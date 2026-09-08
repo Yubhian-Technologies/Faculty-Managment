@@ -11,9 +11,8 @@ import { resolveDepartmentByNameOrCode } from "@/lib/departments/codeOrNameResol
 import { getHodTechnicalDesignations, getNonTechnicalDesignations } from "@/lib/designations/config";
 import { NON_TECHNICAL_STAFF_DESIGNATION_LABELS } from "@/types";
 import {
-  matchOption, parseYesNoStrict, normalizeDigits, isScientificNotation,
-  GENDER_OPTIONS, BLOOD_GROUP_OPTIONS, MARITAL_STATUS_OPTIONS,
-  RATIFICATION_STATUS_OPTIONS, RELIGION_OPTIONS, CASTE_OPTIONS,
+  matchOption, normalizeDigits, isScientificNotation,
+  GENDER_OPTIONS, RATIFICATION_STATUS_OPTIONS,
 } from "@/lib/import/fieldConstraints";
 import type {
   SupportingStaffCategory, SupportingStaffDesignation, EmploymentType, FacultyStatus, CollegeType,
@@ -107,41 +106,27 @@ const COMPUTER_SKILL_MAP: Record<string, ComputerSkill> = {
 
 type ImportRow = {
   employeeId: string;
+  legalName: string;
   name: string;
-  email?: string;
-  password?: string;
-  phone?: string;
+  collegeEmail: string;
+  password: string;
+  phone: string;
   designation: string;
+  qualification: string;
+  employmentType: string;
+  joiningDate: string;
+  gender: string;
+  dateOfBirth: string;
+  nameAsPerAadhar: string;
+  aadharNo: string;
+  panNo: string;
+  ratificationStatus: string;
+  // Staff-specific structural extras - optional, no Faculty analog.
+  email?: string;
   otherDesignationTitle?: string;
   department?: string;
-  employmentType: string;
   status?: string;
-  joiningDate: string;
   experienceYears?: string;
-  gender?: string;
-  dateOfBirth?: string;
-  legalName?: string;
-  fatherName?: string;
-  motherName?: string;
-  aadharNo?: string;
-  panNo?: string;
-  passportNumber?: string;
-  emergencyContactName?: string;
-  emergencyContactPhone?: string;
-  religion?: string;
-  caste?: string;
-  collegeEmail?: string;
-  ratificationStatus?: string;
-  ratificationDate?: string;
-  maritalStatus?: string;
-  spouseName?: string;
-  numberOfChildren?: string;
-  referral?: string;
-  nativePlace?: string;
-  temporaryAddress?: string;
-  permanentSameAsTemporary?: string;
-  permanentAddress?: string;
-  bloodGroup?: string;
   otherInformation?: string;
   [key: string]: string | undefined;
 };
@@ -367,12 +352,6 @@ export async function POST(request: Request) {
         if (!matched) dropped(empId, label, raw);
         return matched;
       };
-      const checkYesNo = (raw: string | undefined, label: string) => {
-        if (!raw?.trim()) return undefined;
-        const parsed = parseYesNoStrict(raw);
-        if (parsed === undefined) dropped(empId, label, raw);
-        return parsed;
-      };
       // Excel turns a long number column into "9E+09" on export - expanded back
       // to digits so the stored value is dialable, and flagged, since the sheet
       // itself has already lost the original digits.
@@ -387,10 +366,27 @@ export async function POST(request: Request) {
         return normalizeDigits(raw);
       };
 
+      // Required field validation - every column in the trimmed-down template
+      // (src/lib/supportingStaff/csvColumns.ts PERSONAL_COLUMNS) is
+      // mandatory, except the staff-specific structural extras (Personal
+      // Email, Designation Title, Department, Status, Total Years of
+      // Experience), which stay optional.
       if (!row.employeeId?.trim()) { failed.push({ row: rowNum, employeeId: "-", error: "Employee ID is required" }); continue; }
-      if (!row.name?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Name is required" }); continue; }
-      if (!row.joiningDate?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Joining date is required" }); continue; }
+      if (!row.legalName?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Full Name (as per SSC) is required" }); continue; }
+      if (!row.name?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Name (as per PAN) is required" }); continue; }
+      if (!row.collegeEmail?.trim() || !row.collegeEmail.includes("@")) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Valid College Email is required" }); continue; }
+      if (!row.password?.trim() || row.password.trim().length < 8) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Login Password is required and must be at least 8 characters" }); continue; }
+      if (!row.phone?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Mobile No is required" }); continue; }
       if (!row.designation?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Designation is required" }); continue; }
+      if (!row.qualification?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Highest Qualification is required" }); continue; }
+      if (!row.employmentType?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Employee Category is required" }); continue; }
+      if (!row.joiningDate?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Date of Joining Institution is required" }); continue; }
+      if (!row.gender?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Gender is required" }); continue; }
+      if (!row.dateOfBirth?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Date of Birth is required" }); continue; }
+      if (!row.nameAsPerAadhar?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Name (as per Aadhar) is required" }); continue; }
+      if (!row.aadharNo?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Aadhar No is required" }); continue; }
+      if (!row.panNo?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "PAN No is required" }); continue; }
+      if (!row.ratificationStatus?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Ratification Status is required" }); continue; }
 
       const empId = row.employeeId.trim();
       if (existingIds.has(empId)) {
@@ -451,11 +447,9 @@ export async function POST(request: Request) {
       const status: FacultyStatus = STATUS_MAP[statusKey] ?? "ACTIVE";
 
       const joiningDate = parseDate(row.joiningDate);
-      if (!joiningDate) { failed.push({ row: rowNum, employeeId: empId, error: "Invalid joining date - use YYYY-MM-DD" }); continue; }
+      if (!joiningDate) { failed.push({ row: rowNum, employeeId: empId, error: "Invalid Date of Joining Institution - use YYYY-MM-DD" }); continue; }
       const dateOfBirth = parseDate(row.dateOfBirth);
-      if (row.dateOfBirth?.trim() && !dateOfBirth) dropped(empId, "Date of birth", row.dateOfBirth);
-      const ratificationDate = parseDate(row.ratificationDate);
-      if (row.ratificationDate?.trim() && !ratificationDate) dropped(empId, "Ratification date", row.ratificationDate);
+      if (!dateOfBirth) dropped(empId, "Date of Birth", row.dateOfBirth);
 
       const checkNum = (raw: string | undefined, label: string): number | undefined => {
         if (!raw?.trim()) return undefined;
@@ -488,15 +482,8 @@ export async function POST(request: Request) {
       // dropped and the record imported with it blank.
       const vPhone = checkPhone(row.phone, "Phone");
       const vGender = checkOption(row.gender, GENDER_OPTIONS, "Gender");
-      const vEmergencyPhone = checkPhone(row.emergencyContactPhone, "Emergency Contact Phone");
-      const vReligion = checkOption(row.religion, RELIGION_OPTIONS, "Religion");
-      const vCaste = checkOption(row.caste, CASTE_OPTIONS, "Caste");
       const vRatification = checkOption(row.ratificationStatus, RATIFICATION_STATUS_OPTIONS, "Ratification Status");
-      const vMarital = checkOption(row.maritalStatus, MARITAL_STATUS_OPTIONS, "Marital Status");
-      const vBloodGroup = checkOption(row.bloodGroup, BLOOD_GROUP_OPTIONS, "Blood Group");
-      const vPermanentSame = checkYesNo(row.permanentSameAsTemporary, "Permanent Same as Temporary");
       const vExperienceYears = checkNum(row.experienceYears, "Experience");
-      const vNumberOfChildren = checkNum(row.numberOfChildren, "Number of Children");
 
       // Every constraint the template states has now been checked. Anything
       // that failed one rejects the row here - before the login below, so a
@@ -506,28 +493,23 @@ export async function POST(request: Request) {
         continue;
       }
 
-      // Optional login creation - a CSV row with a Password fills in this
-      // staff member's login account right here during import, mirroring the
-      // faculty import's behavior (src/app/api/college/faculty/import/route.ts).
-      let userUid: string | undefined;
-      const passwordRaw = row.password?.trim();
-      const loginEmail = row.collegeEmail?.trim().toLowerCase() || row.email?.trim().toLowerCase();
-      if (passwordRaw) {
-        if (!loginEmail) {
-          warnings.push({ row: rowNum, employeeId: empId, warning: "Password ignored - a Personal Email or College Email is required to create a login (staff record was still created)" });
-        } else if (passwordRaw.length < 8) {
-          warnings.push({ row: rowNum, employeeId: empId, warning: "Password ignored - must be at least 8 characters (staff record was still created without a login)" });
-        } else {
-          try {
-            userUid = await createFirebaseUser(loginEmail, passwordRaw, row.name.trim());
-            createdAuthUids.push(userUid);
-          } catch (err) {
-            const message = err && typeof err === "object" && "code" in err && err.code === "auth/email-already-exists"
-              ? "an account with this email already exists"
-              : err instanceof Error ? err.message : "unknown error";
-            warnings.push({ row: rowNum, employeeId: empId, warning: `Login not created - ${message} (staff record was still created)` });
-          }
-        }
+      // Login creation - mandatory now that Login Password is a required
+      // column, so every imported row gets a login account immediately, no
+      // separate login-setup step needed afterward. A failure here (e.g. the
+      // email is already registered to some other Auth account) rejects the
+      // whole row for correction, same as every other constraint above.
+      const passwordRaw = row.password.trim();
+      const loginEmail = row.collegeEmail.trim().toLowerCase();
+      let userUid: string;
+      try {
+        userUid = await createFirebaseUser(loginEmail, passwordRaw, row.name.trim());
+        createdAuthUids.push(userUid);
+      } catch (err) {
+        const message = err && typeof err === "object" && "code" in err && err.code === "auth/email-already-exists"
+          ? "an account with this email already exists"
+          : err instanceof Error ? err.message : "unknown error";
+        failed.push({ row: rowNum, employeeId: empId, error: `Login not created - ${message}` });
+        continue;
       }
 
       const docRef = db.collection("colleges").doc(collegeId).collection("supportingStaff").doc();
@@ -543,34 +525,19 @@ export async function POST(request: Request) {
         staffCategory,
         designation,
         otherDesignationTitle: row.otherDesignationTitle?.trim() || undefined,
+        qualification: row.qualification.trim(),
         experienceYears: vExperienceYears ?? 0,
         joiningDate,
         employmentType,
         status,
         gender: vGender,
         dateOfBirth: dateOfBirth || undefined,
-        legalName: row.legalName?.trim() || undefined,
-        fatherName: row.fatherName?.trim() || undefined,
-        motherName: row.motherName?.trim() || undefined,
+        legalName: row.legalName.trim(),
+        nameAsPerAadhar: row.nameAsPerAadhar.trim(),
         aadharNo: normalizeDigits(row.aadharNo),
-        panNo: row.panNo?.trim().toUpperCase() || undefined,
-        passportNumber: row.passportNumber?.trim() || undefined,
-        emergencyContactName: row.emergencyContactName?.trim() || undefined,
-        emergencyContactPhone: vEmergencyPhone,
-        religion: vReligion,
-        caste: vCaste,
-        collegeEmail: row.collegeEmail?.trim().toLowerCase() || undefined,
+        panNo: row.panNo.trim().toUpperCase(),
+        collegeEmail: loginEmail,
         ratificationStatus: vRatification,
-        ratificationDate: ratificationDate || undefined,
-        maritalStatus: vMarital,
-        spouseName: row.spouseName?.trim() || undefined,
-        numberOfChildren: vNumberOfChildren,
-        referral: row.referral?.trim() || undefined,
-        nativePlace: row.nativePlace?.trim() || undefined,
-        bloodGroup: vBloodGroup,
-        temporaryAddress: row.temporaryAddress?.trim() || undefined,
-        permanentSameAsTemporary: vPermanentSame,
-        permanentAddress: row.permanentAddress?.trim() || undefined,
         supportingStaffProfile: buildSupportingStaffProfile(row, empId, dropped),
         createdAt: now,
         updatedAt: now,

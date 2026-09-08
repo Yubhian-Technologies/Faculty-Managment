@@ -74,27 +74,60 @@ export function normalizeHeader(h: string): string {
     .replace(/\s+/g, " ");
 }
 
+// Like normalizeHeader, but keeps parenthetical content (just tidies case/
+// spacing/stray punctuation inside it) instead of stripping it outright.
+// Needed as a first, more precise matching pass: two columns whose only
+// difference is their parenthetical qualifier - e.g. "Name (as per PAN)" vs
+// "Name (as per Aadhar)" vs "Full Name (as per SSC)" - collapse to the same
+// (or a colliding) string once normalizeHeader strips "(...)", which silently
+// misroutes one column's data into another's. Matching against the
+// downloaded template's actual header text (the overwhelmingly common case)
+// never needs that stripping in the first place.
+function normalizeHeaderExact(h: string): string {
+  return h
+    .toLowerCase()
+    .replace(/[^a-z0-9() ]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
 /**
  * Matches uploaded CSV headers to template columns, tolerant of case,
- * punctuation, spacing, and parenthetical hint text (e.g. "(YYYY-MM-DD)").
- * `aliases` lets a column also match alternate wording (e.g. "Emp ID" → employeeId).
- * Returns a map of header column-index → matched column key; headers with no
- * match are simply left out, so their data is dropped rather than blocking the import.
+ * punctuation, spacing, and (as a fallback only - see normalizeHeaderExact)
+ * parenthetical hint text (e.g. "(YYYY-MM-DD)"). `aliases` lets a column also
+ * match alternate wording (e.g. "Emp ID" → employeeId). Returns a map of
+ * header column-index → matched column key; headers with no match are simply
+ * left out, so their data is dropped rather than blocking the import.
  */
 export function matchHeaders(
   headers: string[],
   columns: { key: string; label: string; aliases?: string[] }[]
 ): Record<number, string> {
-  const byNormalizedLabel = new Map<string, string>();
+  const byExact = new Map<string, string>();
+  const byFuzzy = new Map<string, string>();
+  // A column's own label is registered (in both maps) before any column's
+  // aliases, and never overwritten once set - so a real label match always
+  // wins over another column's alias landing on the same normalized string,
+  // and the first-defined column wins a genuine label-vs-label collision in
+  // the fuzzy map (exact matching resolves those correctly whenever the
+  // uploaded header is the template's own text, which is the case that
+  // actually matters).
+  const register = (map: Map<string, string>, normalized: string, key: string) => {
+    if (normalized && !map.has(normalized)) map.set(normalized, key);
+  };
   for (const col of columns) {
-    byNormalizedLabel.set(normalizeHeader(col.label), col.key);
+    register(byExact, normalizeHeaderExact(col.label), col.key);
+    register(byFuzzy, normalizeHeader(col.label), col.key);
+  }
+  for (const col of columns) {
     for (const alias of col.aliases ?? []) {
-      byNormalizedLabel.set(normalizeHeader(alias), col.key);
+      register(byExact, normalizeHeaderExact(alias), col.key);
+      register(byFuzzy, normalizeHeader(alias), col.key);
     }
   }
   const keyMap: Record<number, string> = {};
   headers.forEach((h, i) => {
-    const key = byNormalizedLabel.get(normalizeHeader(h));
+    const key = byExact.get(normalizeHeaderExact(h)) ?? byFuzzy.get(normalizeHeader(h));
     if (key) keyMap[i] = key;
   });
   return keyMap;

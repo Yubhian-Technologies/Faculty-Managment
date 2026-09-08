@@ -15,8 +15,10 @@ import type { Course, Department } from "@/types";
 
 /**
  * The real departments in scope - never a grouping container (a sub-department
- * or common parent that exists only to organize others). See `deriveHodScope`
- * for the two shapes this covers.
+ * or common parent that exists only to organize others), and never a
+ * department the Principal has explicitly flagged as never running its own
+ * sections (Department.parentRunsOwnSections === false - see its own
+ * doc-comment). See `deriveHodScope` for the two shapes this covers.
  */
 export function resolveScopeDepartments(
   ownDept: Department | null,
@@ -24,7 +26,8 @@ export function resolveScopeDepartments(
   isGroupingContainer: boolean,
   useCascadeFilter: boolean,
   groupingChildren: Department[],
-  plainChildren: Department[]
+  plainChildren: Department[],
+  ownHasNoSections: boolean
 ): Department[] {
   if (!ownDept) return [];
   if (useCascadeFilter) {
@@ -35,7 +38,7 @@ export function resolveScopeDepartments(
   }
   const children = departments.filter((d) => d.parentDepartmentId === ownDept.id);
   const managed = departments.filter((d) => (ownDept.managedDepartments ?? []).includes(d.name));
-  return isGroupingContainer ? [...children, ...managed] : [ownDept, ...children, ...managed];
+  return (isGroupingContainer || ownHasNoSections) ? [...children, ...managed] : [ownDept, ...children, ...managed];
 }
 
 export interface HodScope {
@@ -89,13 +92,14 @@ export function deriveHodScope(departments: Department[], ownDepartmentName: str
     ? departments.filter((d) => d.parentDepartmentId === ownDept.id && (d.managedDepartments?.length ?? 0) === 0)
     : [];
   const useCascadeFilter = !isGroupingContainer && Boolean(ownDept?.hasSubDepartments) && groupingChildren.length > 0;
+  const ownHasNoSections = Boolean(ownDept?.hasSubDepartments) && ownDept?.parentRunsOwnSections === false;
   return {
     ownDept,
     isGroupingContainer,
     groupingChildren,
     plainChildren,
     useCascadeFilter,
-    deptOptions: resolveScopeDepartments(ownDept, departments, isGroupingContainer, useCascadeFilter, groupingChildren, plainChildren),
+    deptOptions: resolveScopeDepartments(ownDept, departments, isGroupingContainer, useCascadeFilter, groupingChildren, plainChildren, ownHasNoSections),
     viewsManagedBranchYears: useCascadeFilter || isGroupingContainer,
   };
 }

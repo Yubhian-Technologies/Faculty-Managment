@@ -82,19 +82,55 @@ export async function PATCH(
     // faculty member's teaching-assignment editor) but is owned here - cascade it to every
     // existing teaching assignment for this subject so all of them (and the period-count
     // cap in their editors) stay in sync.
-    if (body.hoursPerWeek != null) {
-      const newHours = Number(body.hoursPerWeek);
+    //
+    // subjectName/subjectCode are cascaded the same way, for the same reason:
+    // they're copied into teachingAssignments/timetableSlots at
+    // assignment-creation time and never re-read afterward, so a rename here
+    // would otherwise leave every existing assignment/slot showing the old
+    // name/code forever. Historical Tier-2 snapshots (internal marks,
+    // attendance sessions, etc.) are deliberately NOT touched - those are
+    // point-in-time records, not live state.
+    const nameChanged = body.name != null;
+    const codeChanged = body.code != null;
+    if (body.hoursPerWeek != null || nameChanged || codeChanged) {
+      const newHours = body.hoursPerWeek != null ? Number(body.hoursPerWeek) : undefined;
+      const newName = nameChanged ? String(updates.name) : undefined;
+      const newCode = codeChanged ? String(updates.code) : undefined;
+      const now = new Date();
+
+      const assignmentFields: Record<string, unknown> = { updatedAt: now };
+      if (newHours != null) assignmentFields.hoursPerWeek = newHours;
+      if (newName != null) assignmentFields.subjectName = newName;
+      if (newCode != null) assignmentFields.subjectCode = newCode;
+
       const assignmentsSnap = await db
         .collection("colleges").doc(session.collegeId)
         .collection("teachingAssignments")
         .where("subjectId", "==", id)
         .get();
-      const now = new Date();
       for (let i = 0; i < assignmentsSnap.docs.length; i += 400) {
         const chunk = assignmentsSnap.docs.slice(i, i + 400);
         const batch = db.batch();
-        for (const doc of chunk) batch.update(doc.ref, { hoursPerWeek: newHours, updatedAt: now });
+        for (const doc of chunk) batch.update(doc.ref, assignmentFields);
         await batch.commit();
+      }
+
+      if (newName != null) {
+        // TimetableSlot carries subjectName only (no subjectCode field on
+        // this collection - see types/teaching.ts's TimetableSlot).
+        const slotFields: Record<string, unknown> = { updatedAt: now, subjectName: newName };
+
+        const slotsSnap = await db
+          .collection("colleges").doc(session.collegeId)
+          .collection("timetableSlots")
+          .where("subjectId", "==", id)
+          .get();
+        for (let i = 0; i < slotsSnap.docs.length; i += 400) {
+          const chunk = slotsSnap.docs.slice(i, i + 400);
+          const batch = db.batch();
+          for (const doc of chunk) batch.update(doc.ref, slotFields);
+          await batch.commit();
+        }
       }
     }
 
@@ -130,6 +166,27 @@ export async function DELETE(
           { status: 403 },
         );
       }
+    }
+
+    // Refuse to hard-delete a subject that still has live teaching
+    // assignments - deleting the doc out from under them would orphan every
+    // one of those (subjectId pointing at nothing, and any future re-fetch of
+    // the subject 404ing). Deactivate (isActive: false) instead, which keeps
+    // the record - and every assignment that names it - intact.
+    const assignmentSnap = await db
+      .collection("colleges").doc(session.collegeId)
+      .collection("teachingAssignments")
+      .where("subjectId", "==", id)
+      .limit(1)
+      .get();
+    if (!assignmentSnap.empty) {
+      return NextResponse.json(
+        {
+          error:
+            "This subject still has active teaching assignments. Remove/reassign them first, or mark the subject inactive instead of deleting it.",
+        },
+        { status: 409 }
+      );
     }
 
     await ref.delete();

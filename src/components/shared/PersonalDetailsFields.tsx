@@ -48,11 +48,56 @@ export interface PersonalDetailsValue {
 interface Props {
   value: PersonalDetailsValue;
   onChange: (next: PersonalDetailsValue) => void;
+  // Which fields show a required "*" - defaults to STAFF_REQUIRED_PERSONAL_FIELDS
+  // (every consumer's original behavior). Faculty passes
+  // FACULTY_REQUIRED_PERSONAL_FIELDS instead, since Name (as per Aadhar) is
+  // optional there but stays mandatory for Supporting/Non-Technical Staff.
+  requiredFields?: (keyof PersonalDetailsValue)[];
+  // Fields to skip rendering entirely - Faculty's Add/Edit surfaces move
+  // Full Name (as per SSC) up into their "core" identity step (to lead the
+  // template's own field order) and pass ["legalName"] here so it isn't
+  // shown a second time on this "personal" step. Supporting/Non-Technical
+  // Staff don't pass this, so legalName stays exactly where it always was.
+  hiddenFields?: (keyof PersonalDetailsValue)[];
 }
 
-export function PersonalDetailsFields({ value, onChange }: Props) {
+// The full mandatory set - Supporting/Non-Technical Staff's requirement.
+// Faculty uses FACULTY_REQUIRED_PERSONAL_FIELDS below instead (everything
+// here minus nameAsPerAadhar).
+export const STAFF_REQUIRED_PERSONAL_FIELDS: (keyof PersonalDetailsValue)[] = [
+  "legalName", "gender", "dateOfBirth", "nameAsPerAadhar", "aadharNo", "panNo", "ratificationStatus",
+];
+export const FACULTY_REQUIRED_PERSONAL_FIELDS: (keyof PersonalDetailsValue)[] =
+  STAFF_REQUIRED_PERSONAL_FIELDS.filter((k) => k !== "nameAsPerAadhar");
+
+const PERSONAL_FIELD_LABELS: Record<string, string> = {
+  legalName: "Full Name (as per SSC)",
+  gender: "Gender",
+  dateOfBirth: "Date of Birth",
+  nameAsPerAadhar: "Name (as per Aadhar)",
+  aadharNo: "Aadhar No",
+  panNo: "PAN No",
+  ratificationStatus: "Ratification Status",
+};
+
+export function getMissingRequiredPersonalFields(
+  value: PersonalDetailsValue,
+  requiredFields: (keyof PersonalDetailsValue)[] = STAFF_REQUIRED_PERSONAL_FIELDS
+): string[] {
+  return requiredFields
+    .filter((key) => !String(value[key] ?? "").trim())
+    .map((key) => PERSONAL_FIELD_LABELS[key] ?? key);
+}
+
+export function PersonalDetailsFields({ value, onChange, requiredFields = STAFF_REQUIRED_PERSONAL_FIELDS, hiddenFields = [] }: Props) {
   function set<K extends keyof PersonalDetailsValue>(key: K, v: PersonalDetailsValue[K]) {
     onChange({ ...value, [key]: v });
+  }
+  function mark(key: keyof PersonalDetailsValue): string {
+    return requiredFields.includes(key) ? " *" : "";
+  }
+  function hidden(key: keyof PersonalDetailsValue): boolean {
+    return hiddenFields.includes(key);
   }
 
   const subCasteOptions = SUB_CASTES_BY_CASTE[value.caste as Caste] ?? [];
@@ -61,7 +106,7 @@ export function PersonalDetailsFields({ value, onChange }: Props) {
     <div className="space-y-5">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="space-y-2">
-          <Label>Gender</Label>
+          <Label>Gender{mark("gender")}</Label>
           <Select
             value={value.gender && !GENDER_OPTIONS.includes(value.gender) ? "Other" : (value.gender ?? "")}
             onValueChange={(v) => set("gender", v === "Other" ? "Other" : v)}
@@ -82,21 +127,23 @@ export function PersonalDetailsFields({ value, onChange }: Props) {
           )}
         </div>
         <div className="space-y-2">
-          <Label>Date of Birth</Label>
+          <Label>Date of Birth{mark("dateOfBirth")}</Label>
           <Input type="date" value={value.dateOfBirth ?? ""} onChange={(e) => set("dateOfBirth", e.target.value)} />
         </div>
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <div className="space-y-2">
-          <Label>Legal Name (as per SSC)</Label>
-          <Input
-            value={value.legalName ?? ""}
-            onChange={(e) => set("legalName", e.target.value.toUpperCase())}
-            placeholder="FULL NAME IN CAPITALS"
-            className="uppercase"
-          />
-        </div>
+        {!hidden("legalName") && (
+          <div className="space-y-2">
+            <Label>Full Name (as per SSC){mark("legalName")}</Label>
+            <Input
+              value={value.legalName ?? ""}
+              onChange={(e) => set("legalName", e.target.value.toUpperCase())}
+              placeholder="FULL NAME IN CAPITALS"
+              className="uppercase"
+            />
+          </div>
+        )}
         <div className="space-y-2">
           <Label>SSC Hall Ticket No</Label>
           <Input
@@ -181,7 +228,7 @@ export function PersonalDetailsFields({ value, onChange }: Props) {
           )}
         </div>
         <div className="space-y-2">
-          <Label>Name (as per Aadhar)</Label>
+          <Label>Name (as per Aadhar){mark("nameAsPerAadhar")}</Label>
           <Input
             value={value.nameAsPerAadhar ?? ""}
             onChange={(e) => set("nameAsPerAadhar", e.target.value)}
@@ -189,7 +236,7 @@ export function PersonalDetailsFields({ value, onChange }: Props) {
           />
         </div>
         <div className="space-y-2">
-          <Label>Aadhar No</Label>
+          <Label>Aadhar No{mark("aadharNo")}</Label>
           <Input
             value={value.aadharNo ?? ""}
             onChange={(e) => set("aadharNo", e.target.value)}
@@ -198,7 +245,7 @@ export function PersonalDetailsFields({ value, onChange }: Props) {
           />
         </div>
         <div className="space-y-2">
-          <Label>PAN No</Label>
+          <Label>PAN No{mark("panNo")}</Label>
           <Input
             value={value.panNo ?? ""}
             onChange={(e) => set("panNo", e.target.value.toUpperCase())}
@@ -353,7 +400,7 @@ export function PersonalDetailsFields({ value, onChange }: Props) {
       </div>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="space-y-2">
-          <Label>Ratification Status</Label>
+          <Label>Ratification Status{mark("ratificationStatus")}</Label>
           <Select value={value.ratificationStatus ?? ""} onValueChange={(v) => set("ratificationStatus", v)}>
             <SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger>
             <SelectContent>

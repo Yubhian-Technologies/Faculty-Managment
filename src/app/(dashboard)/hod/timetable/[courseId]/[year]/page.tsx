@@ -15,6 +15,7 @@ import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
 import { sectionDisplayLabel } from "@/lib/sections/sectionLabel";
 import { buildCourseGroups } from "@/lib/departments/hodScope";
+import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import type { Course, Department, FacultyMember, Section, SupportingStaffMember, TimetableIncharge } from "@/types";
 
 // One combined dropdown option, whichever roster it actually came from - see
@@ -126,7 +127,7 @@ export default function HODTimetableSectionsPage() {
         .then((r) => r.json() as Promise<{ faculty: FacultyMember[] }>)
         .then((d) => (d.faculty ?? [])
           .filter((f) => f.status === "ACTIVE" && f.department === departmentName)
-          .map((f): InchargeCandidate => ({ id: f.id, name: f.name, userUid: f.userUid, personType: "FACULTY" }))),
+          .map((f): InchargeCandidate => ({ id: f.id, name: facultyDisplayName(f), userUid: f.userUid, personType: "FACULTY" }))),
       fetch("/api/college/supporting-staff?staffCategory=TECHNICAL")
         .then((r) => r.json() as Promise<{ staff: SupportingStaffMember[] }>)
         .then((d) => (d.staff ?? [])

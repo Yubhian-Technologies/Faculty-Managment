@@ -4,9 +4,10 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { requiredFacultyCount } from "@/lib/college/facultyRatio";
-import { getHodDepartmentScope, canHodEditDepartment, canHodManageFacultyDepartment, facultyManageableDepartmentNames } from "@/lib/departments/scope";
+import { getHodDepartmentScope, canHodEditDepartment, canHodManageAssignment, facultyManageableDepartmentNames } from "@/lib/departments/scope";
 import { canHodEditDepartmentYear, type DepartmentYearRow } from "@/lib/departments/managedBranches";
 import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
+import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { getActiveSubstitutionsForDates, currentWeekDateKeys } from "@/lib/leave/periodCoverage";
 import { resolveSectionCurrentSemester, resolveRequestedSemester, matchesCurrentSemester } from "@/lib/college/semester";
 import { resolveTimetableAcademicYear, matchesCurrentAcademicYear } from "@/lib/college/academicSession";
@@ -545,7 +546,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "Subject not found" }, { status: 400 });
       }
 
-      const faculty = facultySnap.data() as { name?: string; department?: string };
+      const faculty = facultySnap.data() as { name?: string; legalName?: string; department?: string };
       const subject = subjectSnap.data() as { name?: string; code?: string; department?: string; hoursPerWeek?: number };
 
       // HOD may assign within their own department and any sub-department beneath
@@ -567,7 +568,7 @@ export async function POST(request: Request) {
       const ref = await collegeRef.collection("teachingAssignments").add({
         collegeId: session.collegeId,
         facultyId: body.facultyId,
-        facultyName: faculty.name ?? "",
+        facultyName: facultyDisplayName(faculty),
         subjectId: body.subjectId,
         subjectName: subject.name ?? "",
         subjectCode: subject.code ?? "",
@@ -654,12 +655,6 @@ export async function DELETE(request: Request) {
       const allDepartments = deptsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as (DepartmentYearRow & Pick<Department, "name">)[];
       // A managed branch's own non-shared year is never this manager's to
       // remove either - same canHodEditDepartmentYear gate as POST/GET above.
-      let catalogId: string | undefined;
-      if (assignmentData.courseId) {
-        const courseSnap = await collegeRef.collection("courses").doc(assignmentData.courseId).get();
-        catalogId = (courseSnap.data() as { catalogId?: string } | undefined)?.catalogId;
-      }
-      const ownsSection = canHodEditDepartmentYear(scope, allDepartments, assignmentData.department ?? "", assignmentData.year as number, catalogId);
       // Also allowed when this HOD owns the ASSIGNED FACULTY, even for a
       // section/year they otherwise have no edit rights over - the case a
       // fulfilled faculty-assignment-request creates (lending one of this
@@ -667,13 +662,16 @@ export async function DELETE(request: Request) {
       // route surfaces that assignment to them as fully manageable, not
       // view-only (see rosterAssignmentQueries above), so removal has to
       // actually be allowed here to match, not just displayed as if it were.
-      let ownsFaculty = false;
-      if (!ownsSection && assignmentData.facultyId) {
-        const facultySnap = await collegeRef.collection("facultyMembers").doc(assignmentData.facultyId).get();
-        const facultyDept = (facultySnap.data() as { department?: string } | undefined)?.department ?? "";
-        ownsFaculty = canHodManageFacultyDepartment(scope, facultyDept);
+      // See canHodManageAssignment's own doc-comment for why this two-part
+      // rule is the shared, canonical check (also used by
+      // teaching-assignments/[id] PATCH/DELETE).
+      let catalogId: string | undefined;
+      if (assignmentData.courseId) {
+        const courseSnap = await collegeRef.collection("courses").doc(assignmentData.courseId).get();
+        catalogId = (courseSnap.data() as { catalogId?: string } | undefined)?.catalogId;
       }
-      if (!ownsSection && !ownsFaculty) {
+      const canManage = await canHodManageAssignment(db, session.collegeId, scope, allDepartments, assignmentData, catalogId);
+      if (!canManage) {
         return NextResponse.json(
           { error: "You can only remove assignments in your own department, its sub-departments, a year your department manages, or one of your own faculty's assignments elsewhere" },
           { status: 403 },

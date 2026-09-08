@@ -57,7 +57,7 @@ export function PersonalDetailsView({ value }: Props) {
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <Field label="Gender" value={p.gender} />
         <Field label="Date of Birth" value={p.dateOfBirth ? formatDate(p.dateOfBirth) : undefined} />
-        <Field label="Legal Name (as per SSC)" value={p.legalName} />
+        <Field label="Full Name (as per SSC)" value={p.legalName} />
         <Field label="SSC Hall Ticket No" value={p.sscHallTicketNo} />
         <Field label="Father / Husband Name" value={p.fatherName} />
         <Field label="Mother Name" value={p.motherName} />

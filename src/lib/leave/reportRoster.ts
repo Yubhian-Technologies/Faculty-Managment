@@ -1,6 +1,7 @@
 import type { Firestore } from "firebase-admin/firestore";
 import { resolveUserDepartment } from "@/lib/budget/departmentScope";
 import { NON_DEPARTMENTAL_STAFF_ROLES } from "@/lib/leave/nonDepartmentalStaffRoles";
+import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { ROLE_LABELS } from "@/types";
 import type { Department, FacultyMember, FMSUser, UserRole } from "@/types";
 
@@ -100,7 +101,7 @@ export async function resolveReportRoster(
   for (const d of facultySnap.docs) {
     const f = d.data() as FacultyMember;
     if (!f.userUid) continue; // no login -> no leave account to report on
-    people.push({ uid: f.userUid, employeeId: f.employeeId, name: f.name, role: "PANEL_MEMBER" });
+    people.push({ uid: f.userUid, employeeId: f.employeeId, name: facultyDisplayName(f), role: "PANEL_MEMBER" });
   }
 
   return { department, people };

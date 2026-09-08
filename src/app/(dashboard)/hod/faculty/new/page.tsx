@@ -14,8 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { HIGHEST_QUALIFICATION_OPTIONS } from "@/lib/import/fieldConstraints";
 import { TeachingAssignmentsEditor, type StagedTeachingRow } from "@/components/faculty/TeachingAssignmentsEditor";
-import { DesignationOptions } from "@/components/faculty/DesignationOptions";
-import { PersonalDetailsFields, type PersonalDetailsValue } from "@/components/shared/PersonalDetailsFields";
+import { PersonalDetailsFields, getMissingRequiredPersonalFields, FACULTY_REQUIRED_PERSONAL_FIELDS, type PersonalDetailsValue } from "@/components/shared/PersonalDetailsFields";
 import {
   QualificationFields, ExperienceFields, ResearchFields, GrantsFields,
   MentorshipFields, FinancialFields, OthersFields,
@@ -24,9 +23,9 @@ import { syncTeachingAssignments } from "@/lib/teaching/syncTeachingAssignments"
 import { PHONE_REGEX } from "@/lib/validations";
 import { AvatarUploadField } from "@/components/shared/AvatarUploadField";
 import { PROFILE_MODULES } from "@/lib/faculty/profileModules";
+import { FACULTY_DESIGNATIONS, FACULTY_EMPLOYMENT_CATEGORIES, designationLabel } from "@/lib/designations/config";
 import { useCollegeType } from "@/hooks/useCollegeType";
 import { toast } from "@/hooks/useToast";
-import { EMPLOYMENT_TYPE_LABELS } from "@/types";
 import type { FacultyProfileFields } from "@/types";
 
 // Sentinel for the "Others" row - never stored, it just switches the field to
@@ -42,15 +41,18 @@ const OTHER_QUALIFICATION = "__OTHER__";
 const schema = z.object({
   employeeId: z.string().min(1, "Employee ID is required"),
   apaarFacultyId: z.string().optional(),
-  name: z.string().min(2, "Name must be at least 2 characters"),
+  // Optional - Full Name (as per SSC), captured via `personalDetails` below,
+  // is the primary/required identity name now; this is only kept for
+  // statutory/financial paperwork matching.
+  name: z.string().min(2, "Name must be at least 2 characters").optional().or(z.literal("")),
   email: z.string().email("Invalid email address").optional().or(z.literal("")),
   collegeEmail: z.string().email("Invalid email address").optional().or(z.literal("")),
   password: z.string().min(8, "Password must be at least 8 characters").optional().or(z.literal("")),
-  phone: z.string().regex(PHONE_REGEX, "Doesn't look like a valid phone number").optional().or(z.literal("")),
+  phone: z.string().min(1, "Mobile No is required").regex(PHONE_REGEX, "Doesn't look like a valid phone number"),
   designation: z.string().min(1, "Designation is required"),
   qualification: z.string().min(1, "Qualification is required"),
   specialization: z.string().optional(),
-  experienceYears: z.number().min(0, "Cannot be negative"),
+  experienceYears: z.number().min(0, "Cannot be negative").optional(),
   joiningDate: z.string().min(1, "Joining date is required"),
   dateOfJoiningDepartment: z.string().optional(),
   employmentType: z.string().min(1, "Employment type is required"),
@@ -72,13 +74,6 @@ export default function NewFacultyPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { collegeType } = useCollegeType();
-  const [academicProfile, setAcademicProfile] = useState<Partial<FacultyProfileFields>>({});
-  const [personalDetails, setPersonalDetails] = useState<PersonalDetailsValue>({});
-  const [teachingRows, setTeachingRows] = useState<StagedTeachingRow[]>([]);
-  const [photoUrl, setPhotoUrl] = useState<string | undefined>(undefined);
-  const [tempPhotoId] = useState(() => crypto.randomUUID());
-  const [stepIndex, setStepIndex] = useState(0);
-  const [submitting, setSubmitting] = useState(false);
 
   // Reached from the Faculty Register's "Sub-Department HODs" card when that
   // sub-department's HOD login has no facultyMembers record yet (see
@@ -91,6 +86,21 @@ export default function NewFacultyPage() {
   const linkName = searchParams.get("name") ?? "";
   const isLinkMode = !!(linkUid && linkDepartment);
 
+  const [academicProfile, setAcademicProfile] = useState<Partial<FacultyProfileFields>>({});
+  // Pre-fills Full Name (as per SSC) from the existing HOD login's name in
+  // link mode - same starting point `defaultValues.name` below used to give,
+  // now that legalName (not name) is the primary identity field. Editable
+  // either way; the login's real name for their own SSC certificate may
+  // differ from what's on file for the login itself.
+  const [personalDetails, setPersonalDetails] = useState<PersonalDetailsValue>(
+    () => (linkName ? { legalName: linkName } : {})
+  );
+  const [teachingRows, setTeachingRows] = useState<StagedTeachingRow[]>([]);
+  const [photoUrl, setPhotoUrl] = useState<string | undefined>(undefined);
+  const [tempPhotoId] = useState(() => crypto.randomUUID());
+  const [stepIndex, setStepIndex] = useState(0);
+  const [submitting, setSubmitting] = useState(false);
+
   const {
     register,
     handleSubmit,
@@ -100,7 +110,7 @@ export default function NewFacultyPage() {
   } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: {
-      experienceYears: 0, designation: "", employmentType: "PERMANENT", password: "", aicteEligible: false,
+      experienceYears: 0, designation: "", employmentType: "Regular", password: "", aicteEligible: false,
       ...(isLinkMode ? { name: linkName } : {}),
     },
   });
@@ -108,6 +118,8 @@ export default function NewFacultyPage() {
 
   const designation = watch("designation");
   const employmentType = watch("employmentType");
+  const isOtherDesignation = !!designation && !FACULTY_DESIGNATIONS.includes(designation);
+  const isOtherEmploymentType = !!employmentType && !FACULTY_EMPLOYMENT_CATEGORIES.includes(employmentType);
   const qualification = watch("qualification");
   // "Others" is a mode, not a stored value - it reveals a free-text box whose
   // contents become `qualification`. Needs its own state because once the user
@@ -138,10 +150,11 @@ export default function NewFacultyPage() {
   // which module (see onInvalid). Steps can be navigated freely - validation
   // is deferred entirely to submit time.
   const FIELD_LABELS: Record<string, string> = {
-    employeeId: "Employee ID", name: "Full Name (as per PAN)", collegeEmail: "College Email",
+    employeeId: "Employee ID", name: "Name (as per PAN)", collegeEmail: "College Email",
     password: "Login Password", phone: "Mobile No", designation: "Designation",
     qualification: "Highest Qualification", experienceYears: "Total Years of Experience",
     joiningDate: "Date of Joining Institution", employmentType: "Employee Category",
+    legalName: "Full Name (as per SSC)",
   };
 
   function goNext() {
@@ -172,6 +185,31 @@ export default function NewFacultyPage() {
       toast({ variant: "destructive", title: "Some required fields are missing", description: `Identity & Employment: ${missing}` });
       return;
     }
+    // Full Name (as per SSC) lives in `personalDetails` state but is rendered
+    // on the "core" step (right after Employee ID, matching the template's
+    // own field order) - not zod-validated, so it's checked here, same
+    // pattern as College Email/Password above, and routes back to "core"
+    // (not "personal", where the input no longer visually is).
+    if (!personalDetails.legalName?.trim()) {
+      setErroredSteps(new Set<WizardStepKey>(["core"]));
+      setStepIndex(steps.findIndex((s) => s.key === "core"));
+      toast({ variant: "destructive", title: "Some required fields are missing", description: "Identity & Employment: Full Name (as per SSC)" });
+      return;
+    }
+    // Personal Details isn't zod-validated (PersonalDetailsFields is plain
+    // React state) - checked here instead, same pattern as the College
+    // Email/Password check above, since these fields are now mandatory too.
+    const missingPersonal = getMissingRequiredPersonalFields(personalDetails, FACULTY_REQUIRED_PERSONAL_FIELDS);
+    if (missingPersonal.length > 0) {
+      setErroredSteps(new Set<WizardStepKey>(["personal"]));
+      setStepIndex(steps.findIndex((s) => s.key === "personal"));
+      toast({ variant: "destructive", title: "Some required fields are missing", description: `Personal Details: ${missingPersonal.join(", ")}` });
+      return;
+    }
+    // Full Name (as per SSC) is the primary display name - used everywhere
+    // this faculty member's name is shown (see facultyDisplayName()) -
+    // falling back to Name (as per PAN) only if legalName is somehow blank.
+    const displayName = personalDetails.legalName?.trim() || data.name?.trim() || "";
     setSubmitting(true);
     try {
       const res = await fetch(isLinkMode ? "/api/college/faculty/link-hod" : "/api/college/faculty", {
@@ -197,7 +235,7 @@ export default function NewFacultyPage() {
       }
 
       if (json.id && teachingRows.length > 0) {
-        const errors = await syncTeachingAssignments(json.id, data.name, [], teachingRows);
+        const errors = await syncTeachingAssignments(json.id, displayName, [], teachingRows);
         if (errors.length > 0) {
           toast({ variant: "destructive", title: "Some teaching assignments failed to save", description: errors.join("; ") });
         }
@@ -207,8 +245,8 @@ export default function NewFacultyPage() {
         variant: "success",
         title: isLinkMode ? "Profile completed" : "Faculty member added",
         description: isLinkMode
-          ? `${data.name}'s faculty profile is now complete.`
-          : `${data.name} has been added to the register.`,
+          ? `${displayName}'s faculty profile is now complete.`
+          : `${displayName} has been added to the register.`,
       });
       router.push("/hod/faculty");
     } catch {
@@ -255,7 +293,7 @@ export default function NewFacultyPage() {
                 <div className="flex flex-col gap-5 pb-5 border-b sm:flex-row sm:items-start">
                   <div className="flex shrink-0 flex-col items-center gap-2 sm:pt-6">
                     <Label>Profile Photo</Label>
-                    <AvatarUploadField name={name || "?"} photoUrl={photoUrl} targetId={tempPhotoId} onUploaded={setPhotoUrl} onDeleted={() => setPhotoUrl(undefined)} />
+                    <AvatarUploadField name={personalDetails.legalName || name || "?"} photoUrl={photoUrl} targetId={tempPhotoId} onUploaded={setPhotoUrl} onDeleted={() => setPhotoUrl(undefined)} />
                   </div>
                   <div className="grid flex-1 grid-cols-1 gap-4">
                     <div className="space-y-2">
@@ -264,10 +302,21 @@ export default function NewFacultyPage() {
                       {errors.employeeId && <p className="text-sm text-destructive">{errors.employeeId.message}</p>}
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="name">Full Name (as per PAN) *</Label>
+                      <Label htmlFor="legalName">Full Name (as per SSC) *</Label>
+                      <Input
+                        id="legalName"
+                        value={personalDetails.legalName ?? ""}
+                        onChange={(e) => setPersonalDetails((p) => ({ ...p, legalName: e.target.value.toUpperCase() }))}
+                        placeholder="FULL NAME IN CAPITALS"
+                        className="uppercase"
+                      />
+                      <p className="text-xs text-muted-foreground">Enter the name exactly as it appears on the SSC (10th class) certificate - this is the faculty member&apos;s primary display name across the app.</p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="name">Name (as per PAN)</Label>
                       <Input id="name" {...register("name")} placeholder="Dr. Priya Nair" />
                       {errors.name && <p className="text-sm text-destructive">{errors.name.message}</p>}
-                      <p className="text-xs text-muted-foreground">Enter the name exactly as it appears on the PAN card.</p>
+                      <p className="text-xs text-muted-foreground">Optional - only needed for statutory/financial paperwork matching.</p>
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="apaarFacultyId">APAAR Faculty ID</Label>
@@ -312,7 +361,7 @@ export default function NewFacultyPage() {
                     {errors.email && <p className="text-sm text-destructive">{errors.email.message}</p>}
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="phone">Mobile No</Label>
+                    <Label htmlFor="phone">Mobile No *</Label>
                     <Input id="phone" type="tel" autoComplete="off" {...register("phone")} placeholder="+91 98765 43210" />
                     {errors.phone && <p className="text-sm text-destructive">{errors.phone.message}</p>}
                   </div>
@@ -325,10 +374,23 @@ export default function NewFacultyPage() {
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
                     <Label>Designation *</Label>
-                    <Select value={designation} onValueChange={(v) => setValue("designation", v)}>
+                    <Select
+                      value={isOtherDesignation ? "OTHER" : designation}
+                      onValueChange={(v) => setValue("designation", v === "OTHER" ? "OTHER" : v)}
+                    >
                       <SelectTrigger><SelectValue placeholder="Select designation" /></SelectTrigger>
-                      <SelectContent><DesignationOptions collegeType={collegeType} kind="teaching" /></SelectContent>
+                      <SelectContent>
+                        {FACULTY_DESIGNATIONS.map((d) => <SelectItem key={d} value={d}>{designationLabel(d)}</SelectItem>)}
+                        <SelectItem value="OTHER">Other</SelectItem>
+                      </SelectContent>
                     </Select>
+                    {isOtherDesignation && (
+                      <Input
+                        value={designation === "OTHER" ? "" : designation}
+                        onChange={(e) => setValue("designation", e.target.value || "OTHER")}
+                        placeholder="Please specify"
+                      />
+                    )}
                     {errors.designation && <p className="text-sm text-destructive">{errors.designation.message}</p>}
                   </div>
                   <div className="space-y-2">
@@ -367,7 +429,7 @@ export default function NewFacultyPage() {
                     <Input id="specialization" {...register("specialization")} placeholder="e.g. Machine Learning, VLSI" />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="experienceYears">Total Years of Experience *</Label>
+                    <Label htmlFor="experienceYears">Total Years of Experience</Label>
                     <Input id="experienceYears" type="number" min={0} placeholder="e.g. 10" {...register("experienceYears", { valueAsNumber: true })} />
                     <p className="text-xs text-muted-foreground">
                       Their whole career, including previous institutions - not just years served here.
@@ -383,12 +445,23 @@ export default function NewFacultyPage() {
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
                     <Label>Employee Category *</Label>
-                    <Select value={employmentType} onValueChange={(v) => setValue("employmentType", v)}>
+                    <Select
+                      value={isOtherEmploymentType ? "OTHER" : employmentType}
+                      onValueChange={(v) => setValue("employmentType", v === "OTHER" ? "OTHER" : v)}
+                    >
                       <SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger>
                       <SelectContent>
-                        {Object.entries(EMPLOYMENT_TYPE_LABELS).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
+                        {FACULTY_EMPLOYMENT_CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                        <SelectItem value="OTHER">Other</SelectItem>
                       </SelectContent>
                     </Select>
+                    {isOtherEmploymentType && (
+                      <Input
+                        value={employmentType === "OTHER" ? "" : employmentType}
+                        onChange={(e) => setValue("employmentType", e.target.value || "OTHER")}
+                        placeholder="Please specify"
+                      />
+                    )}
                     {errors.employmentType && <p className="text-sm text-destructive">{errors.employmentType.message}</p>}
                   </div>
                   <div className="space-y-2">
@@ -414,7 +487,14 @@ export default function NewFacultyPage() {
               </>
             )}
 
-            {step.key === "personal" && <PersonalDetailsFields value={personalDetails} onChange={setPersonalDetails} />}
+            {step.key === "personal" && (
+              <PersonalDetailsFields
+                value={personalDetails}
+                onChange={setPersonalDetails}
+                requiredFields={FACULTY_REQUIRED_PERSONAL_FIELDS}
+                hiddenFields={["legalName"]}
+              />
+            )}
             {step.key === "qualification" && <QualificationFields value={academicProfile} onChange={setAcademicProfile} collegeType={collegeType} />}
             {step.key === "experience" && <ExperienceFields value={academicProfile} onChange={setAcademicProfile} />}
             {step.key === "research" && <ResearchFields value={academicProfile} onChange={setAcademicProfile} />}
@@ -426,8 +506,8 @@ export default function NewFacultyPage() {
             {step.key === "review" && (
               <p className="text-sm text-muted-foreground">
                 {isLinkMode
-                  ? <>Review the steps above using Back, then submit to complete <strong>{name || "this Sub-HOD"}</strong>&apos;s faculty profile.</>
-                  : <>Review the steps above using Back, then submit to create <strong>{name || "this faculty member"}</strong>&apos;s account and record.</>}
+                  ? <>Review the steps above using Back, then submit to complete <strong>{personalDetails.legalName || name || "this Sub-HOD"}</strong>&apos;s faculty profile.</>
+                  : <>Review the steps above using Back, then submit to create <strong>{personalDetails.legalName || name || "this faculty member"}</strong>&apos;s account and record.</>}
               </p>
             )}
           </CardContent>

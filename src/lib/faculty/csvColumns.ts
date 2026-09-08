@@ -331,69 +331,42 @@ export const TEACHING_SUMMARY_COLUMN: FacultyCsvColumn = {
 };
 
 // ─── Bulk-import template - core fields only ──────────────────────────────────
-// The rest of a faculty member's record (personal details, Academic Profile,
-// Technical Profile, etc.) is filled in afterward from the Edit Faculty page -
-// bulk import is for quickly getting people into the system, not a full data
-// migration path.
+// Every column here is mandatory - this template is deliberately limited to
+// the identity/employment/statutory fields a faculty member needs on day
+// one. Personal-detail extras (father/mother name, religion, bank details,
+// addresses, etc.) and the Academic Profile aren't part of this template -
+// fill those in afterward from the Edit Faculty page.
 export const IMPORT_COLUMNS: FacultyCsvColumn[] = [
   { key: "employeeId",   label: "Employee ID",   required: true,  sample: "Required; any text; unique", aliases: ["Emp ID", "Employee Code", "Employee No", "Staff ID"] },
-  // Should match the name on the faculty member's PAN card - it's the name
-  // used across statutory/financial paperwork (PAN, bank, payroll), so a
-  // mismatch here is what causes downstream document rejections.
-  { key: "name",         label: "Full Name (as per PAN)", required: true,  sample: "Required; full name exactly as on PAN card", aliases: ["Faculty Name", "Name", "Employee Name", "Full Name"] },
-  { key: "apaarFacultyId", label: "APAAR Faculty ID", required: false, sample: "Optional; text", aliases: ["APAAR ID"] },
+  { key: "legalName",    label: "Full Name (as per SSC)", required: true, sample: "Required; text", aliases: ["Legal Name (as per SSC)"] },
+  // Optional - matches the name on the faculty member's PAN card, for
+  // statutory/financial paperwork only. Full Name (as per SSC) above is the
+  // primary/required identity name used everywhere the app displays this
+  // faculty member; when this column is left blank, that's what's used
+  // instead (see finalName in the import route).
+  // "Full Name" (bare) and "Full Name (as per PAN)" are deliberately NOT
+  // aliased here - both would be genuinely ambiguous now that there are two
+  // other name-shaped columns (Full Name as per SSC, Name as per Aadhar);
+  // leave a header that vague unmatched rather than guess which one it means.
+  { key: "name",         label: "Name (as per PAN)", required: false, sample: "Optional; full name exactly as on PAN card", aliases: ["Faculty Name", "Name", "Employee Name"] },
   { key: "collegeEmail", label: "College Email", required: true,  sample: "Required; must contain @", aliases: ["Email", "Email ID"] },
-  { key: "password",     label: "Login Password (min 8 characters, optional)", required: false, sample: "Optional; minimum 8 characters", aliases: ["Password"] },
-  { key: "phone",        label: "Mobile No",     required: false, sample: "Optional; phone/text", aliases: ["Phone", "Mobile", "Mobile Number", "Phone Number", "Contact Number"] },
-  { key: "designation",  label: "Designation",   required: true,  sample: "Choose one designation according to staff type. Technical: Professor / Associate Professor / Assistant Professor / Lecturer / Visiting Faculty / Adjunct Faculty / Lab Assistant / Programmer / System Administrator / Network Engineer / Other. Supporting: Office Staff / Accountant / Clerk / Attender / Office Assistant / Other. Non-Technical Staff: use the non-technical designation configured in the application / Other." },
+  { key: "password",     label: "Login Password (min 8 characters)", required: true, sample: "Required; minimum 8 characters", aliases: ["Password"] },
+  { key: "phone",        label: "Mobile No",     required: true, sample: "Required; phone/text", aliases: ["Phone", "Mobile", "Mobile Number", "Phone Number", "Contact Number"] },
+  { key: "designation",  label: "Designation",   required: true,  sample: "Required: Professor / Assistant Professor / Associate Professor / Associate Professor (Sr) / Visiting Professor / Assistant Professor of Practice / Professor of Practice / Sr. Wellness Counsellor / Other - common abbreviations (Prof., Asst. Prof., Assoc. Prof., Assoc. Prof. (Sr)) are accepted too" },
   // Names the same options the Add/Edit Faculty dropdown offers, so a sheet
   // uses the spellings the form produces rather than inventing "PhD"/"Mtech".
   // Still accepts anything else, deliberately: the dropdown's own "Others"
   // stores whatever was typed, so a closed set here would reject qualifications
   // the app itself can create.
   { key: "qualification", label: "Highest Qualification", required: true, sample: `Required; ${HIGHEST_QUALIFICATION_OPTIONS.join(" / ")} / other`, aliases: ["Qualification"] },
-  { key: "specialization", label: "Specialization", required: false, sample: "Optional; free text" },
-  // Header reworded to say TOTAL: it means the whole career, not service at
-  // this institution, which "Years of Experience" beside a Date of Joining
-  // column read as. The old header stays an alias so sheets already written
-  // against it still import.
-  { key: "experienceYears", label: "Total Years of Experience", required: false, sample: "Optional; number", aliases: ["Experience", "Total Experience", "Years of Experience", "Total Experience (Years)"] },
-  { key: "employmentType", label: "Employee Category", required: true, sample: "Required: Permanent / Contract / Visiting / Part-Time", aliases: ["Employment Type", "Employment", "Type of Employment"] },
+  { key: "employmentType", label: "Employee Category", required: true, sample: "Required: Regular / Visiting / Contract / Professor of Practice / Regular(Hyd) / Other", aliases: ["Employment Type", "Employment", "Type of Employment"] },
   { key: "joiningDate",  label: "Date of Joining Institution (DD-MM-YYYY)", required: true, sample: "Required; DD-MM-YYYY", aliases: ["Joining Date", "Date of Joining", "DOJ"] },
-  { key: "dateOfJoiningDepartment", label: "Date of Joining Department (DD-MM-YYYY)", required: false, sample: "Optional; DD-MM-YYYY", aliases: ["Department Joining Date"] },
-
-  // ─── Personal / statutory details (all optional) ──────────────────────────────
-  { key: "gender",            label: "Gender",                       required: false, sample: "Optional: Male / Female / Other" },
-  { key: "dateOfBirth",       label: "Date of Birth (DD-MM-YYYY)",   required: false, sample: "Optional; DD-MM-YYYY", aliases: ["DOB"] },
-  { key: "legalName",         label: "Legal Name (as per SSC)",      required: false, sample: "Optional; text" },
-  { key: "sscHallTicketNo",   label: "SSC Hall Ticket No",           required: false, sample: "Optional; text" },
-  { key: "fatherName",        label: "Father / Husband Name",        required: false, sample: "Optional; text" },
-  { key: "motherName",        label: "Mother Name",                  required: false, sample: "Optional; text" },
+  { key: "gender",            label: "Gender",                       required: true, sample: "Required: Male / Female / Other" },
+  { key: "dateOfBirth",       label: "Date of Birth (DD-MM-YYYY)",   required: true, sample: "Required; DD-MM-YYYY", aliases: ["DOB"] },
   { key: "nameAsPerAadhar",   label: "Name (as per Aadhar)",         required: false, sample: "Optional; text" },
-  { key: "aadharNo",          label: "Aadhar No",                    required: false, sample: "Optional; text" },
-  { key: "panNo",             label: "PAN No",                       required: false, sample: "Optional; text" },
-  { key: "passportNumber",    label: "Passport No",                  required: false, sample: "Optional; text" },
-  { key: "differentlyAbled",  label: "Differently Abled (Yes/No)",   required: false, sample: "Optional: Yes / No" },
-  { key: "bankAccountNo",     label: "Bank A/C Number",              required: false, sample: "Optional; text" },
-  { key: "ifscCode",          label: "IFSC Code",                    required: false, sample: "Optional; e.g. SBIN0001234" },
-  { key: "emergencyContactName",  label: "Emergency Contact Name",   required: false, sample: "Optional; text" },
-  { key: "emergencyContactPhone", label: "Emergency Contact Phone",  required: false, sample: "Optional; phone/text" },
-  { key: "religion",          label: "Religion",                     required: false, sample: "Optional: Hindu / Muslim / Christian / Sikh / Jain / Parsi / Buddhist / Other" },
-  { key: "caste",             label: "Caste",                        required: false, sample: "Optional: OC / EBC / EPC / BC / SC / ST / OTHER" },
-  { key: "subCaste",          label: "Sub Caste",                    required: false, sample: "Optional; text" },
-  { key: "ratificationStatus",label: "Ratification Status",          required: false, sample: "Optional: Ratified / Not Ratified" },
-  { key: "ratificationDate",  label: "Ratification Date (DD-MM-YYYY)", required: false, sample: "Optional; DD-MM-YYYY" },
-  { key: "maritalStatus",     label: "Marital Status (Single/Married)", required: false, sample: "Optional: Single / Married" },
-  { key: "spouseName",        label: "Spouse Name",                  required: false, sample: "Optional; text" },
-  { key: "numberOfChildren",  label: "Number of Children",           required: false, sample: "Optional; number (0,1,2...)" },
-  { key: "referral",          label: "Referral (if any)",            required: false, sample: "Optional; text" },
-  { key: "bloodGroup",        label: "Blood Group",                  required: false, sample: "Optional: A+ / A- / B+ / B- / AB+ / AB- / O+ / O-" },
-  { key: "temporaryAddress",  label: "Temporary Address",            required: false, sample: "Optional; text" },
-  { key: "permanentSameAsTemporary", label: "Permanent Same as Temporary (Yes/No)", required: false, sample: "Optional: Yes / No" },
-  // Only needed when Permanent Same as Temporary is No - leave blank when
-  // Yes, since the system fills it in from Temporary Address automatically.
-  { key: "permanentAddress",  label: "Permanent Address (required if Permanent Same as Temporary is No)", required: false, sample: "Required if the above is No; otherwise leave blank" },
-  { key: "nativePlace",       label: "Native Place",                 required: false, sample: "Optional; text" },
+  { key: "aadharNo",          label: "Aadhar No",                    required: true, sample: "Required; text" },
+  { key: "panNo",             label: "PAN No",                       required: true, sample: "Required; text" },
+  { key: "ratificationStatus",label: "Ratification Status",          required: true, sample: "Required: Ratified / Not Ratified" },
 ];
 
 // Five filled-in rows for the template workbook's second sheet - what a
@@ -402,100 +375,72 @@ export const IMPORT_COLUMNS: FacultyCsvColumn[] = [
 // positional array so adding or reordering a column can't silently shift the
 // data under the wrong headers.
 //
-// Login Password is deliberately blank in all five: filling it in creates a
-// real login on import, and a sample is exactly the sort of thing that gets
-// pasted in wholesale.
+// Login Password now gets a real, distinct-per-row sample value since the
+// column is mandatory (every row creates a real login on import) - each one
+// MUST be changed to something unique before real use; see the Login
+// Password hint below. Never reuse these literal strings for a real account.
 export const IMPORT_SAMPLE_ROWS: Record<string, string>[] = [
   {
-    employeeId: "FAC001", name: "Dr. Anitha Reddy", apaarFacultyId: "APAAR100001",
-    collegeEmail: "anitha.reddy@college.edu", phone: "9876543210", password: "",
-    designation: "Professor", qualification: "Ph.D", specialization: "Machine Learning",
-    experienceYears: "18", employmentType: "Permanent", joiningDate: "15-06-2012",
-    dateOfJoiningDepartment: "15-06-2012", gender: "Female", dateOfBirth: "22-03-1978",
-    legalName: "Anitha Reddy", nameAsPerAadhar: "Anitha Reddy", fatherName: "Ramachandra Reddy", motherName: "Lakshmi Reddy",
-    aadharNo: "123456789012", panNo: "ABCDE1234F", passportNumber: "",
-    sscHallTicketNo: "1234567", differentlyAbled: "No", bankAccountNo: "62345671234", ifscCode: "SBIN0001234",
-    emergencyContactName: "Ramachandra Reddy", emergencyContactPhone: "9876500001",
-    religion: "Hindu", caste: "OC", subCaste: "", ratificationStatus: "Ratified",
-    ratificationDate: "01-08-2013", maritalStatus: "Married", spouseName: "Suresh Reddy",
-    numberOfChildren: "2", referral: "", nativePlace: "Bhimavaram", bloodGroup: "O+",
-    temporaryAddress: "12-4-56, Gandhi Nagar, Bhimavaram", permanentSameAsTemporary: "Yes",
-    permanentAddress: "",
+    employeeId: "FAC001", legalName: "ANITHA REDDY", name: "Dr. Anitha Reddy",
+    collegeEmail: "anitha.reddy@college.edu", password: "ChangeMe#101", phone: "9876543210",
+    designation: "Professor", qualification: "Ph.D",
+    employmentType: "Regular", joiningDate: "15-06-2012",
+    gender: "Female", dateOfBirth: "22-03-1978",
+    nameAsPerAadhar: "Anitha Reddy",
+    aadharNo: "123456789012", panNo: "ABCDE1234F",
+    ratificationStatus: "Ratified",
   },
   {
-    employeeId: "FAC002", name: "Mr. Suresh Kumar", apaarFacultyId: "APAAR100002",
-    collegeEmail: "suresh.kumar@college.edu", phone: "9876543211", password: "",
-    designation: "Assistant Professor", qualification: "M.Tech", specialization: "Computer Networks",
-    experienceYears: "7", employmentType: "Permanent", joiningDate: "01-07-2019",
-    dateOfJoiningDepartment: "01-07-2019", gender: "Male", dateOfBirth: "05-11-1990",
-    legalName: "Suresh Kumar", nameAsPerAadhar: "Suresh Kumar", fatherName: "Venkata Rao", motherName: "Padma",
-    aadharNo: "234567890123", panNo: "BCDEF2345G", passportNumber: "P1234567",
-    sscHallTicketNo: "2345678", differentlyAbled: "No", bankAccountNo: "62345672345", ifscCode: "HDFC0001234",
-    emergencyContactName: "Padma", emergencyContactPhone: "9876500002",
-    religion: "Hindu", caste: "BC", subCaste: "BC-B", ratificationStatus: "Ratified",
-    ratificationDate: "10-09-2020", maritalStatus: "Married", spouseName: "Divya",
-    numberOfChildren: "1", referral: "", nativePlace: "Vijayawada", bloodGroup: "B+",
-    temporaryAddress: "45, Krishna Colony, Vijayawada", permanentSameAsTemporary: "No",
-    permanentAddress: "8-2-1, Gudivada",
+    employeeId: "FAC002", legalName: "SURESH KUMAR", name: "Mr. Suresh Kumar",
+    collegeEmail: "suresh.kumar@college.edu", password: "ChangeMe#102", phone: "9876543211",
+    designation: "Assistant Professor", qualification: "M.Tech",
+    employmentType: "Regular", joiningDate: "01-07-2019",
+    gender: "Male", dateOfBirth: "05-11-1990",
+    nameAsPerAadhar: "Suresh Kumar",
+    aadharNo: "234567890123", panNo: "BCDEF2345G",
+    ratificationStatus: "Ratified",
   },
   {
-    employeeId: "FAC003", name: "Ms. Divya Nair", apaarFacultyId: "",
-    collegeEmail: "divya.nair@college.edu", phone: "9876543212", password: "",
-    designation: "Assistant Professor", qualification: "M.Tech", specialization: "Data Science",
-    experienceYears: "4", employmentType: "Contract", joiningDate: "16-08-2022",
-    dateOfJoiningDepartment: "16-08-2022", gender: "Female", dateOfBirth: "30-01-1995",
-    legalName: "Divya Nair", nameAsPerAadhar: "Divya Nair", fatherName: "Mohan Nair", motherName: "Sujatha Nair",
-    aadharNo: "345678901234", panNo: "CDEFG3456H", passportNumber: "",
-    sscHallTicketNo: "3456789", differentlyAbled: "No", bankAccountNo: "62345673456", ifscCode: "ICIC0001234",
-    emergencyContactName: "Mohan Nair", emergencyContactPhone: "9876500003",
-    religion: "Hindu", caste: "OC", subCaste: "", ratificationStatus: "Not Ratified",
-    ratificationDate: "", maritalStatus: "Single", spouseName: "",
-    numberOfChildren: "0", referral: "Dr. Anitha Reddy", nativePlace: "Kochi", bloodGroup: "A+",
-    temporaryAddress: "Flat 302, Green Park, Bhimavaram", permanentSameAsTemporary: "No",
-    permanentAddress: "Nair House, Ernakulam",
+    employeeId: "FAC003", legalName: "DIVYA NAIR", name: "Ms. Divya Nair",
+    collegeEmail: "divya.nair@college.edu", password: "ChangeMe#103", phone: "9876543212",
+    designation: "Assistant Professor", qualification: "M.Tech",
+    employmentType: "Contract", joiningDate: "16-08-2022",
+    gender: "Female", dateOfBirth: "30-01-1995",
+    nameAsPerAadhar: "Divya Nair",
+    aadharNo: "345678901234", panNo: "CDEFG3456H",
+    ratificationStatus: "Not Ratified",
   },
   {
-    employeeId: "FAC004", name: "Dr. Imran Shaik", apaarFacultyId: "APAAR100004",
-    collegeEmail: "imran.shaik@college.edu", phone: "9876543213", password: "",
-    designation: "Associate Professor", qualification: "Ph.D", specialization: "Embedded Systems",
-    experienceYears: "12", employmentType: "Permanent", joiningDate: "04-01-2016",
-    dateOfJoiningDepartment: "01-06-2018", gender: "Male", dateOfBirth: "19-07-1984",
-    legalName: "Imran Shaik", nameAsPerAadhar: "Imran Shaik", fatherName: "Abdul Shaik", motherName: "Fatima Bee",
-    aadharNo: "456789012345", panNo: "DEFGH4567I", passportNumber: "P7654321",
-    sscHallTicketNo: "4567890", differentlyAbled: "No", bankAccountNo: "62345674567", ifscCode: "AXIS0001234",
-    emergencyContactName: "Fatima Bee", emergencyContactPhone: "9876500004",
-    religion: "Muslim", caste: "BC", subCaste: "BC-E", ratificationStatus: "Ratified",
-    ratificationDate: "20-03-2017", maritalStatus: "Married", spouseName: "Ayesha",
-    numberOfChildren: "3", referral: "", nativePlace: "Guntur", bloodGroup: "AB+",
-    temporaryAddress: "23-1-9, Lakshmipuram, Guntur", permanentSameAsTemporary: "Yes",
-    permanentAddress: "",
+    employeeId: "FAC004", legalName: "IMRAN SHAIK", name: "Dr. Imran Shaik",
+    collegeEmail: "imran.shaik@college.edu", password: "ChangeMe#104", phone: "9876543213",
+    designation: "Associate Professor", qualification: "Ph.D",
+    employmentType: "Regular", joiningDate: "04-01-2016",
+    gender: "Male", dateOfBirth: "19-07-1984",
+    nameAsPerAadhar: "Imran Shaik",
+    aadharNo: "456789012345", panNo: "DEFGH4567I",
+    ratificationStatus: "Ratified",
   },
   {
-    employeeId: "FAC005", name: "Mrs. Grace Thomas", apaarFacultyId: "",
-    collegeEmail: "grace.thomas@college.edu", phone: "9876543214", password: "",
-    designation: "Lecturer", qualification: "M.Sc", specialization: "Applied Mathematics",
-    experienceYears: "3", employmentType: "Part-Time", joiningDate: "12-06-2023",
-    dateOfJoiningDepartment: "12-06-2023", gender: "Female", dateOfBirth: "08-09-1996",
-    legalName: "Grace Thomas", nameAsPerAadhar: "Grace Thomas", fatherName: "Thomas Mathew", motherName: "Mary Thomas",
-    aadharNo: "567890123456", panNo: "EFGHI5678J", passportNumber: "",
-    sscHallTicketNo: "5678901", differentlyAbled: "Yes", bankAccountNo: "62345675678", ifscCode: "PUNB0001234",
-    emergencyContactName: "Thomas Mathew", emergencyContactPhone: "9876500005",
-    religion: "Christian", caste: "OTHER", subCaste: "", ratificationStatus: "Not Ratified",
-    ratificationDate: "", maritalStatus: "Married", spouseName: "Jacob Varghese",
-    numberOfChildren: "0", referral: "", nativePlace: "Kottayam", bloodGroup: "O-",
-    temporaryAddress: "House 7, St. Mary's Street, Bhimavaram", permanentSameAsTemporary: "No",
-    permanentAddress: "Thomas Villa, Kottayam",
+    employeeId: "FAC005", legalName: "GRACE THOMAS", name: "Mrs. Grace Thomas",
+    collegeEmail: "grace.thomas@college.edu", password: "ChangeMe#105", phone: "9876543214",
+    designation: "Visiting Professor", qualification: "M.Sc",
+    employmentType: "Visiting", joiningDate: "12-06-2023",
+    gender: "Female", dateOfBirth: "08-09-1996",
+    nameAsPerAadhar: "Grace Thomas",
+    aadharNo: "567890123456", panNo: "EFGHI5678J",
+    ratificationStatus: "Not Ratified",
   },
 ];
 
 export const IMPORT_HINTS = [
-  "Full Name (as per PAN): enter the name exactly as it appears on the faculty member's PAN card - this is the name used on statutory/financial paperwork",
-  "Differently Abled: Yes or No",
-  "Designation: any teaching title used by your college (e.g. Professor, Assoc. Prof., Asst. Prof., Lecturer, Visiting Faculty, Adjunct Faculty for Engineering/Pharmacy/Dental; Principal, HOD, PGT, TGT, PRT etc. for Degree/Polytechnic/School colleges) - Supporting Staff (Lab Assistant, Programmer, Office Assistant, etc.) is added from the Supporting Staff module instead",
-  "Employee Category: Regular, Permanent, Contract, Visiting, Part-Time",
+  "Full Name (as per SSC): enter the name exactly as it appears on the faculty member's SSC (10th class) certificate, in CAPITAL LETTERS - this is the PRIMARY identity name used as their display name everywhere across the app (lists, PDFs, notifications, teaching assignments, etc.).",
+  "Name (as per PAN): optional - only needed for statutory/financial paperwork matching. When left blank, Full Name (as per SSC) is used instead everywhere this faculty member's name is shown.",
+  "Designation: Professor / Assistant Professor / Associate Professor / Associate Professor (Sr) / Visiting Professor / Assistant Professor of Practice / Professor of Practice / Sr. Wellness Counsellor / Other - Supporting Staff (Lab Assistant, Programmer, Office Assistant, etc.) is added from the Supporting Staff module instead. Common short forms are recognized too, case-insensitively (e.g. Prof., Asst. Prof., Assoc. Prof., Assoc.Prof.(Sr)) - however it's punctuated or capitalized, it still maps to the full title.",
+  "Employee Category: Regular / Visiting / Contract / Professor of Practice / Regular(Hyd) / Other",
+  "Designation or Employee Category as \"Other\" is accepted as-is on import - there's no separate column for the custom title/category text; fill that in afterward from the Edit Faculty page.",
   "Dates must be in DD-MM-YYYY format (e.g. 15-06-2020)",
-  "Permanent Address: only needed when Permanent Same as Temporary is No - leave it blank when Yes, since it is filled in automatically from Temporary Address",
   "Department is auto-assigned from your HOD profile",
-  "Login Password (optional): fill this in to create the faculty member's login account (as a Panel Member) automatically during import, using their College Email as the login ID - must be at least 8 characters. Leave it blank to skip login creation for that row; you can still set it up later from the Faculty list's \"Set Login\" button.",
-  "Personal details and Academic Profile aren't part of this template - fill those in afterward from the Edit Faculty page.",
+  "Login Password is mandatory: it creates the faculty member's login account (as a Panel Member) automatically during import, using their College Email as the login ID - must be at least 8 characters. Use a real, unique password per person - never reuse the sample column's placeholder values.",
+  "Every column above is required except Name (as per PAN) and Name (as per Aadhar) - a row missing a required one, or with an invalid value, is rejected and reported back so it can be corrected and re-imported.",
+  "Personal details beyond what's above (father/mother name, religion, bank details, addresses, etc.) and the Academic Profile aren't part of this template - fill those in afterward from the Edit Faculty page.",
 ];

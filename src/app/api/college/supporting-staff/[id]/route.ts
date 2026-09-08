@@ -70,6 +70,7 @@ export async function PATCH(
       designation: SupportingStaffDesignation;
       otherDesignationTitle: string;
       department: string;
+      qualification: string;
       experienceYears: number;
       joiningDate: string;
       dateOfBirth: string;
@@ -77,6 +78,7 @@ export async function PATCH(
       status: FacultyStatus;
       gender: string;
       legalName: string;
+      nameAsPerAadhar: string;
       fatherName: string;
       motherName: string;
       religion: string;
@@ -165,11 +167,25 @@ export async function PATCH(
 
     const stringFields = [
       "name", "email", "phone", "collegeEmail", "staffCategory", "designation", "otherDesignationTitle",
-      "department", "employmentType", "status", "gender", "legalName",
+      "department", "qualification", "employmentType", "status", "gender", "legalName", "nameAsPerAadhar",
       "fatherName", "motherName", "religion", "caste", "subCaste", "aadharNo", "passportNumber",
       "emergencyContactName", "emergencyContactPhone", "ratificationStatus", "userUid",
       "maritalStatus", "spouseName", "referral", "nativePlace", "temporaryAddress", "permanentAddress", "bloodGroup",
     ] as const;
+
+    // These fields are mandatory on both the import template and Add Staff
+    // wizard - Edit must not be able to blank one out via a partial PATCH
+    // that explicitly sends an empty string for it.
+    const REQUIRED_IF_PRESENT = [
+      "name", "collegeEmail", "phone", "designation", "qualification", "employmentType",
+      "gender", "legalName", "nameAsPerAadhar", "aadharNo", "panNo", "ratificationStatus",
+    ] as const;
+    for (const key of REQUIRED_IF_PRESENT) {
+      if (body[key] !== undefined && !body[key].trim()) {
+        return NextResponse.json({ error: `${key} cannot be blanked out - it is a required field` }, { status: 400 });
+      }
+    }
+
     for (const key of stringFields) {
       if (body[key] !== undefined) updates[key] = body[key];
     }

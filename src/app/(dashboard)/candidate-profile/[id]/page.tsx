@@ -168,7 +168,7 @@ export default function CandidateProfilePage() {
           dateOfJoining: a.dateOfJoining,
         })),
         generatedByName: user?.name ?? "College Office",
-        generatedByRole: user?.role ? ROLE_LABELS[user.role] : undefined,
+        generatedByRole: user?.role ? ROLE_LABELS[user.realRole ?? user.role] : undefined,
       }, candidate.name);
     } catch (err) {
       toast({ variant: "destructive", title: "Failed to generate candidate profile", description: err instanceof Error ? err.message : undefined });
