@@ -20,12 +20,12 @@ import { getSupportingStaffProfileModules } from "@/lib/supportingStaff/profileM
 import { useCollegeType } from "@/hooks/useCollegeType";
 import { toast } from "@/hooks/useToast";
 import { getHodTechnicalDesignations, designationLabel } from "@/lib/designations/config";
-import { EMPLOYMENT_TYPE_LABELS } from "@/types";
+import { SUPPORTING_STAFF_EMPLOYMENT_TYPE_LABELS } from "@/types";
 import type { EmploymentType } from "@/types";
 
 const schema = z.object({
   employeeId: z.string().min(1, "Employee ID is required"),
-  name: z.string().min(2, "Name must be at least 2 characters"),
+  name: z.string().optional(),
   email: z.string().email("Invalid email address").optional().or(z.literal("")),
   collegeEmail: z.string().min(1, "College email is required").email("Invalid email address"),
   password: z.string().min(8, "Password must be at least 8 characters"),
@@ -69,7 +69,7 @@ export default function NewHodSupportingStaffPage() {
     formState: { errors },
   } = useForm<FormData>({
     resolver: zodResolver(schema),
-    defaultValues: { experienceYears: 0, designation: "", employmentType: "PERMANENT", password: "" },
+    defaultValues: { experienceYears: 0, designation: "", employmentType: "REGULAR", password: "" },
   });
   const [erroredSteps, setErroredSteps] = useState<Set<WizardStepKey>>(new Set());
 
@@ -145,7 +145,7 @@ export default function NewHodSupportingStaffPage() {
         return;
       }
 
-      toast({ variant: "success", title: "Supporting Staff added", description: `${data.name} has been added.` });
+      toast({ variant: "success", title: "Supporting Staff added", description: `${data.name || "The staff member"} has been added.` });
       router.push("/hod/supporting-staff");
     } catch {
       toast({ variant: "destructive", title: "Network error", description: "Please try again." });
@@ -210,7 +210,7 @@ export default function NewHodSupportingStaffPage() {
                       {errors.employeeId && <p className="text-sm text-destructive">{errors.employeeId.message}</p>}
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="name">Name (as per PAN) *</Label>
+                      <Label htmlFor="name">Name (as per PAN)</Label>
                       <Input id="name" {...register("name")} placeholder="Suresh Babu" />
                       {errors.name && <p className="text-sm text-destructive">{errors.name.message}</p>}
                     </div>
@@ -290,7 +290,7 @@ export default function NewHodSupportingStaffPage() {
                     <Select value={employmentType} onValueChange={(v) => setValue("employmentType", v as EmploymentType)}>
                       <SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger>
                       <SelectContent>
-                        {Object.entries(EMPLOYMENT_TYPE_LABELS).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
+                        {Object.entries(SUPPORTING_STAFF_EMPLOYMENT_TYPE_LABELS).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
                       </SelectContent>
                     </Select>
                     {errors.employmentType && <p className="text-sm text-destructive">{errors.employmentType.message}</p>}

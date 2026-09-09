@@ -5,6 +5,7 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
 import { SUPPORTING_STAFF_ROLE_CATEGORY, canRolePostCategory } from "@/lib/supportingStaff/roleCategory";
+import { supportingStaffDisplayName } from "@/lib/supportingStaff/supportingStaffDisplayName";
 import type { SupportingStaffCategory, SupportingStaffDesignation, EmploymentType, FacultyStatus } from "@/types";
 
 // HOD may only reach Technical-staff records within their own (or owned
@@ -175,10 +176,11 @@ export async function PATCH(
 
     // These fields are mandatory on both the import template and Add Staff
     // wizard - Edit must not be able to blank one out via a partial PATCH
-    // that explicitly sends an empty string for it.
+    // that explicitly sends an empty string for it. Name (as per PAN) and
+    // Name (as per Aadhar) are deliberately excluded - both are optional.
     const REQUIRED_IF_PRESENT = [
-      "name", "collegeEmail", "phone", "designation", "qualification", "employmentType",
-      "gender", "legalName", "nameAsPerAadhar", "aadharNo", "panNo", "ratificationStatus",
+      "collegeEmail", "phone", "designation", "qualification", "employmentType",
+      "gender", "legalName", "aadharNo", "panNo", "ratificationStatus",
     ] as const;
     for (const key of REQUIRED_IF_PRESENT) {
       if (body[key] !== undefined && !body[key].trim()) {
@@ -215,12 +217,22 @@ export async function PATCH(
 
     await ref.update(updates);
 
-    if (body.profilePhotoUrl !== undefined || body.name !== undefined) {
+    if (body.profilePhotoUrl !== undefined || body.name !== undefined || body.legalName !== undefined) {
       const linkedUid = (snap.data() as { userUid?: string }).userUid;
       if (linkedUid) {
         const loginSync: Record<string, string> = {};
         if (body.profilePhotoUrl !== undefined) loginSync.profilePhotoUrl = body.profilePhotoUrl;
-        if (body.name !== undefined) loginSync.name = body.name;
+        // The login's display name follows Full Name (as per SSC) first, Name
+        // (as per PAN) only as a fallback - same precedence as the record's
+        // own creation (POST's finalName) and supportingStaffDisplayName().
+        // Recomputed from whichever of the two changed here, merged with
+        // whatever the current doc already holds for the other.
+        if (body.name !== undefined || body.legalName !== undefined) {
+          const current = snap.data() as { name?: string; legalName?: string };
+          const effectiveLegalName = body.legalName !== undefined ? body.legalName : current.legalName;
+          const effectiveName = body.name !== undefined ? body.name : current.name;
+          loginSync.name = effectiveLegalName?.trim() || effectiveName?.trim() || "";
+        }
         try {
           await db.collection("colleges").doc(session.collegeId).collection("users").doc(linkedUid)
             .set(loginSync, { merge: true });
@@ -253,7 +265,7 @@ export async function DELETE(
     if (!snap.exists) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
-    const staffData = snap.data() as { name?: string; userUid?: string; staffCategory?: SupportingStaffCategory; department?: string };
+    const staffData = snap.data() as { name?: string; legalName?: string; userUid?: string; staffCategory?: SupportingStaffCategory; department?: string };
 
     if (!canRolePostCategory(session.role, staffData.staffCategory ?? "NON_TECHNICAL")) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -290,7 +302,7 @@ export async function DELETE(
       performedBy: session.uid,
       performedByName: actorName,
       targetId: id,
-      details: { name: staffData.name ?? "" },
+      details: { name: supportingStaffDisplayName(staffData) },
       timestamp: new Date(),
     });
 

@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/useToast";
+import { supportingStaffDisplayName } from "@/lib/supportingStaff/supportingStaffDisplayName";
 
 export default function HodSupportingStaffCredentialsPage() {
   const router = useRouter();
@@ -32,7 +33,7 @@ export default function HodSupportingStaffCredentialsPage() {
           return;
         }
         const s = data.staff;
-        setStaffName((s.name as string) ?? "");
+        setStaffName(supportingStaffDisplayName({ legalName: s.legalName as string, name: s.name as string }));
         setEmail(((s.collegeEmail as string) || (s.email as string)) ?? "");
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load staff record" }))

@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { SupportingStaffModuleContent } from "@/components/supportingStaff/SupportingStaffModuleContent";
 import { SUPPORTING_STAFF_MODULES, type SupportingStaffModuleKey } from "@/lib/supportingStaff/profileModules";
+import { supportingStaffDisplayName } from "@/lib/supportingStaff/supportingStaffDisplayName";
 import { toast } from "@/hooks/useToast";
 import type { SupportingStaffMember } from "@/types";
 
@@ -45,7 +46,7 @@ export default function PrincipalNonTechnicalStaffModulePage() {
     <div className="space-y-6">
       <PageHeader
         title={moduleDef.label}
-        description={staff?.name}
+        description={supportingStaffDisplayName(staff)}
         actions={
           <div className="flex gap-2">
             <Button variant="outline" asChild>

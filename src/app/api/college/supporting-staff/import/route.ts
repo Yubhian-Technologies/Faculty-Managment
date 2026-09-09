@@ -6,8 +6,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { createFirebaseUser } from "@/lib/firebase/authRest";
 import { ChunkedBatch } from "@/lib/firestore/chunkedBatch";
 import { splitDegreeAndBranch } from "@/lib/faculty/legacyProfileFallbacks";
-import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
-import { resolveDepartmentByNameOrCode } from "@/lib/departments/codeOrNameResolver";
+import { getHodDepartmentScope } from "@/lib/departments/scope";
 import { getHodTechnicalDesignations, getNonTechnicalDesignations } from "@/lib/designations/config";
 import { NON_TECHNICAL_STAFF_DESIGNATION_LABELS } from "@/types";
 import {
@@ -44,19 +43,9 @@ const NON_TECHNICAL_DESIGNATION_MAP: Record<string, SupportingStaffDesignation> 
 };
 
 const EMPLOYMENT_MAP: Record<string, EmploymentType> = {
-  "permanent": "PERMANENT",
-  "regular": "PERMANENT",
+  "regular": "REGULAR",
   "contract": "CONTRACT",
-  "visiting": "VISITING",
-  "part-time": "PART_TIME",
-  "part time": "PART_TIME",
-};
-
-const STATUS_MAP: Record<string, FacultyStatus> = {
-  "active": "ACTIVE",
-  "on leave": "ON_LEAVE",
-  "resigned": "RESIGNED",
-  "retired": "RETIRED",
+  "voucher": "VOUCHER",
 };
 
 const TRAINING_TYPE_MAP: Record<string, TrainingEntryType> = {
@@ -121,12 +110,6 @@ type ImportRow = {
   aadharNo: string;
   panNo: string;
   ratificationStatus: string;
-  // Staff-specific structural extras - optional, no Faculty analog.
-  email?: string;
-  otherDesignationTitle?: string;
-  department?: string;
-  status?: string;
-  experienceYears?: string;
   otherInformation?: string;
   [key: string]: string | undefined;
 };
@@ -307,15 +290,11 @@ export async function POST(request: Request) {
       .select("employeeId").get();
     const existingIds = new Set(existingSnap.docs.map((d) => (d.data() as { employeeId: string }).employeeId));
 
-    const departmentsSnap = await db.collection("colleges").doc(collegeId).collection("departments").get();
-    // Accepts a department's short Code (e.g. "CSE", the template's own
-    // sample value) or its full name and normalizes to the canonical `name`.
-    // Without this, a row typed with a code got stored verbatim (e.g.
-    // department: "CSE"), which never matches the exact-string department
-    // filter the HOD's own Supporting Staff list queries by - the record was
-    // created successfully but simply never appeared for them again.
-    const plainDepartmentsForResolve = departmentsSnap.docs.map((d) => d.data() as { name?: string; code?: string });
-    const resolveDepartment = (input: string) => resolveDepartmentByNameOrCode(plainDepartmentsForResolve, input);
+    // No Department column in the import template - HOD's rows default to
+    // their own department (same as the single "Add Staff" form); College
+    // Office's Non-Technical rows import with no department and can be
+    // assigned one afterward from the staff member's own Edit page.
+    const department = hodScope ? hodScope.departmentName : "";
 
     const now = new Date();
     const created: string[] = [];
@@ -366,14 +345,11 @@ export async function POST(request: Request) {
         return normalizeDigits(raw);
       };
 
-      // Required field validation - every column in the trimmed-down template
-      // (src/lib/supportingStaff/csvColumns.ts PERSONAL_COLUMNS) is
-      // mandatory, except the staff-specific structural extras (Personal
-      // Email, Designation Title, Department, Status, Total Years of
-      // Experience), which stay optional.
+      // Required field validation - every column in the template
+      // (src/lib/supportingStaff/csvColumns.ts PERSONAL_COLUMNS) is mandatory
+      // except Name (as per PAN) and Name (as per Aadhar), which are optional.
       if (!row.employeeId?.trim()) { failed.push({ row: rowNum, employeeId: "-", error: "Employee ID is required" }); continue; }
       if (!row.legalName?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Full Name (as per SSC) is required" }); continue; }
-      if (!row.name?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Name (as per PAN) is required" }); continue; }
       if (!row.collegeEmail?.trim() || !row.collegeEmail.includes("@")) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Valid College Email is required" }); continue; }
       if (!row.password?.trim() || row.password.trim().length < 8) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Login Password is required and must be at least 8 characters" }); continue; }
       if (!row.phone?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Mobile No is required" }); continue; }
@@ -383,7 +359,6 @@ export async function POST(request: Request) {
       if (!row.joiningDate?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Date of Joining Institution is required" }); continue; }
       if (!row.gender?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Gender is required" }); continue; }
       if (!row.dateOfBirth?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Date of Birth is required" }); continue; }
-      if (!row.nameAsPerAadhar?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Name (as per Aadhar) is required" }); continue; }
       if (!row.aadharNo?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Aadhar No is required" }); continue; }
       if (!row.panNo?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "PAN No is required" }); continue; }
       if (!row.ratificationStatus?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Ratification Status is required" }); continue; }
@@ -404,77 +379,45 @@ export async function POST(request: Request) {
       // case now rejects the row instead of storing it as typed.
       const designationRaw = row.designation.trim();
       const designationKey = designationRaw.toLowerCase();
-      let designation: SupportingStaffDesignation;
+      // "Other" has no Designation Title column to pair with in this
+      // trimmed-down template, so it can't be represented on import - reject
+      // it with a clear pointer to the manual form instead of a dead-end
+      // "Designation Title is required" error that could never be satisfied.
       if (designationKey === "other") {
-        designation = "OTHER";
-      } else {
-        const mappedAbbreviation = NON_TECHNICAL_DESIGNATION_MAP[designationKey];
-        const matched = (mappedAbbreviation && allowedDesignations.includes(mappedAbbreviation))
-          ? mappedAbbreviation
-          : matchOption(designationRaw, allowedDesignations);
-        if (!matched) {
-          failed.push({
-            row: rowNum, employeeId: empId,
-            error: `Designation "${designationRaw}" is not one of the ${staffCategory === "TECHNICAL" ? "Technical" : "Non-Technical"} titles your college allows (${allowedDesignations.join(" / ")} / Other)`,
-          });
-          continue;
-        }
-        designation = matched;
-      }
-      // The template documents this column as required only when Designation
-      // is Other - enforced here, since a blank one otherwise leaves no way
-      // to tell what the actual title was meant to be.
-      if (designation === "OTHER" && !row.otherDesignationTitle?.trim()) {
-        failed.push({ row: rowNum, employeeId: empId, error: "Designation Title (if Other) is required when Designation is Other" });
+        failed.push({
+          row: rowNum, employeeId: empId,
+          error: `Designation "Other" isn't supported for bulk import - use one of your college's allowed titles (${allowedDesignations.join(" / ")}), or add this staff member individually via Add Staff`,
+        });
         continue;
       }
+      const mappedAbbreviation = NON_TECHNICAL_DESIGNATION_MAP[designationKey];
+      const matched = (mappedAbbreviation && allowedDesignations.includes(mappedAbbreviation))
+        ? mappedAbbreviation
+        : matchOption(designationRaw, allowedDesignations);
+      if (!matched) {
+        failed.push({
+          row: rowNum, employeeId: empId,
+          error: `Designation "${designationRaw}" is not one of the ${staffCategory === "TECHNICAL" ? "Technical" : "Non-Technical"} titles your college allows (${allowedDesignations.join(" / ")})`,
+        });
+        continue;
+      }
+      const designation: SupportingStaffDesignation = matched;
 
       // Blank still takes the documented default; an unrecognised value fails
-      // the row instead of quietly becoming Permanent/Active, which turned a
-      // typo into a real employment type.
+      // the row instead of quietly becoming Regular, which turned a typo into
+      // a real employment category.
       const empTypeKey = (row.employmentType ?? "").trim().toLowerCase();
       if (empTypeKey && !EMPLOYMENT_MAP[empTypeKey]) {
-        failed.push({ row: rowNum, employeeId: empId, error: `Employment Type "${row.employmentType?.trim()}" is not one of Permanent / Contract / Visiting / Part-Time` });
+        failed.push({ row: rowNum, employeeId: empId, error: `Employee Category "${row.employmentType?.trim()}" is not one of Regular / Contract / Voucher` });
         continue;
       }
-      const employmentType: EmploymentType = EMPLOYMENT_MAP[empTypeKey] ?? "PERMANENT";
-
-      const statusKey = (row.status ?? "").trim().toLowerCase();
-      if (statusKey && !STATUS_MAP[statusKey]) {
-        failed.push({ row: rowNum, employeeId: empId, error: `Status "${row.status?.trim()}" is not one of Active / On Leave / Resigned / Retired` });
-        continue;
-      }
-      const status: FacultyStatus = STATUS_MAP[statusKey] ?? "ACTIVE";
+      const employmentType: EmploymentType = EMPLOYMENT_MAP[empTypeKey] ?? "REGULAR";
+      const status: FacultyStatus = "ACTIVE";
 
       const joiningDate = parseDate(row.joiningDate);
       if (!joiningDate) { failed.push({ row: rowNum, employeeId: empId, error: "Invalid Date of Joining Institution - use YYYY-MM-DD" }); continue; }
       const dateOfBirth = parseDate(row.dateOfBirth);
       if (!dateOfBirth) dropped(empId, "Date of Birth", row.dateOfBirth);
-
-      const checkNum = (raw: string | undefined, label: string): number | undefined => {
-        if (!raw?.trim()) return undefined;
-        const n = parseFloat(raw);
-        if (!Number.isFinite(n)) { dropped(empId, label, raw); return undefined; }
-        return n;
-      };
-
-      let department = row.department?.trim() || "";
-      if (department) {
-        const resolved = resolveDepartment(department);
-        if (resolved) {
-          department = resolved;
-        } else {
-          dropped(empId, "Department", department);
-          department = "";
-        }
-      }
-      if (hodScope) {
-        if (department && !canHodEditDepartment(hodScope, department)) {
-          dropped(empId, "Department", `${department} (not yours or one of your sub-departments)`);
-          department = "";
-        }
-        if (!department) department = hodScope.departmentName;
-      }
 
       // Computed here, ABOVE the gate, not inline in the payload literal below:
       // that literal is built after the gate, so a constraint failing there was
@@ -483,7 +426,6 @@ export async function POST(request: Request) {
       const vPhone = checkPhone(row.phone, "Phone");
       const vGender = checkOption(row.gender, GENDER_OPTIONS, "Gender");
       const vRatification = checkOption(row.ratificationStatus, RATIFICATION_STATUS_OPTIONS, "Ratification Status");
-      const vExperienceYears = checkNum(row.experienceYears, "Experience");
 
       // Every constraint the template states has now been checked. Anything
       // that failed one rejects the row here - before the login below, so a
@@ -500,9 +442,16 @@ export async function POST(request: Request) {
       // whole row for correction, same as every other constraint above.
       const passwordRaw = row.password.trim();
       const loginEmail = row.collegeEmail.trim().toLowerCase();
+      // Name (as per PAN) is optional - stored on the record verbatim (falls
+      // back to "" when blank). The login account's display name follows
+      // Full Name (as per SSC) first, same precedence as the manual Add form
+      // (finalName) and supportingStaffDisplayName() - row.legalName is
+      // already guaranteed non-blank by the required-field check above.
+      const staffName = row.name?.trim() ?? "";
+      const finalName = row.legalName.trim() || staffName || "";
       let userUid: string;
       try {
-        userUid = await createFirebaseUser(loginEmail, passwordRaw, row.name.trim());
+        userUid = await createFirebaseUser(loginEmail, passwordRaw, finalName);
         createdAuthUids.push(userUid);
       } catch (err) {
         const message = err && typeof err === "object" && "code" in err && err.code === "auth/email-already-exists"
@@ -519,21 +468,19 @@ export async function POST(request: Request) {
         collegeId,
         department: department || undefined,
         employeeId: empId,
-        name: row.name.trim(),
-        email: row.email?.trim() || undefined,
+        name: staffName,
         phone: vPhone ?? "",
         staffCategory,
         designation,
-        otherDesignationTitle: row.otherDesignationTitle?.trim() || undefined,
         qualification: row.qualification.trim(),
-        experienceYears: vExperienceYears ?? 0,
+        experienceYears: 0,
         joiningDate,
         employmentType,
         status,
         gender: vGender,
         dateOfBirth: dateOfBirth || undefined,
         legalName: row.legalName.trim(),
-        nameAsPerAadhar: row.nameAsPerAadhar.trim(),
+        nameAsPerAadhar: row.nameAsPerAadhar?.trim() || undefined,
         aadharNo: normalizeDigits(row.aadharNo),
         panNo: row.panNo.trim().toUpperCase(),
         collegeEmail: loginEmail,
@@ -554,7 +501,7 @@ export async function POST(request: Request) {
         batch.set(userRef, {
           uid: userUid,
           collegeId,
-          name: row.name.trim(),
+          name: finalName,
           email: loginEmail,
           role: "COLLEGE_STAFF",
           designation: designationLabel(designation),
@@ -569,7 +516,7 @@ export async function POST(request: Request) {
           role: "COLLEGE_STAFF",
           collegeId,
           email: loginEmail,
-          name: row.name.trim(),
+          name: finalName,
         });
       }
 

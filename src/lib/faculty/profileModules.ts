@@ -22,7 +22,7 @@ export interface ProfileModuleDef {
 export const PROFILE_MODULES: Record<ProfileModuleKey, ProfileModuleDef> = {
   personal: { key: "personal", label: "Personal Details", icon: IdCard },
   qualification: { key: "qualification", label: "Academic Qualification", icon: GraduationCap },
-  experience: { key: "experience", label: "Previous Experience", icon: Briefcase },
+  experience: { key: "experience", label: "Professional Experience", icon: Briefcase },
   research: { key: "research", label: "Research Publications", icon: FlaskConical },
   grants: { key: "grants", label: "Grants, Consultancy & IP", icon: HandCoins },
   mentorship: { key: "mentorship", label: "Mentorship & Institutional Value", icon: Users },

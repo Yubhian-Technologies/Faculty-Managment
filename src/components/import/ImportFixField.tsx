@@ -11,7 +11,7 @@ import {
   matchOption,
   GENDER_OPTIONS, MARITAL_STATUS_OPTIONS, RATIFICATION_STATUS_OPTIONS, RELIGION_OPTIONS, CASTE_OPTIONS, BLOOD_GROUP_OPTIONS,
 } from "@/lib/import/fieldConstraints";
-import { EMPLOYMENT_TYPE_LABELS, FACULTY_STATUS_LABELS } from "@/types";
+import { SUPPORTING_STAFF_EMPLOYMENT_TYPE_LABELS, FACULTY_STATUS_LABELS } from "@/types";
 import type { CollegeType } from "@/types";
 
 // Which designation catalogue a "Fix Row" dialog's Designation field should
@@ -47,7 +47,7 @@ function fixFieldOptions(
     case "employmentType":
       return designationKind === "teaching"
         ? [...FACULTY_EMPLOYMENT_CATEGORIES, "Other"]
-        : Object.values(EMPLOYMENT_TYPE_LABELS);
+        : Object.values(SUPPORTING_STAFF_EMPLOYMENT_TYPE_LABELS);
     case "status":
       return STATUS_KEYS.map((s) => FACULTY_STATUS_LABELS[s]);
     case "gender":

@@ -16,6 +16,7 @@ import { toast } from "@/hooks/useToast";
 import { sectionDisplayLabel } from "@/lib/sections/sectionLabel";
 import { buildCourseGroups } from "@/lib/departments/hodScope";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
+import { supportingStaffDisplayName } from "@/lib/supportingStaff/supportingStaffDisplayName";
 import type { Course, Department, FacultyMember, Section, SupportingStaffMember, TimetableIncharge } from "@/types";
 
 // One combined dropdown option, whichever roster it actually came from - see
@@ -132,7 +133,7 @@ export default function HODTimetableSectionsPage() {
         .then((r) => r.json() as Promise<{ staff: SupportingStaffMember[] }>)
         .then((d) => (d.staff ?? [])
           .filter((s) => s.status === "ACTIVE" && s.department === departmentName)
-          .map((s): InchargeCandidate => ({ id: s.id, name: s.name, userUid: s.userUid, personType: "SUPPORTING_STAFF" }))),
+          .map((s): InchargeCandidate => ({ id: s.id, name: supportingStaffDisplayName(s), userUid: s.userUid, personType: "SUPPORTING_STAFF" }))),
     ])
       .then(([faculty, staff]) => {
         const combined = [...faculty, ...staff];

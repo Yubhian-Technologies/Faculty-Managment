@@ -227,7 +227,7 @@ export const FACULTY_DESIGNATIONS = [
 // Non-Technical Staff and Salary Structures keep using unchanged. Same
 // "Other" convention as FACULTY_DESIGNATIONS above.
 export const FACULTY_EMPLOYMENT_CATEGORIES = [
-  "Regular", "Visiting", "Contract", "Professor of Practice", "Regular(Hyd)",
+  "Regular", "Visiting", "Contract", "Professor of Practice", "Assistant Professor of Practice", "Regular(Hyd)",
 ];
 
 // AICTE cadre-ratio auto-fill (src/app/api/college/faculty-requirement) only

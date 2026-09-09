@@ -2,8 +2,9 @@ import type { Firestore } from "firebase-admin/firestore";
 import { resolveUserDepartment } from "@/lib/budget/departmentScope";
 import { NON_DEPARTMENTAL_STAFF_ROLES } from "@/lib/leave/nonDepartmentalStaffRoles";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
+import { supportingStaffDisplayName } from "@/lib/supportingStaff/supportingStaffDisplayName";
 import { ROLE_LABELS } from "@/types";
-import type { Department, FacultyMember, FMSUser, UserRole } from "@/types";
+import type { Department, FacultyMember, FMSUser, SupportingStaffMember, UserRole } from "@/types";
 
 export interface ReportPerson {
   uid: string;
@@ -38,6 +39,11 @@ export async function resolveStaffReportRoster(
 
   const people: ReportPerson[] = usersSnap.docs
     .filter((d) => d.id !== session.uid)
+    // A COLLEGE_STAFF login with a real department already appears in that
+    // department's own register (resolveReportRoster above now includes
+    // Supporting Staff) - excluded here so it isn't double-listed, same
+    // reasoning as the analogous exclusion in /api/leave/profiles.
+    .filter((d) => !(role === "COLLEGE_STAFF" && (d.data() as FMSUser).department))
     .map((d) => {
       const u = d.data() as FMSUser;
       return { uid: d.id, employeeId: u.employeeId ?? "-", name: u.name, role: u.role };
@@ -87,8 +93,13 @@ export async function resolveReportRoster(
     department = { id: deptSnap.id, ...deptSnap.data() } as Department;
   }
 
-  const [facultySnap, hodUserSnap] = await Promise.all([
+  const [facultySnap, supportingStaffSnap, hodUserSnap] = await Promise.all([
     collegeRef.collection("facultyMembers").where("department", "==", department.name).get(),
+    // Same department's Technical/Non-Technical Supporting Staff - without
+    // this, the register only ever showed Faculty, even though Supporting
+    // Staff get their own leave profile/category same as Faculty (see
+    // resolveReportRoster's sibling, getOrCreateProfile via /api/leave/profiles).
+    collegeRef.collection("supportingStaff").where("department", "==", department.name).get(),
     includeHod && department.hodUid ? collegeRef.collection("users").doc(department.hodUid).get() : Promise.resolve(null),
   ]);
 
@@ -102,6 +113,11 @@ export async function resolveReportRoster(
     const f = d.data() as FacultyMember;
     if (!f.userUid) continue; // no login -> no leave account to report on
     people.push({ uid: f.userUid, employeeId: f.employeeId, name: facultyDisplayName(f), role: "PANEL_MEMBER" });
+  }
+  for (const d of supportingStaffSnap.docs) {
+    const s = d.data() as SupportingStaffMember;
+    if (!s.userUid) continue; // no login -> no leave account to report on
+    people.push({ uid: s.userUid, employeeId: s.employeeId, name: supportingStaffDisplayName(s), role: "COLLEGE_STAFF" });
   }
 
   return { department, people };

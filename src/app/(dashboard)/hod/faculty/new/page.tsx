@@ -25,6 +25,7 @@ import { AvatarUploadField } from "@/components/shared/AvatarUploadField";
 import { PROFILE_MODULES } from "@/lib/faculty/profileModules";
 import { FACULTY_DESIGNATIONS, FACULTY_EMPLOYMENT_CATEGORIES, designationLabel } from "@/lib/designations/config";
 import { useCollegeType } from "@/hooks/useCollegeType";
+import { useAuthStore } from "@/store/authStore";
 import { toast } from "@/hooks/useToast";
 import type { FacultyProfileFields } from "@/types";
 
@@ -74,6 +75,15 @@ export default function NewFacultyPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { collegeType } = useCollegeType();
+  const user = useAuthStore((s) => s.user);
+  // Same derivation as the bulk-import page (hod/faculty/import/page.tsx) -
+  // an HOD can now head more than one top-level department at once
+  // (user.departments), so which one a NEW faculty member belongs to is no
+  // longer implicit. POST /api/college/faculty rejects with no way to
+  // recover from the UI otherwise (it 400s "You manage more than one
+  // department - specify which" once departments.length > 1) - this picker
+  // is what actually satisfies that requirement.
+  const myDepartments = user?.departments && user.departments.length > 0 ? user.departments : (user?.department ? [user.department] : []);
 
   // Reached from the Faculty Register's "Sub-Department HODs" card when that
   // sub-department's HOD login has no facultyMembers record yet (see
@@ -95,6 +105,7 @@ export default function NewFacultyPage() {
   const [personalDetails, setPersonalDetails] = useState<PersonalDetailsValue>(
     () => (linkName ? { legalName: linkName } : {})
   );
+  const [department, setDepartment] = useState("");
   const [teachingRows, setTeachingRows] = useState<StagedTeachingRow[]>([]);
   const [photoUrl, setPhotoUrl] = useState<string | undefined>(undefined);
   const [tempPhotoId] = useState(() => crypto.randomUUID());
@@ -175,6 +186,18 @@ export default function NewFacultyPage() {
   }
 
   const onSubmit = async (data: FormData) => {
+    // Which department this faculty member belongs to isn't in the zod
+    // schema (link mode ignores it entirely - the department is already
+    // fixed to linkDepartment) - checked here instead, same pattern as
+    // College Email/Password below. Only actually required once this HOD
+    // heads more than one department; a single-department HOD never sees
+    // the picker and the server falls back to their one department itself.
+    if (!isLinkMode && myDepartments.length > 1 && !department) {
+      setErroredSteps(new Set<WizardStepKey>(["core"]));
+      setStepIndex(steps.findIndex((s) => s.key === "core"));
+      toast({ variant: "destructive", title: "Some required fields are missing", description: "Identity & Employment: Department" });
+      return;
+    }
     // College Email/Password aren't in the zod schema's required set (they
     // don't apply in link mode, see isLinkMode above) - so the default
     // "create a new login" flow enforces their presence here instead.
@@ -217,7 +240,9 @@ export default function NewFacultyPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...data,
-          ...(isLinkMode ? { linkUid, department: linkDepartment, collegeEmail: undefined, password: undefined } : {}),
+          ...(isLinkMode
+            ? { linkUid, department: linkDepartment, collegeEmail: undefined, password: undefined }
+            : department ? { department } : {}),
           academicProfile,
           ...personalDetails,
           ...(photoUrl ? { profilePhotoUrl: photoUrl } : {}),
@@ -332,6 +357,26 @@ export default function NewFacultyPage() {
                     <p className="text-xs text-muted-foreground mt-0.5">
                       This profile links to {linkName || "their"} existing HOD login - no new account or password is created.
                     </p>
+                  </div>
+                )}
+
+                {/* Only shown when this HOD heads more than one department at
+                    once - a single-department HOD's own department is always
+                    implicit, same as before. Placed right after identity,
+                    before Role/Employment Details, since it decides which
+                    department's register this faculty member is filed under -
+                    the same slot the read-only version above shows for a
+                    Sub-HOD link. */}
+                {!isLinkMode && myDepartments.length > 1 && (
+                  <div className="space-y-2">
+                    <Label>Department *</Label>
+                    <Select value={department} onValueChange={setDepartment}>
+                      <SelectTrigger><SelectValue placeholder="Select department" /></SelectTrigger>
+                      <SelectContent>
+                        {myDepartments.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">You manage more than one department - choose which one this faculty member belongs to.</p>
                   </div>
                 )}
 
