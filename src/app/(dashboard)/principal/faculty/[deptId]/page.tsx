@@ -1,15 +1,18 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Eye, Pencil, UsersRound } from "lucide-react";
+import { ArrowLeft, Eye, Pencil, Trash2, UsersRound } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/shared/Avatar";
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
+import { toast } from "@/hooks/useToast";
+import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { DESIGNATION_LABELS, FACULTY_STATUS_LABELS } from "@/types";
 import type { Department, Designation, FacultyMember, FacultyStatus, FMSUser } from "@/types";
 
@@ -34,8 +37,11 @@ const STATUS_TABS = [
 
 export default function PrincipalDepartmentFacultyPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { deptId } = useParams<{ deptId: string }>();
   const [statusFilter, setStatusFilter] = useState("");
+  const [removingHod, setRemovingHod] = useState(false);
+  const [isRemoving, setIsRemoving] = useState(false);
 
   const { data: departments = [] } = useQuery({
     queryKey: ["principal-faculty-departments"],
@@ -66,15 +72,46 @@ export default function PrincipalDepartmentFacultyPage() {
     enabled: !!department,
   });
 
+  // Clears the department's HOD assignment. Deliberately NOT a delete of the
+  // person: the same PATCH the Assign HOD dropdown already uses (hodUid: "")
+  // also drops this department from their own profile's `departments`, so they
+  // keep their login and any other department they head. Re-assign from
+  // Departments → Assign HOD.
+  async function handleRemoveHod() {
+    if (!department || !hod) return;
+    setIsRemoving(true);
+    try {
+      const res = await fetch("/api/college/departments", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ deptId: department.id, hodUid: "", hodName: "" }),
+      });
+      const json = await res.json() as { error?: string };
+      if (!res.ok) throw new Error(json.error ?? "Failed to remove HOD");
+      toast({
+        variant: "success",
+        title: `${hod.name} is no longer HOD of ${department.name}`,
+        description: "Their account is unchanged — assign a new HOD from Departments.",
+      });
+      setRemovingHod(false);
+      await queryClient.invalidateQueries({ queryKey: ["principal-faculty-departments"] });
+      await queryClient.invalidateQueries({ queryKey: ["principal-dept-hod"] });
+    } catch (err) {
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to remove HOD" });
+    } finally {
+      setIsRemoving(false);
+    }
+  }
+
   const columns: Column<FacultyRow>[] = [
     {
       key: "name",
       header: "Faculty Member",
       render: (row) => (
         <div className="flex items-center gap-3">
-          <Avatar name={row.name} photoUrl={row.profilePhotoUrl} size="sm" />
+          <Avatar name={facultyDisplayName(row)} photoUrl={row.profilePhotoUrl} size="sm" />
           <div>
-            <p className="font-medium leading-tight">{row.name}</p>
+            <p className="font-medium leading-tight">{facultyDisplayName(row)}</p>
             <p className="text-xs text-muted-foreground">ID: {row.employeeId}</p>
           </div>
         </div>
@@ -141,6 +178,14 @@ export default function PrincipalDepartmentFacultyPage() {
                 <Button size="sm" variant="outline" asChild>
                   <Link href={`/principal/staff/${hod.uid}/edit`}><Pencil className="h-3.5 w-3.5 mr-1" />Edit HOD</Link>
                 </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="text-destructive hover:text-destructive"
+                  onClick={() => setRemovingHod(true)}
+                >
+                  <Trash2 className="h-3.5 w-3.5 mr-1" />Remove HOD
+                </Button>
               </div>
             </>
           ) : (
@@ -180,6 +225,16 @@ export default function PrincipalDepartmentFacultyPage() {
           <UsersRound className="h-4 w-4" /> Resolving department…
         </p>
       )}
+
+      <ConfirmDialog
+        open={removingHod}
+        onOpenChange={(open) => !open && setRemovingHod(false)}
+        title={`Remove ${hod?.name ?? "this HOD"} as HOD?`}
+        description={`${department?.name ?? "This department"} will have no HOD until you assign one from Departments. ${hod?.name ?? "They"} keeps their account and login — only the assignment is removed.`}
+        confirmLabel={isRemoving ? "Removing..." : "Remove HOD"}
+        variant="destructive"
+        onConfirm={() => void handleRemoveHod()}
+      />
     </div>
   );
 }

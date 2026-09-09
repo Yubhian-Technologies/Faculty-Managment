@@ -8,6 +8,7 @@ import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/s
 import { resolveMergedCourseIds } from "@/lib/departments/courseGrouping";
 import { getFacultyPeriodsForDate } from "@/lib/timetable/currentPeriod";
 import { resolvePeriodCompletionStatus } from "@/lib/attendance/periodAttendanceStatus";
+import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import type { Course, FacultyMember, StudentAttendanceSession, TeachingAssignment } from "@/types";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -171,7 +172,7 @@ export async function GET(request: Request) {
       .filter((s) => s.exists)
       .map((s) => {
         const f = s.data() as FacultyMember;
-        return { facultyId: s.id, name: f.name, designation: f.designation };
+        return { facultyId: s.id, name: facultyDisplayName(f), designation: f.designation };
       })
       .sort((a, b) => a.name.localeCompare(b.name));
 

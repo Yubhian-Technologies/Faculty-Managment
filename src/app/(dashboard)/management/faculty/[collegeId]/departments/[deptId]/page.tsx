@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { ProfileFieldsView } from "@/components/faculty/ProfileFieldsView";
 import { PersonalDetailsView } from "@/components/shared/PersonalDetailsView";
 import { Avatar } from "@/components/shared/Avatar";
+import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import type { FacultyMember, FMSUser, FacultyProfileFields, College, ResearchPublication } from "@/types";
 
 type FacultyRow = Record<string, unknown> & FacultyMember;
@@ -49,8 +50,8 @@ export default function ManagementDepartmentFacultyPage() {
       header: "Name",
       render: (row) => (
         <div className="flex items-center gap-3">
-          <Avatar name={row.name} photoUrl={row.profilePhotoUrl} size="sm" />
-          <span>{row.name}</span>
+          <Avatar name={facultyDisplayName(row)} photoUrl={row.profilePhotoUrl} size="sm" />
+          <span>{facultyDisplayName(row)}</span>
         </div>
       ),
     },

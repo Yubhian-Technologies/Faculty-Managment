@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Avatar } from "@/components/shared/Avatar";
 import { AvatarUploadField } from "@/components/shared/AvatarUploadField";
 import { getFacultyProfileModules, type ProfileModuleKey } from "@/lib/faculty/profileModules";
+import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { formatDate } from "@/lib/utils";
 import { toast } from "@/hooks/useToast";
 import { DESIGNATION_LABELS, FACULTY_STATUS_LABELS } from "@/types";
@@ -126,7 +127,7 @@ export function FacultyProfileHub({
   return (
     <div className="space-y-6">
       <PageHeader
-        title={faculty.name ?? "Faculty Member"}
+        title={facultyDisplayName(faculty) || "Faculty Member"}
         description={designationLabel}
         actions={
           <div className="flex gap-2">
@@ -164,22 +165,23 @@ export function FacultyProfileHub({
           <div className="flex items-center gap-4 flex-wrap">
             {faculty.id ? (
               <AvatarUploadField
-                name={faculty.name ?? "?"}
+                name={facultyDisplayName(faculty) || "?"}
                 photoUrl={photoUrl}
                 targetId={faculty.id}
                 onUploaded={handlePhotoUploaded}
                 onDeleted={() => void handlePhotoUploaded("")}
               />
             ) : (
-              <Avatar name={faculty.name ?? "?"} photoUrl={photoUrl} size="lg" />
+              <Avatar name={facultyDisplayName(faculty) || "?"} photoUrl={photoUrl} size="lg" />
             )}
             {faculty.status && <Badge variant={STATUS_VARIANTS[faculty.status] ?? "secondary"}>{FACULTY_STATUS_LABELS[faculty.status] ?? faculty.status}</Badge>}
           </div>
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
             <Fact label="Employee ID" value={faculty.employeeId} />
+            <Fact label="Name (as per PAN)" value={faculty.name} />
             <Fact label="Email" value={faculty.email} />
             <Fact label="College Email" value={faculty.collegeEmail} />
-            <Fact label="Phone" value={faculty.phone} />
+            <Fact label="Mobile No" value={faculty.phone} />
             <Fact
               label="Department"
               value={
@@ -190,6 +192,7 @@ export function FacultyProfileHub({
               }
             />
             <Fact label="Designation" value={designationLabel} />
+            <Fact label="Employee Category" value={faculty.employmentType} />
             <Fact
               label={faculty.status === "INTERVIEW_DONE" ? "Expected to Join" : "Date of Joining"}
               value={
@@ -198,7 +201,7 @@ export function FacultyProfileHub({
                   : undefined
               }
             />
-            <Fact label="Qualification" value={faculty.qualification} />
+            <Fact label="Highest Qualification" value={faculty.qualification} />
             <Fact label="Specialization" value={faculty.specialization} />
             <Fact label="Experience (yrs)" value={faculty.experienceYears} />
             <Fact label="APAAR Faculty ID" value={faculty.apaarFacultyId} />

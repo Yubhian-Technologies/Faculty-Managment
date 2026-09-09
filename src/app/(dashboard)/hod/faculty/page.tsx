@@ -17,6 +17,7 @@ import { useMyDepartments } from "@/hooks/useMyDepartments";
 import { exportFacultyCsv } from "@/lib/faculty/exportFacultyCsv";
 import { downloadResumePdf } from "@/lib/pdf/downloadResume";
 import { hasSupportingStaffSplit } from "@/lib/designations/config";
+import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { DESIGNATION_LABELS, EMPLOYMENT_TYPE_LABELS, FACULTY_STATUS_LABELS } from "@/types";
 import type { FacultyMember, Designation, EmploymentType, FacultyStatus, TeachingAssignment, CollegeType, Department } from "@/types";
 
@@ -95,6 +96,43 @@ export default function HODFacultyPage() {
       .catch(() => {});
   }, []);
 
+  // Which sub-department's Sub-HOD is being removed - null when no dialog is
+  // open. Same meaning as the Principal's Remove HOD on the department faculty
+  // page: it clears the assignment, it doesn't touch the person's account.
+  const [removingSubHod, setRemovingSubHod] = useState<Department | null>(null);
+  const [isRemovingSubHod, setIsRemovingSubHod] = useState(false);
+
+  async function handleRemoveSubHod() {
+    if (!removingSubHod) return;
+    setIsRemovingSubHod(true);
+    try {
+      const res = await fetch("/api/college/departments", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        // hodUid/hodName are both on the HOD-permitted field list for a
+        // sub-department they own (see the route's HOD allowlist), so this is
+        // the same call the Sub-Departments settings page already makes.
+        body: JSON.stringify({ deptId: removingSubHod.id, hodUid: "", hodName: "" }),
+      });
+      const json = await res.json() as { error?: string };
+      if (!res.ok) throw new Error(json.error ?? "Failed to remove Sub-HOD");
+      toast({
+        variant: "success",
+        title: `${removingSubHod.hodName ?? "They"} is no longer Sub-HOD of ${removingSubHod.name}`,
+        description: "Their account is unchanged — assign a new Sub-HOD from Sub-Departments.",
+      });
+      const removedId = removingSubHod.id;
+      setRemovingSubHod(null);
+      setDepartments((prev) =>
+        prev.map((d) => (d.id === removedId ? { ...d, hodUid: undefined, hodName: undefined } : d))
+      );
+    } catch (err) {
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to remove Sub-HOD" });
+    } finally {
+      setIsRemovingSubHod(false);
+    }
+  }
+
   const subDepartments = useMemo(() => {
     const ownIds = new Set(departments.filter((d) => myDepartments.includes(d.name)).map((d) => d.id));
     if (ownIds.size === 0) return [];
@@ -164,12 +202,19 @@ export default function HODFacultyPage() {
     setIsDeleting(true);
     try {
       const res = await fetch(`/api/college/faculty/${deleteTarget.id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error();
-      toast({ variant: "success", title: `${deleteTarget.name as string} removed from faculty register` });
+      const json = await res.json().catch(() => ({})) as { error?: string };
+      if (!res.ok) {
+        // The API already explains exactly why (e.g. "still has active
+        // teaching assignments or timetable slots" - 409) - surface that
+        // instead of a blanket "failed" message that hides the real reason.
+        toast({ variant: "destructive", title: "Failed to delete faculty record", description: json.error });
+        return;
+      }
+      toast({ variant: "success", title: `${facultyDisplayName(deleteTarget)} removed from faculty register` });
       setDeleteTarget(null);
       void load(statusFilter);
     } catch {
-      toast({ variant: "destructive", title: "Failed to delete faculty record" });
+      toast({ variant: "destructive", title: "Failed to delete faculty record", description: "Network error - please try again." });
     } finally {
       setIsDeleting(false);
     }
@@ -193,7 +238,7 @@ export default function HODFacultyPage() {
           researchPublications = pubData.publications ?? [];
         } catch { /* non-critical - resume falls back to self-reported publications, if any */ }
       }
-      await downloadResumePdf({ ...row, teachingAssignments, researchPublications, collegeName }, (row.employeeId as string) || (row.name as string));
+      await downloadResumePdf({ ...row, teachingAssignments, researchPublications, collegeName }, (row.employeeId as string) || facultyDisplayName(row));
     } catch (err) {
       toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to generate resume" });
     } finally {
@@ -235,10 +280,10 @@ export default function HODFacultyPage() {
       header: "Faculty Member",
       render: (row) => (
         <div className="flex items-start gap-3 min-w-0">
-          <Avatar name={row.name as string} photoUrl={row.profilePhotoUrl as string | undefined} size="sm" className="mt-0.5" />
+          <Avatar name={facultyDisplayName(row)} photoUrl={row.profilePhotoUrl as string | undefined} size="sm" className="mt-0.5" />
           <div className="space-y-0.5 min-w-0">
             <div className="flex items-center gap-1.5 flex-wrap">
-              <p className="font-medium leading-tight">{row.name as string}</p>
+              <p className="font-medium leading-tight">{facultyDisplayName(row)}</p>
               {/* Which department this faculty member actually belongs to -
                   now that the roster spans sub-departments/managed branches
                   too (not just this HOD's own), without this a faculty added
@@ -273,7 +318,7 @@ export default function HODFacultyPage() {
     },
     {
       key: "employmentType",
-      header: "Employment",
+      header: "Employee Category",
       hideOnMobile: true,
       render: (row) => (
         <div className="space-y-1">
@@ -406,7 +451,7 @@ export default function HODFacultyPage() {
                     ? `/hod/faculty/${facultyId}`
                     : `/hod/faculty/new?linkUid=${encodeURIComponent(d.hodUid)}&department=${encodeURIComponent(d.name)}&name=${encodeURIComponent(d.hodName ?? "")}`;
                 const body = (
-                  <div className={`flex items-center gap-2 text-sm border rounded-lg px-3 py-2 h-full ${href ? "transition-colors hover:bg-muted/50 hover:border-primary/40 cursor-pointer" : ""}`}>
+                  <>
                     <UserCog className="h-4 w-4 text-muted-foreground shrink-0" />
                     <div className="min-w-0">
                       <p className="font-medium truncate">{d.name}</p>
@@ -418,9 +463,32 @@ export default function HODFacultyPage() {
                         )
                         : <p className="text-muted-foreground text-xs italic">No Sub-HOD assigned</p>}
                     </div>
+                  </>
+                );
+                // The border moved out to this wrapper so Remove can sit
+                // OUTSIDE the Link - nested inside it, every click would
+                // navigate to the profile instead of opening the dialog.
+                return (
+                  <div
+                    key={d.id}
+                    className={`flex items-center gap-2 text-sm border rounded-lg px-3 py-2 h-full ${href ? "transition-colors hover:bg-muted/50 hover:border-primary/40" : ""}`}
+                  >
+                    {href
+                      ? <Link href={href} className="flex items-center gap-2 min-w-0 flex-1 cursor-pointer">{body}</Link>
+                      : <div className="flex items-center gap-2 min-w-0 flex-1">{body}</div>}
+                    {d.hodUid && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 shrink-0 text-destructive hover:text-destructive"
+                        title={`Remove ${d.hodName ?? "this Sub-HOD"} as Sub-HOD of ${d.name}`}
+                        onClick={() => setRemovingSubHod(d)}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
                   </div>
                 );
-                return href ? <Link key={d.id} href={href}>{body}</Link> : <div key={d.id}>{body}</div>;
               })}
             </div>
           </CardContent>
@@ -434,7 +502,7 @@ export default function HODFacultyPage() {
         keyExtractor={(r) => r.id as string}
         onRowClick={(row) => router.push(`/hod/faculty/${row.id}`)}
         searchPlaceholder="Search by name, email, employee ID..."
-        searchKeys={["name", "email", "employeeId", "specialization"] as (keyof FacultyRow)[]}
+        searchKeys={["name", "legalName", "email", "employeeId", "specialization"] as (keyof FacultyRow)[]}
         emptyTitle="No teaching faculty records yet"
         emptyDescription="Add faculty members to build your department's staff register"
         emptyAction={<Button onClick={() => router.push("/hod/faculty/new")}><UserPlus className="h-4 w-4 mr-2" />Add Faculty</Button>}
@@ -445,11 +513,23 @@ export default function HODFacultyPage() {
         open={!!deleteTarget}
         onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}
         title="Delete faculty record?"
-        description={`This will permanently remove ${(deleteTarget?.name as string) ?? "this faculty member"} (${(deleteTarget?.employeeId as string) ?? ""}) from the register. This cannot be undone.`}
+        description={`This will permanently remove ${facultyDisplayName(deleteTarget) || "this faculty member"} (${(deleteTarget?.employeeId as string) ?? ""}) from the register. This cannot be undone.`}
         confirmLabel="Delete"
         variant="destructive"
         onConfirm={() => void handleDelete()}
         loading={isDeleting}
+      />
+
+      {/* ── Remove Sub-HOD Confirm ── */}
+      <ConfirmDialog
+        open={!!removingSubHod}
+        onOpenChange={(open) => { if (!open) setRemovingSubHod(null); }}
+        title={`Remove ${removingSubHod?.hodName ?? "this Sub-HOD"} as Sub-HOD?`}
+        description={`${removingSubHod?.name ?? "This sub-department"} will have no Sub-HOD until you assign one from Sub-Departments. ${removingSubHod?.hodName ?? "They"} keeps their account and login — only the assignment is removed.`}
+        confirmLabel="Remove Sub-HOD"
+        variant="destructive"
+        onConfirm={() => void handleRemoveSubHod()}
+        loading={isRemovingSubHod}
       />
     </div>
   );

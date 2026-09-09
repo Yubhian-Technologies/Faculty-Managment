@@ -2,14 +2,17 @@ export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
-import { requireCollegeMember } from "@/lib/auth/verifySession";
+import { requireCollegeMember, isDepartmentOffice } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
 import { syncDepartmentHod, getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
 
 async function loadTargetInScope(
   db: FirebaseFirestore.Firestore,
-  session: { collegeId: string; role: string; uid: string },
+  // realRole is needed to tell a Department Office head apart from the HOD they
+  // report to - their `role` reads "HOD" for everything else (see the
+  // normalization in api/auth/session).
+  session: { collegeId: string; role: string; uid: string; realRole?: string },
   uid: string
 ) {
   const targetSnap = await db
@@ -26,10 +29,28 @@ async function loadTargetInScope(
   if (session.role === "PRINCIPAL" || session.role === "VICE_PRINCIPAL") {
     // Matches CREATABLE_ROLES in principal/staff/new/page.tsx - every role a
     // Principal/VP can create here, they can also view/edit/deactivate.
-    if (!["HOD", "COLLEGE_OFFICE", "VICE_PRINCIPAL", "COLLEGE_STAFF", "DEAN", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D", "PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL", "PANEL_MEMBER", "WEBMASTER", "COLLEGE_ACCOUNTS"].includes(target.role)) {
+    // DEPARTMENT_OFFICE is the exception to that symmetry: only an HOD APPOINTS
+    // one (see users POST), but the Principal still oversees them like any other
+    // college staff, so they're listed on the Staff page and must be viewable
+    // and deactivatable from it - otherwise that row renders dead buttons.
+    if (!["HOD", "DEPARTMENT_OFFICE", "COLLEGE_OFFICE", "VICE_PRINCIPAL", "COLLEGE_ADMIN", "COLLEGE_STAFF", "DEAN", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D", "PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL", "PANEL_MEMBER", "WEBMASTER", "COLLEGE_ACCOUNTS"].includes(target.role)) {
       return { targetSnap: null, error: "Cannot access this user", status: 403 };
     }
   } else if (session.role === "HOD") {
+    // A Department Office head is the HOD's own appointee for their department,
+    // so the HOD manages them here (deactivate = remove from the post). The
+    // office head is fenced out of it: their session also reads "HOD", so
+    // without this check they could deactivate themselves or a peer.
+    if (target.role === "DEPARTMENT_OFFICE") {
+      if (isDepartmentOffice(session)) {
+        return { targetSnap: null, error: "Only the Head of Department can manage the Department Office head", status: 403 };
+      }
+      const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
+      if (!canHodEditDepartment(scope, target.department ?? "")) {
+        return { targetSnap: null, error: "That Department Office head is not in your department", status: 403 };
+      }
+      return { targetSnap, error: null, status: 200 };
+    }
     if (target.role !== "PANEL_MEMBER" && target.role !== "CLASS_LEADER") {
       return { targetSnap: null, error: "HOD can only manage Panel Members and Class Leaders", status: 403 };
     }

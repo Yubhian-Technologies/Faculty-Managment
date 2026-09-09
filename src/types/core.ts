@@ -21,6 +21,15 @@ export type UserRole =
   // Principal via /principal/staff/new, alongside the non-technical/office roles.
   | "COLLEGE_ADMIN"
   | "HOD"
+  // A department's own office head, appointed by its HOD. Carries the SAME
+  // authority as that HOD over that department, so it is normalized to "HOD"
+  // for auth purposes in src/app/api/auth/session/route.ts and
+  // src/hooks/useAuth.ts - exactly the COLLEGE_ADMIN -> PRINCIPAL pattern
+  // above, and for the same reason: it keeps the role out of the ~420
+  // file-by-file role==="HOD" checks, which can never drift out of step as a
+  // result. `realRole` still reports the truth, which is what fences off the
+  // few things they may NOT do (appoint another one, remove a Sub-HOD).
+  | "DEPARTMENT_OFFICE"
   | "COLLEGE_OFFICE"
   | "COLLEGE_STAFF"
   | "DEAN"
@@ -50,6 +59,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   VICE_PRINCIPAL: "Vice Principal",
   COLLEGE_ADMIN: "College Admin",
   HOD: "Head of Department",
+  DEPARTMENT_OFFICE: "Department Office",
   COLLEGE_OFFICE: "College Office",
   COLLEGE_STAFF: "College Staff",
   DEAN: "Dean",
@@ -80,6 +90,7 @@ export const ROLE_DASHBOARD_PATHS: Record<UserRole, string> = {
   VICE_PRINCIPAL: "/vice-principal",
   COLLEGE_ADMIN: "/principal",
   HOD: "/hod",
+  DEPARTMENT_OFFICE: "/hod",
   COLLEGE_OFFICE: "/college-office",
   COLLEGE_STAFF: "/college-staff",
   DEAN: "/dean",
@@ -120,6 +131,7 @@ export const ROLE_LEVEL: Record<UserRole, 0 | 1 | 2 | 3 | 4 | 5 | 6> = {
   VICE_PRINCIPAL: 3,
   COLLEGE_ADMIN: 3,
   HOD: 4,
+  DEPARTMENT_OFFICE: 4,
   COLLEGE_OFFICE: 4,
   COLLEGE_STAFF: 4,
   DEAN: 4,
@@ -166,6 +178,7 @@ export const ROLE_SCOPE: Record<UserRole, RoleScope> = {
   VICE_PRINCIPAL: "COLLEGE",
   COLLEGE_ADMIN: "COLLEGE",
   HOD: "COLLEGE",
+  DEPARTMENT_OFFICE: "COLLEGE",
   COLLEGE_OFFICE: "COLLEGE",
   COLLEGE_STAFF: "COLLEGE",
   DEAN: "COLLEGE",
@@ -792,10 +805,19 @@ export type Designation = string;
 export const DESIGNATION_LABELS: Record<string, string> = {
   PROFESSOR: "Professor",
   ASSOCIATE_PROFESSOR: "Associate Professor",
+  ASSOCIATE_PROFESSOR_SR: "Associate Professor (Sr)",
   ASSISTANT_PROFESSOR: "Assistant Professor",
   LECTURER: "Lecturer",
   VISITING_FACULTY: "Visiting Faculty",
   ADJUNCT_FACULTY: "Adjunct Faculty",
+  // Faculty's own current title list (FACULTY_DESIGNATIONS,
+  // src/lib/designations/config.ts) - LECTURER/VISITING_FACULTY/
+  // ADJUNCT_FACULTY above stay mapped for any pre-existing record still
+  // holding one of those older titles.
+  VISITING_PROFESSOR: "Visiting Professor",
+  ASSISTANT_PROFESSOR_OF_PRACTICE: "Assistant Professor of Practice",
+  PROFESSOR_OF_PRACTICE: "Professor of Practice",
+  SR_WELLNESS_COUNSELLOR: "Sr. Wellness Counsellor",
   // Technical designations moved to Supporting Staff - kept here too so any
   // FacultyMember record not yet moved by the migration script still
   // displays as a word instead of the raw code.
@@ -806,9 +828,18 @@ export const DESIGNATION_LABELS: Record<string, string> = {
   OTHER: "Other",
 };
 
-export type EmploymentType = "PERMANENT" | "CONTRACT" | "VISITING" | "PART_TIME";
+// Widened to plain string (matching Designation's own pattern above) so
+// Faculty's Employee Category can use its own independent category list
+// (FACULTY_EMPLOYMENT_CATEGORIES, src/lib/designations/config.ts) - including
+// a free-text "Other" - without those values needing to fit the fixed
+// PERMANENT/CONTRACT/VISITING/PART_TIME codes below, which Supporting/
+// Non-Technical Staff and Salary Structures still use unchanged
+// (EMPLOYMENT_TYPE_LABELS keeps displaying those four as words; a value
+// outside it, like Faculty's new categories, just displays as-is wherever
+// the lookup already falls back to the raw value).
+export type EmploymentType = string;
 
-export const EMPLOYMENT_TYPE_LABELS: Record<EmploymentType, string> = {
+export const EMPLOYMENT_TYPE_LABELS: Record<string, string> = {
   PERMANENT: "Permanent",
   CONTRACT: "Contract",
   VISITING: "Visiting",
@@ -842,7 +873,12 @@ export interface FacultyMember {
   department: string;
   employeeId: string;
   apaarFacultyId?: string; // NBA/AICTE — APAAR Faculty ID
-  name: string;
+  // Name (as per PAN) — optional statutory-matching detail, NOT the record's
+  // display name. legalName (below, in the personal/statutory block) is the
+  // primary/required identity name; use facultyDisplayName()
+  // (src/lib/faculty/facultyDisplayName.ts) wherever a faculty member's name
+  // is shown, rather than reading this field directly.
+  name?: string;
   email?: string; // personal email — optional, contact only
   phone?: string;
   designation: Designation;
@@ -871,7 +907,11 @@ export interface FacultyMember {
   // Extended profile fields (from institution records / bulk import)
   gender?: "Male" | "Female" | "Other";
   dateOfBirth?: Timestamp;
-  legalName?: string; // name as per SSC certificates (CAPITAL LETTERS)
+  // Full Name (as per SSC certificates, CAPITAL LETTERS) - the faculty
+  // member's PRIMARY/required identity name (enforced at the Add/Import
+  // layer, not the type itself, since a legacy record may predate this).
+  // See facultyDisplayName() (src/lib/faculty/facultyDisplayName.ts).
+  legalName?: string;
   nameAsPerAadhar?: string; // name exactly as printed on the Aadhar card
   fatherName?: string; // father or husband name
   motherName?: string;
@@ -1528,6 +1568,9 @@ export type NotificationType =
   | "LEAVE_PENDING_APPROVAL"
   | "LEAVE_APPROVED"
   | "LEAVE_REJECTED"
+  | "LEAVE_OD_PROOF_PENDING_VERIFICATION"
+  | "LEAVE_OD_PROOF_VERIFIED"
+  | "LEAVE_OD_PROOF_REJECTED"
   | "ATTENDANCE_MANUALLY_MARKED"
   // Permission & On-Duty
   | "PERMISSION_APPROVED"

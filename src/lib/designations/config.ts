@@ -201,6 +201,35 @@ export function getHiringSupportingDesignations(type: CollegeType | undefined | 
   return HIRING_SUPPORTING_DESIGNATIONS_BY_COLLEGE_TYPE[type as CollegeType] ?? HIRING_SUPPORTING_COMMON;
 }
 
+// ─── Faculty-only overrides (this deployment's specific title/category lists) ──
+// Deliberately independent of college type and NOT part of
+// TEACHING_DESIGNATIONS_BY_COLLEGE_TYPE above - Faculty's Add/Edit/Import
+// uses this exact list instead of getTeachingDesignations(collegeType), so
+// changing it can never affect what any other Engineering/Pharmacy/Dental
+// college's Faculty module offers. Every Faculty designation picker already
+// appends its own "Other" free-text option on top of this list (see
+// hod/faculty/new/page.tsx) rather than it being a member here.
+//
+// Stores the SAME PROFESSOR/ASSOCIATE_PROFESSOR/ASSISTANT_PROFESSOR codes the
+// rest of the app already uses for those three ranks - not the human-readable
+// title - because AICTE cadre-ratio counting (api/college/faculty-requirement)
+// does an exact `designation === "PROFESSOR"` match against stored records;
+// storing "Professor" instead would silently drop every new hire out of that
+// count. DESIGNATION_LABELS (types/core.ts) is what displays them as words.
+export const FACULTY_DESIGNATIONS = [
+  "PROFESSOR", "ASSISTANT_PROFESSOR", "ASSOCIATE_PROFESSOR", "ASSOCIATE_PROFESSOR_SR",
+  "VISITING_PROFESSOR", "ASSISTANT_PROFESSOR_OF_PRACTICE", "PROFESSOR_OF_PRACTICE",
+  "SR_WELLNESS_COUNSELLOR",
+];
+
+// Faculty's Employee Category list - independent of the shared EmploymentType
+// values (EMPLOYMENT_TYPE_LABELS in types/core.ts), which Supporting/
+// Non-Technical Staff and Salary Structures keep using unchanged. Same
+// "Other" convention as FACULTY_DESIGNATIONS above.
+export const FACULTY_EMPLOYMENT_CATEGORIES = [
+  "Regular", "Visiting", "Contract", "Professor of Practice", "Assistant Professor of Practice", "Regular(Hyd)",
+];
+
 // AICTE cadre-ratio auto-fill (src/app/api/college/faculty-requirement) only
 // applies to the Engineering/Pharmacy/Dental hiring catalogue above - Degree/
 // Polytechnic/School have no cadre-ratio requirement.

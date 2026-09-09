@@ -32,6 +32,13 @@ interface Props {
   // School-type colleges show a different qualifications list instead of
   // UG/PG/PhD - see QualificationFields.
   collegeType?: CollegeType;
+  // Passed straight through to PersonalDetailsFields - this component is
+  // reused by both genuinely-Faculty edit pages AND, via MyProfileModuleEditPage,
+  // several non-Faculty roles' self-profile pages (including College Staff),
+  // so it can't hardcode Faculty's relaxed requirement itself; the default
+  // (undefined -> PersonalDetailsFields' own STAFF_REQUIRED_PERSONAL_FIELDS)
+  // preserves every existing caller's behavior unless they opt in.
+  requiredPersonalFields?: (keyof PersonalDetailsValue)[];
 }
 
 // Edit-side sibling of FacultyProfileModuleContent.tsx - given one moduleKey,
@@ -41,12 +48,13 @@ interface Props {
 // routes replace the field wholesale rather than deep-merging.
 export function FacultyProfileModuleEditor({
   moduleKey, record, onChange, includeTeachingAssignment = true, teachingRows = [], onTeachingRowsChange, collegeType,
+  requiredPersonalFields,
 }: Props) {
   const academicProfile = record.academicProfile ?? {};
 
   switch (moduleKey) {
     case "personal":
-      return <PersonalDetailsFields value={record} onChange={(v) => onChange(v)} />;
+      return <PersonalDetailsFields value={record} onChange={(v) => onChange(v)} requiredFields={requiredPersonalFields} />;
     case "qualification":
       return <QualificationFields value={academicProfile} onChange={(ap) => onChange({ academicProfile: ap })} collegeType={collegeType} />;
     case "experience":

@@ -1,5 +1,6 @@
 import type { DepartmentCourseScope } from "@/types";
 import { resolveDepartmentCourseScope } from "@/lib/college/academicStructure";
+import { canHodEditDepartmentYear, type DepartmentYearRow } from "@/lib/departments/managedBranches";
 
 // Resolves an HOD's department-scoping info, including sub-department (child
 // Department) awareness. Centralizes what used to be a duplicated per-route
@@ -104,6 +105,46 @@ export function facultyManageableDepartmentNames(scope: HodDepartmentScope): str
  */
 export function ownDepartmentNames(scope: HodDepartmentScope): string[] {
   return scope.departmentName ? [scope.departmentName, ...scope.childDepartmentNames] : [];
+}
+
+/**
+ * Canonical "may this HOD create/edit/remove this teaching assignment" check -
+ * the two-part rule (owns the section's department/year, OR owns the assigned
+ * faculty's department) that GET and the bulk DELETE on
+ * api/college/teaching-assignments already applied inline. Extracted here so
+ * every route touching an assignment (including the singular
+ * teaching-assignments/[id] PATCH/DELETE, which previously reimplemented a
+ * third, narrower version of this check with only the `ownsSection` half) uses
+ * one shared rule instead of three that can drift out of sync - a manager
+ * being able to CREATE an assignment for a branch's faculty but not remove it
+ * again was exactly that drift.
+ *
+ * `ownsFaculty` is deliberately the fallback, not the primary check: it lets
+ * an HOD manage an assignment for a section/year they don't otherwise own
+ * (their own faculty lent elsewhere via a fulfilled faculty-assignment-request
+ * - see rosterAssignmentQueries in the GET handler) without granting them
+ * rights over sections that aren't theirs.
+ */
+export async function canHodManageAssignment<T extends DepartmentYearRow & { name?: string }>(
+  db: FirebaseFirestore.Firestore,
+  collegeId: string,
+  scope: HodDepartmentScope,
+  allDepartments: T[],
+  assignment: { department?: string; year?: number; courseId?: string; facultyId?: string },
+  catalogId?: string
+): Promise<boolean> {
+  const ownsSection = canHodEditDepartmentYear(
+    scope,
+    allDepartments,
+    assignment.department ?? "",
+    assignment.year ?? -1,
+    catalogId
+  );
+  if (ownsSection) return true;
+  if (!assignment.facultyId) return false;
+  const facultySnap = await db.collection("colleges").doc(collegeId).collection("facultyMembers").doc(assignment.facultyId).get();
+  const facultyDept = (facultySnap.data() as { department?: string } | undefined)?.department ?? "";
+  return canHodManageFacultyDepartment(scope, facultyDept);
 }
 
 /** Same check by department id, for routes that receive an id rather than a name. */

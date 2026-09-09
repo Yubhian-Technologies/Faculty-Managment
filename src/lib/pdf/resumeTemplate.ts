@@ -1,4 +1,5 @@
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { DESIGNATION_LABELS, EMPLOYMENT_TYPE_LABELS, FACULTY_STATUS_LABELS, ROLE_LABELS, RELIGION_LABELS, CASTE_LABELS } from "@/types";
 import type { Religion, Caste } from "@/types";
 import { buildTeachingLoadRows, formatClassColumn, type TeachingLoadRow } from "@/lib/teaching/buildTeachingLoadRows";
@@ -144,7 +145,9 @@ interface FacultyProfileFieldsLike {
 }
 
 export interface ResumeData {
-  name: string;
+  // Name (as per PAN) - optional; legalName below is the primary display
+  // name. See facultyDisplayName() usage in the header rendering.
+  name?: string;
   role?: string;
   designation?: string;
   /** R&D-managed publication records (see /api/college/publications) - the
@@ -563,9 +566,9 @@ export function getResumeHTML(data: ResumeData): string {
     <div class="header-left">
       ${data.profilePhotoUrl
         ? `<img class="avatar" src="${esc(data.profilePhotoUrl)}" alt="">`
-        : `<div class="avatar-fallback">${esc(initials(data.name))}</div>`}
+        : `<div class="avatar-fallback">${esc(initials(facultyDisplayName(data)))}</div>`}
       <div>
-        <div class="name">${esc(data.name)}</div>
+        <div class="name">${esc(facultyDisplayName(data))}</div>
         ${subtitle ? `<div class="subtitle">${esc(subtitle)}</div>` : ""}
         ${data.collegeName ? `<div class="college">${esc(data.collegeName)}</div>` : ""}
       </div>

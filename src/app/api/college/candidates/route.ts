@@ -39,7 +39,11 @@ export async function GET(_request: Request) {
     // otherwise every HOD sees every other department's applicant list.
     if (session.role === "HOD") {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
-      const ownDepartments = new Set([scope.departmentName, ...scope.childDepartmentNames, ...scope.managedDepartmentNames].filter(Boolean));
+      // ownDepartmentNames, not just the first (scope.departmentName) - an
+      // HOD can head more than one top-level department at once, and a
+      // candidate attached only to their second department must still count
+      // as "own", not fall through to the "other department" exclusion below.
+      const ownDepartments = new Set([...scope.ownDepartmentNames, ...scope.childDepartmentNames, ...scope.managedDepartmentNames].filter(Boolean));
       const appsSnap = await db.collection("colleges").doc(session.collegeId).collection("candidateApplications").get();
       const attachedToOwnDept = new Set<string>();
       const attachedToOtherDept = new Set<string>();

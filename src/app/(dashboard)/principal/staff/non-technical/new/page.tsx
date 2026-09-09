@@ -14,23 +14,25 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AvatarUploadField } from "@/components/shared/AvatarUploadField";
 import { DesignationOptions } from "@/components/faculty/DesignationOptions";
+import { getMissingRequiredPersonalFields } from "@/components/shared/PersonalDetailsFields";
 import { SupportingStaffModuleEditor, type SupportingStaffEditRecord } from "@/components/supportingStaff/SupportingStaffModuleEditor";
 import { getSupportingStaffProfileModules } from "@/lib/supportingStaff/profileModules";
 import { useCollegeType } from "@/hooks/useCollegeType";
 import { toast } from "@/hooks/useToast";
-import { EMPLOYMENT_TYPE_LABELS } from "@/types";
+import { SUPPORTING_STAFF_EMPLOYMENT_TYPE_LABELS } from "@/types";
 import type { EmploymentType, Department } from "@/types";
 
 const schema = z.object({
   employeeId: z.string().min(1, "Employee ID is required"),
-  name: z.string().min(2, "Name must be at least 2 characters"),
+  name: z.string().optional(),
   email: z.string().email("Invalid email address").optional().or(z.literal("")),
   collegeEmail: z.string().min(1, "College email is required").email("Invalid email address"),
   password: z.string().min(8, "Password must be at least 8 characters"),
-  phone: z.string().optional(),
+  phone: z.string().min(1, "Mobile No is required"),
   designation: z.string().min(1, "Designation is required"),
   otherDesignationTitle: z.string().optional(),
-  experienceYears: z.number().min(0, "Cannot be negative"),
+  qualification: z.string().min(1, "Highest Qualification is required"),
+  experienceYears: z.number().min(0, "Cannot be negative").optional(),
   joiningDate: z.string().min(1, "Joining date is required"),
   employmentType: z.string().min(1, "Employment type is required"),
   department: z.string().optional(),
@@ -75,7 +77,7 @@ export default function NewPrincipalNonTechnicalStaffPage() {
     formState: { errors },
   } = useForm<FormData>({
     resolver: zodResolver(schema),
-    defaultValues: { experienceYears: 0, designation: "", employmentType: "PERMANENT", password: "", department: "" },
+    defaultValues: { experienceYears: 0, designation: "", employmentType: "REGULAR", password: "", department: "" },
   });
   const [erroredSteps, setErroredSteps] = useState<Set<WizardStepKey>>(new Set());
 
@@ -95,9 +97,9 @@ export default function NewPrincipalNonTechnicalStaffPage() {
   // All required fields live on the "core" step; deferred to submit time so
   // steps can be navigated freely (see onInvalid).
   const FIELD_LABELS: Record<string, string> = {
-    employeeId: "Employee ID", name: "Full Name", collegeEmail: "College Email",
-    password: "Login Password", designation: "Designation",
-    experienceYears: "Years of Experience", joiningDate: "Joining Date",
+    employeeId: "Employee ID", name: "Name (as per PAN)", collegeEmail: "College Email",
+    password: "Login Password", phone: "Mobile No", designation: "Designation",
+    qualification: "Highest Qualification", joiningDate: "Joining Date",
     employmentType: "Employment Type",
   };
 
@@ -117,6 +119,16 @@ export default function NewPrincipalNonTechnicalStaffPage() {
   }
 
   const onSubmit = async (data: FormData) => {
+    // Personal Details isn't zod-validated (SupportingStaffModuleEditor's
+    // "personal" step is plain React state) - checked here instead, same
+    // pattern as Add Faculty's equivalent check.
+    const missingPersonal = getMissingRequiredPersonalFields(record);
+    if (missingPersonal.length > 0) {
+      setErroredSteps(new Set<WizardStepKey>(["personal"]));
+      setStepIndex(steps.findIndex((s) => s.key === "personal"));
+      toast({ variant: "destructive", title: "Some required fields are missing", description: `Personal Details: ${missingPersonal.join(", ")}` });
+      return;
+    }
     setSubmitting(true);
     try {
       const res = await fetch("/api/college/supporting-staff", {
@@ -141,7 +153,7 @@ export default function NewPrincipalNonTechnicalStaffPage() {
         return;
       }
 
-      toast({ variant: "success", title: "Non-Technical staff added", description: `${data.name} has been added.` });
+      toast({ variant: "success", title: "Non-Technical staff added", description: `${data.name || "The staff member"} has been added.` });
       router.push("/principal/staff");
     } catch {
       toast({ variant: "destructive", title: "Network error", description: "Please try again." });
@@ -189,7 +201,7 @@ export default function NewPrincipalNonTechnicalStaffPage() {
                       {errors.employeeId && <p className="text-sm text-destructive">{errors.employeeId.message}</p>}
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="name">Full Name *</Label>
+                      <Label htmlFor="name">Name (as per PAN)</Label>
                       <Input id="name" {...register("name")} placeholder="Lakshmi Devi" />
                       {errors.name && <p className="text-sm text-destructive">{errors.name.message}</p>}
                     </div>
@@ -209,8 +221,9 @@ export default function NewPrincipalNonTechnicalStaffPage() {
                     {errors.email && <p className="text-sm text-destructive">{errors.email.message}</p>}
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="phone">Phone</Label>
+                    <Label htmlFor="phone">Mobile No *</Label>
                     <Input id="phone" type="tel" autoComplete="off" {...register("phone")} placeholder="+91 98765 43210" />
+                    {errors.phone && <p className="text-sm text-destructive">{errors.phone.message}</p>}
                   </div>
                 </div>
 
@@ -237,7 +250,12 @@ export default function NewPrincipalNonTechnicalStaffPage() {
                     </div>
                   )}
                   <div className="space-y-2">
-                    <Label htmlFor="experienceYears">Years of Experience *</Label>
+                    <Label htmlFor="qualification">Highest Qualification *</Label>
+                    <Input id="qualification" {...register("qualification")} placeholder="e.g. Diploma, B.Com, ITI" />
+                    {errors.qualification && <p className="text-sm text-destructive">{errors.qualification.message}</p>}
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="experienceYears">Years of Experience</Label>
                     <Input id="experienceYears" type="number" min={0} {...register("experienceYears", { valueAsNumber: true })} />
                     {errors.experienceYears && <p className="text-sm text-destructive">{errors.experienceYears.message}</p>}
                   </div>
@@ -265,7 +283,7 @@ export default function NewPrincipalNonTechnicalStaffPage() {
                     <Select value={employmentType} onValueChange={(v) => setValue("employmentType", v as EmploymentType)}>
                       <SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger>
                       <SelectContent>
-                        {Object.entries(EMPLOYMENT_TYPE_LABELS).map(([v, l]) => (
+                        {Object.entries(SUPPORTING_STAFF_EMPLOYMENT_TYPE_LABELS).map(([v, l]) => (
                           <SelectItem key={v} value={v}>{l}</SelectItem>
                         ))}
                       </SelectContent>
