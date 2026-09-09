@@ -10,6 +10,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { CardSkeleton } from "@/components/shared/SkeletonLoader";
 import { toast } from "@/hooks/useToast";
+import { supportingStaffDisplayName } from "@/lib/supportingStaff/supportingStaffDisplayName";
 import { NON_TECHNICAL_STAFF_DESIGNATION_LABELS, ROLE_LABELS, STAFF_CATEGORY_LABELS } from "@/types";
 import type { Department, UserRole, SupportingStaffMember, SupportingStaffCategory, SupportingStaffDesignation } from "@/types";
 
@@ -231,7 +232,7 @@ export default function PrincipalStaffPage() {
                         {g.members.map((m) => (
                           <tr key={m.id}>
                             <td className="px-4 py-2.5 font-medium">
-                              {m.name}
+                              {supportingStaffDisplayName(m)}
                               {m.collegeEmail && <p className="text-xs text-muted-foreground font-normal">{m.collegeEmail}</p>}
                             </td>
                             <td className="px-4 py-2.5">

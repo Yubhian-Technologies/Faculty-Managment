@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { SupportingStaffModuleEditor, type SupportingStaffEditRecord } from "@/components/supportingStaff/SupportingStaffModuleEditor";
 import { getMissingRequiredPersonalFields } from "@/components/shared/PersonalDetailsFields";
 import { SUPPORTING_STAFF_MODULES, type SupportingStaffModuleKey } from "@/lib/supportingStaff/profileModules";
+import { supportingStaffDisplayName } from "@/lib/supportingStaff/supportingStaffDisplayName";
 import { useCollegeType } from "@/hooks/useCollegeType";
 import { toast } from "@/hooks/useToast";
 
@@ -122,7 +123,7 @@ export default function HodSupportingStaffModuleEditPage() {
     <div className="space-y-6">
       <PageHeader
         title={`Edit ${moduleDef.label}`}
-        description={name}
+        description={supportingStaffDisplayName({ legalName: record.legalName, name })}
         actions={
           <Button variant="outline" asChild>
             <Link href={`/hod/supporting-staff/${staffId}/${moduleKey}`}><ArrowLeft className="h-4 w-4 mr-2" />Back</Link>

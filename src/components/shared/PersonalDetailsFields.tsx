@@ -49,9 +49,7 @@ interface Props {
   value: PersonalDetailsValue;
   onChange: (next: PersonalDetailsValue) => void;
   // Which fields show a required "*" - defaults to STAFF_REQUIRED_PERSONAL_FIELDS
-  // (every consumer's original behavior). Faculty passes
-  // FACULTY_REQUIRED_PERSONAL_FIELDS instead, since Name (as per Aadhar) is
-  // optional there but stays mandatory for Supporting/Non-Technical Staff.
+  // (every consumer's original behavior).
   requiredFields?: (keyof PersonalDetailsValue)[];
   // Fields to skip rendering entirely - Faculty's Add/Edit surfaces move
   // Full Name (as per SSC) up into their "core" identity step (to lead the
@@ -61,14 +59,13 @@ interface Props {
   hiddenFields?: (keyof PersonalDetailsValue)[];
 }
 
-// The full mandatory set - Supporting/Non-Technical Staff's requirement.
-// Faculty uses FACULTY_REQUIRED_PERSONAL_FIELDS below instead (everything
-// here minus nameAsPerAadhar).
+// The mandatory set shared by every consumer - Name (as per Aadhar) is
+// optional for all of them (Faculty, Supporting Staff, and Non-Technical
+// Staff alike), so it's deliberately not in this list.
 export const STAFF_REQUIRED_PERSONAL_FIELDS: (keyof PersonalDetailsValue)[] = [
-  "legalName", "gender", "dateOfBirth", "nameAsPerAadhar", "aadharNo", "panNo", "ratificationStatus",
+  "legalName", "gender", "dateOfBirth", "aadharNo", "panNo", "ratificationStatus",
 ];
-export const FACULTY_REQUIRED_PERSONAL_FIELDS: (keyof PersonalDetailsValue)[] =
-  STAFF_REQUIRED_PERSONAL_FIELDS.filter((k) => k !== "nameAsPerAadhar");
+export const FACULTY_REQUIRED_PERSONAL_FIELDS: (keyof PersonalDetailsValue)[] = STAFF_REQUIRED_PERSONAL_FIELDS;
 
 const PERSONAL_FIELD_LABELS: Record<string, string> = {
   legalName: "Full Name (as per SSC)",

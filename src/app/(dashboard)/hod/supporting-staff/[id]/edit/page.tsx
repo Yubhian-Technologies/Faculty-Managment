@@ -15,7 +15,7 @@ import { useCollegeType } from "@/hooks/useCollegeType";
 import { toast } from "@/hooks/useToast";
 import { toDateInputValue } from "@/lib/utils";
 import { getHodTechnicalDesignations, designationLabel } from "@/lib/designations/config";
-import { EMPLOYMENT_TYPE_LABELS, FACULTY_STATUS_LABELS } from "@/types";
+import { SUPPORTING_STAFF_EMPLOYMENT_TYPE_LABELS, FACULTY_STATUS_LABELS } from "@/types";
 import type { EmploymentType, FacultyStatus, SupportingStaffDesignation } from "@/types";
 
 interface StaffForm {
@@ -33,7 +33,7 @@ interface StaffForm {
 
 const EMPTY_FORM: StaffForm = {
   name: "", phone: "", collegeEmail: "", designation: "", otherDesignationTitle: "", qualification: "",
-  experienceYears: 0, employmentType: "PERMANENT", status: "ACTIVE", joiningDate: "",
+  experienceYears: 0, employmentType: "REGULAR", status: "ACTIVE", joiningDate: "",
 };
 
 // Department isn't editable here - a Technical staff record stays owned by
@@ -74,7 +74,7 @@ export default function EditHodSupportingStaffPage() {
           otherDesignationTitle: (m.otherDesignationTitle as string) ?? "",
           qualification: (m.qualification as string) ?? "",
           experienceYears: (m.experienceYears as number) ?? 0,
-          employmentType: (m.employmentType as EmploymentType) ?? "PERMANENT",
+          employmentType: (m.employmentType as EmploymentType) ?? "REGULAR",
           status: (m.status as FacultyStatus) ?? "ACTIVE",
           joiningDate: toDateInputValue(m.joiningDate as never),
         });
@@ -170,7 +170,7 @@ export default function EditHodSupportingStaffPage() {
                   <Input value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} placeholder="EMP-001" />
                 </div>
                 <div className="space-y-2">
-                  <Label>Name (as per PAN) *</Label>
+                  <Label>Name (as per PAN)</Label>
                   <Input value={form.name} onChange={(e) => set({ name: e.target.value })} />
                 </div>
                 <div className="space-y-2">
@@ -246,7 +246,7 @@ export default function EditHodSupportingStaffPage() {
                 <Select value={form.employmentType} onValueChange={(v) => set({ employmentType: v as EmploymentType })}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {Object.entries(EMPLOYMENT_TYPE_LABELS).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
+                    {Object.entries(SUPPORTING_STAFF_EMPLOYMENT_TYPE_LABELS).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>

@@ -166,7 +166,7 @@ export function GrantsModule({ profile }: { profile: Partial<FacultyProfileField
         )}
       </div>
       <div className="space-y-2">
-        <SubLabel>Industry Consultancy</SubLabel>
+        <SubLabel>Consultant Project</SubLabel>
         {(p.consultancyProjects ?? []).length === 0 ? <p className="text-xs text-muted-foreground">None recorded.</p> : (
           <div className="space-y-2">
             {p.consultancyProjects?.map((proj, i) => (

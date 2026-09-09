@@ -19,12 +19,12 @@ import { SupportingStaffModuleEditor, type SupportingStaffEditRecord } from "@/c
 import { getSupportingStaffProfileModules } from "@/lib/supportingStaff/profileModules";
 import { useCollegeType } from "@/hooks/useCollegeType";
 import { toast } from "@/hooks/useToast";
-import { EMPLOYMENT_TYPE_LABELS } from "@/types";
+import { SUPPORTING_STAFF_EMPLOYMENT_TYPE_LABELS } from "@/types";
 import type { EmploymentType, Department } from "@/types";
 
 const schema = z.object({
   employeeId: z.string().min(1, "Employee ID is required"),
-  name: z.string().min(2, "Name must be at least 2 characters"),
+  name: z.string().optional(),
   email: z.string().email("Invalid email address").optional().or(z.literal("")),
   collegeEmail: z.string().min(1, "College email is required").email("Invalid email address"),
   password: z.string().min(8, "Password must be at least 8 characters"),
@@ -77,7 +77,7 @@ export default function NewPrincipalNonTechnicalStaffPage() {
     formState: { errors },
   } = useForm<FormData>({
     resolver: zodResolver(schema),
-    defaultValues: { experienceYears: 0, designation: "", employmentType: "PERMANENT", password: "", department: "" },
+    defaultValues: { experienceYears: 0, designation: "", employmentType: "REGULAR", password: "", department: "" },
   });
   const [erroredSteps, setErroredSteps] = useState<Set<WizardStepKey>>(new Set());
 
@@ -153,7 +153,7 @@ export default function NewPrincipalNonTechnicalStaffPage() {
         return;
       }
 
-      toast({ variant: "success", title: "Non-Technical staff added", description: `${data.name} has been added.` });
+      toast({ variant: "success", title: "Non-Technical staff added", description: `${data.name || "The staff member"} has been added.` });
       router.push("/principal/staff");
     } catch {
       toast({ variant: "destructive", title: "Network error", description: "Please try again." });
@@ -201,7 +201,7 @@ export default function NewPrincipalNonTechnicalStaffPage() {
                       {errors.employeeId && <p className="text-sm text-destructive">{errors.employeeId.message}</p>}
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="name">Name (as per PAN) *</Label>
+                      <Label htmlFor="name">Name (as per PAN)</Label>
                       <Input id="name" {...register("name")} placeholder="Lakshmi Devi" />
                       {errors.name && <p className="text-sm text-destructive">{errors.name.message}</p>}
                     </div>
@@ -283,7 +283,7 @@ export default function NewPrincipalNonTechnicalStaffPage() {
                     <Select value={employmentType} onValueChange={(v) => setValue("employmentType", v as EmploymentType)}>
                       <SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger>
                       <SelectContent>
-                        {Object.entries(EMPLOYMENT_TYPE_LABELS).map(([v, l]) => (
+                        {Object.entries(SUPPORTING_STAFF_EMPLOYMENT_TYPE_LABELS).map(([v, l]) => (
                           <SelectItem key={v} value={v}>{l}</SelectItem>
                         ))}
                       </SelectContent>

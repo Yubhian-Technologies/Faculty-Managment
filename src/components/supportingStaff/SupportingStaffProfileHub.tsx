@@ -8,8 +8,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Avatar } from "@/components/shared/Avatar";
 import { getSupportingStaffProfileModules } from "@/lib/supportingStaff/profileModules";
+import { supportingStaffDisplayName } from "@/lib/supportingStaff/supportingStaffDisplayName";
 import { formatDate } from "@/lib/utils";
-import { NON_TECHNICAL_STAFF_DESIGNATION_LABELS, EMPLOYMENT_TYPE_LABELS, FACULTY_STATUS_LABELS } from "@/types";
+import { NON_TECHNICAL_STAFF_DESIGNATION_LABELS, SUPPORTING_STAFF_EMPLOYMENT_TYPE_LABELS, FACULTY_STATUS_LABELS } from "@/types";
 import type { SupportingStaffMember, FacultyStatus } from "@/types";
 
 const STATUS_VARIANTS: Record<FacultyStatus, "default" | "secondary" | "outline" | "destructive"> = {
@@ -51,7 +52,7 @@ export function SupportingStaffProfileHub({ staff, basePath, backHref, editHref 
   return (
     <div className="space-y-6">
       <PageHeader
-        title={staff.name ?? "Staff Member"}
+        title={supportingStaffDisplayName(staff) || "Staff Member"}
         description={designationLabel}
         actions={
           <div className="flex gap-2">
@@ -72,7 +73,7 @@ export function SupportingStaffProfileHub({ staff, basePath, backHref, editHref 
       <Card>
         <CardContent className="p-5 space-y-4">
           <div className="flex items-center gap-4 flex-wrap">
-            <Avatar name={staff.name ?? "?"} photoUrl={staff.profilePhotoUrl} size="lg" />
+            <Avatar name={supportingStaffDisplayName(staff) || "?"} photoUrl={staff.profilePhotoUrl} size="lg" />
             {staff.status && <Badge variant={STATUS_VARIANTS[staff.status] ?? "secondary"}>{FACULTY_STATUS_LABELS[staff.status] ?? staff.status}</Badge>}
           </div>
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
@@ -82,7 +83,7 @@ export function SupportingStaffProfileHub({ staff, basePath, backHref, editHref 
             <Fact label="Phone" value={staff.phone} />
             <Fact label="Department" value={staff.department || "Centrally managed"} />
             <Fact label="Designation" value={designationLabel} />
-            <Fact label="Employment Type" value={staff.employmentType ? EMPLOYMENT_TYPE_LABELS[staff.employmentType] : undefined} />
+            <Fact label="Employment Type" value={staff.employmentType ? SUPPORTING_STAFF_EMPLOYMENT_TYPE_LABELS[staff.employmentType] : undefined} />
             <Fact label="Date of Joining" value={staff.joiningDate ? formatDate(staff.joiningDate) : undefined} />
             <Fact label="Experience (yrs)" value={staff.experienceYears} />
           </div>
