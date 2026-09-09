@@ -202,12 +202,19 @@ export default function HODFacultyPage() {
     setIsDeleting(true);
     try {
       const res = await fetch(`/api/college/faculty/${deleteTarget.id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error();
+      const json = await res.json().catch(() => ({})) as { error?: string };
+      if (!res.ok) {
+        // The API already explains exactly why (e.g. "still has active
+        // teaching assignments or timetable slots" - 409) - surface that
+        // instead of a blanket "failed" message that hides the real reason.
+        toast({ variant: "destructive", title: "Failed to delete faculty record", description: json.error });
+        return;
+      }
       toast({ variant: "success", title: `${facultyDisplayName(deleteTarget)} removed from faculty register` });
       setDeleteTarget(null);
       void load(statusFilter);
     } catch {
-      toast({ variant: "destructive", title: "Failed to delete faculty record" });
+      toast({ variant: "destructive", title: "Failed to delete faculty record", description: "Network error - please try again." });
     } finally {
       setIsDeleting(false);
     }

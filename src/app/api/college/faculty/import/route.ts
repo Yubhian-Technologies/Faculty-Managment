@@ -85,6 +85,14 @@ const EMPLOYMENT_MAP: Record<string, EmploymentType> = Object.fromEntries(
   FACULTY_EMPLOYMENT_CATEGORIES.map((c) => [normalizeAbbrevKey(c), c])
 );
 EMPLOYMENT_MAP["other"] = "Other";
+// Abbreviations for the two "...of Practice" categories - same normalized-
+// key approach as DESIGNATION_MAP above, so "Asst.Prof. of Practice",
+// "asst prof of practice", "Prof. of Practice" etc. all resolve regardless
+// of punctuation/casing.
+EMPLOYMENT_MAP["asst prof of practice"] = "Assistant Professor of Practice";
+EMPLOYMENT_MAP["asst professor of practice"] = "Assistant Professor of Practice";
+EMPLOYMENT_MAP["assistant prof of practice"] = "Assistant Professor of Practice";
+EMPLOYMENT_MAP["prof of practice"] = "Professor of Practice";
 
 type ImportRow = {
   employeeId: string;

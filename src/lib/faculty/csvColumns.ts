@@ -359,7 +359,7 @@ export const IMPORT_COLUMNS: FacultyCsvColumn[] = [
   // stores whatever was typed, so a closed set here would reject qualifications
   // the app itself can create.
   { key: "qualification", label: "Highest Qualification", required: true, sample: `Required; ${HIGHEST_QUALIFICATION_OPTIONS.join(" / ")} / other`, aliases: ["Qualification"] },
-  { key: "employmentType", label: "Employee Category", required: true, sample: "Required: Regular / Visiting / Contract / Professor of Practice / Regular(Hyd) / Other", aliases: ["Employment Type", "Employment", "Type of Employment"] },
+  { key: "employmentType", label: "Employee Category", required: true, sample: "Required: Regular / Visiting / Contract / Professor of Practice / Assistant Professor of Practice / Regular(Hyd) / Other", aliases: ["Employment Type", "Employment", "Type of Employment"] },
   { key: "joiningDate",  label: "Date of Joining Institution (DD-MM-YYYY)", required: true, sample: "Required; DD-MM-YYYY", aliases: ["Joining Date", "Date of Joining", "DOJ"] },
   { key: "gender",            label: "Gender",                       required: true, sample: "Required: Male / Female / Other" },
   { key: "dateOfBirth",       label: "Date of Birth (DD-MM-YYYY)",   required: true, sample: "Required; DD-MM-YYYY", aliases: ["DOB"] },
@@ -436,7 +436,7 @@ export const IMPORT_HINTS = [
   "Full Name (as per SSC): enter the name exactly as it appears on the faculty member's SSC (10th class) certificate, in CAPITAL LETTERS - this is the PRIMARY identity name used as their display name everywhere across the app (lists, PDFs, notifications, teaching assignments, etc.).",
   "Name (as per PAN): optional - only needed for statutory/financial paperwork matching. When left blank, Full Name (as per SSC) is used instead everywhere this faculty member's name is shown.",
   "Designation: Professor / Assistant Professor / Associate Professor / Associate Professor (Sr) / Visiting Professor / Assistant Professor of Practice / Professor of Practice / Sr. Wellness Counsellor / Other - Supporting Staff (Lab Assistant, Programmer, Office Assistant, etc.) is added from the Supporting Staff module instead. Common short forms are recognized too, case-insensitively (e.g. Prof., Asst. Prof., Assoc. Prof., Assoc.Prof.(Sr)) - however it's punctuated or capitalized, it still maps to the full title.",
-  "Employee Category: Regular / Visiting / Contract / Professor of Practice / Regular(Hyd) / Other",
+  "Employee Category: Regular / Visiting / Contract / Professor of Practice / Assistant Professor of Practice / Regular(Hyd) / Other - common short forms (e.g. Asst.Prof. of Practice, Prof. of Practice) are recognized too, case-insensitively.",
   "Designation or Employee Category as \"Other\" is accepted as-is on import - there's no separate column for the custom title/category text; fill that in afterward from the Edit Faculty page.",
   "Dates must be in DD-MM-YYYY format (e.g. 15-06-2020)",
   "Department is auto-assigned from your HOD profile",
