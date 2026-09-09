@@ -1390,6 +1390,19 @@ export interface StudentRecord {
   // entire academic run, per Section.regulation's own doc-comment. Optional/
   // lenient - absent when the section they were placed into had none set.
   regulation?: string;
+  // This student's own admission batch, e.g. "2024-2028" - a one-time
+  // snapshot taken the same moment/places as `regulation` above (students/
+  // distribute, distribute-cohort's own path never touches lateral students
+  // so is left as a plain regulation-only mirror there; import-excel).
+  // A Regular student just mirrors the section's own Section.batch. A
+  // Lateral student (studentType "Lateral") joins directly into Year 2,
+  // one calendar year later than the Regular batch already occupying that
+  // slot, and spends one fewer year at the college - so their own batch
+  // starts a year later than the section's batch but ends the SAME year
+  // (they graduate together): joining a Section.batch "2024-2028" slot in
+  // session 2025 gives "2025-2028", not "2024-2028". See
+  // lib/college/academicSession.ts's lateralEntryBatch.
+  batch?: string;
   // ─── Admission-detail fields ────────────────────────────────────────────
   // All optional, all set only via the College Office bulk import (see
   // src/lib/students/importRow.ts) - there is no per-student edit form for
