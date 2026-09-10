@@ -204,7 +204,6 @@ export function FacultyProfileHub({
               }
             />
             <Fact label="Designation" value={designationLabel} />
-            <Fact label="Employee Category" value={faculty.employmentType} />
             <Fact
               label={faculty.status === "INTERVIEW_DONE" ? "Expected to Join" : "Date of Joining"}
               value={

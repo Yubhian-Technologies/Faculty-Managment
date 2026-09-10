@@ -104,26 +104,36 @@ export async function GET(request: Request) {
     }
 
     // ── Current active faculty by designation ─────────────────────────────────
-    const facultySnap = await db
-      .collection("colleges").doc(session.collegeId)
-      .collection("facultyMembers")
-      .where("department", "==", dept)
-      .where("status", "==", "ACTIVE")
-      .get();
+    // Cadre is resolved via each designation's own admin-set tag in the
+    // Designation Catalog (see DesignationCatalogCard), not by matching a
+    // fixed literal string - a college is free to rename/replace its titles
+    // entirely and cadre-ratio counting keeps working as long as the
+    // relevant catalog entry is tagged with the right cadre.
+    const [facultySnap, designationSnap] = await Promise.all([
+      db.collection("colleges").doc(session.collegeId).collection("facultyMembers")
+        .where("department", "==", dept).where("status", "==", "ACTIVE").get(),
+      // Not filtered by category - cadre is meaningful wherever an admin set
+      // it, and matching by category name would break if it's ever renamed.
+      db.collection("colleges").doc(session.collegeId).collection("designations").get(),
+    ]);
+    const cadreByDesignation = new Map<string, string>();
+    for (const d of designationSnap.docs) {
+      const data = d.data() as { name?: string; cadre?: string };
+      if (data.name && data.cadre) cadreByDesignation.set(data.name, data.cadre);
+    }
 
     let profCurrent = 0;
     let assocCurrent = 0;
-    let asstCurrent = 0;   // includes LECTURER
+    let asstCurrent = 0;   // includes ASSISTANT_PROFESSOR-cadre titles (e.g. Lecturer)
 
     for (const doc of facultySnap.docs) {
       const desig = (doc.data() as { designation?: string }).designation ?? "";
-      if (desig === "PROFESSOR") profCurrent++;
-      // ASSOCIATE_PROFESSOR_SR (Associate Professor (Sr) - a seniority/pay
-      // grade, not a different rank) counts in the same cadre bucket as
-      // ASSOCIATE_PROFESSOR.
-      else if (desig === "ASSOCIATE_PROFESSOR" || desig === "ASSOCIATE_PROFESSOR_SR") assocCurrent++;
-      else if (desig === "ASSISTANT_PROFESSOR" || desig === "LECTURER") asstCurrent++;
-      // VISITING_FACULTY, ADJUNCT_FACULTY, LAB_ASSISTANT excluded from cadre ratio
+      const cadre = cadreByDesignation.get(desig);
+      if (cadre === "PROFESSOR") profCurrent++;
+      else if (cadre === "ASSOCIATE_PROFESSOR") assocCurrent++;
+      else if (cadre === "ASSISTANT_PROFESSOR") asstCurrent++;
+      // No cadre tag (e.g. Visiting Faculty, Lab Assistant-equivalent) is
+      // excluded from the cadre ratio, same as before.
     }
 
     const totalCurrent = profCurrent + assocCurrent + asstCurrent;

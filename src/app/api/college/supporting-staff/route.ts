@@ -7,10 +7,10 @@ import { createFirebaseUser } from "@/lib/firebase/authRest";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
 import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
 import { SUPPORTING_STAFF_ROLE_CATEGORY, canRolePostCategory, supportingStaffCategoryLabel } from "@/lib/supportingStaff/roleCategory";
-import { getHodTechnicalDesignations } from "@/lib/designations/config";
+import { hasSupportingStaffSplit } from "@/lib/designations/config";
 import { NON_TECHNICAL_STAFF_DESIGNATION_LABELS, ROLE_LABELS } from "@/types";
 import type {
-  SupportingStaffCategory, SupportingStaffDesignation, EmploymentType, FacultyStatus, CollegeType,
+  SupportingStaffCategory, SupportingStaffDesignation, FacultyStatus, CollegeType,
 } from "@/types";
 
 function designationLabel(designation: SupportingStaffDesignation): string {
@@ -83,7 +83,6 @@ export async function POST(request: Request) {
       qualification: string;
       experienceYears: number;
       joiningDate: string;
-      employmentType: EmploymentType;
       department?: string;
       supportingStaffProfile?: Record<string, unknown>;
       profilePhotoUrl?: string;
@@ -91,13 +90,13 @@ export async function POST(request: Request) {
 
     const {
       employeeId, collegeEmail, password, staffCategory, designation, qualification,
-      experienceYears, joiningDate, employmentType, profilePhotoUrl,
+      experienceYears, joiningDate, profilePhotoUrl,
     } = body;
     // Name (as per PAN) is optional - falls back to "" (used as the login
     // account's display name and the record's own `name`, both fine blank).
     const name = body.name?.trim() ?? "";
 
-    if (!employeeId || !collegeEmail || !password || !staffCategory || !designation || !qualification || !employmentType || !joiningDate) {
+    if (!employeeId || !collegeEmail || !password || !staffCategory || !designation || !qualification || !joiningDate) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
     // Matches the mandatory field set the bulk-import template and Add Staff
@@ -136,7 +135,7 @@ export async function POST(request: Request) {
       // HOD has nothing to create. Backstops the nav-hide in Sidebar.tsx.
       const collegeSnap = await db.collection("colleges").doc(collegeId).get();
       const collegeType = (collegeSnap.data() as { type?: CollegeType } | undefined)?.type;
-      if (getHodTechnicalDesignations(collegeType).length === 0) {
+      if (!hasSupportingStaffSplit(collegeType)) {
         return NextResponse.json(
           { error: "Supporting Staff for your college type is managed centrally by Principal" },
           { status: 403 },
@@ -215,7 +214,6 @@ export async function POST(request: Request) {
       qualification,
       experienceYears: Number(experienceYears),
       joiningDate: new Date(joiningDate),
-      employmentType,
       status: "ACTIVE" as FacultyStatus,
       userUid: uid,
       ...(body.supportingStaffProfile ? { supportingStaffProfile: body.supportingStaffProfile } : {}),

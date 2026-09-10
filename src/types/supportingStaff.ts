@@ -16,19 +16,6 @@ export const STAFF_CATEGORY_LABELS: Record<SupportingStaffCategory, string> = {
   TECHNICAL: "Technical Staff",
 };
 
-// Supporting Staff's own Employee Category list - deliberately separate from
-// core.ts's EMPLOYMENT_TYPE_LABELS (Permanent/Contract/Visiting/Part-Time),
-// which Salary Structures and Faculty's legacy records still use unchanged.
-// Used by every Supporting/Non-Technical Staff Add/Edit form, list badge,
-// profile view, and the CSV/Excel import (template, sample rows, and the
-// import route's own value mapping) - so all of them offer/accept exactly
-// these three values.
-export const SUPPORTING_STAFF_EMPLOYMENT_TYPE_LABELS: Record<string, string> = {
-  REGULAR: "Regular",
-  CONTRACT: "Contract",
-  VOUCHER: "Voucher",
-};
-
 // Free text, not a closed enum - see src/lib/designations/config.ts for the
 // per-college-type lists. The original fixed codes below are what
 // Engineering/Pharmacy/Dental colleges use and what every pre-existing
@@ -108,7 +95,9 @@ export interface SupportingStaffMember {
   qualification?: string;
   experienceYears: number;
   joiningDate: Timestamp;
-  employmentType: EmploymentType; // reused from core.ts
+  // Optional - no longer collected via Add/Edit or CSV import (the college's
+  // own Employee Category catalog was retired; only Designation remains).
+  employmentType?: EmploymentType; // reused from core.ts
   status: FacultyStatus;          // reused from core.ts (INTERVIEW_DONE simply unused here)
   userUid?: string;
   profilePhotoUrl?: string;
