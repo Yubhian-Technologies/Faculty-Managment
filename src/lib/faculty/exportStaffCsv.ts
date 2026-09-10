@@ -38,8 +38,12 @@ function courseCells(courses: CourseAssignment[] | undefined, i: number): [strin
 function previousInstitutionCells(items: PreviousInstitution[] | undefined, i: number): [string, string, string] {
   const p = items?.[i];
   if (!p) return ["", "", ""];
-  const years = p.fromYear || p.toYear ? `${p.fromYear ?? ""}-${p.toYear ?? ""}` : "";
-  return [p.institutionName ?? "", p.designation ?? "", years];
+  // Prefers the real dates; falls back to the legacy year-only value for a
+  // record that hasn't been re-saved under the new shape yet.
+  const from = p.fromDate ?? (p.fromYear ? String(p.fromYear) : "");
+  const to = p.toDate ?? (p.toYear ? String(p.toYear) : "");
+  const range = from || to ? `${from}-${to}` : "";
+  return [p.institutionName ?? "", p.designation ?? "", range];
 }
 
 function publicationCells(items: Publication[] | undefined, i: number): [string, string, string, string, string] {
@@ -100,16 +104,21 @@ function buildRow(user: FMSUser): Record<string, string> {
     aadharNo: s(user.aadharNo),
     panNo: s(user.panNo),
     passportNumber: s(user.passportNumber),
+    bankAccountNo: s(user.bankAccountNo),
+    ifscCode: s(user.ifscCode),
+    bankName: s(user.bankName),
+    bankBranch: s(user.bankBranch),
+    bankOtherDetails: s(user.bankOtherDetails),
     emergencyContactName: s(user.emergencyContactName),
+    emergencyContactRelation: s(user.emergencyContactRelation),
     emergencyContactPhone: s(user.emergencyContactPhone),
     ratificationStatus: s(user.ratificationStatus),
+    ratificationProceedingsNumber: s(user.ratificationProceedingsNumber),
     ratificationDate: toDateInputValue(user.ratificationDate),
 
     maritalStatus: s(user.maritalStatus),
     spouseName: s(user.spouseName),
     numberOfChildren: s(user.numberOfChildren),
-    referral: s(user.referral),
-    nativePlace: s(user.nativePlace),
     bloodGroup: s(user.bloodGroup),
     temporaryAddress: s(user.temporaryAddress),
     permanentSameAsTemporary: yesNo(user.permanentSameAsTemporary),
@@ -123,9 +132,10 @@ function buildRow(user: FMSUser): Record<string, string> {
     phdMode: s(p.phdMode),
     phdSupervisorName: s(p.phdSupervisorName),
     fellowshipsReceived: s(p.fellowshipsReceived),
-    gateQualifiedYear: s(p.gateQualifiedYear),
-    gateScore: s(p.gateScore),
-    netSletQualificationYear: s(p.netSletQualificationYear),
+    qualifyingExamQualified: s(p.qualifyingExamQualified === "YES" ? "Yes" : p.qualifyingExamQualified === "NO" ? "No" : undefined),
+    qualifyingExam: s(p.qualifyingExam),
+    qualifyingExamScore: s(p.qualifyingExamScore),
+    qualifyingExamYear: s(p.qualifyingExamYear),
     primaryTeachingRole: s(p.teachingAssignment?.primaryTeachingRole),
 
     publicationsFirstOrCorrespondingAuthor: s(p.publicationsFirstOrCorrespondingAuthor),

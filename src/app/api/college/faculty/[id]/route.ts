@@ -88,20 +88,22 @@ export async function PATCH(
       aadharNo: string;
       panNo: string;
       passportNumber: string;
-      sscHallTicketNo: string;
       differentlyAbled: boolean;
       differentlyAbledDetails: string;
       bankAccountNo: string;
       ifscCode: string;
+      bankName: string;
+      bankBranch: string;
+      bankOtherDetails: string;
       emergencyContactName: string;
+      emergencyContactRelation: string;
       emergencyContactPhone: string;
       ratificationStatus: string;
+      ratificationProceedingsNumber: string;
       ratificationDate: string;
       maritalStatus: string;
       spouseName: string;
       numberOfChildren: number;
-      referral: string;
-      nativePlace: string;
       temporaryAddress: string;
       permanentSameAsTemporary: boolean;
       permanentAddress: string;
@@ -193,9 +195,10 @@ export async function PATCH(
       "name", "email", "phone", "collegeEmail", "apaarFacultyId", "designation", "qualification",
       "specialization", "employmentType", "status", "gender", "legalName", "nameAsPerAadhar",
       "fatherName", "motherName", "religion", "caste", "subCaste", "aadharNo", "passportNumber",
-      "sscHallTicketNo", "differentlyAbledDetails", "bankAccountNo",
-      "emergencyContactName", "emergencyContactPhone", "ratificationStatus", "userUid",
-      "maritalStatus", "spouseName", "referral", "nativePlace", "temporaryAddress", "bloodGroup",
+      "differentlyAbledDetails", "bankAccountNo", "bankName", "bankBranch", "bankOtherDetails",
+      "emergencyContactName", "emergencyContactRelation", "emergencyContactPhone", "ratificationStatus",
+      "ratificationProceedingsNumber", "userUid",
+      "maritalStatus", "spouseName", "temporaryAddress", "bloodGroup",
     ] as const;
 
     for (const key of stringFields) {

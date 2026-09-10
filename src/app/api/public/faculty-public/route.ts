@@ -77,14 +77,16 @@ export async function GET(request: Request) {
           ? {
               highestQualification: ap.highestQualification,
               ugDetails: publicDegree(ap.ugDetails),
+              additionalUgDetails: (ap.additionalUgDetails ?? []).map(publicDegree),
               pgDetails: publicDegree(ap.pgDetails),
               additionalPgDetails: (ap.additionalPgDetails ?? []).map(publicDegree),
               phdDetails: publicDegree(ap.phdDetails),
               additionalPhdDetails: (ap.additionalPhdDetails ?? []).map(publicDegree),
               postDoctoralDetails: publicDegree(ap.postDoctoralDetails),
               phdStatus: ap.phdStatus,
-              netSletQualificationYear: ap.netSletQualificationYear,
-              gateQualifiedYear: ap.gateQualifiedYear,
+              qualifyingExamQualified: ap.qualifyingExamQualified,
+              qualifyingExam: ap.qualifyingExam,
+              qualifyingExamYear: ap.qualifyingExamYear,
             }
           : undefined,
 

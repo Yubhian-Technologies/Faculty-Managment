@@ -6,7 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { CertificateUploadField } from "@/components/shared/CertificateUploadField";
 import { DesignationSelect } from "@/components/faculty/DesignationOptions";
 import {
-  SectionTitle, NumInput, TextInput, DegreeFields, DegreeFieldsList, RepeatingGroup, QualificationsFields,
+  SectionTitle, NumInput, TextInput, DateInput, MonthInput, DegreeFields, DegreeFieldsList, RepeatingGroup, QualificationsFields,
 } from "@/components/shared/ProfileFieldPrimitives";
 import { SCHOOL_TEACHING_QUALIFICATION_LEVELS } from "@/lib/designations/config";
 import type {
@@ -21,17 +21,32 @@ import type {
   TrainingEntry,
   TrainingEntryType,
   TrainingParticipationRole,
+  TrainingProgramLevel,
+  TrainingProgramMode,
   ProfessionalMembership,
   ProfessionalBody,
   AdminResponsibilityEntry,
   AdminResponsibilityCategory,
   AwardEntry,
   AwardCategory,
+  AwardLevel,
 } from "@/types";
 import {
   TRAINING_ENTRY_TYPE_LABELS, TRAINING_PARTICIPATION_ROLE_LABELS, PROFESSIONAL_BODY_LABELS,
-  ADMIN_RESPONSIBILITY_CATEGORY_LABELS, AWARD_CATEGORY_LABELS,
+  ADMIN_RESPONSIBILITY_CATEGORY_LABELS, AWARD_CATEGORY_LABELS, QUALIFYING_EXAM_LABELS,
+  TRAINING_PROGRAM_LEVEL_LABELS, TRAINING_PROGRAM_MODE_LABELS, AWARD_LEVEL_LABELS,
 } from "@/types";
+
+// Inclusive day count between two "YYYY-MM-DD" dates (both days count, so a
+// program running Mon-Fri is 5 days, not 4) - undefined until both ends are
+// set and parse cleanly, rather than a stale/zero value.
+function calcDurationDays(from: string | undefined, to: string | undefined): number | undefined {
+  if (!from || !to) return undefined;
+  const f = new Date(from).getTime();
+  const t = new Date(to).getTime();
+  if (Number.isNaN(f) || Number.isNaN(t) || t < f) return undefined;
+  return Math.round((t - f) / 86400000) + 1;
+}
 
 interface Props {
   value: Partial<FacultyProfileFields>;
@@ -47,9 +62,9 @@ const EMPTY_FUNDED_PROJECT: FundedProject = { title: "", fundingAgency: "", gran
 const EMPTY_CONSULTANCY: ConsultancyProject = { title: "", clientOrAgency: "", revenueLakhs: 0, year: new Date().getFullYear(), status: "" };
 const EMPTY_LAB: LabEstablished = { facilityDetails: "", outcomes: "" };
 const EMPTY_BOOK: AuthoredBook = { title: "", publisher: "", year: new Date().getFullYear() };
-const EMPTY_PREVIOUS_INSTITUTION: PreviousInstitution = { institutionName: "", designation: "", fromYear: new Date().getFullYear(), toYear: new Date().getFullYear() };
+const EMPTY_PREVIOUS_INSTITUTION: PreviousInstitution = { institutionName: "", designation: "" };
 const EMPTY_PROMOTION: PromotionRecord = { fromDesignation: "", toDesignation: "", effectiveYear: new Date().getFullYear() };
-const EMPTY_TRAINING: TrainingEntry = { type: "FDP", title: "", organizer: "", year: new Date().getFullYear() };
+const EMPTY_TRAINING: TrainingEntry = { type: "FDP", title: "", organizer: "" };
 const EMPTY_MEMBERSHIP: ProfessionalMembership = { body: "IEEE" };
 const EMPTY_ADMIN_RESPONSIBILITY: AdminResponsibilityEntry = { category: "COORDINATOR", description: "" };
 const EMPTY_AWARD: AwardEntry = { category: "BEST_TEACHER", title: "", awardingBody: "", year: new Date().getFullYear() };
@@ -71,7 +86,7 @@ export function AcademicProfileFields({ value, onChange, includeTeachingAssignme
       <SectionTitle>Module 1 - General &amp; Academic Profile</SectionTitle>
       {isSchool ? (
         <>
-          <TextInput label="Highest Qualification Earned" value={value.highestQualification} onChange={(v) => set("highestQualification", v)} placeholder="e.g. B.Ed, M.A." />
+          <TextInput label="Highest Qualification" value={value.highestQualification} onChange={(v) => set("highestQualification", v)} placeholder="e.g. B.Ed, M.A." />
           <QualificationsFields
             items={value.schoolQualifications}
             levelOptions={SCHOOL_TEACHING_QUALIFICATION_LEVELS}
@@ -80,46 +95,105 @@ export function AcademicProfileFields({ value, onChange, includeTeachingAssignme
         </>
       ) : (
         <>
-          <TextInput label="Highest Qualification Earned" value={value.highestQualification} onChange={(v) => set("highestQualification", v)} placeholder="e.g. Ph.D" />
-          <DegreeFields label="High School (10th) Details" level="HIGH_SCHOOL" value={value.highSchoolDetails} onChange={(v) => set("highSchoolDetails", v)} />
-          <DegreeFields label="Intermediate (12th) Details" level="INTERMEDIATE" value={value.intermediateDetails} onChange={(v) => set("intermediateDetails", v)} />
+          <TextInput label="Highest Qualification" value={value.highestQualification} onChange={(v) => set("highestQualification", v)} placeholder="e.g. Ph.D" />
+          <div className="space-y-3 rounded-lg border p-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label>NET/SLET/SET/GATE/Others</Label>
+                <Select value={value.qualifyingExamQualified ?? ""} onValueChange={(v) => set("qualifyingExamQualified", v as FacultyProfileFields["qualifyingExamQualified"])}>
+                  <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="YES">Yes</SelectItem>
+                    <SelectItem value="NO">No</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            {value.qualifyingExamQualified === "YES" && (
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div className="space-y-2">
+                  <Label>Qualified Exam</Label>
+                  <Select value={value.qualifyingExam ?? ""} onValueChange={(v) => set("qualifyingExam", v as FacultyProfileFields["qualifyingExam"])}>
+                    <SelectTrigger><SelectValue placeholder="Select exam" /></SelectTrigger>
+                    <SelectContent>
+                      {Object.entries(QUALIFYING_EXAM_LABELS).map(([k, lbl]) => <SelectItem key={k} value={k}>{lbl}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <TextInput label="Score" value={value.qualifyingExamScore} onChange={(v) => set("qualifyingExamScore", v)} />
+                <NumInput label="Qualified Year" value={value.qualifyingExamYear} onChange={(v) => set("qualifyingExamYear", v)} />
+              </div>
+            )}
+          </div>
+          <DegreeFields label="Secondary Education" level="HIGH_SCHOOL" value={value.highSchoolDetails} onChange={(v) => set("highSchoolDetails", v)} />
+          <DegreeFields label="Intermediate (10+2) / Diploma (10+3) / ITI / Others" level="INTERMEDIATE" value={value.intermediateDetails} onChange={(v) => set("intermediateDetails", v)} />
           <DegreeFields label="UG Details" level="UG" value={value.ugDetails} onChange={(v) => set("ugDetails", v)} />
+          <DegreeFieldsList label="UG Details" level="UG" items={value.additionalUgDetails} onChange={(v) => set("additionalUgDetails", v)} />
           <DegreeFields label="PG Details" level="PG" value={value.pgDetails} onChange={(v) => set("pgDetails", v)} />
           <DegreeFieldsList label="PG Details" level="PG" items={value.additionalPgDetails} onChange={(v) => set("additionalPgDetails", v)} />
-          <DegreeFields label="PhD Details" level="DOCTORAL" value={value.phdDetails} onChange={(v) => set("phdDetails", v)} />
-          <DegreeFieldsList label="PhD Details" level="DOCTORAL" items={value.additionalPhdDetails} onChange={(v) => set("additionalPhdDetails", v)} />
-          <DegreeFields label="Post-Doctoral Details" level="POST_DOCTORAL" value={value.postDoctoralDetails} onChange={(v) => set("postDoctoralDetails", v)} />
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label>Ph.D. Status</Label>
-              <Select value={value.phdStatus ?? ""} onValueChange={(v) => set("phdStatus", v as FacultyProfileFields["phdStatus"])}>
-                <SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="AWARDED">Awarded</SelectItem>
-                  <SelectItem value="PURSUING">Pursuing</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Ph.D. Mode</Label>
-              <Select value={value.phdMode ?? ""} onValueChange={(v) => set("phdMode", v as FacultyProfileFields["phdMode"])}>
-                <SelectTrigger><SelectValue placeholder="Select mode" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="FULL_TIME">Full-Time</SelectItem>
-                  <SelectItem value="PART_TIME">Part-Time</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <TextInput label="Project Supervisor Name" value={value.phdSupervisorName} onChange={(v) => set("phdSupervisorName", v)} />
-            <TextInput label="Fellowships Received" value={value.fellowshipsReceived} onChange={(v) => set("fellowshipsReceived", v)} />
-          </div>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <NumInput label="GATE Qualified Year" value={value.gateQualifiedYear} onChange={(v) => set("gateQualifiedYear", v)} />
-            <NumInput label="GATE Score" value={value.gateScore} onChange={(v) => set("gateScore", v)} />
-            <NumInput label="NET/SLET Qualification Year" value={value.netSletQualificationYear} onChange={(v) => set("netSletQualificationYear", v)} />
-          </div>
+          <DegreeFields
+            label="Ph.D. Details"
+            level="DOCTORAL"
+            value={value.phdDetails}
+            onChange={(v) => set("phdDetails", v)}
+            status={value.phdStatus}
+            extraFields={
+              <>
+                <div className="space-y-2">
+                  <Label>Ph.D. Status</Label>
+                  <Select value={value.phdStatus ?? ""} onValueChange={(v) => set("phdStatus", v as FacultyProfileFields["phdStatus"])}>
+                    <SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="AWARDED">Awarded</SelectItem>
+                      <SelectItem value="PURSUING">Pursuing</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Ph.D. Mode</Label>
+                  <Select value={value.phdMode ?? ""} onValueChange={(v) => set("phdMode", v as FacultyProfileFields["phdMode"])}>
+                    <SelectTrigger><SelectValue placeholder="Select mode" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="FULL_TIME">Full-Time</SelectItem>
+                      <SelectItem value="PART_TIME">Part-Time</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </>
+            }
+          />
+          <DegreeFieldsList label="Ph.D. Details" level="DOCTORAL" items={value.additionalPhdDetails} onChange={(v) => set("additionalPhdDetails", v)} />
+          <DegreeFields
+            label="Postdoctoral Fellowship Details"
+            level="POST_DOCTORAL"
+            value={value.postDoctoralDetails}
+            onChange={(v) => set("postDoctoralDetails", v)}
+            status={value.postDoctoralStatus}
+            extraFields={
+              <>
+                <div className="space-y-2">
+                  <Label>Postdoctoral Status</Label>
+                  <Select value={value.postDoctoralStatus ?? ""} onValueChange={(v) => set("postDoctoralStatus", v as FacultyProfileFields["postDoctoralStatus"])}>
+                    <SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="AWARDED">Awarded</SelectItem>
+                      <SelectItem value="PURSUING">Pursuing</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Postdoctoral Mode</Label>
+                  <Select value={value.postDoctoralMode ?? ""} onValueChange={(v) => set("postDoctoralMode", v as FacultyProfileFields["postDoctoralMode"])}>
+                    <SelectTrigger><SelectValue placeholder="Select mode" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="FULL_TIME">Full-Time</SelectItem>
+                      <SelectItem value="PART_TIME">Part-Time</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </>
+            }
+          />
         </>
       )}
 
@@ -133,8 +207,39 @@ export function AcademicProfileFields({ value, onChange, includeTeachingAssignme
           <>
             <TextInput label="Institution Name" value={item.institutionName} onChange={(v) => update({ institutionName: v })} />
             <TextInput label="Designation" value={item.designation} onChange={(v) => update({ designation: v })} />
-            <NumInput label="From Year" value={item.fromYear} onChange={(v) => update({ fromYear: v })} />
-            <NumInput label="To Year" value={item.toYear} onChange={(v) => update({ toYear: v })} />
+            {(() => {
+              const fromDate = item.fromDate ?? (item.fromYear ? `${item.fromYear}-01-01` : undefined);
+              return (
+                <>
+                  <DateInput label="From Date" value={fromDate} onChange={(v) => update({ fromDate: v })} />
+                  <DateInput
+                    label="To Date"
+                    value={item.toDate ?? (item.toYear ? `${item.toYear}-01-01` : undefined)}
+                    // min steers the native picker; the clamp below is the
+                    // actual guarantee since a typed/pasted value can still
+                    // bypass min - never let To Date land before From Date.
+                    onChange={(v) => update({ toDate: fromDate && v && v < fromDate ? fromDate : v })}
+                    min={fromDate}
+                  />
+                </>
+              );
+            })()}
+            <NumInput label="Joining Salary" value={item.joiningSalary} onChange={(v) => update({ joiningSalary: v })} />
+            <NumInput label="Leaving Salary" value={item.leavingSalary} onChange={(v) => update({ leavingSalary: v })} />
+            <div className="sm:col-span-2 space-y-2">
+              <Label>Reason for Leaving</Label>
+              <Textarea value={item.reasonForLeaving ?? ""} onChange={(e) => update({ reasonForLeaving: e.target.value })} />
+            </div>
+            <div className="space-y-2">
+              <Label>NOC Obtained</Label>
+              <Select value={item.nocObtained ?? ""} onValueChange={(v) => update({ nocObtained: v as PreviousInstitution["nocObtained"] })}>
+                <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="YES">Yes</SelectItem>
+                  <SelectItem value="NO">No</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <div className="sm:col-span-2">
               <Label className="text-xs">Experience Certificate</Label>
               <CertificateUploadField
@@ -190,9 +295,9 @@ export function AcademicProfileFields({ value, onChange, includeTeachingAssignme
       {/* Module 3 */}
       {!hideResearchModule && (
         <>
-          <SectionTitle>Module 3 - Research Publications</SectionTitle>
+          <SectionTitle>Module 3 - Research &amp; Development</SectionTitle>
           <p className="text-xs text-muted-foreground">
-            Individual publication records are maintained by the R&amp;D office - view them on the Research Publications module.
+            Individual publication records are maintained by the R&amp;D office - view them on the Research &amp; Development module.
             The fields below are self-reported summary metrics.
           </p>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -364,10 +469,56 @@ export function AcademicProfileFields({ value, onChange, includeTeachingAssignme
                 </SelectContent>
               </Select>
             </div>
-            <TextInput label="Title" value={item.title} onChange={(v) => update({ title: v })} />
-            <TextInput label="Organizer" value={item.organizer} onChange={(v) => update({ organizer: v })} />
-            <NumInput label="Year" value={item.year} onChange={(v) => update({ year: v })} />
-            <NumInput label="Duration (days)" value={item.durationDays} onChange={(v) => update({ durationDays: v })} />
+            <TextInput label="Title of the Program" value={item.title} onChange={(v) => update({ title: v })} />
+            <TextInput label="Name of the Faculty / Coordinator" value={item.organizer} onChange={(v) => update({ organizer: v })} />
+            <DateInput
+              label="From Date"
+              value={item.fromDate}
+              onChange={(v) => update({ fromDate: v, durationDays: calcDurationDays(v, item.toDate) })}
+            />
+            <DateInput
+              label="To Date"
+              value={item.toDate}
+              onChange={(v) => update({ toDate: v, durationDays: calcDurationDays(item.fromDate, v) })}
+              min={item.fromDate}
+            />
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">Duration</Label>
+              <p className="text-sm font-medium pt-2">{item.durationDays ? `${item.durationDays} day${item.durationDays === 1 ? "" : "s"}` : "-"}</p>
+            </div>
+            <div className="space-y-2">
+              <Label>National / International</Label>
+              <Select value={item.levelOfProgram ?? ""} onValueChange={(v) => update({ levelOfProgram: v as TrainingProgramLevel })}>
+                <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                <SelectContent>
+                  {Object.entries(TRAINING_PROGRAM_LEVEL_LABELS).map(([k, label]) => (
+                    <SelectItem key={k} value={k}>{label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <TextInput label="Place" value={item.place} onChange={(v) => update({ place: v })} placeholder="e.g. Bhimavaram" />
+            <div className="space-y-2">
+              <Label>Mode of the Program</Label>
+              <Select value={item.mode ?? ""} onValueChange={(v) => update({ mode: v as TrainingProgramMode })}>
+                <SelectTrigger><SelectValue placeholder="Select mode" /></SelectTrigger>
+                <SelectContent>
+                  {Object.entries(TRAINING_PROGRAM_MODE_LABELS).map(([k, label]) => (
+                    <SelectItem key={k} value={k}>{label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <NumInput label="Number of Participants" value={item.numberOfParticipants} onChange={(v) => update({ numberOfParticipants: v })} />
+            <NumInput label="Number of Resource Persons" value={item.numberOfResourcePersons} onChange={(v) => update({ numberOfResourcePersons: v })} />
+            <div className="sm:col-span-2">
+              <TextInput
+                label="Resource Persons - Details"
+                value={item.resourcePersonsDetails}
+                onChange={(v) => update({ resourcePersonsDetails: v })}
+                placeholder="Names / affiliations of the resource persons"
+              />
+            </div>
             <div className="sm:col-span-2">
               <Label className="text-xs">Certificate</Label>
               <CertificateUploadField
@@ -404,7 +555,7 @@ export function AcademicProfileFields({ value, onChange, includeTeachingAssignme
               <TextInput label="Body Name" value={item.otherName} onChange={(v) => update({ otherName: v })} />
             )}
             <TextInput label="Membership ID" value={item.membershipId} onChange={(v) => update({ membershipId: v })} />
-            <NumInput label="Member Since (Year)" value={item.sinceYear} onChange={(v) => update({ sinceYear: v })} />
+            <MonthInput label="Member Since (Month/Year)" value={item.sinceMonthYear} onChange={(v) => update({ sinceMonthYear: v })} />
           </>
         )}
       />
@@ -445,6 +596,17 @@ export function AcademicProfileFields({ value, onChange, includeTeachingAssignme
             <TextInput label="Title" value={item.title} onChange={(v) => update({ title: v })} />
             <TextInput label="Awarding Body" value={item.awardingBody} onChange={(v) => update({ awardingBody: v })} />
             <NumInput label="Year" value={item.year} onChange={(v) => update({ year: v })} />
+            <div className="space-y-2">
+              <Label>State / National / International</Label>
+              <Select value={item.level ?? ""} onValueChange={(v) => update({ level: v as AwardLevel })}>
+                <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                <SelectContent>
+                  {Object.entries(AWARD_LEVEL_LABELS).map(([k, label]) => (
+                    <SelectItem key={k} value={k}>{label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="sm:col-span-2">
               <Label className="text-xs">Certificate</Label>
               <CertificateUploadField

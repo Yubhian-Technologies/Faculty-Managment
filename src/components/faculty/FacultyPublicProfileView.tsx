@@ -39,14 +39,16 @@ export interface FacultyPublicProfile {
   education?: {
     highestQualification: string;
     ugDetails?: DegreeSummary;
+    additionalUgDetails: (DegreeSummary | undefined)[];
     pgDetails?: DegreeSummary;
     additionalPgDetails: (DegreeSummary | undefined)[];
     phdDetails?: DegreeSummary;
     additionalPhdDetails: (DegreeSummary | undefined)[];
     postDoctoralDetails?: DegreeSummary;
     phdStatus?: "AWARDED" | "PURSUING";
-    netSletQualificationYear?: number;
-    gateQualifiedYear?: number;
+    qualifyingExamQualified?: "YES" | "NO";
+    qualifyingExam?: string;
+    qualifyingExamYear?: number;
   };
   previousInstitutions: { institutionName: string; designation?: string; fromYear?: number; toYear?: number }[];
   research?: {
@@ -149,12 +151,13 @@ export function FacultyPublicProfileView({ profile }: { profile: FacultyPublicPr
     ...(p.education?.pgDetails ? [{ label: "Post-Graduate", d: p.education.pgDetails }] : []),
     ...(p.education?.additionalPgDetails ?? []).filter((d): d is DegreeSummary => !!d).map((d) => ({ label: "Post-Graduate", d })),
     ...(p.education?.ugDetails ? [{ label: "Under-Graduate", d: p.education.ugDetails }] : []),
+    ...(p.education?.additionalUgDetails ?? []).filter((d): d is DegreeSummary => !!d).map((d) => ({ label: "Under-Graduate", d })),
   ];
 
   const designationLabel = DESIGNATION_LABELS[p.designation] ?? p.designation;
   const qualBadges = [
-    p.education?.netSletQualificationYear && `UGC-NET/SLET Qualified (${p.education.netSletQualificationYear})`,
-    p.education?.gateQualifiedYear && `GATE Qualified (${p.education.gateQualifiedYear})`,
+    p.education?.qualifyingExamQualified === "YES" && p.education?.qualifyingExam &&
+      `${p.education.qualifyingExam} Qualified${p.education.qualifyingExamYear ? ` (${p.education.qualifyingExamYear})` : ""}`,
     p.education?.phdStatus === "PURSUING" && "Ph.D. Pursuing",
   ].filter(Boolean) as string[];
 

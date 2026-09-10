@@ -141,6 +141,7 @@ export async function POST(request: Request) {
       collegeEmail: string;
       password: string;
       phone?: string;
+      additionalPhoneNumbers?: { label?: string; number: string }[];
       designation: Designation;
       qualification: string;
       specialization?: string;
@@ -289,6 +290,15 @@ export async function POST(request: Request) {
       collegeEmail,
       ...(body.email ? { email: body.email } : {}),
       phone: body.phone ?? "",
+      // Firestore has no ignoreUndefinedProperties, so a wholly-empty list
+      // (or one with only blank rows) is left out entirely rather than
+      // written as [] - see the phone/apaarFacultyId pattern above.
+      ...((() => {
+        const numbers = (body.additionalPhoneNumbers ?? [])
+          .map((p) => ({ ...(p.label?.trim() ? { label: p.label.trim() } : {}), number: p.number?.trim() ?? "" }))
+          .filter((p) => p.number);
+        return numbers.length > 0 ? { additionalPhoneNumbers: numbers } : {};
+      })()),
       designation,
       qualification,
       specialization: body.specialization ?? "",

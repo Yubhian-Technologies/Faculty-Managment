@@ -128,19 +128,31 @@ export interface SupportingStaffMember {
   aadharNo?: string;
   panNo?: string;
   passportNumber?: string;
+  bankAccountNo?: string;
+  ifscCode?: string;
+  bankName?: string;
+  bankBranch?: string;
+  bankOtherDetails?: string;
   emergencyContactName?: string;
+  emergencyContactRelation?: string; // relation of the emergency contact to this person
   emergencyContactPhone?: string;
   ratificationStatus?: "Ratified" | "Not Ratified";
-  ratificationDate?: Timestamp;
+  ratificationProceedingsNumber?: string;
+  ratificationDate?: Timestamp; // Ratification Proceedings Date
   maritalStatus?: "Single" | "Married";
   spouseName?: string;
   numberOfChildren?: number;
-  referral?: string;
-  nativePlace?: string;
   temporaryAddress?: string;
   permanentSameAsTemporary?: boolean;
   permanentAddress?: string;
   bloodGroup?: string;
+  motherTongue?: string;
+  languagesKnown?: string[];
+  heightFeet?: number;
+  heightInches?: number;
+  weightKg?: number;
+  pfNumber?: string; // Provident Fund number
+  esiNumber?: string; // ESI number
 
   supportingStaffProfile?: SupportingStaffProfileFields;
 

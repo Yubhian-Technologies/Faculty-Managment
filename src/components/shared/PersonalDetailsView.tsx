@@ -16,24 +16,33 @@ export interface PersonalDetailsSource {
   aadharNo?: string;
   panNo?: string;
   passportNumber?: string;
-  sscHallTicketNo?: string;
   differentlyAbled?: boolean;
   differentlyAbledDetails?: string;
   bankAccountNo?: string;
   ifscCode?: string;
+  bankName?: string;
+  bankBranch?: string;
+  bankOtherDetails?: string;
   emergencyContactName?: string;
+  emergencyContactRelation?: string;
   emergencyContactPhone?: string;
   ratificationStatus?: string;
+  ratificationProceedingsNumber?: string;
   ratificationDate?: Timestamp | Date | { _seconds: number; _nanoseconds?: number } | { seconds: number; nanoseconds?: number };
   maritalStatus?: string;
   spouseName?: string;
   numberOfChildren?: number;
-  referral?: string;
-  nativePlace?: string;
   temporaryAddress?: string;
   permanentSameAsTemporary?: boolean;
   permanentAddress?: string;
   bloodGroup?: string;
+  motherTongue?: string;
+  languagesKnown?: string[];
+  heightFeet?: number;
+  heightInches?: number;
+  weightKg?: number;
+  pfNumber?: string;
+  esiNumber?: string;
 }
 
 interface Props {
@@ -55,21 +64,29 @@ export function PersonalDetailsView({ value }: Props) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <Field label="Gender" value={p.gender} />
+        <Field label="Name (as per Aadhar)" value={p.nameAsPerAadhar} />
         <Field label="Date of Birth" value={p.dateOfBirth ? formatDate(p.dateOfBirth) : undefined} />
+        <Field label="Gender" value={p.gender} />
         <Field label="Full Name (as per SSC)" value={p.legalName} />
-        <Field label="SSC Hall Ticket No" value={p.sscHallTicketNo} />
         <Field label="Father / Husband Name" value={p.fatherName} />
         <Field label="Mother Name" value={p.motherName} />
         <Field label="Religion" value={p.religion ? (RELIGION_LABELS[p.religion as Religion] ?? p.religion) : undefined} />
         <Field label="Caste" value={p.caste ? (CASTE_LABELS[p.caste as Caste] ?? p.caste) : undefined} />
         <Field label="Sub Caste" value={p.subCaste} />
-        <Field label="Name (as per Aadhar)" value={p.nameAsPerAadhar} />
         <Field label="Aadhar No" value={p.aadharNo} />
         <Field label="PAN No" value={p.panNo} />
         <Field label="Passport No" value={p.passportNumber} />
-        <Field label="Referral" value={p.referral} />
         <Field label="Differently Abled" value={p.differentlyAbled === undefined ? undefined : p.differentlyAbled ? `Yes${p.differentlyAbledDetails ? ` (${p.differentlyAbledDetails})` : ""}` : "No"} />
+      </div>
+
+      <div className="rounded-lg border bg-muted/20 shadow-sm p-3">
+        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Personal Attributes</p>
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <Field label="Mother Tongue" value={p.motherTongue} />
+          <Field label="Languages Known" value={p.languagesKnown && p.languagesKnown.length > 0 ? p.languagesKnown.join(", ") : undefined} />
+          <Field label="Height" value={p.heightFeet || p.heightInches ? `${p.heightFeet ?? 0} ft ${p.heightInches ?? 0} in` : undefined} />
+          <Field label="Weight" value={p.weightKg !== undefined ? `${p.weightKg} kg` : undefined} />
+        </div>
       </div>
 
       <div className="rounded-lg border bg-muted/20 shadow-sm p-3">
@@ -77,6 +94,17 @@ export function PersonalDetailsView({ value }: Props) {
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           <Field label="A/C Number" value={p.bankAccountNo} />
           <Field label="IFSC Code" value={p.ifscCode} />
+          <Field label="Bank Name" value={p.bankName} />
+          <Field label="Branch" value={p.bankBranch} />
+        </div>
+        {p.bankOtherDetails && (
+          <div className="mt-3">
+            <Field label="Other Details" value={p.bankOtherDetails} />
+          </div>
+        )}
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 mt-3">
+          <Field label="PF Number" value={p.pfNumber} />
+          <Field label="ESI Number" value={p.esiNumber} />
         </div>
       </div>
 
@@ -104,8 +132,9 @@ export function PersonalDetailsView({ value }: Props) {
       <div className="rounded-lg border bg-muted/20 shadow-sm p-3">
         <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Emergency Contact</p>
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-          <Field label="Name" value={p.emergencyContactName} />
-          <Field label="Phone" value={p.emergencyContactPhone} />
+          <Field label="Emergency Contact Person Name" value={p.emergencyContactName} />
+          <Field label="Relation (with Emergency Contact)" value={p.emergencyContactRelation} />
+          <Field label="Emergency Contact Mobile No" value={p.emergencyContactPhone} />
         </div>
       </div>
 
@@ -113,12 +142,9 @@ export function PersonalDetailsView({ value }: Props) {
         <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Ratification</p>
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           <Field label="Ratification Status" value={p.ratificationStatus} />
-          <Field label="Ratification Date" value={p.ratificationDate ? formatDate(p.ratificationDate) : undefined} />
+          <Field label="Proceedings Number" value={p.ratificationProceedingsNumber} />
+          <Field label="Ratification Proceedings Date" value={p.ratificationDate ? formatDate(p.ratificationDate) : undefined} />
         </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <Field label="Native Place" value={p.nativePlace} />
       </div>
     </div>
   );
