@@ -244,7 +244,7 @@ export function AcademicProfileFields({ value, onChange, includeTeachingAssignme
         )}
       />
       <RepeatingGroup
-        title="Industry Consultancy"
+        title="Consultancy Projects"
         items={value.consultancyProjects}
         empty={EMPTY_CONSULTANCY}
         onChange={(v) => set("consultancyProjects", v)}
