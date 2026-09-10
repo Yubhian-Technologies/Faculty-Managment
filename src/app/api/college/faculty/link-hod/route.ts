@@ -30,6 +30,7 @@ export async function POST(request: Request) {
       apaarFacultyId?: string;
       name?: string;
       phone?: string;
+      additionalPhoneNumbers?: { label?: string; number: string }[];
       designation: Designation;
       qualification: string;
       specialization?: string;
@@ -118,6 +119,12 @@ export async function POST(request: Request) {
       // Auth account being created for it to actually match.
       collegeEmail: targetUser.email ?? "",
       phone: body.phone ?? "",
+      ...((() => {
+        const numbers = (body.additionalPhoneNumbers ?? [])
+          .map((p) => ({ ...(p.label?.trim() ? { label: p.label.trim() } : {}), number: p.number?.trim() ?? "" }))
+          .filter((p) => p.number);
+        return numbers.length > 0 ? { additionalPhoneNumbers: numbers } : {};
+      })()),
       designation,
       qualification,
       specialization: body.specialization ?? "",

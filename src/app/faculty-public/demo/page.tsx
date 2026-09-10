@@ -46,9 +46,11 @@ const DEMO_PROFILE: FacultyPublicProfile = {
       universityOrInstitute: "JNTU Hyderabad",
       yearOfCompletion: 2006,
     },
+    additionalUgDetails: [],
     phdStatus: "AWARDED",
-    netSletQualificationYear: 2007,
-    gateQualifiedYear: 2006,
+    qualifyingExamQualified: "YES",
+    qualifyingExam: "GATE",
+    qualifyingExamYear: 2006,
   },
   previousInstitutions: [
     { institutionName: "National University of Singapore", designation: "Post-Doctoral Fellow", fromYear: 2012, toYear: 2014 },
