@@ -6,6 +6,8 @@ import { requireCollegeMember, isDepartmentOffice } from "@/lib/auth/verifySessi
 import { getAdminDb } from "@/lib/firebase/admin";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
 import { syncDepartmentHod, getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
+import { MANAGEABLE_STAFF_ROLES } from "@/types";
+import type { UserRole } from "@/types";
 
 async function loadTargetInScope(
   db: FirebaseFirestore.Firestore,
@@ -33,7 +35,7 @@ async function loadTargetInScope(
     // one (see users POST), but the Principal still oversees them like any other
     // college staff, so they're listed on the Staff page and must be viewable
     // and deactivatable from it - otherwise that row renders dead buttons.
-    if (!["HOD", "DEPARTMENT_OFFICE", "COLLEGE_OFFICE", "VICE_PRINCIPAL", "COLLEGE_ADMIN", "COLLEGE_STAFF", "DEAN", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D", "PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL", "PANEL_MEMBER", "WEBMASTER", "COLLEGE_ACCOUNTS"].includes(target.role)) {
+    if (!MANAGEABLE_STAFF_ROLES.includes(target.role as UserRole)) {
       return { targetSnap: null, error: "Cannot access this user", status: 403 };
     }
   } else if (session.role === "HOD") {
@@ -118,6 +120,11 @@ export async function PATCH(
       academicProfile: Record<string, unknown>;
       profilePhotoUrl: string;
       newPassword: string;
+      // Promotes this person into a new role on their SAME account/login -
+      // their own Leave/personal-details/teaching-assignment data is already
+      // keyed by uid (or facultyId, itself linked via uid), never by role, so
+      // it keeps working automatically with no migration needed.
+      role: string;
     }> & PersonalDetailsInput;
 
     if (body.newPassword !== undefined && body.newPassword.length < 6) {
@@ -129,6 +136,16 @@ export async function PATCH(
     const { targetSnap, error, status } = await loadTargetInScope(db, session, uid);
     if (!targetSnap) return NextResponse.json({ error }, { status });
     const target = targetSnap.data() as { role: string; sectionId?: string; name?: string; department?: string; departments?: string[]; email?: string; collegeEmail?: string };
+
+    const roleChanged = body.role !== undefined && body.role !== target.role;
+    if (roleChanged) {
+      if (session.role !== "PRINCIPAL" && session.role !== "VICE_PRINCIPAL") {
+        return NextResponse.json({ error: "Only the Principal or Vice Principal can change a staff member's role" }, { status: 403 });
+      }
+      if (!MANAGEABLE_STAFF_ROLES.includes(body.role! as UserRole)) {
+        return NextResponse.json({ error: "Not a valid role to promote into" }, { status: 400 });
+      }
+    }
 
     // This generic account editor only ever offers ONE department field - safe
     // for an HOD who heads just one (mirrors it into `departments` below so the
@@ -206,6 +223,7 @@ export async function PATCH(
       // keep the canonical array mirroring the one legacy field this form edits.
       if (target.role === "HOD") updates.departments = body.department ? [body.department] : [];
     }
+    if (roleChanged) updates.role = body.role;
     if (body.phone !== undefined) updates.phone = body.phone;
     if (body.academicProfile !== undefined) updates.academicProfile = body.academicProfile;
     if (body.profilePhotoUrl !== undefined) updates.profilePhotoUrl = body.profilePhotoUrl;
@@ -220,18 +238,44 @@ export async function PATCH(
     if (body.department !== undefined) {
       await syncDepartmentHod(db, session.collegeId, {
         uid,
-        role: target.role,
+        role: roleChanged ? body.role! : target.role,
         name: (updates.name as string | undefined) ?? target.name ?? "",
         department: body.department,
       });
     }
 
-    // Keep systemUsers in sync (name/photo are the only fields mirrored there)
-    if ((body.name !== undefined && body.name.trim()) || body.profilePhotoUrl !== undefined) {
+    if (roleChanged) {
+      // syncDepartmentHod only ever ASSIGNS a department's hodUid, it never
+      // clears one - so a person promoted OFF of HOD would otherwise keep
+      // showing as their old department's head forever.
+      if (target.role === "HOD" && target.department) {
+        const deptSnap = await db.collection("colleges").doc(session.collegeId).collection("departments")
+          .where("name", "==", target.department).limit(1).get();
+        if (!deptSnap.empty && (deptSnap.docs[0].data() as { hodUid?: string }).hodUid === uid) {
+          await deptSnap.docs[0].ref.update({ hodUid: FieldValue.delete(), hodName: FieldValue.delete(), updatedAt: now }).catch(() => {});
+        }
+      }
+      // Promoted INTO HOD with a department already on file (not touched by
+      // this request) - the syncDepartmentHod call above only fires when
+      // body.department is explicitly sent, so this covers the plain
+      // role-only promotion case too.
+      if (body.role === "HOD" && body.department === undefined && target.department) {
+        await syncDepartmentHod(db, session.collegeId, {
+          uid,
+          role: "HOD",
+          name: (updates.name as string | undefined) ?? target.name ?? "",
+          department: target.department,
+        });
+      }
+    }
+
+    // Keep systemUsers in sync (name/photo/role are the only fields mirrored there)
+    if ((body.name !== undefined && body.name.trim()) || body.profilePhotoUrl !== undefined || roleChanged) {
       await db.collection("systemUsers").doc(uid).set(
         {
           ...(body.name !== undefined && body.name.trim() ? { name: body.name.trim() } : {}),
           ...(body.profilePhotoUrl !== undefined ? { profilePhotoUrl: body.profilePhotoUrl } : {}),
+          ...(roleChanged ? { role: body.role } : {}),
         },
         { merge: true }
       );
@@ -247,7 +291,8 @@ export async function PATCH(
         .update({ classLeaderUid: FieldValue.delete(), classLeaderName: FieldValue.delete(), updatedAt: now });
     }
 
-    const action = body.isActive === false ? "USER_DEACTIVATED" : body.isActive === true ? "USER_REACTIVATED" : "USER_UPDATED";
+    const action = roleChanged ? "STAFF_ROLE_CHANGED"
+      : body.isActive === false ? "USER_DEACTIVATED" : body.isActive === true ? "USER_REACTIVATED" : "USER_UPDATED";
     let actorName = "Unknown";
     try {
       const actorSnap = await db
@@ -265,7 +310,7 @@ export async function PATCH(
       performedBy: session.uid,
       performedByName: actorName,
       targetId: uid,
-      details: { role: target.role },
+      details: roleChanged ? { fromRole: target.role, toRole: body.role } : { role: target.role },
       timestamp: now,
     });
 

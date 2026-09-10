@@ -176,6 +176,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Sections", href: "/hod/sections", iconName: "BookMarked", roles: ["HOD"] },
   { label: "Students", href: "/hod/students", iconName: "GraduationCap", roles: ["HOD"] },
   { label: "Sub-Departments", href: "/hod/settings/sub-departments", iconName: "Settings2", roles: ["HOD"] },
+  { label: "Designations", href: "/hod/settings/designations", iconName: "Tags", roles: ["HOD"] },
   // Hidden from a Department Office head, whose `role` also reads "HOD": they
   // hold the same authority everywhere else, but appointing their own successor
   // stays with the actual HOD. The API enforces that too - this only keeps a

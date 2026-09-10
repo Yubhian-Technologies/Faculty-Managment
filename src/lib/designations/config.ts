@@ -2,33 +2,29 @@ import { DESIGNATION_LABELS } from "@/types/core";
 import { NON_TECHNICAL_STAFF_DESIGNATION_LABELS } from "@/types/supportingStaff";
 import type { CollegeType } from "@/types/core";
 
-// Per-college-type designation catalogues, shared by Faculty add/edit,
-// Supporting Staff add/edit, the hiring Vacancy Request role picker, and CSV
-// import/export - one source of truth instead of each surface hardcoding its
-// own list. Every list is presented with an "Other" free-text escape hatch
-// by the components that render it (see DesignationOptions.tsx and the
-// Vacancy Request form), matching the pattern the hiring module already used
-// before this existed.
-//
-// ENGINEERING/PHARMACY/DENTAL deliberately keep the exact original
-// Designation codes (uppercase, e.g. "PROFESSOR") rather than switching to
-// human-readable strings like the other types - every existing FacultyMember/
-// SupportingStaffMember record, and the AICTE cadre-ratio report
-// (src/app/api/college/faculty-requirement/route.ts, which matches on these
-// literal codes), depends on them staying exactly as they are. Display uses
-// DESIGNATION_LABELS/SUPPORTING_DESIGNATION_LABELS to show them as words.
+// Designation lists used to be hardcoded here, one fixed set per college
+// type. They're now each college's own admin-curated Designation Catalog
+// (colleges/{id}/designations - see DesignationCatalogCard and
+// api/college/designations) - Faculty/Supporting Staff Add-Edit, CSV import,
+// and the Hiring role picker all read that collection directly instead of
+// anything in this file. What's left here is legacy-record support: display
+// labels for the old fixed codes, the Technical/Non-Technical split flag
+// (still a real per-college-type distinction, not a list), and the
+// per-college-type lists used ONLY by scripts/backfill-designation-
+// catalog.mjs to seed an existing college's catalog once at rollout.
 
 const ENGINEERING_TEACHING = ["PROFESSOR", "ASSOCIATE_PROFESSOR", "ASSISTANT_PROFESSOR", "LECTURER", "VISITING_FACULTY", "ADJUNCT_FACULTY"];
 // The 4 old FacultyMember "technical" designation codes, now Supporting
 // Staff designations - exported on their own (not just folded into
 // ENGINEERING_SUPPORTING) so callers that need to recognize a not-yet-
 // migrated FacultyMember record (see scripts/migrate-technical-staff-to-
-// supporting-staff.mjs and api/leave/profiles/route.ts) can check against
-// exactly these 4, regardless of college type.
+// supporting-staff.mjs, api/leave/profiles/route.ts, api/college/faculty/
+// route.ts, and lib/leave/identity.ts/periodCoverage.ts's teaching-staff
+// classification) can check against exactly these 4, regardless of college type.
 export const LEGACY_TECHNICAL_DESIGNATIONS = ["LAB_ASSISTANT", "PROGRAMMER", "SYSTEM_ADMINISTRATOR", "NETWORK_ENGINEER"];
 const ENGINEERING_SUPPORTING = ["OFFICE_STAFF", "ACCOUNTANT", "CLERK", "ATTENDER", "OFFICE_ASSISTANT", ...LEGACY_TECHNICAL_DESIGNATIONS];
 
-export const TEACHING_DESIGNATIONS_BY_COLLEGE_TYPE: Record<CollegeType, string[]> = {
+const TEACHING_DESIGNATIONS_BY_COLLEGE_TYPE: Record<CollegeType, string[]> = {
   ENGINEERING: ENGINEERING_TEACHING,
   PHARMACY: ENGINEERING_TEACHING,
   DENTAL: ENGINEERING_TEACHING,
@@ -47,16 +43,13 @@ export const TEACHING_DESIGNATIONS_BY_COLLEGE_TYPE: Record<CollegeType, string[]
 // Technical half (HOD, department-scoped) and a Non-Technical half
 // (Principal/College Office, college-wide) - same ownership model as
 // Engineering/Pharmacy/Dental's LEGACY_TECHNICAL_DESIGNATIONS split. School's
-// supporting list is deliberately NOT split (see getHodTechnicalDesignations).
-// Only the Technical subset is listed explicitly per type; the Non-Technical
-// subset is derived as "full supporting list minus Technical" (see
-// getNonTechnicalDesignations) so the two can never drift or overlap.
+// supporting list is deliberately NOT split (see hasSupportingStaffSplit).
 const DEGREE_TECHNICAL_DESIGNATIONS = ["Lab Assistant", "Programmer", "Network I/C"];
 const POLYTECHNIC_TECHNICAL_DESIGNATIONS = [
   "Sr. Lab Technician", "Drawing Assistant", "Lab Assistant", "Programmer", "Computer Operator", "Lab Technician",
 ];
 
-export const SUPPORTING_DESIGNATIONS_BY_COLLEGE_TYPE: Record<CollegeType, string[]> = {
+const SUPPORTING_DESIGNATIONS_BY_COLLEGE_TYPE: Record<CollegeType, string[]> = {
   ENGINEERING: ENGINEERING_SUPPORTING,
   PHARMACY: ENGINEERING_SUPPORTING,
   DENTAL: ENGINEERING_SUPPORTING,
@@ -72,31 +65,34 @@ export const SUPPORTING_DESIGNATIONS_BY_COLLEGE_TYPE: Record<CollegeType, string
 // both legacy code maps (DESIGNATION_LABELS for the ENGINEERING_TEACHING
 // codes, NON_TECHNICAL_STAFF_DESIGNATION_LABELS for ENGINEERING_SUPPORTING's,
 // extended to cover the 4 migrated-in technical ones), falling back to the
-// value itself - every new per-college-type value is already human-readable
-// and displays as-is. Used anywhere a designation is shown without already
-// knowing which category it's from (e.g. Salary Structures, Budget line
-// items, which cover both).
+// value itself - an admin-curated Designation Catalog value is already
+// human-readable and displays as-is. Used anywhere a designation is shown
+// without already knowing which category it's from (e.g. Salary Structures,
+// Budget line items, which cover both).
 export function designationLabel(value: string | undefined | null): string {
   if (!value) return "-";
   return DESIGNATION_LABELS[value] ?? NON_TECHNICAL_STAFF_DESIGNATION_LABELS[value] ?? value;
 }
 
-export function getTeachingDesignations(type: CollegeType | undefined | null): string[] {
-  return TEACHING_DESIGNATIONS_BY_COLLEGE_TYPE[type as CollegeType] ?? ENGINEERING_TEACHING;
-}
-
-export function getSupportingDesignations(type: CollegeType | undefined | null): string[] {
-  return SUPPORTING_DESIGNATIONS_BY_COLLEGE_TYPE[type as CollegeType] ?? ENGINEERING_SUPPORTING;
-}
-
-// Designation picklist for HOD's Technical Staff (Supporting Staff
-// staffCategory "TECHNICAL"), and its Non-Technical counterpart for
-// College Office/Principal. Engineering/Pharmacy/Dental and Degree/
-// Polytechnic all have a real split; School deliberately does not (its
-// supporting staff is centrally managed, non-technical only - see
-// hasSupportingStaffSplit, which HOD's Sidebar nav entry keys off of).
+// Whether this college type has a real Technical (HOD-owned) / Non-Technical
+// (Principal/College Office-owned) Supporting Staff split at all - School
+// deliberately doesn't (its supporting staff is centrally managed,
+// non-technical only). Not about list *content* any more (that's the
+// Designation Catalog's category field), just whether the split exists -
+// still gates HOD's Supporting Staff nav entry/module (Sidebar.tsx,
+// hod/supporting-staff/*, api/college/supporting-staff*).
 export function hasSupportingStaffSplit(type: CollegeType | undefined | null): boolean {
   return type !== "SCHOOL";
+}
+
+// ─── Rollout-only: seeds scripts/backfill-designation-catalog.mjs ───────────
+// The per-college-type lists an EXISTING college's Designation Catalog is
+// seeded from once at rollout, so it isn't stranded with an empty dropdown
+// the moment admin-curated designations ship. A college created afterward
+// gets no seed data - empty catalog, admin builds it from scratch, same as
+// Course Catalog. Not read anywhere else in the running app.
+export function getTeachingDesignations(type: CollegeType | undefined | null): string[] {
+  return TEACHING_DESIGNATIONS_BY_COLLEGE_TYPE[type as CollegeType] ?? ENGINEERING_TEACHING;
 }
 
 export function getHodTechnicalDesignations(type: CollegeType | undefined | null): string[] {
@@ -108,27 +104,14 @@ export function getHodTechnicalDesignations(type: CollegeType | undefined | null
   }
 }
 
-// Non-Technical designation picklist for College Office/Principal - the full
-// supporting list with the HOD-owned Technical subset removed, so a Technical
-// designation (e.g. Lab Assistant, Programmer) never appears here. School has
-// no Technical subset, so it keeps the full list unchanged. getSupportingDesignations
-// itself stays untouched (Salary Structures and CSV-import label lookups still
-// need the full list regardless of category).
+// The full supporting list with the HOD-owned Technical subset removed, so a
+// Technical designation (e.g. Lab Assistant, Programmer) never seeds into
+// the Non-Technical catalog. School has no Technical subset, so it keeps the
+// full list unchanged.
 export function getNonTechnicalDesignations(type: CollegeType | undefined | null): string[] {
   const technical = getHodTechnicalDesignations(type);
-  if (technical.length === 0) return getSupportingDesignations(type);
-  return getSupportingDesignations(type).filter((d) => !technical.includes(d));
-}
-
-// A record created before this per-college-type system existed - including
-// one at a Degree/Polytechnic/School college, which had no choice but to use
-// these codes back then - should still be recognized as teaching/supporting
-// regardless of what its college's type resolves to today.
-export function isTeachingDesignation(designation: string, type: CollegeType | undefined | null): boolean {
-  return ENGINEERING_TEACHING.includes(designation) || getTeachingDesignations(type).includes(designation);
-}
-export function isSupportingDesignation(designation: string, type: CollegeType | undefined | null): boolean {
-  return ENGINEERING_SUPPORTING.includes(designation) || getSupportingDesignations(type).includes(designation);
+  if (technical.length === 0) return SUPPORTING_DESIGNATIONS_BY_COLLEGE_TYPE[type as CollegeType] ?? ENGINEERING_SUPPORTING;
+  return (SUPPORTING_DESIGNATIONS_BY_COLLEGE_TYPE[type as CollegeType] ?? ENGINEERING_SUPPORTING).filter((d) => !technical.includes(d));
 }
 
 // School-only qualification levels (see AcademicProfileFields.tsx / SupportingStaffProfileFields.tsx) -
@@ -147,96 +130,3 @@ export function getSupportingQualificationLevels(type: CollegeType | undefined |
   return type === "SCHOOL" ? SCHOOL_SUPPORTING_QUALIFICATION_LEVELS : DEFAULT_SUPPORTING_QUALIFICATION_LEVELS;
 }
 
-// ─── Vacancy Request (hiring) designation catalogues ────────────────────────
-// Separate from TEACHING_DESIGNATIONS_BY_COLLEGE_TYPE/SUPPORTING_DESIGNATIONS_
-// BY_COLLEGE_TYPE above: those feed Faculty/Supporting Staff add-edit and MUST
-// keep their exact stored values (FacultyMember records, CSV, cadre-ratio
-// matching by code). The Vacancy Request role picker (src/app/(dashboard)/hod/
-// vacancy/new) shows a HOD "what role am I hiring for" list, which is free to
-// be richer/more descriptive, and cadre-ratio auto-fills via
-// HIRING_DESIGNATION_TO_CADRE. Degree/Polytechnic/School have no such richer
-// list, so hiring reuses their Faculty/Staff catalogue directly.
-//
-// Engineering/Pharmacy/Dental share the same academic-rank teaching roles and
-// generic admin/support roles - Dental additionally gets its clinic-specific
-// supporting roles (Nurse, OT Assistant, Dental/Radiographer techs), which
-// don't belong on an Engineering or Pharmacy college's picker.
-const HIRING_TEACHING_COMMON = [
-  "Professor & Head", "Professor", "Associate Professor", "Reader", "Assistant Professor",
-  "Senior Lecturer", "Lecturer", "Medical Officer", "Psychology Counsellor",
-];
-const HIRING_SUPPORTING_COMMON = [
-  "Assistant Manager (Admin)", "Senior Assistant", "Junior Assistant", "Librarian", "Assistant Librarian",
-  "Lab Technician", "Assistant", "Lab Assistant", "Receptionist", "Stores Incharge", "Physical Director",
-  "Accounts Officer", "Electrician", "Plumber", "Stores Assistant", "Driver", "Warden",
-  "Assistant Systems Administrator",
-];
-const HIRING_SUPPORTING_DENTAL_ONLY = [
-  "Nurse", "OT Assistant", "Sr. Dental Equipment Technician", "Dental Equipment Technician",
-  "Dental Technician", "Radiographer", "Trainee Dental Technician",
-];
-const HIRING_SUPPORTING_DENTAL = [...HIRING_SUPPORTING_COMMON, ...HIRING_SUPPORTING_DENTAL_ONLY];
-
-const HIRING_TEACHING_DESIGNATIONS_BY_COLLEGE_TYPE: Record<CollegeType, string[]> = {
-  ENGINEERING: HIRING_TEACHING_COMMON,
-  PHARMACY: HIRING_TEACHING_COMMON,
-  DENTAL: HIRING_TEACHING_COMMON,
-  DEGREE: TEACHING_DESIGNATIONS_BY_COLLEGE_TYPE.DEGREE,
-  POLYTECHNIC: TEACHING_DESIGNATIONS_BY_COLLEGE_TYPE.POLYTECHNIC,
-  SCHOOL: TEACHING_DESIGNATIONS_BY_COLLEGE_TYPE.SCHOOL,
-};
-const HIRING_SUPPORTING_DESIGNATIONS_BY_COLLEGE_TYPE: Record<CollegeType, string[]> = {
-  ENGINEERING: HIRING_SUPPORTING_COMMON,
-  PHARMACY: HIRING_SUPPORTING_COMMON,
-  DENTAL: HIRING_SUPPORTING_DENTAL,
-  DEGREE: SUPPORTING_DESIGNATIONS_BY_COLLEGE_TYPE.DEGREE,
-  POLYTECHNIC: SUPPORTING_DESIGNATIONS_BY_COLLEGE_TYPE.POLYTECHNIC,
-  SCHOOL: SUPPORTING_DESIGNATIONS_BY_COLLEGE_TYPE.SCHOOL,
-};
-
-export function getHiringTeachingDesignations(type: CollegeType | undefined | null): string[] {
-  return HIRING_TEACHING_DESIGNATIONS_BY_COLLEGE_TYPE[type as CollegeType] ?? HIRING_TEACHING_COMMON;
-}
-export function getHiringSupportingDesignations(type: CollegeType | undefined | null): string[] {
-  return HIRING_SUPPORTING_DESIGNATIONS_BY_COLLEGE_TYPE[type as CollegeType] ?? HIRING_SUPPORTING_COMMON;
-}
-
-// ─── Faculty-only overrides (this deployment's specific title/category lists) ──
-// Deliberately independent of college type and NOT part of
-// TEACHING_DESIGNATIONS_BY_COLLEGE_TYPE above - Faculty's Add/Edit/Import
-// uses this exact list instead of getTeachingDesignations(collegeType), so
-// changing it can never affect what any other Engineering/Pharmacy/Dental
-// college's Faculty module offers. Every Faculty designation picker already
-// appends its own "Other" free-text option on top of this list (see
-// hod/faculty/new/page.tsx) rather than it being a member here.
-//
-// Stores the SAME PROFESSOR/ASSOCIATE_PROFESSOR/ASSISTANT_PROFESSOR codes the
-// rest of the app already uses for those three ranks - not the human-readable
-// title - because AICTE cadre-ratio counting (api/college/faculty-requirement)
-// does an exact `designation === "PROFESSOR"` match against stored records;
-// storing "Professor" instead would silently drop every new hire out of that
-// count. DESIGNATION_LABELS (types/core.ts) is what displays them as words.
-export const FACULTY_DESIGNATIONS = [
-  "PROFESSOR", "ASSISTANT_PROFESSOR", "ASSOCIATE_PROFESSOR", "ASSOCIATE_PROFESSOR_SR",
-  "VISITING_PROFESSOR", "ASSISTANT_PROFESSOR_OF_PRACTICE", "PROFESSOR_OF_PRACTICE",
-  "SR_WELLNESS_COUNSELLOR",
-];
-
-// Faculty's Employee Category list - independent of the shared EmploymentType
-// values (EMPLOYMENT_TYPE_LABELS in types/core.ts), which Supporting/
-// Non-Technical Staff and Salary Structures keep using unchanged. Same
-// "Other" convention as FACULTY_DESIGNATIONS above.
-export const FACULTY_EMPLOYMENT_CATEGORIES = [
-  "Regular", "Visiting", "Contract", "Professor of Practice", "Assistant Professor of Practice", "Regular(Hyd)",
-];
-
-// AICTE cadre-ratio auto-fill (src/app/api/college/faculty-requirement) only
-// applies to the Engineering/Pharmacy/Dental hiring catalogue above - Degree/
-// Polytechnic/School have no cadre-ratio requirement.
-export const HIRING_DESIGNATION_TO_CADRE: Record<string, "PROFESSOR" | "ASSOCIATE_PROFESSOR" | "ASSISTANT_PROFESSOR"> = {
-  "Professor":           "PROFESSOR",
-  "Associate Professor": "ASSOCIATE_PROFESSOR",
-  "Assistant Professor": "ASSISTANT_PROFESSOR",
-  "Senior Lecturer":     "ASSISTANT_PROFESSOR",
-  "Lecturer":            "ASSISTANT_PROFESSOR",
-};

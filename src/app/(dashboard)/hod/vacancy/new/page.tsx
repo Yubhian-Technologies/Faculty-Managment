@@ -12,20 +12,17 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { useAuthStore } from "@/store/authStore";
-import { useCollegeType } from "@/hooks/useCollegeType";
-import {
-  getHiringTeachingDesignations, getHiringSupportingDesignations, HIRING_DESIGNATION_TO_CADRE,
-} from "@/lib/designations/config";
 import { toast } from "@/hooks/useToast";
 import { Plus, Trash2 } from "lucide-react";
 import type { FacultyRequirementResult } from "@/app/api/college/faculty-requirement/route";
+import type { DesignationCatalogItem } from "@/types";
 
 // ─── Position catalogue ──────────────────────────────────────────────────────
-// Role options are entirely driven by the college's type, via the shared
-// hiring catalogues in src/lib/designations/config.ts - one source for every
-// college type, in sync with Faculty/Supporting Staff add-edit's own
-// per-type lists (kept separate there since those feed stored FacultyMember
-// designation codes and CSV import/export).
+// Role options come from this college's own admin-curated Designation
+// Catalog (see DesignationCatalogCard) - no hardcoded per-college-type list,
+// no "Others" free-text escape hatch. Each entry's own optional `cadre` tag
+// (Faculty only) drives the AICTE gap/surplus highlight, replacing the old
+// separate HIRING_DESIGNATION_TO_CADRE map.
 
 type Category = "TEACHING" | "SUPPORTING_STAFF";
 
@@ -50,7 +47,6 @@ type PositionEntry = {
   key: string;
   category: Category | "";
   designation: string;
-  customDesignation: string;
   requiredCount: number;
   availableCount: number;
   qualification: string;
@@ -64,7 +60,6 @@ function newEntry(): PositionEntry {
     key: Math.random().toString(36).slice(2),
     category: "",
     designation: "",
-    customDesignation: "",
     requiredCount: 1,
     availableCount: 0,
     qualification: "",
@@ -82,7 +77,6 @@ function isEntryValid(entry: PositionEntry): boolean {
   return (
     !!entry.category &&
     !!entry.designation &&
-    (entry.designation !== "Others" || entry.customDesignation.trim().length > 0) &&
     entry.requiredCount >= 1 &&
     resolvedQualification(entry).length > 0 &&
     entry.justification.trim().length >= 10 &&
@@ -99,7 +93,6 @@ function getFirstValidationError(entries: PositionEntry[]): string | null {
     const label = entries.length > 1 ? `Position ${i + 1}` : "this request";
     if (!entry.category) return `Select a Position Category for ${label}.`;
     if (!entry.designation) return `Select a Designation for ${label}.`;
-    if (entry.designation === "Others" && !entry.customDesignation.trim()) return `Specify the Designation for ${label}.`;
     if (!(entry.requiredCount >= 1)) return `Enter a valid Current Hiring Requirement (at least 1) for ${label}.`;
     if (!entry.qualification) return `Select a Required Qualification for ${label}.`;
     if (entry.qualification === "Others" && !entry.qualificationOther.trim()) return `Specify the Qualification for ${label}.`;
@@ -114,13 +107,13 @@ function getFirstValidationError(entries: PositionEntry[]): string | null {
 export default function NewVacancyPage() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
-  const { collegeType } = useCollegeType();
 
   const [requirement, setRequirement] = useState<FacultyRequirementResult | null>(null);
   const [reqLoading, setReqLoading] = useState(true);
   const [entries, setEntries] = useState<PositionEntry[]>([newEntry()]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [hiringMode, setHiringMode] = useState<"OFFLINE" | "ONLINE">("OFFLINE");
+  const [designations, setDesignations] = useState<DesignationCatalogItem[]>([]);
 
   useEffect(() => {
     // reqLoading already starts true, so nothing is set synchronously here -
@@ -135,6 +128,15 @@ export default function NewVacancyPage() {
         setReqLoading(false);
       }
     })();
+    void (async () => {
+      try {
+        const r = await fetch("/api/college/designations");
+        const data = await r.json() as { items?: DesignationCatalogItem[] };
+        setDesignations((data.items ?? []).filter((d) => d.isActive));
+      } catch {
+        // Non-fatal - the role picker just stays empty until the admin's catalog loads.
+      }
+    })();
   }, []);
 
   function updateEntry(key: string, patch: Partial<PositionEntry>) {
@@ -142,10 +144,10 @@ export default function NewVacancyPage() {
   }
 
   function handleDesignationChange(key: string, val: string) {
-    const patch: Partial<PositionEntry> = { designation: val, customDesignation: "" };
+    const patch: Partial<PositionEntry> = { designation: val };
 
     if (requirement) {
-      const cadreKey = HIRING_DESIGNATION_TO_CADRE[val];
+      const cadreKey = designations.find((d) => d.name === val)?.cadre;
       if (cadreKey) {
         const cadreRow = requirement.cadre.find((c) => c.key === cadreKey);
         if (cadreRow) {
@@ -166,7 +168,6 @@ export default function NewVacancyPage() {
     updateEntry(key, {
       category: val,
       designation: "",
-      customDesignation: "",
       requiredCount: 1,
       availableCount: 0,
       justification: "",
@@ -195,15 +196,13 @@ export default function NewVacancyPage() {
     let failCount = 0;
 
     for (const entry of entries) {
-      const finalPosition =
-        entry.designation === "Others" ? entry.customDesignation.trim() : entry.designation;
       try {
         const res = await fetch("/api/college/vacancy-requests", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             department: user?.department ?? "",
-            position: finalPosition,
+            position: entry.designation,
             positionCategory: entry.category,
             hiringMode,
             requiredCount: entry.requiredCount,
@@ -299,15 +298,14 @@ export default function NewVacancyPage() {
         {entries.map((entry, idx) => {
           const roleOptions: readonly string[] =
             entry.category === "TEACHING"
-              ? [...getHiringTeachingDesignations(collegeType), "Others"]
+              ? designations.filter((d) => d.category === "FACULTY").map((d) => d.name)
               : entry.category === "SUPPORTING_STAFF"
-              ? [...getHiringSupportingDesignations(collegeType), "Others"]
+              ? designations.filter((d) => d.category === "TECHNICAL" || d.category === "NON_TECHNICAL").map((d) => d.name)
               : [];
 
-          const finalPosition =
-            entry.designation === "Others" ? entry.customDesignation.trim() : entry.designation;
+          const finalPosition = entry.designation;
 
-          const highlightedCadre = entry.designation ? (HIRING_DESIGNATION_TO_CADRE[entry.designation] ?? null) : null;
+          const highlightedCadre = entry.designation ? (designations.find((d) => d.name === entry.designation)?.cadre ?? null) : null;
 
           return (
             <Card key={entry.key} className="relative">
@@ -362,7 +360,7 @@ export default function NewVacancyPage() {
                         </SelectTrigger>
                         <SelectContent>
                           {roleOptions.map((role) => {
-                            const cadreKey = HIRING_DESIGNATION_TO_CADRE[role];
+                            const cadreKey = designations.find((d) => d.name === role)?.cadre;
                             const cadreRow = requirement?.cadre.find((c) => c.key === cadreKey);
                             return (
                               <SelectItem key={role} value={role}>
@@ -380,17 +378,6 @@ export default function NewVacancyPage() {
                           })}
                         </SelectContent>
                       </Select>
-                    </div>
-                  )}
-
-                  {entry.designation === "Others" && (
-                    <div className="space-y-2">
-                      <Label>Specify Designation <span className="text-destructive">*</span></Label>
-                      <Input
-                        value={entry.customDesignation}
-                        onChange={(e) => updateEntry(entry.key, { customDesignation: e.target.value })}
-                        placeholder="Enter the designation..."
-                      />
                     </div>
                   )}
 

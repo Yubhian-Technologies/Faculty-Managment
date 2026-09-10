@@ -11,88 +11,7 @@ import {
 } from "@/lib/import/fieldConstraints";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
 import { getHodDepartmentScope } from "@/lib/departments/scope";
-import { FACULTY_DESIGNATIONS, FACULTY_EMPLOYMENT_CATEGORIES, designationLabel } from "@/lib/designations/config";
-import type { Designation, EmploymentType } from "@/types";
-
-// Normalizes a designation/employment-category cell for matching: case,
-// punctuation (periods, parentheses, etc.) and spacing differences all
-// collapse to the same key, so "Asst. Prof.", "asst.prof", "ASST PROF" and
-// "Assistant Professor" all resolve identically - same approach as
-// normalizeHeaderExact in src/lib/utils/csv.ts, applied to cell values
-// instead of headers.
-function normalizeAbbrevKey(raw: string): string {
-  return raw.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
-}
-
-// Every accepted spelling/abbreviation for FACULTY_DESIGNATIONS
-// (src/lib/designations/config.ts), keyed by normalizeAbbrevKey() so case,
-// punctuation, spacing, and parenthetical qualifiers ("Assoc. Prof. (Sr)")
-// all resolve to the same entry - both the abbreviation and the full name
-// map to the same code, so this is the only lookup designation matching
-// needs (no separate fuzzy-match fallback). Stores the same
-// PROFESSOR/ASSOCIATE_PROFESSOR/ASSISTANT_PROFESSOR codes the rest of the
-// app (and AICTE cadre-ratio counting) already uses for those ranks -
-// DESIGNATION_LABELS (types/core.ts) is what displays them as words.
-const DESIGNATION_MAP: Record<string, Designation> = {
-  "professor": "PROFESSOR",
-  "prof": "PROFESSOR",
-
-  "associate professor": "ASSOCIATE_PROFESSOR",
-  "assoc professor": "ASSOCIATE_PROFESSOR",
-  "associate prof": "ASSOCIATE_PROFESSOR",
-  "assoc prof": "ASSOCIATE_PROFESSOR",
-
-  "associate professor sr": "ASSOCIATE_PROFESSOR_SR",
-  "assoc professor sr": "ASSOCIATE_PROFESSOR_SR",
-  "associate prof sr": "ASSOCIATE_PROFESSOR_SR",
-  "assoc prof sr": "ASSOCIATE_PROFESSOR_SR",
-  "senior associate professor": "ASSOCIATE_PROFESSOR_SR",
-  "sr associate professor": "ASSOCIATE_PROFESSOR_SR",
-  "associate professor senior": "ASSOCIATE_PROFESSOR_SR",
-
-  "assistant professor": "ASSISTANT_PROFESSOR",
-  "asst professor": "ASSISTANT_PROFESSOR",
-  "assistant prof": "ASSISTANT_PROFESSOR",
-  "asst prof": "ASSISTANT_PROFESSOR",
-
-  "visiting professor": "VISITING_PROFESSOR",
-  "visiting prof": "VISITING_PROFESSOR",
-
-  "assistant professor of practice": "ASSISTANT_PROFESSOR_OF_PRACTICE",
-  "asst professor of practice": "ASSISTANT_PROFESSOR_OF_PRACTICE",
-  "assistant prof of practice": "ASSISTANT_PROFESSOR_OF_PRACTICE",
-  "asst prof of practice": "ASSISTANT_PROFESSOR_OF_PRACTICE",
-
-  "professor of practice": "PROFESSOR_OF_PRACTICE",
-  "prof of practice": "PROFESSOR_OF_PRACTICE",
-
-  "sr wellness counsellor": "SR_WELLNESS_COUNSELLOR",
-  "senior wellness counsellor": "SR_WELLNESS_COUNSELLOR",
-  "sr wellness counselor": "SR_WELLNESS_COUNSELLOR",
-  "senior wellness counselor": "SR_WELLNESS_COUNSELLOR",
-
-  "other": "OTHER",
-};
-
-// FACULTY_EMPLOYMENT_CATEGORIES values, stored verbatim (no code lookup
-// needed - unlike Designation, nothing else in the app matches on
-// employmentType's literal value) - keyed by normalizeAbbrevKey() too, so
-// "Regular(Hyd)", "Regular (Hyd)" and "REGULAR HYD" all resolve the same
-// way. "Other" is accepted here too so an imported row can hold it as-is;
-// there's no companion "specify" column on the template - the custom detail
-// is filled in later from the Add/Edit form.
-const EMPLOYMENT_MAP: Record<string, EmploymentType> = Object.fromEntries(
-  FACULTY_EMPLOYMENT_CATEGORIES.map((c) => [normalizeAbbrevKey(c), c])
-);
-EMPLOYMENT_MAP["other"] = "Other";
-// Abbreviations for the two "...of Practice" categories - same normalized-
-// key approach as DESIGNATION_MAP above, so "Asst.Prof. of Practice",
-// "asst prof of practice", "Prof. of Practice" etc. all resolve regardless
-// of punctuation/casing.
-EMPLOYMENT_MAP["asst prof of practice"] = "Assistant Professor of Practice";
-EMPLOYMENT_MAP["asst professor of practice"] = "Assistant Professor of Practice";
-EMPLOYMENT_MAP["assistant prof of practice"] = "Assistant Professor of Practice";
-EMPLOYMENT_MAP["prof of practice"] = "Professor of Practice";
+import type { Designation } from "@/types";
 
 type ImportRow = {
   employeeId: string;
@@ -103,7 +22,6 @@ type ImportRow = {
   phone: string;
   designation: string;
   qualification: string;
-  employmentType: string;
   joiningDate: string;
   gender: string;
   dateOfBirth: string;
@@ -216,10 +134,13 @@ export async function POST(request: Request) {
     );
 
     // The designation catalogue this college's Faculty template allows - the
-    // same fixed list the manual Add form's dropdown offers
-    // (FACULTY_DESIGNATIONS, src/lib/designations/config.ts), plus the
-    // always-available "Other".
-    const allowedTeachingDesignations = FACULTY_DESIGNATIONS;
+    // same admin-curated list the manual Add form's dropdown offers (see
+    // DesignationCatalogCard) - no hardcoded list, no "Other" any more.
+    const designationSnap = await db.collection("colleges").doc(collegeId).collection("designations")
+      .where("category", "==", "FACULTY").where("isActive", "==", true).get();
+    const allowedTeachingDesignations = designationSnap.docs
+      .map((d) => (d.data() as { name?: string }).name)
+      .filter((n): n is string => !!n);
 
     const now = new Date();
     // Rows that passed validation and were queued for write, alongside which
@@ -264,7 +185,7 @@ export async function POST(request: Request) {
       };
 
       // Required field validation - every column in the trimmed-down template
-      // (src/lib/faculty/csvColumns.ts IMPORT_COLUMNS) is mandatory.
+      // (src/lib/faculty/csvColumns.ts getFacultyImportColumns) is mandatory.
       if (!row.employeeId?.trim()) { failed.push({ row: rowNum, employeeId: "-", error: "Employee ID is required" }); continue; }
       if (!row.legalName?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Full Name (as per SSC) is required" }); continue; }
       // Name (as per PAN) is optional - Full Name (as per SSC) is the primary
@@ -275,7 +196,6 @@ export async function POST(request: Request) {
       if (!row.phone?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Mobile No is required" }); continue; }
       if (!row.designation?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Designation is required" }); continue; }
       if (!row.qualification?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Highest Qualification is required" }); continue; }
-      if (!row.employmentType?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Employee Category is required" }); continue; }
       if (!row.joiningDate?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Date of Joining Institution is required" }); continue; }
       if (!row.gender?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Gender is required" }); continue; }
       if (!row.dateOfBirth?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Date of Birth is required" }); continue; }
@@ -294,41 +214,21 @@ export async function POST(request: Request) {
         continue;
       }
 
-      // Map designation - held to FACULTY_DESIGNATIONS, not free text.
-      // DESIGNATION_MAP normalizes both full names and common abbreviations
-      // ("Asst. Prof." / "asst.prof" / "ASST PROF" all -> "ASSISTANT_PROFESSOR")
-      // to the same key, so a value only counts if it (however punctuated or
-      // cased) resolves to one of the allowed titles. Anything else rejects
-      // the row rather than being stored as whatever text was typed.
+      // Map designation - held to this college's own admin-curated catalog,
+      // not free text. matchOption normalizes case/punctuation/spacing so
+      // "assistant professor" and "Assistant Professor" resolve the same,
+      // but the admin's own chosen wording is the only thing accepted -
+      // anything else rejects the row rather than being stored as whatever
+      // text was typed.
       const designationRaw = row.designation.trim();
-      const designationKey = normalizeAbbrevKey(designationRaw);
-      let designation: Designation;
-      if (designationKey === "other") {
-        designation = "OTHER";
-      } else {
-        const mapped = DESIGNATION_MAP[designationKey];
-        const matched = mapped && allowedTeachingDesignations.includes(mapped) ? mapped : undefined;
-        if (!matched) {
-          failed.push({
-            row: rowNum, employeeId: empId,
-            error: `Designation "${designationRaw}" is not one of the titles your college allows (${allowedTeachingDesignations.map((d) => designationLabel(d)).join(" / ")} / Other)`,
-          });
-          continue;
-        }
-        designation = matched;
-      }
-
-      // Map employment type - held to FACULTY_EMPLOYMENT_CATEGORIES
-      // (+ "Other", no companion "specify" column needed on the template -
-      // see EMPLOYMENT_MAP's own comment above); an unrecognised value fails
-      // the row rather than quietly becoming a default, which would turn a
-      // typo into a real employment category.
-      const empTypeKey = normalizeAbbrevKey(row.employmentType);
-      if (!EMPLOYMENT_MAP[empTypeKey]) {
-        failed.push({ row: rowNum, employeeId: empId, error: `Employee Category "${row.employmentType.trim()}" is not one of ${FACULTY_EMPLOYMENT_CATEGORIES.join(" / ")} / Other` });
+      const designation: Designation | undefined = matchOption(designationRaw, allowedTeachingDesignations);
+      if (!designation) {
+        failed.push({
+          row: rowNum, employeeId: empId,
+          error: `Designation "${designationRaw}" is not one of the titles your college allows (${allowedTeachingDesignations.join(" / ")})`,
+        });
         continue;
       }
-      const employmentType: EmploymentType = EMPLOYMENT_MAP[empTypeKey];
 
       // Parse dates
       const joiningDate = parseDate(row.joiningDate);
@@ -423,7 +323,6 @@ export async function POST(request: Request) {
         phone: checkPhone(row.phone, "Phone") ?? "",
         designation,
         qualification: row.qualification.trim(),
-        employmentType,
         joiningDate,
         status: "ACTIVE",
         ...buildPersonalDetailsUpdate(personalInput),

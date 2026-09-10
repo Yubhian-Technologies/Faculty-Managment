@@ -157,8 +157,8 @@ export function AcademicProfileFields({ value, onChange, includeTeachingAssignme
               {/* Same catalogue-backed picker as the College Office promotion
                   page - this form writes the identical promotionHistory field,
                   so leaving it free-text here would let the two disagree. */}
-              <DesignationSelect label="From Designation" value={item.fromDesignation} collegeType={collegeType} onChange={(v) => update({ fromDesignation: v })} />
-              <DesignationSelect label="To Designation" value={item.toDesignation} collegeType={collegeType} onChange={(v) => update({ toDesignation: v })} />
+              <DesignationSelect label="From Designation" value={item.fromDesignation} onChange={(v) => update({ fromDesignation: v })} />
+              <DesignationSelect label="To Designation" value={item.toDesignation} onChange={(v) => update({ toDesignation: v })} />
               <NumInput label="Effective Year" value={item.effectiveYear} onChange={(v) => update({ effectiveYear: v })} />
               <div className="sm:col-span-2">
                 <Label className="text-xs">Promotion Order</Label>

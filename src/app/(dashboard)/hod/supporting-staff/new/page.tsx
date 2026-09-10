@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -19,9 +19,8 @@ import { SupportingStaffModuleEditor, type SupportingStaffEditRecord } from "@/c
 import { getSupportingStaffProfileModules } from "@/lib/supportingStaff/profileModules";
 import { useCollegeType } from "@/hooks/useCollegeType";
 import { toast } from "@/hooks/useToast";
-import { getHodTechnicalDesignations, designationLabel } from "@/lib/designations/config";
-import { SUPPORTING_STAFF_EMPLOYMENT_TYPE_LABELS } from "@/types";
-import type { EmploymentType } from "@/types";
+import { hasSupportingStaffSplit } from "@/lib/designations/config";
+import type { DesignationCatalogItem } from "@/types";
 
 const schema = z.object({
   employeeId: z.string().min(1, "Employee ID is required"),
@@ -31,11 +30,9 @@ const schema = z.object({
   password: z.string().min(8, "Password must be at least 8 characters"),
   phone: z.string().min(1, "Mobile No is required"),
   designation: z.string().min(1, "Designation is required"),
-  otherDesignationTitle: z.string().optional(),
   qualification: z.string().min(1, "Highest Qualification is required"),
   experienceYears: z.number().min(0, "Cannot be negative").optional(),
   joiningDate: z.string().min(1, "Joining date is required"),
-  employmentType: z.string().min(1, "Employment type is required"),
 });
 
 type FormData = z.infer<typeof schema>;
@@ -69,14 +66,24 @@ export default function NewHodSupportingStaffPage() {
     formState: { errors },
   } = useForm<FormData>({
     resolver: zodResolver(schema),
-    defaultValues: { experienceYears: 0, designation: "", employmentType: "REGULAR", password: "" },
+    defaultValues: { experienceYears: 0, designation: "", password: "" },
   });
   const [erroredSteps, setErroredSteps] = useState<Set<WizardStepKey>>(new Set());
 
   const designation = watch("designation");
-  const employmentType = watch("employmentType");
   const name = watch("name");
-  const designationOptions = getHodTechnicalDesignations(collegeType);
+  const [designationOptions, setDesignationOptions] = useState<string[]>([]);
+  useEffect(() => {
+    void (async () => {
+      try {
+        const res = await fetch("/api/college/designations?category=TECHNICAL");
+        const data = await res.json() as { items?: DesignationCatalogItem[] };
+        setDesignationOptions((data.items ?? []).filter((d) => d.isActive).map((d) => d.name));
+      } catch {
+        // Non-fatal - the picker just stays empty until the admin's catalog loads.
+      }
+    })();
+  }, []);
 
   const steps: WizardStep[] = useMemo(() => [
     { key: "core", label: "Identity & Employment" },
@@ -92,7 +99,6 @@ export default function NewHodSupportingStaffPage() {
     employeeId: "Employee ID", name: "Name (as per PAN)", collegeEmail: "College Email",
     password: "Login Password", phone: "Mobile No", designation: "Designation",
     qualification: "Highest Qualification", joiningDate: "Joining Date",
-    employmentType: "Employment Type",
   };
 
   function goNext() {
@@ -154,7 +160,7 @@ export default function NewHodSupportingStaffPage() {
     }
   };
 
-  if (!collegeTypeLoading && designationOptions.length === 0) {
+  if (!collegeTypeLoading && !hasSupportingStaffSplit(collegeType)) {
     return (
       <div className="max-w-2xl">
         <PageHeader title="Add Supporting Staff" description="Centrally managed by Principal for your college" />
@@ -163,6 +169,23 @@ export default function NewHodSupportingStaffPage() {
             <EmptyState
               title="Managed by Principal"
               description="Supporting Staff for your college type is managed centrally by Principal, not per-department."
+              icon={<UsersRound className="h-8 w-8" />}
+            />
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (!collegeTypeLoading && designationOptions.length === 0) {
+    return (
+      <div className="max-w-2xl">
+        <PageHeader title="Add Supporting Staff" description="No designations added yet" />
+        <Card>
+          <CardContent className="py-16">
+            <EmptyState
+              title="No Technical Staff designations yet"
+              description="Add at least one designation under Settings > Designations before adding staff."
               icon={<UsersRound className="h-8 w-8" />}
             />
           </CardContent>
@@ -253,18 +276,11 @@ export default function NewHodSupportingStaffPage() {
                     <Select value={designation} onValueChange={(v) => setValue("designation", v)}>
                       <SelectTrigger><SelectValue placeholder="Select designation" /></SelectTrigger>
                       <SelectContent>
-                        {designationOptions.map((v) => <SelectItem key={v} value={v}>{designationLabel(v)}</SelectItem>)}
-                        <SelectItem value="OTHER">Other</SelectItem>
+                        {designationOptions.map((v) => <SelectItem key={v} value={v}>{v}</SelectItem>)}
                       </SelectContent>
                     </Select>
                     {errors.designation && <p className="text-sm text-destructive">{errors.designation.message}</p>}
                   </div>
-                  {designation === "OTHER" && (
-                    <div className="space-y-2">
-                      <Label htmlFor="otherDesignationTitle">Designation Title</Label>
-                      <Input id="otherDesignationTitle" {...register("otherDesignationTitle")} placeholder="e.g. Lab Technician" />
-                    </div>
-                  )}
                   <div className="space-y-2">
                     <Label htmlFor="qualification">Highest Qualification *</Label>
                     <Input id="qualification" {...register("qualification")} placeholder="e.g. Diploma, B.Com, ITI" />
@@ -285,16 +301,6 @@ export default function NewHodSupportingStaffPage() {
                 </div>
 
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label>Employment Type *</Label>
-                    <Select value={employmentType} onValueChange={(v) => setValue("employmentType", v as EmploymentType)}>
-                      <SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger>
-                      <SelectContent>
-                        {Object.entries(SUPPORTING_STAFF_EMPLOYMENT_TYPE_LABELS).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                    {errors.employmentType && <p className="text-sm text-destructive">{errors.employmentType.message}</p>}
-                  </div>
                   <div className="space-y-2">
                     <Label htmlFor="joiningDate">Joining Date *</Label>
                     <Input id="joiningDate" type="date" {...register("joiningDate")} />

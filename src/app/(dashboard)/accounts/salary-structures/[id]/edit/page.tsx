@@ -12,7 +12,6 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DesignationOptions } from "@/components/faculty/DesignationOptions";
 import { salaryStructureSchema, type SalaryStructureFormData } from "@/lib/validations";
-import { useCollegeType } from "@/hooks/useCollegeType";
 import { toast } from "@/hooks/useToast";
 import { formatCurrency } from "@/lib/utils";
 import { EMPLOYMENT_TYPE_LABELS, type EmploymentType, type SalaryStructure } from "@/types";
@@ -45,7 +44,6 @@ export default function EditSalaryStructurePage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
   const structureId = params.id;
-  const { collegeType } = useCollegeType();
 
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -153,7 +151,7 @@ export default function EditSalaryStructurePage() {
                     <SelectValue placeholder="Select designation" />
                   </SelectTrigger>
                   <SelectContent>
-                    <DesignationOptions collegeType={collegeType} />
+                    <DesignationOptions />
                   </SelectContent>
                 </Select>
                 {errors.designation && <p className="text-sm text-destructive">{errors.designation.message}</p>}

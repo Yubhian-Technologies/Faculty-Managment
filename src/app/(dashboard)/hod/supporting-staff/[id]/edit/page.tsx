@@ -11,12 +11,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AvatarUploadField } from "@/components/shared/AvatarUploadField";
-import { useCollegeType } from "@/hooks/useCollegeType";
 import { toast } from "@/hooks/useToast";
 import { toDateInputValue } from "@/lib/utils";
-import { getHodTechnicalDesignations, designationLabel } from "@/lib/designations/config";
-import { SUPPORTING_STAFF_EMPLOYMENT_TYPE_LABELS, FACULTY_STATUS_LABELS } from "@/types";
-import type { EmploymentType, FacultyStatus, SupportingStaffDesignation } from "@/types";
+import { FACULTY_STATUS_LABELS } from "@/types";
+import type { DesignationCatalogItem, FacultyStatus, SupportingStaffDesignation } from "@/types";
 
 interface StaffForm {
   name: string;
@@ -26,14 +24,13 @@ interface StaffForm {
   otherDesignationTitle: string;
   qualification: string;
   experienceYears: number;
-  employmentType: EmploymentType;
   status: FacultyStatus;
   joiningDate: string;
 }
 
 const EMPTY_FORM: StaffForm = {
   name: "", phone: "", collegeEmail: "", designation: "", otherDesignationTitle: "", qualification: "",
-  experienceYears: 0, employmentType: "REGULAR", status: "ACTIVE", joiningDate: "",
+  experienceYears: 0, status: "ACTIVE", joiningDate: "",
 };
 
 // Department isn't editable here - a Technical staff record stays owned by
@@ -43,7 +40,6 @@ export default function EditHodSupportingStaffPage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
   const staffId = params.id;
-  const { collegeType } = useCollegeType();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -74,7 +70,6 @@ export default function EditHodSupportingStaffPage() {
           otherDesignationTitle: (m.otherDesignationTitle as string) ?? "",
           qualification: (m.qualification as string) ?? "",
           experienceYears: (m.experienceYears as number) ?? 0,
-          employmentType: (m.employmentType as EmploymentType) ?? "REGULAR",
           status: (m.status as FacultyStatus) ?? "ACTIVE",
           joiningDate: toDateInputValue(m.joiningDate as never),
         });
@@ -83,6 +78,19 @@ export default function EditHodSupportingStaffPage() {
       .catch(() => toast({ variant: "destructive", title: "Failed to load staff record" }))
       .finally(() => setLoading(false));
   }, [staffId, router]);
+
+  const [designationOptions, setDesignationOptions] = useState<string[]>([]);
+  useEffect(() => {
+    void (async () => {
+      try {
+        const res = await fetch("/api/college/designations?category=TECHNICAL");
+        const data = await res.json() as { items?: DesignationCatalogItem[] };
+        setDesignationOptions((data.items ?? []).filter((d) => d.isActive).map((d) => d.name));
+      } catch {
+        // Non-fatal - the picker just stays empty until the admin's catalog loads.
+      }
+    })();
+  }, []);
 
   function set(patch: Partial<StaffForm>) {
     setForm((f) => ({ ...f, ...patch }));
@@ -143,8 +151,6 @@ export default function EditHodSupportingStaffPage() {
     );
   }
 
-  const designationOptions = getHodTechnicalDesignations(collegeType);
-
   return (
     <div className="max-w-xl">
       <Button variant="ghost" size="sm" className="mb-4" asChild>
@@ -201,8 +207,7 @@ export default function EditHodSupportingStaffPage() {
                 <Select value={form.designation} onValueChange={(v) => set({ designation: v as SupportingStaffDesignation })}>
                   <SelectTrigger><SelectValue placeholder="Select designation" /></SelectTrigger>
                   <SelectContent>
-                    {designationOptions.map((v) => <SelectItem key={v} value={v}>{designationLabel(v)}</SelectItem>)}
-                    <SelectItem value="OTHER">Other</SelectItem>
+                    {designationOptions.map((v) => <SelectItem key={v} value={v}>{v}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
@@ -241,15 +246,6 @@ export default function EditHodSupportingStaffPage() {
               <p className="text-sm font-medium text-muted-foreground">Employment Details</p>
             </div>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label>Employment Type *</Label>
-                <Select value={form.employmentType} onValueChange={(v) => set({ employmentType: v as EmploymentType })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {Object.entries(SUPPORTING_STAFF_EMPLOYMENT_TYPE_LABELS).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
               <div className="space-y-2">
                 <Label>Joining Date *</Label>
                 <Input type="date" value={form.joiningDate} onChange={(e) => set({ joiningDate: e.target.value })} />

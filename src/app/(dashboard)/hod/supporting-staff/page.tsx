@@ -14,15 +14,15 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "@/hooks/useToast";
 import { useCollegeType } from "@/hooks/useCollegeType";
-import { getHodTechnicalDesignations } from "@/lib/designations/config";
+import { hasSupportingStaffSplit } from "@/lib/designations/config";
 import { supportingStaffDisplayName } from "@/lib/supportingStaff/supportingStaffDisplayName";
 import {
   NON_TECHNICAL_STAFF_DESIGNATION_LABELS,
-  SUPPORTING_STAFF_EMPLOYMENT_TYPE_LABELS, FACULTY_STATUS_LABELS,
+  FACULTY_STATUS_LABELS,
 } from "@/types";
 import type {
   SupportingStaffMember, SupportingStaffDesignation,
-  EmploymentType, FacultyStatus,
+  FacultyStatus,
 } from "@/types";
 
 type StaffRow = Record<string, unknown> & SupportingStaffMember;
@@ -112,12 +112,6 @@ export default function HODSupportingStaffPage() {
       ),
     },
     {
-      key: "employmentType",
-      header: "Employment",
-      hideOnMobile: true,
-      render: (row) => <Badge variant="outline">{SUPPORTING_STAFF_EMPLOYMENT_TYPE_LABELS[row.employmentType as EmploymentType] ?? row.employmentType}</Badge>,
-    },
-    {
       key: "status",
       header: "Status",
       render: (row) => (
@@ -154,7 +148,7 @@ export default function HODSupportingStaffPage() {
     },
   ];
 
-  const isCentrallyManaged = !collegeTypeLoading && getHodTechnicalDesignations(collegeType).length === 0;
+  const isCentrallyManaged = !collegeTypeLoading && !hasSupportingStaffSplit(collegeType);
 
   if (isCentrallyManaged) {
     return (

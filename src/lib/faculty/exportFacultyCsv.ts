@@ -127,7 +127,6 @@ function buildRow(faculty: FacultyMember, teachingSummary: string): Record<strin
     designation: s(faculty.designation),
     qualification: s(faculty.qualification),
     specialization: s(faculty.specialization),
-    employmentType: s(faculty.employmentType),
     status: s(faculty.status),
     joiningDate: toDateInputValue(faculty.joiningDate),
     dateOfJoiningDepartment: toDateInputValue(faculty.dateOfJoiningDepartment),

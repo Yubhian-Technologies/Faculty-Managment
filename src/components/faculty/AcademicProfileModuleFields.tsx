@@ -174,7 +174,7 @@ export function ExperienceFields({ value, onChange, includeTeachingAssignment = 
 // College Office-only editor for Promotion History - split out of
 // ExperienceFields since promotion (and salary, see FinancialFields) is no
 // longer editable by the owner or their HOD/Principal, only by College Office.
-export function PromotionFields({ value, onChange, collegeType }: ModuleFieldsProps & { collegeType?: CollegeType }) {
+export function PromotionFields({ value, onChange }: ModuleFieldsProps & { collegeType?: CollegeType }) {
   function set<K extends keyof FacultyProfileFields>(key: K, v: FacultyProfileFields[K]) {
     onChange({ ...value, [key]: v });
   }
@@ -190,8 +190,8 @@ export function PromotionFields({ value, onChange, collegeType }: ModuleFieldsPr
               designation catalogue rather than typed - a promotion can cross
               between teaching and supporting, so neither side is narrowed by
               `kind`. */}
-          <DesignationSelect label="From Designation" value={item.fromDesignation} collegeType={collegeType} onChange={(v) => update({ fromDesignation: v })} />
-          <DesignationSelect label="To Designation" value={item.toDesignation} collegeType={collegeType} onChange={(v) => update({ toDesignation: v })} />
+          <DesignationSelect label="From Designation" value={item.fromDesignation} onChange={(v) => update({ fromDesignation: v })} />
+          <DesignationSelect label="To Designation" value={item.toDesignation} onChange={(v) => update({ toDesignation: v })} />
           <NumInput label="Effective Year" value={item.effectiveYear} onChange={(v) => update({ effectiveYear: v })} />
           <div className="sm:col-span-2">
             <Label className="text-xs">Promotion Order</Label>
