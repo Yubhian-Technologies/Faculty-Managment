@@ -19,7 +19,9 @@ import {
   QualificationFields, ExperienceFields, ResearchFields, GrantsFields,
   MentorshipFields, FinancialFields, OthersFields,
 } from "@/components/faculty/AcademicProfileModuleFields";
+import { RepeatingGroup, TextInput } from "@/components/shared/ProfileFieldPrimitives";
 import { syncTeachingAssignments } from "@/lib/teaching/syncTeachingAssignments";
+import { totalPreviousExperienceYears, formatExperienceDuration } from "@/lib/faculty/experienceCalc";
 import { PHONE_REGEX } from "@/lib/validations";
 import { AvatarUploadField } from "@/components/shared/AvatarUploadField";
 import { PROFILE_MODULES } from "@/lib/faculty/profileModules";
@@ -120,7 +122,17 @@ export default function NewFacultyPage() {
     () => (linkName ? { legalName: linkName } : {})
   );
   const [department, setDepartment] = useState("");
+  // Whichever department this new faculty member actually ends up filed
+  // under, however it was decided - link mode's fixed department, this HOD's
+  // own explicit pick (multi-department HOD), or their own single department
+  // implicitly. Passed to TeachingAssignmentsEditor so its Year options are
+  // scoped to THIS department's own Course Year Timings.
+  const effectiveDepartment = isLinkMode ? linkDepartment : (department || myDepartments[0] || "");
   const [teachingRows, setTeachingRows] = useState<StagedTeachingRow[]>([]);
+  // Extra contact numbers beyond the primary Mobile No below - each with an
+  // optional freeform label (e.g. "Personal", or just whoever's number it
+  // is), not a fixed category.
+  const [extraPhones, setExtraPhones] = useState<{ label?: string; number: string }[]>([]);
   const [photoUrl, setPhotoUrl] = useState<string | undefined>(undefined);
   const [tempPhotoId] = useState(() => crypto.randomUUID());
   const [stepIndex, setStepIndex] = useState(0);
@@ -150,6 +162,18 @@ export default function NewFacultyPage() {
   const [qualIsOther, setQualIsOther] = useState(false);
   const aicteEligible = watch("aicteEligible");
   const name = watch("name");
+
+  // Total Years of Experience is calculated from Previous Experience's
+  // From/To dates (see experienceCalc.ts), not typed manually - kept in sync
+  // with the form's own experienceYears field so submit sends the computed
+  // total as-is (the "core" step's input just displays it, read-only).
+  const totalExperience = useMemo(
+    () => totalPreviousExperienceYears(academicProfile.previousInstitutions),
+    [academicProfile.previousInstitutions]
+  );
+  useEffect(() => {
+    setValue("experienceYears", totalExperience);
+  }, [totalExperience, setValue]);
 
   const steps: WizardStep[] = useMemo(() => [
     { key: "core", label: "Identity & Employment" },
@@ -251,6 +275,7 @@ export default function NewFacultyPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...data,
+          additionalPhoneNumbers: extraPhones.filter((p) => p.number.trim()),
           ...(isLinkMode
             ? { linkUid, department: linkDepartment, collegeEmail: undefined, password: undefined }
             : department ? { department } : {}),
@@ -423,6 +448,25 @@ export default function NewFacultyPage() {
                   </div>
                 </div>
 
+                <RepeatingGroup
+                  title="Additional Mobile Numbers"
+                  items={extraPhones}
+                  empty={{ label: "", number: "" }}
+                  onChange={setExtraPhones}
+                  addLabel="Add Number"
+                  renderRow={(item, update) => (
+                    <>
+                      <TextInput
+                        label="Label (optional)"
+                        value={item.label}
+                        onChange={(v) => update({ label: v })}
+                        placeholder="e.g. Personal, WhatsApp, or a name"
+                      />
+                      <TextInput label="Mobile Number" value={item.number} onChange={(v) => update({ number: v })} placeholder="+91 98765 43210" />
+                    </>
+                  )}
+                />
+
                 <div className="pt-2 pb-1 border-t">
                   <p className="text-sm font-medium text-muted-foreground">Role Details</p>
                 </div>
@@ -478,11 +522,10 @@ export default function NewFacultyPage() {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="experienceYears">Total Years of Experience</Label>
-                    <Input id="experienceYears" type="number" min={0} placeholder="e.g. 10" {...register("experienceYears", { valueAsNumber: true })} />
+                    <Input id="experienceYears" value={formatExperienceDuration(totalExperience) || "0 mos"} readOnly disabled className="bg-muted" />
                     <p className="text-xs text-muted-foreground">
-                      Their whole career, including previous institutions - not just years served here.
+                      Calculated automatically from the From/To dates added under Professional Experience.
                     </p>
-                    {errors.experienceYears && <p className="text-sm text-destructive">{errors.experienceYears.message}</p>}
                   </div>
                 </div>
 
@@ -495,11 +538,6 @@ export default function NewFacultyPage() {
                     <Label htmlFor="joiningDate">Date of Joining Institution *</Label>
                     <Input id="joiningDate" type="date" {...register("joiningDate")} />
                     {errors.joiningDate && <p className="text-sm text-destructive">{errors.joiningDate.message}</p>}
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="dateOfJoiningDepartment">Date of Joining Department</Label>
-                    <Input id="dateOfJoiningDepartment" type="date" {...register("dateOfJoiningDepartment")} />
-                    <p className="text-xs text-muted-foreground">Leave blank if same as institution joining date.</p>
                   </div>
                 </div>
 
@@ -519,7 +557,7 @@ export default function NewFacultyPage() {
                 value={personalDetails}
                 onChange={setPersonalDetails}
                 requiredFields={FACULTY_REQUIRED_PERSONAL_FIELDS}
-                hiddenFields={["legalName"]}
+                hiddenFields={["legalName", "esiNumber"]}
               />
             )}
             {step.key === "qualification" && <QualificationFields value={academicProfile} onChange={setAcademicProfile} collegeType={collegeType} />}
@@ -529,7 +567,9 @@ export default function NewFacultyPage() {
             {step.key === "mentorship" && <MentorshipFields value={academicProfile} onChange={setAcademicProfile} />}
             {step.key === "financial" && <FinancialFields value={academicProfile} onChange={setAcademicProfile} />}
             {step.key === "others" && <OthersFields value={academicProfile} onChange={setAcademicProfile} />}
-            {step.key === "teaching-load" && <TeachingAssignmentsEditor value={teachingRows} onChange={setTeachingRows} />}
+            {step.key === "teaching-load" && (
+              <TeachingAssignmentsEditor value={teachingRows} onChange={setTeachingRows} department={effectiveDepartment} />
+            )}
             {step.key === "review" && (
               <p className="text-sm text-muted-foreground">
                 {isLinkMode

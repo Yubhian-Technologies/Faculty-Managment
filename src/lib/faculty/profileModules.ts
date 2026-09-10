@@ -6,7 +6,7 @@ import {
 
 // One tile/route per module a faculty member's details are broken into on the
 // View pages (see FacultyProfileHub / FacultyProfileModuleContent) - lets HOD/
-// Principal/self-profile open e.g. just "Research Publications" on its own
+// Principal/self-profile open e.g. just "Research & Development" on its own
 // page instead of scrolling one long form. Keys double as the URL segment
 // (/hod/faculty/[id]/[module]).
 export type ProfileModuleKey =
@@ -23,7 +23,7 @@ export const PROFILE_MODULES: Record<ProfileModuleKey, ProfileModuleDef> = {
   personal: { key: "personal", label: "Personal Details", icon: IdCard },
   qualification: { key: "qualification", label: "Academic Qualification", icon: GraduationCap },
   experience: { key: "experience", label: "Professional Experience", icon: Briefcase },
-  research: { key: "research", label: "Research Publications", icon: FlaskConical },
+  research: { key: "research", label: "Research & Development", icon: FlaskConical },
   grants: { key: "grants", label: "Grants, Consultancy & IP", icon: HandCoins },
   mentorship: { key: "mentorship", label: "Mentorship & Institutional Value", icon: Users },
   financial: { key: "financial", label: "Financial Standing", icon: Wallet },
@@ -33,7 +33,7 @@ export const PROFILE_MODULES: Record<ProfileModuleKey, ProfileModuleDef> = {
 
 // Self-profile modules a person never edits themselves - financial standing
 // is administratively controlled, teaching load is assigned by HOD/Principal,
-// and research publications are R&D-managed (see the Research Publications
+// and research publications are R&D-managed (see the Research & Development
 // feature).
 export const SELF_EDIT_DISABLED_MODULES: ProfileModuleKey[] = ["financial", "teaching-load", "research"];
 

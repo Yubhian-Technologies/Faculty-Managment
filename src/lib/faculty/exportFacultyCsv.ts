@@ -43,8 +43,12 @@ function courseCells(courses: CourseAssignment[] | undefined, i: number): [strin
 function previousInstitutionCells(items: PreviousInstitution[] | undefined, i: number): [string, string, string] {
   const p = items?.[i];
   if (!p) return ["", "", ""];
-  const years = p.fromYear || p.toYear ? `${p.fromYear ?? ""}-${p.toYear ?? ""}` : "";
-  return [p.institutionName ?? "", p.designation ?? "", years];
+  // Prefers the real dates; falls back to the legacy year-only value for a
+  // record that hasn't been re-saved under the new shape yet.
+  const from = p.fromDate ?? (p.fromYear ? String(p.fromYear) : "");
+  const to = p.toDate ?? (p.toYear ? String(p.toYear) : "");
+  const range = from || to ? `${from}-${to}` : "";
+  return [p.institutionName ?? "", p.designation ?? "", range];
 }
 
 function publicationCells(items: Publication[] | undefined, i: number): [string, string, string, string, string] {
@@ -146,25 +150,27 @@ function buildRow(faculty: FacultyMember, teachingSummary: string): Record<strin
     aadharNo: s(faculty.aadharNo),
     panNo: s(faculty.panNo),
     passportNumber: s(faculty.passportNumber),
-    sscHallTicketNo: s(faculty.sscHallTicketNo),
     differentlyAbled: yesNo(faculty.differentlyAbled),
     bankAccountNo: s(faculty.bankAccountNo),
     ifscCode: s(faculty.ifscCode),
+    bankName: s(faculty.bankName),
+    bankBranch: s(faculty.bankBranch),
+    bankOtherDetails: s(faculty.bankOtherDetails),
     emergencyContactName: s(faculty.emergencyContactName),
+    emergencyContactRelation: s(faculty.emergencyContactRelation),
     emergencyContactPhone: s(faculty.emergencyContactPhone),
     religion: faculty.religion ? (RELIGION_LABELS[faculty.religion as Religion] ?? s(faculty.religion)) : "",
     caste: faculty.caste ? (CASTE_LABELS[faculty.caste as Caste] ?? s(faculty.caste)) : "",
     subCaste: s(faculty.subCaste),
     collegeEmail: s(faculty.collegeEmail),
     ratificationStatus: s(faculty.ratificationStatus),
+    ratificationProceedingsNumber: s(faculty.ratificationProceedingsNumber),
     ratificationDate: toDateInputValue(faculty.ratificationDate),
     hasPHD: yesNo(faculty.hasPHD),
 
     maritalStatus: s(faculty.maritalStatus),
     spouseName: s(faculty.spouseName),
     numberOfChildren: s(faculty.numberOfChildren),
-    referral: s(faculty.referral),
-    nativePlace: s(faculty.nativePlace),
     bloodGroup: s(faculty.bloodGroup),
     temporaryAddress: s(faculty.temporaryAddress),
     permanentSameAsTemporary: yesNo(faculty.permanentSameAsTemporary),
@@ -180,9 +186,10 @@ function buildRow(faculty: FacultyMember, teachingSummary: string): Record<strin
     phdMode: s(p.phdMode),
     phdSupervisorName: s(p.phdSupervisorName),
     fellowshipsReceived: s(p.fellowshipsReceived),
-    gateQualifiedYear: s(p.gateQualifiedYear),
-    gateScore: s(p.gateScore),
-    netSletQualificationYear: s(p.netSletQualificationYear),
+    qualifyingExamQualified: s(p.qualifyingExamQualified === "YES" ? "Yes" : p.qualifyingExamQualified === "NO" ? "No" : undefined),
+    qualifyingExam: s(p.qualifyingExam),
+    qualifyingExamScore: s(p.qualifyingExamScore),
+    qualifyingExamYear: s(p.qualifyingExamYear),
     primaryTeachingRole: s(p.teachingAssignment?.primaryTeachingRole),
 
     publicationsFirstOrCorrespondingAuthor: s(p.publicationsFirstOrCorrespondingAuthor),

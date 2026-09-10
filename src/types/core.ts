@@ -387,15 +387,20 @@ export interface FMSUser {
   aadharNo?: string;
   panNo?: string;
   passportNumber?: string;
+  bankAccountNo?: string;
+  ifscCode?: string;
+  bankName?: string;
+  bankBranch?: string;
+  bankOtherDetails?: string;
   emergencyContactName?: string;
+  emergencyContactRelation?: string; // relation of the emergency contact to this person
   emergencyContactPhone?: string;
   ratificationStatus?: "Ratified" | "Not Ratified";
-  ratificationDate?: Timestamp;
+  ratificationProceedingsNumber?: string;
+  ratificationDate?: Timestamp; // Ratification Proceedings Date
   maritalStatus?: "Single" | "Married";
   spouseName?: string;
   numberOfChildren?: number;
-  referral?: string; // referral source/person, if any
-  nativePlace?: string;
   temporaryAddress?: string;
   permanentSameAsTemporary?: boolean;
   permanentAddress?: string; // ignored/blank when permanentSameAsTemporary is true
@@ -915,6 +920,10 @@ export interface FacultyMember {
   name?: string;
   email?: string; // personal email — optional, contact only
   phone?: string;
+  // Extra contact numbers beyond the primary Mobile No above - each with an
+  // optional freeform label the HOD chooses (e.g. "Personal", "WhatsApp", or
+  // just whoever's number it is), not a fixed category.
+  additionalPhoneNumbers?: { label?: string; number: string }[];
   designation: Designation;
   qualification: string;
   specialization?: string;
@@ -961,25 +970,33 @@ export interface FacultyMember {
   aadharNo?: string;
   panNo?: string;
   passportNumber?: string;
-  sscHallTicketNo?: string; // SSC (10th) Hall Ticket Number
   differentlyAbled?: boolean;
   differentlyAbledDetails?: string; // nature of disability, if applicable
   bankAccountNo?: string; // salary account number
   ifscCode?: string; // salary account's bank IFSC code
+  bankName?: string;
+  bankBranch?: string;
+  bankOtherDetails?: string;
   emergencyContactName?: string;
+  emergencyContactRelation?: string; // relation of the emergency contact to this person
   emergencyContactPhone?: string;
   collegeEmail: string; // required — this is the faculty member's login username
   ratificationStatus?: "Ratified" | "Not Ratified";
-  ratificationDate?: Timestamp;
+  ratificationProceedingsNumber?: string;
+  ratificationDate?: Timestamp; // Ratification Proceedings Date
   maritalStatus?: "Single" | "Married";
   spouseName?: string;
   numberOfChildren?: number;
-  referral?: string; // referral source/person, if any
-  nativePlace?: string;
   temporaryAddress?: string;
   permanentSameAsTemporary?: boolean;
   permanentAddress?: string; // ignored/blank when permanentSameAsTemporary is true
   bloodGroup?: string;
+  motherTongue?: string;
+  languagesKnown?: string[];
+  heightFeet?: number;
+  heightInches?: number;
+  weightKg?: number;
+  pfNumber?: string; // Provident Fund number
   hasPHD?: boolean;
   internalExperience?: number; // years of experience within the institution
   externalExperience?: number; // years of experience outside the institution
@@ -1008,10 +1025,24 @@ export interface DegreeDetail {
   degree: string;
   branch: string;
   specialization?: string; // Doctoral only - replaces the Course/Branch fields for PhD entries
+  board?: string; // School/Intermediate only - the examining board (e.g. "State Board", "CBSE")
+  // UG/PG only - whether universityOrInstitute below names a University or an
+  // Institute; an Institute is typically affiliated to a University, which
+  // affiliatedUniversity records separately.
+  institutionType?: "UNIVERSITY" | "INSTITUTE";
+  affiliatedUniversity?: string; // UG/PG only, when institutionType === "INSTITUTE"
   universityOrInstitute: string;
   location?: string; // city/town where the institute is located
   percentageOrDivision: string;
+  // "Year of Passing" everywhere except Doctoral/Post-Doctoral, where it's
+  // "Year of Award" - shown only once that entry's own Status (Ph.D./
+  // Postdoctoral Status, on FacultyProfileFields) is AWARDED.
   yearOfCompletion: number;
+  yearOfRegistration?: number; // Doctoral/Post-Doctoral only
+  // Doctoral/Post-Doctoral only, shown instead of yearOfCompletion while
+  // that entry's own Status is PURSUING (not yet awarded, so no year yet -
+  // who's guiding it instead).
+  guideOrSupervisorName?: string;
   certificateNumber?: string; // certificate/registration number printed on the degree certificate
   certificateUrl?: string; // Google Drive public-view link for the degree/transcript certificate
 }
@@ -1030,6 +1061,15 @@ export interface StaffQualification extends DegreeDetail {
 export type PhdStatus = "AWARDED" | "PURSUING";
 export type PhdMode = "FULL_TIME" | "PART_TIME";
 
+export type QualifyingExamType = "NET" | "SLET" | "SET" | "GATE" | "OTHER";
+export const QUALIFYING_EXAM_LABELS: Record<QualifyingExamType, string> = {
+  NET: "NET",
+  SLET: "SLET",
+  SET: "SET",
+  GATE: "GATE",
+  OTHER: "Others",
+};
+
 export interface CourseAssignment {
   code: string;
   name: string;
@@ -1044,9 +1084,20 @@ export interface TeachingAssignmentSummary {
 export interface PreviousInstitution {
   institutionName: string;
   designation?: string;
+  // "YYYY-MM-DD" - the actual dates worked. fromYear/toYear below are the
+  // legacy, year-only shape this replaced (same read-time-fallback pattern as
+  // legacyProfileFallbacks.ts): a record saved before this existed keeps
+  // showing its year in the edit form (seeded onto Jan 1) until re-saved,
+  // which is when it picks up real fromDate/toDate values.
+  fromDate?: string;
+  toDate?: string;
   fromYear?: number;
   toYear?: number;
   experienceCertificateUrl?: string;
+  joiningSalary?: number;
+  leavingSalary?: number;
+  reasonForLeaving?: string;
+  nocObtained?: "YES" | "NO";
 }
 
 // Employment Details — Promotion History (NBA/AICTE).
@@ -1178,14 +1229,39 @@ export const TRAINING_PARTICIPATION_ROLE_LABELS: Record<
   PARTICIPATED: "Participated",
   CONDUCTED: "Conducted",
 };
+export type TrainingProgramLevel = "NATIONAL" | "INTERNATIONAL";
+export const TRAINING_PROGRAM_LEVEL_LABELS: Record<TrainingProgramLevel, string> = {
+  NATIONAL: "National",
+  INTERNATIONAL: "International",
+};
+export type TrainingProgramMode = "ONLINE" | "OFFLINE" | "HYBRID";
+export const TRAINING_PROGRAM_MODE_LABELS: Record<TrainingProgramMode, string> = {
+  ONLINE: "Online",
+  OFFLINE: "Offline",
+  HYBRID: "Hybrid",
+};
+
 export interface TrainingEntry {
   type: TrainingEntryType;
   role?: TrainingParticipationRole; // did they attend, or run it themselves - applies to any type, not just FDP
-  title: string;
-  organizer: string;
-  year: number;
+  title: string; // Title of the Program
+  organizer: string; // Name of the Faculty / Coordinator
+  // "YYYY-MM-DD" - replaces the old year-only shape (see legacy `year` below).
+  // durationDays is auto-computed from these two, not typed in directly.
+  fromDate?: string;
+  toDate?: string;
   durationDays?: number;
+  levelOfProgram?: TrainingProgramLevel;
+  place?: string;
+  mode?: TrainingProgramMode;
+  numberOfParticipants?: number;
+  numberOfResourcePersons?: number;
+  resourcePersonsDetails?: string;
   certificateUrl?: string;
+  // Legacy year-only shape (Faculty's edit form no longer sets this - see
+  // fromDate/toDate above; Supporting Staff's own simpler Training/
+  // Achievements form, TrainingAchievementsFields.tsx, still uses it as-is).
+  year?: number;
 }
 
 export type ProfessionalBody =
@@ -1207,7 +1283,8 @@ export interface ProfessionalMembership {
   body: ProfessionalBody;
   otherName?: string; // when body === "OTHER"
   membershipId?: string;
-  sinceYear?: number;
+  sinceMonthYear?: string; // "YYYY-MM" - Member Since (Month/Year)
+  sinceYear?: number; // legacy - year-only shape this replaced
 }
 
 export type AdminResponsibilityCategory =
@@ -1247,11 +1324,19 @@ export const AWARD_CATEGORY_LABELS: Record<AwardCategory, string> = {
   APPRECIATION_CERTIFICATE: "Appreciation Certificate",
   OTHER: "Other",
 };
+export type AwardLevel = "STATE" | "NATIONAL" | "INTERNATIONAL";
+export const AWARD_LEVEL_LABELS: Record<AwardLevel, string> = {
+  STATE: "State",
+  NATIONAL: "National",
+  INTERNATIONAL: "International",
+};
+
 export interface AwardEntry {
   category: AwardCategory;
   title: string;
   awardingBody: string;
   year: number;
+  level?: AwardLevel;
   certificateUrl?: string;
 }
 
@@ -1264,22 +1349,29 @@ export interface FacultyProfileFields {
   highSchoolDetails?: DegreeDetail; // 10th
   intermediateDetails?: DegreeDetail; // 12th
   ugDetails?: DegreeDetail;
+  // Extra UG/PG/PhD degrees beyond the primary one above (e.g. a second
+  // Bachelor's, a second Master's, or a second doctorate). Kept as separate
+  // arrays rather than turning ugDetails/pgDetails/phdDetails into arrays so
+  // every existing record, export, resume and view that reads the single
+  // field keeps working unchanged.
+  additionalUgDetails?: DegreeDetail[];
   pgDetails?: DegreeDetail;
-  // Extra PG/PhD degrees beyond the primary one above (e.g. a second Master's
-  // or a second doctorate). Kept as separate arrays rather than turning
-  // pgDetails/phdDetails into arrays so every existing record, export, resume
-  // and view that reads the single field keeps working unchanged.
   additionalPgDetails?: DegreeDetail[];
   phdDetails?: DegreeDetail;
   additionalPhdDetails?: DegreeDetail[];
   postDoctoralDetails?: DegreeDetail;
   phdStatus?: PhdStatus;
   phdMode?: PhdMode;
+  postDoctoralStatus?: PhdStatus;
+  postDoctoralMode?: PhdMode;
   phdSupervisorName?: string;
   fellowshipsReceived?: string;
-  gateQualifiedYear?: number;
-  gateScore?: number;
-  netSletQualificationYear?: number;
+  // Whether NET/SLET/SET/GATE/Others was qualified - exam/score/year below
+  // only apply when this is "YES".
+  qualifyingExamQualified?: "YES" | "NO";
+  qualifyingExam?: QualifyingExamType;
+  qualifyingExamScore?: string;
+  qualifyingExamYear?: number;
   // School-type colleges only - see SCHOOL_TEACHING_QUALIFICATION_LEVELS.
   schoolQualifications?: StaffQualification[];
 
