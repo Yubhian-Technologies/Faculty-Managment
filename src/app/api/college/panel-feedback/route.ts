@@ -87,9 +87,13 @@ export async function POST(request: Request) {
       // Panel evaluation module (marks out of 10 per criterion) — the active form
       panelScores?: {
         subjectKnowledge: number;
+        // Optional: added after the form shipped, so feedback saved before then
+        // carries neither (same reasoning as the type in types/recruitment.ts).
+        communication?: number;
         presentationSkills: number;
         research: number;
         specificAttributes: number;
+        ictTools?: number;
         others: number;
       };
       // Panel-interview module
@@ -104,6 +108,7 @@ export async function POST(request: Request) {
         presentationSkills?: string;
         research?: string;
         specificAttributes?: string;
+        ictTools?: string;
         others?: string;
       };
       subjectsTested?: string[];
