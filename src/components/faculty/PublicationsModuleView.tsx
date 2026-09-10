@@ -84,7 +84,7 @@ export function PublicationsSection({ publications, academicProfile }: { publica
   const hidden = sorted.length - PREVIEW_COUNT;
 
   return (
-    <Section number={3} title="Research Publications">
+    <Section number={3} title="Research & Development">
       <div className="space-y-2">
         <SubLabel>Publications</SubLabel>
         {publications === null ? (

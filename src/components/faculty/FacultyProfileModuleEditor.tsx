@@ -32,6 +32,11 @@ interface Props {
   // School-type colleges show a different qualifications list instead of
   // UG/PG/PhD - see QualificationFields.
   collegeType?: CollegeType;
+  // This faculty member's own department - forwarded to TeachingAssignmentsEditor
+  // so its Year options are scoped to THIS department's own Course Year Timings
+  // rather than unioned across every department sharing the same catalog
+  // programme (see TeachingAssignmentsEditor's own doc-comment on `department`).
+  department?: string;
   // Passed straight through to PersonalDetailsFields - this component is
   // reused by both genuinely-Faculty edit pages AND, via MyProfileModuleEditPage,
   // several non-Faculty roles' self-profile pages (including College Staff),
@@ -48,13 +53,16 @@ interface Props {
 // routes replace the field wholesale rather than deep-merging.
 export function FacultyProfileModuleEditor({
   moduleKey, record, onChange, includeTeachingAssignment = true, teachingRows = [], onTeachingRowsChange, collegeType,
-  requiredPersonalFields,
+  requiredPersonalFields, department,
 }: Props) {
   const academicProfile = record.academicProfile ?? {};
 
   switch (moduleKey) {
     case "personal":
-      return <PersonalDetailsFields value={record} onChange={(v) => onChange(v)} requiredFields={requiredPersonalFields} />;
+      // Every caller of this editor is Faculty-shaped (see its own doc-comment)
+      // - Supporting/Non-Technical Staff have their own SupportingStaffModuleEditor
+      // - so ESI Number (statutory ID with no Faculty equivalent) never applies here.
+      return <PersonalDetailsFields value={record} onChange={(v) => onChange(v)} requiredFields={requiredPersonalFields} hiddenFields={["esiNumber"]} />;
     case "qualification":
       return <QualificationFields value={academicProfile} onChange={(ap) => onChange({ academicProfile: ap })} collegeType={collegeType} />;
     case "experience":
@@ -77,7 +85,7 @@ export function FacultyProfileModuleEditor({
       return <OthersFields value={academicProfile} onChange={(ap) => onChange({ academicProfile: ap })} />;
     case "teaching-load":
       return onTeachingRowsChange ? (
-        <TeachingAssignmentsEditor value={teachingRows} onChange={onTeachingRowsChange} />
+        <TeachingAssignmentsEditor value={teachingRows} onChange={onTeachingRowsChange} department={department} />
       ) : (
         <p className="text-sm text-muted-foreground">Teaching assignments aren&apos;t editable here.</p>
       );

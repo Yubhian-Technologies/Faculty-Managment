@@ -10,6 +10,7 @@ import type { Course, Department, Section, Subject, CourseYearTiming, DayOfWeek 
 import { DAY_LABELS } from "@/types";
 import { sectionDisplayLabel } from "@/lib/sections/sectionLabel";
 import { resolveDepartmentCourseScope } from "@/lib/college/academicStructure";
+import { buildCourseGroups } from "@/lib/departments/hodScope";
 
 export interface StagedSlot {
   localId: string;
@@ -70,16 +71,34 @@ function emptyRow(isPast = false): StagedTeachingRow {
 interface Props {
   value: StagedTeachingRow[];
   onChange: (rows: StagedTeachingRow[]) => void;
+  // The faculty member's own department (e.g. "INFORMATION TECHNOLOGY") -
+  // Year options are scoped to ONLY this department's own Course Year
+  // Timings (Department.courseScopes), never unioned with a sibling
+  // department's own years just because both happen to share the same
+  // catalog programme (see courseGroups below). Basic Science's own Year 1
+  // and Information Technology's own Years 2-4 are two different
+  // departments' own faculty pools, even though they show up under one
+  // merged "Bachelor of Technology" pick in the Course dropdown.
+  department?: string;
 }
 
-export function TeachingAssignmentsEditor({ value, onChange }: Props) {
+export function TeachingAssignmentsEditor({ value, onChange, department }: Props) {
   const [courses, setCourses] = useState<Course[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
-  const departmentById = useMemo(() => new Map(departments.map((d) => [d.id, d])), [departments]);
+  const ownDepartment = useMemo(
+    () => (department ? departments.find((d) => d.name === department) : undefined),
+    [departments, department]
+  );
   const [sectionsCache, setSectionsCache] = useState<Record<string, Section[]>>({});
   const [subjectsCache, setSubjectsCache] = useState<Record<string, Subject[]>>({});
-  const [timingCache, setTimingCache] = useState<Record<string, CourseYearTiming | null>>({});
+  const [timingCache, setTimingCache] = useState<Record<string, CourseYearTiming[]>>({});
   const [occupiedCache, setOccupiedCache] = useState<Record<string, { assignmentId: string; day: string; periodNumber: number }[]>>({});
+  // Every department's own "Bachelor of Technology" Course doc collapsed into
+  // one pick per catalog programme - a scope spanning several departments
+  // otherwise shows the same course name once per department (see
+  // buildCourseGroups's own doc-comment; same fix already used by the
+  // Sections page and hod/teaching-assignments).
+  const courseGroups = useMemo(() => buildCourseGroups(courses), [courses]);
 
   useEffect(() => {
     fetch("/api/college/courses")
@@ -96,24 +115,44 @@ export function TeachingAssignmentsEditor({ value, onChange }: Props) {
       .catch(() => { /* non-critical */ });
   }, []);
 
-  async function ensureCourseYearData(courseId: string, year: number) {
-    const key = `${courseId}_${year}`;
+  // Queried once per course-doc id in the group and merged - the sections/
+  // subjects/timings APIs take a single courseId, and one merged catalog
+  // programme (courseGroups) can span several of them, one per department.
+  async function ensureCourseYearData(courseIds: string[], year: number) {
+    if (courseIds.length === 0) return;
+    const key = `${courseIds.join("|")}_${year}`;
     try {
       if (!(key in sectionsCache)) {
-        const res = await fetch(`/api/college/sections?courseId=${encodeURIComponent(courseId)}&year=${year}`);
-        const d = await res.json() as { sections: Section[] };
-        setSectionsCache((c) => ({ ...c, [key]: d.sections ?? [] }));
+        const lists = await Promise.all(
+          courseIds.map((cId) =>
+            fetch(`/api/college/sections?courseId=${encodeURIComponent(cId)}&year=${year}`)
+              .then((r) => r.json() as Promise<{ sections: Section[] }>)
+              .then((d) => d.sections ?? [])
+          )
+        );
+        const byId = new Map(lists.flat().map((s) => [s.id, s]));
+        setSectionsCache((c) => ({ ...c, [key]: Array.from(byId.values()) }));
       }
       if (!(key in subjectsCache)) {
-        const res = await fetch(`/api/college/subjects?courseId=${encodeURIComponent(courseId)}&year=${year}`);
-        const d = await res.json() as { subjects: Subject[] };
-        setSubjectsCache((c) => ({ ...c, [key]: d.subjects ?? [] }));
+        const lists = await Promise.all(
+          courseIds.map((cId) =>
+            fetch(`/api/college/subjects?courseId=${encodeURIComponent(cId)}&year=${year}`)
+              .then((r) => r.json() as Promise<{ subjects: Subject[] }>)
+              .then((d) => d.subjects ?? [])
+          )
+        );
+        const byId = new Map(lists.flat().map((s) => [s.id, s]));
+        setSubjectsCache((c) => ({ ...c, [key]: Array.from(byId.values()) }));
       }
       if (!(key in timingCache)) {
-        const res = await fetch(`/api/college/course-year-timings?courseId=${encodeURIComponent(courseId)}`);
-        const d = await res.json() as { timings: CourseYearTiming[] };
-        const timing = (d.timings ?? []).find((t) => t.year === year) ?? null;
-        setTimingCache((c) => ({ ...c, [key]: timing }));
+        const lists = await Promise.all(
+          courseIds.map((cId) =>
+            fetch(`/api/college/course-year-timings?courseId=${encodeURIComponent(cId)}`)
+              .then((r) => r.json() as Promise<{ timings: CourseYearTiming[] }>)
+              .then((d) => (d.timings ?? []).filter((t) => t.year === year))
+          )
+        );
+        setTimingCache((c) => ({ ...c, [key]: lists.flat() }));
       }
     } catch {
       // Non-critical - transient network hiccup (e.g. a dev-server reload mid-request).
@@ -136,11 +175,14 @@ export function TeachingAssignmentsEditor({ value, onChange }: Props) {
   // editing an existing faculty member), not just ones the user just selected interactively.
   useEffect(() => {
     for (const row of value) {
-      if (row.courseId && row.year) void ensureCourseYearData(row.courseId, row.year);
+      if (row.courseId && row.year) {
+        const group = courseGroups.find((g) => g.courseIds.includes(row.courseId));
+        void ensureCourseYearData(group ? group.courseIds : [row.courseId], row.year);
+      }
       if (row.sectionId && !row.isPast) void ensureOccupied(row.sectionId);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value]);
+  }, [value, courseGroups]);
 
   function updateRow(localId: string, patch: Partial<StagedTeachingRow>) {
     onChange(value.map((r) => (r.localId === localId ? { ...r, ...patch } : r)));
@@ -154,23 +196,36 @@ export function TeachingAssignmentsEditor({ value, onChange }: Props) {
     onChange(value.filter((r) => r.localId !== localId));
   }
 
-  async function handleCourseChange(row: StagedTeachingRow, courseId: string) {
-    const course = courses.find((c) => c.id === courseId);
+  async function handleCourseChange(row: StagedTeachingRow, groupKey: string) {
+    const group = courseGroups.find((g) => g.key === groupKey);
     updateRow(row.localId, {
-      courseId, courseName: course?.name ?? "",
+      // Just a representative member of the group for now - resolved to the
+      // section's own real courseId once one is picked below, since a merged
+      // programme's docs each belong to a different department.
+      courseId: group?.courseIds[0] ?? "", courseName: group?.name ?? "",
       year: 0, sectionId: "", sectionName: "", subjectId: "", subjectName: "", subjectCode: "", hoursPerWeek: 0, slots: [],
     });
   }
 
   async function handleYearChange(row: StagedTeachingRow, year: number) {
     updateRow(row.localId, { year, sectionId: "", sectionName: "", subjectId: "", subjectName: "", subjectCode: "", hoursPerWeek: 0, slots: [] });
-    await ensureCourseYearData(row.courseId, year);
+    const group = courseGroups.find((g) => g.courseIds.includes(row.courseId));
+    await ensureCourseYearData(group ? group.courseIds : [row.courseId], year);
   }
 
   async function handleSectionChange(row: StagedTeachingRow, sectionId: string) {
-    const key = `${row.courseId}_${row.year}`;
+    const group = courseGroups.find((g) => g.courseIds.includes(row.courseId));
+    const key = `${(group ? group.courseIds : [row.courseId]).join("|")}_${row.year}`;
     const section = (sectionsCache[key] ?? []).find((s) => s.id === sectionId);
-    updateRow(row.localId, { sectionId, sectionName: section?.name ?? "", slots: [] });
+    updateRow(row.localId, {
+      sectionId, sectionName: section?.name ?? "",
+      // The section's OWN real courseId, not the merged group's
+      // representative pick - it may belong to a sibling department's own
+      // Course doc within a shared programme (buildCourseGroups), and the
+      // saved assignment must point at the doc that actually owns it.
+      ...(section?.courseId ? { courseId: section.courseId } : {}),
+      slots: [],
+    });
     if (!row.isPast) await ensureOccupied(sectionId);
   }
 
@@ -183,7 +238,8 @@ export function TeachingAssignmentsEditor({ value, onChange }: Props) {
       });
       return;
     }
-    const key = `${row.courseId}_${row.year}`;
+    const group = courseGroups.find((g) => g.courseIds.includes(row.courseId));
+    const key = `${(group ? group.courseIds : [row.courseId]).join("|")}_${row.year}`;
     const subject = (subjectsCache[key] ?? []).find((s) => s.id === subjectId);
     updateRow(row.localId, {
       subjectId,
@@ -234,21 +290,36 @@ export function TeachingAssignmentsEditor({ value, onChange }: Props) {
   );
 
   function renderRow(row: StagedTeachingRow) {
-        const course = courses.find((c) => c.id === row.courseId) ?? null;
-        // Scoped to the course's own department (resolveDepartmentCourseScope),
-        // not the raw 1..durationYears span - a department only teaches the
-        // years the Principal actually assigned it.
+        // One pick per catalog programme, not per department's own Course doc
+        // (see courseGroups above) - resolved back from row.courseId, which
+        // (once a section is chosen) is that section's own real courseId.
+        const group = courseGroups.find((g) => g.courseIds.includes(row.courseId)) ?? null;
+        // Scoped to THIS faculty member's own department's Years Taught
+        // (Department.courseScopes, via resolveDepartmentCourseScope) - never
+        // unioned with a sibling department sharing the same merged group
+        // (courseGroups above collapses the Course dropdown across
+        // departments, but a Basic Science faculty member has no business
+        // being offered Information Technology's own Years 2-4 just because
+        // both share one "Bachelor of Technology" pick, and vice versa for
+        // Basic Science's own Year 1).
         const yearOptions = (() => {
-          if (!course) return [];
-          const courseYears = Array.from({ length: course.durationYears }, (_, i) => i + 1);
-          const dept = departmentById.get(course.departmentId);
-          const assigned = dept ? resolveDepartmentCourseScope(dept, course.catalogId).assignedYears : [];
+          if (!group) return [];
+          const courseYears = Array.from({ length: group.durationYears }, (_, i) => i + 1);
+          if (!ownDepartment) return courseYears; // no department context supplied - can't scope, show everything
+          const assigned = resolveDepartmentCourseScope(ownDepartment, group.catalogId).assignedYears;
           return assigned.length > 0 ? courseYears.filter((y) => assigned.includes(y)) : courseYears;
         })();
-        const key = `${row.courseId}_${row.year}`;
+        const activeCourseIds = group ? group.courseIds : (row.courseId ? [row.courseId] : []);
+        const key = `${activeCourseIds.join("|")}_${row.year}`;
         const sections = sectionsCache[key] ?? [];
         const subjects = subjectsCache[key] ?? [];
-        const timing = timingCache[key];
+        // This row's own courseId's timing specifically, once a section has
+        // resolved it to one concrete department - falling back to whichever
+        // member's timing loaded first before that (they're expected to
+        // agree; see the "Timings not configured" message below for when
+        // none has one at all).
+        const timingsForKey = timingCache[key] ?? [];
+        const timing = timingsForKey.find((t) => t.courseId === row.courseId) ?? timingsForKey[0] ?? null;
         const occupied = occupiedCache[row.sectionId] ?? [];
         const periodNumbers = timing ? Array.from({ length: timing.numberOfPeriods }, (_, i) => i + 1) : [];
         // Periods this same faculty member is already teaching in any other row (any other
@@ -291,16 +362,16 @@ export function TeachingAssignmentsEditor({ value, onChange }: Props) {
               <div className="flex-1 grid grid-cols-1 gap-3 sm:grid-cols-4">
                 <div className="space-y-1">
                   <Label className="text-xs">Course</Label>
-                  <Select value={row.courseId} onValueChange={(v) => void handleCourseChange(row, v)}>
+                  <Select value={group?.key ?? ""} onValueChange={(v) => void handleCourseChange(row, v)}>
                     <SelectTrigger><SelectValue placeholder="Course" /></SelectTrigger>
                     <SelectContent>
-                      {courses.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                      {courseGroups.map((g) => <SelectItem key={g.key} value={g.key}>{g.name}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs">Year</Label>
-                  <Select value={row.year ? String(row.year) : ""} onValueChange={(v) => void handleYearChange(row, Number(v))} disabled={!course}>
+                  <Select value={row.year ? String(row.year) : ""} onValueChange={(v) => void handleYearChange(row, Number(v))} disabled={!group}>
                     <SelectTrigger><SelectValue placeholder="Year" /></SelectTrigger>
                     <SelectContent>
                       {yearOptions.map((y) => <SelectItem key={y} value={String(y)}>Year {y}</SelectItem>)}

@@ -7,9 +7,21 @@ import { designationLabel } from "@/lib/designations/config";
 import { PublicationsSection } from "@/components/faculty/PublicationsModuleView";
 import {
   TRAINING_ENTRY_TYPE_LABELS, PROFESSIONAL_BODY_LABELS,
-  ADMIN_RESPONSIBILITY_CATEGORY_LABELS, AWARD_CATEGORY_LABELS,
+  ADMIN_RESPONSIBILITY_CATEGORY_LABELS, AWARD_CATEGORY_LABELS, QUALIFYING_EXAM_LABELS,
+  TRAINING_PROGRAM_LEVEL_LABELS, TRAINING_PROGRAM_MODE_LABELS, AWARD_LEVEL_LABELS,
 } from "@/types";
 import type { FacultyProfileFields, CollegeType, ResearchPublication } from "@/types";
+
+// Prefers the real date; falls back to the legacy year-only value for a
+// record that hasn't been re-saved under the new shape yet (see
+// PreviousInstitution's own doc-comment in types/core.ts).
+function formatInstitutionDate(date: string | undefined, year: number | undefined): string | number | undefined {
+  if (date) {
+    const d = new Date(date);
+    if (!Number.isNaN(d.getTime())) return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+  }
+  return year;
+}
 
 interface Props {
   profile: Partial<FacultyProfileFields> | undefined;
@@ -33,34 +45,56 @@ export function QualificationModule({ profile, collegeType }: { profile: Partial
   if (collegeType === "SCHOOL") {
     return (
       <Section number={1} title="General & Academic Profile">
-        <Field label="Highest Qualification Earned" value={p.highestQualification} />
+        <Field label="Highest Qualification" value={p.highestQualification} />
         <QualificationsView items={p.schoolQualifications} />
       </Section>
     );
   }
   return (
     <Section number={1} title="General & Academic Profile">
-      <Field label="Highest Qualification Earned" value={p.highestQualification} />
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <DegreeView label="High School (10th)" degree={p.highSchoolDetails} />
-        <DegreeView label="Intermediate (12th)" degree={p.intermediateDetails} />
-        <DegreeView label="UG" degree={p.ugDetails} />
-        <DegreeView label="PG" degree={p.pgDetails} />
-        {(p.additionalPgDetails ?? []).map((d, i) => <DegreeView key={`pg-${i}`} label={`PG ${i + 2}`} degree={d} />)}
-        <DegreeView label="PhD" degree={p.phdDetails} level="DOCTORAL" />
-        {(p.additionalPhdDetails ?? []).map((d, i) => <DegreeView key={`phd-${i}`} label={`PhD ${i + 2}`} degree={d} level="DOCTORAL" />)}
-        <DegreeView label="Post-Doctoral" degree={p.postDoctoralDetails} />
-      </div>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-        <Field label="Ph.D. Status" value={p.phdStatus} />
-        <Field label="Ph.D. Mode" value={p.phdMode} />
-        <Field label="Supervisor" value={p.phdSupervisorName} />
-        <Field label="Fellowships" value={p.fellowshipsReceived} />
-      </div>
+      <Field label="Highest Qualification" value={p.highestQualification} />
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <Field label="GATE Qualified Year" value={p.gateQualifiedYear} />
-        <Field label="GATE Score" value={p.gateScore} />
-        <Field label="NET/SLET Year" value={p.netSletQualificationYear} />
+        <Field label="NET/SLET/SET/GATE/Others" value={p.qualifyingExamQualified === "YES" ? "Yes" : p.qualifyingExamQualified === "NO" ? "No" : undefined} />
+        {p.qualifyingExamQualified === "YES" && (
+          <>
+            <Field label="Qualified Exam" value={p.qualifyingExam ? QUALIFYING_EXAM_LABELS[p.qualifyingExam] : undefined} />
+            <Field label="Score" value={p.qualifyingExamScore} />
+            <Field label="Qualified Year" value={p.qualifyingExamYear} />
+          </>
+        )}
+      </div>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <DegreeView label="Secondary Education" degree={p.highSchoolDetails} level="HIGH_SCHOOL" />
+        <DegreeView label="Intermediate (10+2) / Diploma (10+3) / ITI / Others" degree={p.intermediateDetails} level="INTERMEDIATE" />
+        <DegreeView label="UG" degree={p.ugDetails} level="UG" />
+        {(p.additionalUgDetails ?? []).map((d, i) => <DegreeView key={`ug-${i}`} label={`UG ${i + 2}`} degree={d} level="UG" />)}
+        <DegreeView label="PG" degree={p.pgDetails} level="PG" />
+        {(p.additionalPgDetails ?? []).map((d, i) => <DegreeView key={`pg-${i}`} label={`PG ${i + 2}`} degree={d} level="PG" />)}
+        <DegreeView
+          label="Ph.D."
+          degree={p.phdDetails}
+          level="DOCTORAL"
+          status={p.phdStatus}
+          extraFields={
+            <>
+              <Field label="Ph.D. Status" value={p.phdStatus} />
+              <Field label="Ph.D. Mode" value={p.phdMode} />
+            </>
+          }
+        />
+        {(p.additionalPhdDetails ?? []).map((d, i) => <DegreeView key={`phd-${i}`} label={`Ph.D. ${i + 2}`} degree={d} level="DOCTORAL" />)}
+        <DegreeView
+          label="Postdoctoral Fellowship"
+          degree={p.postDoctoralDetails}
+          level="POST_DOCTORAL"
+          status={p.postDoctoralStatus}
+          extraFields={
+            <>
+              <Field label="Postdoctoral Status" value={p.postDoctoralStatus} />
+              <Field label="Postdoctoral Mode" value={p.postDoctoralMode} />
+            </>
+          }
+        />
       </div>
     </Section>
   );
@@ -79,8 +113,12 @@ export function ExperienceModule({ profile, includeTeachingAssignment = true }: 
               <div key={i} className="rounded-md border bg-muted/20 shadow-sm p-2 grid grid-cols-2 sm:grid-cols-3 gap-2">
                 <Field label="Institution" value={inst.institutionName} />
                 <Field label="Designation" value={inst.designation} />
-                <Field label="From Year" value={inst.fromYear} />
-                <Field label="To Year" value={inst.toYear} />
+                <Field label="From" value={formatInstitutionDate(inst.fromDate, inst.fromYear)} />
+                <Field label="To" value={formatInstitutionDate(inst.toDate, inst.toYear)} />
+                <Field label="Joining Salary" value={inst.joiningSalary} />
+                <Field label="Leaving Salary" value={inst.leavingSalary} />
+                <Field label="Reason for Leaving" value={inst.reasonForLeaving} />
+                <Field label="NOC Obtained" value={inst.nocObtained === "YES" ? "Yes" : inst.nocObtained === "NO" ? "No" : undefined} />
                 {inst.experienceCertificateUrl && (
                   <div className="col-span-2 sm:col-span-3">
                     <DocLink url={inst.experienceCertificateUrl} label="View Experience Certificate" />
@@ -254,9 +292,18 @@ export function MentorshipModule({ profile }: { profile: Partial<FacultyProfileF
           p.trainingEntries?.map((t, i) => (
             <div key={i} className="rounded-md border bg-muted/20 shadow-sm p-2 grid grid-cols-2 sm:grid-cols-4 gap-2">
               <Field label="Type" value={TRAINING_ENTRY_TYPE_LABELS[t.type]} />
-              <Field label="Title" value={t.title} />
-              <Field label="Organizer" value={t.organizer} />
-              <Field label="Year" value={t.year} />
+              <Field label="Title of the Program" value={t.title} />
+              <Field label="Name of the Faculty / Coordinator" value={t.organizer} />
+              <Field label="From Date" value={t.fromDate} />
+              <Field label="To Date" value={t.toDate} />
+              <Field label="Duration" value={t.durationDays ? `${t.durationDays} day${t.durationDays === 1 ? "" : "s"}` : undefined} />
+              <Field label="National / International" value={t.levelOfProgram ? TRAINING_PROGRAM_LEVEL_LABELS[t.levelOfProgram] : undefined} />
+              <Field label="Place" value={t.place} />
+              <Field label="Mode" value={t.mode ? TRAINING_PROGRAM_MODE_LABELS[t.mode] : undefined} />
+              <Field label="Number of Participants" value={t.numberOfParticipants} />
+              <Field label="Number of Resource Persons" value={t.numberOfResourcePersons} />
+              <Field label="Resource Persons - Details" value={t.resourcePersonsDetails} />
+              {!t.fromDate && t.year && <Field label="Year (legacy)" value={t.year} />}
               {t.certificateUrl && (
                 <div className="col-span-2 sm:col-span-4"><DocLink url={t.certificateUrl} label="View Certificate" /></div>
               )}
@@ -275,7 +322,7 @@ export function MentorshipModule({ profile }: { profile: Partial<FacultyProfileF
             <div key={i} className="rounded-md border bg-muted/20 shadow-sm p-2 grid grid-cols-2 sm:grid-cols-3 gap-2">
               <Field label="Body" value={m.body === "OTHER" ? m.otherName : PROFESSIONAL_BODY_LABELS[m.body]} />
               <Field label="Membership ID" value={m.membershipId} />
-              <Field label="Since" value={m.sinceYear} />
+              <Field label="Member Since (Month/Year)" value={m.sinceMonthYear ?? (m.sinceYear ? String(m.sinceYear) : undefined)} />
             </div>
           ))
         )}
@@ -306,6 +353,7 @@ export function MentorshipModule({ profile }: { profile: Partial<FacultyProfileF
               <Field label="Title" value={a.title} />
               <Field label="Awarding Body" value={a.awardingBody} />
               <Field label="Year" value={a.year} />
+              <Field label="State / National / International" value={a.level ? AWARD_LEVEL_LABELS[a.level] : undefined} />
               {a.certificateUrl && (
                 <div className="col-span-2 sm:col-span-4"><DocLink url={a.certificateUrl} label="View Certificate" /></div>
               )}

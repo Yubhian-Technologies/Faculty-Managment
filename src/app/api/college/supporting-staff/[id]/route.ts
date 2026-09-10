@@ -88,15 +88,20 @@ export async function PATCH(
       aadharNo: string;
       panNo: string;
       passportNumber: string;
+      bankAccountNo: string;
+      ifscCode: string;
+      bankName: string;
+      bankBranch: string;
+      bankOtherDetails: string;
       emergencyContactName: string;
+      emergencyContactRelation: string;
       emergencyContactPhone: string;
       ratificationStatus: string;
+      ratificationProceedingsNumber: string;
       ratificationDate: string;
       maritalStatus: string;
       spouseName: string;
       numberOfChildren: number;
-      referral: string;
-      nativePlace: string;
       temporaryAddress: string;
       permanentSameAsTemporary: boolean;
       permanentAddress: string;
@@ -170,8 +175,10 @@ export async function PATCH(
       "name", "email", "phone", "collegeEmail", "staffCategory", "designation", "otherDesignationTitle",
       "department", "qualification", "employmentType", "status", "gender", "legalName", "nameAsPerAadhar",
       "fatherName", "motherName", "religion", "caste", "subCaste", "aadharNo", "passportNumber",
-      "emergencyContactName", "emergencyContactPhone", "ratificationStatus", "userUid",
-      "maritalStatus", "spouseName", "referral", "nativePlace", "temporaryAddress", "permanentAddress", "bloodGroup",
+      "bankAccountNo", "bankName", "bankBranch", "bankOtherDetails",
+      "emergencyContactName", "emergencyContactRelation", "emergencyContactPhone", "ratificationStatus",
+      "ratificationProceedingsNumber", "userUid",
+      "maritalStatus", "spouseName", "temporaryAddress", "permanentAddress", "bloodGroup",
     ] as const;
 
     // These fields are mandatory on both the import template and Add Staff
@@ -193,6 +200,7 @@ export async function PATCH(
     }
 
     if (body.panNo !== undefined) updates.panNo = body.panNo.toUpperCase();
+    if (body.ifscCode !== undefined) updates.ifscCode = body.ifscCode.toUpperCase();
 
     if (body.experienceYears !== undefined) updates.experienceYears = Number(body.experienceYears);
     if (body.numberOfChildren !== undefined) updates.numberOfChildren = Number(body.numberOfChildren);

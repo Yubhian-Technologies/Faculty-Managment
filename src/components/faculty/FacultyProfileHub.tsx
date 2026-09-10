@@ -182,6 +182,18 @@ export function FacultyProfileHub({
             <Fact label="Email" value={faculty.email} />
             <Fact label="College Email" value={faculty.collegeEmail} />
             <Fact label="Mobile No" value={faculty.phone} />
+            {(faculty.additionalPhoneNumbers ?? []).length > 0 && (
+              <Fact
+                label="Additional Mobile Numbers"
+                value={
+                  <span className="flex flex-col gap-0.5">
+                    {faculty.additionalPhoneNumbers?.map((p, i) => (
+                      <span key={i}>{p.number}{p.label ? ` (${p.label})` : ""}</span>
+                    ))}
+                  </span>
+                }
+              />
+            )}
             <Fact
               label="Department"
               value={
