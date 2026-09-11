@@ -1,8 +1,12 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
+import { FieldValue } from "firebase-admin/firestore";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { notify, notifyRole } from "@/lib/notify";
+import { PUBLICATION_ELIGIBLE_ROLES } from "@/lib/publications/eligibleRoles";
+import type { PublicationStatus } from "@/types";
 
 export async function GET(
   _request: Request,
@@ -33,7 +37,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await requireCollegeMember("R_AND_D");
+    const session = await requireCollegeMember(...PUBLICATION_ELIGIBLE_ROLES);
     const { id } = await params;
 
     const body = (await request.json()) as Partial<{
@@ -53,6 +57,9 @@ export async function PATCH(
       sjr: string;
       quartile: string;
       isbnIssn: string;
+      // R&D's verification decision on a self-submitted PENDING record.
+      decision: "APPROVED" | "REJECTED";
+      rejectionReason: string;
     }>;
 
     const db = getAdminDb();
@@ -61,7 +68,82 @@ export async function PATCH(
     if (!snap.exists) {
       return NextResponse.json({ error: "Publication not found" }, { status: 404 });
     }
+    const pub = snap.data() as { uid: string; title: string; status?: PublicationStatus };
+    const isRnD = session.role === "R_AND_D";
+    const isOwner = pub.uid === session.uid;
+    if (!isRnD && !isOwner) {
+      return NextResponse.json({ error: "Not authorized to edit this publication" }, { status: 403 });
+    }
 
+    // R&D's verification decision - approve/reject a self-submitted record.
+    if (body.decision) {
+      if (!isRnD) {
+        return NextResponse.json({ error: "Only R&D can verify a publication" }, { status: 403 });
+      }
+      const now = new Date();
+      let reviewedByName = "R&D";
+      try {
+        const reviewerSnap = await db.collection("colleges").doc(session.collegeId).collection("users").doc(session.uid).get();
+        reviewedByName = (reviewerSnap.data() as { name?: string } | undefined)?.name ?? "R&D";
+      } catch { /* best-effort */ }
+
+      await ref.update({
+        status: body.decision,
+        reviewedBy: session.uid,
+        reviewedByName,
+        reviewedAt: now,
+        updatedAt: now,
+        ...(body.decision === "REJECTED" ? { rejectionReason: body.rejectionReason ?? "" } : { rejectionReason: FieldValue.delete() }),
+      });
+
+      await notify(
+        db, session.collegeId, pub.uid,
+        "PUBLICATION_REVIEWED",
+        body.decision === "APPROVED" ? "Publication approved" : "Publication rejected",
+        body.decision === "APPROVED"
+          ? `"${pub.title}" was verified and now shows as an official record`
+          : `"${pub.title}" was rejected${body.rejectionReason ? `: ${body.rejectionReason}` : ""} - you can edit and resubmit it`
+      );
+
+      return NextResponse.json({ ok: true });
+    }
+
+    // Owner editing+resubmitting their own rejected submission - the same
+    // plain content fields the self-submit form collects, not R&D's
+    // report-only extras (department/authorPosition/venueType/etc.), which
+    // stay R&D-only below.
+    if (isOwner && !isRnD) {
+      if (pub.status !== "REJECTED") {
+        return NextResponse.json({ error: "Only a rejected submission can be edited" }, { status: 403 });
+      }
+      const now = new Date();
+      const updates: Record<string, unknown> = {
+        updatedAt: now,
+        status: "PENDING" satisfies PublicationStatus,
+        reviewedBy: FieldValue.delete(),
+        reviewedByName: FieldValue.delete(),
+        reviewedAt: FieldValue.delete(),
+        rejectionReason: FieldValue.delete(),
+      };
+      if (body.title !== undefined) updates.title = body.title;
+      if (body.coAuthors !== undefined) updates.coAuthors = body.coAuthors;
+      if (body.journalOrConference !== undefined) updates.journalOrConference = body.journalOrConference;
+      if (body.publicationYear !== undefined) updates.publicationYear = body.publicationYear;
+      if (body.indexing !== undefined) updates.indexing = body.indexing;
+      if (body.driveLink !== undefined) updates.driveLink = body.driveLink;
+
+      await ref.update(updates);
+      await notifyRole(
+        db, session.collegeId, "R_AND_D",
+        "PUBLICATION_PENDING_VERIFICATION",
+        "Publication resubmitted for verification",
+        `A previously rejected publication ("${body.title ?? pub.title}") was corrected and resubmitted`,
+        "/r-and-d/publications"
+      );
+      return NextResponse.json({ ok: true });
+    }
+
+    // R&D's own full edit - any field, any status.
     const updates: Record<string, unknown> = { updatedAt: new Date() };
     if (body.title !== undefined) updates.title = body.title;
     if (body.coAuthors !== undefined) updates.coAuthors = body.coAuthors;
