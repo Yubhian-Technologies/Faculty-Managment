@@ -84,7 +84,7 @@ export function SupportingStaffProfileHub({ staff, basePath, backHref, editHref 
             <Fact label="Department" value={staff.department || "Centrally managed"} />
             <Fact label="Designation" value={designationLabel} />
             <Fact label="Date of Joining" value={staff.joiningDate ? formatDate(staff.joiningDate) : undefined} />
-            <Fact label="Experience (yrs)" value={staff.experienceYears} />
+            <Fact label="Total Years of Experience" value={staff.experienceYears} />
           </div>
         </CardContent>
       </Card>

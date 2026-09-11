@@ -62,6 +62,7 @@ export default function ManagementFacultyModulePage() {
           teachingAssignments={teachingAssignments}
           collegeType={collegeType}
           publications={publications}
+          hideLegalName
         />
       ) : (
         <p className="text-sm text-muted-foreground">Faculty record not found.</p>

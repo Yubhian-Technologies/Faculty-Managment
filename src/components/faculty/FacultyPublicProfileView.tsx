@@ -329,7 +329,7 @@ export function FacultyPublicProfileView({ profile }: { profile: FacultyPublicPr
                 <InfoRow label="Department" value={p.department} />
                 <InfoRow label="Qualification" value={p.qualification} />
                 <InfoRow label="Specialization" value={p.specialization} />
-                <InfoRow label="Experience" value={p.experienceYears ? `${p.experienceYears}+ years` : undefined} />
+                <InfoRow label="Total Years of Experience" value={p.experienceYears ? `${p.experienceYears}+ years` : undefined} />
                 <InfoRow label="At the Institution Since" value={p.joiningYear} />
               </div>
               {qualBadges.length > 0 && (

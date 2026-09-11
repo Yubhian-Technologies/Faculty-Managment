@@ -293,7 +293,7 @@ export function PublicationsSection({
   }
 
   return (
-    <Section number={3} title="Research & Development">
+    <Section number={3} title="Research Publications">
       <div className="space-y-2">
         <div className="flex items-center justify-between">
           <SubLabel>Publications</SubLabel>
@@ -318,11 +318,14 @@ export function PublicationsSection({
           </div>
         )}
       </div>
+      {/* Hidden for now - Research Publications is getting a proper field
+          redesign (see ResearchInnovationModule's sub-tabs); re-enable once
+          that's in and these are re-decided as part of it, not before.
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Field label="First/Corresponding Author" value={p.publicationsFirstOrCorrespondingAuthor} />
-        <Field label="Q1 / IF>4.0" value={p.publicationsQ1OrHighImpact} />
-        <Field label="SCI/Scopus" value={p.sciScopusCount} />
-        <Field label="WoS (SCIE/ESCI)" value={p.wosCount} />
+        <Field label="First/Corresponding Author Pubs" value={p.publicationsFirstOrCorrespondingAuthor} />
+        <Field label="Q1 / IF > 4.0 Pubs" value={p.publicationsQ1OrHighImpact} />
+        <Field label="SCI/Scopus Count" value={p.sciScopusCount} />
+        <Field label="WoS (SCIE/ESCI) Count" value={p.wosCount} />
         <Field label="Conference Papers" value={p.conferencePapersCount} />
         <Field label="Book Chapters" value={p.bookChaptersCount} />
         <Field label="Review Publications" value={p.reviewPublicationsCount} />
@@ -331,6 +334,7 @@ export function PublicationsSection({
         <Field label="H-Index" value={p.hIndex} />
         <Field label="i10-Index" value={p.i10Index} />
       </div>
+      */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <Field label="Google Scholar ID" value={p.googleScholarId} />
         <Field label="Scopus Author ID" value={p.scopusAuthorId} />

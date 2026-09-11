@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ChevronLeft, ChevronRight, Check } from "lucide-react";
+import { ChevronLeft, ChevronRight, Check, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -19,9 +19,9 @@ import {
   QualificationFields, ExperienceFields, ResearchFields, GrantsFields,
   MentorshipFields, FinancialFields, OthersFields,
 } from "@/components/faculty/AcademicProfileModuleFields";
-import { RepeatingGroup, TextInput } from "@/components/shared/ProfileFieldPrimitives";
+import { TextInput } from "@/components/shared/ProfileFieldPrimitives";
 import { syncTeachingAssignments } from "@/lib/teaching/syncTeachingAssignments";
-import { totalPreviousExperienceYears, formatExperienceDuration } from "@/lib/faculty/experienceCalc";
+import { totalPreviousExperienceYears, totalYearsOfExperience, formatDuration } from "@/lib/faculty/experienceCalc";
 import { PHONE_REGEX } from "@/lib/validations";
 import { AvatarUploadField } from "@/components/shared/AvatarUploadField";
 import { PROFILE_MODULES } from "@/lib/faculty/profileModules";
@@ -162,11 +162,12 @@ export default function NewFacultyPage() {
   const [qualIsOther, setQualIsOther] = useState(false);
   const aicteEligible = watch("aicteEligible");
   const name = watch("name");
+  const joiningDateValue = watch("joiningDate");
 
-  // Total Years of Experience is calculated from Previous Experience's
-  // From/To dates (see experienceCalc.ts), not typed manually - kept in sync
-  // with the form's own experienceYears field so submit sends the computed
-  // total as-is (the "core" step's input just displays it, read-only).
+  // FacultyMember.experienceYears is calculated from Previous Experience's
+  // From/To dates alone (see experienceCalc.ts), not typed manually - kept in
+  // sync with the form's own experienceYears field so submit sends the
+  // computed total as-is.
   const totalExperience = useMemo(
     () => totalPreviousExperienceYears(academicProfile.previousInstitutions),
     [academicProfile.previousInstitutions]
@@ -174,6 +175,15 @@ export default function NewFacultyPage() {
   useEffect(() => {
     setValue("experienceYears", totalExperience);
   }, [totalExperience, setValue]);
+
+  // The "core" step's read-only preview goes further than the stored number
+  // above - it also adds time served since Date of Joining (if filled in
+  // yet), live, the same "Total Years of Experience" figure the profile will
+  // show once this faculty member is added.
+  const previewTotalExperience = useMemo(
+    () => totalYearsOfExperience(academicProfile.previousInstitutions, joiningDateValue),
+    [academicProfile.previousInstitutions, joiningDateValue]
+  );
 
   const steps: WizardStep[] = useMemo(() => [
     { key: "core", label: "Identity & Employment" },
@@ -435,38 +445,6 @@ export default function NewFacultyPage() {
                   </div>
                 )}
 
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="email">Personal Email</Label>
-                    <Input id="email" type="email" {...register("email")} placeholder="faculty@example.com" />
-                    {errors.email && <p className="text-sm text-destructive">{errors.email.message}</p>}
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="phone">Mobile No *</Label>
-                    <Input id="phone" type="tel" autoComplete="off" {...register("phone")} placeholder="+91 98765 43210" />
-                    {errors.phone && <p className="text-sm text-destructive">{errors.phone.message}</p>}
-                  </div>
-                </div>
-
-                <RepeatingGroup
-                  title="Additional Mobile Numbers"
-                  items={extraPhones}
-                  empty={{ label: "", number: "" }}
-                  onChange={setExtraPhones}
-                  addLabel="Add Number"
-                  renderRow={(item, update) => (
-                    <>
-                      <TextInput
-                        label="Label (optional)"
-                        value={item.label}
-                        onChange={(v) => update({ label: v })}
-                        placeholder="e.g. Personal, WhatsApp, or a name"
-                      />
-                      <TextInput label="Mobile Number" value={item.number} onChange={(v) => update({ number: v })} placeholder="+91 98765 43210" />
-                    </>
-                  )}
-                />
-
                 <div className="pt-2 pb-1 border-t">
                   <p className="text-sm font-medium text-muted-foreground">Role Details</p>
                 </div>
@@ -522,9 +500,9 @@ export default function NewFacultyPage() {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="experienceYears">Total Years of Experience</Label>
-                    <Input id="experienceYears" value={formatExperienceDuration(totalExperience) || "0 mos"} readOnly disabled className="bg-muted" />
+                    <Input id="experienceYears" value={formatDuration(previewTotalExperience)} readOnly disabled className="bg-muted" />
                     <p className="text-xs text-muted-foreground">
-                      Calculated automatically from the From/To dates added under Professional Experience.
+                      Calculated automatically from the From/To dates added under Professional Experience, plus time served since Date of Joining.
                     </p>
                   </div>
                 </div>
@@ -549,6 +527,66 @@ export default function NewFacultyPage() {
                   />
                   <Label htmlFor="aicteEligible" className="cursor-pointer">AICTE Eligible</Label>
                 </div>
+
+                <div className="pt-2 pb-1 border-t">
+                  <p className="text-sm font-medium text-muted-foreground">Contact Details</p>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="email">Personal Email</Label>
+                    <Input id="email" type="email" {...register("email")} placeholder="faculty@example.com" />
+                    {errors.email && <p className="text-sm text-destructive">{errors.email.message}</p>}
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="phone">Mobile No *</Label>
+                      <Button
+                        type="button"
+                        variant="link"
+                        size="sm"
+                        className="h-auto p-0 text-xs"
+                        onClick={() => setExtraPhones((p) => [...p, { label: "", number: "" }])}
+                      >
+                        + Add Number
+                      </Button>
+                    </div>
+                    <Input id="phone" type="tel" autoComplete="off" {...register("phone")} placeholder="+91 98765 43210" />
+                    {errors.phone && <p className="text-sm text-destructive">{errors.phone.message}</p>}
+                  </div>
+                </div>
+
+                {extraPhones.length > 0 && (
+                  <div className="space-y-3">
+                    {extraPhones.map((item, i) => (
+                      <div key={i} className="flex items-start gap-2">
+                        <div className="flex-1 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                          <TextInput
+                            label="Label (optional)"
+                            value={item.label}
+                            onChange={(v) => setExtraPhones((prev) => prev.map((p, idx) => (idx === i ? { ...p, label: v } : p)))}
+                            placeholder="e.g. Personal, WhatsApp, or a name"
+                          />
+                          <TextInput
+                            label="Mobile Number"
+                            value={item.number}
+                            onChange={(v) => setExtraPhones((prev) => prev.map((p, idx) => (idx === i ? { ...p, number: v } : p)))}
+                            placeholder="+91 98765 43210"
+                          />
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="mt-7"
+                          onClick={() => setExtraPhones((prev) => prev.filter((_, idx) => idx !== i))}
+                        >
+                          <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </>
             )}
 
