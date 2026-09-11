@@ -1123,12 +1123,31 @@ export interface Publication {
 // the owner (`uid`) can only read their own rows - see
 // src/app/api/college/publications/route.ts. Reuses Publication's field
 // names so it renders as a drop-in for the existing Research module UI.
+export type PublicationStatus = "PENDING" | "APPROVED" | "REJECTED";
+
 export interface ResearchPublication {
   id: string;
   collegeId: string;
   uid: string; // owning staff member - any role
   ownerName: string;
   ownerRole: UserRole;
+  // Resolved academic identity (e.g. "Professor", or generically "Faculty"
+  // for Principal/VP/HOD/Dean who have no separate FacultyMember record) -
+  // see src/lib/publications/resolveOwnerDesignation.ts. When present, this
+  // is what's displayed instead of ownerRole: the record belongs to the
+  // person's academic career, not whichever administrative role they
+  // happened to hold when it was added - undefined for genuine office roles
+  // (R&D, IQAC, T&P, Library, Exam Cell, Webmaster, College Office, College
+  // Staff), which keep showing ownerRole as before.
+  ownerDesignation?: string;
+  // Missing on every record created before self-submission shipped - treat
+  // that as APPROVED everywhere (they were all R&D-added). R&D's own direct
+  // adds always write "APPROVED"; a self-submission starts "PENDING".
+  status?: PublicationStatus;
+  reviewedBy?: string; // R&D uid who approved/rejected
+  reviewedByName?: string;
+  reviewedAt?: Timestamp;
+  rejectionReason?: string;
   title: string;
   coAuthors: string;
   journalOrConference: string;

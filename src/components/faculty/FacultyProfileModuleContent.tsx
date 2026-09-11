@@ -42,6 +42,11 @@ interface Props {
   // (/api/college/publications), which only college-scoped roles can call.
   // Omitted entirely, every other caller keeps the self-fetching behavior.
   publications?: ResearchPublication[] | null;
+  // True only when the viewer IS this profile's owner (MyProfileModulePage,
+  // principal/profile) - lets the Research tile offer "Add Publication" for
+  // self-submission. Everyone viewing someone ELSE's profile (HOD/Principal/
+  // Super Admin/Management drill-downs) leaves this unset.
+  isOwnProfile?: boolean;
 }
 
 // Renders exactly one module's content for the per-module View pages - the
@@ -49,7 +54,7 @@ interface Props {
 // pieces as the old single-scroll views (ProfileFieldsView's per-module
 // exports, PersonalDetailsView, TeachingLoadTable) so nothing here
 // duplicates field-rendering logic.
-export function FacultyProfileModuleContent({ moduleKey, faculty, teachingAssignments = [], includeTeachingAssignment = true, collegeType, publications }: Props) {
+export function FacultyProfileModuleContent({ moduleKey, faculty, teachingAssignments = [], includeTeachingAssignment = true, collegeType, publications, isOwnProfile }: Props) {
   return (
     <Card>
       <CardContent className="pt-6">
@@ -58,8 +63,8 @@ export function FacultyProfileModuleContent({ moduleKey, faculty, teachingAssign
         {moduleKey === "experience" && <ExperienceModule profile={faculty.academicProfile} includeTeachingAssignment={includeTeachingAssignment} />}
         {moduleKey === "research" && (
           publications !== undefined
-            ? <PublicationsSection publications={publications} academicProfile={faculty.academicProfile} />
-            : <PublicationsModuleView uid={faculty.userUid ?? faculty.uid} academicProfile={faculty.academicProfile} />
+            ? <PublicationsSection publications={publications} academicProfile={faculty.academicProfile} isOwnProfile={isOwnProfile} />
+            : <PublicationsModuleView uid={faculty.userUid ?? faculty.uid} academicProfile={faculty.academicProfile} isOwnProfile={isOwnProfile} />
         )}
         {moduleKey === "grants" && <GrantsModule profile={faculty.academicProfile} />}
         {moduleKey === "mentorship" && <MentorshipModule profile={faculty.academicProfile} />}

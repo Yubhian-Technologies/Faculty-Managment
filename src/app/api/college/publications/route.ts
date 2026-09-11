@@ -3,8 +3,10 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember, verifySession } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { notifyRole } from "@/lib/notify";
 import { PUBLICATION_ELIGIBLE_ROLES } from "@/lib/publications/eligibleRoles";
-import type { UserRole } from "@/types";
+import { resolveOwnerDesignation } from "@/lib/publications/resolveOwnerDesignation";
+import type { PublicationStatus, UserRole } from "@/types";
 
 // Every college-scoped staff role - any of them can read their own
 // publications; only R_AND_D can read across the whole college or write.
@@ -56,6 +58,16 @@ export async function GET(request: Request) {
     const snap = await query.get();
     const publications = snap.docs
       .map((d) => ({ id: d.id, ...d.data() }))
+      // A record with no `status` predates self-submission and was R&D-added
+      // - treat that as approved. Only R&D (manages the review queue) and the
+      // record's own owner (sees their own pending/rejected submissions) ever
+      // see anything else; every other viewer - including Principal/HOD
+      // drilling into someone else's uid - only sees approved/legacy rows.
+      .filter((p) => {
+        const pub = p as { status?: PublicationStatus; uid?: string };
+        if (!pub.status || pub.status === "APPROVED") return true;
+        return role === "R_AND_D" || role === "SUPER_ADMIN" || pub.uid === uid;
+      })
       .sort((a, b) => ((b as { publicationYear?: number }).publicationYear ?? 0) - ((a as { publicationYear?: number }).publicationYear ?? 0));
 
     return NextResponse.json({ publications });
@@ -70,7 +82,8 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember("R_AND_D");
+    const session = await requireCollegeMember(...PUBLICATION_ELIGIBLE_ROLES);
+    const isRnD = session.role === "R_AND_D";
 
     const body = (await request.json()) as {
       uid?: string;
@@ -81,7 +94,11 @@ export async function POST(request: Request) {
       indexing?: string;
       driveLink?: string;
     };
-    const { uid, title, coAuthors, journalOrConference, publicationYear, indexing, driveLink } = body;
+    // Self-submission can only ever credit the submitter's own login -
+    // any `uid` in the body is ignored for everyone except R&D, who is
+    // recording it on someone else's behalf.
+    const uid = isRnD ? body.uid : session.uid;
+    const { title, coAuthors, journalOrConference, publicationYear, indexing, driveLink } = body;
 
     if (!uid || !title || !journalOrConference || !publicationYear) {
       return NextResponse.json({ error: "uid, title, journalOrConference and publicationYear are required" }, { status: 400 });
@@ -100,8 +117,10 @@ export async function POST(request: Request) {
     let addedByName = "R&D";
     try {
       const addedBySnap = await db.collection("colleges").doc(session.collegeId).collection("users").doc(session.uid).get();
-      addedByName = (addedBySnap.data() as { name?: string } | undefined)?.name ?? "R&D";
+      addedByName = (addedBySnap.data() as { name?: string } | undefined)?.name ?? (isRnD ? "R&D" : "Unknown");
     } catch { /* best-effort */ }
+
+    const ownerDesignation = await resolveOwnerDesignation(db, session.collegeId, uid, owner.role);
 
     const now = new Date();
     const docRef = await db.collection("colleges").doc(session.collegeId).collection("publications").add({
@@ -109,6 +128,11 @@ export async function POST(request: Request) {
       uid,
       ownerName: owner.name ?? "Unknown",
       ownerRole: owner.role,
+      ...(ownerDesignation ? { ownerDesignation } : {}),
+      // R&D is the verifying authority itself - anything it adds directly is
+      // already official. Everyone else's own submission needs R&D's review
+      // before it counts as an official record.
+      status: (isRnD ? "APPROVED" : "PENDING") satisfies PublicationStatus,
       title,
       coAuthors: coAuthors ?? "",
       journalOrConference,
@@ -120,6 +144,16 @@ export async function POST(request: Request) {
       createdAt: now,
       updatedAt: now,
     });
+
+    if (!isRnD) {
+      await notifyRole(
+        db, session.collegeId, "R_AND_D",
+        "PUBLICATION_PENDING_VERIFICATION",
+        "New publication submitted for verification",
+        `${owner.name ?? "A staff member"} submitted "${title}" for verification`,
+        "/r-and-d/publications"
+      );
+    }
 
     return NextResponse.json({ id: docRef.id }, { status: 201 });
   } catch (err) {
