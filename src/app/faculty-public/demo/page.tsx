@@ -98,7 +98,7 @@ const DEMO_PROFILE: FacultyPublicProfile = {
     ],
     adminResponsibilityEntries: [
       { category: "IQAC", description: "IQAC Coordinator for the Department of CSE", fromYear: 2022 },
-      { category: "NBA_NAAC", description: "NBA Documentation Lead for B.Tech CSE Accreditation", fromYear: 2021, toYear: 2023 },
+      { category: "NBA", description: "NBA Documentation Lead for B.Tech CSE Accreditation", fromYear: 2021, toYear: 2023 },
       { category: "COMMITTEE_MEMBER", description: "Anti-Ragging Committee Member", fromYear: 2019 },
     ],
     labsEstablished: [

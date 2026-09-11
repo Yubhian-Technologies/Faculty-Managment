@@ -5,14 +5,37 @@ import {
 } from "@/components/shared/ProfileFieldPrimitives";
 import { designationLabel } from "@/lib/designations/config";
 import { PublicationsSection } from "@/components/faculty/PublicationsModuleView";
-import { totalYearsOfExperience, formatDuration } from "@/lib/faculty/experienceCalc";
+import { normalizeResourcePersonsDetails } from "@/components/faculty/TrainingEntryFields";
+import { totalYearsOfExperience, formatDuration, durationBetween } from "@/lib/faculty/experienceCalc";
 import { toDate } from "@/lib/utils";
 import {
   TRAINING_ENTRY_TYPE_LABELS, TRAINING_PARTICIPATION_ROLE_LABELS, PROFESSIONAL_BODY_LABELS,
   ADMIN_RESPONSIBILITY_CATEGORY_LABELS, AWARD_CATEGORY_LABELS, QUALIFYING_EXAM_LABELS,
   TRAINING_PROGRAM_LEVEL_LABELS, TRAINING_PROGRAM_MODE_LABELS, AWARD_LEVEL_LABELS,
 } from "@/types";
-import type { FacultyProfileFields, CollegeType, ResearchPublication } from "@/types";
+import type { FacultyProfileFields, CollegeType, ResearchPublication, TrainingEntry } from "@/types";
+
+// One-line "who this program served" summary for the read-only view - the
+// edit form (TrainingEntryFields) captures the detailed breakdown, this just
+// condenses it for display.
+function beneficiarySummary(t: TrainingEntry): string | undefined {
+  if (t.beneficiaryType === "STUDENTS") {
+    const parts = (t.beneficiaryDepartments ?? []).map(
+      (d) => `${d.courseName} - ${d.department} Yr ${d.year} (${d.sections.map((s) => `${s.sectionName}: ${s.count}`).join(", ")})`
+    );
+    const total = t.beneficiaryTotalCount !== undefined ? `${t.beneficiaryTotalCount} Students` : "Students";
+    return parts.length > 0 ? `${total} - ${parts.join("; ")}` : total;
+  }
+  if (t.beneficiaryType === "FACULTY") {
+    const bits = [
+      t.beneficiaryTotalCount !== undefined ? `${t.beneficiaryTotalCount} Faculty` : "Faculty",
+      t.beneficiaryInternalCount !== undefined ? `${t.beneficiaryInternalCount} Internal` : undefined,
+      t.beneficiaryExternalCount !== undefined ? `${t.beneficiaryExternalCount} External` : undefined,
+    ].filter(Boolean);
+    return bits.join(" · ");
+  }
+  return undefined;
+}
 
 // Prefers the real date; falls back to the legacy year-only value for a
 // record that hasn't been re-saved under the new shape yet (see
@@ -146,18 +169,22 @@ export function ExperienceModule({
         )}
       </div>
       <div className="space-y-2">
-        <SubLabel>Promotion History</SubLabel>
+        <SubLabel>Teaching</SubLabel>
         {(p.promotionHistory ?? []).length === 0 ? <p className="text-xs text-muted-foreground">None recorded.</p> : (
           <div className="space-y-2">
             {p.promotionHistory?.map((promo, i) => (
               <div key={i} className="rounded-md border bg-muted/20 shadow-sm p-2 grid grid-cols-2 sm:grid-cols-3 gap-2">
-                {/* Now stored as catalogue codes (ASSISTANT_PROFESSOR, …) since
-                    these became dropdowns - labelled here so the view doesn't
-                    show the raw code. Free text from older records and from
-                    "Other" passes through designationLabel unchanged. */}
-                <Field label="From" value={designationLabel(promo.fromDesignation)} />
-                <Field label="To" value={designationLabel(promo.toDesignation)} />
-                <Field label="Effective Year" value={promo.effectiveYear} />
+                {/* Stored as a catalogue code (ASSISTANT_PROFESSOR, …) since
+                    it's a dropdown - labelled here so the view doesn't show
+                    the raw code. Free text from "Other" passes through
+                    designationLabel unchanged. */}
+                <Field label="Designation" value={designationLabel(promo.designation)} />
+                <Field
+                  label="Experience in this Designation"
+                  value={promo.fromDate ? formatDuration(durationBetween(promo.fromDate, promo.toDate || new Date().toISOString().slice(0, 10))) : undefined}
+                />
+                <Field label="From" value={promo.fromDate} />
+                <Field label="To" value={promo.toDate ?? "Ongoing"} />
                 {promo.orderUrl && (
                   <div className="col-span-2 sm:col-span-3">
                     <DocLink url={promo.orderUrl} label="View Promotion Order" />
@@ -269,7 +296,17 @@ export function GrantsModule({ profile }: { profile: Partial<FacultyProfileField
   );
 }
 
-export function MentorshipModule({ profile }: { profile: Partial<FacultyProfileFields> | undefined }) {
+export function MentorshipModule({
+  profile, ownerName,
+}: {
+  profile: Partial<FacultyProfileFields> | undefined;
+  // This profile's own display name - fallback for entry #1 in a "Conducted"
+  // training entry's Co-Conducting Faculty list when its stored `organizer`
+  // is blank (a record saved before TrainingEntryFields started keeping that
+  // field reliably in sync - see its own doc-comment). Omitted entirely
+  // falls back further to "-".
+  ownerName?: string;
+}) {
   const p = profile ?? {};
   return (
     <Section number={5} title="Mentorship & Institutional Value">
@@ -304,14 +341,14 @@ export function MentorshipModule({ profile }: { profile: Partial<FacultyProfileF
       </div>
 
       <div className="space-y-2">
-        <SubLabel>Administrative Responsibilities</SubLabel>
+        <SubLabel>Academic Responsibilities</SubLabel>
         {(p.adminResponsibilityEntries ?? []).length === 0 ? <p className="text-xs text-muted-foreground">None recorded.</p> : (
           p.adminResponsibilityEntries?.map((r, i) => (
             <div key={i} className="rounded-md border bg-muted/20 shadow-sm p-2 grid grid-cols-2 sm:grid-cols-4 gap-2">
-              <Field label="Category" value={ADMIN_RESPONSIBILITY_CATEGORY_LABELS[r.category]} />
+              <Field label="Category" value={r.category === "OTHER" ? r.otherCategory : ADMIN_RESPONSIBILITY_CATEGORY_LABELS[r.category]} />
               <Field label="Description" value={r.description} />
-              <Field label="From" value={r.fromYear} />
-              <Field label="To" value={r.toYear ?? "Ongoing"} />
+              <Field label="From" value={formatInstitutionDate(r.fromDate, r.fromYear)} />
+              <Field label="To" value={formatInstitutionDate(r.toDate, r.toYear) ?? "Ongoing"} />
             </div>
           ))
         )}
@@ -335,10 +372,33 @@ export function MentorshipModule({ profile }: { profile: Partial<FacultyProfileF
               <Field label="National / International" value={t.levelOfProgram ? TRAINING_PROGRAM_LEVEL_LABELS[t.levelOfProgram] : undefined} />
               <Field label="Place" value={t.place} />
               <Field label="Mode of the Program" value={t.mode ? TRAINING_PROGRAM_MODE_LABELS[t.mode] : undefined} />
-              <Field label="Number of Participants" value={t.numberOfParticipants} />
+              <Field label="Beneficiaries" value={beneficiarySummary(t)} />
               <Field label="Number of Resource Persons" value={t.numberOfResourcePersons} />
-              <Field label="Resource Persons - Details" value={t.resourcePersonsDetails} />
+              <Field
+                label="Resource Persons - Details"
+                value={(() => {
+                  const list = normalizeResourcePersonsDetails(t.resourcePersonsDetails);
+                  return list.length > 0 ? list.map((d, i) => `${i + 1}. ${d}`).join(", ") : undefined;
+                })()}
+              />
               {!t.fromDate && t.year && <Field label="Year (legacy)" value={t.year} />}
+              {(t.coConductors ?? []).length > 0 && (
+                <Field
+                  label="Co-Conducting Faculty"
+                  value={[
+                    // A record saved before TrainingEntryFields started
+                    // keeping `organizer` reliably in sync can have it blank
+                    // on its own master copy - fall back to this profile's
+                    // own name there (a synced copy's organizer is always
+                    // populated, copied over at sync time, so this only ever
+                    // matters for !t.isCoConductedCopy).
+                    `1. ${t.organizer || (!t.isCoConductedCopy && ownerName) || "-"}`,
+                    ...t.coConductors!.map((c) => `${c.order}. ${c.name} (${c.department})`),
+                  ].join(", ")}
+                />
+              )}
+              {t.role === "PARTICIPATED" && <Field label="Remark" value={t.remark} />}
+              <Field label="Other Details" value={t.otherDetails} />
               {t.certificateUrl && (
                 <div className="col-span-2 sm:col-span-4"><DocLink url={t.certificateUrl} label="View Certificate" /></div>
               )}

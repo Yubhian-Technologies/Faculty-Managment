@@ -127,7 +127,7 @@ export const ROSTER_SAMPLE_ROWS: Record<string, string>[] = [
     admissionNo: "ADM2026014", hallTicketNo: "2345678901", dateOfAdmission: "2026-06-01",
     admissionType: "Management", entranceType: "JEE", entranceRank: "", jeeRank: "18452", jeePercentage: "95.5",
     seatType: "Management", scholarship: "Yes", gender: "Female", dateOfBirth: "2008-01-30", bloodGroup: "B+",
-    caste: "BC", subCaste: "BC-B", religion: "Hindu", nationality: "Indian", motherTongue: "Telugu",
+    caste: "BC-B", subCaste: "Yadava", religion: "Hindu", nationality: "Indian", motherTongue: "Telugu",
     guardianContact: "9876543212", mobileNo: "9876543213", landLineNo: "08832451234",
     email: "divyasree.k@gmail.com", aadharNo: "234567890123", rationCardNo: "RC1234567", bankAccountNo: "62345672345",
     lastAttendedInstitution: "Narayana Junior College", distanceFromResidenceKm: "5.5",

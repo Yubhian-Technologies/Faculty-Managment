@@ -4,7 +4,8 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodManageFacultyDepartment } from "@/lib/departments/scope";
-import type { Designation, EmploymentType, FacultyStatus } from "@/types";
+import { syncTrainingEntryCoConductors } from "@/lib/faculty/syncTrainingEntryCoConductors";
+import type { Designation, EmploymentType, FacultyStatus, TrainingEntry } from "@/types";
 
 export async function GET(
   _request: Request,
@@ -335,6 +336,16 @@ export async function PATCH(
         }
       } catch (cascadeErr) {
         console.error("[college/faculty/[id] PATCH] facultyName cascade failed:", cascadeErr);
+      }
+    }
+
+    if (body.academicProfile !== undefined) {
+      try {
+        const previousEntries = (snap.data() as { academicProfile?: { trainingEntries?: TrainingEntry[] } }).academicProfile?.trainingEntries;
+        const nextEntries = (body.academicProfile as { trainingEntries?: TrainingEntry[] } | undefined)?.trainingEntries;
+        await syncTrainingEntryCoConductors(db, session.collegeId, id, newDisplayName || oldDisplayName, previousEntries, nextEntries);
+      } catch (syncErr) {
+        console.error("[college/faculty/[id] PATCH] co-conductor sync failed:", syncErr);
       }
     }
 

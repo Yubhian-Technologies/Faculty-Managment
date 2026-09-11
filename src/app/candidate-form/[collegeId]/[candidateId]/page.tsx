@@ -41,12 +41,10 @@ function decimalOnly(value: string): string {
 }
 
 // This form's Caste categories split BC into BC-A..BC-E (the paper form's
-// AP/Telangana sub-groups), but the shared SUB_CASTES_BY_CASTE picklist
-// (also used by the faculty Personal Details form) only has one bucket for
-// all of BC - so every BC-* group shares that same sub-caste list.
+// AP/Telangana sub-groups) - same split the shared Caste type itself now
+// uses (see types/core.ts), so each resolves directly via SUB_CASTES_BY_CASTE.
 function subCasteOptionsFor(caste: string): string[] {
-  if (caste === "OC" || caste === "SC" || caste === "ST") return SUB_CASTES_BY_CASTE[caste as Caste] ?? [];
-  if (caste.startsWith("BC")) return SUB_CASTES_BY_CASTE.BC ?? [];
+  if (caste === "OC" || caste === "SC" || caste === "ST" || caste.startsWith("BC")) return SUB_CASTES_BY_CASTE[caste as Caste] ?? [];
   return []; // EWS / Other - no fixed list, falls back to free text
 }
 

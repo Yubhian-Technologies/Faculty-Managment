@@ -365,7 +365,12 @@ export function RepeatingGroup<T>({
 }: {
   title: string;
   items: T[] | undefined;
-  empty: T;
+  // A plain object is reused as-is for every new row (existing behavior).
+  // Pass a function instead when each new row needs its own unique value
+  // (e.g. a fresh id) rather than sharing one object reference - see the
+  // FDP/Workshop/MOOC training-entries list, whose rows need a stable id
+  // for cross-profile co-conductor sync.
+  empty: T | (() => T);
   onChange: (next: T[]) => void;
   renderRow: (item: T, update: (patch: Partial<T>) => void) => React.ReactNode;
   addLabel?: string;
@@ -375,7 +380,7 @@ export function RepeatingGroup<T>({
     <div className="space-y-3 rounded-lg border p-3">
       <div className="flex items-center justify-between">
         <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{title}</p>
-        <Button type="button" variant="outline" size="sm" onClick={() => onChange([...list, empty])}>
+        <Button type="button" variant="outline" size="sm" onClick={() => onChange([...list, typeof empty === "function" ? (empty as () => T)() : empty])}>
           {addLabel}
         </Button>
       </div>

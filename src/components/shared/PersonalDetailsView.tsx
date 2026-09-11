@@ -75,10 +75,14 @@ export function PersonalDetailsView({ value, hideLegalName = false }: Props) {
         <Field label="Date of Birth" value={p.dateOfBirth ? formatDate(p.dateOfBirth) : undefined} />
         <Field label="Gender" value={p.gender} />
         {!hideLegalName && <Field label="Full Name (as per SSC)" value={p.legalName} />}
-        <Field label="Father / Husband Name" value={p.fatherName} />
+        <Field label="Father Name" value={p.fatherName} />
         <Field label="Mother Name" value={p.motherName} />
         <Field label="Religion" value={p.religion ? (RELIGION_LABELS[p.religion as Religion] ?? p.religion) : undefined} />
-        <Field label="Caste" value={p.caste ? (CASTE_LABELS[p.caste as Caste] ?? p.caste) : undefined} />
+        {/* A record saved before the bare "BC" option was split into
+            BC-A..BC-E (see types/core.ts) still has that removed value on
+            file - shown as blank rather than a stale "BC" until it's re-saved
+            with a real category. */}
+        <Field label="Caste" value={p.caste && p.caste !== "BC" ? (CASTE_LABELS[p.caste as Caste] ?? p.caste) : undefined} />
         <Field label="Sub Caste" value={p.subCaste} />
         <Field label="Aadhar No" value={p.aadharNo} />
         <Field label="PAN No" value={p.panNo} />
@@ -103,7 +107,7 @@ export function PersonalDetailsView({ value, hideLegalName = false }: Props) {
           <Field label="Blood Group" value={p.bloodGroup} />
           {p.maritalStatus === "Married" && (
             <>
-              <Field label="Spouse Name" value={p.spouseName} />
+              <Field label={p.gender === "Female" ? "Husband Name" : "Spouse Name"} value={p.spouseName} />
               <Field label="Number of Children" value={p.numberOfChildren !== undefined ? String(p.numberOfChildren) : undefined} />
             </>
           )}
