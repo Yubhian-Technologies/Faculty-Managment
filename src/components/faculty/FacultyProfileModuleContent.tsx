@@ -9,6 +9,7 @@ import {
 import { ResearchInnovationModule } from "@/components/faculty/ResearchInnovationModule";
 import { TeachingLoadTable } from "@/components/faculty/TeachingLoadTable";
 import { buildTeachingLoadRows } from "@/lib/teaching/buildTeachingLoadRows";
+import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import type { PersonalDetailsSource } from "@/components/shared/PersonalDetailsView";
 import type { ProfileModuleKey } from "@/lib/faculty/profileModules";
 import type { FacultyProfileFields, TeachingAssignment, CollegeType, ResearchPublication } from "@/types";
@@ -20,6 +21,9 @@ import type { FacultyProfileFields, TeachingAssignment, CollegeType, ResearchPub
 export interface FacultyProfileSource extends PersonalDetailsSource {
   academicProfile?: FacultyProfileFields;
   department?: string;
+  // Name (as per PAN) - facultyDisplayName() prefers legalName (already part
+  // of PersonalDetailsSource) but falls back to this when a record has none.
+  name?: string;
   joiningLetterUrl?: string;
   appointmentLetterUrl?: string;
   uid?: string;      // FMSUser (HOD/Principal self-profile) login uid
@@ -78,7 +82,7 @@ export function FacultyProfileModuleContent({ moduleKey, faculty, teachingAssign
           <ResearchInnovationModule uid={faculty.userUid ?? faculty.uid} academicProfile={faculty.academicProfile} publications={publications} isOwnProfile={isOwnProfile} />
         )}
         {moduleKey === "grants" && <GrantsModule profile={faculty.academicProfile} />}
-        {moduleKey === "mentorship" && <MentorshipModule profile={faculty.academicProfile} />}
+        {moduleKey === "mentorship" && <MentorshipModule profile={faculty.academicProfile} ownerName={facultyDisplayName(faculty)} />}
         {moduleKey === "financial" && <FinancialModule profile={faculty.academicProfile} />}
         {moduleKey === "others" && <OthersModule profile={faculty.academicProfile} />}
         {moduleKey === "teaching-load" && (

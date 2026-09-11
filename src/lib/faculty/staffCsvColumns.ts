@@ -21,7 +21,7 @@ export const STAFF_COLUMNS: StaffCsvColumn[] = [
   { key: "isActive",                   label: "Active" },
   { key: "gender",                      label: "Gender" },
   { key: "legalName",                    label: "Legal Name (as per SSC)" },
-  { key: "fatherName",                    label: "Father / Husband Name" },
+  { key: "fatherName",                    label: "Father Name" },
   { key: "motherName",                     label: "Mother Name" },
   { key: "religion",                        label: "Religion" },
   { key: "caste",                            label: "Caste" },

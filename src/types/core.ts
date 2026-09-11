@@ -298,12 +298,19 @@ export const RELIGION_LABELS: Record<Religion, string> = {
   BUDDHIST: "Buddhist",
   OTHER: "Other",
 };
-export type Caste = "OC" | "EBC" | "EPC" | "BC" | "SC" | "ST" | "OTHER";
+// BC (Backward Class) is split straight into its AP/Telangana reservation
+// groups (BC-A/B/C/D/E) rather than a single "BC" value with a separate BC
+// Category field - there is no longer a bare "BC" option.
+export type Caste = "OC" | "EBC" | "EPC" | "BC-A" | "BC-B" | "BC-C" | "BC-D" | "BC-E" | "SC" | "ST" | "OTHER";
 export const CASTE_LABELS: Record<Caste, string> = {
   OC: "OC",
   EBC: "EBC",
   EPC: "EPC",
-  BC: "BC",
+  "BC-A": "BC-A",
+  "BC-B": "BC-B",
+  "BC-C": "BC-C",
+  "BC-D": "BC-D",
+  "BC-E": "BC-E",
   SC: "SC",
   ST: "ST",
   OTHER: "Other",
@@ -314,6 +321,20 @@ export const CASTE_LABELS: Record<Caste, string> = {
 // Religion/Caste above) since they're only ever used as freeform sub-
 // classification text. EPC has no fixed list here - its Sub Caste field
 // falls back to free text, same as "OTHER" does for every caste.
+//
+// The BC-A/B/C/D/E lists below are all the same, full set of sub-castes that
+// used to sit under one shared "BC" value - the real per-category split
+// hasn't been captured yet, so each of the five picks from this same list for
+// now until that mapping is defined.
+const BC_SUB_CASTES = [
+  "Devanga", "Kummari", "Nai Brahmin", "Kalinga", "Gowda", "Cristian", "Kurama",
+  "Korpula Velama", "Vishwa Brahmin", "Agnikula Kshatriya", "Turupu Kapu",
+  "Karnibakthulu", "Settibalija", "Padmasali", "Rajaka", "Sri Sayana",
+  "Munnurukapu", "Yadava", "Velama", "Surya Balija", "Kummara", "Poosala",
+  "Jangam", "Perika", "Sagara", "Christian Mala", "Bhatraju", "Kambali",
+  "Uppara", "Bondili", "Vyshnavas", "Bukka", "Mutrasi", "Adi Andhra Christian",
+  "Telukula",
+];
 export const SUB_CASTES_BY_CASTE: Partial<Record<Caste, string[]>> = {
   OC: [
     "Brahmin", "Kshatriya", "Vysya", "Kapu", "Reddy", "Aryavysya", "Kamma", "Naidu",
@@ -321,15 +342,11 @@ export const SUB_CASTES_BY_CASTE: Partial<Record<Caste, string[]>> = {
     "Padmanayaka Velamadoralu", "Vellama",
   ],
   EBC: ["Faqir", "Muslim", "Shaik"],
-  BC: [
-    "Devanga", "Kummari", "Nai Brahmin", "Kalinga", "Gowda", "Cristian", "Kurama",
-    "Korpula Velama", "Vishwa Brahmin", "Agnikula Kshatriya", "Turupu Kapu",
-    "Karnibakthulu", "Settibalija", "Padmasali", "Rajaka", "Sri Sayana",
-    "Munnurukapu", "Yadava", "Velama", "Surya Balija", "Kummara", "Poosala",
-    "Jangam", "Perika", "Sagara", "Christian Mala", "Bhatraju", "Kambali",
-    "Uppara", "Bondili", "Vyshnavas", "Bukka", "Mutrasi", "Adi Andhra Christian",
-    "Telukula",
-  ],
+  "BC-A": BC_SUB_CASTES,
+  "BC-B": BC_SUB_CASTES,
+  "BC-C": BC_SUB_CASTES,
+  "BC-D": BC_SUB_CASTES,
+  "BC-E": BC_SUB_CASTES,
   SC: ["Mala", "Madiga", "Mala Dasu"],
   ST: ["Koya"],
 };
@@ -379,7 +396,7 @@ export interface FMSUser {
   // Personal / statutory details (same field names as FacultyMember below, for consistency)
   gender?: "Male" | "Female" | "Other";
   legalName?: string; // name as per SSC certificates (CAPITAL LETTERS)
-  fatherName?: string; // father or husband name
+  fatherName?: string;
   motherName?: string;
   religion?: Religion;
   caste?: Caste;
@@ -962,7 +979,7 @@ export interface FacultyMember {
   // See facultyDisplayName() (src/lib/faculty/facultyDisplayName.ts).
   legalName?: string;
   nameAsPerAadhar?: string; // name exactly as printed on the Aadhar card
-  fatherName?: string; // father or husband name
+  fatherName?: string;
   motherName?: string;
   religion?: Religion;
   caste?: Caste;
@@ -1102,9 +1119,12 @@ export interface PreviousInstitution {
 
 // Employment Details — Promotion History (NBA/AICTE).
 export interface PromotionRecord {
-  fromDesignation: string;
-  toDesignation: string;
-  effectiveYear: number;
+  designation: string;
+  // "YYYY-MM-DD" - toDate blank means still serving in this designation, so
+  // its experience is computed up to today (see PromotionFields/durationBetween)
+  // and keeps increasing day by day until one is set.
+  fromDate?: string;
+  toDate?: string;
   orderUrl?: string; // promotion order document
 }
 
@@ -1260,11 +1280,45 @@ export const TRAINING_PROGRAM_MODE_LABELS: Record<TrainingProgramMode, string> =
   HYBRID: "Hybrid",
 };
 
+export type TrainingBeneficiaryType = "STUDENTS" | "FACULTY";
+export const TRAINING_BENEFICIARY_TYPE_LABELS: Record<TrainingBeneficiaryType, string> = {
+  STUDENTS: "Students",
+  FACULTY: "Faculty",
+};
+
+export interface TrainingBeneficiarySection {
+  sectionId: string;
+  sectionName: string;
+  count: number;
+}
+export interface TrainingBeneficiaryDepartmentEntry {
+  courseId: string;
+  courseName: string;
+  departmentId: string;
+  department: string;
+  year: number;
+  sections: TrainingBeneficiarySection[];
+}
+export interface TrainingCoConductor {
+  order: number; // 2, 3, ... - the organizer themself is implicitly #1
+  facultyId: string;
+  name: string;
+  department: string;
+}
+
 export interface TrainingEntry {
+  // Stable id, generated client-side (crypto.randomUUID()) the first time an
+  // entry gets a co-conductor - lets the server match the same entry across
+  // the organizer's and every co-conductor's own trainingEntries array when
+  // keeping synced copies up to date (see syncTrainingEntryCoConductors).
+  id?: string;
   type: TrainingEntryType;
   role?: TrainingParticipationRole; // did they attend, or run it themselves - applies to any type, not just FDP
   title: string; // Title of the Program
-  organizer: string; // Name of the Faculty / Coordinator
+  // Name of the Faculty / Coordinator - auto-set to the profile owner's own
+  // name whenever role is CONDUCTED (see TrainingEntryFields); not a free
+  // text field the user types into directly any more.
+  organizer: string;
   // "YYYY-MM-DD" - replaces the old year-only shape (see legacy `year` below).
   // durationDays is auto-computed from these two, not typed in directly.
   fromDate?: string;
@@ -1273,14 +1327,39 @@ export interface TrainingEntry {
   levelOfProgram?: TrainingProgramLevel;
   place?: string;
   mode?: TrainingProgramMode;
-  numberOfParticipants?: number;
   numberOfResourcePersons?: number;
-  resourcePersonsDetails?: string;
+  // One entry per resource person - length follows numberOfResourcePersons
+  // (see TrainingEntryFields), not typed as one freeform block any more. A
+  // record saved before this change still has this as a plain string in
+  // Firestore - every reader normalizes via normalizeResourcePersonsDetails()
+  // (TrainingEntryFields.tsx) rather than trusting this type at runtime.
+  resourcePersonsDetails?: string[];
   certificateUrl?: string;
   // Legacy year-only shape (Faculty's edit form no longer sets this - see
   // fromDate/toDate above; Supporting Staff's own simpler Training/
   // Achievements form, TrainingAchievementsFields.tsx, still uses it as-is).
   year?: number;
+
+  // Who this program served - shown regardless of Participated/Conducted.
+  beneficiaryType?: TrainingBeneficiaryType;
+  beneficiaryTotalCount?: number;
+  beneficiaryDepartments?: TrainingBeneficiaryDepartmentEntry[]; // STUDENTS only
+  beneficiaryInternalCount?: number; // FACULTY only
+  beneficiaryExternalCount?: number; // FACULTY only
+
+  // Co-conducting faculty - CONDUCTED only, set on the organizer's own
+  // ("master") copy of the entry.
+  coConductors?: TrainingCoConductor[];
+  // Set on every synced copy (see syncTrainingEntryCoConductors) - whose
+  // entry this originally is. Absent on the master copy itself.
+  ownerFacultyId?: string;
+  ownerFacultyName?: string;
+  // True only on a co-conductor's own synced copy - rendered read-only in
+  // the form since edits belong on the organizer's ("master") copy.
+  isCoConductedCopy?: boolean;
+
+  remark?: string; // PARTICIPATED only, replaces organizer/co-conductors there
+  otherDetails?: string; // always shown, trailing free-text field
 }
 
 export type ProfessionalBody =
@@ -1307,26 +1386,35 @@ export interface ProfessionalMembership {
 }
 
 export type AdminResponsibilityCategory =
-  | "COORDINATOR"
   | "COMMITTEE_MEMBER"
-  | "NBA_NAAC"
+  | "NBA"
+  | "NAAC"
+  | "NIRF"
   | "IQAC"
-  | "EXAMINATION_DUTY"
   | "OTHER";
 export const ADMIN_RESPONSIBILITY_CATEGORY_LABELS: Record<
   AdminResponsibilityCategory,
   string
 > = {
-  COORDINATOR: "Coordinator Role",
-  COMMITTEE_MEMBER: "Committee Membership",
-  NBA_NAAC: "NBA / NAAC Work",
+  COMMITTEE_MEMBER: "Committee Member",
+  NBA: "NBA",
+  NAAC: "NAAC",
+  NIRF: "NIRF",
   IQAC: "IQAC",
-  EXAMINATION_DUTY: "Examination Duty",
   OTHER: "Other",
 };
 export interface AdminResponsibilityEntry {
   category: AdminResponsibilityCategory;
+  // Free-text category name - only meaningful (and shown) when category === "OTHER".
+  otherCategory?: string;
   description: string;
+  // "YYYY-MM-DD" - replaces the old year-only shape below. toDate blank means
+  // still ongoing (shown as such until it's set).
+  fromDate?: string;
+  toDate?: string;
+  // Legacy year-only shape - a record saved before fromDate/toDate existed
+  // keeps showing these until it's next re-saved (same read-time-fallback
+  // pattern as PreviousInstitution - see its own doc-comment).
   fromYear?: number;
   toYear?: number; // blank = ongoing
 }

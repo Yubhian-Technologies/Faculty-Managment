@@ -8,7 +8,7 @@ const SIZE_CLASSES = {
 } as const;
 
 interface AvatarProps {
-  name: string;
+  name: string | undefined | null;
   photoUrl?: string;
   size?: keyof typeof SIZE_CLASSES;
   className?: string;
@@ -26,7 +26,7 @@ export function Avatar({ name, photoUrl, size = "md", className }: AvatarProps) 
       {photoUrl ? (
         // Firebase Storage URLs aren't on the next/image remote allowlist; the rest of
         // the app also renders user-supplied/external images with a plain <img>.
-        <img src={photoUrl} alt={name} className="h-full w-full object-cover" />
+        <img src={photoUrl} alt={name ?? ""} className="h-full w-full object-cover" />
       ) : (
         <span>{getInitials(name)}</span>
       )}

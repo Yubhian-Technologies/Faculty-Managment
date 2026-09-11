@@ -52,7 +52,7 @@ interface Props {
 // always PATCH the whole academicProfile object back intact - those PATCH
 // routes replace the field wholesale rather than deep-merging.
 export function FacultyProfileModuleEditor({
-  moduleKey, record, onChange, includeTeachingAssignment = true, teachingRows = [], onTeachingRowsChange, collegeType,
+  moduleKey, record, onChange, facultyId, includeTeachingAssignment = true, teachingRows = [], onTeachingRowsChange, collegeType,
   requiredPersonalFields, department,
 }: Props) {
   const academicProfile = record.academicProfile ?? {};
@@ -78,7 +78,14 @@ export function FacultyProfileModuleEditor({
     case "grants":
       return <GrantsFields value={academicProfile} onChange={(ap) => onChange({ academicProfile: ap })} />;
     case "mentorship":
-      return <MentorshipFields value={academicProfile} onChange={(ap) => onChange({ academicProfile: ap })} />;
+      return (
+        <MentorshipFields
+          value={academicProfile}
+          onChange={(ap) => onChange({ academicProfile: ap })}
+          ownerFacultyId={facultyId}
+          ownerFacultyName={record.legalName?.trim() || record.name?.trim()}
+        />
+      );
     case "financial":
       return <FinancialFields value={academicProfile} onChange={(ap) => onChange({ academicProfile: ap })} />;
     case "others":
