@@ -4,50 +4,31 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
-  getHodTechnicalDesignations, getNonTechnicalDesignations, designationLabel,
-  FACULTY_DESIGNATIONS, FACULTY_EMPLOYMENT_CATEGORIES,
-} from "@/lib/designations/config";
-import {
   matchOption,
   GENDER_OPTIONS, MARITAL_STATUS_OPTIONS, RATIFICATION_STATUS_OPTIONS, RELIGION_OPTIONS, CASTE_OPTIONS, BLOOD_GROUP_OPTIONS,
 } from "@/lib/import/fieldConstraints";
-import { SUPPORTING_STAFF_EMPLOYMENT_TYPE_LABELS, FACULTY_STATUS_LABELS } from "@/types";
-import type { CollegeType } from "@/types";
-
-// Which designation catalogue a "Fix Row" dialog's Designation field should
-// offer - matches the same kind the manual Add form for that module uses
-// (DesignationOptions.tsx): "teaching" for Faculty, "supporting" for HOD's
-// (Technical) Supporting Staff, "non-technical" for College Office's
-// Non-Technical Staff.
-export type ImportDesignationKind = "teaching" | "supporting" | "non-technical";
+import { FACULTY_STATUS_LABELS } from "@/types";
 
 const STATUS_KEYS = ["ACTIVE", "ON_LEAVE", "RESIGNED", "RETIRED"] as const;
 // Columns whose template guidance states a plain Yes/No answer.
 const YES_NO_KEYS = new Set(["differentlyAbled", "permanentSameAsTemporary", "aicteEligible", "hasPHD"]);
 
-// The fixed option list a column's Select should offer, sourced from exactly
-// the same catalogues the single "Add Faculty/Staff" form's own dropdowns use
-// (src/lib/designations/config.ts) and the same option sets the import route
-// itself validates against (src/lib/import/fieldConstraints.ts) - so a value
-// picked here can never fail the row for not matching what's allowed.
-// `undefined` means the column has no fixed set and stays a plain text Input.
+// The fixed option list a column's Select should offer - Designation is now
+// the caller's own admin-curated Designation Catalog list (fetched once by
+// the import page and passed straight through - no "Other" any more, an
+// import row's designation must exactly match a real catalog entry), the
+// rest are the same option sets the import route itself validates against
+// (src/lib/import/fieldConstraints.ts) - so a value picked here can never
+// fail the row for not matching what's allowed. `undefined` means the
+// column has no fixed set and stays a plain text Input.
 function fixFieldOptions(
   fieldKey: string,
-  collegeType: CollegeType | undefined,
-  designationKind: ImportDesignationKind,
+  designationOptions: string[] | undefined,
   departmentOptions: string[] | undefined,
 ): string[] | undefined {
   switch (fieldKey) {
-    case "designation": {
-      const codes = designationKind === "teaching" ? FACULTY_DESIGNATIONS
-        : designationKind === "supporting" ? getHodTechnicalDesignations(collegeType)
-        : getNonTechnicalDesignations(collegeType);
-      return [...codes.map((c) => designationLabel(c)), "Other"];
-    }
-    case "employmentType":
-      return designationKind === "teaching"
-        ? [...FACULTY_EMPLOYMENT_CATEGORIES, "Other"]
-        : Object.values(SUPPORTING_STAFF_EMPLOYMENT_TYPE_LABELS);
+    case "designation":
+      return designationOptions ?? [];
     case "status":
       return STATUS_KEYS.map((s) => FACULTY_STATUS_LABELS[s]);
     case "gender":
@@ -76,8 +57,10 @@ interface Props {
   value: string;
   placeholder?: string;
   onChange: (value: string) => void;
-  collegeType: CollegeType | undefined;
-  designationKind: ImportDesignationKind;
+  // This module's own admin-curated Designation Catalog entries (fetched
+  // once by the import page - see DesignationCatalogCard), for fieldKey
+  // "designation" only.
+  designationOptions?: string[];
   // Only Non-Technical Staff's Fix dialog passes this (College Office's own
   // "Add Staff" form is the only one of the three with a Department picker -
   // Faculty has no Department column at all, and HOD's Supporting Staff
@@ -87,16 +70,16 @@ interface Props {
 }
 
 // One "Fix Row" dialog field: a dropdown wherever the import template states
-// a fixed set of options - Designation, Employment Type, Status, Gender,
-// Marital Status, Ratification Status, Religion, Caste, Blood Group, and any
-// plain Yes/No column - so correcting a rejected value is a pick from the
-// same list the Add/Edit form itself offers, not a guess at exact spelling.
+// a fixed set of options - Designation, Status, Gender, Marital Status,
+// Ratification Status, Religion, Caste, Blood Group, and any plain Yes/No
+// column - so correcting a rejected value is a pick from the same list the
+// Add/Edit form itself offers, not a guess at exact spelling.
 // Falls through to a plain text Input for every other column, unchanged from
 // before.
 export function ImportFixField({
-  fieldKey, label, required, value, placeholder, onChange, collegeType, designationKind, departmentOptions,
+  fieldKey, label, required, value, placeholder, onChange, designationOptions, departmentOptions,
 }: Props) {
-  const options = fixFieldOptions(fieldKey, collegeType, designationKind, departmentOptions);
+  const options = fixFieldOptions(fieldKey, designationOptions, departmentOptions);
 
   if (!options) {
     return (
@@ -116,8 +99,8 @@ export function ImportFixField({
   // The row's original value is whatever text failed import - matched back
   // to one of this field's known options the same case/punctuation-tolerant
   // way the import route itself matches it, so a near-exact value (e.g.
-  // "regular" for Employment Type) still shows pre-selected instead of
-  // blank. A value with no match (an abbreviation, a typo, an off-catalogue
+  // "asst prof" for Designation) still shows pre-selected instead of blank.
+  // A value with no match (an abbreviation, a typo, an off-catalogue
   // title) leaves the dropdown unselected - the row's error message above
   // already says what was wrong, and any pick here is guaranteed valid.
   const selected = matchOption(value, options);

@@ -2,13 +2,14 @@ import { HIGHEST_QUALIFICATION_OPTIONS } from "@/lib/import/fieldConstraints";
 
 // Faculty CSV column definitions.
 //
-// IMPORT_COLUMNS/IMPORT_HINTS (below COLUMNS/HINTS) are the only columns the
-// bulk-import template (src/app/(dashboard)/hod/faculty/import/page.tsx) and
-// import route (src/app/api/college/faculty/import/route.ts) accept -
-// deliberately just the core identity/employment fields, not the full
-// Academic Profile. COLUMNS/HINTS remain the full column set used only by the
-// full-detail export (src/lib/faculty/exportFacultyCsv.ts) - import and
-// export are intentionally no longer symmetric.
+// getFacultyImportColumns/getFacultyImportHints/getFacultyImportSampleRows
+// (below COLUMNS/HINTS) build the only columns the bulk-import template
+// (src/app/(dashboard)/hod/faculty/import/page.tsx) and import route
+// (src/app/api/college/faculty/import/route.ts) accept - deliberately just
+// the core identity/employment fields, not the full Academic Profile.
+// COLUMNS/HINTS remain the full column set used only by the full-detail
+// export (src/lib/faculty/exportFacultyCsv.ts) - import and export are
+// intentionally no longer symmetric.
 
 export interface FacultyCsvColumn {
   key: string;
@@ -29,7 +30,6 @@ export const COLUMNS: FacultyCsvColumn[] = [
   { key: "designation",        label: "Designation",                  required: true,  sample: "Asst. Prof." },
   { key: "qualification",      label: "Qualification",                required: true,  sample: "M.Tech" },
   { key: "specialization",     label: "Specialization",               required: false, sample: "Machine Learning" },
-  { key: "employmentType",     label: "Employee Category",            required: true,  sample: "Regular", aliases: ["Employment Type", "Employment", "Type of Employment"] },
   { key: "status",             label: "Status (Active/On Leave/Resigned/Retired)", required: false, sample: "Active", aliases: ["Status"] },
   { key: "joiningDate",        label: "Joining Date (YYYY-MM-DD)",    required: true,  sample: "2020-06-01", aliases: ["Joining Date", "Date of Joining", "DOJ"] },
   { key: "dateOfJoiningDepartment", label: "Date of Joining Department (YYYY-MM-DD)", required: false, sample: "", aliases: ["Department Joining Date"] },
@@ -305,7 +305,6 @@ export const COLUMNS: FacultyCsvColumn[] = [
 
 export const HINTS = [
   "Designation: any teaching title used by your college (e.g. Professor, Assoc. Prof., Asst. Prof., Lecturer, Visiting Faculty, Adjunct Faculty for Engineering/Pharmacy/Dental; Principal, HOD, PGT, TGT, PRT etc. for Degree/Polytechnic/School colleges)",
-  "Employment Type: Regular, Permanent, Contract, Visiting, Part-Time",
   "Status: Active, On Leave, Resigned, Retired (defaults to Active if left blank)",
   "Gender: Male, Female, Other",
   "Marital Status: Single, Married",
@@ -339,7 +338,13 @@ export const TEACHING_SUMMARY_COLUMN: FacultyCsvColumn = {
 // one. Personal-detail extras (father/mother name, religion, bank details,
 // addresses, etc.) and the Academic Profile aren't part of this template -
 // fill those in afterward from the Edit Faculty page.
-export const IMPORT_COLUMNS: FacultyCsvColumn[] = [
+// Designation is this college's own admin-curated catalog (see
+// DesignationCatalogCard) - no hardcoded list, no "Other" any more, so the
+// template's own instructions have to be built from whatever the admin
+// actually configured rather than a fixed string, or they'd describe options
+// that don't exist.
+export function getFacultyImportColumns(designationOptions: string[]): FacultyCsvColumn[] {
+  return [
   { key: "employeeId",   label: "Employee ID",   required: true,  sample: "Required; any text; unique", aliases: ["Emp ID", "Employee Code", "Employee No", "Staff ID"] },
   { key: "legalName",    label: "Full Name (as per SSC)", required: true, sample: "Required; text", aliases: ["Legal Name (as per SSC)"] },
   // Optional - matches the name on the faculty member's PAN card, for
@@ -355,14 +360,15 @@ export const IMPORT_COLUMNS: FacultyCsvColumn[] = [
   { key: "collegeEmail", label: "College Email", required: true,  sample: "Required; must contain @", aliases: ["Email", "Email ID"] },
   { key: "password",     label: "Login Password (min 8 characters)", required: true, sample: "Required; minimum 8 characters", aliases: ["Password"] },
   { key: "phone",        label: "Mobile No",     required: true, sample: "Required; phone/text", aliases: ["Phone", "Mobile", "Mobile Number", "Phone Number", "Contact Number"] },
-  { key: "designation",  label: "Designation",   required: true,  sample: "Required: Professor / Assistant Professor / Associate Professor / Associate Professor (Sr) / Visiting Professor / Assistant Professor of Practice / Professor of Practice / Sr. Wellness Counsellor / Other - common abbreviations (Prof., Asst. Prof., Assoc. Prof., Assoc. Prof. (Sr)) are accepted too" },
+  { key: "designation",  label: "Designation",   required: true,  sample: designationOptions.length
+      ? `Required: ${designationOptions.join(" / ")} - common abbreviations (Prof., Asst. Prof., Assoc. Prof.) are accepted too`
+      : "Required - add at least one Designation under Settings > Designations first" },
   // Names the same options the Add/Edit Faculty dropdown offers, so a sheet
   // uses the spellings the form produces rather than inventing "PhD"/"Mtech".
   // Still accepts anything else, deliberately: the dropdown's own "Others"
   // stores whatever was typed, so a closed set here would reject qualifications
   // the app itself can create.
   { key: "qualification", label: "Highest Qualification", required: true, sample: `Required; ${HIGHEST_QUALIFICATION_OPTIONS.join(" / ")} / other`, aliases: ["Qualification"] },
-  { key: "employmentType", label: "Employee Category", required: true, sample: "Required: Regular / Visiting / Contract / Professor of Practice / Assistant Professor of Practice / Regular(Hyd) / Other", aliases: ["Employment Type", "Employment", "Type of Employment"] },
   { key: "joiningDate",  label: "Date of Joining Institution (DD-MM-YYYY)", required: true, sample: "Required; DD-MM-YYYY", aliases: ["Joining Date", "Date of Joining", "DOJ"] },
   { key: "gender",            label: "Gender",                       required: true, sample: "Required: Male / Female / Other" },
   { key: "dateOfBirth",       label: "Date of Birth (DD-MM-YYYY)",   required: true, sample: "Required; DD-MM-YYYY", aliases: ["DOB"] },
@@ -370,24 +376,30 @@ export const IMPORT_COLUMNS: FacultyCsvColumn[] = [
   { key: "aadharNo",          label: "Aadhar No",                    required: true, sample: "Required; text" },
   { key: "panNo",             label: "PAN No",                       required: true, sample: "Required; text" },
   { key: "ratificationStatus",label: "Ratification Status",          required: true, sample: "Required: Ratified / Not Ratified" },
-];
+  ];
+}
 
 // Five filled-in rows for the template workbook's second sheet - what a
 // correctly-completed row looks like for every column, which the guidance row
 // on sheet one can only describe. Keyed by column key rather than written as a
 // positional array so adding or reordering a column can't silently shift the
-// data under the wrong headers.
+// data under the wrong headers. Designation cycles through this college's own
+// live catalog (falling back to a plain placeholder if the admin hasn't added
+// any yet) so every sample row is itself a value that would actually pass
+// import, not a stale hardcoded title.
 //
 // Login Password now gets a real, distinct-per-row sample value since the
 // column is mandatory (every row creates a real login on import) - each one
 // MUST be changed to something unique before real use; see the Login
 // Password hint below. Never reuse these literal strings for a real account.
-export const IMPORT_SAMPLE_ROWS: Record<string, string>[] = [
+export function getFacultyImportSampleRows(designationOptions: string[]): Record<string, string>[] {
+  const designation = (i: number) => designationOptions[i % designationOptions.length] ?? "";
+  return [
   {
     employeeId: "FAC001", legalName: "ANITHA REDDY", name: "Dr. Anitha Reddy",
     collegeEmail: "anitha.reddy@college.edu", password: "ChangeMe#101", phone: "9876543210",
-    designation: "Professor", qualification: "Ph.D",
-    employmentType: "Regular", joiningDate: "15-06-2012",
+    designation: designation(0), qualification: "Ph.D",
+    joiningDate: "15-06-2012",
     gender: "Female", dateOfBirth: "22-03-1978",
     nameAsPerAadhar: "Anitha Reddy",
     aadharNo: "123456789012", panNo: "ABCDE1234F",
@@ -396,8 +408,8 @@ export const IMPORT_SAMPLE_ROWS: Record<string, string>[] = [
   {
     employeeId: "FAC002", legalName: "SURESH KUMAR", name: "Mr. Suresh Kumar",
     collegeEmail: "suresh.kumar@college.edu", password: "ChangeMe#102", phone: "9876543211",
-    designation: "Assistant Professor", qualification: "M.Tech",
-    employmentType: "Regular", joiningDate: "01-07-2019",
+    designation: designation(1), qualification: "M.Tech",
+    joiningDate: "01-07-2019",
     gender: "Male", dateOfBirth: "05-11-1990",
     nameAsPerAadhar: "Suresh Kumar",
     aadharNo: "234567890123", panNo: "BCDEF2345G",
@@ -406,8 +418,8 @@ export const IMPORT_SAMPLE_ROWS: Record<string, string>[] = [
   {
     employeeId: "FAC003", legalName: "DIVYA NAIR", name: "Ms. Divya Nair",
     collegeEmail: "divya.nair@college.edu", password: "ChangeMe#103", phone: "9876543212",
-    designation: "Assistant Professor", qualification: "M.Tech",
-    employmentType: "Contract", joiningDate: "16-08-2022",
+    designation: designation(2), qualification: "M.Tech",
+    joiningDate: "16-08-2022",
     gender: "Female", dateOfBirth: "30-01-1995",
     nameAsPerAadhar: "Divya Nair",
     aadharNo: "345678901234", panNo: "CDEFG3456H",
@@ -416,8 +428,8 @@ export const IMPORT_SAMPLE_ROWS: Record<string, string>[] = [
   {
     employeeId: "FAC004", legalName: "IMRAN SHAIK", name: "Dr. Imran Shaik",
     collegeEmail: "imran.shaik@college.edu", password: "ChangeMe#104", phone: "9876543213",
-    designation: "Associate Professor", qualification: "Ph.D",
-    employmentType: "Regular", joiningDate: "04-01-2016",
+    designation: designation(3), qualification: "Ph.D",
+    joiningDate: "04-01-2016",
     gender: "Male", dateOfBirth: "19-07-1984",
     nameAsPerAadhar: "Imran Shaik",
     aadharNo: "456789012345", panNo: "DEFGH4567I",
@@ -426,24 +438,27 @@ export const IMPORT_SAMPLE_ROWS: Record<string, string>[] = [
   {
     employeeId: "FAC005", legalName: "GRACE THOMAS", name: "Mrs. Grace Thomas",
     collegeEmail: "grace.thomas@college.edu", password: "ChangeMe#105", phone: "9876543214",
-    designation: "Visiting Professor", qualification: "M.Sc",
-    employmentType: "Visiting", joiningDate: "12-06-2023",
+    designation: designation(4), qualification: "M.Sc",
+    joiningDate: "12-06-2023",
     gender: "Female", dateOfBirth: "08-09-1996",
     nameAsPerAadhar: "Grace Thomas",
     aadharNo: "567890123456", panNo: "EFGHI5678J",
     ratificationStatus: "Not Ratified",
   },
-];
+  ];
+}
 
-export const IMPORT_HINTS = [
+export function getFacultyImportHints(designationOptions: string[]): string[] {
+  return [
   "Full Name (as per SSC): enter the name exactly as it appears on the faculty member's SSC (10th class) certificate, in CAPITAL LETTERS - this is the PRIMARY identity name used as their display name everywhere across the app (lists, PDFs, notifications, teaching assignments, etc.).",
   "Name (as per PAN): optional - only needed for statutory/financial paperwork matching. When left blank, Full Name (as per SSC) is used instead everywhere this faculty member's name is shown.",
-  "Designation: Professor / Assistant Professor / Associate Professor / Associate Professor (Sr) / Visiting Professor / Assistant Professor of Practice / Professor of Practice / Sr. Wellness Counsellor / Other - Supporting Staff (Lab Assistant, Programmer, Office Assistant, etc.) is added from the Supporting Staff module instead. Common short forms are recognized too, case-insensitively (e.g. Prof., Asst. Prof., Assoc. Prof., Assoc.Prof.(Sr)) - however it's punctuated or capitalized, it still maps to the full title.",
-  "Employee Category: Regular / Visiting / Contract / Professor of Practice / Assistant Professor of Practice / Regular(Hyd) / Other - common short forms (e.g. Asst.Prof. of Practice, Prof. of Practice) are recognized too, case-insensitively.",
-  "Designation or Employee Category as \"Other\" is accepted as-is on import - there's no separate column for the custom title/category text; fill that in afterward from the Edit Faculty page.",
+  designationOptions.length
+    ? `Designation: ${designationOptions.join(" / ")} - added under Settings > Designations. Supporting Staff (Lab Assistant, Programmer, Office Assistant, etc.) is added from the Supporting Staff module instead. Common abbreviations (e.g. Prof., Asst. Prof., Assoc. Prof.) are recognized too, case-insensitively.`
+    : "Designation: add at least one under Settings > Designations before importing - a row can only use a title that's been added there.",
   "Dates must be in DD-MM-YYYY format (e.g. 15-06-2020)",
   "Department is auto-assigned from your HOD profile",
   "Login Password is mandatory: it creates the faculty member's login account (as a Panel Member) automatically during import, using their College Email as the login ID - must be at least 8 characters. Use a real, unique password per person - never reuse the sample column's placeholder values.",
   "Every column above is required except Name (as per PAN) and Name (as per Aadhar) - a row missing a required one, or with an invalid value, is rejected and reported back so it can be corrected and re-imported.",
   "Personal details beyond what's above (father/mother name, religion, bank details, addresses, etc.) and the Academic Profile aren't part of this template - fill those in afterward from the Edit Faculty page.",
-];
+  ];
+}

@@ -19,8 +19,7 @@ import { SupportingStaffModuleEditor, type SupportingStaffEditRecord } from "@/c
 import { getSupportingStaffProfileModules } from "@/lib/supportingStaff/profileModules";
 import { useCollegeType } from "@/hooks/useCollegeType";
 import { toast } from "@/hooks/useToast";
-import { SUPPORTING_STAFF_EMPLOYMENT_TYPE_LABELS } from "@/types";
-import type { EmploymentType, Department } from "@/types";
+import type { Department } from "@/types";
 
 const schema = z.object({
   employeeId: z.string().min(1, "Employee ID is required"),
@@ -30,11 +29,9 @@ const schema = z.object({
   password: z.string().min(8, "Password must be at least 8 characters"),
   phone: z.string().min(1, "Mobile No is required"),
   designation: z.string().min(1, "Designation is required"),
-  otherDesignationTitle: z.string().optional(),
   qualification: z.string().min(1, "Highest Qualification is required"),
   experienceYears: z.number().min(0, "Cannot be negative").optional(),
   joiningDate: z.string().min(1, "Joining date is required"),
-  employmentType: z.string().min(1, "Employment type is required"),
   department: z.string().optional(),
 });
 
@@ -77,12 +74,11 @@ export default function NewPrincipalNonTechnicalStaffPage() {
     formState: { errors },
   } = useForm<FormData>({
     resolver: zodResolver(schema),
-    defaultValues: { experienceYears: 0, designation: "", employmentType: "REGULAR", password: "", department: "" },
+    defaultValues: { experienceYears: 0, designation: "", password: "", department: "" },
   });
   const [erroredSteps, setErroredSteps] = useState<Set<WizardStepKey>>(new Set());
 
   const designation = watch("designation");
-  const employmentType = watch("employmentType");
   const department = watch("department");
   const name = watch("name");
 
@@ -100,7 +96,6 @@ export default function NewPrincipalNonTechnicalStaffPage() {
     employeeId: "Employee ID", name: "Name (as per PAN)", collegeEmail: "College Email",
     password: "Login Password", phone: "Mobile No", designation: "Designation",
     qualification: "Highest Qualification", joiningDate: "Joining Date",
-    employmentType: "Employment Type",
   };
 
   function goNext() {
@@ -239,16 +234,10 @@ export default function NewPrincipalNonTechnicalStaffPage() {
                     <Label>Designation *</Label>
                     <Select value={designation} onValueChange={(v) => setValue("designation", v)}>
                       <SelectTrigger><SelectValue placeholder="Select designation" /></SelectTrigger>
-                      <SelectContent><DesignationOptions collegeType={collegeType} kind="non-technical" /></SelectContent>
+                      <SelectContent><DesignationOptions kind="non-technical" /></SelectContent>
                     </Select>
                     {errors.designation && <p className="text-sm text-destructive">{errors.designation.message}</p>}
                   </div>
-                  {designation === "OTHER" && (
-                    <div className="space-y-2">
-                      <Label htmlFor="otherDesignationTitle">Designation Title</Label>
-                      <Input id="otherDesignationTitle" {...register("otherDesignationTitle")} placeholder="e.g. Store Keeper" />
-                    </div>
-                  )}
                   <div className="space-y-2">
                     <Label htmlFor="qualification">Highest Qualification *</Label>
                     <Input id="qualification" {...register("qualification")} placeholder="e.g. Diploma, B.Com, ITI" />
@@ -278,18 +267,6 @@ export default function NewPrincipalNonTechnicalStaffPage() {
                 </div>
 
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label>Employment Type *</Label>
-                    <Select value={employmentType} onValueChange={(v) => setValue("employmentType", v as EmploymentType)}>
-                      <SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger>
-                      <SelectContent>
-                        {Object.entries(SUPPORTING_STAFF_EMPLOYMENT_TYPE_LABELS).map(([v, l]) => (
-                          <SelectItem key={v} value={v}>{l}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    {errors.employmentType && <p className="text-sm text-destructive">{errors.employmentType.message}</p>}
-                  </div>
                   <div className="space-y-2">
                     <Label htmlFor="joiningDate">Joining Date *</Label>
                     <Input id="joiningDate" type="date" {...register("joiningDate")} />

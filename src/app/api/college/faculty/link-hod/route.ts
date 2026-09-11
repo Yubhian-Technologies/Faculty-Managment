@@ -5,7 +5,7 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
 import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
-import type { Designation, EmploymentType, FacultyStatus } from "@/types";
+import type { Designation, FacultyStatus } from "@/types";
 
 // An HOD or Sub-HOD login (Department.hodUid/hodName, role "HOD" on their
 // `users` doc) is "just a normal HOD account, no separate role" - it never
@@ -37,7 +37,6 @@ export async function POST(request: Request) {
       experienceYears: number;
       joiningDate: string;
       dateOfJoiningDepartment?: string;
-      employmentType: EmploymentType;
       aicteEligible?: boolean;
       academicProfile?: Record<string, unknown>;
       technicalProfile?: Record<string, unknown>;
@@ -46,10 +45,10 @@ export async function POST(request: Request) {
 
     const {
       linkUid, department, employeeId, name, designation, qualification,
-      experienceYears, joiningDate, employmentType, profilePhotoUrl,
+      experienceYears, joiningDate, profilePhotoUrl,
     } = body;
 
-    if (!linkUid || !department || !employeeId || !designation || !qualification || !employmentType || !joiningDate) {
+    if (!linkUid || !department || !employeeId || !designation || !qualification || !joiningDate) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
     // Same personal-detail requirements as the default create flow (POST
@@ -131,7 +130,6 @@ export async function POST(request: Request) {
       experienceYears: Number(experienceYears),
       joiningDate: new Date(joiningDate),
       ...(body.dateOfJoiningDepartment ? { dateOfJoiningDepartment: new Date(body.dateOfJoiningDepartment) } : {}),
-      employmentType,
       ...(body.aicteEligible !== undefined ? { aicteEligible: body.aicteEligible } : {}),
       status: "ACTIVE" as FacultyStatus,
       userUid: linkUid,

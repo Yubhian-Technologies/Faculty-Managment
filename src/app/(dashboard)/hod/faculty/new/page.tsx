@@ -25,7 +25,7 @@ import { totalPreviousExperienceYears, totalYearsOfExperience, formatDuration } 
 import { PHONE_REGEX } from "@/lib/validations";
 import { AvatarUploadField } from "@/components/shared/AvatarUploadField";
 import { PROFILE_MODULES } from "@/lib/faculty/profileModules";
-import { FACULTY_DESIGNATIONS, FACULTY_EMPLOYMENT_CATEGORIES, designationLabel } from "@/lib/designations/config";
+import type { DesignationCatalogItem } from "@/types";
 import { useCollegeType } from "@/hooks/useCollegeType";
 import { useAuthStore } from "@/store/authStore";
 import { toast } from "@/hooks/useToast";
@@ -56,8 +56,8 @@ const schema = z.object({
   qualification: z.string().min(1, "Qualification is required"),
   specialization: z.string().optional(),
   experienceYears: z.number().min(0, "Cannot be negative").optional(),
-  joiningDate: z.string().min(1, "Date of Joining is required"),
-  employmentType: z.string().min(1, "Employment type is required"),
+  joiningDate: z.string().min(1, "Joining date is required"),
+  dateOfJoiningDepartment: z.string().optional(),
   aicteEligible: z.boolean().optional(),
 });
 
@@ -77,6 +77,21 @@ export default function NewFacultyPage() {
   const searchParams = useSearchParams();
   const { collegeType } = useCollegeType();
   const user = useAuthStore((s) => s.user);
+  // The college's own admin-curated Faculty Designation Catalog (see
+  // DesignationCatalogCard) - no hardcoded list, no "Other" free-text escape
+  // hatch any more.
+  const [designationOptions, setDesignationOptions] = useState<string[]>([]);
+  useEffect(() => {
+    void (async () => {
+      try {
+        const res = await fetch("/api/college/designations?category=FACULTY");
+        const data = await res.json() as { items?: DesignationCatalogItem[] };
+        setDesignationOptions((data.items ?? []).filter((d) => d.isActive).map((d) => d.name));
+      } catch {
+        // Non-fatal - the picker just stays empty until the admin's catalog loads.
+      }
+    })();
+  }, []);
   // Same derivation as the bulk-import page (hod/faculty/import/page.tsx) -
   // an HOD can now head more than one top-level department at once
   // (user.departments), so which one a NEW faculty member belongs to is no
@@ -132,16 +147,13 @@ export default function NewFacultyPage() {
   } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: {
-      experienceYears: 0, designation: "", employmentType: "Regular", password: "", aicteEligible: false,
+      experienceYears: 0, designation: "", password: "", aicteEligible: false,
       ...(isLinkMode ? { name: linkName } : {}),
     },
   });
   const [erroredSteps, setErroredSteps] = useState<Set<WizardStepKey>>(new Set());
 
   const designation = watch("designation");
-  const employmentType = watch("employmentType");
-  const isOtherDesignation = !!designation && !FACULTY_DESIGNATIONS.includes(designation);
-  const isOtherEmploymentType = !!employmentType && !FACULTY_EMPLOYMENT_CATEGORIES.includes(employmentType);
   const qualification = watch("qualification");
   // "Others" is a mode, not a stored value - it reveals a free-text box whose
   // contents become `qualification`. Needs its own state because once the user
@@ -197,7 +209,7 @@ export default function NewFacultyPage() {
     employeeId: "Employee ID", name: "Name (as per PAN)", collegeEmail: "College Email",
     password: "Login Password", phone: "Mobile No", designation: "Designation",
     qualification: "Highest Qualification", experienceYears: "Total Years of Experience",
-    joiningDate: "Date of Joining", employmentType: "Employee Category",
+    joiningDate: "Date of Joining Institution",
     legalName: "Full Name (as per SSC)",
   };
 
@@ -441,22 +453,14 @@ export default function NewFacultyPage() {
                   <div className="space-y-2">
                     <Label>Designation *</Label>
                     <Select
-                      value={isOtherDesignation ? "OTHER" : designation}
-                      onValueChange={(v) => setValue("designation", v === "OTHER" ? "OTHER" : v)}
+                      value={designation}
+                      onValueChange={(v) => setValue("designation", v)}
                     >
                       <SelectTrigger><SelectValue placeholder="Select designation" /></SelectTrigger>
                       <SelectContent>
-                        {FACULTY_DESIGNATIONS.map((d) => <SelectItem key={d} value={d}>{designationLabel(d)}</SelectItem>)}
-                        <SelectItem value="OTHER">Other</SelectItem>
+                        {designationOptions.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
                       </SelectContent>
                     </Select>
-                    {isOtherDesignation && (
-                      <Input
-                        value={designation === "OTHER" ? "" : designation}
-                        onChange={(e) => setValue("designation", e.target.value || "OTHER")}
-                        placeholder="Please specify"
-                      />
-                    )}
                     {errors.designation && <p className="text-sm text-destructive">{errors.designation.message}</p>}
                   </div>
                   <div className="space-y-2">
@@ -509,28 +513,7 @@ export default function NewFacultyPage() {
 
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
-                    <Label>Employee Category *</Label>
-                    <Select
-                      value={isOtherEmploymentType ? "OTHER" : employmentType}
-                      onValueChange={(v) => setValue("employmentType", v === "OTHER" ? "OTHER" : v)}
-                    >
-                      <SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger>
-                      <SelectContent>
-                        {FACULTY_EMPLOYMENT_CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                        <SelectItem value="OTHER">Other</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    {isOtherEmploymentType && (
-                      <Input
-                        value={employmentType === "OTHER" ? "" : employmentType}
-                        onChange={(e) => setValue("employmentType", e.target.value || "OTHER")}
-                        placeholder="Please specify"
-                      />
-                    )}
-                    {errors.employmentType && <p className="text-sm text-destructive">{errors.employmentType.message}</p>}
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="joiningDate">Date of Joining *</Label>
+                    <Label htmlFor="joiningDate">Date of Joining Institution *</Label>
                     <Input id="joiningDate" type="date" {...register("joiningDate")} />
                     {errors.joiningDate && <p className="text-sm text-destructive">{errors.joiningDate.message}</p>}
                   </div>

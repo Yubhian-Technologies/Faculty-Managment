@@ -14,6 +14,9 @@ interface Props {
   // own doc-comment on `publications`. Undefined means the Research
   // Publications tab fetches it itself.
   publications?: ResearchPublication[] | null;
+  // True only when the viewer IS this profile's owner - see
+  // FacultyProfileModuleContent's own doc-comment on `isOwnProfile`.
+  isOwnProfile?: boolean;
 }
 
 // Research & Innovation's own sub-tab bar (see profileModules.ts). Research
@@ -21,7 +24,7 @@ interface Props {
 // publication list + this person's self-reported bibliometrics, same content
 // this module always had before it grew sub-tabs. The other nine are
 // scaffolded empty for now; each gets its own field set later, one at a time.
-export function ResearchInnovationModule({ uid, academicProfile, publications }: Props) {
+export function ResearchInnovationModule({ uid, academicProfile, publications, isOwnProfile }: Props) {
   const [activeTab, setActiveTab] = useState<ResearchInnovationTabKey>("publications");
   const activeLabel = RESEARCH_INNOVATION_TABS.find((t) => t.key === activeTab)?.label ?? "";
 
@@ -44,8 +47,8 @@ export function ResearchInnovationModule({ uid, academicProfile, publications }:
 
       {activeTab === "publications" ? (
         publications !== undefined
-          ? <PublicationsSection publications={publications} academicProfile={academicProfile} />
-          : <PublicationsModuleView uid={uid} academicProfile={academicProfile} />
+          ? <PublicationsSection publications={publications} academicProfile={academicProfile} isOwnProfile={isOwnProfile} />
+          : <PublicationsModuleView uid={uid} academicProfile={academicProfile} isOwnProfile={isOwnProfile} />
       ) : (
         <Section number={3} title={activeLabel}>
           <p className="text-sm text-muted-foreground">This section hasn&rsquo;t been built out yet - check back soon.</p>

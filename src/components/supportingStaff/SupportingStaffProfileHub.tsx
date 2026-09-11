@@ -10,7 +10,7 @@ import { Avatar } from "@/components/shared/Avatar";
 import { getSupportingStaffProfileModules } from "@/lib/supportingStaff/profileModules";
 import { supportingStaffDisplayName } from "@/lib/supportingStaff/supportingStaffDisplayName";
 import { formatDate } from "@/lib/utils";
-import { NON_TECHNICAL_STAFF_DESIGNATION_LABELS, SUPPORTING_STAFF_EMPLOYMENT_TYPE_LABELS, FACULTY_STATUS_LABELS } from "@/types";
+import { NON_TECHNICAL_STAFF_DESIGNATION_LABELS, FACULTY_STATUS_LABELS } from "@/types";
 import type { SupportingStaffMember, FacultyStatus } from "@/types";
 
 const STATUS_VARIANTS: Record<FacultyStatus, "default" | "secondary" | "outline" | "destructive"> = {
@@ -83,7 +83,6 @@ export function SupportingStaffProfileHub({ staff, basePath, backHref, editHref 
             <Fact label="Phone" value={staff.phone} />
             <Fact label="Department" value={staff.department || "Centrally managed"} />
             <Fact label="Designation" value={designationLabel} />
-            <Fact label="Employment Type" value={staff.employmentType ? SUPPORTING_STAFF_EMPLOYMENT_TYPE_LABELS[staff.employmentType] : undefined} />
             <Fact label="Date of Joining" value={staff.joiningDate ? formatDate(staff.joiningDate) : undefined} />
             <Fact label="Total Years of Experience" value={staff.experienceYears} />
           </div>

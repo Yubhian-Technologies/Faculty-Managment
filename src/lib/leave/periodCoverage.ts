@@ -1,12 +1,12 @@
 import type { Firestore } from "firebase-admin/firestore";
-import { isTeachingDesignation } from "@/lib/designations/config";
+import { LEGACY_TECHNICAL_DESIGNATIONS } from "@/lib/designations/config";
 import { resolveLoginUidForFacultyMember } from "@/lib/faculty/resolveFacultyMemberId";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { notify } from "@/lib/notify";
 import { enumerateWorkingDates, isoDateKey, todayISODate } from "@/lib/leave/dayCounter";
 import { resolveSectionCurrentSemester, matchesCurrentSemester as slotMatchesCurrentSemester } from "@/lib/college/semester";
 import { resolveTimetableAcademicYear, matchesCurrentAcademicYear } from "@/lib/college/academicSession";
-import type { CollegeType, DayOfWeek, FacultyMember, TimetableSlot } from "@/types";
+import type { DayOfWeek, FacultyMember, TimetableSlot } from "@/types";
 import type { LeaveRequest, PeriodSubstitution } from "@/types/leave";
 
 // Resolves, for a batch of TimetableSlots spanning possibly many course-years,
@@ -199,8 +199,7 @@ export async function buildPeriodCoverage(
   if (required.length === 0) return [];
 
   const collegeRef = db.collection("colleges").doc(collegeId);
-  const [collegeSnap, deptFacultySnap, allSlotsSnap, leaveSnap] = await Promise.all([
-    collegeRef.get(),
+  const [deptFacultySnap, allSlotsSnap, leaveSnap] = await Promise.all([
     // Every teaching faculty member in the college, not just the applicant's
     // own department: cover is routinely arranged across departments (a
     // shared first-year subject especially), and restricting the list to one
@@ -214,11 +213,14 @@ export async function buildPeriodCoverage(
     collegeRef.collection("leaveRequests").where("status", "==", "APPROVED").get(),
   ]);
 
-  const collegeType = (collegeSnap.data() as { type?: CollegeType } | undefined)?.type;
   const eligibleFaculty = deptFacultySnap.docs
     .filter((d) => d.id !== facultyMemberId)
     .map((d) => ({ id: d.id, ...d.data() }) as FacultyMember)
-    .filter((f) => f.status === "ACTIVE" && isTeachingDesignation(f.designation, collegeType));
+    // Any FacultyMember record is teaching staff now that every real Faculty
+    // designation lives in the admin-curated FACULTY Designation Catalog,
+    // EXCEPT a not-yet-migrated legacy technical record (see
+    // scripts/migrate-technical-staff-to-supporting-staff.mjs).
+    .filter((f) => f.status === "ACTIVE" && !LEGACY_TECHNICAL_DESIGNATIONS.includes(f.designation));
 
   const busyByDayPeriod = new Map<string, Set<string>>();
   for (const doc of allSlotsSnap.docs) {

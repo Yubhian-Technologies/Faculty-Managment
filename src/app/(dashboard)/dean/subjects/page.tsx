@@ -13,7 +13,7 @@ import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
 import type { Course, CourseCatalogItem, Department, Subject } from "@/types";
 import { SUBJECT_TYPE_LABELS } from "@/types";
-import { academicSessionLabel, currentAcademicStartYear, recentAcademicSessions, parseAcademicYearStart } from "@/lib/college/academicSession";
+import { academicSessionLabel, currentAcademicStartYear, parseAcademicYearStart } from "@/lib/college/academicSession";
 import { resolveDepartmentCourseScope, regulationsForCourseYearByBatch } from "@/lib/college/academicStructure";
 
 function ordinalYear(year: number) {
@@ -146,17 +146,6 @@ export default function DeanSubjectsPage() {
   // The single regulation to tag a new subject with - only when unambiguous.
   const singleRegulation = allowedRegulations.length === 1 ? allowedRegulations[0] : "";
 
-  // recentAcademicSessions() is clock-anchored only, so a college whose
-  // configured current session (currentSessionLabel, applied above) has
-  // drifted from the plain calendar date would otherwise select a value
-  // missing from the dropdown's own option list. Same self-healing pattern as
-  // hod/sections' batchOptions: keep the actually-selected session in the
-  // list even when the clock-derived window doesn't cover it.
-  const academicYearOptions = useMemo(() => {
-    const base = recentAcademicSessions();
-    return base.includes(selectedAcademicYear) ? base : [selectedAcademicYear, ...base];
-  }, [selectedAcademicYear]);
-
   // Curriculum-table order: by S.No. when set (matches a printed curriculum
   // sheet), falling back to name for legacy subjects that predate the field.
   const sortedSubjects = useMemo(
@@ -287,14 +276,6 @@ export default function DeanSubjectsPage() {
     setSubjects([]);
   }
 
-  function selectAcademicYear(academicYear: string) {
-    setSelectedAcademicYear(academicYear);
-    // Switching session re-scopes the subject list (see loadSubjects) - each
-    // session has its own independent list, so this reloads rather than
-    // reusing whatever was showing for the previous session.
-    if (selectedDepartment && selectedYear) void loadSubjects(selectedDepartment.name, selectedCourseId, selectedYear, academicYear);
-  }
-
   function selectYear(year: string) {
     setSelectedYear(year);
     if (selectedDepartment) void loadSubjects(selectedDepartment.name, selectedCourseId, year, selectedAcademicYear);
@@ -336,7 +317,7 @@ export default function DeanSubjectsPage() {
       ) : (
         <>
           <Card>
-            <CardContent className="p-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            <CardContent className="p-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <div className="space-y-1.5">
                 <Label>Department</Label>
                 <Select value={selectedDepartmentId} onValueChange={selectDepartment}>
@@ -352,18 +333,6 @@ export default function DeanSubjectsPage() {
                   <SelectTrigger><SelectValue placeholder={isLoadingCourses ? "Loading…" : "Select course"} /></SelectTrigger>
                   <SelectContent>
                     {courses.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label>Academic Year</Label>
-                {/* Scopes the subject list below (see loadSubjects) - each
-                    session has its own independent list per course-year,
-                    stamped onto subjects added under it. */}
-                <Select value={selectedAcademicYear} onValueChange={selectAcademicYear}>
-                  <SelectTrigger><SelectValue placeholder="Select academic year" /></SelectTrigger>
-                  <SelectContent>
-                    {academicYearOptions.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>

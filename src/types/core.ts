@@ -79,6 +79,19 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   CLASS_LEADER: "Class Leader",
 };
 
+// Every role a Principal/VP can already view/edit/deactivate (see
+// loadTargetInScope in api/college/users/[uid]/route.ts) - also every role a
+// staff member can be PROMOTED into from the Staff tab on Promotions
+// (any-to-any, no fixed ladder). Exported here (rather than duplicated
+// client + server) since it's shared by that server route and the client
+// Staff Promotions panel. Deliberately excludes PRINCIPAL/SUPER_ADMIN - a
+// college has exactly one Principal, provisioned separately.
+export const MANAGEABLE_STAFF_ROLES: UserRole[] = [
+  "HOD", "DEPARTMENT_OFFICE", "COLLEGE_OFFICE", "VICE_PRINCIPAL", "COLLEGE_ADMIN", "COLLEGE_STAFF",
+  "DEAN", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D", "PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL",
+  "PANEL_MEMBER", "WEBMASTER", "COLLEGE_ACCOUNTS",
+];
+
 export const ROLE_DASHBOARD_PATHS: Record<UserRole, string> = {
   SUPER_ADMIN: "/super-admin",
   MANAGEMENT: "/management/dashboard",
@@ -611,6 +624,34 @@ export interface CourseCatalogItem {
   updatedAt?: Timestamp;
 }
 
+// ─── Designation Catalog (admin-curated job titles — same "add it here once,
+// pick it everywhere else" model as CourseCatalogItem above) ──────────────────
+// Nothing hardcoded per college type any more (see src/lib/designations/config.ts's
+// now-removed per-college-type lists) - each college's own admin builds their own
+// list, starting empty for a new college. Faculty/Add Technical Staff/Add
+// Non-Technical Staff, CSV import validation, and the Hiring role picker all read
+// this same collection, filtered by `category`, instead of a picker offering an
+// "Other" free-text escape hatch.
+export type DesignationCategory = "FACULTY" | "TECHNICAL" | "NON_TECHNICAL";
+export type DesignationCadre = "PROFESSOR" | "ASSOCIATE_PROFESSOR" | "ASSISTANT_PROFESSOR";
+
+export interface DesignationCatalogItem {
+  id: string;
+  collegeId: string;
+  name: string; // admin-entered, e.g. "Professor", "Senior Lab Technician"
+  category: DesignationCategory;
+  // Optional AICTE cadre-ratio tag (Faculty only) - lets a fully custom title
+  // still count toward Professor/Associate/Assistant Professor compliance
+  // reporting (api/college/faculty-requirement) instead of that route needing
+  // to match a fixed literal string like the old hardcoded codes did.
+  cadre?: DesignationCadre;
+  isActive: boolean;
+  createdBy?: string;
+  createdByName?: string;
+  createdAt: Timestamp;
+  updatedAt?: Timestamp;
+}
+
 // ─── Course (a program offered by a Department — engineering, pharmacy, dental, etc.) ──
 
 export interface Course {
@@ -797,14 +838,14 @@ export interface NavVisibilitySettings {
 // ─── Faculty Member (central entity across all modules) ───────────────────────
 // All leave, attendance, payroll, appraisal records reference facultyId
 
-// Free text, not a closed enum - real designation ladders vary by
-// College.type (see src/lib/designations/config.ts, the single source of
-// truth for which values each college type's Add/Edit pickers offer). The
-// original fixed codes below ("PROFESSOR" etc.) are still what Engineering/
-// Pharmacy/Dental colleges use and what every pre-existing FacultyMember
-// record holds - DESIGNATION_LABELS keeps them displaying as words; any
-// other college type's designation is already a human-readable string
-// (e.g. "PGT", "Controller of Examinations") and needs no label lookup.
+// Free text, not a closed enum - each college's own admin decides its real
+// designation ladder via the Designation Catalog (colleges/{id}/designations,
+// category "FACULTY" - see DesignationCatalogCard), so a value here is
+// whatever that college's admin typed in. The fixed codes below ("PROFESSOR"
+// etc.) are what every pre-existing FacultyMember record (created before the
+// catalog existed) holds - DESIGNATION_LABELS keeps them displaying as
+// words; a newer, admin-typed designation is already human-readable and
+// needs no label lookup (see designationLabel's raw-value fallback).
 export type Designation = string;
 
 export const DESIGNATION_LABELS: Record<string, string> = {
@@ -815,10 +856,8 @@ export const DESIGNATION_LABELS: Record<string, string> = {
   LECTURER: "Lecturer",
   VISITING_FACULTY: "Visiting Faculty",
   ADJUNCT_FACULTY: "Adjunct Faculty",
-  // Faculty's own current title list (FACULTY_DESIGNATIONS,
-  // src/lib/designations/config.ts) - LECTURER/VISITING_FACULTY/
-  // ADJUNCT_FACULTY above stay mapped for any pre-existing record still
-  // holding one of those older titles.
+  // LECTURER/VISITING_FACULTY/ADJUNCT_FACULTY above stay mapped for any
+  // pre-existing record still holding one of those older titles.
   VISITING_PROFESSOR: "Visiting Professor",
   ASSISTANT_PROFESSOR_OF_PRACTICE: "Assistant Professor of Practice",
   PROFESSOR_OF_PRACTICE: "Professor of Practice",
@@ -833,15 +872,10 @@ export const DESIGNATION_LABELS: Record<string, string> = {
   OTHER: "Other",
 };
 
-// Widened to plain string (matching Designation's own pattern above) so
-// Faculty's Employee Category can use its own independent category list
-// (FACULTY_EMPLOYMENT_CATEGORIES, src/lib/designations/config.ts) - including
-// a free-text "Other" - without those values needing to fit the fixed
-// PERMANENT/CONTRACT/VISITING/PART_TIME codes below, which Supporting/
-// Non-Technical Staff and Salary Structures still use unchanged
-// (EMPLOYMENT_TYPE_LABELS keeps displaying those four as words; a value
-// outside it, like Faculty's new categories, just displays as-is wherever
-// the lookup already falls back to the raw value).
+// Used by Salary Structures/Budget auto-pricing and the hiring pipeline's
+// faculty provisioning step - unrelated to Designation and no longer set via
+// Add/Edit Faculty or Supporting Staff (that admin-curated "Employee
+// Category" catalog was retired).
 export type EmploymentType = string;
 
 export const EMPLOYMENT_TYPE_LABELS: Record<string, string> = {
@@ -896,7 +930,13 @@ export interface FacultyMember {
   experienceYears: number;
   joiningDate: Timestamp; // Date of Joining Institution
   dateOfJoiningDepartment?: Timestamp; // Date of Joining Department (NBA/AICTE — may differ from institution)
-  employmentType: EmploymentType;
+  // Optional - no longer collected via Add/Edit Faculty or CSV import (the
+  // college's own Employee Category catalog was retired; only Designation
+  // remains). Still written by the hiring pipeline's provisioning step
+  // (src/lib/firestore/facultyProvisioning.ts) and read by Salary
+  // Structures/Budget auto-pricing (src/lib/budget/applySalaryStructurePricing.ts),
+  // both independent of the retired catalog.
+  employmentType?: EmploymentType;
   aicteEligible?: boolean; // AICTE Eligibility
   status: FacultyStatus;
   userUid?: string; // links to users/{uid} if they have a system login
@@ -1083,12 +1123,31 @@ export interface Publication {
 // the owner (`uid`) can only read their own rows - see
 // src/app/api/college/publications/route.ts. Reuses Publication's field
 // names so it renders as a drop-in for the existing Research module UI.
+export type PublicationStatus = "PENDING" | "APPROVED" | "REJECTED";
+
 export interface ResearchPublication {
   id: string;
   collegeId: string;
   uid: string; // owning staff member - any role
   ownerName: string;
   ownerRole: UserRole;
+  // Resolved academic identity (e.g. "Professor", or generically "Faculty"
+  // for Principal/VP/HOD/Dean who have no separate FacultyMember record) -
+  // see src/lib/publications/resolveOwnerDesignation.ts. When present, this
+  // is what's displayed instead of ownerRole: the record belongs to the
+  // person's academic career, not whichever administrative role they
+  // happened to hold when it was added - undefined for genuine office roles
+  // (R&D, IQAC, T&P, Library, Exam Cell, Webmaster, College Office, College
+  // Staff), which keep showing ownerRole as before.
+  ownerDesignation?: string;
+  // Missing on every record created before self-submission shipped - treat
+  // that as APPROVED everywhere (they were all R&D-added). R&D's own direct
+  // adds always write "APPROVED"; a self-submission starts "PENDING".
+  status?: PublicationStatus;
+  reviewedBy?: string; // R&D uid who approved/rejected
+  reviewedByName?: string;
+  reviewedAt?: Timestamp;
+  rejectionReason?: string;
   title: string;
   coAuthors: string;
   journalOrConference: string;
@@ -1522,6 +1581,19 @@ export interface StudentRecord {
   // entire academic run, per Section.regulation's own doc-comment. Optional/
   // lenient - absent when the section they were placed into had none set.
   regulation?: string;
+  // This student's own admission batch, e.g. "2024-2028" - a one-time
+  // snapshot taken the same moment/places as `regulation` above (students/
+  // distribute, distribute-cohort's own path never touches lateral students
+  // so is left as a plain regulation-only mirror there; import-excel).
+  // A Regular student just mirrors the section's own Section.batch. A
+  // Lateral student (studentType "Lateral") joins directly into Year 2,
+  // one calendar year later than the Regular batch already occupying that
+  // slot, and spends one fewer year at the college - so their own batch
+  // starts a year later than the section's batch but ends the SAME year
+  // (they graduate together): joining a Section.batch "2024-2028" slot in
+  // session 2025 gives "2025-2028", not "2024-2028". See
+  // lib/college/academicSession.ts's lateralEntryBatch.
+  batch?: string;
   // ─── Admission-detail fields ────────────────────────────────────────────
   // All optional, all set only via the College Office bulk import (see
   // src/lib/students/importRow.ts) - there is no per-student edit form for
@@ -1762,6 +1834,7 @@ export type AuditAction =
   | "USER_CREATED"
   | "USER_UPDATED"
   | "USER_DEACTIVATED"
+  | "STAFF_ROLE_CHANGED"
   | "USER_PASSWORD_RESET"
   | "PROFILE_PHOTO_UPDATED"
   // Faculty module

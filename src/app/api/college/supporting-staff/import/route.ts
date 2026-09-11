@@ -7,14 +7,14 @@ import { createFirebaseUser } from "@/lib/firebase/authRest";
 import { ChunkedBatch } from "@/lib/firestore/chunkedBatch";
 import { splitDegreeAndBranch } from "@/lib/faculty/legacyProfileFallbacks";
 import { getHodDepartmentScope } from "@/lib/departments/scope";
-import { getHodTechnicalDesignations, getNonTechnicalDesignations } from "@/lib/designations/config";
+import { hasSupportingStaffSplit } from "@/lib/designations/config";
 import { NON_TECHNICAL_STAFF_DESIGNATION_LABELS } from "@/types";
 import {
   matchOption, normalizeDigits, isScientificNotation,
   GENDER_OPTIONS, RATIFICATION_STATUS_OPTIONS,
 } from "@/lib/import/fieldConstraints";
 import type {
-  SupportingStaffCategory, SupportingStaffDesignation, EmploymentType, FacultyStatus, CollegeType,
+  SupportingStaffCategory, SupportingStaffDesignation, FacultyStatus, CollegeType,
   SupportingStaffProfileFields, StaffQualification, TrainingEntry, TrainingEntryType, AwardEntry, AwardCategory,
   NonTechnicalResponsibility, ComputerSkill,
 } from "@/types";
@@ -22,31 +22,6 @@ import type {
 function designationLabel(designation: SupportingStaffDesignation): string {
   return (NON_TECHNICAL_STAFF_DESIGNATION_LABELS as Record<string, string>)[designation] ?? designation;
 }
-
-// Free text (see src/lib/designations/config.ts) - normalizes the original
-// fixed codes every existing Engineering/Pharmacy/Dental record and the 4
-// migrated-in ex-Faculty technical codes expect; anything else (e.g. "AO",
-// "PGT"-adjacent supporting titles for Degree/Polytechnic/School colleges)
-// is stored exactly as typed.
-const NON_TECHNICAL_DESIGNATION_MAP: Record<string, SupportingStaffDesignation> = {
-  "office staff": "OFFICE_STAFF",
-  "accountant": "ACCOUNTANT",
-  "clerk": "CLERK",
-  "attender": "ATTENDER",
-  "office assistant": "OFFICE_ASSISTANT",
-  "lab assistant": "LAB_ASSISTANT",
-  "programmer": "PROGRAMMER",
-  "system administrator": "SYSTEM_ADMINISTRATOR",
-  "sysadmin": "SYSTEM_ADMINISTRATOR",
-  "network engineer": "NETWORK_ENGINEER",
-  "other": "OTHER",
-};
-
-const EMPLOYMENT_MAP: Record<string, EmploymentType> = {
-  "regular": "REGULAR",
-  "contract": "CONTRACT",
-  "voucher": "VOUCHER",
-};
 
 const TRAINING_TYPE_MAP: Record<string, TrainingEntryType> = {
   "fdp": "FDP",
@@ -102,7 +77,6 @@ type ImportRow = {
   phone: string;
   designation: string;
   qualification: string;
-  employmentType: string;
   joiningDate: string;
   gender: string;
   dateOfBirth: string;
@@ -264,20 +238,22 @@ export async function POST(request: Request) {
     // Some college types (School) have no Technical/Non-Technical split -
     // Supporting Staff there is centrally managed by Principal, so HOD has
     // nothing to import. Backstops the nav-hide in Sidebar.tsx.
-    if (session.role === "HOD" && getHodTechnicalDesignations(collegeType).length === 0) {
+    if (session.role === "HOD" && !hasSupportingStaffSplit(collegeType)) {
       return NextResponse.json(
         { error: "Supporting Staff for your college type is managed centrally by Principal" },
         { status: 403 },
       );
     }
 
-    // The designation catalogue this import is allowed to use - the
-    // Technical subset (HOD's Supporting Staff) or Non-Technical subset
-    // (College Office's Non-Technical Staff) for this college's type, same
-    // split the manual Add/Edit forms enforce (src/lib/designations/config.ts).
-    const allowedDesignations = staffCategory === "TECHNICAL"
-      ? getHodTechnicalDesignations(collegeType)
-      : getNonTechnicalDesignations(collegeType);
+    // The designation catalogue this import is allowed to use - this
+    // college's own admin-curated Technical (HOD's Supporting Staff) or
+    // Non-Technical (College Office's Non-Technical Staff) list, same split
+    // the manual Add/Edit forms enforce (see DesignationCatalogCard).
+    const designationSnap = await db.collection("colleges").doc(collegeId).collection("designations")
+      .where("category", "==", staffCategory).where("isActive", "==", true).get();
+    const allowedDesignations = designationSnap.docs
+      .map((d) => (d.data() as { name?: string }).name)
+      .filter((n): n is string => !!n);
 
     // HOD's imported rows are confined to their own (or owned sub-)
     // department, same as the single "Add Staff" form and the Faculty import.
@@ -355,7 +331,6 @@ export async function POST(request: Request) {
       if (!row.phone?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Mobile No is required" }); continue; }
       if (!row.designation?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Designation is required" }); continue; }
       if (!row.qualification?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Highest Qualification is required" }); continue; }
-      if (!row.employmentType?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Employee Category is required" }); continue; }
       if (!row.joiningDate?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Date of Joining Institution is required" }); continue; }
       if (!row.gender?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Gender is required" }); continue; }
       if (!row.dateOfBirth?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Date of Birth is required" }); continue; }
@@ -369,31 +344,14 @@ export async function POST(request: Request) {
         continue;
       }
 
-      // Map designation - held to the template's own stated catalogue for
-      // this college type AND this importer's Technical/Non-Technical
-      // category (allowedDesignations), not free text. This is what stopped
-      // an HOD's Technical Supporting Staff import from accepting "Office
-      // Staff" (a Non-Technical title, mapped to a real code but not one
-      // this category is allowed to use) or an arbitrary string like
-      // "Technical Support Executive" that matches nothing at all - either
-      // case now rejects the row instead of storing it as typed.
+      // Map designation - held to this college's own admin-curated catalog
+      // for this importer's Technical/Non-Technical category
+      // (allowedDesignations), not free text. matchOption normalizes case/
+      // punctuation/spacing, but the admin's own chosen wording is the only
+      // thing accepted - anything else rejects the row rather than storing
+      // it as typed.
       const designationRaw = row.designation.trim();
-      const designationKey = designationRaw.toLowerCase();
-      // "Other" has no Designation Title column to pair with in this
-      // trimmed-down template, so it can't be represented on import - reject
-      // it with a clear pointer to the manual form instead of a dead-end
-      // "Designation Title is required" error that could never be satisfied.
-      if (designationKey === "other") {
-        failed.push({
-          row: rowNum, employeeId: empId,
-          error: `Designation "Other" isn't supported for bulk import - use one of your college's allowed titles (${allowedDesignations.join(" / ")}), or add this staff member individually via Add Staff`,
-        });
-        continue;
-      }
-      const mappedAbbreviation = NON_TECHNICAL_DESIGNATION_MAP[designationKey];
-      const matched = (mappedAbbreviation && allowedDesignations.includes(mappedAbbreviation))
-        ? mappedAbbreviation
-        : matchOption(designationRaw, allowedDesignations);
+      const matched = matchOption(designationRaw, allowedDesignations);
       if (!matched) {
         failed.push({
           row: rowNum, employeeId: empId,
@@ -403,15 +361,6 @@ export async function POST(request: Request) {
       }
       const designation: SupportingStaffDesignation = matched;
 
-      // Blank still takes the documented default; an unrecognised value fails
-      // the row instead of quietly becoming Regular, which turned a typo into
-      // a real employment category.
-      const empTypeKey = (row.employmentType ?? "").trim().toLowerCase();
-      if (empTypeKey && !EMPLOYMENT_MAP[empTypeKey]) {
-        failed.push({ row: rowNum, employeeId: empId, error: `Employee Category "${row.employmentType?.trim()}" is not one of Regular / Contract / Voucher` });
-        continue;
-      }
-      const employmentType: EmploymentType = EMPLOYMENT_MAP[empTypeKey] ?? "REGULAR";
       const status: FacultyStatus = "ACTIVE";
 
       const joiningDate = parseDate(row.joiningDate);
@@ -475,7 +424,6 @@ export async function POST(request: Request) {
         qualification: row.qualification.trim(),
         experienceYears: 0,
         joiningDate,
-        employmentType,
         status,
         gender: vGender,
         dateOfBirth: dateOfBirth || undefined,
