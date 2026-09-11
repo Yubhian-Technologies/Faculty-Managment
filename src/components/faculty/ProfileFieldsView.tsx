@@ -197,6 +197,24 @@ export function ResearchModule({ profile, publications }: { profile: Partial<Fac
   return <PublicationsSection publications={publications ?? null} academicProfile={profile} />;
 }
 
+// The researcher IDs/links - split out of ResearchModule so this flat view
+// mirrors ResearchInnovationModule's tab split (Research Publications vs.
+// Research Profiles), same underlying academicProfile fields either way.
+export function ResearchProfilesModule({ profile }: { profile: Partial<FacultyProfileFields> | undefined }) {
+  const p = profile ?? {};
+  return (
+    <Section number={3} title="Research Profiles">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <Field label="ORCID iD" value={p.orcidId} />
+        <Field label="Scopus Author ID" value={p.scopusAuthorId} />
+        <Field label="Researcher ID" value={p.researcherId} />
+        <Field label="Google Scholar ID" value={p.googleScholarId} />
+        <Field label="IRINS Profile" value={p.irinsProfile} />
+      </div>
+    </Section>
+  );
+}
+
 export function GrantsModule({ profile }: { profile: Partial<FacultyProfileFields> | undefined }) {
   const p = profile ?? {};
   const patents = p.patents;
@@ -424,6 +442,7 @@ export function ProfileFieldsView({ profile, includeTeachingAssignment = true, h
       <QualificationModule profile={profile} collegeType={collegeType} />
       <ExperienceModule profile={profile} includeTeachingAssignment={includeTeachingAssignment} />
       <ResearchModule profile={profile} publications={publications} />
+      <ResearchProfilesModule profile={profile} />
       <GrantsModule profile={profile} />
       <MentorshipModule profile={profile} />
       {!hideFinancialModule && <FinancialModule profile={profile} />}
