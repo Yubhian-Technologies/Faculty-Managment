@@ -295,9 +295,9 @@ export function AcademicProfileFields({ value, onChange, includeTeachingAssignme
       {/* Module 3 */}
       {!hideResearchModule && (
         <>
-          <SectionTitle>Module 3 - Research &amp; Development</SectionTitle>
+          <SectionTitle>Module 3 - Research &amp; Innovation</SectionTitle>
           <p className="text-xs text-muted-foreground">
-            Individual publication records are maintained by the R&amp;D office - view them on the Research &amp; Development module.
+            Individual publication records are maintained by the R&amp;D office - view them on the Research &amp; Innovation module.
             The fields below are self-reported summary metrics.
           </p>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">

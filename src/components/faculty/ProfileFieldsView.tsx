@@ -5,8 +5,10 @@ import {
 } from "@/components/shared/ProfileFieldPrimitives";
 import { designationLabel } from "@/lib/designations/config";
 import { PublicationsSection } from "@/components/faculty/PublicationsModuleView";
+import { totalYearsOfExperience, formatDuration } from "@/lib/faculty/experienceCalc";
+import { toDate } from "@/lib/utils";
 import {
-  TRAINING_ENTRY_TYPE_LABELS, PROFESSIONAL_BODY_LABELS,
+  TRAINING_ENTRY_TYPE_LABELS, TRAINING_PARTICIPATION_ROLE_LABELS, PROFESSIONAL_BODY_LABELS,
   ADMIN_RESPONSIBILITY_CATEGORY_LABELS, AWARD_CATEGORY_LABELS, QUALIFYING_EXAM_LABELS,
   TRAINING_PROGRAM_LEVEL_LABELS, TRAINING_PROGRAM_MODE_LABELS, AWARD_LEVEL_LABELS,
 } from "@/types";
@@ -66,12 +68,12 @@ export function QualificationModule({ profile, collegeType }: { profile: Partial
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <DegreeView label="Secondary Education" degree={p.highSchoolDetails} level="HIGH_SCHOOL" />
         <DegreeView label="Intermediate (10+2) / Diploma (10+3) / ITI / Others" degree={p.intermediateDetails} level="INTERMEDIATE" />
-        <DegreeView label="UG" degree={p.ugDetails} level="UG" />
-        {(p.additionalUgDetails ?? []).map((d, i) => <DegreeView key={`ug-${i}`} label={`UG ${i + 2}`} degree={d} level="UG" />)}
-        <DegreeView label="PG" degree={p.pgDetails} level="PG" />
-        {(p.additionalPgDetails ?? []).map((d, i) => <DegreeView key={`pg-${i}`} label={`PG ${i + 2}`} degree={d} level="PG" />)}
+        <DegreeView label="UG Details" degree={p.ugDetails} level="UG" />
+        {(p.additionalUgDetails ?? []).map((d, i) => <DegreeView key={`ug-${i}`} label={`UG Details ${i + 2}`} degree={d} level="UG" />)}
+        <DegreeView label="PG Details" degree={p.pgDetails} level="PG" />
+        {(p.additionalPgDetails ?? []).map((d, i) => <DegreeView key={`pg-${i}`} label={`PG Details ${i + 2}`} degree={d} level="PG" />)}
         <DegreeView
-          label="Ph.D."
+          label="Ph.D. Details"
           degree={p.phdDetails}
           level="DOCTORAL"
           status={p.phdStatus}
@@ -82,9 +84,9 @@ export function QualificationModule({ profile, collegeType }: { profile: Partial
             </>
           }
         />
-        {(p.additionalPhdDetails ?? []).map((d, i) => <DegreeView key={`phd-${i}`} label={`Ph.D. ${i + 2}`} degree={d} level="DOCTORAL" />)}
+        {(p.additionalPhdDetails ?? []).map((d, i) => <DegreeView key={`phd-${i}`} label={`Ph.D. Details ${i + 2}`} degree={d} level="DOCTORAL" />)}
         <DegreeView
-          label="Postdoctoral Fellowship"
+          label="Postdoctoral Fellowship Details"
           degree={p.postDoctoralDetails}
           level="POST_DOCTORAL"
           status={p.postDoctoralStatus}
@@ -100,18 +102,32 @@ export function QualificationModule({ profile, collegeType }: { profile: Partial
   );
 }
 
-export function ExperienceModule({ profile, includeTeachingAssignment = true }: { profile: Partial<FacultyProfileFields> | undefined; includeTeachingAssignment?: boolean }) {
+export function ExperienceModule({
+  profile, includeTeachingAssignment = true, joiningDate,
+}: {
+  profile: Partial<FacultyProfileFields> | undefined;
+  includeTeachingAssignment?: boolean;
+  // Optional - when the caller has it (FacultyProfileModuleContent does),
+  // shows the live "Total Years of Experience" fact (Previous Experience
+  // rows + time served since joining, ticking up day by day - see
+  // experienceCalc.ts) above the row list. Omitted entirely otherwise.
+  joiningDate?: Parameters<typeof toDate>[0];
+}) {
   const p = profile ?? {};
   const teaching = p.teachingAssignment;
+  const hasExperienceData = !!(joiningDate || (p.previousInstitutions?.length ?? 0) > 0);
   return (
     <Section number={2} title="Previous Experience">
+      {hasExperienceData && (
+        <Field label="Total Years of Experience" value={formatDuration(totalYearsOfExperience(p.previousInstitutions, joiningDate))} />
+      )}
       <div className="space-y-2">
         <SubLabel>Previous Institutions Worked At</SubLabel>
         {(p.previousInstitutions ?? []).length === 0 ? <p className="text-xs text-muted-foreground">None recorded.</p> : (
           <div className="space-y-2">
             {p.previousInstitutions?.map((inst, i) => (
               <div key={i} className="rounded-md border bg-muted/20 shadow-sm p-2 grid grid-cols-2 sm:grid-cols-3 gap-2">
-                <Field label="Institution" value={inst.institutionName} />
+                <Field label="Institution Name" value={inst.institutionName} />
                 <Field label="Designation" value={inst.designation} />
                 <Field label="From" value={formatInstitutionDate(inst.fromDate, inst.fromYear)} />
                 <Field label="To" value={formatInstitutionDate(inst.toDate, inst.toYear)} />
@@ -193,8 +209,8 @@ export function GrantsModule({ profile }: { profile: Partial<FacultyProfileField
             {p.fundedProjects?.map((proj, i) => (
               <div key={i} className="rounded-md border bg-muted/20 shadow-sm p-2 grid grid-cols-2 sm:grid-cols-5 gap-2">
                 <Field label="Title" value={proj.title} />
-                <Field label="Agency" value={proj.fundingAgency} />
-                <Field label="Grant (₹L)" value={proj.grantAmountLakhs} />
+                <Field label="Funding Agency" value={proj.fundingAgency} />
+                <Field label="Grant Amount (₹L)" value={proj.grantAmountLakhs} />
                 <Field label="Year" value={proj.year} />
                 <Field label="Status" value={proj.status} />
                 <Field label="Role" value={proj.piOrCoPi === "CO_PI" ? "Co-PI" : proj.piOrCoPi} />
@@ -204,13 +220,13 @@ export function GrantsModule({ profile }: { profile: Partial<FacultyProfileField
         )}
       </div>
       <div className="space-y-2">
-        <SubLabel>Consultant Project</SubLabel>
+        <SubLabel>Industry Consultancy</SubLabel>
         {(p.consultancyProjects ?? []).length === 0 ? <p className="text-xs text-muted-foreground">None recorded.</p> : (
           <div className="space-y-2">
             {p.consultancyProjects?.map((proj, i) => (
               <div key={i} className="rounded-md border bg-muted/20 shadow-sm p-2 grid grid-cols-2 sm:grid-cols-5 gap-2">
                 <Field label="Title" value={proj.title} />
-                <Field label="Client/Agency" value={proj.clientOrAgency} />
+                <Field label="Client / Agency" value={proj.clientOrAgency} />
                 <Field label="Revenue (₹L)" value={proj.revenueLakhs} />
                 <Field label="Year" value={proj.year} />
                 <Field label="Status" value={proj.status} />
@@ -244,14 +260,14 @@ export function MentorshipModule({ profile }: { profile: Partial<FacultyProfileF
           <SubLabel>Ph.D. Scholars Pursuing</SubLabel>
           <div className="mt-2">
             <Field label="Count" value={p.phdScholarsPursuing?.count} />
-            <Field label="Universities" value={p.phdScholarsPursuing?.universities} />
+            <Field label="University Names" value={p.phdScholarsPursuing?.universities} />
           </div>
         </div>
         <div className="rounded-lg border bg-muted/20 shadow-sm p-3">
           <SubLabel>Ph.D. Scholars Awarded</SubLabel>
           <div className="mt-2">
             <Field label="Count" value={p.phdScholarsAwarded?.count} />
-            <Field label="Universities" value={p.phdScholarsAwarded?.universities} />
+            <Field label="University Names" value={p.phdScholarsAwarded?.universities} />
           </div>
         </div>
       </div>
@@ -292,6 +308,7 @@ export function MentorshipModule({ profile }: { profile: Partial<FacultyProfileF
           p.trainingEntries?.map((t, i) => (
             <div key={i} className="rounded-md border bg-muted/20 shadow-sm p-2 grid grid-cols-2 sm:grid-cols-4 gap-2">
               <Field label="Type" value={TRAINING_ENTRY_TYPE_LABELS[t.type]} />
+              <Field label="Participated or Conducted" value={t.role ? TRAINING_PARTICIPATION_ROLE_LABELS[t.role] : undefined} />
               <Field label="Title of the Program" value={t.title} />
               <Field label="Name of the Faculty / Coordinator" value={t.organizer} />
               <Field label="From Date" value={t.fromDate} />
@@ -299,7 +316,7 @@ export function MentorshipModule({ profile }: { profile: Partial<FacultyProfileF
               <Field label="Duration" value={t.durationDays ? `${t.durationDays} day${t.durationDays === 1 ? "" : "s"}` : undefined} />
               <Field label="National / International" value={t.levelOfProgram ? TRAINING_PROGRAM_LEVEL_LABELS[t.levelOfProgram] : undefined} />
               <Field label="Place" value={t.place} />
-              <Field label="Mode" value={t.mode ? TRAINING_PROGRAM_MODE_LABELS[t.mode] : undefined} />
+              <Field label="Mode of the Program" value={t.mode ? TRAINING_PROGRAM_MODE_LABELS[t.mode] : undefined} />
               <Field label="Number of Participants" value={t.numberOfParticipants} />
               <Field label="Number of Resource Persons" value={t.numberOfResourcePersons} />
               <Field label="Resource Persons - Details" value={t.resourcePersonsDetails} />
@@ -383,7 +400,7 @@ export function FinancialModule({ profile }: { profile: Partial<FacultyProfileFi
         <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-3">
           <Field label="Gross Annual CTC (₹)" value={p.grossAnnualCTC} />
           <Field label="Increments Awarded" value={p.incrementsAwarded} />
-          <Field label="Funding/Consultancy Revenue (₹)" value={p.fundingConsultancyRevenue} />
+          <Field label="Funding/Consultancy Revenue Generation (₹)" value={p.fundingConsultancyRevenue} />
         </div>
       </div>
     </Section>

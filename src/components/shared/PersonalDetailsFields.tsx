@@ -438,13 +438,6 @@ export function PersonalDetailsFields({ value, onChange, requiredFields = STAFF_
           <Label>Branch</Label>
           <Input value={value.bankBranch ?? ""} onChange={(e) => set("bankBranch", e.target.value)} placeholder="Branch name" />
         </div>
-        <div className="space-y-2 sm:col-span-2">
-          <Label>Other Details</Label>
-          <Textarea value={value.bankOtherDetails ?? ""} onChange={(e) => set("bankOtherDetails", e.target.value)} />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="space-y-2">
           <Label>PF Number</Label>
           <Input value={value.pfNumber ?? ""} onChange={(e) => set("pfNumber", e.target.value)} placeholder="Provident Fund number" />
@@ -455,6 +448,10 @@ export function PersonalDetailsFields({ value, onChange, requiredFields = STAFF_
             <Input value={value.esiNumber ?? ""} onChange={(e) => set("esiNumber", e.target.value)} placeholder="ESI number" />
           </div>
         )}
+        <div className="space-y-2 sm:col-span-2">
+          <Label>Other Details</Label>
+          <Textarea value={value.bankOtherDetails ?? ""} onChange={(e) => set("bankOtherDetails", e.target.value)} />
+        </div>
       </div>
 
       <div className="pt-2 pb-1 border-t">

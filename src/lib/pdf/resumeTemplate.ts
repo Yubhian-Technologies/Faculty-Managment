@@ -592,7 +592,7 @@ export function getResumeHTML(data: ResumeData): string {
   ${renderSection("Education", educationBody)}
   ${renderSection("Previous Experience", experienceBody)}
   ${renderSection("Teaching Load", teachingLoadBody)}
-  ${renderSection("Research & Development", publicationsBody)}
+  ${renderSection("Research & Innovation", publicationsBody)}
   ${renderSection("Projects, Grants & Consultancy", grantsBody)}
   ${renderSection("Mentorship & Institutional Contribution", mentorshipBody)}
   ${renderSection("Certifications & Professional Memberships", certificationsBody)}
