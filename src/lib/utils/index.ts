@@ -101,9 +101,12 @@ export function slugify(text: string): string {
     .replace(/(^-|-$)/g, "");
 }
 
-export function getInitials(name: string): string {
+export function getInitials(name: string | undefined | null): string {
+  if (!name?.trim()) return "?";
   return name
+    .trim()
     .split(" ")
+    .filter(Boolean)
     .map((n) => n[0])
     .join("")
     .toUpperCase()

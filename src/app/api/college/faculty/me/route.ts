@@ -4,6 +4,8 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
+import { syncTrainingEntryCoConductors } from "@/lib/faculty/syncTrainingEntryCoConductors";
+import type { TrainingEntry } from "@/types";
 
 const FINANCIAL_ACADEMIC_KEYS = ["presentSalary", "grossAnnualCTC", "incrementsAwarded", "fundingConsultancyRevenue"];
 
@@ -117,7 +119,22 @@ export async function PATCH(request: Request) {
       facultyUpdates.academicProfile = ap;
     }
 
+    const previousFacultyData = facultyDoc.data() as { legalName?: string; name?: string; academicProfile?: { trainingEntries?: TrainingEntry[] } };
+
     await facultyDoc.ref.update(facultyUpdates);
+
+    if (body.academicProfile !== undefined) {
+      try {
+        const ownerName = previousFacultyData.legalName?.trim() || previousFacultyData.name?.trim() || "";
+        const nextEntries = (facultyUpdates.academicProfile as { trainingEntries?: TrainingEntry[] } | undefined)?.trainingEntries;
+        await syncTrainingEntryCoConductors(
+          db, session.collegeId, facultyDoc.id, ownerName,
+          previousFacultyData.academicProfile?.trainingEntries, nextEntries
+        );
+      } catch (syncErr) {
+        console.error("[college/faculty/me PATCH] co-conductor sync failed:", syncErr);
+      }
+    }
 
     // Keep the thin users/{uid} doc in sync so auth store reflects latest name/photo
     const userUpdates: Record<string, unknown> = { updatedAt: now };

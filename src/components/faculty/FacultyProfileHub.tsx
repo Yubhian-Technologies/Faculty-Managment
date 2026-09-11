@@ -205,11 +205,11 @@ export function FacultyProfileHub({
                 </span>
               }
             />
-            <Fact label="College Email" value={faculty.collegeEmail} />
             <Fact label="Designation" value={designationLabel} />
             <Fact label="Highest Qualification" value={faculty.qualification} />
             <Fact label="Specialization" value={faculty.specialization} />
             <Fact label="Total Years of Experience" value={hasExperienceData ? formatDuration(totalExperience) : undefined} />
+            <Fact label="College Email" value={faculty.collegeEmail} />
             <Fact label="Employee Category" value={faculty.employmentType} />
             <Fact
               label={faculty.status === "INTERVIEW_DONE" ? "Expected to Join" : "Date of Joining"}

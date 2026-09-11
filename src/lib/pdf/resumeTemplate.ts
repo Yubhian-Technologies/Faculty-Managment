@@ -532,12 +532,12 @@ export function getResumeHTML(data: ResumeData): string {
     detail("Blood Group", data.bloodGroup) +
     detail("Marital Status", data.maritalStatus) +
     detail("Legal Name", data.legalName) +
-    detail("Father / Husband", data.fatherName) +
+    detail("Father", data.fatherName) +
     detail("Mother", data.motherName) +
-    detail("Spouse", data.spouseName) +
+    detail(data.gender === "Female" ? "Husband" : "Spouse", data.spouseName) +
     detail("Children", data.numberOfChildren) +
     detail("Religion", data.religion ? (RELIGION_LABELS[data.religion as Religion] ?? data.religion) : undefined) +
-    detail("Caste", data.caste ? (CASTE_LABELS[data.caste as Caste] ?? data.caste) : undefined) +
+    detail("Caste", data.caste && data.caste !== "BC" ? (CASTE_LABELS[data.caste as Caste] ?? data.caste) : undefined) +
     detail("Sub Caste", data.subCaste) +
     detail("Aadhar No.", data.aadharNo) +
     detail("PAN No.", data.panNo) +

@@ -117,4 +117,4 @@ export const RATIFICATION_STATUS_OPTIONS = ["Ratified", "Not Ratified"] as const
 export const RELIGION_OPTIONS = [
   "Hindu", "Muslim", "Christian", "Sikh", "Jain", "Parsi", "Buddhist", "Other",
 ] as const;
-export const CASTE_OPTIONS = ["OC", "EBC", "EPC", "BC", "SC", "ST", "OTHER"] as const;
+export const CASTE_OPTIONS = ["OC", "EBC", "EPC", "BC-A", "BC-B", "BC-C", "BC-D", "BC-E", "SC", "ST", "OTHER"] as const;
