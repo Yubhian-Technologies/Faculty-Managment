@@ -8,6 +8,9 @@ import { syncTrainingEntryCoConductors } from "@/lib/faculty/syncTrainingEntryCo
 import type { TrainingEntry } from "@/types";
 
 const FINANCIAL_ACADEMIC_KEYS = ["presentSalary", "grossAnnualCTC", "incrementsAwarded", "fundingConsultancyRevenue"];
+// Researcher IDs go through R&D verification (POST /api/college/research-profile)
+// instead - stripped here so a direct PATCH can't set them unverified.
+const RESEARCH_PROFILE_KEYS = ["orcidId", "scopusAuthorId", "researcherId", "googleScholarId", "irinsProfile"];
 
 // Self-service lookup for "My Profile" pages. Two different data shapes can hold
 // "this person's own details" depending on how their account was provisioned:
@@ -116,6 +119,7 @@ export async function PATCH(request: Request) {
     if (body.academicProfile !== undefined) {
       const ap = { ...body.academicProfile };
       for (const k of FINANCIAL_ACADEMIC_KEYS) delete ap[k];
+      for (const k of RESEARCH_PROFILE_KEYS) delete ap[k];
       facultyUpdates.academicProfile = ap;
     }
 

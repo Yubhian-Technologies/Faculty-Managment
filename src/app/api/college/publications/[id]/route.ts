@@ -6,7 +6,8 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { notify, notifyRole } from "@/lib/notify";
 import { PUBLICATION_ELIGIBLE_ROLES } from "@/lib/publications/eligibleRoles";
-import type { PublicationStatus } from "@/types";
+import { finalizePublicationDetails, deriveFlatFields, summarizeChanges } from "@/lib/publications/deriveFlatFields";
+import type { PublicationDetails, PublicationStatus } from "@/types";
 
 export async function GET(
   _request: Request,
@@ -60,6 +61,7 @@ export async function PATCH(
       // R&D's verification decision on a self-submitted PENDING record.
       decision: "APPROVED" | "REJECTED";
       rejectionReason: string;
+      details: PublicationDetails;
     }>;
 
     const db = getAdminDb();
@@ -68,10 +70,14 @@ export async function PATCH(
     if (!snap.exists) {
       return NextResponse.json({ error: "Publication not found" }, { status: 404 });
     }
-    const pub = snap.data() as { uid: string; title: string; status?: PublicationStatus };
+    const pub = snap.data() as {
+      uid: string; title: string; status?: PublicationStatus;
+      internalAuthorUids?: string[]; details?: PublicationDetails;
+    };
     const isRnD = session.role === "R_AND_D";
     const isOwner = pub.uid === session.uid;
-    if (!isRnD && !isOwner) {
+    const isCoAuthor = (pub.internalAuthorUids ?? []).includes(session.uid);
+    if (!isRnD && !isOwner && !isCoAuthor) {
       return NextResponse.json({ error: "Not authorized to edit this publication" }, { status: 403 });
     }
 
@@ -108,14 +114,13 @@ export async function PATCH(
       return NextResponse.json({ ok: true });
     }
 
-    // Owner editing+resubmitting their own rejected submission - the same
-    // plain content fields the self-submit form collects, not R&D's
-    // report-only extras (department/authorPosition/venueType/etc.), which
-    // stay R&D-only below.
-    if (isOwner && !isRnD) {
-      if (pub.status !== "REJECTED") {
-        return NextResponse.json({ error: "Only a rejected submission can be edited" }, { status: 403 });
-      }
+    // Owner or a verified Internal co-author editing this record - allowed
+    // at any status, not just REJECTED (they can correct a still-PENDING
+    // submission before R&D even looks at it). Editing an already-APPROVED
+    // record reopens it for re-verification and logs exactly what changed,
+    // rather than silently re-approving stale info.
+    if ((isOwner || isCoAuthor) && !isRnD) {
+      const wasApproved = pub.status === "APPROVED";
       const now = new Date();
       const updates: Record<string, unknown> = {
         updatedAt: now,
@@ -125,19 +130,41 @@ export async function PATCH(
         reviewedAt: FieldValue.delete(),
         rejectionReason: FieldValue.delete(),
       };
-      if (body.title !== undefined) updates.title = body.title;
-      if (body.coAuthors !== undefined) updates.coAuthors = body.coAuthors;
-      if (body.journalOrConference !== undefined) updates.journalOrConference = body.journalOrConference;
-      if (body.publicationYear !== undefined) updates.publicationYear = body.publicationYear;
-      if (body.indexing !== undefined) updates.indexing = body.indexing;
-      if (body.driveLink !== undefined) updates.driveLink = body.driveLink;
+      let editorName = "A staff member";
+      try {
+        const editorSnap = await db.collection("colleges").doc(session.collegeId).collection("users").doc(session.uid).get();
+        editorName = (editorSnap.data() as { name?: string } | undefined)?.name ?? editorName;
+      } catch { /* best-effort */ }
+
+      let changes: string[] = [];
+      if (body.details) {
+        const { details, internalAuthorUids } = await finalizePublicationDetails(db, session.collegeId, body.details);
+        if (wasApproved && pub.details) changes = summarizeChanges(pub.details, details);
+        Object.assign(updates, { details, internalAuthorUids }, deriveFlatFields(details));
+      } else {
+        if (body.title !== undefined) updates.title = body.title;
+        if (body.coAuthors !== undefined) updates.coAuthors = body.coAuthors;
+        if (body.journalOrConference !== undefined) updates.journalOrConference = body.journalOrConference;
+        if (body.publicationYear !== undefined) updates.publicationYear = body.publicationYear;
+        if (body.indexing !== undefined) updates.indexing = body.indexing;
+        if (body.driveLink !== undefined) updates.driveLink = body.driveLink;
+      }
+
+      if (wasApproved) {
+        updates.changeLog = FieldValue.arrayUnion({
+          changedAt: now, changedBy: session.uid, changedByName: editorName,
+          changes: changes.length > 0 ? changes : ["Details updated"],
+        });
+      }
 
       await ref.update(updates);
       await notifyRole(
         db, session.collegeId, "R_AND_D",
         "PUBLICATION_PENDING_VERIFICATION",
-        "Publication resubmitted for verification",
-        `A previously rejected publication ("${body.title ?? pub.title}") was corrected and resubmitted`,
+        wasApproved ? "Approved publication edited - re-verification needed" : "Publication resubmitted for verification",
+        wasApproved
+          ? `${editorName} edited "${body.title ?? pub.title}" after approval: ${(changes.length > 0 ? changes : ["Details updated"]).join(", ")}`
+          : `${editorName} submitted/corrected "${body.title ?? pub.title}" for verification`,
         "/r-and-d/publications"
       );
       return NextResponse.json({ ok: true });
@@ -145,6 +172,10 @@ export async function PATCH(
 
     // R&D's own full edit - any field, any status.
     const updates: Record<string, unknown> = { updatedAt: new Date() };
+    if (body.details) {
+      const { details, internalAuthorUids } = await finalizePublicationDetails(db, session.collegeId, body.details);
+      Object.assign(updates, { details, internalAuthorUids }, deriveFlatFields(details));
+    }
     if (body.title !== undefined) updates.title = body.title;
     if (body.coAuthors !== undefined) updates.coAuthors = body.coAuthors;
     if (body.citation !== undefined) updates.citation = body.citation;

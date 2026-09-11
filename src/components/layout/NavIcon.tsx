@@ -51,6 +51,13 @@ import {
   FlaskConical,
   Send,
   Award,
+  IdCard,
+  HandCoins,
+  PiggyBank,
+  Lightbulb,
+  Presentation,
+  Trophy,
+  Sparkles,
   type LucideProps,
 } from "lucide-react";
 
@@ -107,6 +114,13 @@ const icons: Record<string, React.ComponentType<LucideProps>> = {
   FlaskConical,
   Send,
   Award,
+  IdCard,
+  HandCoins,
+  PiggyBank,
+  Lightbulb,
+  Presentation,
+  Trophy,
+  Sparkles,
 };
 
 export function NavIcon({ name, ...props }: { name: string } & LucideProps) {

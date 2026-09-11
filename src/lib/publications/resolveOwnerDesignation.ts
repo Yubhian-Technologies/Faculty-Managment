@@ -1,10 +1,9 @@
 import type { Firestore } from "firebase-admin/firestore";
-import type { UserRole } from "@/types";
 
 // Academic-leadership roles that resolveEmployeeIdentity (src/lib/leave/
 // identity.ts) already treats as teaching-equivalent when they have no
 // FacultyMember record of their own.
-const ACADEMIC_LEADERSHIP_ROLES: UserRole[] = ["HOD", "PRINCIPAL", "VICE_PRINCIPAL", "DEAN"];
+const ACADEMIC_LEADERSHIP_ROLES: string[] = ["HOD", "PRINCIPAL", "VICE_PRINCIPAL", "DEAN"];
 
 // A publication belongs to the person's academic career, not whichever
 // administrative role they happened to hold when it was added - Principal/
@@ -19,7 +18,7 @@ export async function resolveOwnerDesignation(
   db: Firestore,
   collegeId: string,
   uid: string,
-  role: UserRole
+  role: string
 ): Promise<string | undefined> {
   const facultySnap = await db.collection("colleges").doc(collegeId).collection("facultyMembers")
     .where("userUid", "==", uid).limit(1).get();
