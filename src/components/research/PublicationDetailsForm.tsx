@@ -26,15 +26,10 @@ const AUTHOR_CATEGORY_LABELS: Record<AuthorCategory, string> = {
 
 const AUTHOR_TYPE_LABELS: Record<AuthorRoleType, string> = { FACULTY: "Faculty", STUDENT: "Student" };
 
-const INDEX_LABELS: Record<PublicationIndex, string> = {
-  SCOPUS: "Scopus", WOS_ESCI: "WoS-ESCI", WOS_SCIE: "WoS-SCIE", WOS: "WoS",
-};
-const INDEX_REFERENCE_URLS: Record<PublicationIndex, string> = {
-  SCOPUS: "https://www.scopus.com", WOS_ESCI: "https://mjl.clarivate.com/home",
-  WOS_SCIE: "https://mjl.clarivate.com/home", WOS: "https://mjl.clarivate.com/home",
-};
-const QUARTILE_REFERENCE_URL = "https://www.scimagojr.com/";
-const IMPACT_FACTOR_REFERENCE_URL = "https://www.bioxbio.com/";
+// Shared with the R&D record view so both point at the same sources.
+import {
+  INDEX_LABELS, INDEX_REFERENCE_URLS, QUARTILE_REFERENCE_URL, IMPACT_FACTOR_REFERENCE_URL,
+} from "@/lib/research/publicationReferences";
 
 // Journal indexes distinguish WoS-ESCI/WoS-SCIE; Conference/Book Chapter just use plain WoS.
 const INDEX_OPTIONS_BY_TYPE: Record<PublicationType, PublicationIndex[]> = {

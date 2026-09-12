@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Trash2, Check, X } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Eye, Trash2, Check, X } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
+import { researchRecordHref } from "@/lib/research/modules";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
@@ -19,6 +21,7 @@ const SERVICE_TYPE_LABELS: Record<ResearchServiceType, string> = {
 };
 
 export default function RAndDResearchServicesPage() {
+  const router = useRouter();
   const [records, setRecords] = useState<ResearchServiceRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [deleteTarget, setDeleteTarget] = useState<ResearchServiceRow | null>(null);
@@ -133,6 +136,12 @@ export default function RAndDResearchServicesPage() {
       header: "",
       render: (row) => (
         <div className="flex items-center gap-1">
+          <Button
+            variant="ghost" size="sm"
+            onClick={(e) => { e.stopPropagation(); router.push(researchRecordHref("research-services", row.id)); }}
+          >
+            <Eye className="h-4 w-4 mr-1" />View
+          </Button>
           <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={(e) => { e.stopPropagation(); setDeleteTarget(row); }}>
             <Trash2 className="h-4 w-4" />
           </Button>
@@ -149,6 +158,12 @@ export default function RAndDResearchServicesPage() {
       header: "",
       render: (row) => (
         <div className="flex items-center gap-1">
+          <Button
+            variant="ghost" size="sm"
+            onClick={(e) => { e.stopPropagation(); router.push(researchRecordHref("research-services", row.id)); }}
+          >
+            <Eye className="h-4 w-4 mr-1" />View
+          </Button>
           <Button
             variant="ghost" size="sm" className="text-green-700 hover:text-green-700"
             loading={approving === row.id}
@@ -198,6 +213,7 @@ export default function RAndDResearchServicesPage() {
           columns={officialColumns}
           isLoading={isLoading}
           keyExtractor={(r) => r.id}
+          onRowClick={(r) => router.push(researchRecordHref("research-services", r.id))}
           searchPlaceholder="Search records..."
           searchKeys={["title", "ownerName", "reviewerPaperTitle", "editorPublicationName"] as (keyof ResearchServiceRow)[]}
           emptyTitle="No records yet"
@@ -210,6 +226,7 @@ export default function RAndDResearchServicesPage() {
           columns={pendingColumns}
           isLoading={isLoading}
           keyExtractor={(r) => r.id}
+          onRowClick={(r) => router.push(researchRecordHref("research-services", r.id))}
           searchPlaceholder="Search pending submissions..."
           searchKeys={["title", "ownerName", "reviewerPaperTitle", "editorPublicationName"] as (keyof ResearchServiceRow)[]}
           emptyTitle="Nothing pending"

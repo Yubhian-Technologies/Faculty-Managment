@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Trash2, Check, X } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Eye, Trash2, Check, X } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
+import { researchRecordHref } from "@/lib/research/modules";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
@@ -18,6 +20,7 @@ import type { ConsultancyProjectRequest } from "@/types";
 type ConsultancyProjectRow = ConsultancyProjectRequest & Record<string, unknown>;
 
 export default function RAndDConsultancyProjectsPage() {
+  const router = useRouter();
   const [projects, setProjects] = useState<ConsultancyProjectRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [deleteTarget, setDeleteTarget] = useState<ConsultancyProjectRow | null>(null);
@@ -140,6 +143,12 @@ export default function RAndDConsultancyProjectsPage() {
       header: "",
       render: (row) => (
         <div className="flex items-center gap-1">
+          <Button
+            variant="ghost" size="sm"
+            onClick={(e) => { e.stopPropagation(); router.push(researchRecordHref("consultancy-projects", row.id)); }}
+          >
+            <Eye className="h-4 w-4 mr-1" />View
+          </Button>
           <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={(e) => { e.stopPropagation(); setDeleteTarget(row); }}>
             <Trash2 className="h-4 w-4" />
           </Button>
@@ -156,6 +165,12 @@ export default function RAndDConsultancyProjectsPage() {
       header: "",
       render: (row) => (
         <div className="flex items-center gap-1">
+          <Button
+            variant="ghost" size="sm"
+            onClick={(e) => { e.stopPropagation(); router.push(researchRecordHref("consultancy-projects", row.id)); }}
+          >
+            <Eye className="h-4 w-4 mr-1" />View
+          </Button>
           <Button
             variant="ghost" size="sm" className="text-green-700 hover:text-green-700"
             loading={approving === row.id}
@@ -205,6 +220,7 @@ export default function RAndDConsultancyProjectsPage() {
           columns={officialColumns}
           isLoading={isLoading}
           keyExtractor={(r) => r.id}
+          onRowClick={(r) => router.push(researchRecordHref("consultancy-projects", r.id))}
           searchPlaceholder="Search consultancy projects..."
           searchKeys={["title", "ownerName", "clientName"] as (keyof ConsultancyProjectRow)[]}
           emptyTitle="No consultancy projects yet"
@@ -217,6 +233,7 @@ export default function RAndDConsultancyProjectsPage() {
           columns={pendingColumns}
           isLoading={isLoading}
           keyExtractor={(r) => r.id}
+          onRowClick={(r) => router.push(researchRecordHref("consultancy-projects", r.id))}
           searchPlaceholder="Search pending submissions..."
           searchKeys={["title", "ownerName", "clientName"] as (keyof ConsultancyProjectRow)[]}
           emptyTitle="Nothing pending"

@@ -417,7 +417,7 @@ export function GrantsFields({ value, onChange }: ModuleFieldsProps) {
         )}
       />
       <RepeatingGroup
-        title="Industry Consultancy"
+        title="Consultancy Projects"
         items={value.consultancyProjects}
         empty={EMPTY_CONSULTANCY}
         onChange={(v) => set("consultancyProjects", v)}

@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Check, X } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Eye, Check, X } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
+import { researchRecordHref } from "@/lib/research/modules";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
@@ -15,6 +17,7 @@ import type { CitationMetricsRequest } from "@/types";
 type CitationMetricsRow = CitationMetricsRequest & Record<string, unknown>;
 
 export default function RAndDCitationMetricsPage() {
+  const router = useRouter();
   const [requests, setRequests] = useState<CitationMetricsRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [tab, setTab] = useState<"verified" | "pending">("pending");
@@ -110,6 +113,20 @@ export default function RAndDCitationMetricsPage() {
       header: "Status",
       render: (row) => <Badge variant={row.status === "APPROVED" ? "approved" : "rejected"} className="text-xs">{row.status === "APPROVED" ? "Verified" : "Rejected"}</Badge>,
     },
+    {
+      key: "actions",
+      header: "",
+      render: (row) => (
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost" size="sm"
+            onClick={(e) => { e.stopPropagation(); router.push(researchRecordHref("citation-metrics", row.id)); }}
+          >
+            <Eye className="h-4 w-4 mr-1" />View
+          </Button>
+        </div>
+      ),
+    },
   ];
 
   const pendingColumns: Column<CitationMetricsRow>[] = [
@@ -120,6 +137,12 @@ export default function RAndDCitationMetricsPage() {
       header: "",
       render: (row) => (
         <div className="flex items-center gap-1">
+          <Button
+            variant="ghost" size="sm"
+            onClick={(e) => { e.stopPropagation(); router.push(researchRecordHref("citation-metrics", row.id)); }}
+          >
+            <Eye className="h-4 w-4 mr-1" />View
+          </Button>
           <Button
             variant="ghost" size="sm" className="text-green-700 hover:text-green-700"
             loading={approving === row.uid}
@@ -169,6 +192,7 @@ export default function RAndDCitationMetricsPage() {
           columns={verifiedColumns}
           isLoading={isLoading}
           keyExtractor={(r) => r.id}
+          onRowClick={(r) => router.push(researchRecordHref("citation-metrics", r.id))}
           searchPlaceholder="Search citation metrics..."
           searchKeys={["ownerName"] as (keyof CitationMetricsRow)[]}
           emptyTitle="Nothing verified yet"
@@ -181,6 +205,7 @@ export default function RAndDCitationMetricsPage() {
           columns={pendingColumns}
           isLoading={isLoading}
           keyExtractor={(r) => r.id}
+          onRowClick={(r) => router.push(researchRecordHref("citation-metrics", r.id))}
           searchPlaceholder="Search pending submissions..."
           searchKeys={["ownerName"] as (keyof CitationMetricsRow)[]}
           emptyTitle="Nothing pending"

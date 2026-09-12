@@ -2,9 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { FlaskConical, Plus, Pencil, Trash2, Upload, Check, X } from "lucide-react";
+import { Eye, FlaskConical, Plus, Pencil, Trash2, Upload, Check, X } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
+import { researchRecordHref } from "@/lib/research/modules";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
@@ -134,6 +135,12 @@ export default function RAndDPublicationsPage() {
       header: "",
       render: (row) => (
         <div className="flex items-center gap-1">
+          <Button
+            variant="ghost" size="sm"
+            onClick={(e) => { e.stopPropagation(); router.push(researchRecordHref("publications", row.id)); }}
+          >
+            <Eye className="h-4 w-4 mr-1" />View
+          </Button>
           <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); router.push(`/r-and-d/publications/${row.id}/edit`); }}>
             <Pencil className="h-4 w-4" />
           </Button>
@@ -164,6 +171,12 @@ export default function RAndDPublicationsPage() {
       header: "",
       render: (row) => (
         <div className="flex items-center gap-1">
+          <Button
+            variant="ghost" size="sm"
+            onClick={(e) => { e.stopPropagation(); router.push(researchRecordHref("publications", row.id)); }}
+          >
+            <Eye className="h-4 w-4 mr-1" />View
+          </Button>
           <Button
             variant="ghost" size="sm" className="text-green-700 hover:text-green-700"
             loading={approving === row.id}
@@ -223,6 +236,7 @@ export default function RAndDPublicationsPage() {
           columns={officialColumns}
           isLoading={isLoading}
           keyExtractor={(r) => r.id}
+          onRowClick={(r) => router.push(researchRecordHref("publications", r.id))}
           searchPlaceholder="Search publications..."
           searchKeys={["title", "ownerName", "journalOrConference"] as (keyof PublicationRow)[]}
           emptyTitle="No publications yet"
@@ -240,6 +254,7 @@ export default function RAndDPublicationsPage() {
           columns={pendingColumns}
           isLoading={isLoading}
           keyExtractor={(r) => r.id}
+          onRowClick={(r) => router.push(researchRecordHref("publications", r.id))}
           searchPlaceholder="Search pending submissions..."
           searchKeys={["title", "ownerName", "journalOrConference"] as (keyof PublicationRow)[]}
           emptyTitle="Nothing pending"
