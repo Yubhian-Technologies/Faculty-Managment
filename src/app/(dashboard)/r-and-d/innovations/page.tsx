@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Trash2, Check, X } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Eye, Trash2, Check, X } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
+import { researchRecordHref } from "@/lib/research/modules";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
@@ -20,6 +22,7 @@ const INNOVATION_TYPE_LABELS: Record<InnovationType, string> = {
 };
 
 export default function RAndDInnovationsPage() {
+  const router = useRouter();
   const [records, setRecords] = useState<InnovationRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [deleteTarget, setDeleteTarget] = useState<InnovationRow | null>(null);
@@ -132,6 +135,12 @@ export default function RAndDInnovationsPage() {
       header: "",
       render: (row) => (
         <div className="flex items-center gap-1">
+          <Button
+            variant="ghost" size="sm"
+            onClick={(e) => { e.stopPropagation(); router.push(researchRecordHref("innovations", row.id)); }}
+          >
+            <Eye className="h-4 w-4 mr-1" />View
+          </Button>
           <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={(e) => { e.stopPropagation(); setDeleteTarget(row); }}>
             <Trash2 className="h-4 w-4" />
           </Button>
@@ -148,6 +157,12 @@ export default function RAndDInnovationsPage() {
       header: "",
       render: (row) => (
         <div className="flex items-center gap-1">
+          <Button
+            variant="ghost" size="sm"
+            onClick={(e) => { e.stopPropagation(); router.push(researchRecordHref("innovations", row.id)); }}
+          >
+            <Eye className="h-4 w-4 mr-1" />View
+          </Button>
           <Button
             variant="ghost" size="sm" className="text-green-700 hover:text-green-700"
             loading={approving === row.id}
@@ -197,6 +212,7 @@ export default function RAndDInnovationsPage() {
           columns={officialColumns}
           isLoading={isLoading}
           keyExtractor={(r) => r.id}
+          onRowClick={(r) => router.push(researchRecordHref("innovations", r.id))}
           searchPlaceholder="Search innovations..."
           searchKeys={["innovationTitle", "ownerName", "academicYear"] as (keyof InnovationRow)[]}
           emptyTitle="No records yet"
@@ -209,6 +225,7 @@ export default function RAndDInnovationsPage() {
           columns={pendingColumns}
           isLoading={isLoading}
           keyExtractor={(r) => r.id}
+          onRowClick={(r) => router.push(researchRecordHref("innovations", r.id))}
           searchPlaceholder="Search pending submissions..."
           searchKeys={["innovationTitle", "ownerName", "academicYear"] as (keyof InnovationRow)[]}
           emptyTitle="Nothing pending"

@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Trash2, Check, X } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Eye, Trash2, Check, X } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
+import { researchRecordHref } from "@/lib/research/modules";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
@@ -15,6 +17,7 @@ import type { SponsoredProjectRequest } from "@/types";
 type SponsoredProjectRow = SponsoredProjectRequest & Record<string, unknown>;
 
 export default function RAndDSponsoredProjectsPage() {
+  const router = useRouter();
   const [projects, setProjects] = useState<SponsoredProjectRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [deleteTarget, setDeleteTarget] = useState<SponsoredProjectRow | null>(null);
@@ -134,6 +137,12 @@ export default function RAndDSponsoredProjectsPage() {
       header: "",
       render: (row) => (
         <div className="flex items-center gap-1">
+          <Button
+            variant="ghost" size="sm"
+            onClick={(e) => { e.stopPropagation(); router.push(researchRecordHref("sponsored-projects", row.id)); }}
+          >
+            <Eye className="h-4 w-4 mr-1" />View
+          </Button>
           <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={(e) => { e.stopPropagation(); setDeleteTarget(row); }}>
             <Trash2 className="h-4 w-4" />
           </Button>
@@ -150,6 +159,12 @@ export default function RAndDSponsoredProjectsPage() {
       header: "",
       render: (row) => (
         <div className="flex items-center gap-1">
+          <Button
+            variant="ghost" size="sm"
+            onClick={(e) => { e.stopPropagation(); router.push(researchRecordHref("sponsored-projects", row.id)); }}
+          >
+            <Eye className="h-4 w-4 mr-1" />View
+          </Button>
           <Button
             variant="ghost" size="sm" className="text-green-700 hover:text-green-700"
             loading={approving === row.id}
@@ -199,6 +214,7 @@ export default function RAndDSponsoredProjectsPage() {
           columns={officialColumns}
           isLoading={isLoading}
           keyExtractor={(r) => r.id}
+          onRowClick={(r) => router.push(researchRecordHref("sponsored-projects", r.id))}
           searchPlaceholder="Search sponsored projects..."
           searchKeys={["title", "ownerName", "agencyName"] as (keyof SponsoredProjectRow)[]}
           emptyTitle="No sponsored projects yet"
@@ -211,6 +227,7 @@ export default function RAndDSponsoredProjectsPage() {
           columns={pendingColumns}
           isLoading={isLoading}
           keyExtractor={(r) => r.id}
+          onRowClick={(r) => router.push(researchRecordHref("sponsored-projects", r.id))}
           searchPlaceholder="Search pending submissions..."
           searchKeys={["title", "ownerName", "agencyName"] as (keyof SponsoredProjectRow)[]}
           emptyTitle="Nothing pending"
