@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,9 +14,9 @@ import {
 import { ImportFixField } from "@/components/import/ImportFixField";
 import { toast } from "@/hooks/useToast";
 import { useAuthStore } from "@/store/authStore";
-import { useCollegeType } from "@/hooks/useCollegeType";
 import { parseCSV, matchHeaders, getUnmatchedHeaders, parseExcelFile, readFileAsText } from "@/lib/utils/csv";
-import { IMPORT_COLUMNS as COLUMNS, IMPORT_HINTS as HINTS, IMPORT_SAMPLE_ROWS } from "@/lib/faculty/csvColumns";
+import type { DesignationCatalogItem } from "@/types";
+import { getFacultyImportColumns, getFacultyImportHints, getFacultyImportSampleRows } from "@/lib/faculty/csvColumns";
 import { Download, Upload, CheckCircle2, XCircle, FileSpreadsheet, ArrowLeft, AlertTriangle, Pencil } from "lucide-react";
 
 type ParsedRow = Record<string, string>;
@@ -36,7 +36,21 @@ type FailedRow = { row: number; employeeId: string; error: string; data: ParsedR
 
 export default function FacultyImportPage() {
   const fileRef = useRef<HTMLInputElement>(null);
-  const { collegeType } = useCollegeType();
+  const [designationOptions, setDesignationOptions] = useState<string[]>([]);
+  useEffect(() => {
+    void (async () => {
+      try {
+        const res = await fetch("/api/college/designations?category=FACULTY");
+        const data = await res.json() as { items?: DesignationCatalogItem[] };
+        setDesignationOptions((data.items ?? []).filter((d) => d.isActive).map((d) => d.name));
+      } catch {
+        // Non-fatal - the Fix dialog's Designation field just stays empty.
+      }
+    })();
+  }, []);
+  const COLUMNS = useMemo(() => getFacultyImportColumns(designationOptions), [designationOptions]);
+  const HINTS = useMemo(() => getFacultyImportHints(designationOptions), [designationOptions]);
+  const IMPORT_SAMPLE_ROWS = useMemo(() => getFacultyImportSampleRows(designationOptions), [designationOptions]);
   const [rows, setRows] = useState<ParsedRow[]>([]);
   const [parseError, setParseError] = useState("");
   const [isImporting, setIsImporting] = useState(false);
@@ -504,8 +518,7 @@ export default function FacultyImportPage() {
                   value={fixTarget.form[c.key] ?? ""}
                   placeholder={c.sample || undefined}
                   onChange={(v) => setFixField(c.key, v)}
-                  collegeType={collegeType}
-                  designationKind="teaching"
+                  designationOptions={designationOptions}
                 />
               ))}
             </div>

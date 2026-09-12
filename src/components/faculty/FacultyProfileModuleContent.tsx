@@ -6,9 +6,10 @@ import {
   QualificationModule, ExperienceModule, GrantsModule,
   MentorshipModule, FinancialModule, OthersModule,
 } from "@/components/faculty/ProfileFieldsView";
-import { PublicationsModuleView, PublicationsSection } from "@/components/faculty/PublicationsModuleView";
+import { ResearchInnovationModule } from "@/components/faculty/ResearchInnovationModule";
 import { TeachingLoadTable } from "@/components/faculty/TeachingLoadTable";
 import { buildTeachingLoadRows } from "@/lib/teaching/buildTeachingLoadRows";
+import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import type { PersonalDetailsSource } from "@/components/shared/PersonalDetailsView";
 import type { ProfileModuleKey } from "@/lib/faculty/profileModules";
 import type { FacultyProfileFields, TeachingAssignment, CollegeType, ResearchPublication } from "@/types";
@@ -20,10 +21,17 @@ import type { FacultyProfileFields, TeachingAssignment, CollegeType, ResearchPub
 export interface FacultyProfileSource extends PersonalDetailsSource {
   academicProfile?: FacultyProfileFields;
   department?: string;
+  // Name (as per PAN) - facultyDisplayName() prefers legalName (already part
+  // of PersonalDetailsSource) but falls back to this when a record has none.
+  name?: string;
   joiningLetterUrl?: string;
   appointmentLetterUrl?: string;
   uid?: string;      // FMSUser (HOD/Principal self-profile) login uid
   userUid?: string;  // FacultyMember's linked login uid
+  // For the "Total Years of Experience" fact on the Professional Experience
+  // module (see ExperienceModule) - optional since it doesn't apply outside
+  // a genuine Faculty record.
+  joiningDate?: PersonalDetailsSource["dateOfBirth"];
 }
 
 interface Props {
@@ -42,6 +50,18 @@ interface Props {
   // (/api/college/publications), which only college-scoped roles can call.
   // Omitted entirely, every other caller keeps the self-fetching behavior.
   publications?: ResearchPublication[] | null;
+  // True only for a genuine Faculty record view (HOD/Principal/Management
+  // viewing a Faculty member) - their Add/Edit surfaces move Full Name (as
+  // per SSC) up into the "core" identity step, shown on FacultyProfileHub's
+  // own top summary instead, so it isn't shown a second time here. Every
+  // other caller (self-profile pages for non-Faculty logins) leaves this
+  // false/default, unchanged from before.
+  hideLegalName?: boolean;
+  // True only when the viewer IS this profile's owner (MyProfileModulePage,
+  // principal/profile) - lets the Research tile offer "Add Publication" for
+  // self-submission. Everyone viewing someone ELSE's profile (HOD/Principal/
+  // Super Admin/Management drill-downs) leaves this unset.
+  isOwnProfile?: boolean;
 }
 
 // Renders exactly one module's content for the per-module View pages - the
@@ -49,20 +69,20 @@ interface Props {
 // pieces as the old single-scroll views (ProfileFieldsView's per-module
 // exports, PersonalDetailsView, TeachingLoadTable) so nothing here
 // duplicates field-rendering logic.
-export function FacultyProfileModuleContent({ moduleKey, faculty, teachingAssignments = [], includeTeachingAssignment = true, collegeType, publications }: Props) {
+export function FacultyProfileModuleContent({ moduleKey, faculty, teachingAssignments = [], includeTeachingAssignment = true, collegeType, publications, hideLegalName, isOwnProfile }: Props) {
   return (
     <Card>
       <CardContent className="pt-6">
-        {moduleKey === "personal" && <PersonalDetailsView value={faculty} />}
+        {moduleKey === "personal" && <PersonalDetailsView value={faculty} hideLegalName={hideLegalName} />}
         {moduleKey === "qualification" && <QualificationModule profile={faculty.academicProfile} collegeType={collegeType} />}
-        {moduleKey === "experience" && <ExperienceModule profile={faculty.academicProfile} includeTeachingAssignment={includeTeachingAssignment} />}
+        {moduleKey === "experience" && (
+          <ExperienceModule profile={faculty.academicProfile} includeTeachingAssignment={includeTeachingAssignment} joiningDate={faculty.joiningDate} />
+        )}
         {moduleKey === "research" && (
-          publications !== undefined
-            ? <PublicationsSection publications={publications} academicProfile={faculty.academicProfile} />
-            : <PublicationsModuleView uid={faculty.userUid ?? faculty.uid} academicProfile={faculty.academicProfile} />
+          <ResearchInnovationModule uid={faculty.userUid ?? faculty.uid} academicProfile={faculty.academicProfile} publications={publications} isOwnProfile={isOwnProfile} />
         )}
         {moduleKey === "grants" && <GrantsModule profile={faculty.academicProfile} />}
-        {moduleKey === "mentorship" && <MentorshipModule profile={faculty.academicProfile} />}
+        {moduleKey === "mentorship" && <MentorshipModule profile={faculty.academicProfile} ownerName={facultyDisplayName(faculty)} />}
         {moduleKey === "financial" && <FinancialModule profile={faculty.academicProfile} />}
         {moduleKey === "others" && <OthersModule profile={faculty.academicProfile} />}
         {moduleKey === "teaching-load" && (

@@ -47,6 +47,13 @@ export interface PersonalDetailsSource {
 
 interface Props {
   value: PersonalDetailsSource | undefined;
+  // Faculty's Add/Edit surfaces move Full Name (as per SSC) up into their
+  // "core" identity step, shown on FacultyProfileHub's own top summary
+  // instead - so FacultyProfileModuleContent passes this to avoid showing it
+  // a second time here. Supporting/Non-Technical Staff don't pass this, so
+  // legalName stays exactly where it always was (matches PersonalDetailsFields'
+  // own hiddenFields doc-comment).
+  hideLegalName?: boolean;
 }
 
 function Field({ label, value }: { label: string; value: string | undefined | null }) {
@@ -58,7 +65,7 @@ function Field({ label, value }: { label: string; value: string | undefined | nu
   );
 }
 
-export function PersonalDetailsView({ value }: Props) {
+export function PersonalDetailsView({ value, hideLegalName = false }: Props) {
   const p = value ?? {};
 
   return (
@@ -67,11 +74,15 @@ export function PersonalDetailsView({ value }: Props) {
         <Field label="Name (as per Aadhar)" value={p.nameAsPerAadhar} />
         <Field label="Date of Birth" value={p.dateOfBirth ? formatDate(p.dateOfBirth) : undefined} />
         <Field label="Gender" value={p.gender} />
-        <Field label="Full Name (as per SSC)" value={p.legalName} />
-        <Field label="Father / Husband Name" value={p.fatherName} />
+        {!hideLegalName && <Field label="Full Name (as per SSC)" value={p.legalName} />}
+        <Field label="Father Name" value={p.fatherName} />
         <Field label="Mother Name" value={p.motherName} />
         <Field label="Religion" value={p.religion ? (RELIGION_LABELS[p.religion as Religion] ?? p.religion) : undefined} />
-        <Field label="Caste" value={p.caste ? (CASTE_LABELS[p.caste as Caste] ?? p.caste) : undefined} />
+        {/* A record saved before the bare "BC" option was split into
+            BC-A..BC-E (see types/core.ts) still has that removed value on
+            file - shown as blank rather than a stale "BC" until it's re-saved
+            with a real category. */}
+        <Field label="Caste" value={p.caste && p.caste !== "BC" ? (CASTE_LABELS[p.caste as Caste] ?? p.caste) : undefined} />
         <Field label="Sub Caste" value={p.subCaste} />
         <Field label="Aadhar No" value={p.aadharNo} />
         <Field label="PAN No" value={p.panNo} />
@@ -90,32 +101,13 @@ export function PersonalDetailsView({ value }: Props) {
       </div>
 
       <div className="rounded-lg border bg-muted/20 shadow-sm p-3">
-        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Bank Account Details</p>
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-          <Field label="A/C Number" value={p.bankAccountNo} />
-          <Field label="IFSC Code" value={p.ifscCode} />
-          <Field label="Bank Name" value={p.bankName} />
-          <Field label="Branch" value={p.bankBranch} />
-        </div>
-        {p.bankOtherDetails && (
-          <div className="mt-3">
-            <Field label="Other Details" value={p.bankOtherDetails} />
-          </div>
-        )}
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 mt-3">
-          <Field label="PF Number" value={p.pfNumber} />
-          <Field label="ESI Number" value={p.esiNumber} />
-        </div>
-      </div>
-
-      <div className="rounded-lg border bg-muted/20 shadow-sm p-3">
         <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Family &amp; Other Details</p>
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           <Field label="Marital Status" value={p.maritalStatus} />
           <Field label="Blood Group" value={p.bloodGroup} />
           {p.maritalStatus === "Married" && (
             <>
-              <Field label="Spouse Name" value={p.spouseName} />
+              <Field label={p.gender === "Female" ? "Husband Name" : "Spouse Name"} value={p.spouseName} />
               <Field label="Number of Children" value={p.numberOfChildren !== undefined ? String(p.numberOfChildren) : undefined} />
             </>
           )}
@@ -127,6 +119,25 @@ export function PersonalDetailsView({ value }: Props) {
             value={p.permanentSameAsTemporary ? "Same as temporary" : p.permanentAddress}
           />
         </div>
+      </div>
+
+      <div className="rounded-lg border bg-muted/20 shadow-sm p-3">
+        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Bank Account Details</p>
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <Field label="A/C Number" value={p.bankAccountNo} />
+          <Field label="IFSC Code" value={p.ifscCode} />
+          <Field label="Bank Name" value={p.bankName} />
+          <Field label="Branch" value={p.bankBranch} />
+        </div>
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 mt-3">
+          <Field label="PF Number" value={p.pfNumber} />
+          <Field label="ESI Number" value={p.esiNumber} />
+        </div>
+        {p.bankOtherDetails && (
+          <div className="mt-3">
+            <Field label="Other Details" value={p.bankOtherDetails} />
+          </div>
+        )}
       </div>
 
       <div className="rounded-lg border bg-muted/20 shadow-sm p-3">

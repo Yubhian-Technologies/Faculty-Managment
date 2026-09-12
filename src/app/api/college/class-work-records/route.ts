@@ -6,7 +6,6 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodManageFacultyDepartment } from "@/lib/departments/scope";
 import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 import { DAY_BY_JS_DAY } from "@/lib/timetable/currentPeriod";
-import { loadDepartmentCodes, formatSectionLabel } from "@/lib/attendance/sectionLabel";
 import { fetchSectionStudents } from "@/lib/students/sectionRoster";
 import type { CourseYearTiming, Section, StudentAttendanceMark, StudentAttendanceSession, TimetableSlot } from "@/types";
 
@@ -352,10 +351,9 @@ export async function GET(request: Request) {
     }
 
     // HOD's Monthly Records daily view - unchanged.
-    const codeByName = await loadDepartmentCodes(collegeRef, inMonth.map((r) => r.department));
     const records: DailyRecord[] = inMonth
       .map((r) => ({
-        section: formatSectionLabel(r.department, r.sectionName, codeByName),
+        section: r.sectionName,
         date: r.date,
         periodNumber: resolvePeriodNumber(r),
         classNotes: r.classNotes ?? "",

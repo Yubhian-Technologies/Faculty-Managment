@@ -162,7 +162,7 @@ export function PersonalDetailsFields({ value, onChange, requiredFields = STAFF_
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="space-y-2">
-          <Label>Father / Husband Name</Label>
+          <Label>Father Name</Label>
           <Input value={value.fatherName ?? ""} onChange={(e) => set("fatherName", e.target.value)} />
         </div>
         <div className="space-y-2">
@@ -191,7 +191,12 @@ export function PersonalDetailsFields({ value, onChange, requiredFields = STAFF_
         <div className="space-y-2">
           <Label>Caste</Label>
           <Select
-            value={value.caste && !(value.caste in CASTE_LABELS) ? "OTHER" : (value.caste ?? "")}
+            // A record saved before the bare "BC" option was split into
+            // BC-A..BC-E (see types/core.ts) still has that removed value on
+            // file - treated as unset here (not "Other") so it doesn't
+            // resurface as if it were a real caste name; picking any option
+            // below overwrites it.
+            value={value.caste === "BC" ? "" : value.caste && !(value.caste in CASTE_LABELS) ? "OTHER" : (value.caste ?? "")}
             onValueChange={(v) => onChange({ ...value, caste: v, subCaste: undefined })}
           >
             <SelectTrigger><SelectValue placeholder="Select caste" /></SelectTrigger>
@@ -199,7 +204,7 @@ export function PersonalDetailsFields({ value, onChange, requiredFields = STAFF_
               {Object.entries(CASTE_LABELS).map(([v, label]) => <SelectItem key={v} value={v}>{label}</SelectItem>)}
             </SelectContent>
           </Select>
-          {value.caste && (value.caste === "OTHER" || !(value.caste in CASTE_LABELS)) && (
+          {value.caste && value.caste !== "BC" && (value.caste === "OTHER" || !(value.caste in CASTE_LABELS)) && (
             <Input
               value={value.caste === "OTHER" ? "" : value.caste}
               onChange={(e) => set("caste", e.target.value || "OTHER")}
@@ -230,7 +235,7 @@ export function PersonalDetailsFields({ value, onChange, requiredFields = STAFF_
               )}
             </>
           ) : (
-            <Input value={value.subCaste ?? ""} onChange={(e) => set("subCaste", e.target.value)} placeholder="e.g. BC-B" />
+            <Input value={value.subCaste ?? ""} onChange={(e) => set("subCaste", e.target.value)} placeholder="e.g. Reddy" />
           )}
         </div>
         <div className="space-y-2">
@@ -370,7 +375,7 @@ export function PersonalDetailsFields({ value, onChange, requiredFields = STAFF_
         {value.maritalStatus === "Married" && (
           <>
             <div className="space-y-2">
-              <Label>Spouse Name</Label>
+              <Label>{value.gender === "Female" ? "Husband Name" : "Spouse Name"}</Label>
               <Input value={value.spouseName ?? ""} onChange={(e) => set("spouseName", e.target.value)} />
             </div>
             <div className="space-y-2">
@@ -438,13 +443,6 @@ export function PersonalDetailsFields({ value, onChange, requiredFields = STAFF_
           <Label>Branch</Label>
           <Input value={value.bankBranch ?? ""} onChange={(e) => set("bankBranch", e.target.value)} placeholder="Branch name" />
         </div>
-        <div className="space-y-2 sm:col-span-2">
-          <Label>Other Details</Label>
-          <Textarea value={value.bankOtherDetails ?? ""} onChange={(e) => set("bankOtherDetails", e.target.value)} />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="space-y-2">
           <Label>PF Number</Label>
           <Input value={value.pfNumber ?? ""} onChange={(e) => set("pfNumber", e.target.value)} placeholder="Provident Fund number" />
@@ -455,6 +453,10 @@ export function PersonalDetailsFields({ value, onChange, requiredFields = STAFF_
             <Input value={value.esiNumber ?? ""} onChange={(e) => set("esiNumber", e.target.value)} placeholder="ESI number" />
           </div>
         )}
+        <div className="space-y-2 sm:col-span-2">
+          <Label>Other Details</Label>
+          <Textarea value={value.bankOtherDetails ?? ""} onChange={(e) => set("bankOtherDetails", e.target.value)} />
+        </div>
       </div>
 
       <div className="pt-2 pb-1 border-t">

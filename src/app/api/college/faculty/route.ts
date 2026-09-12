@@ -7,7 +7,7 @@ import { createFirebaseUser } from "@/lib/firebase/authRest";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
 import { getHodDepartmentScope, getDepartmentTreeNames, canHodEditDepartment, facultyManageableDepartmentNames } from "@/lib/departments/scope";
 import { LEGACY_TECHNICAL_DESIGNATIONS } from "@/lib/designations/config";
-import type { Designation, EmploymentType, FacultyStatus } from "@/types";
+import type { Designation, FacultyStatus } from "@/types";
 
 export async function GET(request: Request) {
   try {
@@ -148,7 +148,6 @@ export async function POST(request: Request) {
       experienceYears: number;
       joiningDate: string;
       dateOfJoiningDepartment?: string;
-      employmentType: EmploymentType;
       aicteEligible?: boolean;
       department?: string;
       academicProfile?: Record<string, unknown>;
@@ -165,11 +164,10 @@ export async function POST(request: Request) {
       qualification,
       experienceYears,
       joiningDate,
-      employmentType,
       profilePhotoUrl,
     } = body;
 
-    if (!employeeId || !collegeEmail || !password || !designation || !qualification || !employmentType || !joiningDate) {
+    if (!employeeId || !collegeEmail || !password || !designation || !qualification || !joiningDate) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
     // Matches the mandatory field set the bulk-import template and Add
@@ -305,7 +303,6 @@ export async function POST(request: Request) {
       experienceYears: Number(experienceYears),
       joiningDate: new Date(joiningDate),
       ...(body.dateOfJoiningDepartment ? { dateOfJoiningDepartment: new Date(body.dateOfJoiningDepartment) } : {}),
-      employmentType,
       ...(body.aicteEligible !== undefined ? { aicteEligible: body.aicteEligible } : {}),
       status: "ACTIVE" as FacultyStatus,
       userUid: uid,

@@ -13,11 +13,11 @@ import { toast } from "@/hooks/useToast";
 import { supportingStaffDisplayName } from "@/lib/supportingStaff/supportingStaffDisplayName";
 import {
   NON_TECHNICAL_STAFF_DESIGNATION_LABELS,
-  SUPPORTING_STAFF_EMPLOYMENT_TYPE_LABELS, FACULTY_STATUS_LABELS,
+  FACULTY_STATUS_LABELS,
 } from "@/types";
 import type {
   SupportingStaffMember, SupportingStaffDesignation,
-  EmploymentType, FacultyStatus,
+  FacultyStatus,
 } from "@/types";
 
 type StaffRow = Record<string, unknown> & SupportingStaffMember;
@@ -102,12 +102,6 @@ export default function CollegeOfficeNonTechnicalStaffPage() {
       header: "Department",
       hideOnMobile: true,
       render: (row) => <span className="text-sm text-muted-foreground">{row.department || "Centrally managed"}</span>,
-    },
-    {
-      key: "employmentType",
-      header: "Employment",
-      hideOnMobile: true,
-      render: (row) => <Badge variant="outline">{SUPPORTING_STAFF_EMPLOYMENT_TYPE_LABELS[row.employmentType as EmploymentType] ?? row.employmentType}</Badge>,
     },
     {
       key: "status",

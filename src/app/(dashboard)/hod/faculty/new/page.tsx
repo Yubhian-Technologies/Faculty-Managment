@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ChevronLeft, ChevronRight, Check } from "lucide-react";
+import { ChevronLeft, ChevronRight, Check, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -19,13 +19,13 @@ import {
   QualificationFields, ExperienceFields, ResearchFields, GrantsFields,
   MentorshipFields, FinancialFields, OthersFields,
 } from "@/components/faculty/AcademicProfileModuleFields";
-import { RepeatingGroup, TextInput } from "@/components/shared/ProfileFieldPrimitives";
+import { TextInput } from "@/components/shared/ProfileFieldPrimitives";
 import { syncTeachingAssignments } from "@/lib/teaching/syncTeachingAssignments";
-import { totalPreviousExperienceYears, formatExperienceDuration } from "@/lib/faculty/experienceCalc";
+import { totalPreviousExperienceYears, totalYearsOfExperience, formatDuration } from "@/lib/faculty/experienceCalc";
 import { PHONE_REGEX } from "@/lib/validations";
 import { AvatarUploadField } from "@/components/shared/AvatarUploadField";
 import { PROFILE_MODULES } from "@/lib/faculty/profileModules";
-import { FACULTY_DESIGNATIONS, FACULTY_EMPLOYMENT_CATEGORIES, designationLabel } from "@/lib/designations/config";
+import type { DesignationCatalogItem } from "@/types";
 import { useCollegeType } from "@/hooks/useCollegeType";
 import { useAuthStore } from "@/store/authStore";
 import { toast } from "@/hooks/useToast";
@@ -56,8 +56,8 @@ const schema = z.object({
   qualification: z.string().min(1, "Qualification is required"),
   specialization: z.string().optional(),
   experienceYears: z.number().min(0, "Cannot be negative").optional(),
-  joiningDate: z.string().min(1, "Date of Joining is required"),
-  employmentType: z.string().min(1, "Employment type is required"),
+  joiningDate: z.string().min(1, "Joining date is required"),
+  dateOfJoiningDepartment: z.string().optional(),
   aicteEligible: z.boolean().optional(),
 });
 
@@ -77,6 +77,21 @@ export default function NewFacultyPage() {
   const searchParams = useSearchParams();
   const { collegeType } = useCollegeType();
   const user = useAuthStore((s) => s.user);
+  // The college's own admin-curated Faculty Designation Catalog (see
+  // DesignationCatalogCard) - no hardcoded list, no "Other" free-text escape
+  // hatch any more.
+  const [designationOptions, setDesignationOptions] = useState<string[]>([]);
+  useEffect(() => {
+    void (async () => {
+      try {
+        const res = await fetch("/api/college/designations?category=FACULTY");
+        const data = await res.json() as { items?: DesignationCatalogItem[] };
+        setDesignationOptions((data.items ?? []).filter((d) => d.isActive).map((d) => d.name));
+      } catch {
+        // Non-fatal - the picker just stays empty until the admin's catalog loads.
+      }
+    })();
+  }, []);
   // Same derivation as the bulk-import page (hod/faculty/import/page.tsx) -
   // an HOD can now head more than one top-level department at once
   // (user.departments), so which one a NEW faculty member belongs to is no
@@ -132,16 +147,13 @@ export default function NewFacultyPage() {
   } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: {
-      experienceYears: 0, designation: "", employmentType: "Regular", password: "", aicteEligible: false,
+      experienceYears: 0, designation: "", password: "", aicteEligible: false,
       ...(isLinkMode ? { name: linkName } : {}),
     },
   });
   const [erroredSteps, setErroredSteps] = useState<Set<WizardStepKey>>(new Set());
 
   const designation = watch("designation");
-  const employmentType = watch("employmentType");
-  const isOtherDesignation = !!designation && !FACULTY_DESIGNATIONS.includes(designation);
-  const isOtherEmploymentType = !!employmentType && !FACULTY_EMPLOYMENT_CATEGORIES.includes(employmentType);
   const qualification = watch("qualification");
   // "Others" is a mode, not a stored value - it reveals a free-text box whose
   // contents become `qualification`. Needs its own state because once the user
@@ -150,11 +162,12 @@ export default function NewFacultyPage() {
   const [qualIsOther, setQualIsOther] = useState(false);
   const aicteEligible = watch("aicteEligible");
   const name = watch("name");
+  const joiningDateValue = watch("joiningDate");
 
-  // Total Years of Experience is calculated from Previous Experience's
-  // From/To dates (see experienceCalc.ts), not typed manually - kept in sync
-  // with the form's own experienceYears field so submit sends the computed
-  // total as-is (the "core" step's input just displays it, read-only).
+  // FacultyMember.experienceYears is calculated from Previous Experience's
+  // From/To dates alone (see experienceCalc.ts), not typed manually - kept in
+  // sync with the form's own experienceYears field so submit sends the
+  // computed total as-is.
   const totalExperience = useMemo(
     () => totalPreviousExperienceYears(academicProfile.previousInstitutions),
     [academicProfile.previousInstitutions]
@@ -162,6 +175,15 @@ export default function NewFacultyPage() {
   useEffect(() => {
     setValue("experienceYears", totalExperience);
   }, [totalExperience, setValue]);
+
+  // The "core" step's read-only preview goes further than the stored number
+  // above - it also adds time served since Date of Joining (if filled in
+  // yet), live, the same "Total Years of Experience" figure the profile will
+  // show once this faculty member is added.
+  const previewTotalExperience = useMemo(
+    () => totalYearsOfExperience(academicProfile.previousInstitutions, joiningDateValue),
+    [academicProfile.previousInstitutions, joiningDateValue]
+  );
 
   const steps: WizardStep[] = useMemo(() => [
     { key: "core", label: "Identity & Employment" },
@@ -187,7 +209,7 @@ export default function NewFacultyPage() {
     employeeId: "Employee ID", name: "Name (as per PAN)", collegeEmail: "College Email",
     password: "Login Password", phone: "Mobile No", designation: "Designation",
     qualification: "Highest Qualification", experienceYears: "Total Years of Experience",
-    joiningDate: "Date of Joining", employmentType: "Employee Category",
+    joiningDate: "Date of Joining Institution",
     legalName: "Full Name (as per SSC)",
   };
 
@@ -423,38 +445,6 @@ export default function NewFacultyPage() {
                   </div>
                 )}
 
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="email">Personal Email</Label>
-                    <Input id="email" type="email" {...register("email")} placeholder="faculty@example.com" />
-                    {errors.email && <p className="text-sm text-destructive">{errors.email.message}</p>}
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="phone">Mobile No *</Label>
-                    <Input id="phone" type="tel" autoComplete="off" {...register("phone")} placeholder="+91 98765 43210" />
-                    {errors.phone && <p className="text-sm text-destructive">{errors.phone.message}</p>}
-                  </div>
-                </div>
-
-                <RepeatingGroup
-                  title="Additional Mobile Numbers"
-                  items={extraPhones}
-                  empty={{ label: "", number: "" }}
-                  onChange={setExtraPhones}
-                  addLabel="Add Number"
-                  renderRow={(item, update) => (
-                    <>
-                      <TextInput
-                        label="Label (optional)"
-                        value={item.label}
-                        onChange={(v) => update({ label: v })}
-                        placeholder="e.g. Personal, WhatsApp, or a name"
-                      />
-                      <TextInput label="Mobile Number" value={item.number} onChange={(v) => update({ number: v })} placeholder="+91 98765 43210" />
-                    </>
-                  )}
-                />
-
                 <div className="pt-2 pb-1 border-t">
                   <p className="text-sm font-medium text-muted-foreground">Role Details</p>
                 </div>
@@ -463,22 +453,14 @@ export default function NewFacultyPage() {
                   <div className="space-y-2">
                     <Label>Designation *</Label>
                     <Select
-                      value={isOtherDesignation ? "OTHER" : designation}
-                      onValueChange={(v) => setValue("designation", v === "OTHER" ? "OTHER" : v)}
+                      value={designation}
+                      onValueChange={(v) => setValue("designation", v)}
                     >
                       <SelectTrigger><SelectValue placeholder="Select designation" /></SelectTrigger>
                       <SelectContent>
-                        {FACULTY_DESIGNATIONS.map((d) => <SelectItem key={d} value={d}>{designationLabel(d)}</SelectItem>)}
-                        <SelectItem value="OTHER">Other</SelectItem>
+                        {designationOptions.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
                       </SelectContent>
                     </Select>
-                    {isOtherDesignation && (
-                      <Input
-                        value={designation === "OTHER" ? "" : designation}
-                        onChange={(e) => setValue("designation", e.target.value || "OTHER")}
-                        placeholder="Please specify"
-                      />
-                    )}
                     {errors.designation && <p className="text-sm text-destructive">{errors.designation.message}</p>}
                   </div>
                   <div className="space-y-2">
@@ -518,9 +500,9 @@ export default function NewFacultyPage() {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="experienceYears">Total Years of Experience</Label>
-                    <Input id="experienceYears" value={formatExperienceDuration(totalExperience) || "0 mos"} readOnly disabled className="bg-muted" />
+                    <Input id="experienceYears" value={formatDuration(previewTotalExperience)} readOnly disabled className="bg-muted" />
                     <p className="text-xs text-muted-foreground">
-                      Calculated automatically from the From/To dates added under Professional Experience.
+                      Calculated automatically from the From/To dates added under Professional Experience, plus time served since Date of Joining.
                     </p>
                   </div>
                 </div>
@@ -531,28 +513,7 @@ export default function NewFacultyPage() {
 
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
-                    <Label>Employee Category *</Label>
-                    <Select
-                      value={isOtherEmploymentType ? "OTHER" : employmentType}
-                      onValueChange={(v) => setValue("employmentType", v === "OTHER" ? "OTHER" : v)}
-                    >
-                      <SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger>
-                      <SelectContent>
-                        {FACULTY_EMPLOYMENT_CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                        <SelectItem value="OTHER">Other</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    {isOtherEmploymentType && (
-                      <Input
-                        value={employmentType === "OTHER" ? "" : employmentType}
-                        onChange={(e) => setValue("employmentType", e.target.value || "OTHER")}
-                        placeholder="Please specify"
-                      />
-                    )}
-                    {errors.employmentType && <p className="text-sm text-destructive">{errors.employmentType.message}</p>}
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="joiningDate">Date of Joining *</Label>
+                    <Label htmlFor="joiningDate">Date of Joining Institution *</Label>
                     <Input id="joiningDate" type="date" {...register("joiningDate")} />
                     {errors.joiningDate && <p className="text-sm text-destructive">{errors.joiningDate.message}</p>}
                   </div>
@@ -566,6 +527,66 @@ export default function NewFacultyPage() {
                   />
                   <Label htmlFor="aicteEligible" className="cursor-pointer">AICTE Eligible</Label>
                 </div>
+
+                <div className="pt-2 pb-1 border-t">
+                  <p className="text-sm font-medium text-muted-foreground">Contact Details</p>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="email">Personal Email</Label>
+                    <Input id="email" type="email" {...register("email")} placeholder="faculty@example.com" />
+                    {errors.email && <p className="text-sm text-destructive">{errors.email.message}</p>}
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="phone">Mobile No *</Label>
+                      <Button
+                        type="button"
+                        variant="link"
+                        size="sm"
+                        className="h-auto p-0 text-xs"
+                        onClick={() => setExtraPhones((p) => [...p, { label: "", number: "" }])}
+                      >
+                        + Add Number
+                      </Button>
+                    </div>
+                    <Input id="phone" type="tel" autoComplete="off" {...register("phone")} placeholder="+91 98765 43210" />
+                    {errors.phone && <p className="text-sm text-destructive">{errors.phone.message}</p>}
+                  </div>
+                </div>
+
+                {extraPhones.length > 0 && (
+                  <div className="space-y-3">
+                    {extraPhones.map((item, i) => (
+                      <div key={i} className="flex items-start gap-2">
+                        <div className="flex-1 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                          <TextInput
+                            label="Label (optional)"
+                            value={item.label}
+                            onChange={(v) => setExtraPhones((prev) => prev.map((p, idx) => (idx === i ? { ...p, label: v } : p)))}
+                            placeholder="e.g. Personal, WhatsApp, or a name"
+                          />
+                          <TextInput
+                            label="Mobile Number"
+                            value={item.number}
+                            onChange={(v) => setExtraPhones((prev) => prev.map((p, idx) => (idx === i ? { ...p, number: v } : p)))}
+                            placeholder="+91 98765 43210"
+                          />
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="mt-7"
+                          onClick={() => setExtraPhones((prev) => prev.filter((_, idx) => idx !== i))}
+                        >
+                          <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </>
             )}
 

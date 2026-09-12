@@ -4,8 +4,13 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
+import { syncTrainingEntryCoConductors } from "@/lib/faculty/syncTrainingEntryCoConductors";
+import type { TrainingEntry } from "@/types";
 
 const FINANCIAL_ACADEMIC_KEYS = ["presentSalary", "grossAnnualCTC", "incrementsAwarded", "fundingConsultancyRevenue"];
+// Researcher IDs go through R&D verification (POST /api/college/research-profile)
+// instead - stripped here so a direct PATCH can't set them unverified.
+const RESEARCH_PROFILE_KEYS = ["orcidId", "scopusAuthorId", "researcherId", "googleScholarId", "irinsProfile"];
 
 // Self-service lookup for "My Profile" pages. Two different data shapes can hold
 // "this person's own details" depending on how their account was provisioned:
@@ -114,10 +119,26 @@ export async function PATCH(request: Request) {
     if (body.academicProfile !== undefined) {
       const ap = { ...body.academicProfile };
       for (const k of FINANCIAL_ACADEMIC_KEYS) delete ap[k];
+      for (const k of RESEARCH_PROFILE_KEYS) delete ap[k];
       facultyUpdates.academicProfile = ap;
     }
 
+    const previousFacultyData = facultyDoc.data() as { legalName?: string; name?: string; academicProfile?: { trainingEntries?: TrainingEntry[] } };
+
     await facultyDoc.ref.update(facultyUpdates);
+
+    if (body.academicProfile !== undefined) {
+      try {
+        const ownerName = previousFacultyData.legalName?.trim() || previousFacultyData.name?.trim() || "";
+        const nextEntries = (facultyUpdates.academicProfile as { trainingEntries?: TrainingEntry[] } | undefined)?.trainingEntries;
+        await syncTrainingEntryCoConductors(
+          db, session.collegeId, facultyDoc.id, ownerName,
+          previousFacultyData.academicProfile?.trainingEntries, nextEntries
+        );
+      } catch (syncErr) {
+        console.error("[college/faculty/me PATCH] co-conductor sync failed:", syncErr);
+      }
+    }
 
     // Keep the thin users/{uid} doc in sync so auth store reflects latest name/photo
     const userUpdates: Record<string, unknown> = { updatedAt: now };

@@ -67,13 +67,13 @@ function projectCells(projects: FundedProject[] | undefined, i: number): [string
 
 function promotionCells(items: PromotionRecord[] | undefined, i: number): [string, string, string] {
   const p = items?.[i];
-  return p ? [p.fromDesignation ?? "", p.toDesignation ?? "", p.effectiveYear ? String(p.effectiveYear) : ""] : ["", "", ""];
+  return p ? [p.designation ?? "", p.fromDate ?? "", p.toDate ?? ""] : ["", "", ""];
 }
 
 function adminRespCells(items: AdminResponsibilityEntry[] | undefined, i: number): [string, string, string, string] {
   const a = items?.[i];
   return a
-    ? [ADMIN_RESPONSIBILITY_CATEGORY_LABELS[a.category] ?? a.category, a.description ?? "", a.fromYear ? String(a.fromYear) : "", a.toYear ? String(a.toYear) : ""]
+    ? [a.category === "OTHER" ? (a.otherCategory ?? "Other") : (ADMIN_RESPONSIBILITY_CATEGORY_LABELS[a.category] ?? a.category), a.description ?? "", a.fromYear ? String(a.fromYear) : "", a.toYear ? String(a.toYear) : ""]
     : ["", "", "", ""];
 }
 
@@ -131,7 +131,6 @@ function buildRow(faculty: FacultyMember, teachingSummary: string): Record<strin
     designation: s(faculty.designation),
     qualification: s(faculty.qualification),
     specialization: s(faculty.specialization),
-    employmentType: s(faculty.employmentType),
     status: s(faculty.status),
     joiningDate: toDateInputValue(faculty.joiningDate),
     dateOfJoiningDepartment: toDateInputValue(faculty.dateOfJoiningDepartment),
@@ -257,8 +256,8 @@ function buildRow(faculty: FacultyMember, teachingSummary: string): Record<strin
     const [labDetails, labOutcomes] = labCells(p.labsEstablished, n - 1);
     row[`lab${n}_details`] = labDetails; row[`lab${n}_outcomes`] = labOutcomes;
 
-    const [promoFrom, promoTo, promoYear] = promotionCells(p.promotionHistory, n - 1);
-    row[`promotion${n}_fromDesignation`] = promoFrom; row[`promotion${n}_toDesignation`] = promoTo; row[`promotion${n}_effectiveYear`] = promoYear;
+    const [promoDesignation, promoFromDate, promoToDate] = promotionCells(p.promotionHistory, n - 1);
+    row[`promotion${n}_designation`] = promoDesignation; row[`promotion${n}_fromDate`] = promoFromDate; row[`promotion${n}_toDate`] = promoToDate;
 
     const [arCategory, arDescription, arFromYear, arToYear] = adminRespCells(p.adminResponsibilityEntries, n - 1);
     row[`adminResp${n}_category`] = arCategory; row[`adminResp${n}_description`] = arDescription;

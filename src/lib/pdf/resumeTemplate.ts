@@ -1,6 +1,6 @@
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
-import { DESIGNATION_LABELS, EMPLOYMENT_TYPE_LABELS, FACULTY_STATUS_LABELS, ROLE_LABELS, RELIGION_LABELS, CASTE_LABELS } from "@/types";
+import { DESIGNATION_LABELS, FACULTY_STATUS_LABELS, ROLE_LABELS, RELIGION_LABELS, CASTE_LABELS } from "@/types";
 import type { Religion, Caste } from "@/types";
 import { buildTeachingLoadRows, formatClassColumn, type TeachingLoadRow } from "@/lib/teaching/buildTeachingLoadRows";
 
@@ -172,7 +172,6 @@ export interface ResumeData {
   resumeUrl?: string;
 
   joiningDate?: TimestampLike;
-  employmentType?: string;
   status?: string;
   isActive?: boolean;
   hasPHD?: boolean;
@@ -360,9 +359,6 @@ export function getResumeHTML(data: ResumeData): string {
   const designationLabel = data.designation
     ? (DESIGNATION_LABELS[data.designation as keyof typeof DESIGNATION_LABELS] ?? data.designation)
     : "";
-  const employmentTypeLabel = data.employmentType
-    ? (EMPLOYMENT_TYPE_LABELS[data.employmentType as keyof typeof EMPLOYMENT_TYPE_LABELS] ?? data.employmentType)
-    : "";
   const statusLabel = data.status
     ? (FACULTY_STATUS_LABELS[data.status as keyof typeof FACULTY_STATUS_LABELS] ?? data.status)
     : typeof data.isActive === "boolean"
@@ -527,7 +523,6 @@ export function getResumeHTML(data: ResumeData): string {
   // ── Personal & contact details ──────────────────────────────────────────
   const personalBody = detailTable(
     detail("Status", statusLabel) +
-    detail("Employment Type", employmentTypeLabel) +
     detail(
       data.status === "INTERVIEW_DONE" ? "Expected to Join" : "Date of Joining",
       data.joiningDate ? formatDate(data.joiningDate as Parameters<typeof formatDate>[0]) : ""
@@ -537,12 +532,12 @@ export function getResumeHTML(data: ResumeData): string {
     detail("Blood Group", data.bloodGroup) +
     detail("Marital Status", data.maritalStatus) +
     detail("Legal Name", data.legalName) +
-    detail("Father / Husband", data.fatherName) +
+    detail("Father", data.fatherName) +
     detail("Mother", data.motherName) +
-    detail("Spouse", data.spouseName) +
+    detail(data.gender === "Female" ? "Husband" : "Spouse", data.spouseName) +
     detail("Children", data.numberOfChildren) +
     detail("Religion", data.religion ? (RELIGION_LABELS[data.religion as Religion] ?? data.religion) : undefined) +
-    detail("Caste", data.caste ? (CASTE_LABELS[data.caste as Caste] ?? data.caste) : undefined) +
+    detail("Caste", data.caste && data.caste !== "BC" ? (CASTE_LABELS[data.caste as Caste] ?? data.caste) : undefined) +
     detail("Sub Caste", data.subCaste) +
     detail("Aadhar No.", data.aadharNo) +
     detail("PAN No.", data.panNo) +
@@ -592,7 +587,7 @@ export function getResumeHTML(data: ResumeData): string {
   ${renderSection("Education", educationBody)}
   ${renderSection("Previous Experience", experienceBody)}
   ${renderSection("Teaching Load", teachingLoadBody)}
-  ${renderSection("Research & Development", publicationsBody)}
+  ${renderSection("Research & Innovation", publicationsBody)}
   ${renderSection("Projects, Grants & Consultancy", grantsBody)}
   ${renderSection("Mentorship & Institutional Contribution", mentorshipBody)}
   ${renderSection("Certifications & Professional Memberships", certificationsBody)}

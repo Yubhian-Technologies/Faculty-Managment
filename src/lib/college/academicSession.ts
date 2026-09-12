@@ -18,6 +18,26 @@ export function parseBatchStartYear(batch: string): number | null {
   return m ? Number(m[1]) : null;
 }
 
+/** "2024-2028" -> 2028 (the graduation year). Null if the label doesn't end with a 4-digit year. */
+export function parseBatchEndYear(batch: string): number | null {
+  const m = batch.match(/(\d{4})$/);
+  return m ? Number(m[1]) : null;
+}
+
+/**
+ * A Lateral-entry student's OWN batch - distinct from the Regular batch
+ * physically occupying the same Section slot they're joining. They enter
+ * directly at Year 2, one calendar year later than that Regular batch, and
+ * spend one fewer year at the college, so their batch starts a year later
+ * but ends the SAME year (they graduate together): joining a Section.batch
+ * "2024-2028" slot in session 2025 gives "2025-2028". Null if `sectionBatch`
+ * isn't a recognizable batch label.
+ */
+export function lateralEntryBatch(sectionBatch: string, asOfStartYear: number = currentAcademicStartYear()): string | null {
+  const endYear = parseBatchEndYear(sectionBatch);
+  return endYear != null ? `${asOfStartYear}-${endYear}` : null;
+}
+
 // The intake year a course-year sits in AS OF a given session - e.g. a 2nd
 // Year course-year in session-start 2026 was admitted in 2025. Feeds
 // deriveBatch below for Section.batch derivation.
@@ -211,4 +231,20 @@ export function resolveCurrentAcademicYear(storedCurrentLabel?: string | null): 
 export function recentAcademicYearOptions(): string[] {
   const current = currentAcademicStartYear();
   return [current + 1, current, current - 1, current - 2].map(academicYearLongLabel);
+}
+
+/**
+ * Display-only: renders a "2025-26"/"2025-2026" session label as a
+ * DD/MM/YYYY-DD/MM/YYYY date range (fixed to the same April 1 - March 31
+ * cutoff currentAcademicStartYear already assumes everywhere else). Storage
+ * and comparisons (AcademicSession.label, matchesCurrentAcademicYear, every
+ * Firestore doc stamped with an academicYear string, etc.) are untouched and
+ * keep using the short/long year-pair shape - only what's shown to a person
+ * changes. Falls back to the original string unchanged if it isn't a
+ * recognizable year-pair label (e.g. legacy free text).
+ */
+export function academicYearDateRangeLabel(label: string): string {
+  const start = parseAcademicYearStart(label);
+  if (start == null) return label;
+  return `01/04/${start}-31/03/${start + 1}`;
 }

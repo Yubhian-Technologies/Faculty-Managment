@@ -8,6 +8,9 @@ import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/fir
 // Fields a Principal/VP must never set about themselves via self-service edit -
 // salary/CTC belongs to the Accounts/Finance payroll domain, not a self-editable profile.
 const FINANCIAL_ACADEMIC_KEYS = ["presentSalary", "grossAnnualCTC", "incrementsAwarded", "fundingConsultancyRevenue"];
+// Researcher IDs go through R&D verification (POST /api/college/research-profile)
+// instead - stripped here so a direct PATCH can't set them unverified.
+const RESEARCH_PROFILE_KEYS = ["orcidId", "scopusAuthorId", "researcherId", "googleScholarId", "irinsProfile"];
 
 export async function PATCH(request: Request) {
   try {
@@ -60,6 +63,7 @@ export async function PATCH(request: Request) {
     if (body.academicProfile !== undefined) {
       const academicProfile = { ...body.academicProfile };
       for (const key of FINANCIAL_ACADEMIC_KEYS) delete academicProfile[key];
+      for (const key of RESEARCH_PROFILE_KEYS) delete academicProfile[key];
       updates.academicProfile = academicProfile;
     }
     if (body.profilePhotoUrl !== undefined) updates.profilePhotoUrl = body.profilePhotoUrl;

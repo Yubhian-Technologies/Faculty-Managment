@@ -79,6 +79,19 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   CLASS_LEADER: "Class Leader",
 };
 
+// Every role a Principal/VP can already view/edit/deactivate (see
+// loadTargetInScope in api/college/users/[uid]/route.ts) - also every role a
+// staff member can be PROMOTED into from the Staff tab on Promotions
+// (any-to-any, no fixed ladder). Exported here (rather than duplicated
+// client + server) since it's shared by that server route and the client
+// Staff Promotions panel. Deliberately excludes PRINCIPAL/SUPER_ADMIN - a
+// college has exactly one Principal, provisioned separately.
+export const MANAGEABLE_STAFF_ROLES: UserRole[] = [
+  "HOD", "DEPARTMENT_OFFICE", "COLLEGE_OFFICE", "VICE_PRINCIPAL", "COLLEGE_ADMIN", "COLLEGE_STAFF",
+  "DEAN", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D", "PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL",
+  "PANEL_MEMBER", "WEBMASTER", "COLLEGE_ACCOUNTS",
+];
+
 export const ROLE_DASHBOARD_PATHS: Record<UserRole, string> = {
   SUPER_ADMIN: "/super-admin",
   MANAGEMENT: "/management/dashboard",
@@ -285,12 +298,19 @@ export const RELIGION_LABELS: Record<Religion, string> = {
   BUDDHIST: "Buddhist",
   OTHER: "Other",
 };
-export type Caste = "OC" | "EBC" | "EPC" | "BC" | "SC" | "ST" | "OTHER";
+// BC (Backward Class) is split straight into its AP/Telangana reservation
+// groups (BC-A/B/C/D/E) rather than a single "BC" value with a separate BC
+// Category field - there is no longer a bare "BC" option.
+export type Caste = "OC" | "EBC" | "EPC" | "BC-A" | "BC-B" | "BC-C" | "BC-D" | "BC-E" | "SC" | "ST" | "OTHER";
 export const CASTE_LABELS: Record<Caste, string> = {
   OC: "OC",
   EBC: "EBC",
   EPC: "EPC",
-  BC: "BC",
+  "BC-A": "BC-A",
+  "BC-B": "BC-B",
+  "BC-C": "BC-C",
+  "BC-D": "BC-D",
+  "BC-E": "BC-E",
   SC: "SC",
   ST: "ST",
   OTHER: "Other",
@@ -301,6 +321,20 @@ export const CASTE_LABELS: Record<Caste, string> = {
 // Religion/Caste above) since they're only ever used as freeform sub-
 // classification text. EPC has no fixed list here - its Sub Caste field
 // falls back to free text, same as "OTHER" does for every caste.
+//
+// The BC-A/B/C/D/E lists below are all the same, full set of sub-castes that
+// used to sit under one shared "BC" value - the real per-category split
+// hasn't been captured yet, so each of the five picks from this same list for
+// now until that mapping is defined.
+const BC_SUB_CASTES = [
+  "Devanga", "Kummari", "Nai Brahmin", "Kalinga", "Gowda", "Cristian", "Kurama",
+  "Korpula Velama", "Vishwa Brahmin", "Agnikula Kshatriya", "Turupu Kapu",
+  "Karnibakthulu", "Settibalija", "Padmasali", "Rajaka", "Sri Sayana",
+  "Munnurukapu", "Yadava", "Velama", "Surya Balija", "Kummara", "Poosala",
+  "Jangam", "Perika", "Sagara", "Christian Mala", "Bhatraju", "Kambali",
+  "Uppara", "Bondili", "Vyshnavas", "Bukka", "Mutrasi", "Adi Andhra Christian",
+  "Telukula",
+];
 export const SUB_CASTES_BY_CASTE: Partial<Record<Caste, string[]>> = {
   OC: [
     "Brahmin", "Kshatriya", "Vysya", "Kapu", "Reddy", "Aryavysya", "Kamma", "Naidu",
@@ -308,15 +342,11 @@ export const SUB_CASTES_BY_CASTE: Partial<Record<Caste, string[]>> = {
     "Padmanayaka Velamadoralu", "Vellama",
   ],
   EBC: ["Faqir", "Muslim", "Shaik"],
-  BC: [
-    "Devanga", "Kummari", "Nai Brahmin", "Kalinga", "Gowda", "Cristian", "Kurama",
-    "Korpula Velama", "Vishwa Brahmin", "Agnikula Kshatriya", "Turupu Kapu",
-    "Karnibakthulu", "Settibalija", "Padmasali", "Rajaka", "Sri Sayana",
-    "Munnurukapu", "Yadava", "Velama", "Surya Balija", "Kummara", "Poosala",
-    "Jangam", "Perika", "Sagara", "Christian Mala", "Bhatraju", "Kambali",
-    "Uppara", "Bondili", "Vyshnavas", "Bukka", "Mutrasi", "Adi Andhra Christian",
-    "Telukula",
-  ],
+  "BC-A": BC_SUB_CASTES,
+  "BC-B": BC_SUB_CASTES,
+  "BC-C": BC_SUB_CASTES,
+  "BC-D": BC_SUB_CASTES,
+  "BC-E": BC_SUB_CASTES,
   SC: ["Mala", "Madiga", "Mala Dasu"],
   ST: ["Koya"],
 };
@@ -366,7 +396,7 @@ export interface FMSUser {
   // Personal / statutory details (same field names as FacultyMember below, for consistency)
   gender?: "Male" | "Female" | "Other";
   legalName?: string; // name as per SSC certificates (CAPITAL LETTERS)
-  fatherName?: string; // father or husband name
+  fatherName?: string;
   motherName?: string;
   religion?: Religion;
   caste?: Caste;
@@ -611,6 +641,34 @@ export interface CourseCatalogItem {
   updatedAt?: Timestamp;
 }
 
+// ─── Designation Catalog (admin-curated job titles — same "add it here once,
+// pick it everywhere else" model as CourseCatalogItem above) ──────────────────
+// Nothing hardcoded per college type any more (see src/lib/designations/config.ts's
+// now-removed per-college-type lists) - each college's own admin builds their own
+// list, starting empty for a new college. Faculty/Add Technical Staff/Add
+// Non-Technical Staff, CSV import validation, and the Hiring role picker all read
+// this same collection, filtered by `category`, instead of a picker offering an
+// "Other" free-text escape hatch.
+export type DesignationCategory = "FACULTY" | "TECHNICAL" | "NON_TECHNICAL";
+export type DesignationCadre = "PROFESSOR" | "ASSOCIATE_PROFESSOR" | "ASSISTANT_PROFESSOR";
+
+export interface DesignationCatalogItem {
+  id: string;
+  collegeId: string;
+  name: string; // admin-entered, e.g. "Professor", "Senior Lab Technician"
+  category: DesignationCategory;
+  // Optional AICTE cadre-ratio tag (Faculty only) - lets a fully custom title
+  // still count toward Professor/Associate/Assistant Professor compliance
+  // reporting (api/college/faculty-requirement) instead of that route needing
+  // to match a fixed literal string like the old hardcoded codes did.
+  cadre?: DesignationCadre;
+  isActive: boolean;
+  createdBy?: string;
+  createdByName?: string;
+  createdAt: Timestamp;
+  updatedAt?: Timestamp;
+}
+
 // ─── Course (a program offered by a Department — engineering, pharmacy, dental, etc.) ──
 
 export interface Course {
@@ -797,14 +855,14 @@ export interface NavVisibilitySettings {
 // ─── Faculty Member (central entity across all modules) ───────────────────────
 // All leave, attendance, payroll, appraisal records reference facultyId
 
-// Free text, not a closed enum - real designation ladders vary by
-// College.type (see src/lib/designations/config.ts, the single source of
-// truth for which values each college type's Add/Edit pickers offer). The
-// original fixed codes below ("PROFESSOR" etc.) are still what Engineering/
-// Pharmacy/Dental colleges use and what every pre-existing FacultyMember
-// record holds - DESIGNATION_LABELS keeps them displaying as words; any
-// other college type's designation is already a human-readable string
-// (e.g. "PGT", "Controller of Examinations") and needs no label lookup.
+// Free text, not a closed enum - each college's own admin decides its real
+// designation ladder via the Designation Catalog (colleges/{id}/designations,
+// category "FACULTY" - see DesignationCatalogCard), so a value here is
+// whatever that college's admin typed in. The fixed codes below ("PROFESSOR"
+// etc.) are what every pre-existing FacultyMember record (created before the
+// catalog existed) holds - DESIGNATION_LABELS keeps them displaying as
+// words; a newer, admin-typed designation is already human-readable and
+// needs no label lookup (see designationLabel's raw-value fallback).
 export type Designation = string;
 
 export const DESIGNATION_LABELS: Record<string, string> = {
@@ -815,10 +873,8 @@ export const DESIGNATION_LABELS: Record<string, string> = {
   LECTURER: "Lecturer",
   VISITING_FACULTY: "Visiting Faculty",
   ADJUNCT_FACULTY: "Adjunct Faculty",
-  // Faculty's own current title list (FACULTY_DESIGNATIONS,
-  // src/lib/designations/config.ts) - LECTURER/VISITING_FACULTY/
-  // ADJUNCT_FACULTY above stay mapped for any pre-existing record still
-  // holding one of those older titles.
+  // LECTURER/VISITING_FACULTY/ADJUNCT_FACULTY above stay mapped for any
+  // pre-existing record still holding one of those older titles.
   VISITING_PROFESSOR: "Visiting Professor",
   ASSISTANT_PROFESSOR_OF_PRACTICE: "Assistant Professor of Practice",
   PROFESSOR_OF_PRACTICE: "Professor of Practice",
@@ -833,15 +889,10 @@ export const DESIGNATION_LABELS: Record<string, string> = {
   OTHER: "Other",
 };
 
-// Widened to plain string (matching Designation's own pattern above) so
-// Faculty's Employee Category can use its own independent category list
-// (FACULTY_EMPLOYMENT_CATEGORIES, src/lib/designations/config.ts) - including
-// a free-text "Other" - without those values needing to fit the fixed
-// PERMANENT/CONTRACT/VISITING/PART_TIME codes below, which Supporting/
-// Non-Technical Staff and Salary Structures still use unchanged
-// (EMPLOYMENT_TYPE_LABELS keeps displaying those four as words; a value
-// outside it, like Faculty's new categories, just displays as-is wherever
-// the lookup already falls back to the raw value).
+// Used by Salary Structures/Budget auto-pricing and the hiring pipeline's
+// faculty provisioning step - unrelated to Designation and no longer set via
+// Add/Edit Faculty or Supporting Staff (that admin-curated "Employee
+// Category" catalog was retired).
 export type EmploymentType = string;
 
 export const EMPLOYMENT_TYPE_LABELS: Record<string, string> = {
@@ -896,7 +947,13 @@ export interface FacultyMember {
   experienceYears: number;
   joiningDate: Timestamp; // Date of Joining Institution
   dateOfJoiningDepartment?: Timestamp; // Date of Joining Department (NBA/AICTE — may differ from institution)
-  employmentType: EmploymentType;
+  // Optional - no longer collected via Add/Edit Faculty or CSV import (the
+  // college's own Employee Category catalog was retired; only Designation
+  // remains). Still written by the hiring pipeline's provisioning step
+  // (src/lib/firestore/facultyProvisioning.ts) and read by Salary
+  // Structures/Budget auto-pricing (src/lib/budget/applySalaryStructurePricing.ts),
+  // both independent of the retired catalog.
+  employmentType?: EmploymentType;
   aicteEligible?: boolean; // AICTE Eligibility
   status: FacultyStatus;
   userUid?: string; // links to users/{uid} if they have a system login
@@ -922,7 +979,7 @@ export interface FacultyMember {
   // See facultyDisplayName() (src/lib/faculty/facultyDisplayName.ts).
   legalName?: string;
   nameAsPerAadhar?: string; // name exactly as printed on the Aadhar card
-  fatherName?: string; // father or husband name
+  fatherName?: string;
   motherName?: string;
   religion?: Religion;
   caste?: Caste;
@@ -1062,9 +1119,12 @@ export interface PreviousInstitution {
 
 // Employment Details — Promotion History (NBA/AICTE).
 export interface PromotionRecord {
-  fromDesignation: string;
-  toDesignation: string;
-  effectiveYear: number;
+  designation: string;
+  // "YYYY-MM-DD" - toDate blank means still serving in this designation, so
+  // its experience is computed up to today (see PromotionFields/durationBetween)
+  // and keeps increasing day by day until one is set.
+  fromDate?: string;
+  toDate?: string;
   orderUrl?: string; // promotion order document
 }
 
@@ -1083,12 +1143,109 @@ export interface Publication {
 // the owner (`uid`) can only read their own rows - see
 // src/app/api/college/publications/route.ts. Reuses Publication's field
 // names so it renders as a drop-in for the existing Research module UI.
+export type PublicationStatus = "PENDING" | "APPROVED" | "REJECTED";
+
+// Rich, type-specific publication details (Journal/Conference/Book Chapter/
+// Text Book), each institution's R&D policy field set - additive on top of
+// ResearchPublication's flat legacy fields below, which stay populated
+// (derived from this at write time) so CSV-imported/pre-existing records and
+// every consumer of the flat shape keep working unchanged. See
+// src/components/research/PublicationDetailsForm.tsx (the shared form) and
+// src/app/api/college/publications/route.ts (server-side derivation).
+export type PublicationType = "JOURNAL" | "CONFERENCE" | "BOOK_CHAPTER" | "TEXT_BOOK";
+export type AuthorCategory = "FIRST_AUTHOR" | "CO_AUTHOR" | "CORRESPONDING_AUTHOR";
+export type AuthorRoleType = "FACULTY" | "STUDENT";
+// WOS_ESCI/WOS_SCIE apply to Journal; plain WOS applies to Conference/Book Chapter.
+export type PublicationIndex = "SCOPUS" | "WOS_ESCI" | "WOS_SCIE" | "WOS";
+export type PublicationQuartile = "Q1" | "Q2" | "Q3" | "Q4" | "NA";
+
+export interface PublicationAuthor {
+  name: string;
+  category: AuthorCategory;
+  authorType: AuthorRoleType;
+  facultyId?: string; // when isInternal && authorType === "FACULTY" - resolves name via facultyMembers
+  studentRegistrationNumber?: string; // when isInternal && authorType === "STUDENT" - no directory to verify against, trusted as entered
+  affiliationCollegeId?: string; // a real colleges/{id}, or "OTHERS"
+  affiliationCollegeName: string; // denormalized - the picked college's real name, or the free-text name typed under "Others"
+  affiliationCountry?: string; // only when affiliationCollegeId === "OTHERS"
+  // Server-derived (never trust a client-submitted value): true when
+  // affiliationCollegeId equals the submitting college's own id.
+  isInternal: boolean;
+}
+
+export interface PublicationDetails {
+  type: PublicationType;
+  title: string; // "Title of the Paper" (Journal/Conference/Book Chapter) or "Title of the Book" (Text Book)
+  researchDomain?: string; // JOURNAL / CONFERENCE / BOOK_CHAPTER
+  sdgGoals?: number[]; // UN SDG 1-17 - JOURNAL / CONFERENCE / BOOK_CHAPTER
+
+  journalName?: string; // JOURNAL
+  organizedBy?: string; // CONFERENCE
+  conferenceName?: string; // CONFERENCE
+  bookName?: string; // BOOK_CHAPTER
+  isExtensionOfConference?: boolean; // BOOK_CHAPTER
+  providedBookLink?: string; // TEXT_BOOK
+  isPublisherInRnDPolicyAnnexure?: boolean; // TEXT_BOOK
+
+  publisherName?: string;
+  issnNumber?: string; // JOURNAL
+  isbnNumber?: string; // CONFERENCE / BOOK_CHAPTER / TEXT_BOOK
+  indexedIn?: PublicationIndex[];
+  quartile?: PublicationQuartile; // JOURNAL only
+  impactFactor?: string;
+
+  authors: PublicationAuthor[];
+  internalAuthorsCount: number; // server-derived
+  externalAuthorsCount: number; // server-derived
+
+  monthYearOfPublication?: string; // "YYYY-MM"
+  monthYearOfIndex?: string; // "YYYY-MM"
+  scopusOrWosLink?: string;
+  publishedPaperLink?: string;
+  doi?: string;
+  citeAs?: string;
+  hasInternationalCollaboration?: boolean;
+  hasIndustryCollaboration?: boolean;
+}
+
 export interface ResearchPublication {
   id: string;
   collegeId: string;
   uid: string; // owning staff member - any role
   ownerName: string;
   ownerRole: UserRole;
+  // Resolved academic identity (e.g. "Professor", or generically "Faculty"
+  // for Principal/VP/HOD/Dean who have no separate FacultyMember record) -
+  // see src/lib/publications/resolveOwnerDesignation.ts. When present, this
+  // is what's displayed instead of ownerRole: the record belongs to the
+  // person's academic career, not whichever administrative role they
+  // happened to hold when it was added - undefined for genuine office roles
+  // (R&D, IQAC, T&P, Library, Exam Cell, Webmaster, College Office, College
+  // Staff), which keep showing ownerRole as before.
+  ownerDesignation?: string;
+  // Missing on every record created before self-submission shipped - treat
+  // that as APPROVED everywhere (they were all R&D-added). R&D's own direct
+  // adds always write "APPROVED"; a self-submission starts "PENDING".
+  status?: PublicationStatus;
+  reviewedBy?: string; // R&D uid who approved/rejected
+  reviewedByName?: string;
+  reviewedAt?: Timestamp;
+  rejectionReason?: string;
+  // Rich Journal/Conference/Book Chapter/Text Book breakdown - absent on
+  // every record added before this shipped (CSV-imported or hand-added with
+  // the old flat form), which still display fine off the flat fields below.
+  details?: PublicationDetails;
+  // Login uid of every verified Internal author (resolved from their
+  // Faculty ID, see resolveOwnerDesignation/deriveFlatFields) - lets this
+  // record show on THEIR own profile too, not just the submitter's (`uid`
+  // above). Also who else, besides the submitter, may edit this record.
+  internalAuthorUids?: string[];
+  // One entry per edit made to an already-APPROVED record - re-editing
+  // flips status back to PENDING for re-verification, and this is what
+  // shows R&D (and the submitter/co-authors) exactly what changed instead
+  // of a blank resubmission. Edits made while still PENDING/REJECTED aren't
+  // logged here - only ones that reopen an already-accepted record.
+  changeLog?: { changedAt: Timestamp; changedBy: string; changedByName: string; changes: string[] }[];
   title: string;
   coAuthors: string;
   journalOrConference: string;
@@ -1115,6 +1272,685 @@ export interface ResearchPublication {
   quartile?: string;
   isbnIssn?: string;
   addedBy: string; // R&D uid who created/last edited it
+  addedByName: string;
+  createdAt: Timestamp;
+  updatedAt?: Timestamp;
+}
+
+// A staff member's self-submitted researcher IDs (see Research & Innovation's
+// "Research Profiles" tab) - one doc per uid (doc id == uid), since unlike
+// publications this is a single evolving record, not a repeating list. Same
+// PENDING/APPROVED/REJECTED verification flow as ResearchPublication: R&D
+// reviews before the values are copied onto the person's academicProfile
+// fields (orcidId/scopusAuthorId/researcherId/googleScholarId/irinsProfile),
+// which stay the officially-shown values everywhere else in the app.
+export interface ResearchProfileRequest {
+  id: string; // == uid
+  collegeId: string;
+  uid: string;
+  ownerName: string;
+  ownerRole: UserRole;
+  ownerDesignation?: string; // see resolveOwnerDesignation.ts
+  orcidId?: string;
+  scopusAuthorId?: string;
+  researcherId?: string;
+  googleScholarId?: string;
+  irinsProfile?: string;
+  status: PublicationStatus;
+  reviewedBy?: string; // R&D uid who approved/rejected
+  reviewedByName?: string;
+  reviewedAt?: Timestamp;
+  rejectionReason?: string;
+  createdAt: Timestamp;
+  updatedAt?: Timestamp;
+}
+
+// A staff member's self-submitted citation/H-index metrics (see Research &
+// Innovation's "Citations & H-Index Growth" tab) - one doc per uid (doc id ==
+// uid), same PENDING/APPROVED/REJECTED verification flow as
+// ResearchProfileRequest: R&D reviews before the values are copied onto the
+// person's academicProfile fields, which stay the officially-shown values
+// everywhere else in the app.
+export interface CitationMetricsRequest {
+  id: string; // == uid
+  collegeId: string;
+  uid: string;
+  ownerName: string;
+  ownerRole: UserRole;
+  ownerDesignation?: string; // see resolveOwnerDesignation.ts
+  totalCitations?: number;
+  hIndex?: number;
+  citationsExcludingSelf?: number;
+  hIndexExcludingSelf?: number;
+  status: PublicationStatus;
+  // (mapped onto academicProfile.citationsTotal/citationsHIndex/
+  // citationsExcludingSelf/citationsHIndexExcludingSelf on approval - see
+  // applyCitationMetricsFields.ts)
+  reviewedBy?: string; // R&D uid who approved/rejected
+  reviewedByName?: string;
+  reviewedAt?: Timestamp;
+  rejectionReason?: string;
+  createdAt: Timestamp;
+  updatedAt?: Timestamp;
+}
+
+export type ConsultancyClientType = "INDUSTRY" | "GOVERNMENT" | "ACADEMIC_INSTITUTION" | "NGO" | "STARTUP" | "MSME";
+export type ConsultancyCategory = "TECHNICAL" | "TESTING" | "TRAINING" | "DESIGN" | "SOFTWARE_DEVELOPMENT";
+export type ConsultancyDeliverable = "REPORTS" | "SOFTWARE" | "PROTOTYPE" | "TESTING_REPORT" | "DESIGN" | "TRAINING" | "OTHERS";
+
+// A staff-submitted Consultancy Project record (see Research & Innovation's
+// "Consultancy Projects" tab) - one doc per project (a person can have many
+// over their career, unlike the singleton ResearchProfileRequest/
+// CitationMetricsRequest), same PENDING/APPROVED/REJECTED verification flow
+// as ResearchPublication: self-submitted rows start PENDING and only count
+// as official once R&D approves them; R&D's own adds are auto-APPROVED.
+export interface ConsultancyProjectRequest {
+  id: string;
+  collegeId: string;
+  uid: string; // owning staff member - the lead/submitting consultant
+  ownerName: string;
+  ownerRole: UserRole;
+  ownerDesignation?: string; // see resolveOwnerDesignation.ts
+  status: PublicationStatus;
+  reviewedBy?: string; // R&D uid who approved/rejected
+  reviewedByName?: string;
+  reviewedAt?: Timestamp;
+  rejectionReason?: string;
+
+  title: string;
+  facultyConsultantsCount?: number;
+  facultyConsultantsNames: string; // free text - comma-separated names
+  department?: string;
+  clientName: string;
+  clientType: ConsultancyClientType;
+  consultancyCategory: ConsultancyCategory;
+  problemStatement: string; // brief description of the work assigned
+  startDate: string; // yyyy-mm-dd
+  endDate?: string; // yyyy-mm-dd
+  durationMonths?: number;
+  consultancyAmount?: number; // total sanctioned/agreed value
+  amountReceived?: number; // actual amount received so far
+  amountReceivedDate?: string; // yyyy-mm-dd
+  institutionalInfrastructureUsage?: "YES" | "NO";
+  hoursSpentDuringAcademicHours?: number;
+  institutionalShare?: number; // Rs.
+  facultyShare?: number; // Rs.
+  facultyShareProofUrl?: string; // uploaded PDF
+  deliverables: ConsultancyDeliverable[];
+  completionReportUrl?: string; // uploaded PDF
+  incomeSupportingDocUrl?: string; // cheque/deposit/transfer receipt - uploaded PDF/image
+
+  addedBy: string; // uid who created/last edited it (self, or R&D on someone's behalf)
+  addedByName: string;
+  createdAt: Timestamp;
+  updatedAt?: Timestamp;
+}
+
+export interface SeedFundingStudentItem {
+  name: string;
+  regdNumber: string;
+  yearOfStudy: string;
+}
+
+export interface SeedFundingEquipmentItem {
+  name: string;
+  makeModel: string;
+  softwareOrHardware: string;
+  amount?: number;
+  purpose: string;
+}
+
+export interface SeedFundingPaperItem {
+  title: string;
+  journalOrConference: string;
+  doi?: string;
+  quartile?: string;
+  impactFactor?: string;
+  indexedScopusWos?: string;
+  citeAs?: string;
+}
+
+export interface SeedFundingPatentItem {
+  applicationNo: string;
+  applicantName: string;
+  patentTitle: string;
+  inventorDetails: string;
+  status: string; // Filed / Published / Granted
+}
+
+export type SeedFundingProjectStatus = "SANCTIONED" | "COMPLETED";
+
+// A staff-submitted Seed Funding project record (Research & Innovation's
+// "Seed Funding" tab) - one doc per project, same PENDING/APPROVED/REJECTED
+// verification flow as ConsultancyProjectRequest/ResearchPublication (a
+// repeating list per person, not a singleton).
+export interface SeedFundingProjectRequest {
+  id: string;
+  collegeId: string;
+  uid: string; // owning staff member - the PI
+  ownerName: string;
+  ownerRole: UserRole;
+  ownerDesignation?: string;
+  status: PublicationStatus;
+  reviewedBy?: string;
+  reviewedByName?: string;
+  reviewedAt?: Timestamp;
+  rejectionReason?: string;
+
+  title: string;
+  durationMonths?: number;
+  objectives: string;
+  tentativeOutcomes?: string;
+  piName: string;
+  piDepartment?: string;
+  studentsInvolvedCount?: number;
+  students: SeedFundingStudentItem[];
+  projectStatus: SeedFundingProjectStatus;
+  dateSanctioned?: string;
+  dateOfStart?: string;
+  financialYearOfStart?: string;
+  totalAmountSanctioned?: number;
+  recurringAmount?: number;
+  nonRecurringAmount?: number;
+  equipmentProcured: SeedFundingEquipmentItem[];
+  outcomes?: string;
+  papersPublished: SeedFundingPaperItem[];
+  patents: SeedFundingPatentItem[];
+  studentsProjectsUG?: number;
+  studentsProjectsPG?: number;
+  studentsProjectsPhD?: number;
+  studentsTrainedCount?: number;
+  externalFundedProposalsApplied?: number;
+  progressReportUrl?: string;
+  utilizationCertificateUrl?: string;
+
+  addedBy: string;
+  addedByName: string;
+  createdAt: Timestamp;
+  updatedAt?: Timestamp;
+}
+
+export interface SponsoredProjectCoPI {
+  name: string;
+  department: string;
+  affiliation: string;
+}
+
+export type SponsoredProjectType = "TRAINING" | "TECHNICAL" | "SOCIETY" | "INFRASTRUCTURE";
+export type SponsoredProjectStatus = "APPLIED" | "SANCTIONED";
+export type SponsoredProjectSanctionedStatus = "ONGOING" | "COMPLETED";
+
+// A staff-submitted Sponsored Research Project record (Research & Innovation's
+// "Sponsored Research Projects" tab) - one doc per project, same
+// PENDING/APPROVED/REJECTED verification flow as SeedFundingProjectRequest.
+// Reuses SeedFunding's equipment/paper/patent item shapes (same columns) for
+// Infrastructure Procured / Papers Published / Patents.
+export interface SponsoredProjectRequest {
+  id: string;
+  collegeId: string;
+  uid: string; // owning staff member - the PI
+  ownerName: string;
+  ownerRole: UserRole;
+  ownerDesignation?: string;
+  status: PublicationStatus;
+  reviewedBy?: string;
+  reviewedByName?: string;
+  reviewedAt?: Timestamp;
+  rejectionReason?: string;
+
+  agencyName: string;
+  schemeName: string;
+  applicationNumber: string;
+  title: string;
+  projectType: SponsoredProjectType;
+  durationMonths?: number;
+  objectives: string;
+  tentativeOutcomes?: string;
+  piName: string;
+  piDepartment?: string;
+  piAffiliation?: string;
+  coPiCount?: number;
+  coPis: SponsoredProjectCoPI[];
+
+  projectStatus: SponsoredProjectStatus; // Applied / Sanctioned
+
+  // Applied branch
+  dateProposalSubmitted?: string;
+  amountApplied?: number;
+  extendedToSeedFund?: "YES" | "NO";
+
+  // Sanctioned branch
+  sanctionedStatus?: SponsoredProjectSanctionedStatus; // Ongoing / Completed
+  dateProjectSanctioned?: string;
+  dateOfStart?: string;
+  financialYearOfStart?: string;
+  totalAmountSanctioned?: number;
+  recurringAmountSanctioned?: number;
+  nonRecurringAmountSanctioned?: number;
+  instituteContributionSanctioned?: number;
+  noOfYears?: string; // e.g. "First Year"
+  totalAmountReceived?: number;
+  recurringAmountReceived?: number;
+  nonRecurringAmountReceived?: number;
+  instituteContributionReceived?: number;
+
+  // Completed-only
+  dateOfCompletion?: string;
+  financialYearOfCompletion?: string;
+
+  infrastructureProcured: SeedFundingEquipmentItem[];
+  outcomes?: string;
+  papersPublished: SeedFundingPaperItem[]; // Ongoing - structured table
+  papersPublishedCitations?: string; // Completed - "in citation format"
+  patents: SeedFundingPatentItem[];
+
+  studentsProjectsUG?: number;
+  studentsProjectsPG?: number;
+  studentsProjectsPhD?: number;
+  studentsTrainedCount?: number;
+  technicalStaffTrainedCount?: number;
+  personsTrainedCount?: number;
+
+  progressReportUrl?: string; // Ongoing
+  completionReportUrl?: string; // Completed
+  utilizationCertificateUrl?: string;
+  statementOfExpenditureUrl?: string;
+  submittedRequiredDocs?: "YES" | "NO";
+  dateOfSubmission?: string;
+
+  addedBy: string;
+  addedByName: string;
+  createdAt: Timestamp;
+  updatedAt?: Timestamp;
+}
+
+export type IprType = "UTILITY_PATENT" | "DESIGN_PATENT" | "COPYRIGHT";
+export type IprStatus = "PUBLISHED" | "GRANTED";
+export type IprApplicantType = "INDIVIDUAL" | "INSTITUTION" | "INDUSTRY";
+export type IprCommercializationStatus = "COMMERCIALIZED" | "LICENSED" | "TECHNOLOGY_TRANSFERRED";
+export type IprCommercializationType =
+  | "EXCLUSIVE_LICENSE" | "NON_EXCLUSIVE_LICENSE" | "ASSIGNMENT" | "TECHNOLOGY_TRANSFER" | "STARTUP_COMMERCIALIZATION";
+
+export interface IprApplicant {
+  name: string;
+  type: IprApplicantType;
+}
+
+export interface IprInventor {
+  name: string;
+  affiliation: string;
+  state: string;
+  country: string;
+}
+
+// A staff-submitted Discovery & Innovation (IPR) record (Research &
+// Innovation's "Discovery & Innovation (IPR)" tab) - one doc per IPR filing,
+// same PENDING/APPROVED/REJECTED verification flow as the other
+// Research & Innovation tabs.
+export interface DiscoveryInnovationRequest {
+  id: string;
+  collegeId: string;
+  uid: string;
+  ownerName: string;
+  ownerRole: UserRole;
+  ownerDesignation?: string;
+  status: PublicationStatus;
+  reviewedBy?: string;
+  reviewedByName?: string;
+  reviewedAt?: Timestamp;
+  rejectionReason?: string;
+
+  iprType: IprType;
+  iprStatus: IprStatus; // Published / Granted
+  applicationNumber: string;
+  title: string;
+  sdgGoals: number[]; // 1-17, checked SDGs
+  dateOfFiling: string;
+  datePublished?: string;
+  dateGranted?: string; // only when iprStatus === GRANTED
+
+  applicantsCount?: number;
+  applicants: IprApplicant[];
+  inventorsCount?: number;
+  inventors: IprInventor[];
+
+  isStudentPatent?: "YES" | "NO";
+  publishedProofUrl?: string;
+  grantedProofUrl?: string;
+
+  isCommercialized?: "YES" | "NO";
+  commercializationStatus?: IprCommercializationStatus;
+  commercializationDate?: string;
+  licenseePartner?: string;
+  commercializationType?: IprCommercializationType;
+  commercializationValue?: number;
+  revenueGenerated?: number;
+  commercializedProofUrl?: string;
+  revenueGeneratedProofUrl?: string;
+
+  addedBy: string;
+  addedByName: string;
+  createdAt: Timestamp;
+  updatedAt?: Timestamp;
+}
+
+export type PhdRecognizedSupervisor = "JNTUK" | "OTHER";
+export type PhdGuideStatus = "SUPERVISOR" | "CO_SUPERVISOR";
+export type PhdFellowshipType = "NATIONAL" | "INTERNATIONAL";
+export type PhdAwardType = "NATIONAL" | "INTERNATIONAL";
+export type PhdAwardNature = "GOVERNMENT" | "PRIVATE";
+
+// A staff-submitted Ph.D. Supervision & Guidance record (Research &
+// Innovation's "Ph.D. Supervision" tab) - one doc per scholar guided, same
+// PENDING/APPROVED/REJECTED verification flow as the other Research &
+// Innovation tabs. Reuses SeedFunding's paper/patent item shapes for the
+// Papers Published / Patents tables.
+export interface PhdSupervisionRequest {
+  id: string;
+  collegeId: string;
+  uid: string; // owning staff member - the supervisor/co-supervisor
+  ownerName: string;
+  ownerRole: UserRole;
+  ownerDesignation?: string;
+  status: PublicationStatus;
+  reviewedBy?: string;
+  reviewedByName?: string;
+  reviewedAt?: Timestamp;
+  rejectionReason?: string;
+
+  recognizedSupervisor: PhdRecognizedSupervisor;
+  otherUniversityName?: string; // when recognizedSupervisor === OTHER
+  guideStatus: PhdGuideStatus;
+  scholarName: string;
+  scholarDepartment?: string;
+  scholarAffiliation?: string;
+  scholarPhone?: string;
+  yearOfAllocation?: string;
+  allotmentOrderUrl?: string; // uploaded PDF
+  yearsCompleted?: number;
+  degreeAwarded?: "YES" | "NO";
+  dateOfAward?: string; // when degreeAwarded === YES
+  awardedDegreeProofUrl?: string; // when degreeAwarded === YES
+
+  papersPublished: SeedFundingPaperItem[];
+  patents: SeedFundingPatentItem[];
+
+  fellowshipReceived?: "YES" | "NO";
+  fellowshipType?: PhdFellowshipType;
+  fellowshipName?: string;
+  fellowshipAmount?: number;
+
+  awardsReceived?: "YES" | "NO";
+  awardName?: string;
+  awardType?: PhdAwardType;
+  awardNature?: PhdAwardNature;
+  awardDetails?: string;
+
+  addedBy: string;
+  addedByName: string;
+  createdAt: Timestamp;
+  updatedAt?: Timestamp;
+}
+
+export type ResearchServiceType = "CONFERENCE" | "WORKSHOP" | "REVIEWER" | "EDITOR";
+export type ConferenceWorkshopType = "NATIONAL" | "INTERNATIONAL";
+export type ConferenceWorkshopNature = "ONLINE" | "OFFLINE" | "HYBRID";
+export type ResearchServiceFundNature = "EXTERNAL_GRANT" | "INSTITUTIONAL_GRANT" | "SANCTIONED_PROJECT_GRANT";
+export type ReviewerType = "JOURNAL" | "CONFERENCE";
+export type EditorialRole = "EDITOR" | "CHIEF_EDITOR" | "ASSOCIATE_EDITOR" | "GUEST_EDITOR" | "SECTION_EDITOR";
+export type EditorPublicationType = "JOURNAL" | "BOOK" | "EDITED_BOOK" | "CONFERENCE_PROCEEDINGS" | "SPECIAL_ISSUE";
+export type PublicationScope = "NATIONAL" | "INTERNATIONAL";
+
+export interface ConvenerCoordinatorItem {
+  name: string;
+  department: string;
+  type: string; // Convener / Co-Convener / Coordinator / Co-Coordinator
+}
+
+export interface OrganizingCommitteeMemberItem {
+  name: string;
+  department: string;
+}
+
+export interface ResourcePersonItem {
+  name: string;
+  affiliation: string;
+}
+
+// A staff-submitted Research Services & Contributions record (Research &
+// Innovation's own tab) - one doc per contribution, same
+// PENDING/APPROVED/REJECTED verification flow as the other Research &
+// Innovation tabs. `serviceType` picks which field group below is relevant;
+// Conference and Workshop share the same field names (organized/eventType/
+// eventNature/fundNature/title/conveners/committeeMembers/dates/amounts/
+// resourcePersons/uploads) since the source spec lists nearly identical
+// sections for both - only the trailing stats differ (papers vs
+// participants) and each keeps its own fields for that.
+export interface ResearchServiceRequest {
+  id: string;
+  collegeId: string;
+  uid: string;
+  ownerName: string;
+  ownerRole: UserRole;
+  ownerDesignation?: string;
+  status: PublicationStatus;
+  reviewedBy?: string;
+  reviewedByName?: string;
+  reviewedAt?: Timestamp;
+  rejectionReason?: string;
+
+  serviceType: ResearchServiceType;
+
+  // Conference / Workshop - shared fields
+  organized?: "YES" | "NO";
+  eventType?: ConferenceWorkshopType;
+  eventNature?: ConferenceWorkshopNature;
+  fundNature?: ResearchServiceFundNature;
+  title?: string;
+  convenersCount?: number;
+  conveners: ConvenerCoordinatorItem[];
+  committeeMembersCount?: number;
+  committeeMembers: OrganizingCommitteeMemberItem[];
+  noOfDays?: number;
+  academicYear?: string;
+  startDate?: string;
+  endDate?: string;
+  amountSanctioned?: number;
+  amountReceived?: number;
+  expenditureMade?: number;
+  sanctionedLetterUrl?: string;
+  brochureUrl?: string;
+  scheduleUrl?: string;
+  resourcePersonsCount?: number;
+  resourcePersons: ResourcePersonItem[];
+  completionReportUrl?: string;
+
+  // Conference-only
+  papersReceived?: number;
+  papersAccepted?: number;
+  papersPublishedCount?: number;
+  papersIndexedCount?: number;
+  conferenceProceedingsUrl?: string;
+
+  // Workshop-only
+  participantsRegisteredInternal?: number;
+  participantsRegisteredExternal?: number;
+  papersAttendedInternal?: number;
+  papersAttendedExternal?: number;
+
+  // Reviewer
+  reviewerType?: ReviewerType;
+  reviewerPublicationName?: string;
+  reviewerPublisherName?: string;
+  reviewerPaperTitle?: string;
+  reviewerReviewDate?: string;
+  reviewerCertificateUrl?: string;
+
+  // Editor
+  editorialRole?: EditorialRole;
+  editorPublicationType?: EditorPublicationType;
+  editorPublicationName?: string;
+  editorPublisher?: string;
+  editorPublisherOther?: string;
+  editorIssnIsbn?: string;
+  editorScope?: PublicationScope;
+  editorIndexedIn?: string;
+  editorResponsibilities?: string;
+  editorPapersChaptersHandled?: number;
+  editorAppointmentLetterUrl?: string;
+  editorPublicationUrl?: string;
+  editorRemarks?: string;
+
+  addedBy: string;
+  addedByName: string;
+  createdAt: Timestamp;
+  updatedAt?: Timestamp;
+}
+
+export type HackathonEventType = "HACKATHON" | "IDEATHON" | "INNOVATION_CHALLENGE" | "BUSINESS_PLAN_COMPETITION";
+export type HackathonLevel = "INSTITUTION" | "INTER_COLLEGE" | "STATE" | "NATIONAL";
+export type YuktiReferenceStatus = "SUBMITTED" | "RECOMMENDED" | "NOT_RECOMMENDED";
+
+export interface HackathonEvaluatorItem {
+  name: string;
+  affiliation: string;
+}
+
+export interface HackathonFacultyCoordinatorItem {
+  name: string;
+  designation: string;
+  departmentOrCell: string;
+}
+
+export interface YuktiReferenceItem {
+  teamName: string;
+  yuktiId: string;
+  ideaOrPrototypeTitle: string;
+  submittedOn: string;
+  status: YuktiReferenceStatus | "";
+}
+
+// A staff-submitted Hackathon/Competition record (Research & Innovation's
+// "Organizing Hackathons / Competitions" tab) - one doc per event, same
+// PENDING/APPROVED/REJECTED verification flow as the other Research &
+// Innovation tabs.
+export interface HackathonRequest {
+  id: string;
+  collegeId: string;
+  uid: string; // owning staff member - the organizer/coordinator
+  ownerName: string;
+  ownerRole: UserRole;
+  ownerDesignation?: string;
+  status: PublicationStatus;
+  reviewedBy?: string;
+  reviewedByName?: string;
+  reviewedAt?: Timestamp;
+  rejectionReason?: string;
+
+  academicYear: string;
+  eventTitle: string;
+  eventType: HackathonEventType;
+  organizingDeptCell?: string;
+  startDate?: string;
+  endDate?: string;
+  durationHours?: number;
+  venue?: string;
+  levelOfEvent: HackathonLevel;
+  themeDomain?: string;
+  noOfProblemStatements?: number;
+  teamsRegisteredInternal?: number;
+  teamsRegisteredExternal?: number;
+  participantsInternal?: number;
+  participantsExternal?: number;
+  ideasPresentedCount?: number;
+  pocsPresentedCount?: number;
+  productsPresentedCount?: number;
+  evaluators: HackathonEvaluatorItem[];
+  facultyCoordinators: HackathonFacultyCoordinatorItem[];
+
+  ideasUploadedYukti?: number;
+  ideasVerifiedRecommendedYukti?: number;
+  prototypesUploadedYukti?: number;
+  prototypesVerifiedRecommendedYukti?: number;
+  yuktiReferences: YuktiReferenceItem[];
+
+  sanctionedLetterUrl?: string;
+  brochureUrl?: string;
+  expenditureProofUrl?: string;
+  eventReportUrl?: string;
+  remarks?: string;
+
+  addedBy: string;
+  addedByName: string;
+  createdAt: Timestamp;
+  updatedAt?: Timestamp;
+}
+
+export type InnovatorType = "STUDENT" | "FACULTY";
+export type InnovationType = "IDEA" | "PROTOTYPE" | "BUSINESS_MODEL" | "STARTUP" | "HACKATHON" | "IDEATHON";
+
+export interface InnovationFacultyItem {
+  name: string;
+  department: string;
+  contribution: string;
+}
+
+// A staff-submitted Innovation record (Research & Innovation's "Innovations"
+// tab) - one doc per innovation, same PENDING/APPROVED/REJECTED verification
+// flow as the other Research & Innovation tabs. `innovatorType` picks
+// whether the Faculty or Student detail block applies.
+export interface InnovationRequest {
+  id: string;
+  collegeId: string;
+  uid: string;
+  ownerName: string;
+  ownerRole: UserRole;
+  ownerDesignation?: string;
+  status: PublicationStatus;
+  reviewedBy?: string;
+  reviewedByName?: string;
+  reviewedAt?: Timestamp;
+  rejectionReason?: string;
+
+  academicYear: string;
+  innovatorType: InnovatorType;
+
+  // Faculty branch
+  facultyInvolvedCount?: number;
+  facultyMembers: InnovationFacultyItem[];
+
+  // Student branch
+  studentName?: string;
+  studentRegdNo?: string;
+  studentYearOfStudy?: string;
+  studentDepartment?: string;
+  facultyMentorName?: string;
+
+  innovationTitle: string;
+  innovationType: InnovationType;
+  problemStatement?: string;
+  briefDescription?: string;
+  trlLevel?: string;
+
+  prototypeDeveloped?: "YES" | "NO";
+  prototypeDetails?: string;
+  businessModelDeveloped?: "YES" | "NO";
+  businessModelDetails?: string;
+  startupFormed?: "YES" | "NO";
+  startupName?: string;
+  incubationName?: string;
+  yuktiId?: string;
+
+  verifiedRecommendedYukti?: "YES" | "NO";
+  yuktiScreenshotUrl?: string;
+
+  presentedInCompetition?: "YES" | "NO";
+  competitionName?: string;
+  organizedBy?: string;
+
+  remarks?: string;
+
+  addedBy: string;
   addedByName: string;
   createdAt: Timestamp;
   updatedAt?: Timestamp;
@@ -1201,11 +2037,45 @@ export const TRAINING_PROGRAM_MODE_LABELS: Record<TrainingProgramMode, string> =
   HYBRID: "Hybrid",
 };
 
+export type TrainingBeneficiaryType = "STUDENTS" | "FACULTY";
+export const TRAINING_BENEFICIARY_TYPE_LABELS: Record<TrainingBeneficiaryType, string> = {
+  STUDENTS: "Students",
+  FACULTY: "Faculty",
+};
+
+export interface TrainingBeneficiarySection {
+  sectionId: string;
+  sectionName: string;
+  count: number;
+}
+export interface TrainingBeneficiaryDepartmentEntry {
+  courseId: string;
+  courseName: string;
+  departmentId: string;
+  department: string;
+  year: number;
+  sections: TrainingBeneficiarySection[];
+}
+export interface TrainingCoConductor {
+  order: number; // 2, 3, ... - the organizer themself is implicitly #1
+  facultyId: string;
+  name: string;
+  department: string;
+}
+
 export interface TrainingEntry {
+  // Stable id, generated client-side (crypto.randomUUID()) the first time an
+  // entry gets a co-conductor - lets the server match the same entry across
+  // the organizer's and every co-conductor's own trainingEntries array when
+  // keeping synced copies up to date (see syncTrainingEntryCoConductors).
+  id?: string;
   type: TrainingEntryType;
   role?: TrainingParticipationRole; // did they attend, or run it themselves - applies to any type, not just FDP
   title: string; // Title of the Program
-  organizer: string; // Name of the Faculty / Coordinator
+  // Name of the Faculty / Coordinator - auto-set to the profile owner's own
+  // name whenever role is CONDUCTED (see TrainingEntryFields); not a free
+  // text field the user types into directly any more.
+  organizer: string;
   // "YYYY-MM-DD" - replaces the old year-only shape (see legacy `year` below).
   // durationDays is auto-computed from these two, not typed in directly.
   fromDate?: string;
@@ -1214,14 +2084,39 @@ export interface TrainingEntry {
   levelOfProgram?: TrainingProgramLevel;
   place?: string;
   mode?: TrainingProgramMode;
-  numberOfParticipants?: number;
   numberOfResourcePersons?: number;
-  resourcePersonsDetails?: string;
+  // One entry per resource person - length follows numberOfResourcePersons
+  // (see TrainingEntryFields), not typed as one freeform block any more. A
+  // record saved before this change still has this as a plain string in
+  // Firestore - every reader normalizes via normalizeResourcePersonsDetails()
+  // (TrainingEntryFields.tsx) rather than trusting this type at runtime.
+  resourcePersonsDetails?: string[];
   certificateUrl?: string;
   // Legacy year-only shape (Faculty's edit form no longer sets this - see
   // fromDate/toDate above; Supporting Staff's own simpler Training/
   // Achievements form, TrainingAchievementsFields.tsx, still uses it as-is).
   year?: number;
+
+  // Who this program served - shown regardless of Participated/Conducted.
+  beneficiaryType?: TrainingBeneficiaryType;
+  beneficiaryTotalCount?: number;
+  beneficiaryDepartments?: TrainingBeneficiaryDepartmentEntry[]; // STUDENTS only
+  beneficiaryInternalCount?: number; // FACULTY only
+  beneficiaryExternalCount?: number; // FACULTY only
+
+  // Co-conducting faculty - CONDUCTED only, set on the organizer's own
+  // ("master") copy of the entry.
+  coConductors?: TrainingCoConductor[];
+  // Set on every synced copy (see syncTrainingEntryCoConductors) - whose
+  // entry this originally is. Absent on the master copy itself.
+  ownerFacultyId?: string;
+  ownerFacultyName?: string;
+  // True only on a co-conductor's own synced copy - rendered read-only in
+  // the form since edits belong on the organizer's ("master") copy.
+  isCoConductedCopy?: boolean;
+
+  remark?: string; // PARTICIPATED only, replaces organizer/co-conductors there
+  otherDetails?: string; // always shown, trailing free-text field
 }
 
 export type ProfessionalBody =
@@ -1248,26 +2143,35 @@ export interface ProfessionalMembership {
 }
 
 export type AdminResponsibilityCategory =
-  | "COORDINATOR"
   | "COMMITTEE_MEMBER"
-  | "NBA_NAAC"
+  | "NBA"
+  | "NAAC"
+  | "NIRF"
   | "IQAC"
-  | "EXAMINATION_DUTY"
   | "OTHER";
 export const ADMIN_RESPONSIBILITY_CATEGORY_LABELS: Record<
   AdminResponsibilityCategory,
   string
 > = {
-  COORDINATOR: "Coordinator Role",
-  COMMITTEE_MEMBER: "Committee Membership",
-  NBA_NAAC: "NBA / NAAC Work",
+  COMMITTEE_MEMBER: "Committee Member",
+  NBA: "NBA",
+  NAAC: "NAAC",
+  NIRF: "NIRF",
   IQAC: "IQAC",
-  EXAMINATION_DUTY: "Examination Duty",
   OTHER: "Other",
 };
 export interface AdminResponsibilityEntry {
   category: AdminResponsibilityCategory;
+  // Free-text category name - only meaningful (and shown) when category === "OTHER".
+  otherCategory?: string;
   description: string;
+  // "YYYY-MM-DD" - replaces the old year-only shape below. toDate blank means
+  // still ongoing (shown as such until it's set).
+  fromDate?: string;
+  toDate?: string;
+  // Legacy year-only shape - a record saved before fromDate/toDate existed
+  // keeps showing these until it's next re-saved (same read-time-fallback
+  // pattern as PreviousInstitution - see its own doc-comment).
   fromYear?: number;
   toYear?: number; // blank = ongoing
 }
@@ -1353,9 +2257,21 @@ export interface FacultyProfileFields {
   totalCitations: number;
   hIndex: number;
   i10Index: number;
-  googleScholarId?: string;
-  scopusAuthorId?: string;
   orcidId?: string;
+  scopusAuthorId?: string;
+  researcherId?: string; // Web of Science / Publons ResearcherID
+  googleScholarId?: string;
+  irinsProfile?: string; // IRINS profile URL/ID
+
+  // "Citations & H-Index Growth" tab - self-submitted, R&D-verified (see
+  // CitationMetricsRequest) - kept distinct from the totalCitations/hIndex
+  // fields above (those stay directly self-editable via the Academic
+  // Profile form and are still used by resume PDF/CSV export/public
+  // profile) so the two paths never overwrite each other.
+  citationsTotal?: number;
+  citationsHIndex?: number;
+  citationsExcludingSelf?: number;
+  citationsHIndexExcludingSelf?: number;
 
   // Module 4 — Grants, Consultancy & IP
   fundedProjects: FundedProject[];
@@ -1522,6 +2438,19 @@ export interface StudentRecord {
   // entire academic run, per Section.regulation's own doc-comment. Optional/
   // lenient - absent when the section they were placed into had none set.
   regulation?: string;
+  // This student's own admission batch, e.g. "2024-2028" - a one-time
+  // snapshot taken the same moment/places as `regulation` above (students/
+  // distribute, distribute-cohort's own path never touches lateral students
+  // so is left as a plain regulation-only mirror there; import-excel).
+  // A Regular student just mirrors the section's own Section.batch. A
+  // Lateral student (studentType "Lateral") joins directly into Year 2,
+  // one calendar year later than the Regular batch already occupying that
+  // slot, and spends one fewer year at the college - so their own batch
+  // starts a year later than the section's batch but ends the SAME year
+  // (they graduate together): joining a Section.batch "2024-2028" slot in
+  // session 2025 gives "2025-2028", not "2024-2028". See
+  // lib/college/academicSession.ts's lateralEntryBatch.
+  batch?: string;
   // ─── Admission-detail fields ────────────────────────────────────────────
   // All optional, all set only via the College Office bulk import (see
   // src/lib/students/importRow.ts) - there is no per-student edit form for
@@ -1762,6 +2691,7 @@ export type AuditAction =
   | "USER_CREATED"
   | "USER_UPDATED"
   | "USER_DEACTIVATED"
+  | "STAFF_ROLE_CHANGED"
   | "USER_PASSWORD_RESET"
   | "PROFILE_PHOTO_UPDATED"
   // Faculty module

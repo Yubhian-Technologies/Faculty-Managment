@@ -70,7 +70,7 @@ export interface FacultyPublicProfile {
   recognition?: {
     awardEntries: { title: string; awardingBody: string; year: number }[];
     professionalMemberships: { body: ProfessionalBody; otherName?: string; sinceYear?: number }[];
-    adminResponsibilityEntries: { category: AdminResponsibilityCategory; description: string; fromYear?: number; toYear?: number }[];
+    adminResponsibilityEntries: { category: AdminResponsibilityCategory; otherCategory?: string; description: string; fromYear?: number; toYear?: number }[];
     labsEstablished: { facilityDetails: string; outcomes: string }[];
     trainingEntries: { type: TrainingEntryType; title: string; organizer: string; year: number }[];
     nationalExposure?: string;
@@ -329,7 +329,7 @@ export function FacultyPublicProfileView({ profile }: { profile: FacultyPublicPr
                 <InfoRow label="Department" value={p.department} />
                 <InfoRow label="Qualification" value={p.qualification} />
                 <InfoRow label="Specialization" value={p.specialization} />
-                <InfoRow label="Experience" value={p.experienceYears ? `${p.experienceYears}+ years` : undefined} />
+                <InfoRow label="Total Years of Experience" value={p.experienceYears ? `${p.experienceYears}+ years` : undefined} />
                 <InfoRow label="At the Institution Since" value={p.joiningYear} />
               </div>
               {qualBadges.length > 0 && (
@@ -553,7 +553,7 @@ export function FacultyPublicProfileView({ profile }: { profile: FacultyPublicPr
                       <EntryList>
                         {p.recognition.adminResponsibilityEntries.map((r, i) => (
                           <EntryCard key={i}>
-                            <span className="font-medium">{ADMIN_RESPONSIBILITY_CATEGORY_LABELS[r.category]}</span>
+                            <span className="font-medium">{r.category === "OTHER" ? (r.otherCategory || "Other") : ADMIN_RESPONSIBILITY_CATEGORY_LABELS[r.category]}</span>
                             {r.description ? ` — ${r.description}` : ""}
                             {r.fromYear && <span className="text-muted-foreground"> &middot; {r.fromYear}–{r.toYear ?? "present"}</span>}
                           </EntryCard>

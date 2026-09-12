@@ -18,8 +18,8 @@ import { exportFacultyCsv } from "@/lib/faculty/exportFacultyCsv";
 import { downloadResumePdf } from "@/lib/pdf/downloadResume";
 import { hasSupportingStaffSplit } from "@/lib/designations/config";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
-import { DESIGNATION_LABELS, EMPLOYMENT_TYPE_LABELS, FACULTY_STATUS_LABELS } from "@/types";
-import type { FacultyMember, Designation, EmploymentType, FacultyStatus, TeachingAssignment, CollegeType, Department } from "@/types";
+import { DESIGNATION_LABELS, FACULTY_STATUS_LABELS } from "@/types";
+import type { FacultyMember, Designation, FacultyStatus, TeachingAssignment, CollegeType, Department } from "@/types";
 
 function fmtDate(val: unknown): string {
   if (!val) return "-";
@@ -317,14 +317,11 @@ export default function HODFacultyPage() {
       ),
     },
     {
-      key: "employmentType",
-      header: "Employee Category",
+      key: "joiningDate",
+      header: "Joining",
       hideOnMobile: true,
       render: (row) => (
-        <div className="space-y-1">
-          <Badge variant="outline">{EMPLOYMENT_TYPE_LABELS[row.employmentType as EmploymentType] ?? (row.employmentType as string)}</Badge>
-          <p className="text-xs text-muted-foreground">{joiningLabel(row.status)}: {fmtDate(row.joiningDate)}</p>
-        </div>
+        <p className="text-xs text-muted-foreground">{joiningLabel(row.status)}: {fmtDate(row.joiningDate)}</p>
       ),
     },
     {

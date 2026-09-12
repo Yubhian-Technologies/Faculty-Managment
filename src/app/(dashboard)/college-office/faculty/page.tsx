@@ -8,6 +8,7 @@ import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Button } from "@/components/ui/button";
 import { Avatar } from "@/components/shared/Avatar";
 import { toast } from "@/hooks/useToast";
+import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { DESIGNATION_LABELS } from "@/types";
 import type { FacultyMember, Designation } from "@/types";
 
@@ -42,9 +43,9 @@ export default function CollegeOfficeFacultyPage() {
       header: "Faculty Member",
       render: (row) => (
         <div className="flex items-start gap-3 min-w-0">
-          <Avatar name={row.name as string} photoUrl={row.profilePhotoUrl as string | undefined} size="sm" className="mt-0.5" />
+          <Avatar name={facultyDisplayName(row)} photoUrl={row.profilePhotoUrl as string | undefined} size="sm" className="mt-0.5" />
           <div className="space-y-0.5 min-w-0">
-            <p className="font-medium leading-tight">{row.name as string}</p>
+            <p className="font-medium leading-tight">{facultyDisplayName(row) || "-"}</p>
             <p className="text-xs text-muted-foreground">ID: {row.employeeId as string}</p>
           </div>
         </div>

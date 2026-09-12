@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import type { FacultyMember, DegreeDetail } from "@/types";
 
 // Public "meet the faculty" page — no auth, reached via a short, human-
@@ -63,7 +64,7 @@ export async function GET(request: Request) {
     return NextResponse.json({
       profile: {
         collegeName,
-        name: faculty.name,
+        name: facultyDisplayName(faculty),
         designation: faculty.designation,
         department: faculty.department,
         profilePhotoUrl: faculty.profilePhotoUrl || undefined,
@@ -157,6 +158,7 @@ export async function GET(request: Request) {
               })),
               adminResponsibilityEntries: (ap.adminResponsibilityEntries ?? []).map((r) => ({
                 category: r.category,
+                otherCategory: r.otherCategory,
                 description: r.description,
                 fromYear: r.fromYear,
                 toYear: r.toYear,
