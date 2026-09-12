@@ -21,7 +21,7 @@ import {
 } from "@/components/faculty/AcademicProfileModuleFields";
 import { TextInput } from "@/components/shared/ProfileFieldPrimitives";
 import { syncTeachingAssignments } from "@/lib/teaching/syncTeachingAssignments";
-import { totalPreviousExperienceYears, totalYearsOfExperience, formatDuration } from "@/lib/faculty/experienceCalc";
+import { totalPreviousExperienceYears, totalYearsOfExperience, formatDuration, allPreviousExperienceEntries } from "@/lib/faculty/experienceCalc";
 import { PHONE_REGEX } from "@/lib/validations";
 import { AvatarUploadField } from "@/components/shared/AvatarUploadField";
 import { PROFILE_MODULES } from "@/lib/faculty/profileModules";
@@ -164,13 +164,20 @@ export default function NewFacultyPage() {
   const name = watch("name");
   const joiningDateValue = watch("joiningDate");
 
-  // FacultyMember.experienceYears is calculated from Previous Experience's
-  // From/To dates alone (see experienceCalc.ts), not typed manually - kept in
-  // sync with the form's own experienceYears field so submit sends the
-  // computed total as-is.
+  // FacultyMember.experienceYears is calculated from Academic/Industry/Research
+  // Experience's From/To dates alone, combined (see experienceCalc.ts), not
+  // typed manually - kept in sync with the form's own experienceYears field
+  // so submit sends the computed total as-is.
+  const allExperienceEntries = useMemo(
+    () => allPreviousExperienceEntries(academicProfile),
+    // The 3 specific arrays read are the real deps; academicProfile itself is
+    // a new object every render and would defeat the memoization if listed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [academicProfile.previousInstitutions, academicProfile.industryExperienceEntries, academicProfile.researchExperienceEntries]
+  );
   const totalExperience = useMemo(
-    () => totalPreviousExperienceYears(academicProfile.previousInstitutions),
-    [academicProfile.previousInstitutions]
+    () => totalPreviousExperienceYears(allExperienceEntries),
+    [allExperienceEntries]
   );
   useEffect(() => {
     setValue("experienceYears", totalExperience);
@@ -181,8 +188,8 @@ export default function NewFacultyPage() {
   // yet), live, the same "Total Years of Experience" figure the profile will
   // show once this faculty member is added.
   const previewTotalExperience = useMemo(
-    () => totalYearsOfExperience(academicProfile.previousInstitutions, joiningDateValue),
-    [academicProfile.previousInstitutions, joiningDateValue]
+    () => totalYearsOfExperience(allExperienceEntries, joiningDateValue),
+    [allExperienceEntries, joiningDateValue]
   );
 
   const steps: WizardStep[] = useMemo(() => [

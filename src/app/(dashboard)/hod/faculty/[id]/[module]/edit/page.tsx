@@ -11,7 +11,7 @@ import { FacultyProfileModuleEditor, type FacultyEditRecord } from "@/components
 import { getMissingRequiredPersonalFields, FACULTY_REQUIRED_PERSONAL_FIELDS } from "@/components/shared/PersonalDetailsFields";
 import { PROFILE_MODULES, type ProfileModuleKey } from "@/lib/faculty/profileModules";
 import { syncTeachingAssignments } from "@/lib/teaching/syncTeachingAssignments";
-import { totalPreviousExperienceYears } from "@/lib/faculty/experienceCalc";
+import { totalPreviousExperienceYears, allPreviousExperienceEntries } from "@/lib/faculty/experienceCalc";
 import { toDateInputValue } from "@/lib/utils";
 import type { StagedTeachingRow } from "@/components/faculty/TeachingAssignmentsEditor";
 import { useCollegeType } from "@/hooks/useCollegeType";
@@ -161,11 +161,12 @@ export default function HodFacultyModuleEditPage() {
                 pfNumber: record.pfNumber,
               }
             : moduleKey === "experience"
-              // Total Experience is calculated from Previous Experience's From/To
-              // dates, not typed manually - see experienceCalc.ts. Kept in sync
-              // with the top-level FacultyMember.experienceYears field (shown on
-              // the list/PDF/profile) every time this module is saved.
-              ? { academicProfile: record.academicProfile, experienceYears: totalPreviousExperienceYears(record.academicProfile?.previousInstitutions) }
+              // Total Experience is calculated from Academic/Industry/Research
+              // Experience's From/To dates, combined, not typed manually - see
+              // experienceCalc.ts. Kept in sync with the top-level
+              // FacultyMember.experienceYears field (shown on the list/PDF/
+              // profile) every time this module is saved.
+              ? { academicProfile: record.academicProfile, experienceYears: totalPreviousExperienceYears(allPreviousExperienceEntries(record.academicProfile)) }
               : { academicProfile: record.academicProfile };
 
         const res = await fetch(`/api/college/faculty/${facultyId}`, {

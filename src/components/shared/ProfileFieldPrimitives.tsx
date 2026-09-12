@@ -155,6 +155,12 @@ export function DegreeFields({
   const v = resolveDegree(value);
   const hasDomain = DOMAIN_LEVELS.includes(level);
   const domain = v.domain as EducationDomain | undefined;
+  // "Others" is a sentinel in v.domain itself (same pattern as Course's own
+  // "Other" below) until the user types the real domain name - a legacy
+  // value that matches none of the fixed domains also falls into this so it
+  // surfaces for correction rather than silently hiding behind an unselected
+  // dropdown.
+  const domainIsOther = !!domain && !(domain in EDUCATION_DOMAIN_LABELS);
   const courseOptions = hasDomain ? (domain ? (COURSES_BY_DOMAIN[domain] ?? []) : []) : (FLAT_OPTIONS_BY_LEVEL[level] ?? []);
   const degreeIsOther = !!v.degree && !courseOptions.includes(v.degree);
   // Intermediate (12th) and High School (10th) have no fixed course
@@ -189,7 +195,7 @@ export function DegreeFields({
           <div className="space-y-2">
             <Label>Domain</Label>
             <Select
-              value={domain ?? ""}
+              value={domainIsOther ? "OTHERS" : (domain ?? "")}
               onValueChange={(x) => onChange({ ...v, domain: x, degree: "" })}
             >
               <SelectTrigger><SelectValue placeholder="Select domain" /></SelectTrigger>
@@ -197,6 +203,13 @@ export function DegreeFields({
                 {Object.entries(EDUCATION_DOMAIN_LABELS).map(([k, lbl]) => <SelectItem key={k} value={k}>{lbl}</SelectItem>)}
               </SelectContent>
             </Select>
+            {(domain === "OTHERS" || domainIsOther) && (
+              <Input
+                value={domain === "OTHERS" ? "" : domain}
+                onChange={(e) => onChange({ ...v, domain: e.target.value || "OTHERS" })}
+                placeholder="Please specify domain"
+              />
+            )}
           </div>
         )}
         {isSchoolLevel ? (

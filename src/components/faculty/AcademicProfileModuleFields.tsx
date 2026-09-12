@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
@@ -7,22 +8,22 @@ import { CertificateUploadField } from "@/components/shared/CertificateUploadFie
 import { DesignationSelect } from "@/components/faculty/DesignationOptions";
 import { TrainingEntryFields } from "@/components/faculty/TrainingEntryFields";
 import {
-  NumInput, TextInput, DateInput, MonthInput, DegreeFields, DegreeFieldsList, RepeatingGroup, QualificationsFields,
+  NumInput, TextInput, DateInput, DegreeFields, DegreeFieldsList, RepeatingGroup, QualificationsFields,
 } from "@/components/shared/ProfileFieldPrimitives";
 import { SCHOOL_TEACHING_QUALIFICATION_LEVELS } from "@/lib/designations/config";
-import { durationBetween, formatDuration, totalYearsOfExperience } from "@/lib/faculty/experienceCalc";
+import { durationBetween, formatDuration, totalYearsOfExperience, allPreviousExperienceEntries } from "@/lib/faculty/experienceCalc";
 import type {
   FacultyProfileFields,
   CollegeType,
   FundedProject,
   ConsultancyProject,
   LabEstablished,
-  AuthoredBook,
   PreviousInstitution,
   PromotionRecord,
   TrainingEntry,
   ProfessionalMembership,
   ProfessionalBody,
+  MembershipValidity,
   AdminResponsibilityEntry,
   AdminResponsibilityCategory,
   AwardEntry,
@@ -30,7 +31,7 @@ import type {
   AwardLevel,
 } from "@/types";
 import {
-  PROFESSIONAL_BODY_LABELS,
+  PROFESSIONAL_BODY_LABELS, MEMBERSHIP_VALIDITY_LABELS,
   ADMIN_RESPONSIBILITY_CATEGORY_LABELS, AWARD_CATEGORY_LABELS, QUALIFYING_EXAM_LABELS,
   AWARD_LEVEL_LABELS,
 } from "@/types";
@@ -52,7 +53,6 @@ export interface ModuleFieldsProps {
 const EMPTY_FUNDED_PROJECT: FundedProject = { title: "", fundingAgency: "", grantAmountLakhs: 0, year: new Date().getFullYear(), status: "" };
 const EMPTY_CONSULTANCY: ConsultancyProject = { title: "", clientOrAgency: "", revenueLakhs: 0, year: new Date().getFullYear(), status: "" };
 const EMPTY_LAB: LabEstablished = { facilityDetails: "", outcomes: "" };
-const EMPTY_BOOK: AuthoredBook = { title: "", publisher: "", year: new Date().getFullYear() };
 const EMPTY_PREVIOUS_INSTITUTION: PreviousInstitution = { institutionName: "", designation: "" };
 const EMPTY_PROMOTION: PromotionRecord = { designation: "" };
 const EMPTY_TRAINING: TrainingEntry = { type: "FDP", title: "", organizer: "" };
@@ -105,6 +105,9 @@ export function QualificationFields({ value, onChange, collegeType }: ModuleFiel
                 </SelectContent>
               </Select>
             </div>
+            {value.qualifyingExam === "OTHER" && (
+              <TextInput label="Please specify exam" value={value.otherQualifyingExam} onChange={(v) => set("otherQualifyingExam", v)} />
+            )}
             <TextInput label="Score" value={value.qualifyingExamScore} onChange={(v) => set("qualifyingExamScore", v)} />
             <NumInput label="Qualified Year" value={value.qualifyingExamYear} onChange={(v) => set("qualifyingExamYear", v)} />
           </div>
@@ -183,23 +186,59 @@ export function QualificationFields({ value, onChange, collegeType }: ModuleFiel
   );
 }
 
+// Academic/Industry/Research Experience are 3 tabs sharing this exact row
+// shape (PreviousInstitution) and layout - only the Institution/Teaching-Role
+// labels and which FacultyProfileFields array they read/write differ, so one
+// tab config drives all three instead of tripling the JSX.
+const EXPERIENCE_TABS = [
+  {
+    key: "academic", label: "Academic Experience", field: "previousInstitutions",
+    institutionLabel: "Institution Name", roleSectionLabel: "Teaching Role", roleFieldLabel: "Teaching Role/Responsibilities",
+  },
+  {
+    key: "industry", label: "Industry Experience", field: "industryExperienceEntries",
+    institutionLabel: "Name of the Industry", roleSectionLabel: "Industry Roles", roleFieldLabel: "Industry Roles/Responsibilities",
+  },
+  {
+    key: "research", label: "Research Experience", field: "researchExperienceEntries",
+    institutionLabel: "Research Organization Name", roleSectionLabel: "Research Role", roleFieldLabel: "Research Role/Responsibilities",
+  },
+] as const;
+
 export function ExperienceFields({ value, onChange, includeTeachingAssignment = true }: ModuleFieldsProps & { includeTeachingAssignment?: boolean }) {
   function set<K extends keyof FacultyProfileFields>(key: K, v: FacultyProfileFields[K]) {
     onChange({ ...value, [key]: v });
   }
   const teaching = value.teachingAssignment;
-  // Previous Experience rows only - no Date of Joining here, so this is
-  // deliberately not the same figure as the "Total Years of Experience" fact
-  // shown on the profile (FacultyProfileHub), which also adds time served
-  // since joining and keeps ticking up day by day.
-  const previousExperienceTotal = totalYearsOfExperience(value.previousInstitutions, undefined);
+  const [activeTabKey, setActiveTabKey] = useState<(typeof EXPERIENCE_TABS)[number]["key"]>("academic");
+  const activeTab = EXPERIENCE_TABS.find((t) => t.key === activeTabKey) ?? EXPERIENCE_TABS[0];
+  const items = value[activeTab.field];
+  // All 3 tabs combined - no Date of Joining here, so this is deliberately
+  // not the same figure as the "Total Years of Experience" fact shown on the
+  // profile (FacultyProfileHub), which also adds time served since joining
+  // and keeps ticking up day by day.
+  const previousExperienceTotal = totalYearsOfExperience(allPreviousExperienceEntries(value), undefined);
   return (
     <div className="space-y-5">
+      <div className="flex flex-wrap gap-2">
+        {EXPERIENCE_TABS.map((t) => (
+          <button
+            type="button"
+            key={t.key}
+            onClick={() => setActiveTabKey(t.key)}
+            className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+              activeTabKey === t.key ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/70"
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
       <RepeatingGroup
-        title="Previous Experience"
-        items={value.previousInstitutions}
+        title={activeTab.label}
+        items={items}
         empty={EMPTY_PREVIOUS_INSTITUTION}
-        onChange={(v) => set("previousInstitutions", v)}
+        onChange={(v) => set(activeTab.field, v)}
         renderRow={(item, update) => {
           // Falls back to Jan 1 of the legacy year-only value so an older
           // record still shows something to correct, rather than blank -
@@ -210,7 +249,7 @@ export function ExperienceFields({ value, onChange, includeTeachingAssignment = 
           const rowDuration = durationBetween(fromDate, toDate);
           return (
             <>
-              <TextInput label="Institution Name" value={item.institutionName} onChange={(v) => update({ institutionName: v })} />
+              <TextInput label={activeTab.institutionLabel} value={item.institutionName} onChange={(v) => update({ institutionName: v })} />
               <TextInput label="Designation" value={item.designation} onChange={(v) => update({ designation: v })} />
               <DateInput label="From Date" value={fromDate} onChange={(v) => update({ fromDate: v })} />
               <DateInput
@@ -229,6 +268,19 @@ export function ExperienceFields({ value, onChange, includeTeachingAssignment = 
               )}
               <NumInput label="Joining Salary" value={item.joiningSalary} onChange={(v) => update({ joiningSalary: v })} />
               <NumInput label="Leaving Salary" value={item.leavingSalary} onChange={(v) => update({ leavingSalary: v })} />
+              {includeTeachingAssignment && (
+                <div className="sm:col-span-2 space-y-3 rounded-lg border p-3">
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{activeTab.roleSectionLabel}</p>
+                  <TextInput
+                    label={activeTab.roleFieldLabel}
+                    value={teaching?.primaryTeachingRole}
+                    onChange={(v) => set("teachingAssignment", { primaryTeachingRole: v, courses: teaching?.courses ?? [] })}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Subject-level teaching assignments (course, section, subject, weekly schedule) are managed from the &ldquo;Teaching Load&rdquo; module.
+                  </p>
+                </div>
+              )}
               <div className="sm:col-span-2 space-y-2">
                 <Label>Reason for Leaving</Label>
                 <Textarea value={item.reasonForLeaving ?? ""} onChange={(e) => update({ reasonForLeaving: e.target.value })} />
@@ -255,28 +307,18 @@ export function ExperienceFields({ value, onChange, includeTeachingAssignment = 
           );
         }}
       />
-      {(value.previousInstitutions?.length ?? 0) > 0 && (
+      {(items?.length ?? 0) > 0 && (
         <p className="text-sm rounded-md border bg-muted/20 p-2">
-          Previous Experience Total: <span className="font-semibold">{formatDuration(previousExperienceTotal)}</span>
-          <span className="text-xs text-muted-foreground"> — combined with time served since Date of Joining, this becomes the Total Years of Experience shown on this faculty member&rsquo;s profile.</span>
+          {activeTab.label} Total: <span className="font-semibold">{formatDuration(totalYearsOfExperience(items, undefined))}</span>
         </p>
       )}
+      <p className="text-sm rounded-md border bg-muted/20 p-2">
+        Previous Experience Total (all 3 tabs combined): <span className="font-semibold">{formatDuration(previousExperienceTotal)}</span>
+        <span className="text-xs text-muted-foreground"> — combined with time served since Date of Joining, this becomes the Total Years of Experience shown on this faculty member&rsquo;s profile.</span>
+      </p>
       <p className="text-xs text-muted-foreground rounded-md border bg-muted/20 p-2">
         Promotion History is maintained by the College Office - it can no longer be edited here.
       </p>
-      {includeTeachingAssignment && (
-        <div className="space-y-3 rounded-lg border p-3">
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Teaching Role</p>
-          <TextInput
-            label="Primary Teaching Role / Specialization"
-            value={teaching?.primaryTeachingRole}
-            onChange={(v) => set("teachingAssignment", { primaryTeachingRole: v, courses: teaching?.courses ?? [] })}
-          />
-          <p className="text-xs text-muted-foreground">
-            Subject-level teaching assignments (course, section, subject, weekly schedule) are managed from the &ldquo;Teaching Load&rdquo; module.
-          </p>
-        </div>
-      )}
     </div>
   );
 }
@@ -456,30 +498,8 @@ export function MentorshipFields({
   function set<K extends keyof FacultyProfileFields>(key: K, v: FacultyProfileFields[K]) {
     onChange({ ...value, [key]: v });
   }
-  const phdPursuing = value.phdScholarsPursuing;
-  const phdAwarded = value.phdScholarsAwarded;
   return (
     <div className="space-y-5">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <div className="space-y-2 rounded-lg border p-3">
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Ph.D. Scholars Pursuing</p>
-          <NumInput label="Count" value={phdPursuing?.count} onChange={(v) => set("phdScholarsPursuing", { count: v, universities: phdPursuing?.universities ?? "" })} />
-          <TextInput label="University Names" value={phdPursuing?.universities} onChange={(v) => set("phdScholarsPursuing", { count: phdPursuing?.count ?? 0, universities: v })} />
-        </div>
-        <div className="space-y-2 rounded-lg border p-3">
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Ph.D. Scholars Awarded</p>
-          <NumInput label="Count" value={phdAwarded?.count} onChange={(v) => set("phdScholarsAwarded", { count: v, universities: phdAwarded?.universities ?? "" })} />
-          <TextInput label="University Names" value={phdAwarded?.universities} onChange={(v) => set("phdScholarsAwarded", { count: phdAwarded?.count ?? 0, universities: v })} />
-        </div>
-      </div>
-      <div className="space-y-2">
-        <Label>National Exposure (joint pubs w/ IITs/NITs/IIITs/CSIR)</Label>
-        <Textarea value={value.nationalExposure ?? ""} onChange={(e) => set("nationalExposure", e.target.value)} />
-      </div>
-      <div className="space-y-2">
-        <Label>International Exposure (joint pubs w/ foreign universities)</Label>
-        <Textarea value={value.internationalExposure ?? ""} onChange={(e) => set("internationalExposure", e.target.value)} />
-      </div>
       <RepeatingGroup
         title="New Labs Established"
         items={value.labsEstablished}
@@ -570,27 +590,39 @@ export function MentorshipFields({
             {item.body === "OTHER" && (
               <TextInput label="Body Name" value={item.otherName} onChange={(v) => update({ otherName: v })} />
             )}
+            <TextInput
+              label="Membership Type"
+              value={item.membershipType}
+              onChange={(v) => update({ membershipType: v })}
+              placeholder="e.g. Senior Fellowship / Associate Fellowship / Fellowship"
+            />
             <TextInput label="Membership ID" value={item.membershipId} onChange={(v) => update({ membershipId: v })} />
-            <MonthInput label="Member Since (Month/Year)" value={item.sinceMonthYear} onChange={(v) => update({ sinceMonthYear: v })} />
+            <div className="space-y-2">
+              <Label>Membership Validity</Label>
+              <Select value={item.validity ?? ""} onValueChange={(v) => update({ validity: v as MembershipValidity })}>
+                <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                <SelectContent>
+                  {Object.entries(MEMBERSHIP_VALIDITY_LABELS).map(([k, label]) => (
+                    <SelectItem key={k} value={k}>{label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {item.validity === "LIFETIME" && (
+              <DateInput label="Member Since" value={item.sinceDate} onChange={(v) => update({ sinceDate: v })} />
+            )}
+            {item.validity === "ANNUAL" && (
+              <>
+                <DateInput label="Valid From" value={item.validFrom} onChange={(v) => update({ validFrom: v })} />
+                <DateInput label="Valid To" value={item.validTo} onChange={(v) => update({ validTo: v })} min={item.validFrom} />
+              </>
+            )}
           </>
         )}
       />
       {value.professionalBodyMemberships && (
         <p className="text-xs text-muted-foreground italic">Legacy note: {value.professionalBodyMemberships}</p>
       )}
-      <RepeatingGroup
-        title="Authored Books"
-        items={value.authoredBooks}
-        empty={EMPTY_BOOK}
-        onChange={(v) => set("authoredBooks", v)}
-        renderRow={(item, update) => (
-          <>
-            <TextInput label="Title" value={item.title} onChange={(v) => update({ title: v })} />
-            <TextInput label="Publisher" value={item.publisher} onChange={(v) => update({ publisher: v })} />
-            <NumInput label="Year" value={item.year} onChange={(v) => update({ year: v })} />
-          </>
-        )}
-      />
       <RepeatingGroup
         title="Awards & Recognition"
         items={value.awardEntries}
@@ -609,9 +641,16 @@ export function MentorshipFields({
                 </SelectContent>
               </Select>
             </div>
-            <TextInput label="Title" value={item.title} onChange={(v) => update({ title: v })} />
-            <TextInput label="Awarding Body" value={item.awardingBody} onChange={(v) => update({ awardingBody: v })} />
-            <NumInput label="Year" value={item.year} onChange={(v) => update({ year: v })} />
+            {item.category === "OTHER" && (
+              <TextInput label="Please specify category" value={item.otherCategory} onChange={(v) => update({ otherCategory: v })} />
+            )}
+            <TextInput label="Title of Awarded" value={item.title} onChange={(v) => update({ title: v })} />
+            <TextInput label="Awarding Agency/Body" value={item.awardingBody} onChange={(v) => update({ awardingBody: v })} />
+            <DateInput
+              label="Date of Awarded"
+              value={item.dateAwarded}
+              onChange={(v) => update({ dateAwarded: v, year: v ? new Date(v).getFullYear() : item.year })}
+            />
             <div className="space-y-2">
               <Label>State / National / International</Label>
               <Select value={item.level ?? ""} onValueChange={(v) => update({ level: v as AwardLevel })}>
@@ -622,6 +661,10 @@ export function MentorshipFields({
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+            <div className="sm:col-span-2 space-y-2">
+              <Label>Other Details (if any)</Label>
+              <Textarea value={item.otherDetails ?? ""} onChange={(e) => update({ otherDetails: e.target.value })} />
             </div>
             <div className="sm:col-span-2">
               <Label className="text-xs">Certificate</Label>

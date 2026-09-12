@@ -68,6 +68,25 @@ interface PreviousInstitutionLike {
   toYear?: number;
 }
 
+// Academic (previousInstitutions), Industry, and Research Experience are 3
+// separate tabs (same row shape, different field labels - see ExperienceFields)
+// that all roll up into one combined "previous experience" total - every
+// caller computing Total/Internal/External Years of Experience combines all
+// three through here rather than reading previousInstitutions alone.
+interface ExperienceEntriesSource {
+  previousInstitutions?: PreviousInstitutionLike[];
+  industryExperienceEntries?: PreviousInstitutionLike[];
+  researchExperienceEntries?: PreviousInstitutionLike[];
+}
+export function allPreviousExperienceEntries(p: ExperienceEntriesSource | undefined): PreviousInstitutionLike[] {
+  if (!p) return [];
+  return [
+    ...(p.previousInstitutions ?? []),
+    ...(p.industryExperienceEntries ?? []),
+    ...(p.researchExperienceEntries ?? []),
+  ];
+}
+
 // Legacy rows that only have fromYear/toYear (pre-dating the From/To Date
 // fields) anchor to Jan 1 of each year - same read-time fallback
 // ExperienceFields itself uses.

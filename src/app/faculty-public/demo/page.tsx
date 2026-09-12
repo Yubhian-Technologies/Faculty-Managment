@@ -93,7 +93,7 @@ const DEMO_PROFILE: FacultyPublicProfile = {
     ],
     professionalMemberships: [
       { body: "IEEE", sinceYear: 2012 },
-      { body: "ACM", sinceYear: 2013 },
+      { body: "ACME", sinceYear: 2013 },
       { body: "ISTE", sinceYear: 2015 },
     ],
     adminResponsibilityEntries: [

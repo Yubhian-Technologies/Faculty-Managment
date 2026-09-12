@@ -11,7 +11,7 @@ import { Avatar } from "@/components/shared/Avatar";
 import { AvatarUploadField } from "@/components/shared/AvatarUploadField";
 import { getFacultyProfileModules, type ProfileModuleKey } from "@/lib/faculty/profileModules";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
-import { totalYearsOfExperience, formatDuration } from "@/lib/faculty/experienceCalc";
+import { totalYearsOfExperience, formatDuration, allPreviousExperienceEntries } from "@/lib/faculty/experienceCalc";
 import { formatDate } from "@/lib/utils";
 import { toast } from "@/hooks/useToast";
 import { DESIGNATION_LABELS, FACULTY_STATUS_LABELS } from "@/types";
@@ -106,11 +106,23 @@ export function FacultyProfileHub({
   // Joining, ticking up day by day - see experienceCalc.ts's own doc-comment.
   // `dateOfJoining` is the fallback for a bare login account with no real
   // FacultyMember record (see this component's own prop doc-comment).
-  const hasExperienceData = !!(faculty.joiningDate || faculty.dateOfJoining || (faculty.academicProfile?.previousInstitutions?.length ?? 0) > 0);
-  const totalExperience = totalYearsOfExperience(
-    faculty.academicProfile?.previousInstitutions,
-    faculty.joiningDate ?? faculty.dateOfJoining
-  );
+  const joiningDate = faculty.joiningDate ?? faculty.dateOfJoining;
+  // Academic + Industry + Research Experience tabs, combined (see
+  // experienceCalc.ts's own doc-comment on allPreviousExperienceEntries).
+  const previousExperienceEntries = allPreviousExperienceEntries(faculty.academicProfile);
+  const hasExperienceData = !!(joiningDate || previousExperienceEntries.length > 0);
+  const totalExperience = totalYearsOfExperience(previousExperienceEntries, joiningDate);
+  // Internal = time actually served at THIS institution since Date of
+  // Joining, ticking up day by day - same live tenure component as above,
+  // just without any Previous Experience rows folded in.
+  const hasJoiningDate = !!joiningDate;
+  const internalExperience = totalYearsOfExperience(undefined, joiningDate);
+  // External = every Previous Experience row's own duration (all 3
+  // Professional Experience tabs) - fetched automatically from there, never
+  // typed in separately; not a live-ticking value like the two above since
+  // it only changes when a Previous Experience row is added/edited.
+  const hasPreviousExperience = previousExperienceEntries.length > 0;
+  const externalExperience = totalYearsOfExperience(previousExperienceEntries, undefined);
 
   function copyPublicProfileLink() {
     if (!faculty.employeeId) return;
@@ -209,6 +221,8 @@ export function FacultyProfileHub({
             <Fact label="Highest Qualification" value={faculty.qualification} />
             <Fact label="Specialization" value={faculty.specialization} />
             <Fact label="Total Years of Experience" value={hasExperienceData ? formatDuration(totalExperience) : undefined} />
+            <Fact label="Internal Experience" value={hasJoiningDate ? formatDuration(internalExperience) : undefined} />
+            <Fact label="External Experience" value={hasPreviousExperience ? formatDuration(externalExperience) : undefined} />
             <Fact label="College Email" value={faculty.collegeEmail} />
             <Fact label="Employee Category" value={faculty.employmentType} />
             <Fact

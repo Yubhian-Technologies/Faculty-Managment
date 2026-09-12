@@ -25,7 +25,7 @@ export const PROFILE_MODULES: Record<ProfileModuleKey, ProfileModuleDef> = {
   experience: { key: "experience", label: "Professional Experience", icon: Briefcase },
   research: { key: "research", label: "Research & Innovation", icon: FlaskConical },
   grants: { key: "grants", label: "Grants, Consultancy & IP", icon: HandCoins },
-  mentorship: { key: "mentorship", label: "Mentorship & Institutional Value", icon: Users },
+  mentorship: { key: "mentorship", label: "Professional Development", icon: Users },
   financial: { key: "financial", label: "Financial Standing", icon: Wallet },
   others: { key: "others", label: "Others", icon: FileQuestion },
   "teaching-load": { key: "teaching-load", label: "Teaching Load", icon: BookOpen },
@@ -45,7 +45,7 @@ export function getFacultyProfileModules(
   opts: { hideFinancialModule?: boolean; excludeModules?: ProfileModuleKey[] } = {}
 ): ProfileModuleDef[] {
   const keys: ProfileModuleKey[] = [
-    "personal", "qualification", "experience", "research", "grants", "mentorship",
+    "personal", "qualification", "experience", "research", "mentorship",
     ...(opts.hideFinancialModule ? [] : (["financial"] as ProfileModuleKey[])),
     "teaching-load", "others",
   ];

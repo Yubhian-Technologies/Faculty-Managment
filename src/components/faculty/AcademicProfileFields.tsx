@@ -7,7 +7,7 @@ import { CertificateUploadField } from "@/components/shared/CertificateUploadFie
 import { DesignationSelect } from "@/components/faculty/DesignationOptions";
 import { TrainingEntryFields } from "@/components/faculty/TrainingEntryFields";
 import {
-  SectionTitle, NumInput, TextInput, DateInput, MonthInput, DegreeFields, DegreeFieldsList, RepeatingGroup, QualificationsFields,
+  SectionTitle, NumInput, TextInput, DateInput, DegreeFields, DegreeFieldsList, RepeatingGroup, QualificationsFields,
 } from "@/components/shared/ProfileFieldPrimitives";
 import { SCHOOL_TEACHING_QUALIFICATION_LEVELS } from "@/lib/designations/config";
 import { durationBetween, formatDuration } from "@/lib/faculty/experienceCalc";
@@ -17,12 +17,12 @@ import type {
   FundedProject,
   ConsultancyProject,
   LabEstablished,
-  AuthoredBook,
   PreviousInstitution,
   PromotionRecord,
   TrainingEntry,
   ProfessionalMembership,
   ProfessionalBody,
+  MembershipValidity,
   AdminResponsibilityEntry,
   AdminResponsibilityCategory,
   AwardEntry,
@@ -30,7 +30,7 @@ import type {
   AwardLevel,
 } from "@/types";
 import {
-  PROFESSIONAL_BODY_LABELS,
+  PROFESSIONAL_BODY_LABELS, MEMBERSHIP_VALIDITY_LABELS,
   ADMIN_RESPONSIBILITY_CATEGORY_LABELS, AWARD_CATEGORY_LABELS, QUALIFYING_EXAM_LABELS,
   AWARD_LEVEL_LABELS,
 } from "@/types";
@@ -48,7 +48,6 @@ interface Props {
 const EMPTY_FUNDED_PROJECT: FundedProject = { title: "", fundingAgency: "", grantAmountLakhs: 0, year: new Date().getFullYear(), status: "" };
 const EMPTY_CONSULTANCY: ConsultancyProject = { title: "", clientOrAgency: "", revenueLakhs: 0, year: new Date().getFullYear(), status: "" };
 const EMPTY_LAB: LabEstablished = { facilityDetails: "", outcomes: "" };
-const EMPTY_BOOK: AuthoredBook = { title: "", publisher: "", year: new Date().getFullYear() };
 const EMPTY_PREVIOUS_INSTITUTION: PreviousInstitution = { institutionName: "", designation: "" };
 const EMPTY_PROMOTION: PromotionRecord = { designation: "" };
 const EMPTY_TRAINING: TrainingEntry = { type: "FDP", title: "", organizer: "" };
@@ -63,8 +62,6 @@ export function AcademicProfileFields({ value, onChange, includeTeachingAssignme
 
   const teaching = value.teachingAssignment;
   const patents = value.patents;
-  const phdPursuing = value.phdScholarsPursuing;
-  const phdAwarded = value.phdScholarsAwarded;
   const isSchool = collegeType === "SCHOOL";
 
   return (
@@ -107,6 +104,9 @@ export function AcademicProfileFields({ value, onChange, includeTeachingAssignme
                     </SelectContent>
                   </Select>
                 </div>
+                {value.qualifyingExam === "OTHER" && (
+                  <TextInput label="Please specify exam" value={value.otherQualifyingExam} onChange={(v) => set("otherQualifyingExam", v)} />
+                )}
                 <TextInput label="Score" value={value.qualifyingExamScore} onChange={(v) => set("qualifyingExamScore", v)} />
                 <NumInput label="Qualified Year" value={value.qualifyingExamYear} onChange={(v) => set("qualifyingExamYear", v)} />
               </div>
@@ -388,27 +388,7 @@ export function AcademicProfileFields({ value, onChange, includeTeachingAssignme
       </div>
 
       {/* Module 5 */}
-      <SectionTitle>Module 5 - Mentorship &amp; Institutional Value</SectionTitle>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <div className="space-y-2 rounded-lg border p-3">
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Ph.D. Scholars Pursuing</p>
-          <NumInput label="Count" value={phdPursuing?.count} onChange={(v) => set("phdScholarsPursuing", { count: v, universities: phdPursuing?.universities ?? "" })} />
-          <TextInput label="University Names" value={phdPursuing?.universities} onChange={(v) => set("phdScholarsPursuing", { count: phdPursuing?.count ?? 0, universities: v })} />
-        </div>
-        <div className="space-y-2 rounded-lg border p-3">
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Ph.D. Scholars Awarded</p>
-          <NumInput label="Count" value={phdAwarded?.count} onChange={(v) => set("phdScholarsAwarded", { count: v, universities: phdAwarded?.universities ?? "" })} />
-          <TextInput label="University Names" value={phdAwarded?.universities} onChange={(v) => set("phdScholarsAwarded", { count: phdAwarded?.count ?? 0, universities: v })} />
-        </div>
-      </div>
-      <div className="space-y-2">
-        <Label>National Exposure (joint pubs w/ IITs/NITs/IIITs/CSIR)</Label>
-        <Textarea value={value.nationalExposure ?? ""} onChange={(e) => set("nationalExposure", e.target.value)} />
-      </div>
-      <div className="space-y-2">
-        <Label>International Exposure (joint pubs w/ foreign universities)</Label>
-        <Textarea value={value.internationalExposure ?? ""} onChange={(e) => set("internationalExposure", e.target.value)} />
-      </div>
+      <SectionTitle>Module 5 - Professional Development</SectionTitle>
       <RepeatingGroup
         title="New Labs Established"
         items={value.labsEstablished}
@@ -488,27 +468,39 @@ export function AcademicProfileFields({ value, onChange, includeTeachingAssignme
             {item.body === "OTHER" && (
               <TextInput label="Body Name" value={item.otherName} onChange={(v) => update({ otherName: v })} />
             )}
+            <TextInput
+              label="Membership Type"
+              value={item.membershipType}
+              onChange={(v) => update({ membershipType: v })}
+              placeholder="e.g. Senior Fellowship / Associate Fellowship / Fellowship"
+            />
             <TextInput label="Membership ID" value={item.membershipId} onChange={(v) => update({ membershipId: v })} />
-            <MonthInput label="Member Since (Month/Year)" value={item.sinceMonthYear} onChange={(v) => update({ sinceMonthYear: v })} />
+            <div className="space-y-2">
+              <Label>Membership Validity</Label>
+              <Select value={item.validity ?? ""} onValueChange={(v) => update({ validity: v as MembershipValidity })}>
+                <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                <SelectContent>
+                  {Object.entries(MEMBERSHIP_VALIDITY_LABELS).map(([k, label]) => (
+                    <SelectItem key={k} value={k}>{label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {item.validity === "LIFETIME" && (
+              <DateInput label="Member Since" value={item.sinceDate} onChange={(v) => update({ sinceDate: v })} />
+            )}
+            {item.validity === "ANNUAL" && (
+              <>
+                <DateInput label="Valid From" value={item.validFrom} onChange={(v) => update({ validFrom: v })} />
+                <DateInput label="Valid To" value={item.validTo} onChange={(v) => update({ validTo: v })} min={item.validFrom} />
+              </>
+            )}
           </>
         )}
       />
       {value.professionalBodyMemberships && (
         <p className="text-xs text-muted-foreground italic">Legacy note: {value.professionalBodyMemberships}</p>
       )}
-      <RepeatingGroup
-        title="Authored Books"
-        items={value.authoredBooks}
-        empty={EMPTY_BOOK}
-        onChange={(v) => set("authoredBooks", v)}
-        renderRow={(item, update) => (
-          <>
-            <TextInput label="Title" value={item.title} onChange={(v) => update({ title: v })} />
-            <TextInput label="Publisher" value={item.publisher} onChange={(v) => update({ publisher: v })} />
-            <NumInput label="Year" value={item.year} onChange={(v) => update({ year: v })} />
-          </>
-        )}
-      />
       <RepeatingGroup
         title="Awards & Recognition"
         items={value.awardEntries}
@@ -527,9 +519,16 @@ export function AcademicProfileFields({ value, onChange, includeTeachingAssignme
                 </SelectContent>
               </Select>
             </div>
-            <TextInput label="Title" value={item.title} onChange={(v) => update({ title: v })} />
-            <TextInput label="Awarding Body" value={item.awardingBody} onChange={(v) => update({ awardingBody: v })} />
-            <NumInput label="Year" value={item.year} onChange={(v) => update({ year: v })} />
+            {item.category === "OTHER" && (
+              <TextInput label="Please specify category" value={item.otherCategory} onChange={(v) => update({ otherCategory: v })} />
+            )}
+            <TextInput label="Title of Awarded" value={item.title} onChange={(v) => update({ title: v })} />
+            <TextInput label="Awarding Agency/Body" value={item.awardingBody} onChange={(v) => update({ awardingBody: v })} />
+            <DateInput
+              label="Date of Awarded"
+              value={item.dateAwarded}
+              onChange={(v) => update({ dateAwarded: v, year: v ? new Date(v).getFullYear() : item.year })}
+            />
             <div className="space-y-2">
               <Label>State / National / International</Label>
               <Select value={item.level ?? ""} onValueChange={(v) => update({ level: v as AwardLevel })}>
@@ -540,6 +539,10 @@ export function AcademicProfileFields({ value, onChange, includeTeachingAssignme
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+            <div className="sm:col-span-2 space-y-2">
+              <Label>Other Details (if any)</Label>
+              <Textarea value={item.otherDetails ?? ""} onChange={(e) => update({ otherDetails: e.target.value })} />
             </div>
             <div className="sm:col-span-2">
               <Label className="text-xs">Certificate</Label>

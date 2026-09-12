@@ -11,11 +11,13 @@ import { CertificateUploadField } from "@/components/shared/CertificateUploadFie
 import { NumInput, TextInput, DateInput } from "@/components/shared/ProfileFieldPrimitives";
 import type {
   TrainingEntry, TrainingEntryType, TrainingParticipationRole, TrainingProgramLevel, TrainingProgramMode,
-  TrainingBeneficiaryType, TrainingBeneficiaryDepartmentEntry, TrainingCoConductor,
+  TrainingBeneficiaryType, TrainingBeneficiaryDepartmentEntry, TrainingBeneficiarySection, TrainingCoConductor,
+  CertificationType,
 } from "@/types";
 import {
   TRAINING_ENTRY_TYPE_LABELS, TRAINING_PARTICIPATION_ROLE_LABELS,
   TRAINING_PROGRAM_LEVEL_LABELS, TRAINING_PROGRAM_MODE_LABELS, TRAINING_BENEFICIARY_TYPE_LABELS,
+  CERTIFICATION_TYPE_LABELS,
 } from "@/types";
 
 // Inclusive day count between two "YYYY-MM-DD" dates (both days count, so a
@@ -113,6 +115,13 @@ function BeneficiaryDepartmentCard({
   );
 }
 
+// Course + Year are picked first, then that course/year's sections load
+// right here with a count input each - filled in as part of the same "add"
+// step, not after (the old flow committed an empty-counts card immediately
+// on Course/Year selection, pushing section counts into a separate follow-up
+// edit). Only "Add Course / Year" commits the whole thing - course, year,
+// and every section's count - to the list at once; the form then resets so
+// another course/year can be added the same way.
 function AddBeneficiaryDepartment({
   courses, existingCourseYears, onAdd,
 }: {
@@ -122,55 +131,93 @@ function AddBeneficiaryDepartment({
 }) {
   const [courseId, setCourseId] = useState("");
   const [year, setYear] = useState<number | undefined>(undefined);
+  const [sections, setSections] = useState<TrainingBeneficiarySection[]>([]);
   const [loading, setLoading] = useState(false);
 
   const selectedCourse = courses.find((c) => c.id === courseId);
   const yearOptions = selectedCourse ? YEARS.filter((y) => y <= selectedCourse.durationYears) : YEARS;
+  const isDuplicate = !!selectedCourse && !!year && existingCourseYears.has(`${selectedCourse.id}:${year}`);
 
-  async function handleAdd() {
-    const course = courses.find((c) => c.id === courseId);
-    if (!course || !year) return;
-    if (existingCourseYears.has(`${course.id}:${year}`)) return;
+  function selectCourse(v: string) {
+    setCourseId(v);
+    setYear(undefined);
+    setSections([]);
+  }
+
+  function selectYear(v: string) {
+    const y = Number(v);
+    setYear(y);
+    setSections([]);
+    if (!selectedCourse) return;
     setLoading(true);
-    try {
-      const res = await fetch(`/api/college/sections/lookup?courseId=${encodeURIComponent(course.id)}&year=${year}`);
-      const data = (await res.json()) as { sections?: SectionOption[] };
-      onAdd({
-        courseId: course.id,
-        courseName: course.name,
-        departmentId: course.departmentId,
-        department: course.department,
-        year,
-        sections: (data.sections ?? []).map((s) => ({ sectionId: s.id, sectionName: s.name, count: 0 })),
-      });
-      setCourseId("");
-      setYear(undefined);
-    } finally {
-      setLoading(false);
-    }
+    fetch(`/api/college/sections/lookup?courseId=${encodeURIComponent(selectedCourse.id)}&year=${y}`)
+      .then((r) => r.json() as Promise<{ sections?: SectionOption[] }>)
+      .then((data) => setSections((data.sections ?? []).map((s) => ({ sectionId: s.id, sectionName: s.name, count: 0 }))))
+      .catch(() => setSections([]))
+      .finally(() => setLoading(false));
+  }
+
+  function updateSectionCount(sectionId: string, count: number) {
+    setSections((prev) => prev.map((s) => (s.sectionId === sectionId ? { ...s, count } : s)));
+  }
+
+  function handleAdd() {
+    if (!selectedCourse || !year || isDuplicate) return;
+    onAdd({
+      courseId: selectedCourse.id,
+      courseName: selectedCourse.name,
+      departmentId: selectedCourse.departmentId,
+      department: selectedCourse.department,
+      year,
+      sections,
+    });
+    setCourseId("");
+    setYear(undefined);
+    setSections([]);
   }
 
   return (
-    <div className="flex flex-wrap items-end gap-2 rounded-md border border-dashed p-2">
-      <div className="space-y-1">
-        <Label className="text-xs">Course</Label>
-        <Select value={courseId} onValueChange={(v) => { setCourseId(v); setYear(undefined); }}>
-          <SelectTrigger className="w-56"><SelectValue placeholder="Select course" /></SelectTrigger>
-          <SelectContent>
-            {courses.map((c) => <SelectItem key={c.id} value={c.id}>{c.name} ({c.department})</SelectItem>)}
-          </SelectContent>
-        </Select>
+    <div className="space-y-2 rounded-md border border-dashed p-2">
+      <div className="flex flex-wrap items-end gap-2">
+        <div className="space-y-1">
+          <Label className="text-xs">Course</Label>
+          <Select value={courseId} onValueChange={selectCourse}>
+            <SelectTrigger className="w-56"><SelectValue placeholder="Select course" /></SelectTrigger>
+            <SelectContent>
+              {courses.map((c) => <SelectItem key={c.id} value={c.id}>{c.name} ({c.department})</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">Year</Label>
+          <Select value={year ? String(year) : ""} onValueChange={selectYear} disabled={!courseId}>
+            <SelectTrigger className="w-28"><SelectValue placeholder="Year" /></SelectTrigger>
+            <SelectContent>
+              {yearOptions.map((y) => <SelectItem key={y} value={String(y)}>Year {y}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
-      <div className="space-y-1">
-        <Label className="text-xs">Year</Label>
-        <Select value={year ? String(year) : ""} onValueChange={(v) => setYear(Number(v))} disabled={!courseId}>
-          <SelectTrigger className="w-28"><SelectValue placeholder="Year" /></SelectTrigger>
-          <SelectContent>
-            {yearOptions.map((y) => <SelectItem key={y} value={String(y)}>Year {y}</SelectItem>)}
-          </SelectContent>
-        </Select>
-      </div>
-      <Button type="button" variant="outline" size="sm" disabled={!courseId || !year || loading} onClick={handleAdd}>
+
+      {loading && <p className="text-xs text-muted-foreground">Loading sections…</p>}
+      {!loading && year && sections.length === 0 && (
+        <p className="text-xs text-muted-foreground">No sections found for this course/year.</p>
+      )}
+      {sections.length > 0 && (
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          {sections.map((s) => (
+            <NumInput
+              key={s.sectionId}
+              label={`Section ${s.sectionName}`}
+              value={s.count || undefined}
+              onChange={(v) => updateSectionCount(s.sectionId, v)}
+            />
+          ))}
+        </div>
+      )}
+      {isDuplicate && <p className="text-xs text-destructive">This course/year has already been added.</p>}
+
+      <Button type="button" variant="outline" size="sm" disabled={!courseId || !year || loading || isDuplicate} onClick={handleAdd}>
         <Plus className="h-3.5 w-3.5 mr-1" />Add Course / Year
       </Button>
     </div>
@@ -330,7 +377,20 @@ export function TrainingEntryFields({ item, update, ownerFacultyId, ownerFaculty
       <fieldset disabled={readOnly} className="contents">
         <div className="space-y-2">
           <Label>Type</Label>
-          <Select value={item.type} onValueChange={(v) => update({ type: v as TrainingEntryType })}>
+          <Select
+            value={item.type}
+            onValueChange={(v) => update({
+              type: v as TrainingEntryType,
+              otherType: v === "OTHER" ? item.otherType : undefined,
+              // MOOC/CERTIFICATION don't have a role - clear any stale
+              // role-dependent fields when switching into one of them.
+              role: (v === "MOOC" || v === "CERTIFICATION") ? undefined : item.role,
+              organizer: (v === "MOOC" || v === "CERTIFICATION") ? "" : item.organizer,
+              coConductors: (v === "MOOC" || v === "CERTIFICATION") ? undefined : item.coConductors,
+              remark: (v === "MOOC" || v === "CERTIFICATION") ? undefined : item.remark,
+              certificationType: v === "CERTIFICATION" ? item.certificationType : undefined,
+            })}
+          >
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
               {Object.entries(TRAINING_ENTRY_TYPE_LABELS).map(([k, label]) => (
@@ -339,41 +399,64 @@ export function TrainingEntryFields({ item, update, ownerFacultyId, ownerFaculty
             </SelectContent>
           </Select>
         </div>
-        <div className="space-y-2">
-          <Label>Participated or Conducted</Label>
-          <Select
-            value={item.role ?? ""}
-            onValueChange={(v) => update({
-              role: v as TrainingParticipationRole,
-              organizer: v === "CONDUCTED" ? (ownerFacultyName ?? "") : "",
-              coConductors: v === "CONDUCTED" ? item.coConductors : undefined,
-              remark: v === "PARTICIPATED" ? item.remark : undefined,
-            })}
-          >
-            <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
-            <SelectContent>
-              {Object.entries(TRAINING_PARTICIPATION_ROLE_LABELS).map(([k, label]) => (
-                <SelectItem key={k} value={k}>{label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        {item.type === "OTHER" && (
+          <TextInput label="Please specify type" value={item.otherType} onChange={(v) => update({ otherType: v })} />
+        )}
+        {item.type === "CERTIFICATION" ? (
+          <div className="space-y-2">
+            <Label>Certification Type</Label>
+            <Select value={item.certificationType ?? ""} onValueChange={(v) => update({ certificationType: v as CertificationType })}>
+              <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+              <SelectContent>
+                {Object.entries(CERTIFICATION_TYPE_LABELS).map(([k, label]) => (
+                  <SelectItem key={k} value={k}>{label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        ) : item.type !== "MOOC" ? (
+          <div className="space-y-2">
+            <Label>Participated or Conducted</Label>
+            <Select
+              value={item.role ?? ""}
+              onValueChange={(v) => update({
+                role: v as TrainingParticipationRole,
+                organizer: v === "CONDUCTED" ? (ownerFacultyName ?? "") : "",
+                coConductors: v === "CONDUCTED" ? item.coConductors : undefined,
+                remark: v === "PARTICIPATED" ? item.remark : undefined,
+              })}
+            >
+              <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+              <SelectContent>
+                {Object.entries(TRAINING_PARTICIPATION_ROLE_LABELS).map(([k, label]) => (
+                  <SelectItem key={k} value={k}>{label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        ) : null}
         <TextInput label="Title of the Program" value={item.title} onChange={(v) => update({ title: v })} />
-        <DateInput
-          label="From Date"
-          value={item.fromDate}
-          onChange={(v) => update({ fromDate: v, durationDays: calcDurationDays(v, item.toDate) })}
-        />
-        <DateInput
-          label="To Date"
-          value={item.toDate}
-          onChange={(v) => update({ toDate: v, durationDays: calcDurationDays(item.fromDate, v) })}
-          min={item.fromDate}
-        />
-        <div className="space-y-2">
-          <Label className="text-xs text-muted-foreground">Duration</Label>
-          <p className="text-sm font-medium pt-2">{item.durationDays ? `${item.durationDays} day${item.durationDays === 1 ? "" : "s"}` : "-"}</p>
-        </div>
+        {item.type === "MOOC" || item.type === "CERTIFICATION" ? (
+          <NumInput label="Number of Weeks" value={item.durationWeeks} onChange={(v) => update({ durationWeeks: v })} />
+        ) : (
+          <>
+            <DateInput
+              label="From Date"
+              value={item.fromDate}
+              onChange={(v) => update({ fromDate: v, durationDays: calcDurationDays(v, item.toDate) })}
+            />
+            <DateInput
+              label="To Date"
+              value={item.toDate}
+              onChange={(v) => update({ toDate: v, durationDays: calcDurationDays(item.fromDate, v) })}
+              min={item.fromDate}
+            />
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">Duration</Label>
+              <p className="text-sm font-medium pt-2">{item.durationDays ? `${item.durationDays} day${item.durationDays === 1 ? "" : "s"}` : "-"}</p>
+            </div>
+          </>
+        )}
         <div className="space-y-2">
           <Label>National / International</Label>
           <Select value={item.levelOfProgram ?? ""} onValueChange={(v) => update({ levelOfProgram: v as TrainingProgramLevel })}>
@@ -398,8 +481,7 @@ export function TrainingEntryFields({ item, update, ownerFacultyId, ownerFaculty
           </Select>
         </div>
 
-        {item.role && (
-          <div className="sm:col-span-2 space-y-2 rounded-lg border p-3">
+        <div className="sm:col-span-2 space-y-2 rounded-lg border p-3">
             <Label>Beneficiaries</Label>
             <Select value={item.beneficiaryType ?? ""} onValueChange={(v) => update({ beneficiaryType: v as TrainingBeneficiaryType })}>
               <SelectTrigger className="w-44"><SelectValue placeholder="Students / Faculty" /></SelectTrigger>
@@ -462,8 +544,7 @@ export function TrainingEntryFields({ item, update, ownerFacultyId, ownerFaculty
                 </div>
               </div>
             )}
-          </div>
-        )}
+        </div>
 
         {item.role === "CONDUCTED" && (
           <CoConductorFields
@@ -501,17 +582,28 @@ export function TrainingEntryFields({ item, update, ownerFacultyId, ownerFaculty
             placeholder="Name / affiliation"
           />
         ))}
-        <div className="sm:col-span-2">
-          <Label className="text-xs">Certificate</Label>
-          <CertificateUploadField
-            value={item.certificateUrl}
-            onUploaded={(url) => update({ certificateUrl: url })}
-            onRemoved={() => update({ certificateUrl: "" })}
-          />
-        </div>
         <div className="sm:col-span-2 space-y-2">
           <Label>Other Details</Label>
           <Textarea value={item.otherDetails ?? ""} onChange={(e) => update({ otherDetails: e.target.value })} />
+        </div>
+        <div className="sm:col-span-2 space-y-1.5">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <CertificateUploadField
+              value={item.certificateUrl}
+              onUploaded={(url) => update({ certificateUrl: url })}
+              onRemoved={() => update({ certificateUrl: "" })}
+              buttonText="Upload Certificate"
+            />
+            <CertificateUploadField
+              value={item.brochureUrl}
+              onUploaded={(url) => update({ brochureUrl: url })}
+              onRemoved={() => update({ brochureUrl: "" })}
+              label="Brochure"
+              uploadedText="Brochure uploaded"
+              buttonText="Upload Brochure"
+            />
+          </div>
+          <p className="text-xs text-muted-foreground">PNG, JPG, or PDF · max 5 MB</p>
         </div>
       </fieldset>
     </>
