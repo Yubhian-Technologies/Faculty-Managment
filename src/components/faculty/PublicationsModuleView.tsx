@@ -5,19 +5,37 @@ import { ExternalLink, Plus, Pencil } from "lucide-react";
 import { Section, SubLabel, Field } from "@/components/shared/ProfileFieldPrimitives";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
-import type { FacultyProfileFields, ResearchPublication } from "@/types";
+import { useAuthStore } from "@/store/authStore";
+import { PublicationDetailsForm, emptyPublicationDetails, isPublicationDetailsValid } from "@/components/research/PublicationDetailsForm";
+import type { FacultyProfileFields, ResearchPublication, PublicationDetails } from "@/types";
 
 const PREVIEW_COUNT = 3;
 
+const AUTHOR_CATEGORY_LABELS: Record<string, string> = {
+  FIRST_AUTHOR: "First Author", CO_AUTHOR: "Co-Author", CORRESPONDING_AUTHOR: "Corresponding Author",
+};
+
 // Bibliometric/report fields (from R&D's import) are only shown when
 // present, so older hand-entered records don't sprout a wall of "-".
-function PublicationRow({ pub, isOwnProfile, onEdit }: { pub: ResearchPublication; isOwnProfile?: boolean; onEdit?: (pub: ResearchPublication) => void }) {
+function PublicationRow({
+  pub, isOwnProfile, viewerUid, onEdit,
+}: {
+  pub: ResearchPublication;
+  isOwnProfile?: boolean;
+  viewerUid?: string;
+  onEdit?: (pub: ResearchPublication) => void;
+}) {
+  // Shows on both the submitter's own profile AND every verified Internal
+  // co-author's profile (see internalAuthorUids, api/college/publications
+  // GET) - so "isOwnProfile" alone doesn't mean "I submitted this"; check
+  // which one it actually is to word things correctly and decide who may edit.
+  const isSubmitter = pub.uid === viewerUid;
+  const isCoAuthorHere = !!viewerUid && (pub.internalAuthorUids ?? []).includes(viewerUid);
+  const canEdit = isOwnProfile && (isSubmitter || isCoAuthorHere);
   const extras: { label: string; value: string | number | undefined }[] = [
     { label: "Dept.", value: pub.department },
     { label: "Author Position", value: pub.authorPosition },
@@ -32,24 +50,28 @@ function PublicationRow({ pub, isOwnProfile, onEdit }: { pub: ResearchPublicatio
 
   return (
     <div className="rounded-md border bg-muted/20 shadow-sm p-2 space-y-2">
-      {isOwnProfile && pub.status && pub.status !== "APPROVED" && (
+      {isOwnProfile && !isSubmitter && (
+        <p className="text-xs text-muted-foreground">Submitted by {pub.ownerName}</p>
+      )}
+      {(isOwnProfile && pub.status && pub.status !== "APPROVED") || canEdit ? (
         <div className="flex items-center gap-2">
-          {pub.status === "PENDING" ? (
-            <Badge variant="pending" className="text-xs">Pending Verification</Badge>
-          ) : (
-            <>
-              <Badge variant="rejected" className="text-xs">Rejected</Badge>
-              {onEdit && (
-                <button type="button" onClick={() => onEdit(pub)} className="text-xs font-medium text-primary hover:underline inline-flex items-center gap-1">
-                  <Pencil className="h-3 w-3" />Edit &amp; Resubmit
-                </button>
-              )}
-            </>
+          {pub.status === "PENDING" && <Badge variant="pending" className="text-xs">Pending Verification</Badge>}
+          {pub.status === "REJECTED" && <Badge variant="rejected" className="text-xs">Rejected</Badge>}
+          {canEdit && onEdit && (
+            <button type="button" onClick={() => onEdit(pub)} className="text-xs font-medium text-primary hover:underline inline-flex items-center gap-1">
+              <Pencil className="h-3 w-3" />
+              {pub.status === "REJECTED" ? "Edit & Resubmit" : pub.status === "PENDING" ? "Edit" : "Edit (sends for re-verification)"}
+            </button>
           )}
         </div>
-      )}
+      ) : null}
       {pub.status === "REJECTED" && pub.rejectionReason && (
         <p className="text-xs text-destructive">Reason: {pub.rejectionReason}</p>
+      )}
+      {pub.changeLog && pub.changeLog.length > 0 && (
+        <p className="text-xs text-muted-foreground">
+          Last edited by {pub.changeLog[pub.changeLog.length - 1].changedByName}: {pub.changeLog[pub.changeLog.length - 1].changes.join(", ")}
+        </p>
       )}
       {pub.citation ? (
         // "Publication Details" - the full citation, exactly as imported -
@@ -68,6 +90,28 @@ function PublicationRow({ pub, isOwnProfile, onEdit }: { pub: ResearchPublicatio
         {pub.citation && <Field label="Journal / Conference" value={pub.journalOrConference} />}
         {extras.map((f) => <Field key={f.label} label={f.label} value={f.value} />)}
       </div>
+      {pub.details && (
+        <div className="space-y-1.5 border-t pt-2">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <Field label="Type" value={pub.details.type} />
+            <Field label="Research Domain" value={pub.details.researchDomain} />
+            <Field label="Quartile" value={pub.details.quartile} />
+            <Field label="Internal / External Authors" value={`${pub.details.internalAuthorsCount} / ${pub.details.externalAuthorsCount}`} />
+          </div>
+          {pub.details.authors.length > 0 && (
+            <div className="space-y-1">
+              <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Authors</p>
+              <div className="flex flex-wrap gap-1.5">
+                {pub.details.authors.map((a, i) => (
+                  <Badge key={i} variant={a.isInternal ? "approved" : "secondary"} className="text-xs font-normal">
+                    {a.name || "Unnamed"} &middot; {AUTHOR_CATEGORY_LABELS[a.category] ?? a.category} &middot; {a.affiliationCollegeName || "—"}
+                  </Badge>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
       {pub.driveLink && (
         <a
           href={pub.driveLink}
@@ -82,31 +126,13 @@ function PublicationRow({ pub, isOwnProfile, onEdit }: { pub: ResearchPublicatio
   );
 }
 
-interface PublicationFormState {
-  title: string;
-  coAuthors: string;
-  journalOrConference: string;
-  publicationYear: string;
-  indexing: string;
-  driveLink: string;
-}
-
-const EMPTY_FORM: PublicationFormState = {
-  title: "", coAuthors: "", journalOrConference: "", publicationYear: String(new Date().getFullYear()), indexing: "", driveLink: "",
-};
-
-// Self-submit form - the same fields R&D's own Add Publication page collects
-// (src/app/(dashboard)/r-and-d/publications/new/page.tsx), minus the staff
-// picker (the server infers the submitter from their own session). Also
-// reused to edit-and-resubmit a REJECTED entry - same fields, PATCH instead
-// of POST.
-function initialFormState(editingPub: ResearchPublication | null): PublicationFormState {
-  return editingPub
-    ? {
-        title: editingPub.title, coAuthors: editingPub.coAuthors, journalOrConference: editingPub.journalOrConference,
-        publicationYear: String(editingPub.publicationYear), indexing: editingPub.indexing ?? "", driveLink: editingPub.driveLink ?? "",
-      }
-    : EMPTY_FORM;
+// Self-submit form - the same rich Journal/Conference/Book Chapter/Text Book
+// fields R&D's own Add Publication page collects (src/app/(dashboard)/
+// r-and-d/publications/new/page.tsx), minus the staff picker (the server
+// infers the submitter from their own session). Also reused to edit-and-
+// resubmit a REJECTED entry - same fields, PATCH instead of POST.
+function initialDetails(editingPub: ResearchPublication | null): PublicationDetails {
+  return editingPub?.details ?? { ...emptyPublicationDetails(), title: editingPub?.title ?? "" };
 }
 
 // The actual form fields + their state, split out and only ever mounted
@@ -120,28 +146,18 @@ function PublicationFormFields({
   onCancel: () => void;
   onSaved: () => void;
 }) {
-  const [form, setForm] = useState<PublicationFormState>(() => initialFormState(editingPub));
+  const ownCollegeId = useAuthStore((s) => s.user?.collegeId ?? "");
+  const [details, setDetails] = useState<PublicationDetails>(() => initialDetails(editingPub));
   const [saving, setSaving] = useState(false);
   const editingId = editingPub?.id ?? null;
 
-  function set<K extends keyof PublicationFormState>(key: K, value: PublicationFormState[K]) {
-    setForm((f) => ({ ...f, [key]: value }));
-  }
-
-  const isValid = form.title.trim().length > 1 && form.journalOrConference.trim().length > 1 && !!form.publicationYear;
+  const isValid = isPublicationDetailsValid(details);
 
   async function handleSubmit() {
     if (!isValid) return;
     setSaving(true);
     try {
-      const body = {
-        title: form.title.trim(),
-        coAuthors: form.coAuthors.trim(),
-        journalOrConference: form.journalOrConference.trim(),
-        publicationYear: Number(form.publicationYear),
-        indexing: form.indexing.trim(),
-        driveLink: form.driveLink.trim(),
-      };
+      const body = { details };
       const res = editingId
         ? await fetch(`/api/college/publications/${editingId}`, {
             method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
@@ -173,35 +189,8 @@ function PublicationFormFields({
             : "This is submitted to R&D for verification before it shows as an official record."}
         </DialogDescription>
       </DialogHeader>
-      <div className="space-y-4">
-        <div className="space-y-2">
-          <Label>Title <span className="text-destructive">*</span></Label>
-          <Input value={form.title} onChange={(e) => set("title", e.target.value)} placeholder="Paper title" />
-        </div>
-        <div className="space-y-2">
-          <Label>Co-Authors</Label>
-          <Input value={form.coAuthors} onChange={(e) => set("coAuthors", e.target.value)} placeholder="Comma-separated names" />
-        </div>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div className="space-y-2">
-            <Label>Journal / Conference <span className="text-destructive">*</span></Label>
-            <Input value={form.journalOrConference} onChange={(e) => set("journalOrConference", e.target.value)} />
-          </div>
-          <div className="space-y-2">
-            <Label>Year <span className="text-destructive">*</span></Label>
-            <Input type="number" value={form.publicationYear} onChange={(e) => set("publicationYear", e.target.value)} />
-          </div>
-        </div>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div className="space-y-2">
-            <Label>Indexing</Label>
-            <Input value={form.indexing} onChange={(e) => set("indexing", e.target.value)} placeholder="e.g. SCI, Scopus, WoS, UGC-CARE" />
-          </div>
-          <div className="space-y-2">
-            <Label>Publication Link</Label>
-            <Input value={form.driveLink} onChange={(e) => set("driveLink", e.target.value)} placeholder="DOI / Scopus / Drive link" />
-          </div>
-        </div>
+      <div className="flex-1 min-h-0 overflow-y-auto pr-1">
+        <PublicationDetailsForm value={details} onChange={setDetails} ownCollegeId={ownCollegeId} />
       </div>
       <DialogFooter>
         <Button variant="outline" onClick={onCancel} disabled={saving}>Cancel</Button>
@@ -228,7 +217,7 @@ function AddPublicationDialog({
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="w-[95vw] max-w-[1400px] h-[90vh] max-h-[90vh] flex flex-col overflow-hidden">
         {open && (
           <PublicationFormFields
             editingPub={editingPub}
@@ -273,7 +262,7 @@ export function PublicationsSection({
   isOwnProfile?: boolean;
   onChanged?: () => void;
 }) {
-  const p = academicProfile ?? {};
+  const viewerUid = useAuthStore((s) => s.user?.uid);
   const [expanded, setExpanded] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
   const [editingPub, setEditingPub] = useState<ResearchPublication | null>(null);
@@ -309,7 +298,7 @@ export function PublicationsSection({
           <p className="text-xs text-muted-foreground">None recorded.</p>
         ) : (
           <div className="space-y-2">
-            {visible.map((pub) => <PublicationRow key={pub.id} pub={pub} isOwnProfile={isOwnProfile} onEdit={openEdit} />)}
+            {visible.map((pub) => <PublicationRow key={pub.id} pub={pub} isOwnProfile={isOwnProfile} viewerUid={viewerUid} onEdit={openEdit} />)}
             {sorted.length > PREVIEW_COUNT && (
               <button type="button" onClick={() => setExpanded((v) => !v)} className="text-xs font-medium text-primary hover:underline">
                 {expanded ? "Show less" : `Show ${hidden} more`}
@@ -335,11 +324,6 @@ export function PublicationsSection({
         <Field label="i10-Index" value={p.i10Index} />
       </div>
       */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <Field label="Google Scholar ID" value={p.googleScholarId} />
-        <Field label="Scopus Author ID" value={p.scopusAuthorId} />
-        <Field label="ORCID iD" value={p.orcidId} />
-      </div>
 
       {isOwnProfile && (
         <AddPublicationDialog

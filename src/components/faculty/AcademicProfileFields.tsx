@@ -318,10 +318,13 @@ export function AcademicProfileFields({ value, onChange, includeTeachingAssignme
             <NumInput label="H-Index" value={value.hIndex} onChange={(v) => set("hIndex", v)} />
             <NumInput label="i10-Index" value={value.i10Index} onChange={(v) => set("i10Index", v)} />
           </div>
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Research Profiles</p>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <TextInput label="Google Scholar ID" value={value.googleScholarId} onChange={(v) => set("googleScholarId", v)} />
-            <TextInput label="Scopus Author ID" value={value.scopusAuthorId} onChange={(v) => set("scopusAuthorId", v)} />
             <TextInput label="ORCID iD" value={value.orcidId} onChange={(v) => set("orcidId", v)} />
+            <TextInput label="Scopus Author ID" value={value.scopusAuthorId} onChange={(v) => set("scopusAuthorId", v)} />
+            <TextInput label="Researcher ID" value={value.researcherId} onChange={(v) => set("researcherId", v)} />
+            <TextInput label="Google Scholar ID" value={value.googleScholarId} onChange={(v) => set("googleScholarId", v)} />
+            <TextInput label="IRINS Profile" value={value.irinsProfile} onChange={(v) => set("irinsProfile", v)} />
           </div>
         </>
       )}

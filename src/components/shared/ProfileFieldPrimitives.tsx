@@ -403,6 +403,71 @@ export function RepeatingGroup<T>({
   );
 }
 
+// A repeating list edited as an actual table (Sl. No. + one column per
+// field) rather than RepeatingGroup's stacked cards - used wherever the
+// source spec calls for a literal table (e.g. Equipment Procured / Papers
+// Published / Patents under Research & Innovation's Seed Funding and
+// Sponsored Research Projects tabs).
+export function TableRepeatingGroup<T>({
+  title, items, empty, onChange, addLabel = "Add Row", columns,
+}: {
+  title: string;
+  items: T[];
+  empty: T;
+  onChange: (next: T[]) => void;
+  addLabel?: string;
+  columns: { header: string; render: (item: T, update: (patch: Partial<T>) => void) => React.ReactNode }[];
+}) {
+  return (
+    <div className="space-y-2 rounded-lg border p-3">
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{title}</p>
+        <Button type="button" variant="outline" size="sm" onClick={() => onChange([...items, empty])}>
+          {addLabel}
+        </Button>
+      </div>
+      {items.length === 0 ? (
+        <p className="text-xs text-muted-foreground">None added yet.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm border-collapse">
+            <thead>
+              <tr className="border-b">
+                <th className="text-left font-medium text-muted-foreground p-1.5 w-10">Sl. No.</th>
+                {columns.map((c) => (
+                  <th key={c.header} className="text-left font-medium text-muted-foreground p-1.5 min-w-[140px]">{c.header}</th>
+                ))}
+                <th className="p-1.5 w-8" />
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((item, i) => (
+                <tr key={i} className="border-b last:border-0">
+                  <td className="p-1.5 align-top text-muted-foreground">{i + 1}</td>
+                  {columns.map((c) => (
+                    <td key={c.header} className="p-1.5 align-top">
+                      {c.render(item, (patch) => {
+                        const next = [...items];
+                        next[i] = { ...next[i], ...patch };
+                        onChange(next);
+                      })}
+                    </td>
+                  ))}
+                  <td className="p-1.5 align-top">
+                    <Button type="button" variant="ghost" size="sm" onClick={() => onChange(items.filter((_, idx) => idx !== i))}>
+                      <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Shared by Supporting Staff (every college type) and Faculty at School-type
 // colleges (see College.type, src/lib/designations/config.ts) - a repeating
 // list of {level, degree/university/year/certificate} entries, standing in
