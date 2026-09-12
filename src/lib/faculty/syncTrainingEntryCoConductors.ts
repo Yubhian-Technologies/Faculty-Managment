@@ -59,6 +59,10 @@ export async function syncTrainingEntryCoConductors(
     if (next) {
       const copy: TrainingEntry = {
         ...next,
+        // Guard against a master entry whose own `organizer` was never
+        // properly kept in sync (a stale/blank value would otherwise get
+        // copied verbatim, leaving every co-conductor's copy blank too).
+        organizer: next.organizer || ownerFacultyName,
         ownerFacultyId,
         ownerFacultyName,
         isCoConductedCopy: true,

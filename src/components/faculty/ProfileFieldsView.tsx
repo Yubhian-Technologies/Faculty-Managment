@@ -6,14 +6,14 @@ import {
 import { designationLabel } from "@/lib/designations/config";
 import { PublicationsSection } from "@/components/faculty/PublicationsModuleView";
 import { normalizeResourcePersonsDetails } from "@/components/faculty/TrainingEntryFields";
-import { totalYearsOfExperience, formatDuration, durationBetween } from "@/lib/faculty/experienceCalc";
+import { totalYearsOfExperience, formatDuration, durationBetween, allPreviousExperienceEntries } from "@/lib/faculty/experienceCalc";
 import { toDate } from "@/lib/utils";
 import {
-  TRAINING_ENTRY_TYPE_LABELS, TRAINING_PARTICIPATION_ROLE_LABELS, PROFESSIONAL_BODY_LABELS,
+  TRAINING_ENTRY_TYPE_LABELS, TRAINING_PARTICIPATION_ROLE_LABELS, CERTIFICATION_TYPE_LABELS, PROFESSIONAL_BODY_LABELS, MEMBERSHIP_VALIDITY_LABELS,
   ADMIN_RESPONSIBILITY_CATEGORY_LABELS, AWARD_CATEGORY_LABELS, QUALIFYING_EXAM_LABELS,
   TRAINING_PROGRAM_LEVEL_LABELS, TRAINING_PROGRAM_MODE_LABELS, AWARD_LEVEL_LABELS,
 } from "@/types";
-import type { FacultyProfileFields, CollegeType, ResearchPublication, TrainingEntry } from "@/types";
+import type { FacultyProfileFields, CollegeType, ResearchPublication, TrainingEntry, PreviousInstitution } from "@/types";
 
 // One-line "who this program served" summary for the read-only view - the
 // edit form (TrainingEntryFields) captures the detailed breakdown, this just
@@ -82,7 +82,7 @@ export function QualificationModule({ profile, collegeType }: { profile: Partial
         <Field label="NET/SLET/SET/GATE/Others" value={p.qualifyingExamQualified === "YES" ? "Yes" : p.qualifyingExamQualified === "NO" ? "No" : undefined} />
         {p.qualifyingExamQualified === "YES" && (
           <>
-            <Field label="Qualified Exam" value={p.qualifyingExam ? QUALIFYING_EXAM_LABELS[p.qualifyingExam] : undefined} />
+            <Field label="Qualified Exam" value={p.qualifyingExam === "OTHER" ? (p.otherQualifyingExam || "Other") : (p.qualifyingExam ? QUALIFYING_EXAM_LABELS[p.qualifyingExam] : undefined)} />
             <Field label="Score" value={p.qualifyingExamScore} />
             <Field label="Qualified Year" value={p.qualifyingExamYear} />
           </>
@@ -138,36 +138,44 @@ export function ExperienceModule({
 }) {
   const p = profile ?? {};
   const teaching = p.teachingAssignment;
-  const hasExperienceData = !!(joiningDate || (p.previousInstitutions?.length ?? 0) > 0);
+  const allExperienceEntries = allPreviousExperienceEntries(p);
+  const hasExperienceData = !!(joiningDate || allExperienceEntries.length > 0);
+  const experienceGroups: { label: string; institutionLabel: string; entries: PreviousInstitution[] }[] = [
+    { label: "Academic Experience", institutionLabel: "Institution Name", entries: p.previousInstitutions ?? [] },
+    { label: "Industry Experience", institutionLabel: "Name of the Industry", entries: p.industryExperienceEntries ?? [] },
+    { label: "Research Experience", institutionLabel: "Research Organization Name", entries: p.researchExperienceEntries ?? [] },
+  ];
   return (
     <Section number={2} title="Previous Experience">
       {hasExperienceData && (
-        <Field label="Total Years of Experience" value={formatDuration(totalYearsOfExperience(p.previousInstitutions, joiningDate))} />
+        <Field label="Total Years of Experience" value={formatDuration(totalYearsOfExperience(allExperienceEntries, joiningDate))} />
       )}
-      <div className="space-y-2">
-        <SubLabel>Previous Institutions Worked At</SubLabel>
-        {(p.previousInstitutions ?? []).length === 0 ? <p className="text-xs text-muted-foreground">None recorded.</p> : (
-          <div className="space-y-2">
-            {p.previousInstitutions?.map((inst, i) => (
-              <div key={i} className="rounded-md border bg-muted/20 shadow-sm p-2 grid grid-cols-2 sm:grid-cols-3 gap-2">
-                <Field label="Institution Name" value={inst.institutionName} />
-                <Field label="Designation" value={inst.designation} />
-                <Field label="From" value={formatInstitutionDate(inst.fromDate, inst.fromYear)} />
-                <Field label="To" value={formatInstitutionDate(inst.toDate, inst.toYear)} />
-                <Field label="Joining Salary" value={inst.joiningSalary} />
-                <Field label="Leaving Salary" value={inst.leavingSalary} />
-                <Field label="Reason for Leaving" value={inst.reasonForLeaving} />
-                <Field label="NOC Obtained" value={inst.nocObtained === "YES" ? "Yes" : inst.nocObtained === "NO" ? "No" : undefined} />
-                {inst.experienceCertificateUrl && (
-                  <div className="col-span-2 sm:col-span-3">
-                    <DocLink url={inst.experienceCertificateUrl} label="View Experience Certificate" />
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+      {experienceGroups.map((group) => (
+        <div className="space-y-2" key={group.label}>
+          <SubLabel>{group.label}</SubLabel>
+          {group.entries.length === 0 ? <p className="text-xs text-muted-foreground">None recorded.</p> : (
+            <div className="space-y-2">
+              {group.entries.map((inst, i) => (
+                <div key={i} className="rounded-md border bg-muted/20 shadow-sm p-2 grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  <Field label={group.institutionLabel} value={inst.institutionName} />
+                  <Field label="Designation" value={inst.designation} />
+                  <Field label="From" value={formatInstitutionDate(inst.fromDate, inst.fromYear)} />
+                  <Field label="To" value={formatInstitutionDate(inst.toDate, inst.toYear)} />
+                  <Field label="Joining Salary" value={inst.joiningSalary} />
+                  <Field label="Leaving Salary" value={inst.leavingSalary} />
+                  <Field label="Reason for Leaving" value={inst.reasonForLeaving} />
+                  <Field label="NOC Obtained" value={inst.nocObtained === "YES" ? "Yes" : inst.nocObtained === "NO" ? "No" : undefined} />
+                  {inst.experienceCertificateUrl && (
+                    <div className="col-span-2 sm:col-span-3">
+                      <DocLink url={inst.experienceCertificateUrl} label="View Experience Certificate" />
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      ))}
       <div className="space-y-2">
         <SubLabel>Teaching</SubLabel>
         {(p.promotionHistory ?? []).length === 0 ? <p className="text-xs text-muted-foreground">None recorded.</p> : (
@@ -309,25 +317,7 @@ export function MentorshipModule({
 }) {
   const p = profile ?? {};
   return (
-    <Section number={5} title="Mentorship & Institutional Value">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <div className="rounded-lg border bg-muted/20 shadow-sm p-3">
-          <SubLabel>Ph.D. Scholars Pursuing</SubLabel>
-          <div className="mt-2">
-            <Field label="Count" value={p.phdScholarsPursuing?.count} />
-            <Field label="University Names" value={p.phdScholarsPursuing?.universities} />
-          </div>
-        </div>
-        <div className="rounded-lg border bg-muted/20 shadow-sm p-3">
-          <SubLabel>Ph.D. Scholars Awarded</SubLabel>
-          <div className="mt-2">
-            <Field label="Count" value={p.phdScholarsAwarded?.count} />
-            <Field label="University Names" value={p.phdScholarsAwarded?.universities} />
-          </div>
-        </div>
-      </div>
-      <Field label="National Exposure" value={p.nationalExposure} />
-      <Field label="International Exposure" value={p.internationalExposure} />
+    <Section number={5} title="Professional Development">
       <div className="space-y-2">
         <SubLabel>New Labs Established</SubLabel>
         {(p.labsEstablished ?? []).length === 0 ? <p className="text-xs text-muted-foreground">None recorded.</p> : (
@@ -364,11 +354,13 @@ export function MentorshipModule({
             <div key={i} className="rounded-md border bg-muted/20 shadow-sm p-2 grid grid-cols-2 sm:grid-cols-4 gap-2">
               <Field label="Type" value={t.type === "OTHER" ? (t.otherType || "Other") : TRAINING_ENTRY_TYPE_LABELS[t.type]} />
               <Field label="Participated or Conducted" value={t.role ? TRAINING_PARTICIPATION_ROLE_LABELS[t.role] : undefined} />
+              <Field label="Certification Type" value={t.certificationType ? CERTIFICATION_TYPE_LABELS[t.certificationType] : undefined} />
               <Field label="Title of the Program" value={t.title} />
-              <Field label="Name of the Faculty / Coordinator" value={t.organizer} />
+              <Field label="Name of the Faculty / Coordinator" value={t.organizer || (t.isCoConductedCopy ? t.ownerFacultyName : ownerName)} />
               <Field label="From Date" value={t.fromDate} />
               <Field label="To Date" value={t.toDate} />
               <Field label="Duration" value={t.durationDays ? `${t.durationDays} day${t.durationDays === 1 ? "" : "s"}` : undefined} />
+              <Field label="Number of Weeks" value={t.durationWeeks} />
               <Field label="National / International" value={t.levelOfProgram ? TRAINING_PROGRAM_LEVEL_LABELS[t.levelOfProgram] : undefined} />
               <Field label="Place" value={t.place} />
               <Field label="Mode of the Program" value={t.mode ? TRAINING_PROGRAM_MODE_LABELS[t.mode] : undefined} />
@@ -392,7 +384,7 @@ export function MentorshipModule({
                     // own name there (a synced copy's organizer is always
                     // populated, copied over at sync time, so this only ever
                     // matters for !t.isCoConductedCopy).
-                    `1. ${t.organizer || (!t.isCoConductedCopy && ownerName) || "-"}`,
+                    `1. ${t.organizer || (t.isCoConductedCopy ? t.ownerFacultyName : ownerName) || "-"}`,
                     ...t.coConductors!.map((c) => `${c.order}. ${c.name} (${c.department})`),
                   ].join(", ")}
                 />
@@ -419,8 +411,17 @@ export function MentorshipModule({
           p.professionalMemberships?.map((m, i) => (
             <div key={i} className="rounded-md border bg-muted/20 shadow-sm p-2 grid grid-cols-2 sm:grid-cols-3 gap-2">
               <Field label="Body" value={m.body === "OTHER" ? m.otherName : PROFESSIONAL_BODY_LABELS[m.body]} />
+              <Field label="Membership Type" value={m.membershipType} />
               <Field label="Membership ID" value={m.membershipId} />
-              <Field label="Member Since (Month/Year)" value={m.sinceMonthYear ?? (m.sinceYear ? String(m.sinceYear) : undefined)} />
+              <Field label="Membership Validity" value={m.validity ? MEMBERSHIP_VALIDITY_LABELS[m.validity] : undefined} />
+              {m.validity === "ANNUAL" ? (
+                <>
+                  <Field label="Valid From" value={m.validFrom} />
+                  <Field label="Valid To" value={m.validTo} />
+                </>
+              ) : (
+                <Field label="Member Since" value={m.sinceDate ?? m.sinceMonthYear ?? (m.sinceYear ? String(m.sinceYear) : undefined)} />
+              )}
             </div>
           ))
         )}
@@ -430,28 +431,16 @@ export function MentorshipModule({
       </div>
 
       <div className="space-y-2">
-        <SubLabel>Authored Books</SubLabel>
-        {(p.authoredBooks ?? []).length === 0 ? <p className="text-xs text-muted-foreground">None recorded.</p> : (
-          p.authoredBooks?.map((b, i) => (
-            <div key={i} className="rounded-md border bg-muted/20 shadow-sm p-2 grid grid-cols-1 sm:grid-cols-3 gap-2">
-              <Field label="Title" value={b.title} />
-              <Field label="Publisher" value={b.publisher} />
-              <Field label="Year" value={b.year} />
-            </div>
-          ))
-        )}
-      </div>
-
-      <div className="space-y-2">
         <SubLabel>Awards &amp; Recognition</SubLabel>
         {(p.awardEntries ?? []).length === 0 ? <p className="text-xs text-muted-foreground">None recorded.</p> : (
           p.awardEntries?.map((a, i) => (
             <div key={i} className="rounded-md border bg-muted/20 shadow-sm p-2 grid grid-cols-2 sm:grid-cols-4 gap-2">
-              <Field label="Category" value={AWARD_CATEGORY_LABELS[a.category]} />
-              <Field label="Title" value={a.title} />
-              <Field label="Awarding Body" value={a.awardingBody} />
-              <Field label="Year" value={a.year} />
+              <Field label="Category" value={a.category === "OTHER" ? (a.otherCategory || "Other") : AWARD_CATEGORY_LABELS[a.category]} />
+              <Field label="Title of Awarded" value={a.title} />
+              <Field label="Awarding Agency/Body" value={a.awardingBody} />
+              <Field label="Date of Awarded" value={a.dateAwarded ?? (a.year ? String(a.year) : undefined)} />
               <Field label="State / National / International" value={a.level ? AWARD_LEVEL_LABELS[a.level] : undefined} />
+              <Field label="Other Details" value={a.otherDetails} />
               {a.certificateUrl && (
                 <div className="col-span-2 sm:col-span-4"><DocLink url={a.certificateUrl} label="View Certificate" /></div>
               )}

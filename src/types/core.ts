@@ -2009,7 +2009,7 @@ export type TrainingEntryType =
 export const TRAINING_ENTRY_TYPE_LABELS: Record<TrainingEntryType, string> = {
   FDP: "FDP",
   WORKSHOP: "Workshop",
-  MOOC: "MOOC",
+  MOOC: "NPTEL/MOOCs",
   CERTIFICATION: "Certification",
   SKILL_DEVELOPMENT: "Skill Development",
   ADMINISTRATIVE: "Administrative Training",
@@ -2024,6 +2024,11 @@ export const TRAINING_PARTICIPATION_ROLE_LABELS: Record<
 > = {
   PARTICIPATED: "Participated",
   CONDUCTED: "Conducted",
+};
+export type CertificationType = "INDUSTRY" | "VEDIC";
+export const CERTIFICATION_TYPE_LABELS: Record<CertificationType, string> = {
+  INDUSTRY: "Industry Certification",
+  VEDIC: "VEDIC Certification",
 };
 export type TrainingProgramLevel = "NATIONAL" | "INTERNATIONAL";
 export const TRAINING_PROGRAM_LEVEL_LABELS: Record<TrainingProgramLevel, string> = {
@@ -2083,6 +2088,12 @@ export interface TrainingEntry {
   fromDate?: string;
   toDate?: string;
   durationDays?: number;
+  // MOOC/CERTIFICATION only - shown instead of From/To Date + Duration above,
+  // since these are typically measured in weeks rather than a date range.
+  durationWeeks?: number;
+  // CERTIFICATION only - replaces Participated/Conducted there (a
+  // certification isn't "conducted", so role/coConductors/remark don't apply).
+  certificationType?: CertificationType;
   levelOfProgram?: TrainingProgramLevel;
   place?: string;
   mode?: TrainingProgramMode;
@@ -2126,22 +2137,36 @@ export type ProfessionalBody =
   | "IEEE"
   | "ISTE"
   | "CSI"
-  | "ACM"
+  | "IGS"
+  | "IETE"
+  | "ACME"
   | "IEI"
   | "OTHER";
 export const PROFESSIONAL_BODY_LABELS: Record<ProfessionalBody, string> = {
   IEEE: "IEEE",
   ISTE: "ISTE",
   CSI: "CSI",
-  ACM: "ACM",
+  IGS: "IGS",
+  IETE: "IETE",
+  ACME: "ACME",
   IEI: "IEI",
   OTHER: "Other",
+};
+export type MembershipValidity = "LIFETIME" | "ANNUAL";
+export const MEMBERSHIP_VALIDITY_LABELS: Record<MembershipValidity, string> = {
+  LIFETIME: "Lifetime",
+  ANNUAL: "Annual",
 };
 export interface ProfessionalMembership {
   body: ProfessionalBody;
   otherName?: string; // when body === "OTHER"
+  membershipType?: string; // e.g. Senior Fellowship / Associate Fellowship / Fellowship
   membershipId?: string;
-  sinceMonthYear?: string; // "YYYY-MM" - Member Since (Month/Year)
+  validity?: MembershipValidity;
+  sinceDate?: string; // "YYYY-MM-DD" - Member Since, LIFETIME only
+  validFrom?: string; // "YYYY-MM-DD" - ANNUAL only
+  validTo?: string; // "YYYY-MM-DD" - ANNUAL only
+  sinceMonthYear?: string; // legacy "YYYY-MM" - Member Since (Month/Year), pre-dates validity split
   sinceYear?: number; // legacy - year-only shape this replaced
 }
 
@@ -2200,11 +2225,14 @@ export const AWARD_LEVEL_LABELS: Record<AwardLevel, string> = {
 
 export interface AwardEntry {
   category: AwardCategory;
+  otherCategory?: string; // when category === "OTHER"
   title: string;
   awardingBody: string;
-  year: number;
+  dateAwarded?: string; // "YYYY-MM-DD" - replaces the year-only shape below
+  year: number; // legacy year-only shape, kept in sync from dateAwarded for back-compat (CSV export/resume)
   level?: AwardLevel;
   certificateUrl?: string;
+  otherDetails?: string;
 }
 
 export interface FacultyProfileFields {
@@ -2237,6 +2265,7 @@ export interface FacultyProfileFields {
   // only apply when this is "YES".
   qualifyingExamQualified?: "YES" | "NO";
   qualifyingExam?: QualifyingExamType;
+  otherQualifyingExam?: string; // only meaningful when qualifyingExam === "OTHER"
   qualifyingExamScore?: string;
   qualifyingExamYear?: number;
   // School-type colleges only - see SCHOOL_TEACHING_QUALIFICATION_LEVELS.
@@ -2244,7 +2273,13 @@ export interface FacultyProfileFields {
 
   // Previous Institutions Worked / Current Teaching Assignment
   teachingAssignment?: TeachingAssignmentSummary; // omitted for PRINCIPAL / VICE_PRINCIPAL
-  previousInstitutions: PreviousInstitution[]; // prior institutions worked at, before this one
+  previousInstitutions: PreviousInstitution[]; // Academic Experience tab - prior institutions worked at, before this one
+  // Industry/Research Experience tabs - same shape/fields as previousInstitutions
+  // (institutionName/designation relabeled per tab in the UI only - see
+  // ExperienceFields), all three summed into one combined Previous Experience
+  // total (see allPreviousExperienceEntries in experienceCalc.ts).
+  industryExperienceEntries?: PreviousInstitution[];
+  researchExperienceEntries?: PreviousInstitution[];
   promotionHistory: PromotionRecord[]; // Employment Details — promotions within this institution
 
   // Module 3 — Research Publications

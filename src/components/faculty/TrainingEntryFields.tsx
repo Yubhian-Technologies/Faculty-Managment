@@ -12,10 +12,12 @@ import { NumInput, TextInput, DateInput } from "@/components/shared/ProfileField
 import type {
   TrainingEntry, TrainingEntryType, TrainingParticipationRole, TrainingProgramLevel, TrainingProgramMode,
   TrainingBeneficiaryType, TrainingBeneficiaryDepartmentEntry, TrainingBeneficiarySection, TrainingCoConductor,
+  CertificationType,
 } from "@/types";
 import {
   TRAINING_ENTRY_TYPE_LABELS, TRAINING_PARTICIPATION_ROLE_LABELS,
   TRAINING_PROGRAM_LEVEL_LABELS, TRAINING_PROGRAM_MODE_LABELS, TRAINING_BENEFICIARY_TYPE_LABELS,
+  CERTIFICATION_TYPE_LABELS,
 } from "@/types";
 
 // Inclusive day count between two "YYYY-MM-DD" dates (both days count, so a
@@ -375,7 +377,20 @@ export function TrainingEntryFields({ item, update, ownerFacultyId, ownerFaculty
       <fieldset disabled={readOnly} className="contents">
         <div className="space-y-2">
           <Label>Type</Label>
-          <Select value={item.type} onValueChange={(v) => update({ type: v as TrainingEntryType, otherType: v === "OTHER" ? item.otherType : undefined })}>
+          <Select
+            value={item.type}
+            onValueChange={(v) => update({
+              type: v as TrainingEntryType,
+              otherType: v === "OTHER" ? item.otherType : undefined,
+              // MOOC/CERTIFICATION don't have a role - clear any stale
+              // role-dependent fields when switching into one of them.
+              role: (v === "MOOC" || v === "CERTIFICATION") ? undefined : item.role,
+              organizer: (v === "MOOC" || v === "CERTIFICATION") ? "" : item.organizer,
+              coConductors: (v === "MOOC" || v === "CERTIFICATION") ? undefined : item.coConductors,
+              remark: (v === "MOOC" || v === "CERTIFICATION") ? undefined : item.remark,
+              certificationType: v === "CERTIFICATION" ? item.certificationType : undefined,
+            })}
+          >
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
               {Object.entries(TRAINING_ENTRY_TYPE_LABELS).map(([k, label]) => (
@@ -387,41 +402,61 @@ export function TrainingEntryFields({ item, update, ownerFacultyId, ownerFaculty
         {item.type === "OTHER" && (
           <TextInput label="Please specify type" value={item.otherType} onChange={(v) => update({ otherType: v })} />
         )}
-        <div className="space-y-2">
-          <Label>Participated or Conducted</Label>
-          <Select
-            value={item.role ?? ""}
-            onValueChange={(v) => update({
-              role: v as TrainingParticipationRole,
-              organizer: v === "CONDUCTED" ? (ownerFacultyName ?? "") : "",
-              coConductors: v === "CONDUCTED" ? item.coConductors : undefined,
-              remark: v === "PARTICIPATED" ? item.remark : undefined,
-            })}
-          >
-            <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
-            <SelectContent>
-              {Object.entries(TRAINING_PARTICIPATION_ROLE_LABELS).map(([k, label]) => (
-                <SelectItem key={k} value={k}>{label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        {item.type === "CERTIFICATION" ? (
+          <div className="space-y-2">
+            <Label>Certification Type</Label>
+            <Select value={item.certificationType ?? ""} onValueChange={(v) => update({ certificationType: v as CertificationType })}>
+              <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+              <SelectContent>
+                {Object.entries(CERTIFICATION_TYPE_LABELS).map(([k, label]) => (
+                  <SelectItem key={k} value={k}>{label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        ) : item.type !== "MOOC" ? (
+          <div className="space-y-2">
+            <Label>Participated or Conducted</Label>
+            <Select
+              value={item.role ?? ""}
+              onValueChange={(v) => update({
+                role: v as TrainingParticipationRole,
+                organizer: v === "CONDUCTED" ? (ownerFacultyName ?? "") : "",
+                coConductors: v === "CONDUCTED" ? item.coConductors : undefined,
+                remark: v === "PARTICIPATED" ? item.remark : undefined,
+              })}
+            >
+              <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+              <SelectContent>
+                {Object.entries(TRAINING_PARTICIPATION_ROLE_LABELS).map(([k, label]) => (
+                  <SelectItem key={k} value={k}>{label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        ) : null}
         <TextInput label="Title of the Program" value={item.title} onChange={(v) => update({ title: v })} />
-        <DateInput
-          label="From Date"
-          value={item.fromDate}
-          onChange={(v) => update({ fromDate: v, durationDays: calcDurationDays(v, item.toDate) })}
-        />
-        <DateInput
-          label="To Date"
-          value={item.toDate}
-          onChange={(v) => update({ toDate: v, durationDays: calcDurationDays(item.fromDate, v) })}
-          min={item.fromDate}
-        />
-        <div className="space-y-2">
-          <Label className="text-xs text-muted-foreground">Duration</Label>
-          <p className="text-sm font-medium pt-2">{item.durationDays ? `${item.durationDays} day${item.durationDays === 1 ? "" : "s"}` : "-"}</p>
-        </div>
+        {item.type === "MOOC" || item.type === "CERTIFICATION" ? (
+          <NumInput label="Number of Weeks" value={item.durationWeeks} onChange={(v) => update({ durationWeeks: v })} />
+        ) : (
+          <>
+            <DateInput
+              label="From Date"
+              value={item.fromDate}
+              onChange={(v) => update({ fromDate: v, durationDays: calcDurationDays(v, item.toDate) })}
+            />
+            <DateInput
+              label="To Date"
+              value={item.toDate}
+              onChange={(v) => update({ toDate: v, durationDays: calcDurationDays(item.fromDate, v) })}
+              min={item.fromDate}
+            />
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">Duration</Label>
+              <p className="text-sm font-medium pt-2">{item.durationDays ? `${item.durationDays} day${item.durationDays === 1 ? "" : "s"}` : "-"}</p>
+            </div>
+          </>
+        )}
         <div className="space-y-2">
           <Label>National / International</Label>
           <Select value={item.levelOfProgram ?? ""} onValueChange={(v) => update({ levelOfProgram: v as TrainingProgramLevel })}>
@@ -446,8 +481,7 @@ export function TrainingEntryFields({ item, update, ownerFacultyId, ownerFaculty
           </Select>
         </div>
 
-        {item.role && (
-          <div className="sm:col-span-2 space-y-2 rounded-lg border p-3">
+        <div className="sm:col-span-2 space-y-2 rounded-lg border p-3">
             <Label>Beneficiaries</Label>
             <Select value={item.beneficiaryType ?? ""} onValueChange={(v) => update({ beneficiaryType: v as TrainingBeneficiaryType })}>
               <SelectTrigger className="w-44"><SelectValue placeholder="Students / Faculty" /></SelectTrigger>
@@ -510,8 +544,7 @@ export function TrainingEntryFields({ item, update, ownerFacultyId, ownerFaculty
                 </div>
               </div>
             )}
-          </div>
-        )}
+        </div>
 
         {item.role === "CONDUCTED" && (
           <CoConductorFields
@@ -549,6 +582,10 @@ export function TrainingEntryFields({ item, update, ownerFacultyId, ownerFaculty
             placeholder="Name / affiliation"
           />
         ))}
+        <div className="sm:col-span-2 space-y-2">
+          <Label>Other Details</Label>
+          <Textarea value={item.otherDetails ?? ""} onChange={(e) => update({ otherDetails: e.target.value })} />
+        </div>
         <div className="sm:col-span-2 space-y-1.5">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <CertificateUploadField
@@ -567,10 +604,6 @@ export function TrainingEntryFields({ item, update, ownerFacultyId, ownerFaculty
             />
           </div>
           <p className="text-xs text-muted-foreground">PNG, JPG, or PDF · max 5 MB</p>
-        </div>
-        <div className="sm:col-span-2 space-y-2">
-          <Label>Other Details</Label>
-          <Textarea value={item.otherDetails ?? ""} onChange={(e) => update({ otherDetails: e.target.value })} />
         </div>
       </fieldset>
     </>
