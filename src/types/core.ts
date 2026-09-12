@@ -1313,6 +1313,8 @@ export interface TrainingEntry {
   // keeping synced copies up to date (see syncTrainingEntryCoConductors).
   id?: string;
   type: TrainingEntryType;
+  // Free-text type name - only meaningful (and shown) when type === "OTHER".
+  otherType?: string;
   role?: TrainingParticipationRole; // did they attend, or run it themselves - applies to any type, not just FDP
   title: string; // Title of the Program
   // Name of the Faculty / Coordinator - auto-set to the profile owner's own
@@ -1335,6 +1337,7 @@ export interface TrainingEntry {
   // (TrainingEntryFields.tsx) rather than trusting this type at runtime.
   resourcePersonsDetails?: string[];
   certificateUrl?: string;
+  brochureUrl?: string; // event brochure, alongside the certificate/transcript
   // Legacy year-only shape (Faculty's edit form no longer sets this - see
   // fromDate/toDate above; Supporting Staff's own simpler Training/
   // Achievements form, TrainingAchievementsFields.tsx, still uses it as-is).

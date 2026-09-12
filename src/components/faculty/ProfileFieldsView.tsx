@@ -344,7 +344,7 @@ export function MentorshipModule({
         {(p.trainingEntries ?? []).length === 0 ? <p className="text-xs text-muted-foreground">None recorded.</p> : (
           p.trainingEntries?.map((t, i) => (
             <div key={i} className="rounded-md border bg-muted/20 shadow-sm p-2 grid grid-cols-2 sm:grid-cols-4 gap-2">
-              <Field label="Type" value={TRAINING_ENTRY_TYPE_LABELS[t.type]} />
+              <Field label="Type" value={t.type === "OTHER" ? (t.otherType || "Other") : TRAINING_ENTRY_TYPE_LABELS[t.type]} />
               <Field label="Participated or Conducted" value={t.role ? TRAINING_PARTICIPATION_ROLE_LABELS[t.role] : undefined} />
               <Field label="Title of the Program" value={t.title} />
               <Field label="Name of the Faculty / Coordinator" value={t.organizer} />
@@ -381,8 +381,11 @@ export function MentorshipModule({
               )}
               {t.role === "PARTICIPATED" && <Field label="Remark" value={t.remark} />}
               <Field label="Other Details" value={t.otherDetails} />
-              {t.certificateUrl && (
-                <div className="col-span-2 sm:col-span-4"><DocLink url={t.certificateUrl} label="View Certificate" /></div>
+              {(t.certificateUrl || t.brochureUrl) && (
+                <div className="col-span-2 sm:col-span-4 flex flex-wrap gap-3">
+                  {t.certificateUrl && <DocLink url={t.certificateUrl} label="View Certificate" />}
+                  {t.brochureUrl && <DocLink url={t.brochureUrl} label="View Brochure" />}
+                </div>
               )}
             </div>
           ))
