@@ -51,9 +51,11 @@ function Score1to10Selector({
 type PanelForm = {
   scores: {
     subjectKnowledge?: number;
+    communication?: number;
     presentationSkills?: number;
     research?: number;
     specificAttributes?: number;
+    ictTools?: number;
     others?: number;
   };
   recommendation: "" | "ACCEPT" | "MAYBE" | "REJECT";
@@ -73,9 +75,11 @@ const RECOMMENDATION_OPTIONS: [Exclude<PanelForm["recommendation"], "">, string]
 // demo-sheet rubric across the HOD / panel / coordinator dashboards.
 const PANEL_CRITERIA: [keyof PanelForm["scores"], string][] = [
   ["subjectKnowledge", "Subject Knowledge"],
+  ["communication", "Communication"],
   ["presentationSkills", "Presentation Skills"],
   ["research", "Research"],
   ["specificAttributes", "Specific Attributes"],
+  ["ictTools", "ICT tools"],
   ["others", "Others"],
 ];
 

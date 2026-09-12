@@ -51,9 +51,11 @@ type BatchCandidateView = {
 
 type PanelScores = {
   subjectKnowledge: number;
+  communication?: number;
   presentationSkills: number;
   research: number;
   specificAttributes: number;
+  ictTools?: number;
   others: number;
 };
 
@@ -68,12 +70,16 @@ type PanelFeedbackItem = {
 };
 
 // Panel rubric is marked out of 10 per criterion; a panelist's overall is the
-// mean of their 5 criteria (also out of 10).
+// mean of whichever criteria they actually scored (also out of 10) -
+// Communication and ICT tools joined the rubric later, so older feedback has
+// five and newer has seven.
 const PANEL_SCORE_LABELS: [keyof PanelScores, string][] = [
   ["subjectKnowledge", "Subject Knowledge"],
+  ["communication", "Communication"],
   ["presentationSkills", "Presentation"],
   ["research", "Research"],
   ["specificAttributes", "Specific Attributes"],
+  ["ictTools", "ICT tools"],
   ["others", "Others"],
 ];
 

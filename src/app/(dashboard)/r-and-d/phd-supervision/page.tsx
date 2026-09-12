@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Trash2, Check, X } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Eye, Trash2, Check, X } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
+import { researchRecordHref } from "@/lib/research/modules";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
@@ -15,6 +17,7 @@ import type { PhdSupervisionRequest } from "@/types";
 type PhdSupervisionRow = PhdSupervisionRequest & Record<string, unknown>;
 
 export default function RAndDPhdSupervisionPage() {
+  const router = useRouter();
   const [records, setRecords] = useState<PhdSupervisionRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [deleteTarget, setDeleteTarget] = useState<PhdSupervisionRow | null>(null);
@@ -133,6 +136,12 @@ export default function RAndDPhdSupervisionPage() {
       header: "",
       render: (row) => (
         <div className="flex items-center gap-1">
+          <Button
+            variant="ghost" size="sm"
+            onClick={(e) => { e.stopPropagation(); router.push(researchRecordHref("phd-supervision", row.id)); }}
+          >
+            <Eye className="h-4 w-4 mr-1" />View
+          </Button>
           <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={(e) => { e.stopPropagation(); setDeleteTarget(row); }}>
             <Trash2 className="h-4 w-4" />
           </Button>
@@ -149,6 +158,12 @@ export default function RAndDPhdSupervisionPage() {
       header: "",
       render: (row) => (
         <div className="flex items-center gap-1">
+          <Button
+            variant="ghost" size="sm"
+            onClick={(e) => { e.stopPropagation(); router.push(researchRecordHref("phd-supervision", row.id)); }}
+          >
+            <Eye className="h-4 w-4 mr-1" />View
+          </Button>
           <Button
             variant="ghost" size="sm" className="text-green-700 hover:text-green-700"
             loading={approving === row.id}
@@ -198,6 +213,7 @@ export default function RAndDPhdSupervisionPage() {
           columns={officialColumns}
           isLoading={isLoading}
           keyExtractor={(r) => r.id}
+          onRowClick={(r) => router.push(researchRecordHref("phd-supervision", r.id))}
           searchPlaceholder="Search scholars..."
           searchKeys={["scholarName", "ownerName", "scholarDepartment"] as (keyof PhdSupervisionRow)[]}
           emptyTitle="No records yet"
@@ -210,6 +226,7 @@ export default function RAndDPhdSupervisionPage() {
           columns={pendingColumns}
           isLoading={isLoading}
           keyExtractor={(r) => r.id}
+          onRowClick={(r) => router.push(researchRecordHref("phd-supervision", r.id))}
           searchPlaceholder="Search pending submissions..."
           searchKeys={["scholarName", "ownerName", "scholarDepartment"] as (keyof PhdSupervisionRow)[]}
           emptyTitle="Nothing pending"
