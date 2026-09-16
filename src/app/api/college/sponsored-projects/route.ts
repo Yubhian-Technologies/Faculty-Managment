@@ -6,9 +6,10 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { notifyRole } from "@/lib/notify";
 import { PUBLICATION_ELIGIBLE_ROLES } from "@/lib/publications/eligibleRoles";
 import { resolveOwnerDesignation } from "@/lib/publications/resolveOwnerDesignation";
+import { validateSponsoredProjectBody } from "@/lib/research/validateSponsoredProject";
 import type {
-  PublicationStatus, SeedFundingEquipmentItem, SeedFundingPaperItem, SeedFundingPatentItem,
-  SponsoredProjectCoPI, SponsoredProjectSanctionedStatus, SponsoredProjectStatus, SponsoredProjectType, UserRole,
+  PublicationStatus, SponsoredProjectCoPI, SponsoredProjectSanctionedStatus, SponsoredProjectStatus,
+  SponsoredProjectType, SponsoredProjectYearData, UserRole,
 } from "@/types";
 
 const COLLEGE_STAFF_ROLES = PUBLICATION_ELIGIBLE_ROLES;
@@ -75,24 +76,10 @@ interface SponsoredProjectBody {
   recurringAmountSanctioned?: number;
   nonRecurringAmountSanctioned?: number;
   instituteContributionSanctioned?: number;
-  noOfYears?: string;
-  totalAmountReceived?: number;
-  recurringAmountReceived?: number;
-  nonRecurringAmountReceived?: number;
-  instituteContributionReceived?: number;
   dateOfCompletion?: string;
   financialYearOfCompletion?: string;
-  infrastructureProcured?: SeedFundingEquipmentItem[];
-  outcomes?: string;
-  papersPublished?: SeedFundingPaperItem[];
-  papersPublishedCitations?: string;
-  patents?: SeedFundingPatentItem[];
-  studentsProjectsUG?: number;
-  studentsProjectsPG?: number;
-  studentsProjectsPhD?: number;
-  studentsTrainedCount?: number;
-  technicalStaffTrainedCount?: number;
-  personsTrainedCount?: number;
+  noOfYears?: number;
+  yearlyData?: SponsoredProjectYearData[];
   progressReportUrl?: string;
   completionReportUrl?: string;
   utilizationCertificateUrl?: string;
@@ -115,6 +102,11 @@ export async function POST(request: Request) {
         { error: "uid, agencyName, schemeName, applicationNumber, title, projectType, objectives, piName and projectStatus are required" },
         { status: 400 }
       );
+    }
+
+    const validationError = validateSponsoredProjectBody(body);
+    if (validationError) {
+      return NextResponse.json({ error: validationError }, { status: 400 });
     }
 
     const db = getAdminDb();
@@ -168,24 +160,10 @@ export async function POST(request: Request) {
       recurringAmountSanctioned: body.recurringAmountSanctioned ?? null,
       nonRecurringAmountSanctioned: body.nonRecurringAmountSanctioned ?? null,
       instituteContributionSanctioned: body.instituteContributionSanctioned ?? null,
-      noOfYears: body.noOfYears ?? "",
-      totalAmountReceived: body.totalAmountReceived ?? null,
-      recurringAmountReceived: body.recurringAmountReceived ?? null,
-      nonRecurringAmountReceived: body.nonRecurringAmountReceived ?? null,
-      instituteContributionReceived: body.instituteContributionReceived ?? null,
       dateOfCompletion: body.dateOfCompletion ?? "",
       financialYearOfCompletion: body.financialYearOfCompletion ?? "",
-      infrastructureProcured: body.infrastructureProcured ?? [],
-      outcomes: body.outcomes ?? "",
-      papersPublished: body.papersPublished ?? [],
-      papersPublishedCitations: body.papersPublishedCitations ?? "",
-      patents: body.patents ?? [],
-      studentsProjectsUG: body.studentsProjectsUG ?? null,
-      studentsProjectsPG: body.studentsProjectsPG ?? null,
-      studentsProjectsPhD: body.studentsProjectsPhD ?? null,
-      studentsTrainedCount: body.studentsTrainedCount ?? null,
-      technicalStaffTrainedCount: body.technicalStaffTrainedCount ?? null,
-      personsTrainedCount: body.personsTrainedCount ?? null,
+      noOfYears: body.noOfYears ?? null,
+      yearlyData: body.yearlyData ?? [],
       progressReportUrl: body.progressReportUrl ?? "",
       completionReportUrl: body.completionReportUrl ?? "",
       utilizationCertificateUrl: body.utilizationCertificateUrl ?? "",

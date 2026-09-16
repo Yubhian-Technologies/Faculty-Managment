@@ -23,7 +23,7 @@ import type {
 
 const PREVIEW_COUNT = 3;
 
-const EMPTY_STUDENT: SeedFundingStudentItem = { name: "", regdNumber: "", yearOfStudy: "" };
+const EMPTY_STUDENT: SeedFundingStudentItem = { name: "", department: "", regdNumber: "", yearOfStudy: "" };
 const EMPTY_EQUIPMENT: SeedFundingEquipmentItem = { name: "", makeModel: "", softwareOrHardware: "", amount: undefined, purpose: "" };
 const EMPTY_PAPER: SeedFundingPaperItem = { title: "", journalOrConference: "" };
 const EMPTY_PATENT: SeedFundingPatentItem = { applicationNo: "", applicantName: "", patentTitle: "", inventorDetails: "", status: "" };
@@ -78,12 +78,6 @@ function SeedFundingRow({
           <p className="text-sm">{project.objectives}</p>
         </div>
       )}
-      {project.outcomes && (
-        <div>
-          <p className="text-xs text-muted-foreground">Outcomes</p>
-          <p className="text-sm">{project.outcomes}</p>
-        </div>
-      )}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         <Field label="Equipment Procured" value={project.equipmentProcured.length} />
         <Field label="Papers Published" value={project.papersPublished.length} />
@@ -123,7 +117,6 @@ interface ProjectFormState {
   recurringAmount: string;
   nonRecurringAmount: string;
   equipmentProcured: SeedFundingEquipmentItem[];
-  outcomes: string;
   papersPublished: SeedFundingPaperItem[];
   patents: SeedFundingPatentItem[];
   studentsProjectsUG: string;
@@ -141,7 +134,7 @@ function initialFormState(editing: SeedFundingProjectRequest | null): ProjectFor
       title: "", durationMonths: "", objectives: "", tentativeOutcomes: "", piName: "", piDepartment: "",
       studentsInvolvedCount: "", students: [], projectStatus: "", dateSanctioned: "", dateOfStart: "",
       financialYearOfStart: "", totalAmountSanctioned: "", recurringAmount: "", nonRecurringAmount: "",
-      equipmentProcured: [], outcomes: "", papersPublished: [], patents: [],
+      equipmentProcured: [], papersPublished: [], patents: [],
       studentsProjectsUG: "", studentsProjectsPG: "", studentsProjectsPhD: "", studentsTrainedCount: "",
       externalFundedProposalsApplied: "", progressReportUrl: "", utilizationCertificateUrl: "",
     };
@@ -164,7 +157,6 @@ function initialFormState(editing: SeedFundingProjectRequest | null): ProjectFor
     recurringAmount: n(editing.recurringAmount),
     nonRecurringAmount: n(editing.nonRecurringAmount),
     equipmentProcured: editing.equipmentProcured ?? [],
-    outcomes: editing.outcomes ?? "",
     papersPublished: editing.papersPublished ?? [],
     patents: editing.patents ?? [],
     studentsProjectsUG: n(editing.studentsProjectsUG),
@@ -215,7 +207,6 @@ function ProjectFormFields({
         recurringAmount: toNumberOrUndefined(form.recurringAmount),
         nonRecurringAmount: toNumberOrUndefined(form.nonRecurringAmount),
         equipmentProcured: form.equipmentProcured,
-        outcomes: form.outcomes.trim(),
         papersPublished: form.papersPublished,
         patents: form.patents,
         studentsProjectsUG: toNumberOrUndefined(form.studentsProjectsUG),
@@ -305,18 +296,6 @@ function ProjectFormFields({
           </div>
         </div>
 
-        <div className="space-y-4">
-          <SubLabel>Students &amp; Training</SubLabel>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <NumInput label="Students Projects Executed - UG" value={toNumberOrUndefined(form.studentsProjectsUG)} onChange={(v) => set("studentsProjectsUG", String(v))} />
-            <NumInput label="PG" value={toNumberOrUndefined(form.studentsProjectsPG)} onChange={(v) => set("studentsProjectsPG", String(v))} />
-            <NumInput label="Ph.D." value={toNumberOrUndefined(form.studentsProjectsPhD)} onChange={(v) => set("studentsProjectsPhD", String(v))} />
-          </div>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <NumInput label="No. of Students Trained" value={toNumberOrUndefined(form.studentsTrainedCount)} onChange={(v) => set("studentsTrainedCount", String(v))} />
-            <NumInput label="No. of External Funded Proposals Applied" value={toNumberOrUndefined(form.externalFundedProposalsApplied)} onChange={(v) => set("externalFundedProposalsApplied", String(v))} />
-          </div>
-        </div>
       </div>
 
       <div className="space-y-5">
@@ -329,6 +308,7 @@ function ProjectFormFields({
           renderRow={(item, update) => (
             <>
               <TextInput label="Name of Student" value={item.name} onChange={(v) => update({ name: v })} />
+              <TextInput label="Department" value={item.department} onChange={(v) => update({ department: v })} />
               <TextInput label="Regd. Number" value={item.regdNumber} onChange={(v) => update({ regdNumber: v })} />
               <TextInput label="Year of Study" value={item.yearOfStudy} onChange={(v) => update({ yearOfStudy: v })} />
             </>
@@ -350,42 +330,54 @@ function ProjectFormFields({
           ]}
         />
 
-        <div className="space-y-2">
-          <Label>Outcomes</Label>
-          <Textarea value={form.outcomes} onChange={(e) => set("outcomes", e.target.value)} rows={3} />
+        <div className="space-y-4">
+          <SubLabel>Outcomes</SubLabel>
+
+          <TableRepeatingGroup
+            title="Papers Published"
+            items={form.papersPublished}
+            empty={EMPTY_PAPER}
+            onChange={(v) => set("papersPublished", v)}
+            addLabel="Add Paper"
+            columns={[
+              { header: "Title of the Paper", render: (item, update) => <Input className="h-8 text-sm" value={item.title} onChange={(e) => update({ title: e.target.value })} /> },
+              { header: "Name of the Journal/Conference", render: (item, update) => <Input className="h-8 text-sm" value={item.journalOrConference} onChange={(e) => update({ journalOrConference: e.target.value })} /> },
+              { header: "DoI", render: (item, update) => <Input className="h-8 text-sm" value={item.doi ?? ""} onChange={(e) => update({ doi: e.target.value })} /> },
+              { header: "Quartile", render: (item, update) => <Input className="h-8 text-sm" value={item.quartile ?? ""} onChange={(e) => update({ quartile: e.target.value })} /> },
+              { header: "IF", render: (item, update) => <Input className="h-8 text-sm" value={item.impactFactor ?? ""} onChange={(e) => update({ impactFactor: e.target.value })} /> },
+              { header: "Indexed Scopus/WoS", render: (item, update) => <Input className="h-8 text-sm" value={item.indexedScopusWos ?? ""} onChange={(e) => update({ indexedScopusWos: e.target.value })} /> },
+              { header: "Cite the Paper As", render: (item, update) => <Input className="h-8 text-sm" value={item.citeAs ?? ""} onChange={(e) => update({ citeAs: e.target.value })} /> },
+            ]}
+          />
+
+          <TableRepeatingGroup
+            title="Patents Published/Granted"
+            items={form.patents}
+            empty={EMPTY_PATENT}
+            onChange={(v) => set("patents", v)}
+            addLabel="Add Patent"
+            columns={[
+              { header: "Application No.", render: (item, update) => <Input className="h-8 text-sm" value={item.applicationNo} onChange={(e) => update({ applicationNo: e.target.value })} /> },
+              { header: "Name of the Applicant", render: (item, update) => <Input className="h-8 text-sm" value={item.applicantName} onChange={(e) => update({ applicantName: e.target.value })} /> },
+              { header: "Title of the Patent", render: (item, update) => <Input className="h-8 text-sm" value={item.patentTitle} onChange={(e) => update({ patentTitle: e.target.value })} /> },
+              { header: "Inventor Details", render: (item, update) => <Input className="h-8 text-sm" value={item.inventorDetails} onChange={(e) => update({ inventorDetails: e.target.value })} /> },
+              { header: "Status (Filed/Published/Granted)", render: (item, update) => <Input className="h-8 text-sm" value={item.status} onChange={(e) => update({ status: e.target.value })} placeholder="Filed / Published / Granted" /> },
+            ]}
+          />
+
+          <div className="space-y-2">
+            <SubLabel>Students Projects Executed</SubLabel>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <NumInput label="UG" value={toNumberOrUndefined(form.studentsProjectsUG)} onChange={(v) => set("studentsProjectsUG", String(v))} />
+              <NumInput label="PG" value={toNumberOrUndefined(form.studentsProjectsPG)} onChange={(v) => set("studentsProjectsPG", String(v))} />
+              <NumInput label="Ph.D." value={toNumberOrUndefined(form.studentsProjectsPhD)} onChange={(v) => set("studentsProjectsPhD", String(v))} />
+            </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <NumInput label="No. of Students Trained" value={toNumberOrUndefined(form.studentsTrainedCount)} onChange={(v) => set("studentsTrainedCount", String(v))} />
+              <NumInput label="No. of External Funded Proposals Applied" value={toNumberOrUndefined(form.externalFundedProposalsApplied)} onChange={(v) => set("externalFundedProposalsApplied", String(v))} />
+            </div>
+          </div>
         </div>
-
-        <TableRepeatingGroup
-          title="Papers Published"
-          items={form.papersPublished}
-          empty={EMPTY_PAPER}
-          onChange={(v) => set("papersPublished", v)}
-          addLabel="Add Paper"
-          columns={[
-            { header: "Title of the Paper", render: (item, update) => <Input className="h-8 text-sm" value={item.title} onChange={(e) => update({ title: e.target.value })} /> },
-            { header: "Name of the Journal/Conference", render: (item, update) => <Input className="h-8 text-sm" value={item.journalOrConference} onChange={(e) => update({ journalOrConference: e.target.value })} /> },
-            { header: "DoI", render: (item, update) => <Input className="h-8 text-sm" value={item.doi ?? ""} onChange={(e) => update({ doi: e.target.value })} /> },
-            { header: "Quartile", render: (item, update) => <Input className="h-8 text-sm" value={item.quartile ?? ""} onChange={(e) => update({ quartile: e.target.value })} /> },
-            { header: "IF", render: (item, update) => <Input className="h-8 text-sm" value={item.impactFactor ?? ""} onChange={(e) => update({ impactFactor: e.target.value })} /> },
-            { header: "Indexed Scopus/WoS", render: (item, update) => <Input className="h-8 text-sm" value={item.indexedScopusWos ?? ""} onChange={(e) => update({ indexedScopusWos: e.target.value })} /> },
-            { header: "Cite the Paper As", render: (item, update) => <Input className="h-8 text-sm" value={item.citeAs ?? ""} onChange={(e) => update({ citeAs: e.target.value })} /> },
-          ]}
-        />
-
-        <TableRepeatingGroup
-          title="Patents Published/Granted"
-          items={form.patents}
-          empty={EMPTY_PATENT}
-          onChange={(v) => set("patents", v)}
-          addLabel="Add Patent"
-          columns={[
-            { header: "Application No.", render: (item, update) => <Input className="h-8 text-sm" value={item.applicationNo} onChange={(e) => update({ applicationNo: e.target.value })} /> },
-            { header: "Name of the Applicant", render: (item, update) => <Input className="h-8 text-sm" value={item.applicantName} onChange={(e) => update({ applicantName: e.target.value })} /> },
-            { header: "Title of the Patent", render: (item, update) => <Input className="h-8 text-sm" value={item.patentTitle} onChange={(e) => update({ patentTitle: e.target.value })} /> },
-            { header: "Inventor Details", render: (item, update) => <Input className="h-8 text-sm" value={item.inventorDetails} onChange={(e) => update({ inventorDetails: e.target.value })} /> },
-            { header: "Status (Filed/Published/Granted)", render: (item, update) => <Input className="h-8 text-sm" value={item.status} onChange={(e) => update({ status: e.target.value })} placeholder="Filed / Published / Granted" /> },
-          ]}
-        />
 
         <div className="space-y-4">
           <SubLabel>Reports</SubLabel>
