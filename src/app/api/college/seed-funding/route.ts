@@ -66,7 +66,6 @@ interface SeedFundingBody {
   recurringAmount?: number;
   nonRecurringAmount?: number;
   equipmentProcured?: SeedFundingEquipmentItem[];
-  outcomes?: string;
   papersPublished?: SeedFundingPaperItem[];
   patents?: SeedFundingPatentItem[];
   studentsProjectsUG?: number;
@@ -137,7 +136,6 @@ export async function POST(request: Request) {
       recurringAmount: body.recurringAmount ?? null,
       nonRecurringAmount: body.nonRecurringAmount ?? null,
       equipmentProcured: body.equipmentProcured ?? [],
-      outcomes: body.outcomes ?? "",
       papersPublished: body.papersPublished ?? [],
       patents: body.patents ?? [],
       studentsProjectsUG: body.studentsProjectsUG ?? null,

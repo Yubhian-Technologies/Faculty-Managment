@@ -6,9 +6,10 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { notify, notifyRole } from "@/lib/notify";
 import { PUBLICATION_ELIGIBLE_ROLES } from "@/lib/publications/eligibleRoles";
+import { validateSponsoredProjectBody } from "@/lib/research/validateSponsoredProject";
 import type {
-  PublicationStatus, SeedFundingEquipmentItem, SeedFundingPaperItem, SeedFundingPatentItem,
-  SponsoredProjectCoPI, SponsoredProjectSanctionedStatus, SponsoredProjectStatus, SponsoredProjectType,
+  PublicationStatus, SponsoredProjectCoPI, SponsoredProjectRequest, SponsoredProjectSanctionedStatus,
+  SponsoredProjectStatus, SponsoredProjectType, SponsoredProjectYearData,
 } from "@/types";
 
 export async function GET(
@@ -61,24 +62,10 @@ interface SponsoredProjectPatchBody {
   recurringAmountSanctioned?: number;
   nonRecurringAmountSanctioned?: number;
   instituteContributionSanctioned?: number;
-  noOfYears?: string;
-  totalAmountReceived?: number;
-  recurringAmountReceived?: number;
-  nonRecurringAmountReceived?: number;
-  instituteContributionReceived?: number;
   dateOfCompletion?: string;
   financialYearOfCompletion?: string;
-  infrastructureProcured?: SeedFundingEquipmentItem[];
-  outcomes?: string;
-  papersPublished?: SeedFundingPaperItem[];
-  papersPublishedCitations?: string;
-  patents?: SeedFundingPatentItem[];
-  studentsProjectsUG?: number;
-  studentsProjectsPG?: number;
-  studentsProjectsPhD?: number;
-  studentsTrainedCount?: number;
-  technicalStaffTrainedCount?: number;
-  personsTrainedCount?: number;
+  noOfYears?: number;
+  yearlyData?: SponsoredProjectYearData[];
   progressReportUrl?: string;
   completionReportUrl?: string;
   utilizationCertificateUrl?: string;
@@ -94,11 +81,8 @@ const EDITABLE_KEYS = [
   "objectives", "tentativeOutcomes", "piName", "piDepartment", "piAffiliation", "coPiCount", "coPis",
   "projectStatus", "dateProposalSubmitted", "amountApplied", "extendedToSeedFund", "sanctionedStatus",
   "dateProjectSanctioned", "dateOfStart", "financialYearOfStart", "totalAmountSanctioned",
-  "recurringAmountSanctioned", "nonRecurringAmountSanctioned", "instituteContributionSanctioned", "noOfYears",
-  "totalAmountReceived", "recurringAmountReceived", "nonRecurringAmountReceived", "instituteContributionReceived",
-  "dateOfCompletion", "financialYearOfCompletion", "infrastructureProcured", "outcomes", "papersPublished",
-  "papersPublishedCitations", "patents", "studentsProjectsUG", "studentsProjectsPG", "studentsProjectsPhD",
-  "studentsTrainedCount", "technicalStaffTrainedCount", "personsTrainedCount", "progressReportUrl",
+  "recurringAmountSanctioned", "nonRecurringAmountSanctioned", "instituteContributionSanctioned",
+  "dateOfCompletion", "financialYearOfCompletion", "noOfYears", "yearlyData", "progressReportUrl",
   "completionReportUrl", "utilizationCertificateUrl", "statementOfExpenditureUrl", "submittedRequiredDocs",
   "dateOfSubmission",
 ] as const satisfies readonly (keyof SponsoredProjectPatchBody)[];
@@ -127,7 +111,7 @@ export async function PATCH(
     if (!snap.exists) {
       return NextResponse.json({ error: "Sponsored project not found" }, { status: 404 });
     }
-    const project = snap.data() as { uid: string; title: string; status?: PublicationStatus };
+    const project = snap.data() as SponsoredProjectRequest;
     const isRnD = session.role === "R_AND_D";
     const isOwner = project.uid === session.uid;
     if (!isRnD && !isOwner) {
@@ -170,6 +154,12 @@ export async function PATCH(
       if (project.status !== "REJECTED") {
         return NextResponse.json({ error: "Only a rejected submission can be edited" }, { status: 403 });
       }
+
+      const validationError = validateSponsoredProjectBody({ ...project, ...body });
+      if (validationError) {
+        return NextResponse.json({ error: validationError }, { status: 400 });
+      }
+
       const now = new Date();
       const updates: Record<string, unknown> = {
         ...pickEditableFields(body),

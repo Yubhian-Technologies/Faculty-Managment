@@ -48,6 +48,16 @@ export async function POST(request: Request) {
       hIndexExcludingSelf?: number | string;
     };
 
+    const invalid = (v: number | string | undefined) => v === undefined || v === "" || Number.isNaN(Number(v));
+    if (
+      invalid(body.totalCitations) ||
+      invalid(body.hIndex) ||
+      invalid(body.citationsExcludingSelf) ||
+      invalid(body.hIndexExcludingSelf)
+    ) {
+      return NextResponse.json({ error: "All citation metrics fields are required and must be valid numbers" }, { status: 400 });
+    }
+
     const db = getAdminDb();
     const collegeRef = db.collection("colleges").doc(session.collegeId);
     const ref = collegeRef.collection("citationMetricsRequests").doc(session.uid);

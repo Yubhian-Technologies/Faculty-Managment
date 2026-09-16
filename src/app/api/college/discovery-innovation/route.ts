@@ -6,6 +6,8 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { notifyRole } from "@/lib/notify";
 import { PUBLICATION_ELIGIBLE_ROLES } from "@/lib/publications/eligibleRoles";
 import { resolveOwnerDesignation } from "@/lib/publications/resolveOwnerDesignation";
+import { finalizeIprInventors } from "@/lib/research/finalizeIprInventors";
+import { validateDiscoveryInnovationBody } from "@/lib/research/validateDiscoveryInnovation";
 import type {
   IprApplicant, IprCommercializationStatus, IprCommercializationType, IprInventor, IprStatus, IprType,
   PublicationStatus, UserRole,
@@ -93,6 +95,12 @@ export async function POST(request: Request) {
     }
 
     const db = getAdminDb();
+    const inventors = await finalizeIprInventors(db, session.collegeId, body.inventors ?? []);
+    const validationError = validateDiscoveryInnovationBody({ ...body, inventors }, iprStatus);
+    if (validationError) {
+      return NextResponse.json({ error: validationError }, { status: 400 });
+    }
+
     const ownerSnap = await db.collection("colleges").doc(session.collegeId).collection("users").doc(uid).get();
     if (!ownerSnap.exists) {
       return NextResponse.json({ error: "Staff member not found" }, { status: 404 });
@@ -129,7 +137,7 @@ export async function POST(request: Request) {
       applicantsCount: body.applicantsCount ?? null,
       applicants: body.applicants ?? [],
       inventorsCount: body.inventorsCount ?? null,
-      inventors: body.inventors ?? [],
+      inventors,
       isStudentPatent: body.isStudentPatent ?? null,
       publishedProofUrl: body.publishedProofUrl ?? "",
       grantedProofUrl: body.grantedProofUrl ?? "",
