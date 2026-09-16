@@ -19,7 +19,7 @@ import { toast } from "@/hooks/useToast";
 import type {
   SeedFundingEquipmentItem, SeedFundingPaperItem, SeedFundingPatentItem,
   SponsoredProjectCoPI, SponsoredProjectRequest, SponsoredProjectSanctionedStatus,
-  SponsoredProjectStatus, SponsoredProjectType,
+  SponsoredProjectStatus, SponsoredProjectType, SponsoredProjectYearData,
 } from "@/types";
 
 const PREVIEW_COUNT = 3;
@@ -28,6 +28,26 @@ const EMPTY_COPI: SponsoredProjectCoPI = { name: "", department: "", affiliation
 const EMPTY_EQUIPMENT: SeedFundingEquipmentItem = { name: "", makeModel: "", softwareOrHardware: "", amount: undefined, purpose: "" };
 const EMPTY_PAPER: SeedFundingPaperItem = { title: "", journalOrConference: "" };
 const EMPTY_PATENT: SeedFundingPatentItem = { applicationNo: "", applicantName: "", patentTitle: "", inventorDetails: "", status: "" };
+
+// Resizes a list to exactly `count` items, trimming from the end or padding
+// with `empty` - backs the "No. of Years" numeric field, which drives how
+// many yearly Amount Received/Infrastructure/Outcomes groups show.
+function resizeArray<T>(arr: T[], count: number, empty: T): T[] {
+  if (arr.length === count) return arr;
+  if (arr.length > count) return arr.slice(0, count);
+  return [...arr, ...Array.from({ length: count - arr.length }, () => ({ ...empty }))];
+}
+
+function yearOrdinal(n: number): string {
+  const mod100 = n % 100;
+  if (mod100 >= 11 && mod100 <= 13) return `${n}th`;
+  switch (n % 10) {
+    case 1: return `${n}st`;
+    case 2: return `${n}nd`;
+    case 3: return `${n}rd`;
+    default: return `${n}th`;
+  }
+}
 
 const PROJECT_TYPE_LABELS: Record<SponsoredProjectType, string> = {
   TRAINING: "Training", TECHNICAL: "Technical", SOCIETY: "Society", INFRASTRUCTURE: "Infrastructure",
@@ -109,6 +129,74 @@ function SponsoredProjectRow({
   );
 }
 
+interface YearFormData {
+  totalAmountReceived: string;
+  recurringAmountReceived: string;
+  nonRecurringAmountReceived: string;
+  instituteContributionReceived: string;
+  infrastructureProcured: SeedFundingEquipmentItem[];
+  papersPublished: SeedFundingPaperItem[];
+  patents: SeedFundingPatentItem[];
+  studentsProjectsUG: string;
+  studentsProjectsPG: string;
+  studentsProjectsPhD: string;
+  studentsTrainedCount: string;
+  teachingStaffTrainedCount: string;
+  nonTeachingStaffTrainedCount: string;
+  externalPersonsTrainedCount: string;
+}
+
+const EMPTY_YEAR_DATA: YearFormData = {
+  totalAmountReceived: "", recurringAmountReceived: "", nonRecurringAmountReceived: "", instituteContributionReceived: "",
+  infrastructureProcured: [], papersPublished: [], patents: [],
+  studentsProjectsUG: "", studentsProjectsPG: "", studentsProjectsPhD: "",
+  studentsTrainedCount: "", teachingStaffTrainedCount: "", nonTeachingStaffTrainedCount: "", externalPersonsTrainedCount: "",
+};
+
+function yearFormFromData(y?: SponsoredProjectYearData): YearFormData {
+  const n = (v: number | undefined) => (v !== undefined ? String(v) : "");
+  return {
+    totalAmountReceived: n(y?.totalAmountReceived), recurringAmountReceived: n(y?.recurringAmountReceived),
+    nonRecurringAmountReceived: n(y?.nonRecurringAmountReceived), instituteContributionReceived: n(y?.instituteContributionReceived),
+    infrastructureProcured: y?.infrastructureProcured ?? [],
+    papersPublished: y?.papersPublished ?? [], patents: y?.patents ?? [],
+    studentsProjectsUG: n(y?.studentsProjectsUG), studentsProjectsPG: n(y?.studentsProjectsPG), studentsProjectsPhD: n(y?.studentsProjectsPhD),
+    studentsTrainedCount: n(y?.studentsTrainedCount), teachingStaffTrainedCount: n(y?.teachingStaffTrainedCount),
+    nonTeachingStaffTrainedCount: n(y?.nonTeachingStaffTrainedCount), externalPersonsTrainedCount: n(y?.externalPersonsTrainedCount),
+  };
+}
+
+function yearDataToPayload(y: YearFormData): SponsoredProjectYearData {
+  return {
+    totalAmountReceived: toNumberOrUndefined(y.totalAmountReceived), recurringAmountReceived: toNumberOrUndefined(y.recurringAmountReceived),
+    nonRecurringAmountReceived: toNumberOrUndefined(y.nonRecurringAmountReceived), instituteContributionReceived: toNumberOrUndefined(y.instituteContributionReceived),
+    infrastructureProcured: y.infrastructureProcured,
+    papersPublished: y.papersPublished, patents: y.patents,
+    studentsProjectsUG: toNumberOrUndefined(y.studentsProjectsUG), studentsProjectsPG: toNumberOrUndefined(y.studentsProjectsPG),
+    studentsProjectsPhD: toNumberOrUndefined(y.studentsProjectsPhD), studentsTrainedCount: toNumberOrUndefined(y.studentsTrainedCount),
+    teachingStaffTrainedCount: toNumberOrUndefined(y.teachingStaffTrainedCount),
+    nonTeachingStaffTrainedCount: toNumberOrUndefined(y.nonTeachingStaffTrainedCount),
+    externalPersonsTrainedCount: toNumberOrUndefined(y.externalPersonsTrainedCount),
+  };
+}
+
+// Every field of a yearly group is compulsory (Amount Received, at least one
+// Infrastructure/Paper/Patent row, Students & Training) - mirrors the
+// compulsory-everything treatment of Discovery & Innovation's Applicants/
+// Inventors.
+function isYearDataValid(y: YearFormData): boolean {
+  const numFields = [
+    y.totalAmountReceived, y.recurringAmountReceived, y.nonRecurringAmountReceived, y.instituteContributionReceived,
+    y.studentsProjectsUG, y.studentsProjectsPG, y.studentsProjectsPhD, y.studentsTrainedCount,
+    y.teachingStaffTrainedCount, y.nonTeachingStaffTrainedCount, y.externalPersonsTrainedCount,
+  ];
+  if (numFields.some((v) => v.trim() === "" || Number.isNaN(Number(v)))) return false;
+  if (y.infrastructureProcured.length === 0 || y.infrastructureProcured.some((it) => !it.name.trim())) return false;
+  if (y.papersPublished.length === 0 || y.papersPublished.some((p) => !p.title.trim())) return false;
+  if (y.patents.length === 0 || y.patents.some((p) => !p.patentTitle.trim())) return false;
+  return true;
+}
+
 interface ProjectFormState {
   agencyName: string;
   schemeName: string;
@@ -135,24 +223,10 @@ interface ProjectFormState {
   recurringAmountSanctioned: string;
   nonRecurringAmountSanctioned: string;
   instituteContributionSanctioned: string;
-  noOfYears: string;
-  totalAmountReceived: string;
-  recurringAmountReceived: string;
-  nonRecurringAmountReceived: string;
-  instituteContributionReceived: string;
   dateOfCompletion: string;
   financialYearOfCompletion: string;
-  infrastructureProcured: SeedFundingEquipmentItem[];
-  outcomes: string;
-  papersPublished: SeedFundingPaperItem[];
-  papersPublishedCitations: string;
-  patents: SeedFundingPatentItem[];
-  studentsProjectsUG: string;
-  studentsProjectsPG: string;
-  studentsProjectsPhD: string;
-  studentsTrainedCount: string;
-  technicalStaffTrainedCount: string;
-  personsTrainedCount: string;
+  noOfYears: string;
+  yearlyData: YearFormData[];
   progressReportUrl: string;
   completionReportUrl: string;
   utilizationCertificateUrl: string;
@@ -170,11 +244,8 @@ function initialFormState(editing: SponsoredProjectRequest | null): ProjectFormS
       coPis: [], projectStatus: "", dateProposalSubmitted: "", amountApplied: "", extendedToSeedFund: "",
       sanctionedStatus: "", dateProjectSanctioned: "", dateOfStart: "", financialYearOfStart: "",
       totalAmountSanctioned: "", recurringAmountSanctioned: "", nonRecurringAmountSanctioned: "",
-      instituteContributionSanctioned: "", noOfYears: "", totalAmountReceived: "", recurringAmountReceived: "",
-      nonRecurringAmountReceived: "", instituteContributionReceived: "", dateOfCompletion: "",
-      financialYearOfCompletion: "", infrastructureProcured: [], outcomes: "", papersPublished: [],
-      papersPublishedCitations: "", patents: [], studentsProjectsUG: "", studentsProjectsPG: "",
-      studentsProjectsPhD: "", studentsTrainedCount: "", technicalStaffTrainedCount: "", personsTrainedCount: "",
+      instituteContributionSanctioned: "", dateOfCompletion: "", financialYearOfCompletion: "",
+      noOfYears: "", yearlyData: [],
       progressReportUrl: "", completionReportUrl: "", utilizationCertificateUrl: "", statementOfExpenditureUrl: "",
       submittedRequiredDocs: "", dateOfSubmission: "",
     };
@@ -190,16 +261,9 @@ function initialFormState(editing: SponsoredProjectRequest | null): ProjectFormS
     dateOfStart: editing.dateOfStart ?? "", financialYearOfStart: editing.financialYearOfStart ?? "",
     totalAmountSanctioned: n(editing.totalAmountSanctioned), recurringAmountSanctioned: n(editing.recurringAmountSanctioned),
     nonRecurringAmountSanctioned: n(editing.nonRecurringAmountSanctioned),
-    instituteContributionSanctioned: n(editing.instituteContributionSanctioned), noOfYears: editing.noOfYears ?? "",
-    totalAmountReceived: n(editing.totalAmountReceived), recurringAmountReceived: n(editing.recurringAmountReceived),
-    nonRecurringAmountReceived: n(editing.nonRecurringAmountReceived),
-    instituteContributionReceived: n(editing.instituteContributionReceived), dateOfCompletion: editing.dateOfCompletion ?? "",
-    financialYearOfCompletion: editing.financialYearOfCompletion ?? "", infrastructureProcured: editing.infrastructureProcured ?? [],
-    outcomes: editing.outcomes ?? "", papersPublished: editing.papersPublished ?? [],
-    papersPublishedCitations: editing.papersPublishedCitations ?? "", patents: editing.patents ?? [],
-    studentsProjectsUG: n(editing.studentsProjectsUG), studentsProjectsPG: n(editing.studentsProjectsPG),
-    studentsProjectsPhD: n(editing.studentsProjectsPhD), studentsTrainedCount: n(editing.studentsTrainedCount),
-    technicalStaffTrainedCount: n(editing.technicalStaffTrainedCount), personsTrainedCount: n(editing.personsTrainedCount),
+    instituteContributionSanctioned: n(editing.instituteContributionSanctioned),
+    dateOfCompletion: editing.dateOfCompletion ?? "", financialYearOfCompletion: editing.financialYearOfCompletion ?? "",
+    noOfYears: n(editing.noOfYears), yearlyData: (editing.yearlyData ?? []).map(yearFormFromData),
     progressReportUrl: editing.progressReportUrl ?? "", completionReportUrl: editing.completionReportUrl ?? "",
     utilizationCertificateUrl: editing.utilizationCertificateUrl ?? "", statementOfExpenditureUrl: editing.statementOfExpenditureUrl ?? "",
     submittedRequiredDocs: editing.submittedRequiredDocs ?? "", dateOfSubmission: editing.dateOfSubmission ?? "",
@@ -221,14 +285,56 @@ function ProjectFormFields({
     setForm((f) => ({ ...f, [key]: value }));
   }
 
-  const isValid =
-    form.agencyName.trim().length > 1 && form.schemeName.trim().length > 1 && form.applicationNumber.trim().length > 1 &&
-    form.title.trim().length > 1 && !!form.projectType && form.objectives.trim().length > 1 &&
-    form.piName.trim().length > 1 && !!form.projectStatus;
+  function setNoOfYears(v: string) {
+    const count = toNumberOrUndefined(v) ?? 0;
+    setForm((f) => ({ ...f, noOfYears: v, yearlyData: resizeArray(f.yearlyData, count, EMPTY_YEAR_DATA) }));
+  }
+
+  function updateYear(i: number, patch: Partial<YearFormData>) {
+    setForm((f) => {
+      const next = [...f.yearlyData];
+      next[i] = { ...next[i], ...patch };
+      return { ...f, yearlyData: next };
+    });
+  }
 
   const isSanctioned = form.projectStatus === "SANCTIONED";
   const isOngoing = isSanctioned && form.sanctionedStatus === "ONGOING";
   const isCompleted = isSanctioned && form.sanctionedStatus === "COMPLETED";
+
+  // Almost every field is compulsory (mirrors Discovery & Innovation /
+  // Citation Metrics) - Applied vs Sanctioned each validate their own branch,
+  // and a Sanctioned project's yearly groups + reports are required too.
+  const coPisValid = (toNumberOrUndefined(form.coPiCount) ?? 0) === 0
+    || (form.coPis.length > 0 && form.coPis.every((c) => c.name.trim() && c.department.trim() && c.affiliation.trim()));
+
+  const appliedValid = isSanctioned || (
+    !!form.dateProposalSubmitted && form.amountApplied.trim() !== "" && !Number.isNaN(Number(form.amountApplied)) && !!form.extendedToSeedFund
+  );
+
+  const sanctionedValid = !isSanctioned || (
+    !!form.sanctionedStatus &&
+    !!form.dateProjectSanctioned && !!form.dateOfStart && form.financialYearOfStart.trim() !== "" &&
+    (!isCompleted || (!!form.dateOfCompletion && form.financialYearOfCompletion.trim() !== "")) &&
+    [form.totalAmountSanctioned, form.recurringAmountSanctioned, form.nonRecurringAmountSanctioned, form.instituteContributionSanctioned]
+      .every((v) => v.trim() !== "" && !Number.isNaN(Number(v))) &&
+    form.noOfYears.trim() !== "" && !Number.isNaN(Number(form.noOfYears)) && Number(form.noOfYears) > 0 &&
+    form.yearlyData.length === Number(form.noOfYears) && form.yearlyData.every(isYearDataValid) &&
+    !!form.submittedRequiredDocs &&
+    (form.submittedRequiredDocs === "NO" || (
+      !!form.dateOfSubmission &&
+      (isOngoing ? !!form.progressReportUrl : !!form.completionReportUrl) &&
+      !!form.utilizationCertificateUrl && !!form.statementOfExpenditureUrl
+    ))
+  );
+
+  const isValid =
+    form.agencyName.trim().length > 1 && form.schemeName.trim().length > 1 && form.applicationNumber.trim().length > 1 &&
+    form.title.trim().length > 1 && !!form.projectType &&
+    form.durationMonths.trim() !== "" && !Number.isNaN(Number(form.durationMonths)) &&
+    form.objectives.trim().length > 1 && form.tentativeOutcomes.trim().length > 1 &&
+    form.piName.trim().length > 1 && form.piDepartment.trim().length > 1 && form.piAffiliation.trim().length > 1 &&
+    coPisValid && !!form.projectStatus && appliedValid && sanctionedValid;
 
   async function handleSubmit() {
     if (!isValid) return;
@@ -260,24 +366,10 @@ function ProjectFormFields({
         recurringAmountSanctioned: toNumberOrUndefined(form.recurringAmountSanctioned),
         nonRecurringAmountSanctioned: toNumberOrUndefined(form.nonRecurringAmountSanctioned),
         instituteContributionSanctioned: toNumberOrUndefined(form.instituteContributionSanctioned),
-        noOfYears: form.noOfYears.trim(),
-        totalAmountReceived: toNumberOrUndefined(form.totalAmountReceived),
-        recurringAmountReceived: toNumberOrUndefined(form.recurringAmountReceived),
-        nonRecurringAmountReceived: toNumberOrUndefined(form.nonRecurringAmountReceived),
-        instituteContributionReceived: toNumberOrUndefined(form.instituteContributionReceived),
         dateOfCompletion: form.dateOfCompletion || undefined,
         financialYearOfCompletion: form.financialYearOfCompletion || undefined,
-        infrastructureProcured: form.infrastructureProcured,
-        outcomes: form.outcomes.trim(),
-        papersPublished: form.papersPublished,
-        papersPublishedCitations: form.papersPublishedCitations.trim(),
-        patents: form.patents,
-        studentsProjectsUG: toNumberOrUndefined(form.studentsProjectsUG),
-        studentsProjectsPG: toNumberOrUndefined(form.studentsProjectsPG),
-        studentsProjectsPhD: toNumberOrUndefined(form.studentsProjectsPhD),
-        studentsTrainedCount: toNumberOrUndefined(form.studentsTrainedCount),
-        technicalStaffTrainedCount: toNumberOrUndefined(form.technicalStaffTrainedCount),
-        personsTrainedCount: toNumberOrUndefined(form.personsTrainedCount),
+        noOfYears: toNumberOrUndefined(form.noOfYears),
+        yearlyData: form.yearlyData.map(yearDataToPayload),
         progressReportUrl: form.progressReportUrl || undefined,
         completionReportUrl: form.completionReportUrl || undefined,
         utilizationCertificateUrl: form.utilizationCertificateUrl || undefined,
@@ -424,9 +516,6 @@ function ProjectFormFields({
                   <TextInput label="F.Y. of Completion" value={form.financialYearOfCompletion} onChange={(v) => set("financialYearOfCompletion", v)} placeholder="e.g. 2025-26" />
                 </div>
               )}
-              {isOngoing && (
-                <TextInput label="No. of Years (e.g. First Year)" value={form.noOfYears} onChange={(v) => set("noOfYears", v)} />
-              )}
               <div className="space-y-2">
                 <SubLabel>Amount Sanctioned</SubLabel>
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -436,149 +525,149 @@ function ProjectFormFields({
                 </div>
                 <NumInput label="Institute Contribution (Rs.)" value={toNumberOrUndefined(form.instituteContributionSanctioned)} onChange={(v) => set("instituteContributionSanctioned", String(v))} />
               </div>
-              <div className="space-y-2">
-                <SubLabel>Amount Received</SubLabel>
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                  <NumInput label="Total Amount (Rs.)" value={toNumberOrUndefined(form.totalAmountReceived)} onChange={(v) => set("totalAmountReceived", String(v))} />
-                  <NumInput label="Recurring (Rs.)" value={toNumberOrUndefined(form.recurringAmountReceived)} onChange={(v) => set("recurringAmountReceived", String(v))} />
-                  <NumInput label="Non-Recurring (Rs.)" value={toNumberOrUndefined(form.nonRecurringAmountReceived)} onChange={(v) => set("nonRecurringAmountReceived", String(v))} />
-                </div>
-                <NumInput label="Institute Contribution (Rs.)" value={toNumberOrUndefined(form.instituteContributionReceived)} onChange={(v) => set("instituteContributionReceived", String(v))} />
-              </div>
+              <NumInput label="No. of Years" value={toNumberOrUndefined(form.noOfYears)} onChange={(v) => setNoOfYears(String(v))} />
             </div>
           )}
         </div>
-
-        {isSanctioned && (
-          <div className="space-y-4">
-            <SubLabel>Students &amp; Training</SubLabel>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-              <NumInput label="Students Projects Executed - UG" value={toNumberOrUndefined(form.studentsProjectsUG)} onChange={(v) => set("studentsProjectsUG", String(v))} />
-              <NumInput label="PG" value={toNumberOrUndefined(form.studentsProjectsPG)} onChange={(v) => set("studentsProjectsPG", String(v))} />
-              <NumInput label="Ph.D." value={toNumberOrUndefined(form.studentsProjectsPhD)} onChange={(v) => set("studentsProjectsPhD", String(v))} />
-            </div>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-              <NumInput label="No. of Students Trained" value={toNumberOrUndefined(form.studentsTrainedCount)} onChange={(v) => set("studentsTrainedCount", String(v))} />
-              <NumInput label="No. of Technical Staff Trained" value={toNumberOrUndefined(form.technicalStaffTrainedCount)} onChange={(v) => set("technicalStaffTrainedCount", String(v))} />
-              <NumInput label="No. of Persons Trained" value={toNumberOrUndefined(form.personsTrainedCount)} onChange={(v) => set("personsTrainedCount", String(v))} />
-            </div>
-          </div>
-        )}
       </div>
 
       {isSanctioned && (
         <div className="space-y-5">
-          <TableRepeatingGroup
-            title="Infrastructure Procured"
-            items={form.infrastructureProcured}
-            empty={EMPTY_EQUIPMENT}
-            onChange={(v) => set("infrastructureProcured", v)}
-            addLabel="Add Equipment"
-            columns={[
-              { header: "Name of the Equipment", render: (item, update) => <Input className="h-8 text-sm" value={item.name} onChange={(e) => update({ name: e.target.value })} /> },
-              { header: "Make/Model", render: (item, update) => <Input className="h-8 text-sm" value={item.makeModel} onChange={(e) => update({ makeModel: e.target.value })} /> },
-              { header: "Software/Hardware", render: (item, update) => <Input className="h-8 text-sm" value={item.softwareOrHardware} onChange={(e) => update({ softwareOrHardware: e.target.value })} /> },
-              { header: "Amount", render: (item, update) => <Input type="number" className="h-8 text-sm" value={item.amount ?? ""} onChange={(e) => update({ amount: e.target.value === "" ? undefined : Number(e.target.value) })} /> },
-              { header: "Purpose", render: (item, update) => <Input className="h-8 text-sm" value={item.purpose} onChange={(e) => update({ purpose: e.target.value })} /> },
-            ]}
-          />
+          {form.yearlyData.map((yr, i) => (
+            <div key={i} className="space-y-4 rounded-lg border p-3">
+              <SubLabel>{yearOrdinal(i + 1)} Year</SubLabel>
 
-          <div className="space-y-2">
-            <Label>Outcomes</Label>
-            <Textarea value={form.outcomes} onChange={(e) => set("outcomes", e.target.value)} rows={3} />
-          </div>
+              <div className="space-y-2">
+                <SubLabel>Amount Received</SubLabel>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                  <NumInput label="Total Amount (Rs.)" value={toNumberOrUndefined(yr.totalAmountReceived)} onChange={(v) => updateYear(i, { totalAmountReceived: String(v) })} />
+                  <NumInput label="Recurring (Rs.)" value={toNumberOrUndefined(yr.recurringAmountReceived)} onChange={(v) => updateYear(i, { recurringAmountReceived: String(v) })} />
+                  <NumInput label="Non-Recurring (Rs.)" value={toNumberOrUndefined(yr.nonRecurringAmountReceived)} onChange={(v) => updateYear(i, { nonRecurringAmountReceived: String(v) })} />
+                </div>
+                <NumInput label="Institute Contribution (Rs.)" value={toNumberOrUndefined(yr.instituteContributionReceived)} onChange={(v) => updateYear(i, { instituteContributionReceived: String(v) })} />
+              </div>
 
-          {isCompleted ? (
-            <div className="space-y-2">
-              <Label>No. of Papers Published (Citation Format)</Label>
-              <Textarea value={form.papersPublishedCitations} onChange={(e) => set("papersPublishedCitations", e.target.value)} rows={4} placeholder="One citation per line" />
+              <TableRepeatingGroup
+                title="Infrastructure Procured"
+                items={yr.infrastructureProcured}
+                empty={EMPTY_EQUIPMENT}
+                onChange={(v) => updateYear(i, { infrastructureProcured: v })}
+                addLabel="Add Equipment"
+                columns={[
+                  { header: "Name of the Equipment", render: (item, update) => <Input className="h-8 text-sm" value={item.name} onChange={(e) => update({ name: e.target.value })} /> },
+                  { header: "Make/Model", render: (item, update) => <Input className="h-8 text-sm" value={item.makeModel} onChange={(e) => update({ makeModel: e.target.value })} /> },
+                  { header: "Software/Hardware", render: (item, update) => <Input className="h-8 text-sm" value={item.softwareOrHardware} onChange={(e) => update({ softwareOrHardware: e.target.value })} /> },
+                  { header: "Amount", render: (item, update) => <Input type="number" className="h-8 text-sm" value={item.amount ?? ""} onChange={(e) => update({ amount: e.target.value === "" ? undefined : Number(e.target.value) })} /> },
+                  { header: "Purpose", render: (item, update) => <Input className="h-8 text-sm" value={item.purpose} onChange={(e) => update({ purpose: e.target.value })} /> },
+                ]}
+              />
+
+              <div className="space-y-4">
+                <SubLabel>Outcomes</SubLabel>
+
+                <TableRepeatingGroup
+                  title="Papers Published"
+                  items={yr.papersPublished}
+                  empty={EMPTY_PAPER}
+                  onChange={(v) => updateYear(i, { papersPublished: v })}
+                  addLabel="Add Paper"
+                  columns={[
+                    { header: "Title of the Paper", render: (item, update) => <Input className="h-8 text-sm" value={item.title} onChange={(e) => update({ title: e.target.value })} /> },
+                    { header: "Name of the Journal/Conference", render: (item, update) => <Input className="h-8 text-sm" value={item.journalOrConference} onChange={(e) => update({ journalOrConference: e.target.value })} /> },
+                    { header: "DoI", render: (item, update) => <Input className="h-8 text-sm" value={item.doi ?? ""} onChange={(e) => update({ doi: e.target.value })} /> },
+                    { header: "Quartile", render: (item, update) => <Input className="h-8 text-sm" value={item.quartile ?? ""} onChange={(e) => update({ quartile: e.target.value })} /> },
+                    { header: "IF", render: (item, update) => <Input className="h-8 text-sm" value={item.impactFactor ?? ""} onChange={(e) => update({ impactFactor: e.target.value })} /> },
+                    { header: "Indexed Scopus/WoS", render: (item, update) => <Input className="h-8 text-sm" value={item.indexedScopusWos ?? ""} onChange={(e) => update({ indexedScopusWos: e.target.value })} /> },
+                    { header: "Cite the Paper As", render: (item, update) => <Input className="h-8 text-sm" value={item.citeAs ?? ""} onChange={(e) => update({ citeAs: e.target.value })} /> },
+                  ]}
+                />
+
+                <TableRepeatingGroup
+                  title="Patents Published/Granted"
+                  items={yr.patents}
+                  empty={EMPTY_PATENT}
+                  onChange={(v) => updateYear(i, { patents: v })}
+                  addLabel="Add Patent"
+                  columns={[
+                    { header: "Application No.", render: (item, update) => <Input className="h-8 text-sm" value={item.applicationNo} onChange={(e) => update({ applicationNo: e.target.value })} /> },
+                    { header: "Name of the Applicant", render: (item, update) => <Input className="h-8 text-sm" value={item.applicantName} onChange={(e) => update({ applicantName: e.target.value })} /> },
+                    { header: "Title of the Patent", render: (item, update) => <Input className="h-8 text-sm" value={item.patentTitle} onChange={(e) => update({ patentTitle: e.target.value })} /> },
+                    { header: "Inventor Details", render: (item, update) => <Input className="h-8 text-sm" value={item.inventorDetails} onChange={(e) => update({ inventorDetails: e.target.value })} /> },
+                    { header: "Status (Filed/Published/Granted)", render: (item, update) => <Input className="h-8 text-sm" value={item.status} onChange={(e) => update({ status: e.target.value })} placeholder="Filed / Published / Granted" /> },
+                  ]}
+                />
+
+                <div className="space-y-2">
+                  <SubLabel>Students Projects Executed</SubLabel>
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                    <NumInput label="UG" value={toNumberOrUndefined(yr.studentsProjectsUG)} onChange={(v) => updateYear(i, { studentsProjectsUG: String(v) })} />
+                    <NumInput label="PG" value={toNumberOrUndefined(yr.studentsProjectsPG)} onChange={(v) => updateYear(i, { studentsProjectsPG: String(v) })} />
+                    <NumInput label="Ph.D." value={toNumberOrUndefined(yr.studentsProjectsPhD)} onChange={(v) => updateYear(i, { studentsProjectsPhD: String(v) })} />
+                  </div>
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <NumInput label="No. of Students Trained" value={toNumberOrUndefined(yr.studentsTrainedCount)} onChange={(v) => updateYear(i, { studentsTrainedCount: String(v) })} />
+                    <NumInput label="Teaching Staff Trained" value={toNumberOrUndefined(yr.teachingStaffTrainedCount)} onChange={(v) => updateYear(i, { teachingStaffTrainedCount: String(v) })} />
+                    <NumInput label="Non-Teaching Staff Trained" value={toNumberOrUndefined(yr.nonTeachingStaffTrainedCount)} onChange={(v) => updateYear(i, { nonTeachingStaffTrainedCount: String(v) })} />
+                    <NumInput label="External Persons Trained" value={toNumberOrUndefined(yr.externalPersonsTrainedCount)} onChange={(v) => updateYear(i, { externalPersonsTrainedCount: String(v) })} />
+                  </div>
+                </div>
+              </div>
             </div>
-          ) : (
-            <TableRepeatingGroup
-              title="Papers Published"
-              items={form.papersPublished}
-              empty={EMPTY_PAPER}
-              onChange={(v) => set("papersPublished", v)}
-              addLabel="Add Paper"
-              columns={[
-                { header: "Title of the Paper", render: (item, update) => <Input className="h-8 text-sm" value={item.title} onChange={(e) => update({ title: e.target.value })} /> },
-                { header: "Name of the Journal/Conference", render: (item, update) => <Input className="h-8 text-sm" value={item.journalOrConference} onChange={(e) => update({ journalOrConference: e.target.value })} /> },
-                { header: "DoI", render: (item, update) => <Input className="h-8 text-sm" value={item.doi ?? ""} onChange={(e) => update({ doi: e.target.value })} /> },
-                { header: "Quartile", render: (item, update) => <Input className="h-8 text-sm" value={item.quartile ?? ""} onChange={(e) => update({ quartile: e.target.value })} /> },
-                { header: "IF", render: (item, update) => <Input className="h-8 text-sm" value={item.impactFactor ?? ""} onChange={(e) => update({ impactFactor: e.target.value })} /> },
-                { header: "Indexed Scopus/WoS", render: (item, update) => <Input className="h-8 text-sm" value={item.indexedScopusWos ?? ""} onChange={(e) => update({ indexedScopusWos: e.target.value })} /> },
-                { header: "Cite the Paper As", render: (item, update) => <Input className="h-8 text-sm" value={item.citeAs ?? ""} onChange={(e) => update({ citeAs: e.target.value })} /> },
-              ]}
-            />
-          )}
-
-          <TableRepeatingGroup
-            title="Patents Published/Granted"
-            items={form.patents}
-            empty={EMPTY_PATENT}
-            onChange={(v) => set("patents", v)}
-            addLabel="Add Patent"
-            columns={[
-              { header: "Application No.", render: (item, update) => <Input className="h-8 text-sm" value={item.applicationNo} onChange={(e) => update({ applicationNo: e.target.value })} /> },
-              { header: "Name of the Applicant", render: (item, update) => <Input className="h-8 text-sm" value={item.applicantName} onChange={(e) => update({ applicantName: e.target.value })} /> },
-              { header: "Title of the Patent", render: (item, update) => <Input className="h-8 text-sm" value={item.patentTitle} onChange={(e) => update({ patentTitle: e.target.value })} /> },
-              { header: "Inventor Details", render: (item, update) => <Input className="h-8 text-sm" value={item.inventorDetails} onChange={(e) => update({ inventorDetails: e.target.value })} /> },
-              { header: "Status (Filed/Published/Granted)", render: (item, update) => <Input className="h-8 text-sm" value={item.status} onChange={(e) => update({ status: e.target.value })} placeholder="Filed / Published / Granted" /> },
-            ]}
-          />
+          ))}
 
           <div className="space-y-4">
-            <SubLabel>Reports</SubLabel>
-            {isOngoing ? (
-              <DocumentUploadField
-                label="Progress Report"
-                value={form.progressReportUrl}
-                uploadEndpoint="/api/upload/sponsored-project-doc"
-                extraFields={{ kind: "progress-report" }}
-                onUploaded={(url) => set("progressReportUrl", url)}
-                onRemoved={() => set("progressReportUrl", "")}
-              />
-            ) : (
-              <DocumentUploadField
-                label="Completion Report"
-                value={form.completionReportUrl}
-                uploadEndpoint="/api/upload/sponsored-project-doc"
-                extraFields={{ kind: "completion-report" }}
-                onUploaded={(url) => set("completionReportUrl", url)}
-                onRemoved={() => set("completionReportUrl", "")}
-              />
-            )}
-            <DocumentUploadField
-              label="Utilization Certificate"
-              value={form.utilizationCertificateUrl}
-              uploadEndpoint="/api/upload/sponsored-project-doc"
-              extraFields={{ kind: "utilization-certificate" }}
-              onUploaded={(url) => set("utilizationCertificateUrl", url)}
-              onRemoved={() => set("utilizationCertificateUrl", "")}
-            />
-            <DocumentUploadField
-              label="Statement of Expenditure"
-              value={form.statementOfExpenditureUrl}
-              uploadEndpoint="/api/upload/sponsored-project-doc"
-              extraFields={{ kind: "statement-of-expenditure" }}
-              onUploaded={(url) => set("statementOfExpenditureUrl", url)}
-              onRemoved={() => set("statementOfExpenditureUrl", "")}
-            />
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label>Submitted All Required Documents to Sponsoring Agency</Label>
-                <Select value={form.submittedRequiredDocs} onValueChange={(v) => set("submittedRequiredDocs", v as "YES" | "NO")}>
-                  <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="YES">Yes</SelectItem>
-                    <SelectItem value="NO">No</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              {form.submittedRequiredDocs === "YES" && (
-                <DateInput label="Date of Submission" value={form.dateOfSubmission} onChange={(v) => set("dateOfSubmission", v)} />
-              )}
+            <div className="space-y-2 max-w-[280px]">
+              <Label>Submitted All Required Documents to Sponsoring Agency</Label>
+              <Select value={form.submittedRequiredDocs} onValueChange={(v) => set("submittedRequiredDocs", v as "YES" | "NO")}>
+                <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="YES">Yes</SelectItem>
+                  <SelectItem value="NO">No</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
+
+            {form.submittedRequiredDocs === "YES" && (
+              <div className="space-y-4 rounded-lg border p-3">
+                <SubLabel>Reports</SubLabel>
+                <DateInput label="Date of Submission" value={form.dateOfSubmission} onChange={(v) => set("dateOfSubmission", v)} />
+                {isOngoing ? (
+                  <DocumentUploadField
+                    label="Progress Report"
+                    value={form.progressReportUrl}
+                    uploadEndpoint="/api/upload/sponsored-project-doc"
+                    extraFields={{ kind: "progress-report" }}
+                    onUploaded={(url) => set("progressReportUrl", url)}
+                    onRemoved={() => set("progressReportUrl", "")}
+                  />
+                ) : (
+                  <DocumentUploadField
+                    label="Completion Report"
+                    value={form.completionReportUrl}
+                    uploadEndpoint="/api/upload/sponsored-project-doc"
+                    extraFields={{ kind: "completion-report" }}
+                    onUploaded={(url) => set("completionReportUrl", url)}
+                    onRemoved={() => set("completionReportUrl", "")}
+                  />
+                )}
+                <DocumentUploadField
+                  label="Utilization Certificate"
+                  value={form.utilizationCertificateUrl}
+                  uploadEndpoint="/api/upload/sponsored-project-doc"
+                  extraFields={{ kind: "utilization-certificate" }}
+                  onUploaded={(url) => set("utilizationCertificateUrl", url)}
+                  onRemoved={() => set("utilizationCertificateUrl", "")}
+                />
+                <DocumentUploadField
+                  label="Statement of Expenditure"
+                  value={form.statementOfExpenditureUrl}
+                  uploadEndpoint="/api/upload/sponsored-project-doc"
+                  extraFields={{ kind: "statement-of-expenditure" }}
+                  onUploaded={(url) => set("statementOfExpenditureUrl", url)}
+                  onRemoved={() => set("statementOfExpenditureUrl", "")}
+                />
+              </div>
+            )}
           </div>
         </div>
       )}

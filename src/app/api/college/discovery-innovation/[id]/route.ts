@@ -6,6 +6,8 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { notify, notifyRole } from "@/lib/notify";
 import { PUBLICATION_ELIGIBLE_ROLES } from "@/lib/publications/eligibleRoles";
+import { finalizeIprInventors } from "@/lib/research/finalizeIprInventors";
+import { validateDiscoveryInnovationBody } from "@/lib/research/validateDiscoveryInnovation";
 import type {
   IprApplicant, IprCommercializationStatus, IprCommercializationType, IprInventor, IprStatus, IprType,
   PublicationStatus,
@@ -96,7 +98,7 @@ export async function PATCH(
     if (!snap.exists) {
       return NextResponse.json({ error: "IPR record not found" }, { status: 404 });
     }
-    const record = snap.data() as { uid: string; title: string; status?: PublicationStatus };
+    const record = snap.data() as { uid: string; title: string; status?: PublicationStatus; iprStatus: IprStatus };
     const isRnD = session.role === "R_AND_D";
     const isOwner = record.uid === session.uid;
     if (!isRnD && !isOwner) {
@@ -139,9 +141,20 @@ export async function PATCH(
       if (record.status !== "REJECTED") {
         return NextResponse.json({ error: "Only a rejected submission can be edited" }, { status: 403 });
       }
+
+      const iprStatus = body.iprStatus ?? record.iprStatus;
+      const inventors = body.inventors !== undefined
+        ? await finalizeIprInventors(db, session.collegeId, body.inventors)
+        : undefined;
+      const validationError = validateDiscoveryInnovationBody({ ...body, inventors }, iprStatus);
+      if (validationError) {
+        return NextResponse.json({ error: validationError }, { status: 400 });
+      }
+
       const now = new Date();
       const updates: Record<string, unknown> = {
         ...pickEditableFields(body),
+        ...(inventors !== undefined ? { inventors } : {}),
         updatedAt: now,
         status: "PENDING" satisfies PublicationStatus,
         reviewedBy: FieldValue.delete(),

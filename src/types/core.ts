@@ -1388,6 +1388,7 @@ export interface ConsultancyProjectRequest {
 
 export interface SeedFundingStudentItem {
   name: string;
+  department: string;
   regdNumber: string;
   yearOfStudy: string;
 }
@@ -1453,7 +1454,6 @@ export interface SeedFundingProjectRequest {
   recurringAmount?: number;
   nonRecurringAmount?: number;
   equipmentProcured: SeedFundingEquipmentItem[];
-  outcomes?: string;
   papersPublished: SeedFundingPaperItem[];
   patents: SeedFundingPatentItem[];
   studentsProjectsUG?: number;
@@ -1479,6 +1479,26 @@ export interface SponsoredProjectCoPI {
 export type SponsoredProjectType = "TRAINING" | "TECHNICAL" | "SOCIETY" | "INFRASTRUCTURE";
 export type SponsoredProjectStatus = "APPLIED" | "SANCTIONED";
 export type SponsoredProjectSanctionedStatus = "ONGOING" | "COMPLETED";
+
+// One year's worth of Amount Received / Infrastructure / Outcomes /
+// Students & Training for a Sanctioned SponsoredProjectRequest - repeated
+// once per year of noOfYears.
+export interface SponsoredProjectYearData {
+  totalAmountReceived?: number;
+  recurringAmountReceived?: number;
+  nonRecurringAmountReceived?: number;
+  instituteContributionReceived?: number;
+  infrastructureProcured: SeedFundingEquipmentItem[];
+  papersPublished: SeedFundingPaperItem[];
+  patents: SeedFundingPatentItem[];
+  studentsProjectsUG?: number;
+  studentsProjectsPG?: number;
+  studentsProjectsPhD?: number;
+  studentsTrainedCount?: number;
+  teachingStaffTrainedCount?: number;
+  nonTeachingStaffTrainedCount?: number;
+  externalPersonsTrainedCount?: number;
+}
 
 // A staff-submitted Sponsored Research Project record (Research & Innovation's
 // "Sponsored Research Projects" tab) - one doc per project, same
@@ -1528,28 +1548,16 @@ export interface SponsoredProjectRequest {
   recurringAmountSanctioned?: number;
   nonRecurringAmountSanctioned?: number;
   instituteContributionSanctioned?: number;
-  noOfYears?: string; // e.g. "First Year"
-  totalAmountReceived?: number;
-  recurringAmountReceived?: number;
-  nonRecurringAmountReceived?: number;
-  instituteContributionReceived?: number;
 
   // Completed-only
   dateOfCompletion?: string;
   financialYearOfCompletion?: string;
 
-  infrastructureProcured: SeedFundingEquipmentItem[];
-  outcomes?: string;
-  papersPublished: SeedFundingPaperItem[]; // Ongoing - structured table
-  papersPublishedCitations?: string; // Completed - "in citation format"
-  patents: SeedFundingPatentItem[];
-
-  studentsProjectsUG?: number;
-  studentsProjectsPG?: number;
-  studentsProjectsPhD?: number;
-  studentsTrainedCount?: number;
-  technicalStaffTrainedCount?: number;
-  personsTrainedCount?: number;
+  // Everything below Amount Sanctioned is broken down per year of the
+  // sanction - noOfYears drives yearlyData's length (one entry per year,
+  // "Amount Received for Year 1", "Infrastructure Procured for Year 2", etc).
+  noOfYears?: number;
+  yearlyData: SponsoredProjectYearData[];
 
   progressReportUrl?: string; // Ongoing
   completionReportUrl?: string; // Completed
@@ -1576,11 +1584,21 @@ export interface IprApplicant {
   type: IprApplicantType;
 }
 
+// Same shape as PublicationAuthor (src/components/research/PublicationDetailsForm.tsx)
+// - Internal/External split, Faculty ID re-verified server-side against
+// facultyMembers (resolves name + affiliation, own college), External picks
+// affiliation via the same college-directory/Others two-step. Just Author
+// renamed to Inventor.
 export interface IprInventor {
   name: string;
-  affiliation: string;
-  state: string;
-  country: string;
+  category: AuthorCategory;
+  authorType: AuthorRoleType;
+  facultyId?: string; // when isInternal && authorType === "FACULTY" - resolves name via facultyMembers
+  studentRegistrationNumber?: string; // when isInternal && authorType === "STUDENT" - trusted as entered
+  affiliationCollegeId?: string; // a real colleges/{id}, or "OTHERS"
+  affiliationCollegeName: string; // denormalized - the picked college's real name, or the free-text name typed under "Others"
+  affiliationCountry?: string; // only when affiliationCollegeId === "OTHERS"
+  isInternal: boolean;
 }
 
 // A staff-submitted Discovery & Innovation (IPR) record (Research &

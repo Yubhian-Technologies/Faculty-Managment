@@ -52,7 +52,6 @@ interface SeedFundingPatchBody {
   recurringAmount?: number;
   nonRecurringAmount?: number;
   equipmentProcured?: SeedFundingEquipmentItem[];
-  outcomes?: string;
   papersPublished?: SeedFundingPaperItem[];
   patents?: SeedFundingPatentItem[];
   studentsProjectsUG?: number;
@@ -70,7 +69,7 @@ const EDITABLE_KEYS = [
   "title", "durationMonths", "objectives", "tentativeOutcomes", "piName", "piDepartment",
   "studentsInvolvedCount", "students", "projectStatus", "dateSanctioned", "dateOfStart",
   "financialYearOfStart", "totalAmountSanctioned", "recurringAmount", "nonRecurringAmount",
-  "equipmentProcured", "outcomes", "papersPublished", "patents", "studentsProjectsUG",
+  "equipmentProcured", "papersPublished", "patents", "studentsProjectsUG",
   "studentsProjectsPG", "studentsProjectsPhD", "studentsTrainedCount",
   "externalFundedProposalsApplied", "progressReportUrl", "utilizationCertificateUrl",
 ] as const satisfies readonly (keyof SeedFundingPatchBody)[];

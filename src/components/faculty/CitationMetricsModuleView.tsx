@@ -53,6 +53,11 @@ function RequestFormFields({
   }
 
   async function handleSubmit() {
+    const values = [form.totalCitations, form.hIndex, form.citationsExcludingSelf, form.hIndexExcludingSelf];
+    if (values.some((v) => v.trim() === "" || Number.isNaN(Number(v)))) {
+      toast({ variant: "destructive", title: "All fields are required and must be valid numbers" });
+      return;
+    }
     setSaving(true);
     try {
       const res = await fetch("/api/college/citation-metrics", {
@@ -81,22 +86,22 @@ function RequestFormFields({
       <div className="flex-1 min-h-0 overflow-y-auto pr-1 space-y-4">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="space-y-2">
-            <Label>Total No. of Citations</Label>
-            <Input type="number" value={form.totalCitations} onChange={(e) => set("totalCitations", e.target.value)} />
+            <Label>Total No. of Citations *</Label>
+            <Input required type="number" value={form.totalCitations} onChange={(e) => set("totalCitations", e.target.value)} />
           </div>
           <div className="space-y-2">
-            <Label>H-Index</Label>
-            <Input type="number" value={form.hIndex} onChange={(e) => set("hIndex", e.target.value)} />
+            <Label>H-Index *</Label>
+            <Input required type="number" value={form.hIndex} onChange={(e) => set("hIndex", e.target.value)} />
           </div>
         </div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="space-y-2">
-            <Label>No. of Citations Excluding Self Citations</Label>
-            <Input type="number" value={form.citationsExcludingSelf} onChange={(e) => set("citationsExcludingSelf", e.target.value)} />
+            <Label>No. of Citations Excluding Self Citations *</Label>
+            <Input required type="number" value={form.citationsExcludingSelf} onChange={(e) => set("citationsExcludingSelf", e.target.value)} />
           </div>
           <div className="space-y-2">
-            <Label>H-Index (Excluding Self Citations)</Label>
-            <Input type="number" value={form.hIndexExcludingSelf} onChange={(e) => set("hIndexExcludingSelf", e.target.value)} />
+            <Label>H-Index (Excluding Self Citations) *</Label>
+            <Input required type="number" value={form.hIndexExcludingSelf} onChange={(e) => set("hIndexExcludingSelf", e.target.value)} />
           </div>
         </div>
       </div>

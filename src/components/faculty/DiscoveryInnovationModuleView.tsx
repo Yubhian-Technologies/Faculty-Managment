@@ -5,6 +5,7 @@ import { ExternalLink, Plus, Pencil } from "lucide-react";
 import { Section, SubLabel, Field, TextInput, NumInput, DateInput } from "@/components/shared/ProfileFieldPrimitives";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -14,16 +15,39 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
+import { useAuthStore } from "@/store/authStore";
 import type {
-  DiscoveryInnovationRequest, IprApplicant, IprApplicantType, IprCommercializationStatus,
-  IprCommercializationType, IprInventor, IprStatus, IprType,
+  AuthorCategory, AuthorRoleType, DiscoveryInnovationRequest, IprApplicant, IprApplicantType,
+  IprCommercializationStatus, IprCommercializationType, IprInventor, IprStatus, IprType,
 } from "@/types";
 
 const PREVIEW_COUNT = 3;
 const COUNT_OPTIONS = Array.from({ length: 10 }, (_, i) => i + 1);
+const OTHERS_COLLEGE_ID = "OTHERS";
 
 const EMPTY_APPLICANT: IprApplicant = { name: "", type: "INDIVIDUAL" };
-const EMPTY_INVENTOR: IprInventor = { name: "", affiliation: "", state: "", country: "" };
+const EMPTY_INVENTOR: IprInventor = { name: "", category: "CO_AUTHOR", authorType: "FACULTY", affiliationCollegeName: "", isInternal: true };
+
+const INVENTOR_CATEGORY_LABELS: Record<AuthorCategory, string> = {
+  FIRST_AUTHOR: "First Inventor", CO_AUTHOR: "Co-Inventor", CORRESPONDING_AUTHOR: "Corresponding Inventor",
+};
+const INVENTOR_TYPE_LABELS: Record<AuthorRoleType, string> = { FACULTY: "Faculty", STUDENT: "Student" };
+
+interface CollegeOption { id: string; name: string }
+
+// Fetches once - shared by every inventor row rather than each row fetching
+// its own copy. Same pattern as PublicationDetailsForm.tsx's useCollegeOptions
+// (kept as its own copy here since that one isn't exported).
+function useCollegeOptions() {
+  const [colleges, setColleges] = useState<CollegeOption[]>([]);
+  useEffect(() => {
+    fetch("/api/college/colleges-directory")
+      .then((r) => r.json() as Promise<{ colleges?: CollegeOption[] }>)
+      .then((d) => setColleges(d.colleges ?? []))
+      .catch(() => setColleges([]));
+  }, []);
+  return colleges;
+}
 
 // Same SDG list/labels and dropdown-picker pattern as Research Publications'
 // SdgPicker (PublicationDetailsForm.tsx) - kept as its own copy here since
@@ -95,6 +119,158 @@ function resizeArray<T>(arr: T[], count: number, empty: T): T[] {
   if (arr.length === count) return arr;
   if (arr.length > count) return arr.slice(0, count);
   return [...arr, ...Array.from({ length: count - arr.length }, () => ({ ...empty }))];
+}
+
+// Exact copy of PublicationDetailsForm.tsx's AuthorFields, Author renamed to
+// Inventor throughout - same Nature of Inventor (Internal/External) split,
+// same Faculty ID lookup for Internal, same two-step Affiliation (a college
+// elsewhere in this project, or "Others" free text + country) for External.
+function InventorFields({
+  inventor, update, colleges, ownCollegeId,
+}: {
+  inventor: IprInventor;
+  update: (patch: Partial<IprInventor>) => void;
+  colleges: CollegeOption[];
+  ownCollegeId: string;
+}) {
+  const [lookup, setLookup] = useState<"idle" | "loading" | "found" | "not-found">(
+    inventor.isInternal && inventor.authorType === "FACULTY" && inventor.name ? "found" : "idle"
+  );
+  const otherColleges = colleges.filter((c) => c.id !== ownCollegeId);
+  const scope: "PROJECT" | "OTHERS" = inventor.affiliationCollegeId === OTHERS_COLLEGE_ID ? "OTHERS" : "PROJECT";
+
+  async function lookupFacultyId(facultyId: string) {
+    update({ facultyId, name: "" });
+    if (!facultyId.trim()) { setLookup("idle"); return; }
+    setLookup("loading");
+    try {
+      const res = await fetch(`/api/college/faculty-lookup?employeeId=${encodeURIComponent(facultyId.trim())}`);
+      if (!res.ok) { setLookup("not-found"); return; }
+      const data = await res.json() as { name?: string };
+      update({ facultyId, name: data.name ?? "" });
+      setLookup("found");
+    } catch {
+      setLookup("not-found");
+    }
+  }
+
+  function onAffiliationScopeChange(next: "PROJECT" | "OTHERS") {
+    if (next === "OTHERS") {
+      update({ affiliationCollegeId: OTHERS_COLLEGE_ID, affiliationCollegeName: "" });
+    } else {
+      update({ affiliationCollegeId: undefined, affiliationCollegeName: "", affiliationCountry: undefined });
+    }
+  }
+
+  return (
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <div className="space-y-1.5">
+        <Label className="text-xs">Inventor Position</Label>
+        <Select value={inventor.category} onValueChange={(v) => update({ category: v as AuthorCategory })}>
+          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {(Object.keys(INVENTOR_CATEGORY_LABELS) as AuthorCategory[]).map((c) => <SelectItem key={c} value={c}>{INVENTOR_CATEGORY_LABELS[c]}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="space-y-1.5">
+        <Label className="text-xs">Nature of Inventor</Label>
+        <Select
+          value={inventor.isInternal ? "INTERNAL" : "EXTERNAL"}
+          onValueChange={(v) => update(
+            v === "INTERNAL"
+              ? { isInternal: true, name: "", facultyId: "", studentRegistrationNumber: "", authorType: "FACULTY", affiliationCollegeId: undefined, affiliationCollegeName: "", affiliationCountry: undefined }
+              : { isInternal: false, name: "", facultyId: undefined, studentRegistrationNumber: undefined }
+          )}
+        >
+          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="INTERNAL">Internal Inventor</SelectItem>
+            <SelectItem value="EXTERNAL">External Inventor</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {inventor.isInternal ? (
+        <>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Inventor Type</Label>
+            <Select
+              value={inventor.authorType}
+              onValueChange={(v) => update({ authorType: v as AuthorRoleType, name: "", facultyId: "", studentRegistrationNumber: "" })}
+            >
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {(Object.keys(INVENTOR_TYPE_LABELS) as AuthorRoleType[]).map((t) => <SelectItem key={t} value={t}>{INVENTOR_TYPE_LABELS[t]}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          {inventor.authorType === "FACULTY" ? (
+            <div className="space-y-1.5">
+              <Label className="text-xs">Faculty ID</Label>
+              <Input value={inventor.facultyId ?? ""} onChange={(e) => void lookupFacultyId(e.target.value)} placeholder="Employee ID" />
+              {lookup === "loading" && <p className="text-xs text-muted-foreground">Looking up…</p>}
+              {lookup === "found" && inventor.name && <p className="text-xs text-green-700">{inventor.name}</p>}
+              {lookup === "not-found" && <p className="text-xs text-destructive">No faculty member found with that ID</p>}
+            </div>
+          ) : (
+            <>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Name of the Inventor</Label>
+                <Input value={inventor.name} onChange={(e) => update({ name: e.target.value })} placeholder="Student name" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Student Registration Number</Label>
+                <Input value={inventor.studentRegistrationNumber ?? ""} onChange={(e) => update({ studentRegistrationNumber: e.target.value })} />
+              </div>
+            </>
+          )}
+        </>
+      ) : (
+        <>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Name of the Inventor</Label>
+            <Input value={inventor.name} onChange={(e) => update({ name: e.target.value })} placeholder="Inventor name" />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Affiliation</Label>
+            <Select value={scope} onValueChange={(v) => onAffiliationScopeChange(v as "PROJECT" | "OTHERS")}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="PROJECT">SVES</SelectItem>
+                <SelectItem value="OTHERS">Others</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          {scope === "PROJECT" ? (
+            <div className="space-y-1.5">
+              <Label className="text-xs">College</Label>
+              <Select
+                value={inventor.affiliationCollegeId ?? ""}
+                onValueChange={(id) => update({ affiliationCollegeId: id, affiliationCollegeName: otherColleges.find((c) => c.id === id)?.name ?? "" })}
+              >
+                <SelectTrigger><SelectValue placeholder="Select college" /></SelectTrigger>
+                <SelectContent>
+                  {otherColleges.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : (
+            <>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Affiliation Name</Label>
+                <Input value={inventor.affiliationCollegeName} onChange={(e) => update({ affiliationCollegeName: e.target.value })} placeholder="College/university name" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Country</Label>
+                <Input value={inventor.affiliationCountry ?? ""} onChange={(e) => update({ affiliationCountry: e.target.value })} placeholder="Country" />
+              </div>
+            </>
+          )}
+        </>
+      )}
+    </div>
+  );
 }
 
 function DiscoveryInnovationRow({
@@ -224,6 +400,8 @@ function RecordFormFields({
   const [form, setForm] = useState<RecordFormState>(() => initialFormState(editingRecord));
   const [saving, setSaving] = useState(false);
   const editingId = editingRecord?.id ?? null;
+  const colleges = useCollegeOptions();
+  const ownCollegeId = useAuthStore((s) => s.user?.collegeId ?? "");
 
   function set<K extends keyof RecordFormState>(key: K, value: RecordFormState[K]) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -255,9 +433,23 @@ function RecordFormFields({
     });
   }
 
+  // Every field is compulsory except Commercialization (isCommercialized and
+  // everything under it) - mirrors the server-side check in
+  // validateDiscoveryInnovationBody (src/lib/research/validateDiscoveryInnovation.ts).
+  const applicantsValid = form.applicants.length > 0 && form.applicants.every((a) => a.name.trim().length > 0);
+  const inventorsValid = form.inventors.length > 0 && form.inventors.every((inv) => {
+    if (!inv.name.trim()) return false;
+    if (inv.isInternal) return inv.authorType === "FACULTY" ? !!inv.facultyId?.trim() : !!inv.studentRegistrationNumber?.trim();
+    return !!inv.affiliationCollegeName.trim();
+  });
   const isValid =
     !!form.iprType && !!form.iprStatus && form.applicationNumber.trim().length > 1 &&
-    form.title.trim().length > 1 && !!form.dateOfFiling;
+    form.title.trim().length > 1 && !!form.dateOfFiling && !!form.datePublished &&
+    (form.iprStatus !== "GRANTED" || !!form.dateGranted) &&
+    !!form.isStudentPatent && form.sdgGoals.length > 0 &&
+    !!form.applicantsCount && applicantsValid &&
+    !!form.inventorsCount && inventorsValid &&
+    !!form.publishedProofUrl && (form.iprStatus !== "GRANTED" || !!form.grantedProofUrl);
 
   async function handleSubmit() {
     if (!isValid) return;
@@ -411,11 +603,8 @@ function RecordFormFields({
             </Select>
           </div>
           {form.inventors.map((inv, i) => (
-            <div key={i} className="grid grid-cols-1 gap-3 sm:grid-cols-2 rounded-md bg-muted/30 p-3">
-              <TextInput label={`Name of Inventor ${i + 1}`} value={inv.name} onChange={(v) => updateInventor(i, { name: v })} />
-              <TextInput label="Affiliation" value={inv.affiliation} onChange={(v) => updateInventor(i, { affiliation: v })} />
-              <TextInput label="State" value={inv.state} onChange={(v) => updateInventor(i, { state: v })} />
-              <TextInput label="Country" value={inv.country} onChange={(v) => updateInventor(i, { country: v })} />
+            <div key={i} className="rounded-md bg-muted/30 p-3">
+              <InventorFields inventor={inv} update={(patch) => updateInventor(i, patch)} colleges={colleges} ownCollegeId={ownCollegeId} />
             </div>
           ))}
         </div>
