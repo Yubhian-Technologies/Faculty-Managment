@@ -92,10 +92,20 @@ export function SectionTitle({ children }: { children: React.ReactNode }) {
   return <div className="pt-2 pb-1 border-t"><p className="text-sm font-medium text-muted-foreground">{children}</p></div>;
 }
 
-export function NumInput({ label, value, onChange }: { label: string; value: number | undefined; onChange: (v: number) => void }) {
+/**
+ * The required marker used by the field primitives below. Opt-in per field:
+ * a caller that passes nothing renders exactly as before, so adding this
+ * changed no existing form.
+ */
+function RequiredMark({ required }: { required?: boolean }) {
+  if (!required) return null;
+  return <span className="text-destructive"> *</span>;
+}
+
+export function NumInput({ label, value, onChange, required }: { label: string; value: number | undefined; onChange: (v: number) => void; required?: boolean }) {
   return (
     <div className="space-y-2">
-      <Label>{label}</Label>
+      <Label>{label}<RequiredMark required={required} /></Label>
       {/* Empty rather than 0 when unset, so a field nobody has filled in reads
           as blank instead of asserting a value of zero. The leading-zero
           cleanup when typing over an actual 0 lives in Input itself. */}
@@ -105,11 +115,11 @@ export function NumInput({ label, value, onChange }: { label: string; value: num
 }
 
 export function DateInput({
-  label, value, onChange, min, max,
-}: { label: string; value: string | undefined; onChange: (v: string) => void; min?: string; max?: string }) {
+  label, value, onChange, min, max, required,
+}: { label: string; value: string | undefined; onChange: (v: string) => void; min?: string; max?: string; required?: boolean }) {
   return (
     <div className="space-y-2">
-      <Label>{label}</Label>
+      <Label>{label}<RequiredMark required={required} /></Label>
       {/* min/max only steer the native picker's own UI - a typed/pasted value
           outside that range still reaches onChange, so a caller enforcing an
           order (e.g. To Date >= From Date) must still re-check it there. */}
@@ -118,20 +128,20 @@ export function DateInput({
   );
 }
 
-export function MonthInput({ label, value, onChange }: { label: string; value: string | undefined; onChange: (v: string) => void }) {
+export function MonthInput({ label, value, onChange, required }: { label: string; value: string | undefined; onChange: (v: string) => void; required?: boolean }) {
   return (
     <div className="space-y-2">
-      <Label>{label}</Label>
+      <Label>{label}<RequiredMark required={required} /></Label>
       {/* "YYYY-MM" - the native month picker, no day component. */}
       <Input type="month" value={value ?? ""} onChange={(e) => onChange(e.target.value)} />
     </div>
   );
 }
 
-export function TextInput({ label, value, onChange, placeholder }: { label: string; value: string | undefined; onChange: (v: string) => void; placeholder?: string }) {
+export function TextInput({ label, value, onChange, placeholder, required }: { label: string; value: string | undefined; onChange: (v: string) => void; placeholder?: string; required?: boolean }) {
   return (
     <div className="space-y-2">
-      <Label>{label}</Label>
+      <Label>{label}<RequiredMark required={required} /></Label>
       <Input value={value ?? ""} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} />
     </div>
   );
