@@ -66,6 +66,10 @@ interface PreviousInstitutionLike {
   toDate?: string;
   fromYear?: number;
   toYear?: number;
+  // Not read for any date math below - carried through purely so
+  // findOverlappingExperience's callers can describe which entry a warning
+  // is about without a separate lookup.
+  institutionName?: string;
 }
 
 // Academic (previousInstitutions), Industry, and Research Experience are 3
@@ -95,6 +99,45 @@ function rowDates(r: PreviousInstitutionLike): { fromDate?: string; toDate?: str
     fromDate: r.fromDate ?? (r.fromYear ? `${r.fromYear}-01-01` : undefined),
     toDate: r.toDate ?? (r.toYear ? `${r.toYear}-01-01` : undefined),
   };
+}
+
+export interface ExperienceOverlap {
+  entry: PreviousInstitutionLike;
+  fromDate: string;
+  toDate: string;
+}
+
+// Whether `current`'s date range overlaps any OTHER row's range (inclusive
+// on both ends) - `current` itself, found by reference inside `rows`, is
+// excluded so a row never "overlaps itself". Used to warn when a Previous
+// Experience row (Academic/Industry/Research Experience - see
+// allPreviousExperienceEntries) is set to a period that overlaps another
+// one, since these three tabs roll up into one combined Total Years of
+// Experience that would otherwise double-count the overlapping days.
+// Rows with an incomplete range (missing either end) are skipped on both
+// sides - nothing to compare yet.
+export function findOverlappingExperience(
+  rows: PreviousInstitutionLike[],
+  current: PreviousInstitutionLike
+): ExperienceOverlap | undefined {
+  const { fromDate: curFrom, toDate: curTo } = rowDates(current);
+  if (!curFrom || !curTo) return undefined;
+  const curFromMs = new Date(curFrom).getTime();
+  const curToMs = new Date(curTo).getTime();
+  if (Number.isNaN(curFromMs) || Number.isNaN(curToMs)) return undefined;
+
+  for (const entry of rows) {
+    if (entry === current) continue;
+    const { fromDate, toDate } = rowDates(entry);
+    if (!fromDate || !toDate) continue;
+    const fromMs = new Date(fromDate).getTime();
+    const toMs = new Date(toDate).getTime();
+    if (Number.isNaN(fromMs) || Number.isNaN(toMs)) continue;
+    if (curFromMs <= toMs && fromMs <= curToMs) {
+      return { entry, fromDate, toDate };
+    }
+  }
+  return undefined;
 }
 
 // Sum of every Previous Experience row's exact day count.

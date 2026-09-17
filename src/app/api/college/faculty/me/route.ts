@@ -83,6 +83,15 @@ export async function PATCH(request: Request) {
       name: string;
       email: string;
       phone: string;
+      // Identity & Employment fields a Faculty member may edit about
+      // themselves - deliberately excludes employeeId, collegeEmail,
+      // designation, department, joiningDate, aicteEligible, aicteFacultyId
+      // and employmentType, which stay HR/HOD-controlled (see PATCH
+      // /api/college/faculty/[id], HOD/Principal/VP only).
+      apaarFacultyId: string;
+      qualification: string;
+      specialization: string;
+      additionalPhoneNumbers: { label?: string; number: string }[];
       academicProfile: Record<string, unknown>;
       profilePhotoUrl: string;
     }> & PersonalDetailsInput;
@@ -115,6 +124,12 @@ export async function PATCH(request: Request) {
     if (body.name?.trim()) facultyUpdates.name = body.name.trim();
     if (body.email?.trim()) facultyUpdates.email = body.email.trim();
     if (body.phone !== undefined) facultyUpdates.phone = body.phone;
+    if (body.apaarFacultyId !== undefined) facultyUpdates.apaarFacultyId = body.apaarFacultyId;
+    if (body.qualification?.trim()) facultyUpdates.qualification = body.qualification.trim();
+    if (body.specialization !== undefined) facultyUpdates.specialization = body.specialization;
+    if (body.additionalPhoneNumbers !== undefined) {
+      facultyUpdates.additionalPhoneNumbers = body.additionalPhoneNumbers.filter((p) => p.number?.trim());
+    }
     if (body.profilePhotoUrl !== undefined) facultyUpdates.profilePhotoUrl = body.profilePhotoUrl;
     if (body.academicProfile !== undefined) {
       const ap = { ...body.academicProfile };

@@ -71,6 +71,7 @@ export function QualificationModule({ profile, collegeType }: { profile: Partial
     return (
       <Section number={1} title="General & Academic Profile">
         <Field label="Highest Qualification" value={p.highestQualification} />
+        <Field label="Research Areas/Interests" value={(p.researchAreas ?? []).join(", ")} />
         <QualificationsView items={p.schoolQualifications} />
       </Section>
     );
@@ -78,6 +79,7 @@ export function QualificationModule({ profile, collegeType }: { profile: Partial
   return (
     <Section number={1} title="General & Academic Profile">
       <Field label="Highest Qualification" value={p.highestQualification} />
+      <Field label="Research Areas/Interests" value={(p.researchAreas ?? []).join(", ")} />
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         <Field label="NET/SLET/SET/GATE/Others" value={p.qualifyingExamQualified === "YES" ? "Yes" : p.qualifyingExamQualified === "NO" ? "No" : undefined} />
         {p.qualifyingExamQualified === "YES" && (
@@ -140,10 +142,10 @@ export function ExperienceModule({
   const teaching = p.teachingAssignment;
   const allExperienceEntries = allPreviousExperienceEntries(p);
   const hasExperienceData = !!(joiningDate || allExperienceEntries.length > 0);
-  const experienceGroups: { label: string; institutionLabel: string; entries: PreviousInstitution[] }[] = [
-    { label: "Academic Experience", institutionLabel: "Institution Name", entries: p.previousInstitutions ?? [] },
-    { label: "Industry Experience", institutionLabel: "Name of the Industry", entries: p.industryExperienceEntries ?? [] },
-    { label: "Research Experience", institutionLabel: "Research Organization Name", entries: p.researchExperienceEntries ?? [] },
+  const experienceGroups: { label: string; institutionLabel: string; entries: PreviousInstitution[]; roleLabel: string; role: string | undefined }[] = [
+    { label: "Academic Experience", institutionLabel: "Institution Name", entries: p.previousInstitutions ?? [], roleLabel: "Teaching Roles/Responsibilities", role: teaching?.primaryTeachingRole },
+    { label: "Industry Experience", institutionLabel: "Name of the Industry", entries: p.industryExperienceEntries ?? [], roleLabel: "Industry Roles/Responsibilities", role: p.primaryIndustryRole },
+    { label: "Research Experience", institutionLabel: "Research Organization Name", entries: p.researchExperienceEntries ?? [], roleLabel: "Research Roles/Responsibilities", role: p.primaryResearchRole },
   ];
   return (
     <Section number={2} title="Previous Experience">
@@ -153,6 +155,7 @@ export function ExperienceModule({
       {experienceGroups.map((group) => (
         <div className="space-y-2" key={group.label}>
           <SubLabel>{group.label}</SubLabel>
+          {includeTeachingAssignment && group.role && <Field label={group.roleLabel} value={group.role} />}
           {group.entries.length === 0 ? <p className="text-xs text-muted-foreground">None recorded.</p> : (
             <div className="space-y-2">
               {group.entries.map((inst, i) => (
@@ -206,7 +209,6 @@ export function ExperienceModule({
       {includeTeachingAssignment && (
         <div className="rounded-lg border bg-muted/20 shadow-sm p-3 space-y-2">
           <SubLabel>Current Teaching Assignment</SubLabel>
-          <Field label="Primary Teaching Role" value={teaching?.primaryTeachingRole} />
           {(teaching?.courses ?? []).length === 0 ? (
             <p className="text-xs text-muted-foreground">No courses recorded.</p>
           ) : (
@@ -250,60 +252,6 @@ export function ResearchProfilesModule({ profile }: { profile: Partial<FacultyPr
   );
 }
 
-export function GrantsModule({ profile }: { profile: Partial<FacultyProfileFields> | undefined }) {
-  const p = profile ?? {};
-  const patents = p.patents;
-  return (
-    <Section number={4} title="Grants, Consultancy & IP">
-      <div className="space-y-2">
-        <SubLabel>Funded Projects</SubLabel>
-        {(p.fundedProjects ?? []).length === 0 ? <p className="text-xs text-muted-foreground">None recorded.</p> : (
-          <div className="space-y-2">
-            {p.fundedProjects?.map((proj, i) => (
-              <div key={i} className="rounded-md border bg-muted/20 shadow-sm p-2 grid grid-cols-2 sm:grid-cols-5 gap-2">
-                <Field label="Title" value={proj.title} />
-                <Field label="Funding Agency" value={proj.fundingAgency} />
-                <Field label="Grant Amount (₹L)" value={proj.grantAmountLakhs} />
-                <Field label="Year" value={proj.year} />
-                <Field label="Status" value={proj.status} />
-                <Field label="Role" value={proj.piOrCoPi === "CO_PI" ? "Co-PI" : proj.piOrCoPi} />
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-      <div className="space-y-2">
-        <SubLabel>Industry Consultancy</SubLabel>
-        {(p.consultancyProjects ?? []).length === 0 ? <p className="text-xs text-muted-foreground">None recorded.</p> : (
-          <div className="space-y-2">
-            {p.consultancyProjects?.map((proj, i) => (
-              <div key={i} className="rounded-md border bg-muted/20 shadow-sm p-2 grid grid-cols-2 sm:grid-cols-5 gap-2">
-                <Field label="Title" value={proj.title} />
-                <Field label="Client / Agency" value={proj.clientOrAgency} />
-                <Field label="Revenue (₹L)" value={proj.revenueLakhs} />
-                <Field label="Year" value={proj.year} />
-                <Field label="Status" value={proj.status} />
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-      <div className="rounded-lg border bg-muted/20 shadow-sm p-3 space-y-2">
-        <SubLabel>Patents</SubLabel>
-        <div className="grid grid-cols-3 gap-3">
-          <Field label="Indian - Filed" value={patents?.indianFiled} />
-          <Field label="Indian - Published" value={patents?.indianPublished} />
-          <Field label="Indian - Granted" value={patents?.indianGranted} />
-          <Field label="Intl - Filed" value={patents?.internationalFiled} />
-          <Field label="Intl - Published" value={patents?.internationalPublished} />
-          <Field label="Intl - Granted" value={patents?.internationalGranted} />
-        </div>
-        <Field label="Details" value={patents?.details} />
-      </div>
-    </Section>
-  );
-}
-
 export function MentorshipModule({
   profile, ownerName,
 }: {
@@ -341,9 +289,6 @@ export function MentorshipModule({
               <Field label="To" value={formatInstitutionDate(r.toDate, r.toYear) ?? "Ongoing"} />
             </div>
           ))
-        )}
-        {p.administrativeResponsibilities && (
-          <p className="text-xs text-muted-foreground italic">Legacy note: {p.administrativeResponsibilities}</p>
         )}
       </div>
 
@@ -400,9 +345,6 @@ export function MentorshipModule({
             </div>
           ))
         )}
-        {p.certificationsAndFdps && (
-          <p className="text-xs text-muted-foreground italic">Legacy note: {p.certificationsAndFdps}</p>
-        )}
       </div>
 
       <div className="space-y-2">
@@ -425,9 +367,6 @@ export function MentorshipModule({
             </div>
           ))
         )}
-        {p.professionalBodyMemberships && (
-          <p className="text-xs text-muted-foreground italic">Legacy note: {p.professionalBodyMemberships}</p>
-        )}
       </div>
 
       <div className="space-y-2">
@@ -436,9 +375,9 @@ export function MentorshipModule({
           p.awardEntries?.map((a, i) => (
             <div key={i} className="rounded-md border bg-muted/20 shadow-sm p-2 grid grid-cols-2 sm:grid-cols-4 gap-2">
               <Field label="Category" value={a.category === "OTHER" ? (a.otherCategory || "Other") : AWARD_CATEGORY_LABELS[a.category]} />
-              <Field label="Title of Awarded" value={a.title} />
+              <Field label="Title of Award" value={a.title} />
               <Field label="Awarding Agency/Body" value={a.awardingBody} />
-              <Field label="Date of Awarded" value={a.dateAwarded ?? (a.year ? String(a.year) : undefined)} />
+              <Field label="Date of Award" value={a.dateAwarded ?? (a.year ? String(a.year) : undefined)} />
               <Field label="State / National / International" value={a.level ? AWARD_LEVEL_LABELS[a.level] : undefined} />
               <Field label="Other Details" value={a.otherDetails} />
               {a.certificateUrl && (
@@ -446,9 +385,6 @@ export function MentorshipModule({
               )}
             </div>
           ))
-        )}
-        {p.notableAwards && (
-          <p className="text-xs text-muted-foreground italic">Legacy note: {p.notableAwards}</p>
         )}
       </div>
     </Section>
@@ -495,7 +431,6 @@ export function ProfileFieldsView({ profile, includeTeachingAssignment = true, h
       <ExperienceModule profile={profile} includeTeachingAssignment={includeTeachingAssignment} />
       <ResearchModule profile={profile} publications={publications} />
       <ResearchProfilesModule profile={profile} />
-      <GrantsModule profile={profile} />
       <MentorshipModule profile={profile} />
       {!hideFinancialModule && <FinancialModule profile={profile} />}
       <OthersModule profile={profile} />

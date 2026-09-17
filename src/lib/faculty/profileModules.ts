@@ -1,5 +1,5 @@
 import {
-  IdCard, GraduationCap, Briefcase, FlaskConical, HandCoins,
+  IdCard, GraduationCap, Briefcase, FlaskConical,
   Users, Wallet, FileQuestion, BookOpen,
   type LucideIcon,
 } from "lucide-react";
@@ -10,7 +10,7 @@ import {
 // page instead of scrolling one long form. Keys double as the URL segment
 // (/hod/faculty/[id]/[module]).
 export type ProfileModuleKey =
-  | "personal" | "qualification" | "experience" | "research" | "grants"
+  | "personal" | "qualification" | "experience" | "research"
   | "mentorship" | "financial" | "others" | "teaching-load";
 
 export interface ProfileModuleDef {
@@ -24,7 +24,6 @@ export const PROFILE_MODULES: Record<ProfileModuleKey, ProfileModuleDef> = {
   qualification: { key: "qualification", label: "Academic Qualification", icon: GraduationCap },
   experience: { key: "experience", label: "Professional Experience", icon: Briefcase },
   research: { key: "research", label: "Research & Innovation", icon: FlaskConical },
-  grants: { key: "grants", label: "Grants, Consultancy & IP", icon: HandCoins },
   mentorship: { key: "mentorship", label: "Professional Development", icon: Users },
   financial: { key: "financial", label: "Financial Standing", icon: Wallet },
   others: { key: "others", label: "Others", icon: FileQuestion },

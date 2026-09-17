@@ -7,7 +7,11 @@ import { createFirebaseUser } from "@/lib/firebase/authRest";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
 import { getHodDepartmentScope, getDepartmentTreeNames, canHodEditDepartment, facultyManageableDepartmentNames } from "@/lib/departments/scope";
 import { LEGACY_TECHNICAL_DESIGNATIONS } from "@/lib/designations/config";
-import type { Designation, FacultyStatus } from "@/types";
+import type { Designation, FacultyStatus, EmployeeCategory } from "@/types";
+
+// Exactly these 4 values are accepted anywhere Employee Category is set -
+// see EmployeeCategory's own doc-comment in types/core.ts.
+const EMPLOYEE_CATEGORY_VALUES: EmployeeCategory[] = ["REGULAR", "VISITING", "CONTRACT", "PART_TIME"];
 
 export async function GET(request: Request) {
   try {
@@ -143,12 +147,14 @@ export async function POST(request: Request) {
       phone?: string;
       additionalPhoneNumbers?: { label?: string; number: string }[];
       designation: Designation;
+      employeeCategory: EmployeeCategory;
       qualification: string;
       specialization?: string;
       experienceYears: number;
       joiningDate: string;
       dateOfJoiningDepartment?: string;
       aicteEligible?: boolean;
+      aicteFacultyId?: string;
       department?: string;
       academicProfile?: Record<string, unknown>;
       technicalProfile?: Record<string, unknown>;
@@ -161,6 +167,7 @@ export async function POST(request: Request) {
       collegeEmail,
       password,
       designation,
+      employeeCategory,
       qualification,
       experienceYears,
       joiningDate,
@@ -169,6 +176,11 @@ export async function POST(request: Request) {
 
     if (!employeeId || !collegeEmail || !password || !designation || !qualification || !joiningDate) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    }
+    // Exactly these 4 values are accepted anywhere Employee Category is set -
+    // enforced here, not just in the Add Faculty dropdown.
+    if (!EMPLOYEE_CATEGORY_VALUES.includes(employeeCategory)) {
+      return NextResponse.json({ error: "Employee Category must be one of Regular, Visiting, Contract, or Part Time" }, { status: 400 });
     }
     // Matches the mandatory field set the bulk-import template and Add
     // Faculty wizard's Personal Details step now both enforce. Name (as per
@@ -298,12 +310,14 @@ export async function POST(request: Request) {
         return numbers.length > 0 ? { additionalPhoneNumbers: numbers } : {};
       })()),
       designation,
+      employeeCategory,
       qualification,
       specialization: body.specialization ?? "",
       experienceYears: Number(experienceYears),
       joiningDate: new Date(joiningDate),
       ...(body.dateOfJoiningDepartment ? { dateOfJoiningDepartment: new Date(body.dateOfJoiningDepartment) } : {}),
       ...(body.aicteEligible !== undefined ? { aicteEligible: body.aicteEligible } : {}),
+      ...(body.aicteFacultyId?.trim() ? { aicteFacultyId: body.aicteFacultyId.trim() } : {}),
       status: "ACTIVE" as FacultyStatus,
       userUid: uid,
       ...(body.academicProfile ? { academicProfile: body.academicProfile } : {}),
