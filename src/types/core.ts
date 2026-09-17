@@ -889,10 +889,25 @@ export const DESIGNATION_LABELS: Record<string, string> = {
   OTHER: "Other",
 };
 
-// Used by Salary Structures/Budget auto-pricing and the hiring pipeline's
-// faculty provisioning step - unrelated to Designation and no longer set via
-// Add/Edit Faculty or Supporting Staff (that admin-curated "Employee
-// Category" catalog was retired).
+// FacultyMember.employeeCategory - set on Add Faculty's "Identity &
+// Employment" step and by the hiring pipeline's provisioning step, editable
+// afterward only by HOD/Principal/VP (see FacultyMember.employeeCategory's
+// own doc-comment). Exactly these 4 values are accepted anywhere this is set
+// - no catalog, no free text.
+export type EmployeeCategory = "REGULAR" | "VISITING" | "CONTRACT" | "PART_TIME";
+export const EMPLOYEE_CATEGORY_LABELS: Record<EmployeeCategory, string> = {
+  REGULAR: "Regular",
+  VISITING: "Visiting",
+  CONTRACT: "Contract",
+  PART_TIME: "Part Time",
+};
+
+// Legacy field/type this replaced (see FacultyMember.employmentType) - Salary
+// Structures/Budget (src/lib/budget/applySalaryStructurePricing.ts,
+// BudgetItemsTable.tsx) still store/select this exact shape for their own
+// records, independent of the faculty-side rename above; PERMANENT there
+// maps to REGULAR on the faculty side (the other 3 values are spelled the
+// same in both).
 export type EmploymentType = string;
 
 export const EMPLOYMENT_TYPE_LABELS: Record<string, string> = {
@@ -947,14 +962,20 @@ export interface FacultyMember {
   experienceYears: number;
   joiningDate: Timestamp; // Date of Joining Institution
   dateOfJoiningDepartment?: Timestamp; // Date of Joining Department (NBA/AICTE — may differ from institution)
-  // Optional - no longer collected via Add/Edit Faculty or CSV import (the
-  // college's own Employee Category catalog was retired; only Designation
-  // remains). Still written by the hiring pipeline's provisioning step
-  // (src/lib/firestore/facultyProvisioning.ts) and read by Salary
-  // Structures/Budget auto-pricing (src/lib/budget/applySalaryStructurePricing.ts),
-  // both independent of the retired catalog.
+  // Set on the "Identity & Employment" step of Add Faculty and by the hiring
+  // pipeline's provisioning step (src/lib/firestore/facultyProvisioning.ts);
+  // editable afterward only by HOD/Principal/VP via PATCH /api/college/faculty/[id].
+  // Also read by Salary Structures/Budget auto-pricing
+  // (src/lib/budget/applySalaryStructurePricing.ts) - see EmployeeCategory's
+  // own doc-comment for how that legacy-keyed feature maps to this.
+  employeeCategory?: EmployeeCategory;
+  // Legacy field name/values (PERMANENT/CONTRACT/VISITING/PART_TIME) - a
+  // record saved before this rename still has this instead; kept only for
+  // read-time fallback display (see facultyDisplayEmployeeCategory-style
+  // helpers at each read site), never written to any more.
   employmentType?: EmploymentType;
   aicteEligible?: boolean; // AICTE Eligibility
+  aicteFacultyId?: string; // Required whenever aicteEligible is true
   status: FacultyStatus;
   userUid?: string; // links to users/{uid} if they have a system login
   profilePhotoUrl?: string;
@@ -1014,12 +1035,12 @@ export interface FacultyMember {
   heightInches?: number;
   weightKg?: number;
   pfNumber?: string; // Provident Fund number
-  hasPHD?: boolean;
-  internalExperience?: number; // years of experience within the institution
-  externalExperience?: number; // years of experience outside the institution
-  inCampusExperience?: number; // years of on-campus experience
-  industryExperience?: number; // years of industry experience
-  researchExperience?: number; // years of research experience
+  // Internal Experience (time served since Date of Joining) and External
+  // Experience (Academic + Industry + Research Experience entries combined,
+  // see academicProfile below) are NOT stored fields - both are computed
+  // live from joiningDate/academicProfile wherever shown (see
+  // totalYearsOfExperience/allPreviousExperienceEntries in
+  // src/lib/faculty/experienceCalc.ts), so they can never go stale.
   academicProfile?: FacultyProfileFields; // Modules 1-5 extended profile
 
   joiningLetterUrl?: string; // Firebase Storage URL for the signed joining letter (uploaded by HOD)
@@ -1974,33 +1995,6 @@ export interface InnovationRequest {
   updatedAt?: Timestamp;
 }
 
-export interface FundedProject {
-  title: string;
-  fundingAgency: string;
-  grantAmountLakhs: number;
-  year: number;
-  status: string;
-  piOrCoPi?: "PI" | "CO_PI";
-}
-
-export interface ConsultancyProject {
-  title: string;
-  clientOrAgency: string;
-  revenueLakhs: number;
-  year: number;
-  status: string;
-}
-
-export interface PatentSummary {
-  indianFiled: number;
-  indianPublished: number;
-  indianGranted: number;
-  internationalFiled: number;
-  internationalPublished: number;
-  internationalGranted: number;
-  details?: string;
-}
-
 export interface LabEstablished {
   facilityDetails: string;
   outcomes: string;
@@ -2020,7 +2014,11 @@ export type TrainingEntryType =
   | "MOOC"
   | "CERTIFICATION"
   | "SKILL_DEVELOPMENT"
-  | "ADMINISTRATIVE"
+  | "SEMINAR"
+  | "WEBINAR"
+  | "GUEST_LECTURE"
+  | "ALUMNI_TALK"
+  | "PLACEMENT_TRAINING"
   | "ERP"
   | "OFFICE_AUTOMATION"
   | "OTHER";
@@ -2030,7 +2028,11 @@ export const TRAINING_ENTRY_TYPE_LABELS: Record<TrainingEntryType, string> = {
   MOOC: "NPTEL/MOOCs",
   CERTIFICATION: "Certification",
   SKILL_DEVELOPMENT: "Skill Development",
-  ADMINISTRATIVE: "Administrative Training",
+  SEMINAR: "Seminar",
+  WEBINAR: "Webinar",
+  GUEST_LECTURE: "Guest Lecture",
+  ALUMNI_TALK: "Alumni Talks",
+  PLACEMENT_TRAINING: "Placement Training",
   ERP: "ERP Training",
   OFFICE_AUTOMATION: "Office Automation Training",
   OTHER: "Other",
@@ -2259,6 +2261,7 @@ export interface FacultyProfileFields {
   // UG/PG/PhD and the PhD-specific fields below don't apply to school teachers
   // (see College.type and src/lib/designations/config.ts).
   highestQualification: string;
+  researchAreas?: string[]; // mandatory (at least one) in the Add/Edit form - see QualificationFields
   highSchoolDetails?: DegreeDetail; // 10th
   intermediateDetails?: DegreeDetail; // 12th
   ugDetails?: DegreeDetail;
@@ -2290,7 +2293,13 @@ export interface FacultyProfileFields {
   schoolQualifications?: StaffQualification[];
 
   // Previous Institutions Worked / Current Teaching Assignment
-  teachingAssignment?: TeachingAssignmentSummary; // omitted for PRINCIPAL / VICE_PRINCIPAL
+  teachingAssignment?: TeachingAssignmentSummary; // omitted for PRINCIPAL / VICE_PRINCIPAL - primaryTeachingRole here is the Academic Experience tab's role box specifically
+  // Industry/Research Experience tabs' own role boxes - kept as separate
+  // top-level fields (rather than folded into teachingAssignment, which is
+  // Academic-tab-specific) so filling one tab's "Roles/Responsibilities" box
+  // no longer silently overwrites what was typed on another tab.
+  primaryIndustryRole?: string;
+  primaryResearchRole?: string;
   previousInstitutions: PreviousInstitution[]; // Academic Experience tab - prior institutions worked at, before this one
   // Industry/Research Experience tabs - same shape/fields as previousInstitutions
   // (institutionName/designation relabeled per tab in the UI only - see
@@ -2329,25 +2338,10 @@ export interface FacultyProfileFields {
   citationsExcludingSelf?: number;
   citationsHIndexExcludingSelf?: number;
 
-  // Module 4 — Grants, Consultancy & IP
-  fundedProjects: FundedProject[];
-  consultancyProjects: ConsultancyProject[];
-  patents: PatentSummary;
-
   // Module 5 — Mentorship & Institutional Value
-  phdScholarsPursuing?: { count: number; universities: string };
-  phdScholarsAwarded?: { count: number; universities: string };
-  nationalExposure?: string;
-  internationalExposure?: string;
   labsEstablished: LabEstablished[];
-  // Legacy free-text fields — kept for backward-compat display of pre-existing data only.
-  // New entries go into the structured lists below instead (trainingEntries etc.).
-  administrativeResponsibilities?: string;
-  certificationsAndFdps?: string;
-  professionalBodyMemberships?: string;
   authoredBooks: AuthoredBook[];
-  notableAwards?: string;
-  // Structured NBA/AICTE replacements for the 4 free-text fields above.
+  // Structured NBA/AICTE replacements for the 4 legacy free-text fields this module used to carry.
   trainingEntries: TrainingEntry[];
   professionalMemberships: ProfessionalMembership[];
   adminResponsibilityEntries: AdminResponsibilityEntry[];

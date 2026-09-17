@@ -16,7 +16,7 @@ import { HIGHEST_QUALIFICATION_OPTIONS } from "@/lib/import/fieldConstraints";
 import { TeachingAssignmentsEditor, type StagedTeachingRow } from "@/components/faculty/TeachingAssignmentsEditor";
 import { PersonalDetailsFields, getMissingRequiredPersonalFields, FACULTY_REQUIRED_PERSONAL_FIELDS, type PersonalDetailsValue } from "@/components/shared/PersonalDetailsFields";
 import {
-  QualificationFields, ExperienceFields, ResearchFields, GrantsFields,
+  QualificationFields, ExperienceFields, ResearchFields,
   MentorshipFields, FinancialFields, OthersFields,
 } from "@/components/faculty/AcademicProfileModuleFields";
 import { TextInput } from "@/components/shared/ProfileFieldPrimitives";
@@ -25,7 +25,8 @@ import { totalPreviousExperienceYears, totalYearsOfExperience, formatDuration, a
 import { PHONE_REGEX } from "@/lib/validations";
 import { AvatarUploadField } from "@/components/shared/AvatarUploadField";
 import { PROFILE_MODULES } from "@/lib/faculty/profileModules";
-import type { DesignationCatalogItem } from "@/types";
+import { EMPLOYEE_CATEGORY_LABELS } from "@/types";
+import type { DesignationCatalogItem, EmployeeCategory } from "@/types";
 import { useCollegeType } from "@/hooks/useCollegeType";
 import { useAuthStore } from "@/store/authStore";
 import { toast } from "@/hooks/useToast";
@@ -53,18 +54,19 @@ const schema = z.object({
   password: z.string().min(8, "Password must be at least 8 characters").optional().or(z.literal("")),
   phone: z.string().min(1, "Mobile No is required").regex(PHONE_REGEX, "Doesn't look like a valid phone number"),
   designation: z.string().min(1, "Designation is required"),
+  employeeCategory: z.string().min(1, "Employee Category is required"),
   qualification: z.string().min(1, "Qualification is required"),
   specialization: z.string().optional(),
   experienceYears: z.number().min(0, "Cannot be negative").optional(),
   joiningDate: z.string().min(1, "Joining date is required"),
   dateOfJoiningDepartment: z.string().optional(),
-  aicteEligible: z.boolean().optional(),
+  aicteFacultyId: z.string().optional(),
 });
 
 type FormData = z.infer<typeof schema>;
 
 type WizardStepKey =
-  | "core" | "personal" | "qualification" | "experience" | "research" | "grants"
+  | "core" | "personal" | "qualification" | "experience" | "research"
   | "mentorship" | "financial" | "others" | "teaching-load" | "review";
 
 interface WizardStep {
@@ -147,20 +149,20 @@ export default function NewFacultyPage() {
   } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: {
-      experienceYears: 0, designation: "", password: "", aicteEligible: false,
+      experienceYears: 0, designation: "", password: "",
       ...(isLinkMode ? { name: linkName } : {}),
     },
   });
   const [erroredSteps, setErroredSteps] = useState<Set<WizardStepKey>>(new Set());
 
   const designation = watch("designation");
+  const employeeCategory = watch("employeeCategory");
   const qualification = watch("qualification");
   // "Others" is a mode, not a stored value - it reveals a free-text box whose
   // contents become `qualification`. Needs its own state because once the user
   // types "MBA" the field no longer matches any option, which is
   // indistinguishable from a pre-filled value that simply isn't on the list.
   const [qualIsOther, setQualIsOther] = useState(false);
-  const aicteEligible = watch("aicteEligible");
   const name = watch("name");
   const joiningDateValue = watch("joiningDate");
 
@@ -198,7 +200,6 @@ export default function NewFacultyPage() {
     { key: "qualification", label: PROFILE_MODULES.qualification.label },
     { key: "experience", label: PROFILE_MODULES.experience.label },
     { key: "research", label: PROFILE_MODULES.research.label },
-    { key: "grants", label: PROFILE_MODULES.grants.label },
     { key: "mentorship", label: PROFILE_MODULES.mentorship.label },
     { key: "financial", label: PROFILE_MODULES.financial.label },
     { key: "teaching-load", label: PROFILE_MODULES["teaching-load"].label },
@@ -215,6 +216,7 @@ export default function NewFacultyPage() {
   const FIELD_LABELS: Record<string, string> = {
     employeeId: "Employee ID", name: "Name (as per PAN)", collegeEmail: "College Email",
     password: "Login Password", phone: "Mobile No", designation: "Designation",
+    employeeCategory: "Employee Category",
     qualification: "Highest Qualification", experienceYears: "Total Years of Experience",
     joiningDate: "Date of Joining Institution",
     legalName: "Full Name (as per SSC)",
@@ -279,6 +281,14 @@ export default function NewFacultyPage() {
       setErroredSteps(new Set<WizardStepKey>(["personal"]));
       setStepIndex(steps.findIndex((s) => s.key === "personal"));
       toast({ variant: "destructive", title: "Some required fields are missing", description: `Personal Details: ${missingPersonal.join(", ")}` });
+      return;
+    }
+    // Research Areas/Interests isn't zod-validated (academicProfile is plain
+    // React state) - checked here instead, same pattern as Personal Details above.
+    if (!academicProfile.researchAreas || academicProfile.researchAreas.length === 0) {
+      setErroredSteps(new Set<WizardStepKey>(["qualification"]));
+      setStepIndex(steps.findIndex((s) => s.key === "qualification"));
+      toast({ variant: "destructive", title: "Some required fields are missing", description: "Academic Qualification: Research Areas/Interests" });
       return;
     }
     // Full Name (as per SSC) is the primary display name - used everywhere
@@ -471,6 +481,21 @@ export default function NewFacultyPage() {
                     {errors.designation && <p className="text-sm text-destructive">{errors.designation.message}</p>}
                   </div>
                   <div className="space-y-2">
+                    <Label>Employee Category *</Label>
+                    <Select
+                      value={employeeCategory ?? ""}
+                      onValueChange={(v) => setValue("employeeCategory", v as EmployeeCategory)}
+                    >
+                      <SelectTrigger><SelectValue placeholder="Select employee category" /></SelectTrigger>
+                      <SelectContent>
+                        {Object.entries(EMPLOYEE_CATEGORY_LABELS).map(([k, label]) => (
+                          <SelectItem key={k} value={k}>{label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {errors.employeeCategory && <p className="text-sm text-destructive">{errors.employeeCategory.message}</p>}
+                  </div>
+                  <div className="space-y-2">
                     <Label>Highest Qualification *</Label>
                     <Select
                       value={qualIsOther ? OTHER_QUALIFICATION : (HIGHEST_QUALIFICATION_OPTIONS as readonly string[]).includes(qualification) ? qualification : ""}
@@ -526,13 +551,9 @@ export default function NewFacultyPage() {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox" id="aicteEligible" checked={aicteEligible ?? false}
-                    onChange={(e) => setValue("aicteEligible", e.target.checked)}
-                    className="h-4 w-4 rounded border-gray-300"
-                  />
-                  <Label htmlFor="aicteEligible" className="cursor-pointer">AICTE Eligible</Label>
+                <div className="space-y-2">
+                  <Label htmlFor="aicteFacultyId">AICTE Faculty ID</Label>
+                  <Input id="aicteFacultyId" {...register("aicteFacultyId")} placeholder="AICTE Faculty ID" />
                 </div>
 
                 <div className="pt-2 pb-1 border-t">
@@ -608,7 +629,6 @@ export default function NewFacultyPage() {
             {step.key === "qualification" && <QualificationFields value={academicProfile} onChange={setAcademicProfile} collegeType={collegeType} />}
             {step.key === "experience" && <ExperienceFields value={academicProfile} onChange={setAcademicProfile} />}
             {step.key === "research" && <ResearchFields value={academicProfile} onChange={setAcademicProfile} />}
-            {step.key === "grants" && <GrantsFields value={academicProfile} onChange={setAcademicProfile} />}
             {step.key === "mentorship" && <MentorshipFields value={academicProfile} onChange={setAcademicProfile} />}
             {step.key === "financial" && <FinancialFields value={academicProfile} onChange={setAcademicProfile} />}
             {step.key === "others" && <OthersFields value={academicProfile} onChange={setAcademicProfile} />}

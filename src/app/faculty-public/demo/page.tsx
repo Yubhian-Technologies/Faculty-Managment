@@ -75,16 +75,6 @@ const DEMO_PROFILE: FacultyPublicProfile = {
       { title: "Edge AI: Systems and Applications (Chapter 4)", publisher: "CRC Press", year: 2019 },
     ],
   },
-  projects: {
-    fundedProjects: [
-      { title: "Federated Learning for Rural Healthcare Diagnostics", fundingAgency: "DST-SERB", year: 2023, status: "Ongoing", piOrCoPi: "PI" },
-      { title: "Low-Power ML Accelerators for IoT Devices", fundingAgency: "AICTE-RPS", year: 2021, status: "Completed", piOrCoPi: "CO_PI" },
-    ],
-    consultancyProjects: [
-      { title: "Predictive Maintenance Model for Manufacturing Client", clientOrAgency: "Vishnu Industrial Solutions Pvt. Ltd.", year: 2022, status: "Completed" },
-    ],
-    patents: { indianGranted: 2, indianFiled: 3, internationalGranted: 1, internationalFiled: 1 },
-  },
   recognition: {
     awardEntries: [
       { title: "Best Teacher Award", awardingBody: "Shree Vishnu Educational Society", year: 2023 },
@@ -109,8 +99,6 @@ const DEMO_PROFILE: FacultyPublicProfile = {
       { type: "WORKSHOP", title: "Advanced GPU Computing Workshop", organizer: "NVIDIA Deep Learning Institute", year: 2022 },
       { type: "CERTIFICATION", title: "TensorFlow Advanced Techniques Specialization", organizer: "Coursera / DeepLearning.AI", year: 2021 },
     ],
-    nationalExposure: "Invited speaker at the National Conference on AI & Machine Learning (NCAIML) 2023, and technical committee member for INDICON 2022.",
-    internationalExposure: "Visiting researcher at National University of Singapore (2018) and invited panelist at IEEE International Conference on Big Data (2022, virtual).",
   },
   otherInformation: "Reviewer for IEEE Transactions on Neural Networks, ACM Computing Surveys, and Springer Machine Learning. Doctoral committee member for 4 PhD scholars currently pursuing research in federated learning and edge AI.",
 };

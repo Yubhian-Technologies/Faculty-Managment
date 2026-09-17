@@ -14,8 +14,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/useToast";
-import { EMPLOYMENT_TYPE_LABELS } from "@/types";
-import type { EmploymentType } from "@/types";
+import { EMPLOYEE_CATEGORY_LABELS } from "@/types";
+import type { EmployeeCategory } from "@/types";
 
 interface RequestFacultyAccountDialogProps {
   offerId: string;
@@ -35,14 +35,14 @@ export function RequestFacultyAccountDialog({
   onSubmitted,
 }: RequestFacultyAccountDialogProps) {
   const [officialEmail, setOfficialEmail] = useState(candidateEmail ?? "");
-  const [employmentType, setEmploymentType] = useState<EmploymentType | "">("");
+  const [employeeCategory, setEmployeeCategory] = useState<EmployeeCategory | "">("");
   const [specialization, setSpecialization] = useState("");
   const [qualification, setQualification] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   async function handleSubmit() {
-    if (!officialEmail.trim() || !employmentType) {
-      toast({ variant: "destructive", title: "Official email and employment type are required" });
+    if (!officialEmail.trim() || !employeeCategory) {
+      toast({ variant: "destructive", title: "Official email and employee category are required" });
       return;
     }
     setIsSubmitting(true);
@@ -53,7 +53,7 @@ export function RequestFacultyAccountDialog({
         body: JSON.stringify({
           offerId,
           officialEmail: officialEmail.trim(),
-          employmentType,
+          employeeCategory,
           specialization: specialization.trim() || undefined,
           qualification: qualification.trim() || undefined,
         }),
@@ -85,14 +85,14 @@ export function RequestFacultyAccountDialog({
             <Input value={officialEmail} onChange={(e) => setOfficialEmail(e.target.value)} placeholder="name@college.edu" />
           </div>
           <div className="space-y-2">
-            <Label>Employment Type *</Label>
-            <Select value={employmentType} onValueChange={(v) => setEmploymentType(v as EmploymentType)}>
+            <Label>Employee Category *</Label>
+            <Select value={employeeCategory} onValueChange={(v) => setEmployeeCategory(v as EmployeeCategory)}>
               <SelectTrigger>
-                <SelectValue placeholder="Select employment type..." />
+                <SelectValue placeholder="Select employee category..." />
               </SelectTrigger>
               <SelectContent>
-                {(Object.keys(EMPLOYMENT_TYPE_LABELS) as EmploymentType[]).map((t) => (
-                  <SelectItem key={t} value={t}>{EMPLOYMENT_TYPE_LABELS[t]}</SelectItem>
+                {(Object.keys(EMPLOYEE_CATEGORY_LABELS) as EmployeeCategory[]).map((t) => (
+                  <SelectItem key={t} value={t}>{EMPLOYEE_CATEGORY_LABELS[t]}</SelectItem>
                 ))}
               </SelectContent>
             </Select>

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
-import { UserPlus, Eye, Upload, Download, Trash2, LogIn, FileDown, UserCog } from "lucide-react";
+import { UserPlus, Eye, Upload, Trash2, LogIn, FileDown, UserCog } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Button } from "@/components/ui/button";
@@ -12,14 +12,15 @@ import { Card, CardContent } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { Avatar } from "@/components/shared/Avatar";
 import { SegmentedTabs } from "@/components/shared/SegmentedTabs";
+import { ExportFacultyDialog } from "@/components/faculty/ExportFacultyDialog";
 import { toast } from "@/hooks/useToast";
 import { useMyDepartments } from "@/hooks/useMyDepartments";
-import { exportFacultyCsv } from "@/lib/faculty/exportFacultyCsv";
 import { downloadResumePdf } from "@/lib/pdf/downloadResume";
 import { hasSupportingStaffSplit } from "@/lib/designations/config";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
+import { allPreviousExperienceEntries, totalYearsOfExperience } from "@/lib/faculty/experienceCalc";
 import { DESIGNATION_LABELS, FACULTY_STATUS_LABELS } from "@/types";
-import type { FacultyMember, Designation, FacultyStatus, TeachingAssignment, CollegeType, Department } from "@/types";
+import type { FacultyMember, Designation, FacultyStatus, CollegeType, Department } from "@/types";
 
 function fmtDate(val: unknown): string {
   if (!val) return "-";
@@ -67,7 +68,6 @@ export default function HODFacultyPage() {
 
   const [deleteTarget, setDeleteTarget] = useState<FacultyRow | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [isExporting, setIsExporting] = useState(false);
   const [downloadingResumeId, setDownloadingResumeId] = useState<string | null>(null);
   const [collegeName, setCollegeName] = useState("");
   const [collegeType, setCollegeType] = useState<CollegeType | undefined>(undefined);
@@ -246,25 +246,6 @@ export default function HODFacultyPage() {
     }
   }
 
-  async function handleExportAll() {
-    setIsExporting(true);
-    try {
-      const teachingSummaries: Record<string, string> = {};
-      try {
-        const res = await fetch("/api/college/teaching-assignments?dept=true");
-        const data = await res.json() as { assignments?: TeachingAssignment[] };
-        for (const a of data.assignments ?? []) {
-          const entry = `${a.courseName} Y${a.year}-${a.sectionName}: ${a.subjectName}`;
-          teachingSummaries[a.facultyId] = teachingSummaries[a.facultyId] ? `${teachingSummaries[a.facultyId]}; ${entry}` : entry;
-        }
-      } catch { /* export still proceeds without the teaching summary column */ }
-
-      exportFacultyCsv(faculty, teachingSummaries);
-    } finally {
-      setIsExporting(false);
-    }
-  }
-
   const STATUS_TABS = [
     { key: "", label: "All" },
     { key: "INTERVIEW_DONE", label: "Interview Done" },
@@ -310,7 +291,7 @@ export default function HODFacultyPage() {
           {(row.specialization as string) && (
             <p className="text-xs text-muted-foreground italic">{row.specialization as string}</p>
           )}
-          {(row.hasPHD as boolean) && (
+          {row.academicProfile?.phdStatus === "AWARDED" && (
             <span className="inline-flex items-center rounded-full border border-violet-200 bg-violet-50 px-1.5 py-0.5 text-[10px] font-medium text-violet-700">Ph.D</span>
           )}
         </div>
@@ -328,17 +309,23 @@ export default function HODFacultyPage() {
       key: "experienceYears",
       header: "Experience",
       hideOnMobile: true,
-      render: (row) => (
-        <div className="space-y-0.5">
-          <p className="text-sm font-medium">{fmtExp(row.experienceYears)} yrs</p>
-          {Number(row.internalExperience) > 0 && (
-            <p className="text-xs text-muted-foreground">Int: {fmtExp(row.internalExperience)} · Ext: {fmtExp(row.externalExperience)}</p>
-          )}
-          {Number(row.industryExperience) > 0 && (
-            <p className="text-xs text-muted-foreground">Industry: {fmtExp(row.industryExperience)} yrs</p>
-          )}
-        </div>
-      ),
+      render: (row) => {
+        // Internal (time served since Date of Joining) / External (Academic +
+        // Industry + Research Experience entries combined) - computed live,
+        // same as the faculty profile page (FacultyProfileHub), not read
+        // from a stored field.
+        const previousExperienceEntries = allPreviousExperienceEntries(row.academicProfile);
+        const internalYears = totalYearsOfExperience(undefined, row.joiningDate).years;
+        const externalYears = totalYearsOfExperience(previousExperienceEntries, undefined).years;
+        return (
+          <div className="space-y-0.5">
+            <p className="text-sm font-medium">{fmtExp(row.experienceYears)} yrs</p>
+            {row.joiningDate != null && (
+              <p className="text-xs text-muted-foreground">Int: {internalYears} · Ext: {externalYears}</p>
+            )}
+          </div>
+        );
+      },
     },
     {
       key: "status",
@@ -403,9 +390,7 @@ export default function HODFacultyPage() {
             <Button variant="outline" onClick={() => router.push("/hod/faculty/import")}>
               <Upload className="h-4 w-4 mr-2" />Import
             </Button>
-            <Button variant="outline" onClick={() => void handleExportAll()} loading={isExporting} disabled={isExporting || faculty.length === 0}>
-              <Download className="h-4 w-4 mr-2" />Export All Details
-            </Button>
+            <ExportFacultyDialog faculty={faculty} />
             <Button onClick={() => router.push("/hod/faculty/new")}>
               <UserPlus className="h-4 w-4 mr-2" />Add Faculty
             </Button>

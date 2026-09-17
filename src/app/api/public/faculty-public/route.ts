@@ -118,32 +118,6 @@ export async function GET(request: Request) {
             }
           : undefined,
 
-        projects: ap
-          ? {
-              fundedProjects: (ap.fundedProjects ?? []).map((p) => ({
-                title: p.title,
-                fundingAgency: p.fundingAgency,
-                year: p.year,
-                status: p.status,
-                piOrCoPi: p.piOrCoPi,
-              })),
-              consultancyProjects: (ap.consultancyProjects ?? []).map((p) => ({
-                title: p.title,
-                clientOrAgency: p.clientOrAgency,
-                year: p.year,
-                status: p.status,
-              })),
-              patents: ap.patents
-                ? {
-                    indianGranted: ap.patents.indianGranted,
-                    indianFiled: ap.patents.indianFiled,
-                    internationalGranted: ap.patents.internationalGranted,
-                    internationalFiled: ap.patents.internationalFiled,
-                  }
-                : undefined,
-            }
-          : undefined,
-
         recognition: ap
           ? {
               awardEntries: (ap.awardEntries ?? []).map((a) => ({
@@ -170,8 +144,6 @@ export async function GET(request: Request) {
                 organizer: t.organizer,
                 year: t.year,
               })),
-              nationalExposure: ap.nationalExposure,
-              internationalExposure: ap.internationalExposure,
             }
           : undefined,
 
