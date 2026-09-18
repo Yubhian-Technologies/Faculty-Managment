@@ -29,8 +29,12 @@ const TRAINING_TYPE_MAP: Record<string, TrainingEntryType> = {
   "mooc": "MOOC",
   "certification": "CERTIFICATION",
   "skill development": "SKILL_DEVELOPMENT",
-  "administrative": "ADMINISTRATIVE",
-  "administrative training": "ADMINISTRATIVE",
+  "placement training": "PLACEMENT_TRAINING",
+  // Legacy spreadsheet wording - this type was renamed from "Administrative
+  // Training" to "Placement Training" (see types/core.ts), but an older
+  // sheet may still say the old name.
+  "administrative": "PLACEMENT_TRAINING",
+  "administrative training": "PLACEMENT_TRAINING",
   "erp": "ERP",
   "erp training": "ERP",
   "office automation": "OFFICE_AUTOMATION",

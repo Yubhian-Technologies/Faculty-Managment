@@ -352,6 +352,30 @@ export function TrainingEntryFields({ item, update, ownerFacultyId, ownerFaculty
   const beneficiaryDepartments = item.beneficiaryDepartments ?? [];
   const existingCourseYears = new Set(beneficiaryDepartments.map((d) => `${d.courseId}:${d.year}`));
 
+  // Participated (just attending) and NPTEL/MOOCs (a self-paced course, no
+  // one to organize it for) never have a beneficiary audience or resource
+  // persons - only someone who ran the program does.
+  const hideBeneficiariesAndResourcePersons = item.role === "PARTICIPATED" || item.type === "MOOC";
+
+  // Placement Training and Alumni Talks are always Conducted - there's no
+  // "Participated" role for either (see the Type Select below) - and only
+  // ever serve Students (placement prep / a talk given TO students, never
+  // an audience of fellow faculty).
+  const isConductedOnlyStudentsOnly = item.type === "PLACEMENT_TRAINING" || item.type === "ALUMNI_TALK";
+  const allowedBeneficiaryTypes: TrainingBeneficiaryType[] = isConductedOnlyStudentsOnly
+    ? ["STUDENTS"]
+    : ["STUDENTS", "FACULTY"];
+
+  // Keeps beneficiaryType inside whatever this type currently allows -
+  // switching into/out of Placement Training or Alumni Talks can make a
+  // previously valid Faculty pick suddenly disallowed.
+  useEffect(() => {
+    if (item.beneficiaryType && !allowedBeneficiaryTypes.includes(item.beneficiaryType)) {
+      update({ beneficiaryType: allowedBeneficiaryTypes[0] });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isConductedOnlyStudentsOnly, item.beneficiaryType]);
+
   // organizer only ever got set at the moment "Conducted" was first picked
   // (see the Select below) - if ownerFacultyName wasn't available yet at
   // that instant (e.g. mid Add-Faculty wizard, before the record has a name
@@ -382,12 +406,16 @@ export function TrainingEntryFields({ item, update, ownerFacultyId, ownerFaculty
             onValueChange={(v) => update({
               type: v as TrainingEntryType,
               otherType: v === "OTHER" ? item.otherType : undefined,
-              // MOOC/CERTIFICATION don't have a role - clear any stale
-              // role-dependent fields when switching into one of them.
-              role: (v === "MOOC" || v === "CERTIFICATION") ? undefined : item.role,
-              organizer: (v === "MOOC" || v === "CERTIFICATION") ? "" : item.organizer,
+              // MOOC/CERTIFICATION don't have a role at all; Placement
+              // Training and Alumni Talks always have exactly one (CONDUCTED,
+              // no Participated option) - clear/force role and its dependent
+              // fields when switching type.
+              role: (v === "MOOC" || v === "CERTIFICATION") ? undefined
+                : (v === "PLACEMENT_TRAINING" || v === "ALUMNI_TALK") ? "CONDUCTED" : item.role,
+              organizer: (v === "MOOC" || v === "CERTIFICATION") ? ""
+                : (v === "PLACEMENT_TRAINING" || v === "ALUMNI_TALK") ? (ownerFacultyName ?? "") : item.organizer,
               coConductors: (v === "MOOC" || v === "CERTIFICATION") ? undefined : item.coConductors,
-              remark: (v === "MOOC" || v === "CERTIFICATION") ? undefined : item.remark,
+              remark: (v === "MOOC" || v === "CERTIFICATION" || v === "PLACEMENT_TRAINING" || v === "ALUMNI_TALK") ? undefined : item.remark,
               certificationType: v === "CERTIFICATION" ? item.certificationType : undefined,
             })}
           >
@@ -413,6 +441,11 @@ export function TrainingEntryFields({ item, update, ownerFacultyId, ownerFaculty
                 ))}
               </SelectContent>
             </Select>
+          </div>
+        ) : isConductedOnlyStudentsOnly ? (
+          <div className="space-y-2">
+            <Label className="text-xs text-muted-foreground">Participated or Conducted</Label>
+            <p className="text-sm font-medium pt-2">Conducted</p>
           </div>
         ) : item.type !== "MOOC" ? (
           <div className="space-y-2">
@@ -481,14 +514,17 @@ export function TrainingEntryFields({ item, update, ownerFacultyId, ownerFaculty
           </Select>
         </div>
 
+        {!hideBeneficiariesAndResourcePersons && (
         <div className="sm:col-span-2 space-y-2 rounded-lg border p-3">
             <Label>Beneficiaries</Label>
             <Select value={item.beneficiaryType ?? ""} onValueChange={(v) => update({ beneficiaryType: v as TrainingBeneficiaryType })}>
               <SelectTrigger className="w-44"><SelectValue placeholder="Students / Faculty" /></SelectTrigger>
               <SelectContent>
-                {Object.entries(TRAINING_BENEFICIARY_TYPE_LABELS).map(([k, label]) => (
-                  <SelectItem key={k} value={k}>{label}</SelectItem>
-                ))}
+                {Object.entries(TRAINING_BENEFICIARY_TYPE_LABELS)
+                  .filter(([k]) => allowedBeneficiaryTypes.includes(k as TrainingBeneficiaryType))
+                  .map(([k, label]) => (
+                    <SelectItem key={k} value={k}>{label}</SelectItem>
+                  ))}
               </SelectContent>
             </Select>
 
@@ -545,6 +581,7 @@ export function TrainingEntryFields({ item, update, ownerFacultyId, ownerFaculty
               </div>
             )}
         </div>
+        )}
 
         {item.role === "CONDUCTED" && (
           <CoConductorFields
@@ -559,29 +596,33 @@ export function TrainingEntryFields({ item, update, ownerFacultyId, ownerFaculty
           </div>
         )}
 
-        <NumInput
-          label="Number of Resource Persons"
-          value={item.numberOfResourcePersons}
-          onChange={(v) => update({
-            numberOfResourcePersons: v,
-            // Keep the details array in lockstep with the count - growing it
-            // pads with blanks, shrinking it drops the trailing entries.
-            resourcePersonsDetails: Array.from({ length: v }, (_, i) => normalizeResourcePersonsDetails(item.resourcePersonsDetails)[i] ?? ""),
-          })}
-        />
-        {Array.from({ length: item.numberOfResourcePersons ?? 0 }).map((_, i) => (
-          <TextInput
-            key={i}
-            label={`Resource Person ${i + 1} - Details`}
-            value={normalizeResourcePersonsDetails(item.resourcePersonsDetails)[i]}
-            onChange={(v) => {
-              const next = [...normalizeResourcePersonsDetails(item.resourcePersonsDetails)];
-              next[i] = v;
-              update({ resourcePersonsDetails: next });
-            }}
-            placeholder="Name / affiliation"
-          />
-        ))}
+        {!hideBeneficiariesAndResourcePersons && (
+          <>
+            <NumInput
+              label="Number of Resource Persons"
+              value={item.numberOfResourcePersons}
+              onChange={(v) => update({
+                numberOfResourcePersons: v,
+                // Keep the details array in lockstep with the count - growing it
+                // pads with blanks, shrinking it drops the trailing entries.
+                resourcePersonsDetails: Array.from({ length: v }, (_, i) => normalizeResourcePersonsDetails(item.resourcePersonsDetails)[i] ?? ""),
+              })}
+            />
+            {Array.from({ length: item.numberOfResourcePersons ?? 0 }).map((_, i) => (
+              <TextInput
+                key={i}
+                label={`Resource Person ${i + 1} - Details`}
+                value={normalizeResourcePersonsDetails(item.resourcePersonsDetails)[i]}
+                onChange={(v) => {
+                  const next = [...normalizeResourcePersonsDetails(item.resourcePersonsDetails)];
+                  next[i] = v;
+                  update({ resourcePersonsDetails: next });
+                }}
+                placeholder="Name / affiliation"
+              />
+            ))}
+          </>
+        )}
         <div className="sm:col-span-2 space-y-2">
           <Label>Other Details</Label>
           <Textarea value={item.otherDetails ?? ""} onChange={(e) => update({ otherDetails: e.target.value })} />

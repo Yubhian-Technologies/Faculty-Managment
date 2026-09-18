@@ -8,15 +8,13 @@ import { CertificateUploadField } from "@/components/shared/CertificateUploadFie
 import { DesignationSelect } from "@/components/faculty/DesignationOptions";
 import { TrainingEntryFields } from "@/components/faculty/TrainingEntryFields";
 import {
-  NumInput, TextInput, DateInput, DegreeFields, DegreeFieldsList, RepeatingGroup, QualificationsFields,
+  NumInput, TextInput, DateInput, DegreeFields, DegreeFieldsList, RepeatingGroup, QualificationsFields, StringListInput,
 } from "@/components/shared/ProfileFieldPrimitives";
 import { SCHOOL_TEACHING_QUALIFICATION_LEVELS } from "@/lib/designations/config";
-import { durationBetween, formatDuration, totalYearsOfExperience, allPreviousExperienceEntries } from "@/lib/faculty/experienceCalc";
+import { durationBetween, formatDuration, totalYearsOfExperience, allPreviousExperienceEntries, findOverlappingExperience } from "@/lib/faculty/experienceCalc";
 import type {
   FacultyProfileFields,
   CollegeType,
-  FundedProject,
-  ConsultancyProject,
   LabEstablished,
   PreviousInstitution,
   PromotionRecord,
@@ -50,8 +48,6 @@ export interface ModuleFieldsProps {
   onChange: (next: Partial<FacultyProfileFields>) => void;
 }
 
-const EMPTY_FUNDED_PROJECT: FundedProject = { title: "", fundingAgency: "", grantAmountLakhs: 0, year: new Date().getFullYear(), status: "" };
-const EMPTY_CONSULTANCY: ConsultancyProject = { title: "", clientOrAgency: "", revenueLakhs: 0, year: new Date().getFullYear(), status: "" };
 const EMPTY_LAB: LabEstablished = { facilityDetails: "", outcomes: "" };
 const EMPTY_PREVIOUS_INSTITUTION: PreviousInstitution = { institutionName: "", designation: "" };
 const EMPTY_PROMOTION: PromotionRecord = { designation: "" };
@@ -69,6 +65,7 @@ export function QualificationFields({ value, onChange, collegeType }: ModuleFiel
     return (
       <div className="space-y-5">
         <TextInput label="Highest Qualification" value={value.highestQualification} onChange={(v) => set("highestQualification", v)} placeholder="e.g. B.Ed, M.A." />
+        <StringListInput label="Research Areas/Interests *" values={value.researchAreas} onChange={(v) => set("researchAreas", v)} placeholder="e.g. Machine Learning - press Enter or Add" />
         <QualificationsFields
           items={value.schoolQualifications}
           levelOptions={SCHOOL_TEACHING_QUALIFICATION_LEVELS}
@@ -81,6 +78,7 @@ export function QualificationFields({ value, onChange, collegeType }: ModuleFiel
   return (
     <div className="space-y-5">
       <TextInput label="Highest Qualification" value={value.highestQualification} onChange={(v) => set("highestQualification", v)} placeholder="e.g. Ph.D" />
+      <StringListInput label="Research Areas/Interests *" values={value.researchAreas} onChange={(v) => set("researchAreas", v)} placeholder="e.g. Machine Learning - press Enter or Add" />
       <div className="space-y-3 rounded-lg border p-3">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="space-y-2">
@@ -193,7 +191,7 @@ export function QualificationFields({ value, onChange, collegeType }: ModuleFiel
 const EXPERIENCE_TABS = [
   {
     key: "academic", label: "Academic Experience", field: "previousInstitutions",
-    institutionLabel: "Institution Name", roleSectionLabel: "Teaching Role", roleFieldLabel: "Teaching Role/Responsibilities",
+    institutionLabel: "Institution Name", roleSectionLabel: "Teaching Role", roleFieldLabel: "Teaching Roles/Responsibilities",
   },
   {
     key: "industry", label: "Industry Experience", field: "industryExperienceEntries",
@@ -201,7 +199,7 @@ const EXPERIENCE_TABS = [
   },
   {
     key: "research", label: "Research Experience", field: "researchExperienceEntries",
-    institutionLabel: "Research Organization Name", roleSectionLabel: "Research Role", roleFieldLabel: "Research Role/Responsibilities",
+    institutionLabel: "Research Organization Name", roleSectionLabel: "Research Role", roleFieldLabel: "Research Roles/Responsibilities",
   },
 ] as const;
 
@@ -213,11 +211,34 @@ export function ExperienceFields({ value, onChange, includeTeachingAssignment = 
   const [activeTabKey, setActiveTabKey] = useState<(typeof EXPERIENCE_TABS)[number]["key"]>("academic");
   const activeTab = EXPERIENCE_TABS.find((t) => t.key === activeTabKey) ?? EXPERIENCE_TABS[0];
   const items = value[activeTab.field];
+  // Each tab's "Roles/Responsibilities" box writes its own field - previously
+  // all 3 tabs shared teachingAssignment.primaryTeachingRole, so filling in
+  // e.g. the Industry tab's box silently overwrote the Academic tab's value.
+  const activeRoleValue =
+    activeTab.key === "academic" ? teaching?.primaryTeachingRole
+      : activeTab.key === "industry" ? value.primaryIndustryRole
+        : value.primaryResearchRole;
+  function setActiveRole(v: string) {
+    if (activeTab.key === "academic") set("teachingAssignment", { primaryTeachingRole: v, courses: teaching?.courses ?? [] });
+    else if (activeTab.key === "industry") set("primaryIndustryRole", v);
+    else set("primaryResearchRole", v);
+  }
   // All 3 tabs combined - no Date of Joining here, so this is deliberately
   // not the same figure as the "Total Years of Experience" fact shown on the
   // profile (FacultyProfileHub), which also adds time served since joining
   // and keeps ticking up day by day.
   const previousExperienceTotal = totalYearsOfExperience(allPreviousExperienceEntries(value), undefined);
+  const allExperienceEntries = allPreviousExperienceEntries(value);
+  // Previous Experience is, by definition, in the past - never let From/To
+  // Date land after today.
+  const today = new Date().toISOString().slice(0, 10);
+  // Which tab a given row (matched by reference) belongs to - so an overlap
+  // warning can name the OTHER tab when the conflicting row isn't on the
+  // one currently open (e.g. an Industry Experience row overlapping an
+  // Academic Experience one).
+  function tabLabelForEntry(entry: { institutionName?: string }): string {
+    return EXPERIENCE_TABS.find((t) => (value[t.field] ?? []).some((x) => (x as unknown) === entry))?.label ?? "another entry";
+  }
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap gap-2">
@@ -247,23 +268,46 @@ export function ExperienceFields({ value, onChange, includeTeachingAssignment = 
           const fromDate = item.fromDate ?? (item.fromYear ? `${item.fromYear}-01-01` : undefined);
           const toDate = item.toDate ?? (item.toYear ? `${item.toYear}-01-01` : undefined);
           const rowDuration = durationBetween(fromDate, toDate);
+          // Checked against ALL Academic/Industry/Research Experience rows
+          // combined, not just this tab's own - the three roll up into one
+          // Total Years of Experience (see experienceCalc.ts), so an
+          // overlap anywhere would double-count those days regardless of
+          // which tab it's on.
+          const overlap = findOverlappingExperience(allExperienceEntries, item);
           return (
             <>
               <TextInput label={activeTab.institutionLabel} value={item.institutionName} onChange={(v) => update({ institutionName: v })} />
               <TextInput label="Designation" value={item.designation} onChange={(v) => update({ designation: v })} />
-              <DateInput label="From Date" value={fromDate} onChange={(v) => update({ fromDate: v })} />
+              <DateInput
+                label="From Date"
+                value={fromDate}
+                // max steers the native picker; the clamp below is the
+                // actual guarantee since a typed/pasted value can still
+                // bypass max - never let From Date land in the future.
+                onChange={(v) => update({ fromDate: v && v > today ? today : v })}
+                max={today}
+              />
               <DateInput
                 label="To Date"
                 value={toDate}
-                // min steers the native picker; the clamp below is the
+                // min/max steer the native picker; the clamp below is the
                 // actual guarantee since a typed/pasted value can still
-                // bypass min - never let To Date land before From Date.
-                onChange={(v) => update({ toDate: fromDate && v && v < fromDate ? fromDate : v })}
+                // bypass them - never let To Date land before From Date or
+                // after today.
+                onChange={(v) => update({ toDate: fromDate && v && v < fromDate ? fromDate : v && v > today ? today : v })}
                 min={fromDate}
+                max={today}
               />
               {(rowDuration.years > 0 || rowDuration.months > 0 || rowDuration.days > 0) && (
                 <p className="sm:col-span-2 text-xs text-muted-foreground">
                   Experience: <span className="font-medium text-foreground">{formatDuration(rowDuration)}</span>
+                </p>
+              )}
+              {overlap && (
+                <p className="sm:col-span-2 text-xs text-destructive">
+                  Overlaps {overlap.entry.institutionName ? `${overlap.entry.institutionName} - ` : ""}
+                  {tabLabelForEntry(overlap.entry)} ({overlap.fromDate} to {overlap.toDate}) - adjust the dates so
+                  experience periods don&rsquo;t overlap.
                 </p>
               )}
               <NumInput label="Joining Salary" value={item.joiningSalary} onChange={(v) => update({ joiningSalary: v })} />
@@ -273,8 +317,8 @@ export function ExperienceFields({ value, onChange, includeTeachingAssignment = 
                   <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{activeTab.roleSectionLabel}</p>
                   <TextInput
                     label={activeTab.roleFieldLabel}
-                    value={teaching?.primaryTeachingRole}
-                    onChange={(v) => set("teachingAssignment", { primaryTeachingRole: v, courses: teaching?.courses ?? [] })}
+                    value={activeRoleValue}
+                    onChange={setActiveRole}
                   />
                   <p className="text-xs text-muted-foreground">
                     Subject-level teaching assignments (course, section, subject, weekly schedule) are managed from the &ldquo;Teaching Load&rdquo; module.
@@ -426,72 +470,6 @@ export function ResearchFields({ value, onChange }: ModuleFieldsProps) {
   );
 }
 
-export function GrantsFields({ value, onChange }: ModuleFieldsProps) {
-  function set<K extends keyof FacultyProfileFields>(key: K, v: FacultyProfileFields[K]) {
-    onChange({ ...value, [key]: v });
-  }
-  const patents = value.patents;
-  return (
-    <div className="space-y-5">
-      <RepeatingGroup
-        title="Funded Projects"
-        items={value.fundedProjects}
-        empty={EMPTY_FUNDED_PROJECT}
-        onChange={(v) => set("fundedProjects", v)}
-        renderRow={(item, update) => (
-          <>
-            <TextInput label="Title" value={item.title} onChange={(v) => update({ title: v })} />
-            <TextInput label="Funding Agency" value={item.fundingAgency} onChange={(v) => update({ fundingAgency: v })} />
-            <NumInput label="Grant Amount (₹L)" value={item.grantAmountLakhs} onChange={(v) => update({ grantAmountLakhs: v })} />
-            <NumInput label="Year" value={item.year} onChange={(v) => update({ year: v })} />
-            <TextInput label="Status" value={item.status} onChange={(v) => update({ status: v })} />
-            <div className="space-y-2">
-              <Label>Role</Label>
-              <Select value={item.piOrCoPi ?? ""} onValueChange={(v) => update({ piOrCoPi: v as FundedProject["piOrCoPi"] })}>
-                <SelectTrigger><SelectValue placeholder="Select role" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="PI">PI</SelectItem>
-                  <SelectItem value="CO_PI">Co-PI</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </>
-        )}
-      />
-      <RepeatingGroup
-        title="Consultancy Projects"
-        items={value.consultancyProjects}
-        empty={EMPTY_CONSULTANCY}
-        onChange={(v) => set("consultancyProjects", v)}
-        renderRow={(item, update) => (
-          <>
-            <TextInput label="Title" value={item.title} onChange={(v) => update({ title: v })} />
-            <TextInput label="Client / Agency" value={item.clientOrAgency} onChange={(v) => update({ clientOrAgency: v })} />
-            <NumInput label="Revenue (₹L)" value={item.revenueLakhs} onChange={(v) => update({ revenueLakhs: v })} />
-            <NumInput label="Year" value={item.year} onChange={(v) => update({ year: v })} />
-            <TextInput label="Status" value={item.status} onChange={(v) => update({ status: v })} />
-          </>
-        )}
-      />
-      <div className="space-y-3 rounded-lg border p-3">
-        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Patents</p>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          <NumInput label="Indian - Filed" value={patents?.indianFiled} onChange={(v) => set("patents", { ...patents, indianFiled: v } as FacultyProfileFields["patents"])} />
-          <NumInput label="Indian - Published" value={patents?.indianPublished} onChange={(v) => set("patents", { ...patents, indianPublished: v } as FacultyProfileFields["patents"])} />
-          <NumInput label="Indian - Granted" value={patents?.indianGranted} onChange={(v) => set("patents", { ...patents, indianGranted: v } as FacultyProfileFields["patents"])} />
-          <NumInput label="International - Filed" value={patents?.internationalFiled} onChange={(v) => set("patents", { ...patents, internationalFiled: v } as FacultyProfileFields["patents"])} />
-          <NumInput label="International - Published" value={patents?.internationalPublished} onChange={(v) => set("patents", { ...patents, internationalPublished: v } as FacultyProfileFields["patents"])} />
-          <NumInput label="International - Granted" value={patents?.internationalGranted} onChange={(v) => set("patents", { ...patents, internationalGranted: v } as FacultyProfileFields["patents"])} />
-        </div>
-        <div className="space-y-2">
-          <Label>Details</Label>
-          <Textarea value={patents?.details ?? ""} onChange={(e) => set("patents", { ...patents, details: e.target.value } as FacultyProfileFields["patents"])} />
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export function MentorshipFields({
   value, onChange, ownerFacultyId, ownerFacultyName,
 }: ModuleFieldsProps & { ownerFacultyId?: string; ownerFacultyName?: string }) {
@@ -554,9 +532,6 @@ export function MentorshipFields({
           );
         }}
       />
-      {value.administrativeResponsibilities && (
-        <p className="text-xs text-muted-foreground italic">Legacy note: {value.administrativeResponsibilities}</p>
-      )}
       <RepeatingGroup
         title="FDPs, Workshops, MOOCs & Certifications"
         items={value.trainingEntries}
@@ -566,9 +541,6 @@ export function MentorshipFields({
           <TrainingEntryFields item={item} update={update} ownerFacultyId={ownerFacultyId} ownerFacultyName={ownerFacultyName} />
         )}
       />
-      {value.certificationsAndFdps && (
-        <p className="text-xs text-muted-foreground italic">Legacy note: {value.certificationsAndFdps}</p>
-      )}
       <RepeatingGroup
         title="Professional Body Memberships"
         items={value.professionalMemberships}
@@ -620,9 +592,6 @@ export function MentorshipFields({
           </>
         )}
       />
-      {value.professionalBodyMemberships && (
-        <p className="text-xs text-muted-foreground italic">Legacy note: {value.professionalBodyMemberships}</p>
-      )}
       <RepeatingGroup
         title="Awards & Recognition"
         items={value.awardEntries}
@@ -644,10 +613,10 @@ export function MentorshipFields({
             {item.category === "OTHER" && (
               <TextInput label="Please specify category" value={item.otherCategory} onChange={(v) => update({ otherCategory: v })} />
             )}
-            <TextInput label="Title of Awarded" value={item.title} onChange={(v) => update({ title: v })} />
+            <TextInput label="Title of Award" value={item.title} onChange={(v) => update({ title: v })} />
             <TextInput label="Awarding Agency/Body" value={item.awardingBody} onChange={(v) => update({ awardingBody: v })} />
             <DateInput
-              label="Date of Awarded"
+              label="Date of Award"
               value={item.dateAwarded}
               onChange={(v) => update({ dateAwarded: v, year: v ? new Date(v).getFullYear() : item.year })}
             />
@@ -677,9 +646,6 @@ export function MentorshipFields({
           </>
         )}
       />
-      {value.notableAwards && (
-        <p className="text-xs text-muted-foreground italic">Legacy note: {value.notableAwards}</p>
-      )}
     </div>
   );
 }

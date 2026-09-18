@@ -7,15 +7,13 @@ import { CertificateUploadField } from "@/components/shared/CertificateUploadFie
 import { DesignationSelect } from "@/components/faculty/DesignationOptions";
 import { TrainingEntryFields } from "@/components/faculty/TrainingEntryFields";
 import {
-  SectionTitle, NumInput, TextInput, DateInput, DegreeFields, DegreeFieldsList, RepeatingGroup, QualificationsFields,
+  SectionTitle, NumInput, TextInput, DateInput, DegreeFields, DegreeFieldsList, RepeatingGroup, QualificationsFields, StringListInput,
 } from "@/components/shared/ProfileFieldPrimitives";
 import { SCHOOL_TEACHING_QUALIFICATION_LEVELS } from "@/lib/designations/config";
 import { durationBetween, formatDuration } from "@/lib/faculty/experienceCalc";
 import type {
   FacultyProfileFields,
   CollegeType,
-  FundedProject,
-  ConsultancyProject,
   LabEstablished,
   PreviousInstitution,
   PromotionRecord,
@@ -45,8 +43,6 @@ interface Props {
   collegeType?: CollegeType;
 }
 
-const EMPTY_FUNDED_PROJECT: FundedProject = { title: "", fundingAgency: "", grantAmountLakhs: 0, year: new Date().getFullYear(), status: "" };
-const EMPTY_CONSULTANCY: ConsultancyProject = { title: "", clientOrAgency: "", revenueLakhs: 0, year: new Date().getFullYear(), status: "" };
 const EMPTY_LAB: LabEstablished = { facilityDetails: "", outcomes: "" };
 const EMPTY_PREVIOUS_INSTITUTION: PreviousInstitution = { institutionName: "", designation: "" };
 const EMPTY_PROMOTION: PromotionRecord = { designation: "" };
@@ -61,7 +57,6 @@ export function AcademicProfileFields({ value, onChange, includeTeachingAssignme
   }
 
   const teaching = value.teachingAssignment;
-  const patents = value.patents;
   const isSchool = collegeType === "SCHOOL";
 
   return (
@@ -71,6 +66,7 @@ export function AcademicProfileFields({ value, onChange, includeTeachingAssignme
       {isSchool ? (
         <>
           <TextInput label="Highest Qualification" value={value.highestQualification} onChange={(v) => set("highestQualification", v)} placeholder="e.g. B.Ed, M.A." />
+          <StringListInput label="Research Areas/Interests *" values={value.researchAreas} onChange={(v) => set("researchAreas", v)} placeholder="e.g. Machine Learning - press Enter or Add" />
           <QualificationsFields
             items={value.schoolQualifications}
             levelOptions={SCHOOL_TEACHING_QUALIFICATION_LEVELS}
@@ -80,6 +76,7 @@ export function AcademicProfileFields({ value, onChange, includeTeachingAssignme
       ) : (
         <>
           <TextInput label="Highest Qualification" value={value.highestQualification} onChange={(v) => set("highestQualification", v)} placeholder="e.g. Ph.D" />
+          <StringListInput label="Research Areas/Interests *" values={value.researchAreas} onChange={(v) => set("researchAreas", v)} placeholder="e.g. Machine Learning - press Enter or Add" />
           <div className="space-y-3 rounded-lg border p-3">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-2">
@@ -329,64 +326,6 @@ export function AcademicProfileFields({ value, onChange, includeTeachingAssignme
         </>
       )}
 
-      {/* Module 4 */}
-      <SectionTitle>Module 4 - Grants, Consultancy &amp; IP</SectionTitle>
-      <RepeatingGroup
-        title="Funded Projects"
-        items={value.fundedProjects}
-        empty={EMPTY_FUNDED_PROJECT}
-        onChange={(v) => set("fundedProjects", v)}
-        renderRow={(item, update) => (
-          <>
-            <TextInput label="Title" value={item.title} onChange={(v) => update({ title: v })} />
-            <TextInput label="Funding Agency" value={item.fundingAgency} onChange={(v) => update({ fundingAgency: v })} />
-            <NumInput label="Grant Amount (₹L)" value={item.grantAmountLakhs} onChange={(v) => update({ grantAmountLakhs: v })} />
-            <NumInput label="Year" value={item.year} onChange={(v) => update({ year: v })} />
-            <TextInput label="Status" value={item.status} onChange={(v) => update({ status: v })} />
-            <div className="space-y-2">
-              <Label>Role</Label>
-              <Select value={item.piOrCoPi ?? ""} onValueChange={(v) => update({ piOrCoPi: v as FundedProject["piOrCoPi"] })}>
-                <SelectTrigger><SelectValue placeholder="Select role" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="PI">PI</SelectItem>
-                  <SelectItem value="CO_PI">Co-PI</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </>
-        )}
-      />
-      <RepeatingGroup
-        title="Consultancy Projects"
-        items={value.consultancyProjects}
-        empty={EMPTY_CONSULTANCY}
-        onChange={(v) => set("consultancyProjects", v)}
-        renderRow={(item, update) => (
-          <>
-            <TextInput label="Title" value={item.title} onChange={(v) => update({ title: v })} />
-            <TextInput label="Client / Agency" value={item.clientOrAgency} onChange={(v) => update({ clientOrAgency: v })} />
-            <NumInput label="Revenue (₹L)" value={item.revenueLakhs} onChange={(v) => update({ revenueLakhs: v })} />
-            <NumInput label="Year" value={item.year} onChange={(v) => update({ year: v })} />
-            <TextInput label="Status" value={item.status} onChange={(v) => update({ status: v })} />
-          </>
-        )}
-      />
-      <div className="space-y-3 rounded-lg border p-3">
-        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Patents</p>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          <NumInput label="Indian - Filed" value={patents?.indianFiled} onChange={(v) => set("patents", { ...patents, indianFiled: v } as FacultyProfileFields["patents"])} />
-          <NumInput label="Indian - Published" value={patents?.indianPublished} onChange={(v) => set("patents", { ...patents, indianPublished: v } as FacultyProfileFields["patents"])} />
-          <NumInput label="Indian - Granted" value={patents?.indianGranted} onChange={(v) => set("patents", { ...patents, indianGranted: v } as FacultyProfileFields["patents"])} />
-          <NumInput label="International - Filed" value={patents?.internationalFiled} onChange={(v) => set("patents", { ...patents, internationalFiled: v } as FacultyProfileFields["patents"])} />
-          <NumInput label="International - Published" value={patents?.internationalPublished} onChange={(v) => set("patents", { ...patents, internationalPublished: v } as FacultyProfileFields["patents"])} />
-          <NumInput label="International - Granted" value={patents?.internationalGranted} onChange={(v) => set("patents", { ...patents, internationalGranted: v } as FacultyProfileFields["patents"])} />
-        </div>
-        <div className="space-y-2">
-          <Label>Details</Label>
-          <Textarea value={patents?.details ?? ""} onChange={(e) => set("patents", { ...patents, details: e.target.value } as FacultyProfileFields["patents"])} />
-        </div>
-      </div>
-
       {/* Module 5 */}
       <SectionTitle>Module 5 - Professional Development</SectionTitle>
       <RepeatingGroup
@@ -428,9 +367,6 @@ export function AcademicProfileFields({ value, onChange, includeTeachingAssignme
           </>
         )}
       />
-      {value.administrativeResponsibilities && (
-        <p className="text-xs text-muted-foreground italic">Legacy note: {value.administrativeResponsibilities}</p>
-      )}
       <RepeatingGroup
         title="FDPs, Workshops, MOOCs & Certifications"
         items={value.trainingEntries}
@@ -444,9 +380,6 @@ export function AcademicProfileFields({ value, onChange, includeTeachingAssignme
           <TrainingEntryFields item={item} update={update} />
         )}
       />
-      {value.certificationsAndFdps && (
-        <p className="text-xs text-muted-foreground italic">Legacy note: {value.certificationsAndFdps}</p>
-      )}
       <RepeatingGroup
         title="Professional Body Memberships"
         items={value.professionalMemberships}
@@ -498,9 +431,6 @@ export function AcademicProfileFields({ value, onChange, includeTeachingAssignme
           </>
         )}
       />
-      {value.professionalBodyMemberships && (
-        <p className="text-xs text-muted-foreground italic">Legacy note: {value.professionalBodyMemberships}</p>
-      )}
       <RepeatingGroup
         title="Awards & Recognition"
         items={value.awardEntries}
@@ -522,10 +452,10 @@ export function AcademicProfileFields({ value, onChange, includeTeachingAssignme
             {item.category === "OTHER" && (
               <TextInput label="Please specify category" value={item.otherCategory} onChange={(v) => update({ otherCategory: v })} />
             )}
-            <TextInput label="Title of Awarded" value={item.title} onChange={(v) => update({ title: v })} />
+            <TextInput label="Title of Award" value={item.title} onChange={(v) => update({ title: v })} />
             <TextInput label="Awarding Agency/Body" value={item.awardingBody} onChange={(v) => update({ awardingBody: v })} />
             <DateInput
-              label="Date of Awarded"
+              label="Date of Award"
               value={item.dateAwarded}
               onChange={(v) => update({ dateAwarded: v, year: v ? new Date(v).getFullYear() : item.year })}
             />
@@ -555,10 +485,6 @@ export function AcademicProfileFields({ value, onChange, includeTeachingAssignme
           </>
         )}
       />
-      {value.notableAwards && (
-        <p className="text-xs text-muted-foreground italic">Legacy note: {value.notableAwards}</p>
-      )}
-
       {/* Module 6 */}
       {!hideFinancialModule && (
         <>

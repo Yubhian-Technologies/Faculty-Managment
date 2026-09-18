@@ -5,7 +5,12 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodManageFacultyDepartment } from "@/lib/departments/scope";
 import { syncTrainingEntryCoConductors } from "@/lib/faculty/syncTrainingEntryCoConductors";
-import type { Designation, EmploymentType, FacultyStatus, TrainingEntry } from "@/types";
+import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
+import type { Designation, EmployeeCategory, FacultyStatus, TrainingEntry } from "@/types";
+
+// Exactly these 4 values are accepted anywhere Employee Category is set -
+// see EmployeeCategory's own doc-comment in types/core.ts.
+const EMPLOYEE_CATEGORY_VALUES: EmployeeCategory[] = ["REGULAR", "VISITING", "CONTRACT", "PART_TIME"];
 
 export async function GET(
   _request: Request,
@@ -67,49 +72,12 @@ export async function PATCH(
       qualification: string;
       specialization: string;
       experienceYears: number;
-      internalExperience: number;
-      externalExperience: number;
-      inCampusExperience: number;
-      industryExperience: number;
-      researchExperience: number;
       joiningDate: string;
       dateOfJoiningDepartment: string;
-      dateOfBirth: string;
-      employmentType: EmploymentType;
+      employeeCategory: EmployeeCategory;
       aicteEligible: boolean;
+      aicteFacultyId: string;
       status: FacultyStatus;
-      gender: string;
-      legalName: string;
-      nameAsPerAadhar: string;
-      fatherName: string;
-      motherName: string;
-      religion: string;
-      caste: string;
-      subCaste: string;
-      aadharNo: string;
-      panNo: string;
-      passportNumber: string;
-      differentlyAbled: boolean;
-      differentlyAbledDetails: string;
-      bankAccountNo: string;
-      ifscCode: string;
-      bankName: string;
-      bankBranch: string;
-      bankOtherDetails: string;
-      emergencyContactName: string;
-      emergencyContactRelation: string;
-      emergencyContactPhone: string;
-      ratificationStatus: string;
-      ratificationProceedingsNumber: string;
-      ratificationDate: string;
-      maritalStatus: string;
-      spouseName: string;
-      numberOfChildren: number;
-      temporaryAddress: string;
-      permanentSameAsTemporary: boolean;
-      permanentAddress: string;
-      bloodGroup: string;
-      hasPHD: boolean;
       userUid: string;
       academicProfile: Record<string, unknown>;
       technicalProfile: Record<string, unknown>;
@@ -117,7 +85,8 @@ export async function PATCH(
       joiningLetterUrl: string;
       appointmentLetterUrl: string;
       resumeUrl: string;
-    }>;
+    }> &
+      PersonalDetailsInput;
 
     const db = getAdminDb();
     const ref = db
@@ -156,13 +125,18 @@ export async function PATCH(
     // deliberately NOT in this list - it's optional; legalName (Full Name as
     // per SSC) is the required primary identity name.
     const REQUIRED_IF_PRESENT = [
-      "collegeEmail", "phone", "designation", "qualification", "employmentType",
+      "collegeEmail", "phone", "designation", "qualification",
       "gender", "legalName", "aadharNo", "panNo", "ratificationStatus",
     ] as const;
     for (const key of REQUIRED_IF_PRESENT) {
       if (body[key] !== undefined && !body[key].trim()) {
         return NextResponse.json({ error: `${key} cannot be blanked out - it is a required field` }, { status: 400 });
       }
+    }
+    // Exactly these 4 values are accepted anywhere Employee Category is set -
+    // see EmployeeCategory's own doc-comment in types/core.ts.
+    if (body.employeeCategory !== undefined && !EMPLOYEE_CATEGORY_VALUES.includes(body.employeeCategory)) {
+      return NextResponse.json({ error: "Employee Category must be one of Regular, Visiting, Contract, or Part Time" }, { status: 400 });
     }
 
     const updates: Record<string, unknown> = { updatedAt: new Date() };
@@ -188,54 +162,30 @@ export async function PATCH(
       updates.employeeId = newEmployeeId;
     }
 
-    // permanentAddress is deliberately excluded here - see the dedicated
-    // handling below, which overrides it with temporaryAddress whenever
-    // permanentSameAsTemporary is true rather than trusting whatever (if
-    // anything) the caller sent for it directly.
+    // Personal/statutory details (gender, name variants, bank, address, PF
+    // number, mother tongue, languages known, height/weight, etc.) - shared
+    // builder also used by the create route (POST /api/college/faculty), so
+    // an edit persists exactly the fields creation does instead of a second,
+    // easily-incomplete hand-rolled whitelist (a prior version of this route
+    // omitted pfNumber/motherTongue/languagesKnown/heightFeet/heightInches/
+    // weightKg entirely, so those silently failed to save on edit).
+    Object.assign(updates, buildPersonalDetailsUpdate(body));
+
+    // Non-personal string fields
     const stringFields = [
-      "name", "email", "phone", "collegeEmail", "apaarFacultyId", "designation", "qualification",
-      "specialization", "employmentType", "status", "gender", "legalName", "nameAsPerAadhar",
-      "fatherName", "motherName", "religion", "caste", "subCaste", "aadharNo", "passportNumber",
-      "differentlyAbledDetails", "bankAccountNo", "bankName", "bankBranch", "bankOtherDetails",
-      "emergencyContactName", "emergencyContactRelation", "emergencyContactPhone", "ratificationStatus",
-      "ratificationProceedingsNumber", "userUid",
-      "maritalStatus", "spouseName", "temporaryAddress", "bloodGroup",
+      "name", "email", "phone", "collegeEmail", "apaarFacultyId", "aicteFacultyId", "designation", "qualification",
+      "specialization", "employeeCategory", "status", "userUid",
     ] as const;
 
     for (const key of stringFields) {
       if (body[key] !== undefined) updates[key] = body[key];
     }
 
-    // PAN / IFSC always uppercase
-    if (body.panNo !== undefined) updates.panNo = body.panNo.toUpperCase();
-    if (body.ifscCode !== undefined) updates.ifscCode = body.ifscCode.toUpperCase();
-
     // Numeric fields
-    const numFields = [
-      "experienceYears", "internalExperience", "externalExperience",
-      "inCampusExperience", "industryExperience", "researchExperience", "numberOfChildren",
-    ] as const;
-    for (const key of numFields) {
-      if (body[key] !== undefined) updates[key] = Number(body[key]);
-    }
+    if (body.experienceYears !== undefined) updates.experienceYears = Number(body.experienceYears);
 
     // Boolean
-    if (body.hasPHD !== undefined) updates.hasPHD = body.hasPHD;
     if (body.aicteEligible !== undefined) updates.aicteEligible = body.aicteEligible;
-    if (body.permanentSameAsTemporary !== undefined) updates.permanentSameAsTemporary = body.permanentSameAsTemporary;
-    if (body.differentlyAbled !== undefined) updates.differentlyAbled = body.differentlyAbled;
-
-    // "Same as temporary" means the permanent address IS the temporary
-    // address - copied automatically rather than left blank or trusting a
-    // stray permanentAddress value sent alongside. Only applies when
-    // temporaryAddress is part of this same call (the personal-module editor
-    // always sends the whole section together); otherwise a direct
-    // permanentAddress update still goes through untouched.
-    if (body.permanentSameAsTemporary === true && body.temporaryAddress !== undefined) {
-      updates.permanentAddress = body.temporaryAddress;
-    } else if (body.permanentAddress !== undefined) {
-      updates.permanentAddress = body.permanentAddress;
-    }
 
     // Academic profile (Modules 1-5) / Technical profile - mutually exclusive by designation
     if (body.academicProfile !== undefined) updates.academicProfile = body.academicProfile;
@@ -244,8 +194,6 @@ export async function PATCH(
     // Date fields
     if (body.joiningDate) updates.joiningDate = new Date(body.joiningDate);
     if (body.dateOfJoiningDepartment) updates.dateOfJoiningDepartment = new Date(body.dateOfJoiningDepartment);
-    if (body.dateOfBirth) updates.dateOfBirth = new Date(body.dateOfBirth);
-    if (body.ratificationDate) updates.ratificationDate = new Date(body.ratificationDate);
 
     if (body.profilePhotoUrl !== undefined) updates.profilePhotoUrl = body.profilePhotoUrl;
 

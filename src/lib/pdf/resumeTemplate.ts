@@ -3,6 +3,7 @@ import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { DESIGNATION_LABELS, FACULTY_STATUS_LABELS, ROLE_LABELS, RELIGION_LABELS, CASTE_LABELS } from "@/types";
 import type { Religion, Caste } from "@/types";
 import { buildTeachingLoadRows, formatClassColumn, type TeachingLoadRow } from "@/lib/teaching/buildTeachingLoadRows";
+import { allPreviousExperienceEntries, totalYearsOfExperience, formatDuration } from "@/lib/faculty/experienceCalc";
 
 type TimestampLike = { toDate?: () => Date; seconds?: number; _seconds?: number } | string | null | undefined;
 
@@ -34,7 +35,7 @@ interface CourseAssignment {
 }
 
 interface TeachingAssignmentSummary {
-  primaryTeachingRole?: string;
+  primaryTeachingRole?: string; // Academic Experience tab's role box
   courses?: CourseAssignment[];
 }
 
@@ -54,32 +55,6 @@ interface Publication {
   publicationYear?: number;
   indexing?: string;
   driveLink?: string;
-}
-
-interface FundedProject {
-  title?: string;
-  fundingAgency?: string;
-  grantAmountLakhs?: number;
-  year?: number;
-  status?: string;
-}
-
-interface ConsultancyProject {
-  title?: string;
-  clientOrAgency?: string;
-  revenueLakhs?: number;
-  year?: number;
-  status?: string;
-}
-
-interface PatentSummary {
-  indianFiled?: number;
-  indianPublished?: number;
-  indianGranted?: number;
-  internationalFiled?: number;
-  internationalPublished?: number;
-  internationalGranted?: number;
-  details?: string;
 }
 
 interface LabEstablished {
@@ -111,7 +86,11 @@ interface FacultyProfileFieldsLike {
   qualifyingExamYear?: number;
 
   teachingAssignment?: TeachingAssignmentSummary;
+  primaryIndustryRole?: string;
+  primaryResearchRole?: string;
   previousInstitutions?: PreviousInstitution[];
+  industryExperienceEntries?: PreviousInstitution[];
+  researchExperienceEntries?: PreviousInstitution[];
 
   publications?: Publication[];
   publicationsFirstOrCorrespondingAuthor?: number;
@@ -126,20 +105,8 @@ interface FacultyProfileFieldsLike {
   hIndex?: number;
   i10Index?: number;
 
-  fundedProjects?: FundedProject[];
-  consultancyProjects?: ConsultancyProject[];
-  patents?: PatentSummary;
-
-  phdScholarsPursuing?: { count?: number; universities?: string };
-  phdScholarsAwarded?: { count?: number; universities?: string };
-  nationalExposure?: string;
-  internationalExposure?: string;
   labsEstablished?: LabEstablished[];
-  administrativeResponsibilities?: string;
-  certificationsAndFdps?: string;
-  professionalBodyMemberships?: string;
   authoredBooks?: AuthoredBook[];
-  notableAwards?: string;
 
   presentSalary?: number;
   grossAnnualCTC?: number;
@@ -174,15 +141,9 @@ export interface ResumeData {
   joiningDate?: TimestampLike;
   status?: string;
   isActive?: boolean;
-  hasPHD?: boolean;
   qualification?: string;
   specialization?: string;
   experienceYears?: number;
-  internalExperience?: number;
-  externalExperience?: number;
-  inCampusExperience?: number;
-  industryExperience?: number;
-  researchExperience?: number;
 
   gender?: string;
   dateOfBirth?: TimestampLike;
@@ -399,15 +360,20 @@ export function getResumeHTML(data: ResumeData): string {
     data.department || "",
     data.joiningDate ? `${formatDate(data.joiningDate as Parameters<typeof formatDate>[0])} - ${data.isActive === false ? "Left" : "Present"}` : ""
   );
+  // Internal (time served since Date of Joining) / External (Academic +
+  // Industry + Research Experience entries combined) - computed live the
+  // same way as the faculty profile page (FacultyProfileHub) and CSV export,
+  // rather than read from a separately-stored, rarely-written field.
+  const previousExperienceEntries = allPreviousExperienceEntries(ap);
+  const hasPreviousExperience = previousExperienceEntries.length > 0;
+  const hasJoiningDate = !!data.joiningDate;
+  const internalExperienceDuration = totalYearsOfExperience(undefined, data.joiningDate as Parameters<typeof formatDate>[0]);
+  const externalExperienceDuration = totalYearsOfExperience(previousExperienceEntries, undefined);
   const experienceBullets = bullets([
     data.experienceYears &&
       `Total Professional Experience: ${esc(data.experienceYears)} years`,
-    (data.internalExperience || data.externalExperience) &&
-      `Internal / External Experience: ${data.internalExperience ?? 0} yrs internal, ${data.externalExperience ?? 0} yrs external`,
-    (data.inCampusExperience || data.industryExperience) &&
-      `In-Campus / Industry Experience: ${data.inCampusExperience ?? 0} yrs in-campus, ${data.industryExperience ?? 0} yrs industry`,
-    data.researchExperience &&
-      `Research / Industry Experience: ${esc(data.researchExperience)} years`,
+    hasJoiningDate && `Internal Experience: ${formatDuration(internalExperienceDuration)}`,
+    hasPreviousExperience && `External Experience: ${formatDuration(externalExperienceDuration)}`,
     data.specialization && `Specialization: ${esc(data.specialization)}`,
     data.qualification && `Qualification: ${esc(data.qualification)}`,
   ]);
@@ -430,7 +396,9 @@ export function getResumeHTML(data: ResumeData): string {
   // course/section assignments + the Module 2 course summary vs. structured
   // past assignments (past rows carry a pass %, current ones never do).
   const teachingLoadBullets = bullets([
-    ap?.teachingAssignment?.primaryTeachingRole && `Primary Teaching Role: ${esc(ap.teachingAssignment.primaryTeachingRole)}`,
+    ap?.teachingAssignment?.primaryTeachingRole && `Teaching Roles/Responsibilities: ${esc(ap.teachingAssignment.primaryTeachingRole)}`,
+    ap?.primaryIndustryRole && `Industry Roles/Responsibilities: ${esc(ap.primaryIndustryRole)}`,
+    ap?.primaryResearchRole && `Research Roles/Responsibilities: ${esc(ap.primaryResearchRole)}`,
   ]);
   const teachingLoadGroups = buildTeachingLoadRows({
     currentAssignments: data.teachingAssignments,
@@ -473,52 +441,11 @@ export function getResumeHTML(data: ResumeData): string {
     : "";
   const publicationsBody = publicationEntries + publicationStatsBullets + booksEntries;
 
-  // ── Projects, grants & consultancy ──────────────────────────────────────
-  const fundedProjectEntries = ap?.fundedProjects?.length
-    ? ap.fundedProjects
-        .map((p) =>
-          entry(p.title || "Funded Project", p.year ? String(p.year) : "", p.fundingAgency || "", p.status || "") +
-          bullets([p.grantAmountLakhs && `Grant Amount: ₹${esc(p.grantAmountLakhs)} Lakhs`])
-        )
-        .join("")
-    : "";
-  const consultancyEntries = ap?.consultancyProjects?.length
-    ? ap.consultancyProjects
-        .map((p) =>
-          entry(p.title || "Consultancy Project", p.year ? String(p.year) : "", p.clientOrAgency || "", p.status || "") +
-          bullets([p.revenueLakhs && `Revenue: ₹${esc(p.revenueLakhs)} Lakhs`])
-        )
-        .join("")
-    : "";
+  // ── Mentorship & institutional contribution ─────────────────────────────
   const labEntries = ap?.labsEstablished?.length
     ? ap.labsEstablished.map((l) => entry(l.facilityDetails || "Facility Established", "") + bullets([l.outcomes && `Outcomes: ${esc(l.outcomes)}`])).join("")
     : "";
-  const patentsBullets = ap?.patents && (ap.patents.indianFiled || ap.patents.internationalFiled || ap.patents.details)
-    ? bullets([
-        (ap.patents.indianFiled || ap.patents.indianPublished || ap.patents.indianGranted) &&
-          `Indian Patents (Filed / Published / Granted): ${ap.patents.indianFiled ?? 0} / ${ap.patents.indianPublished ?? 0} / ${ap.patents.indianGranted ?? 0}`,
-        (ap.patents.internationalFiled || ap.patents.internationalPublished || ap.patents.internationalGranted) &&
-          `International Patents (Filed / Published / Granted): ${ap.patents.internationalFiled ?? 0} / ${ap.patents.internationalPublished ?? 0} / ${ap.patents.internationalGranted ?? 0}`,
-        ap.patents.details && `Patent Details: ${esc(ap.patents.details)}`,
-      ])
-    : "";
-  const grantsBody = fundedProjectEntries + consultancyEntries + labEntries + patentsBullets;
-
-  // ── Mentorship & institutional contribution ─────────────────────────────
-  const mentorshipBody = bullets([
-    ap?.phdScholarsPursuing?.count && `PhD Scholars Pursuing: ${esc(ap.phdScholarsPursuing.count)}${ap.phdScholarsPursuing.universities ? ` (${esc(ap.phdScholarsPursuing.universities)})` : ""}`,
-    ap?.phdScholarsAwarded?.count && `PhD Scholars Awarded: ${esc(ap.phdScholarsAwarded.count)}${ap.phdScholarsAwarded.universities ? ` (${esc(ap.phdScholarsAwarded.universities)})` : ""}`,
-    ap?.nationalExposure && `National Exposure: ${esc(ap.nationalExposure)}`,
-    ap?.internationalExposure && `International Exposure: ${esc(ap.internationalExposure)}`,
-    ap?.administrativeResponsibilities && `Administrative Responsibilities: ${esc(ap.administrativeResponsibilities)}`,
-    ap?.notableAwards && `Notable Awards: ${esc(ap.notableAwards)}`,
-  ]);
-
-  // ── Certifications & memberships ────────────────────────────────────────
-  const certificationsBody = bullets([
-    ap?.certificationsAndFdps && esc(ap.certificationsAndFdps),
-    ap?.professionalBodyMemberships && esc(ap.professionalBodyMemberships),
-  ]);
+  const mentorshipBody = labEntries;
 
   // ── Personal & contact details ──────────────────────────────────────────
   const personalBody = detailTable(
@@ -588,9 +515,7 @@ export function getResumeHTML(data: ResumeData): string {
   ${renderSection("Previous Experience", experienceBody)}
   ${renderSection("Teaching Load", teachingLoadBody)}
   ${renderSection("Research & Innovation", publicationsBody)}
-  ${renderSection("Projects, Grants & Consultancy", grantsBody)}
   ${renderSection("Mentorship & Institutional Contribution", mentorshipBody)}
-  ${renderSection("Certifications & Professional Memberships", certificationsBody)}
   ${renderSection("Other Information", otherInfoBody)}
   ${renderSection("Financial Standing", financialBody)}
 

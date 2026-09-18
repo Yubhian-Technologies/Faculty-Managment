@@ -11,7 +11,7 @@ import { FACULTY_STATUS_LABELS } from "@/types";
 
 const STATUS_KEYS = ["ACTIVE", "ON_LEAVE", "RESIGNED", "RETIRED"] as const;
 // Columns whose template guidance states a plain Yes/No answer.
-const YES_NO_KEYS = new Set(["differentlyAbled", "permanentSameAsTemporary", "aicteEligible", "hasPHD"]);
+const YES_NO_KEYS = new Set(["differentlyAbled", "permanentSameAsTemporary", "aicteEligible"]);
 
 // The fixed option list a column's Select should offer - Designation is now
 // the caller's own admin-curated Designation Catalog list (fetched once by

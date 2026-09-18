@@ -3,7 +3,7 @@
 import { PersonalDetailsFields, type PersonalDetailsValue } from "@/components/shared/PersonalDetailsFields";
 import { TeachingAssignmentsEditor, type StagedTeachingRow } from "@/components/faculty/TeachingAssignmentsEditor";
 import {
-  QualificationFields, ExperienceFields, ResearchFields, GrantsFields,
+  QualificationFields, ExperienceFields, ResearchFields,
   MentorshipFields, FinancialFields, OthersFields,
 } from "@/components/faculty/AcademicProfileModuleFields";
 import type { ProfileModuleKey } from "@/lib/faculty/profileModules";
@@ -75,8 +75,6 @@ export function FacultyProfileModuleEditor({
       );
     case "research":
       return <ResearchFields value={academicProfile} onChange={(ap) => onChange({ academicProfile: ap })} />;
-    case "grants":
-      return <GrantsFields value={academicProfile} onChange={(ap) => onChange({ academicProfile: ap })} />;
     case "mentorship":
       return (
         <MentorshipFields
