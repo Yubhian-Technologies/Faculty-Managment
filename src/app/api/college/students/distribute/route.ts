@@ -10,6 +10,7 @@ import { sectionFeedsTarget } from "@/lib/sections/sectionLabel";
 import { ChunkedBatch } from "@/lib/firestore/chunkedBatch";
 import { compareSectionsByName } from "@/lib/students/evenSplit";
 import { buildDistributionPlan, validateDistributionPlan, validateStudentNames } from "@/lib/students/distributionPlan";
+import { lateralEntryBatch } from "@/lib/college/academicSession";
 import { acquireDistributionLock, releaseDistributionLock, DistributionLockHeldError } from "@/lib/students/distributionLock";
 import type { Section, StudentRecord } from "@/types";
 
@@ -272,11 +273,19 @@ export async function POST(request: Request) {
       const now = new Date();
       const batch = new ChunkedBatch(db);
       const sectionById = new Map(sections.map((s) => [s.id, s]));
+      const cohortById = new Map(validCohort.map((s) => [s.id, s]));
 
       for (const move of plan.moves) {
         const section = sectionById.get(move.toSectionId);
         if (!section) continue;
         const ref = collegeRef.collection("students").doc(move.studentId);
+        // A Lateral student joining this section directly gets their OWN
+        // batch (see StudentRecord.batch's doc-comment), not the section's -
+        // everyone else just mirrors it, same as regulation below.
+        const isLateral = cohortById.get(move.studentId)?.studentType?.trim().toUpperCase() === "LATERAL";
+        const studentBatch = section.batch
+          ? (isLateral ? lateralEntryBatch(section.batch) ?? section.batch : section.batch)
+          : null;
         // department/secondaryDepartment are deliberately left untouched, even
         // when routing a shared-first-year cohort through a real branch
         // (secondaryDeptName set) - every student here was queried by
@@ -296,6 +305,7 @@ export async function POST(request: Request) {
           // of what this section's own `regulation` is later edited to for a
           // different batch (see Section.regulation's doc-comment).
           regulation: section.regulation ?? null,
+          batch: studentBatch,
           courseId: section.courseId,
           course: section.courseName ?? null,
           updatedAt: now,

@@ -50,9 +50,11 @@ type PanelFeedbackItem = {
 
 const PANEL_CRITERIA: [string, string][] = [
   ["subjectKnowledge", "Subject Knowledge"],
+  ["communication", "Communication"],
   ["presentationSkills", "Presentation Skills"],
   ["research", "Research"],
   ["specificAttributes", "Specific Attributes"],
+  ["ictTools", "ICT tools"],
   ["others", "Others"],
 ];
 

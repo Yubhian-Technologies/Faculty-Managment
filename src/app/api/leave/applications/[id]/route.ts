@@ -13,6 +13,8 @@ import { resolveStaffGender, resolveEmployeeIdentity } from "@/lib/leave/identit
 import { yearsOfService } from "@/lib/leave/dayCounter";
 import { OTHER_CATEGORIES_COL } from "@/lib/leave/otherCategories";
 import { LEAVE_TYPE_SEED } from "@/lib/leave/seedData";
+import { evaluateODProof } from "@/lib/leave/odProof";
+import { notifyODProofSubmitted, notifyODProofDecision } from "@/lib/leave/odProofNotify";
 import { notify, notifyRole } from "@/lib/notify";
 import { emitWorkflowNotification } from "@/lib/notifications/workflowNotifications";
 import { validatePeriodSubstitutions, notifySubstitutes, type PeriodSubstitutionInput } from "@/lib/leave/periodCoverage";
@@ -60,7 +62,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       "LIBRARY", "EXAM_CELL", "WEBMASTER", "PLACEMENT_DEPT", "PURCHASE_DEPT"
     );
     const body = (await request.json()) as {
-      action?: "APPROVE" | "REJECT" | "CANCEL" | "PROPOSE_COVERAGE" | "REVISE_ADJUSTMENT";
+      action?: "APPROVE" | "REJECT" | "CANCEL" | "PROPOSE_COVERAGE" | "REVISE_ADJUSTMENT"
+        | "SUBMIT_OD_PROOF" | "VERIFY_OD_PROOF" | "REJECT_OD_PROOF";
       remarks?: string;
       isPaidLeave?: boolean;
       otherLeaveCategory?: OtherLeaveCategory;
@@ -71,12 +74,17 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       declinedAssigneeUid?: string;
       newSubstituteFacultyId?: string;
       newHandoverUid?: string;
+      // SUBMIT_OD_PROOF only - the URL /api/upload/leave-proof just returned.
+      odProofUrl?: string;
     };
     if (!body.action) {
       return NextResponse.json({ error: "action is required" }, { status: 400 });
     }
     if (body.action === "CANCEL" && !body.reason?.trim()) {
       return NextResponse.json({ error: "A reason is required to cancel a leave request" }, { status: 400 });
+    }
+    if (body.action === "REJECT_OD_PROOF" && !body.reason?.trim()) {
+      return NextResponse.json({ error: "A reason is required to reject proof of duty" }, { status: 400 });
     }
 
     const db = getAdminDb();
@@ -373,6 +381,106 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       return NextResponse.json({ ok: true, changed: true });
     }
 
+    // ─── On Duty proof ────────────────────────────────────────────────────────
+    // These act on an APPROVED request, so they belong here beside CANCEL and
+    // PROPOSE_COVERAGE - past this point the handler only deals with requests
+    // still awaiting a decision and would answer "no longer pending".
+    //
+    // Nothing below writes `status` or touches a balance. Whether unproven days
+    // become Loss of Pay is derived at read time from these fields plus the
+    // request's own dates (lib/leave/odProof.ts), never recorded as a verdict.
+    if (body.action === "SUBMIT_OD_PROOF") {
+      if (req.uid !== session.uid) {
+        return NextResponse.json({ error: "You can only upload proof for your own leave" }, { status: 403 });
+      }
+      const evaluation = evaluateODProof(req, now);
+      if (!evaluation.canUpload) {
+        return NextResponse.json({
+          error: evaluation.state === "VERIFIED"
+            ? "This proof has already been verified"
+            : "Proof can only be uploaded once the On Duty period has ended",
+        }, { status: 400 });
+      }
+      // The upload route builds its path from the session and this request id
+      // alone, so a URL carrying this exact prefix could only have come from
+      // this user uploading against this request - the same host + path check
+      // profilePhotoUrl gets in api/college/users/[uid].
+      const expectedPrefix = `leave-proofs/${session.collegeId}/${session.uid}/${id}/`;
+      if (
+        !body.odProofUrl?.startsWith("https://firebasestorage.googleapis.com/") ||
+        !body.odProofUrl.includes(encodeURIComponent(expectedPrefix))
+      ) {
+        return NextResponse.json({ error: "Invalid proof URL" }, { status: 400 });
+      }
+
+      const submissionCount = (req.odProofSubmissionCount ?? 0) + 1;
+      await ref.update({
+        odProofUrl: body.odProofUrl,
+        odProofUploadedAt: now,
+        odProofStatus: "PENDING_VERIFICATION",
+        odProofSubmissionCount: submissionCount,
+        // A resubmission must not keep showing the previous rejection.
+        odProofRejectionReason: "",
+        odProofReviewedBy: "",
+        odProofReviewedByName: "",
+        updatedAt: now,
+      });
+      await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
+        collegeId: session.collegeId, action: "LEAVE_OD_PROOF_SUBMITTED", performedBy: session.uid,
+        performedByName: session.email || session.role, targetId: id, details: { submissionCount }, timestamp: now,
+      });
+      await notifyODProofSubmitted(db, session.collegeId, { ...req, id }, submissionCount);
+      return NextResponse.json({ ok: true });
+    }
+
+    if (body.action === "VERIFY_OD_PROOF" || body.action === "REJECT_OD_PROOF") {
+      // Checked first and without exception: an HOD's own OD carries their own
+      // department, so the department check below would otherwise let them
+      // sign off their own proof.
+      if (req.uid === session.uid) {
+        return NextResponse.json({ error: "You cannot verify proof for your own leave" }, { status: 403 });
+      }
+      if (req.odProofStatus !== "PENDING_VERIFICATION") {
+        return NextResponse.json({ error: "There is no proof awaiting verification on this request" }, { status: 400 });
+      }
+      // Authorised off whichever tier actually approved the request, read from
+      // the document - the requester's own role isn't stored on it. Principal/VP
+      // are allowed on an HOD-tier request too (the same allowance
+      // PROPOSE_COVERAGE makes), so a department with no sitting HOD isn't stuck.
+      if (req.hodAction) {
+        if (session.role === "HOD") {
+          const hodDept = await resolveUserDepartment(db, session.collegeId, session.uid);
+          if (!hodDept || req.department !== hodDept) {
+            return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+          }
+        } else if (session.role !== "PRINCIPAL" && session.role !== "VICE_PRINCIPAL") {
+          return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+        }
+      } else if (session.role !== "PRINCIPAL" && session.role !== "VICE_PRINCIPAL") {
+        // Approved at the Principal tier - or by Management, in which case it's
+        // reviewed from the management route rather than here.
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+
+      const verified = body.action === "VERIFY_OD_PROOF";
+      await ref.update({
+        odProofStatus: verified ? "VERIFIED" : "REJECTED",
+        odProofReviewedBy: session.uid,
+        odProofReviewedByName: session.email || session.role,
+        odProofReviewedAt: now,
+        odProofRejectionReason: verified ? "" : (body.reason ?? "").trim(),
+        updatedAt: now,
+      });
+      await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
+        collegeId: session.collegeId,
+        action: verified ? "LEAVE_OD_PROOF_VERIFIED" : "LEAVE_OD_PROOF_REJECTED",
+        performedBy: session.uid, performedByName: session.email || session.role, targetId: id,
+        details: { reason: body.reason ?? null }, timestamp: now,
+      });
+      await notifyODProofDecision(db, session.collegeId, { ...req, id }, verified, body.reason);
+      return NextResponse.json({ ok: true });
+    }
+
     // ─── HOD stage ────────────────────────────────────────────────────────────
     // Standard types (CL/SL/SCL/EL/OD): the HOD's decision is final - APPROVE
     // commits the balance and closes the request out; REJECT releases it.
@@ -475,6 +583,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       await ref.update({
         status: "APPROVED", hodAction: actionRecord, lopDays, updatedAt: now,
         ...(periodSubstitutions ? { periodSubstitutions } : {}),
+        // An approved OD only stays PAID once the duty is evidenced: the
+        // requester uploads proof after the period ends and an approver
+        // verifies it (see lib/leave/odProof.ts). Stamping the obligation
+        // here, rather than testing leaveTypeCode at read time, is what
+        // keeps every OD approved before this shipped permanently exempt.
+        ...(req.leaveTypeCode === "OD" ? { odProofRequired: true } : {}),
       });
       await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
         collegeId: session.collegeId, action: "LEAVE_HOD_APPROVED", performedBy: session.uid,

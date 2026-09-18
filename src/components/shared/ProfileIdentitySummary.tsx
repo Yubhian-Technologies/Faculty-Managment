@@ -6,7 +6,7 @@ import { ROLE_LABELS } from "@/types";
 import type { FMSUser } from "@/types";
 
 interface Props {
-  user: Pick<FMSUser, "name" | "email" | "role" | "department" | "departments">;
+  user: Pick<FMSUser, "name" | "email" | "role" | "realRole" | "department" | "departments">;
   /** Shown instead of Department - Principal/VP carry a designation, not a department. */
   designation?: string;
   /** e.g. "Sub-department of Basic Science" - HOD's own department context. */
@@ -53,7 +53,7 @@ export function ProfileIdentitySummary({ user, designation, departmentBadge }: P
       </div>
       <div>
         <p className="text-xs text-muted-foreground">Role</p>
-        <p className="text-sm font-medium">{ROLE_LABELS[user.role]}</p>
+        <p className="text-sm font-medium">{ROLE_LABELS[user.realRole ?? user.role]}</p>
       </div>
       <div>
         <p className="text-xs text-muted-foreground">College</p>

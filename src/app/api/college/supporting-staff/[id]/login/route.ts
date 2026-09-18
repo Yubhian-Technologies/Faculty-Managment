@@ -49,7 +49,7 @@ export async function POST(
     }
 
     const data = snap.data() as {
-      userUid?: string; name?: string; department?: string; profilePhotoUrl?: string;
+      userUid?: string; name?: string; legalName?: string; department?: string; profilePhotoUrl?: string;
       staffCategory?: SupportingStaffCategory; designation?: SupportingStaffDesignation;
       otherDesignationTitle?: string;
     };
@@ -72,7 +72,10 @@ export async function POST(
       );
     }
 
-    const name = data.name ?? "";
+    // Full Name (as per SSC) takes precedence over Name (as per PAN) for the
+    // login's display name - same precedence as record creation (finalName
+    // in supporting-staff POST/import) and supportingStaffDisplayName().
+    const name = data.legalName?.trim() || data.name?.trim() || "";
     const department = data.department ?? "";
     const profilePhotoUrl = data.profilePhotoUrl;
     const designation =

@@ -315,8 +315,12 @@ export async function POST(request: Request) {
           batch.update(collegeRef.collection("students").doc(move.studentId), {
             section: section.name,
             year,
-            // One-time snapshot - see distribute/route.ts's own comment.
+            // One-time snapshot - see distribute/route.ts's own comment. Never
+            // Lateral here - this route only ever moves the shared-first-year
+            // pool (Regular admits by definition), so no lateralEntryBatch
+            // branch is needed, unlike distribute/route.ts.
             regulation: section.regulation ?? null,
+            batch: section.batch ?? null,
             courseId: section.courseId,
             course: section.courseName ?? null,
             updatedAt: now,

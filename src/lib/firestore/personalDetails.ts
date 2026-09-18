@@ -14,24 +14,33 @@ export interface PersonalDetailsInput {
   aadharNo?: string;
   panNo?: string;
   passportNumber?: string;
-  sscHallTicketNo?: string;
   differentlyAbled?: boolean;
   differentlyAbledDetails?: string;
   bankAccountNo?: string;
   ifscCode?: string;
+  bankName?: string;
+  bankBranch?: string;
+  bankOtherDetails?: string;
   emergencyContactName?: string;
+  emergencyContactRelation?: string;
   emergencyContactPhone?: string;
   ratificationStatus?: string;
+  ratificationProceedingsNumber?: string;
   ratificationDate?: string;   // yyyy-mm-dd
   maritalStatus?: string;
   spouseName?: string;
   numberOfChildren?: number;
-  referral?: string;
-  nativePlace?: string;
   temporaryAddress?: string;
   permanentSameAsTemporary?: boolean;
   permanentAddress?: string;
   bloodGroup?: string;
+  motherTongue?: string;
+  languagesKnown?: string[];
+  heightFeet?: number;
+  heightInches?: number;
+  weightKg?: number;
+  pfNumber?: string; // Provident Fund number - Faculty and Supporting/Non-Technical Staff alike
+  esiNumber?: string; // ESI number - Supporting/Non-Technical Staff only (no equivalent field on FacultyMember)
 }
 
 // permanentAddress is deliberately NOT in this list - see the dedicated
@@ -40,8 +49,10 @@ export interface PersonalDetailsInput {
 // passing through whatever (if anything) the caller sent for it.
 const STRING_FIELDS = [
   "gender", "legalName", "nameAsPerAadhar", "fatherName", "motherName", "religion", "caste", "subCaste", "aadharNo", "ratificationStatus",
-  "passportNumber", "sscHallTicketNo", "differentlyAbledDetails", "bankAccountNo", "emergencyContactName", "emergencyContactPhone",
-  "maritalStatus", "spouseName", "referral", "nativePlace", "temporaryAddress", "bloodGroup",
+  "ratificationProceedingsNumber",
+  "passportNumber", "differentlyAbledDetails", "bankAccountNo", "bankName", "bankBranch", "bankOtherDetails",
+  "emergencyContactName", "emergencyContactRelation", "emergencyContactPhone", "maritalStatus", "spouseName", "temporaryAddress", "bloodGroup",
+  "motherTongue", "pfNumber", "esiNumber",
 ] as const;
 
 // The manual Add/Edit forms only ever write "Ratified" or "Not Ratified"
@@ -79,6 +90,10 @@ export function buildPersonalDetailsUpdate(body: PersonalDetailsInput): Record<s
   if (body.dateOfBirth) updates.dateOfBirth = new Date(body.dateOfBirth);
   if (body.ratificationDate) updates.ratificationDate = new Date(body.ratificationDate);
   if (body.numberOfChildren !== undefined) updates.numberOfChildren = body.numberOfChildren;
+  if (body.languagesKnown !== undefined) updates.languagesKnown = body.languagesKnown;
+  if (body.heightFeet !== undefined) updates.heightFeet = body.heightFeet;
+  if (body.heightInches !== undefined) updates.heightInches = body.heightInches;
+  if (body.weightKg !== undefined) updates.weightKg = body.weightKg;
   if (body.permanentSameAsTemporary !== undefined) updates.permanentSameAsTemporary = body.permanentSameAsTemporary;
   if (body.differentlyAbled !== undefined) updates.differentlyAbled = body.differentlyAbled;
   // "Same as temporary" means exactly that - the permanent address is set to

@@ -20,10 +20,10 @@ interface ReportRow {
   otherDays: number;
 }
 
-// Monthly leave register: every faculty member with a login, plus per-type
-// days taken this month + opening/closing balance (computeMonthlyLeaveSummary).
-// See resolveReportRoster for the PRINCIPAL/VICE_PRINCIPAL/COLLEGE_OFFICE vs
-// HOD roster rules.
+// Monthly leave register: every faculty member and supporting staff member
+// with a login, plus per-type days taken this month + opening/closing balance
+// (computeMonthlyLeaveSummary). See resolveReportRoster for the
+// PRINCIPAL/VICE_PRINCIPAL/COLLEGE_OFFICE vs HOD roster rules.
 export async function GET(request: Request) {
   try {
     const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_OFFICE", "HOD");

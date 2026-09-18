@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/select";
 import { toast } from "@/hooks/useToast";
 import {
-  academicYearLongLabel, currentAcademicStartYear, parseAcademicYearStart,
+  academicYearDateRangeLabel, academicYearLongLabel, currentAcademicStartYear, parseAcademicYearStart,
   recentAcademicYearOptions, resolveCurrentAcademicYear,
 } from "@/lib/college/academicSession";
 import type { AcademicSession } from "@/types";
@@ -78,7 +78,7 @@ export function AcademicYearSettingsCard() {
           });
           if (!res.ok) throw new Error("Failed to clear the academic year");
         }
-        toast({ variant: "success", title: `Following the calendar - now ${derived}` });
+        toast({ variant: "success", title: `Following the calendar - now ${academicYearDateRangeLabel(derived)}` });
       } else {
         // The API keys sessions by label and enforces a single current one, so
         // an existing label is switched to current and a new one is created as
@@ -97,7 +97,7 @@ export function AcademicYearSettingsCard() {
             });
         const json = await res.json() as { error?: string };
         if (!res.ok) throw new Error(json.error ?? "Failed to set the academic year");
-        toast({ variant: "success", title: `Academic year set to ${choice}` });
+        toast({ variant: "success", title: `Academic year set to ${academicYearDateRangeLabel(choice)}` });
       }
       await load();
     } catch (err) {
@@ -127,7 +127,7 @@ export function AcademicYearSettingsCard() {
           <>
             <div className="flex flex-wrap items-center gap-2 text-sm">
               <span className="text-muted-foreground">Current:</span>
-              <Badge variant="secondary">{effective}</Badge>
+              <Badge variant="secondary">{academicYearDateRangeLabel(effective)}</Badge>
               {!stored && (
                 <span className="text-xs text-muted-foreground">
                   following the calendar &mdash; rolls over on its own each April
@@ -139,8 +139,8 @@ export function AcademicYearSettingsCard() {
               <Select value={choice} onValueChange={setChoice}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={AUTO}>Follow the calendar ({derived})</SelectItem>
-                  {options.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+                  <SelectItem value={AUTO}>Follow the calendar ({academicYearDateRangeLabel(derived)})</SelectItem>
+                  {options.map((o) => <SelectItem key={o} value={o}>{academicYearDateRangeLabel(o)}</SelectItem>)}
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">

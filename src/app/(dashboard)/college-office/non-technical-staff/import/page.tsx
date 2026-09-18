@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,11 +11,10 @@ import {
 } from "@/components/ui/dialog";
 import { ImportFixField } from "@/components/import/ImportFixField";
 import { toast } from "@/hooks/useToast";
-import { useCollegeType } from "@/hooks/useCollegeType";
 import { parseCSV, matchHeaders, getUnmatchedHeaders, parseExcelFile, readFileAsText } from "@/lib/utils/csv";
 import { getSupportingStaffColumns, getSupportingStaffHints, getSupportingStaffSampleRows } from "@/lib/supportingStaff/csvColumns";
 import { Download, Upload, CheckCircle2, XCircle, FileSpreadsheet, ArrowLeft, AlertTriangle, Pencil } from "lucide-react";
-import type { Department } from "@/types";
+import type { Department, DesignationCatalogItem } from "@/types";
 
 type ParsedRow = Record<string, string>;
 type ImportResult = {
@@ -30,15 +29,25 @@ type ImportResult = {
 // importer's fix-and-retry flow (hod/faculty/import).
 type FailedRow = { row: number; employeeId: string; error: string; data: ParsedRow; status: "failed" | "fixed" };
 
-const COLUMNS = getSupportingStaffColumns("non-technical");
-const HINTS = getSupportingStaffHints();
-const SAMPLE_ROWS = getSupportingStaffSampleRows("non-technical");
-
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function CollegeOfficeNonTechnicalStaffImportPage() {
   const fileRef = useRef<HTMLInputElement>(null);
-  const { collegeType } = useCollegeType();
+  const [designationOptions, setDesignationOptions] = useState<string[]>([]);
+  useEffect(() => {
+    void (async () => {
+      try {
+        const res = await fetch("/api/college/designations?category=NON_TECHNICAL");
+        const data = await res.json() as { items?: DesignationCatalogItem[] };
+        setDesignationOptions((data.items ?? []).filter((d) => d.isActive).map((d) => d.name));
+      } catch {
+        // Non-fatal - the Fix dialog's Designation field just stays empty.
+      }
+    })();
+  }, []);
+  const COLUMNS = useMemo(() => getSupportingStaffColumns("non-technical", designationOptions), [designationOptions]);
+  const HINTS = useMemo(() => getSupportingStaffHints("non-technical", designationOptions), [designationOptions]);
+  const SAMPLE_ROWS = useMemo(() => getSupportingStaffSampleRows(designationOptions), [designationOptions]);
   const [rows, setRows] = useState<ParsedRow[]>([]);
   const [parseError, setParseError] = useState("");
   const [isImporting, setIsImporting] = useState(false);
@@ -481,8 +490,7 @@ export default function CollegeOfficeNonTechnicalStaffImportPage() {
                   value={fixTarget.form[c.key] ?? ""}
                   placeholder={c.sample || undefined}
                   onChange={(v) => setFixField(c.key, v)}
-                  collegeType={collegeType}
-                  designationKind="non-technical"
+                  designationOptions={designationOptions}
                   departmentOptions={departmentNames}
                 />
               ))}

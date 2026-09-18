@@ -8,7 +8,9 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { SupportingStaffModuleEditor, type SupportingStaffEditRecord } from "@/components/supportingStaff/SupportingStaffModuleEditor";
+import { getMissingRequiredPersonalFields } from "@/components/shared/PersonalDetailsFields";
 import { SUPPORTING_STAFF_MODULES, type SupportingStaffModuleKey } from "@/lib/supportingStaff/profileModules";
+import { supportingStaffDisplayName } from "@/lib/supportingStaff/supportingStaffDisplayName";
 import { useCollegeType } from "@/hooks/useCollegeType";
 import { toast } from "@/hooks/useToast";
 
@@ -40,6 +42,7 @@ export default function NonTechnicalStaffModuleEditPage() {
           gender: (m.gender as string) ?? "",
           dateOfBirth: (m.dateOfBirth as string) ?? undefined,
           legalName: (m.legalName as string) ?? "",
+          nameAsPerAadhar: (m.nameAsPerAadhar as string) ?? "",
           fatherName: (m.fatherName as string) ?? "",
           motherName: (m.motherName as string) ?? "",
           religion: m.religion as never,
@@ -48,19 +51,31 @@ export default function NonTechnicalStaffModuleEditPage() {
           aadharNo: (m.aadharNo as string) ?? "",
           panNo: (m.panNo as string) ?? "",
           passportNumber: (m.passportNumber as string) ?? "",
+          bankAccountNo: (m.bankAccountNo as string) ?? "",
+          ifscCode: (m.ifscCode as string) ?? "",
+          bankName: (m.bankName as string) ?? "",
+          bankBranch: (m.bankBranch as string) ?? "",
+          bankOtherDetails: (m.bankOtherDetails as string) ?? "",
           emergencyContactName: (m.emergencyContactName as string) ?? "",
+          emergencyContactRelation: (m.emergencyContactRelation as string) ?? "",
           emergencyContactPhone: (m.emergencyContactPhone as string) ?? "",
           ratificationStatus: (m.ratificationStatus as string) ?? "",
+          ratificationProceedingsNumber: (m.ratificationProceedingsNumber as string) ?? "",
           ratificationDate: (m.ratificationDate as string) ?? undefined,
           maritalStatus: (m.maritalStatus as string) ?? "",
           spouseName: (m.spouseName as string) ?? "",
           numberOfChildren: m.numberOfChildren as number | undefined,
-          referral: (m.referral as string) ?? "",
-          nativePlace: (m.nativePlace as string) ?? "",
           temporaryAddress: (m.temporaryAddress as string) ?? "",
           permanentSameAsTemporary: (m.permanentSameAsTemporary as boolean) ?? false,
           permanentAddress: (m.permanentAddress as string) ?? "",
           bloodGroup: (m.bloodGroup as string) ?? "",
+          motherTongue: (m.motherTongue as string) ?? "",
+          languagesKnown: (m.languagesKnown as string[]) ?? [],
+          heightFeet: m.heightFeet as number | undefined,
+          heightInches: m.heightInches as number | undefined,
+          weightKg: m.weightKg as number | undefined,
+          pfNumber: (m.pfNumber as string) ?? "",
+          esiNumber: (m.esiNumber as string) ?? "",
           supportingStaffProfile: (m.supportingStaffProfile as SupportingStaffEditRecord["supportingStaffProfile"]) ?? {},
         });
       })
@@ -73,20 +88,35 @@ export default function NonTechnicalStaffModuleEditPage() {
   }
 
   async function handleSave() {
+    if (moduleKey === "personal") {
+      const missing = getMissingRequiredPersonalFields(record);
+      if (missing.length > 0) {
+        toast({ variant: "destructive", title: "Some required fields are missing", description: missing.join(", ") });
+        return;
+      }
+    }
     setSaving(true);
     try {
       const body: Record<string, unknown> =
         moduleKey === "personal"
           ? {
               gender: record.gender, dateOfBirth: record.dateOfBirth, legalName: record.legalName,
+              nameAsPerAadhar: record.nameAsPerAadhar,
               fatherName: record.fatherName, motherName: record.motherName, religion: record.religion,
               caste: record.caste, subCaste: record.subCaste, aadharNo: record.aadharNo, panNo: record.panNo,
-              passportNumber: record.passportNumber, emergencyContactName: record.emergencyContactName,
+              passportNumber: record.passportNumber,
+              bankAccountNo: record.bankAccountNo, ifscCode: record.ifscCode,
+              bankName: record.bankName, bankBranch: record.bankBranch, bankOtherDetails: record.bankOtherDetails,
+              emergencyContactName: record.emergencyContactName, emergencyContactRelation: record.emergencyContactRelation,
               emergencyContactPhone: record.emergencyContactPhone, ratificationStatus: record.ratificationStatus,
+              ratificationProceedingsNumber: record.ratificationProceedingsNumber,
               ratificationDate: record.ratificationDate, maritalStatus: record.maritalStatus, spouseName: record.spouseName,
-              numberOfChildren: record.numberOfChildren, referral: record.referral, nativePlace: record.nativePlace,
+              numberOfChildren: record.numberOfChildren,
               temporaryAddress: record.temporaryAddress, permanentSameAsTemporary: record.permanentSameAsTemporary,
               permanentAddress: record.permanentAddress, bloodGroup: record.bloodGroup,
+              motherTongue: record.motherTongue, languagesKnown: record.languagesKnown,
+              heightFeet: record.heightFeet, heightInches: record.heightInches, weightKg: record.weightKg,
+              pfNumber: record.pfNumber, esiNumber: record.esiNumber,
             }
           : { supportingStaffProfile: record.supportingStaffProfile };
 
@@ -112,7 +142,7 @@ export default function NonTechnicalStaffModuleEditPage() {
     <div className="space-y-6">
       <PageHeader
         title={`Edit ${moduleDef.label}`}
-        description={name}
+        description={supportingStaffDisplayName({ legalName: record.legalName, name })}
         actions={
           <Button variant="outline" asChild>
             <Link href={`/college-office/non-technical-staff/${staffId}/${moduleKey}`}><ArrowLeft className="h-4 w-4 mr-2" />Back</Link>

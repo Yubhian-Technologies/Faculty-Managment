@@ -3,19 +3,35 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import { getHodDepartmentScope } from "@/lib/departments/scope";
+import { getHodDepartmentScope, canHodManageAssignment } from "@/lib/departments/scope";
+import type { Department } from "@/types";
+import type { DepartmentYearRow } from "@/lib/departments/managedBranches";
 
-// A parent department's HOD only has view-only (secondary) access to a child
-// sub-department's assignments - only the assignment's own (primary) HOD may
-// edit or remove it.
+// Same two-part rule the bulk teaching-assignments DELETE applies (see
+// canHodManageAssignment's own doc-comment): owns the section's
+// department/year, OR owns the assigned faculty's department. This used to be
+// a third, narrower reimplementation here (own department only, no child/
+// managed-branch or owns-the-faculty fallback) that disagreed with both the
+// bulk DELETE and the broader check assignment-creation (POST) uses - letting
+// a managing HOD create an assignment for a branch's faculty they could then
+// never remove through this route. Fetches the same department list POST/the
+// bulk DELETE already read, since Firestore has no cheap way to answer "is X
+// in the courseScopes-resolved owner list" without it.
 async function assertHodOwnsAssignment(
   db: FirebaseFirestore.Firestore,
   collegeId: string,
   uid: string,
-  assignmentDepartment: string
+  assignment: { department?: string; year?: number; courseId?: string; facultyId?: string }
 ): Promise<boolean> {
   const scope = await getHodDepartmentScope(db, collegeId, uid);
-  return !!assignmentDepartment && scope.ownDepartmentNames.includes(assignmentDepartment);
+  const collegeRef = db.collection("colleges").doc(collegeId);
+  const [deptsSnap, courseSnap] = await Promise.all([
+    collegeRef.collection("departments").get(),
+    assignment.courseId ? collegeRef.collection("courses").doc(assignment.courseId).get() : Promise.resolve(null),
+  ]);
+  const allDepartments = deptsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as (DepartmentYearRow & Pick<Department, "name">)[];
+  const catalogId = (courseSnap?.data() as { catalogId?: string } | undefined)?.catalogId;
+  return canHodManageAssignment(db, collegeId, scope, allDepartments, assignment, catalogId);
 }
 
 export async function PATCH(
@@ -39,9 +55,9 @@ export async function PATCH(
     if (!snap.exists) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
     if (session.role === "HOD") {
-      const dept = (snap.data() as { department?: string }).department ?? "";
-      if (!(await assertHodOwnsAssignment(db, session.collegeId, session.uid, dept))) {
-        return NextResponse.json({ error: "You can only edit assignments in your own department" }, { status: 403 });
+      const assignmentData = snap.data() as { department?: string; year?: number; courseId?: string; facultyId?: string };
+      if (!(await assertHodOwnsAssignment(db, session.collegeId, session.uid, assignmentData))) {
+        return NextResponse.json({ error: "You can only edit assignments in your own department, its sub-departments, a year your department manages, or one of your own faculty's assignments elsewhere" }, { status: 403 });
       }
     }
 
@@ -80,9 +96,9 @@ export async function DELETE(
     if (!snap.exists) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
     if (session.role === "HOD") {
-      const dept = (snap.data() as { department?: string }).department ?? "";
-      if (!(await assertHodOwnsAssignment(db, session.collegeId, session.uid, dept))) {
-        return NextResponse.json({ error: "You can only remove assignments in your own department" }, { status: 403 });
+      const assignmentData = snap.data() as { department?: string; year?: number; courseId?: string; facultyId?: string };
+      if (!(await assertHodOwnsAssignment(db, session.collegeId, session.uid, assignmentData))) {
+        return NextResponse.json({ error: "You can only remove assignments in your own department, its sub-departments, a year your department manages, or one of your own faculty's assignments elsewhere" }, { status: 403 });
       }
     }
 

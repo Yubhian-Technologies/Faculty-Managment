@@ -42,7 +42,7 @@ export default function PrincipalProfileModulePage() {
         }
       />
 
-      <FacultyProfileModuleContent moduleKey={moduleKey} faculty={user} includeTeachingAssignment={false} collegeType={collegeType} />
+      <FacultyProfileModuleContent moduleKey={moduleKey} faculty={user} includeTeachingAssignment={false} collegeType={collegeType} isOwnProfile />
     </div>
   );
 }

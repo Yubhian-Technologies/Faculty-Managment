@@ -8,8 +8,11 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { FacultyProfileModuleEditor, type FacultyEditRecord } from "@/components/faculty/FacultyProfileModuleEditor";
+import { getMissingRequiredPersonalFields, FACULTY_REQUIRED_PERSONAL_FIELDS } from "@/components/shared/PersonalDetailsFields";
 import { PROFILE_MODULES, type ProfileModuleKey } from "@/lib/faculty/profileModules";
 import { syncTeachingAssignments } from "@/lib/teaching/syncTeachingAssignments";
+import { totalPreviousExperienceYears, allPreviousExperienceEntries } from "@/lib/faculty/experienceCalc";
+import { toDateInputValue } from "@/lib/utils";
 import type { StagedTeachingRow } from "@/components/faculty/TeachingAssignmentsEditor";
 import { useCollegeType } from "@/hooks/useCollegeType";
 import { toast } from "@/hooks/useToast";
@@ -25,6 +28,7 @@ export default function HodFacultyModuleEditPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [name, setName] = useState("");
+  const [department, setDepartment] = useState("");
   const [record, setRecord] = useState<FacultyEditRecord>({});
   const [teachingRows, setTeachingRows] = useState<StagedTeachingRow[]>([]);
   const [originalTeachingRows, setOriginalTeachingRows] = useState<StagedTeachingRow[]>([]);
@@ -40,9 +44,10 @@ export default function HodFacultyModuleEditPage() {
         }
         const m = data.faculty;
         setName((m.name as string) ?? "");
+        setDepartment((m.department as string) ?? "");
         setRecord({
           gender: (m.gender as string) ?? "",
-          dateOfBirth: (m.dateOfBirth as string) ?? undefined,
+          dateOfBirth: toDateInputValue(m.dateOfBirth as never) || undefined,
           legalName: (m.legalName as string) ?? "",
           nameAsPerAadhar: (m.nameAsPerAadhar as string) ?? "",
           fatherName: (m.fatherName as string) ?? "",
@@ -53,24 +58,32 @@ export default function HodFacultyModuleEditPage() {
           aadharNo: (m.aadharNo as string) ?? "",
           panNo: (m.panNo as string) ?? "",
           passportNumber: (m.passportNumber as string) ?? "",
-          sscHallTicketNo: (m.sscHallTicketNo as string) ?? "",
           differentlyAbled: (m.differentlyAbled as boolean) ?? undefined,
           differentlyAbledDetails: (m.differentlyAbledDetails as string) ?? "",
           bankAccountNo: (m.bankAccountNo as string) ?? "",
           ifscCode: (m.ifscCode as string) ?? "",
+          bankName: (m.bankName as string) ?? "",
+          bankBranch: (m.bankBranch as string) ?? "",
+          bankOtherDetails: (m.bankOtherDetails as string) ?? "",
           emergencyContactName: (m.emergencyContactName as string) ?? "",
+          emergencyContactRelation: (m.emergencyContactRelation as string) ?? "",
           emergencyContactPhone: (m.emergencyContactPhone as string) ?? "",
           ratificationStatus: (m.ratificationStatus as string) ?? "",
-          ratificationDate: (m.ratificationDate as string) ?? undefined,
+          ratificationProceedingsNumber: (m.ratificationProceedingsNumber as string) ?? "",
+          ratificationDate: toDateInputValue(m.ratificationDate as never) || undefined,
           maritalStatus: (m.maritalStatus as string) ?? "",
           spouseName: (m.spouseName as string) ?? "",
           numberOfChildren: m.numberOfChildren as number | undefined,
-          referral: (m.referral as string) ?? "",
-          nativePlace: (m.nativePlace as string) ?? "",
           temporaryAddress: (m.temporaryAddress as string) ?? "",
           permanentSameAsTemporary: (m.permanentSameAsTemporary as boolean) ?? false,
           permanentAddress: (m.permanentAddress as string) ?? "",
           bloodGroup: (m.bloodGroup as string) ?? "",
+          motherTongue: (m.motherTongue as string) ?? "",
+          languagesKnown: (m.languagesKnown as string[]) ?? [],
+          heightFeet: m.heightFeet as number | undefined,
+          heightInches: m.heightInches as number | undefined,
+          weightKg: m.weightKg as number | undefined,
+          pfNumber: (m.pfNumber as string) ?? "",
           academicProfile: (m.academicProfile as FacultyEditRecord["academicProfile"]) ?? {},
           joiningLetterUrl: (m.joiningLetterUrl as string) ?? "",
           appointmentLetterUrl: (m.appointmentLetterUrl as string) ?? "",
@@ -108,6 +121,13 @@ export default function HodFacultyModuleEditPage() {
   }
 
   async function handleSave() {
+    if (moduleKey === "personal") {
+      const missing = getMissingRequiredPersonalFields(record, FACULTY_REQUIRED_PERSONAL_FIELDS);
+      if (missing.length > 0) {
+        toast({ variant: "destructive", title: "Some required fields are missing", description: missing.join(", ") });
+        return;
+      }
+    }
     setSaving(true);
     try {
       if (moduleKey === "teaching-load") {
@@ -125,17 +145,29 @@ export default function HodFacultyModuleEditPage() {
                 nameAsPerAadhar: record.nameAsPerAadhar,
                 fatherName: record.fatherName, motherName: record.motherName, religion: record.religion,
                 caste: record.caste, subCaste: record.subCaste, aadharNo: record.aadharNo, panNo: record.panNo,
-                passportNumber: record.passportNumber, sscHallTicketNo: record.sscHallTicketNo,
+                passportNumber: record.passportNumber,
                 differentlyAbled: record.differentlyAbled, differentlyAbledDetails: record.differentlyAbledDetails,
                 bankAccountNo: record.bankAccountNo, ifscCode: record.ifscCode,
-                emergencyContactName: record.emergencyContactName,
+                bankName: record.bankName, bankBranch: record.bankBranch, bankOtherDetails: record.bankOtherDetails,
+                emergencyContactName: record.emergencyContactName, emergencyContactRelation: record.emergencyContactRelation,
                 emergencyContactPhone: record.emergencyContactPhone, ratificationStatus: record.ratificationStatus,
+                ratificationProceedingsNumber: record.ratificationProceedingsNumber,
                 ratificationDate: record.ratificationDate, maritalStatus: record.maritalStatus, spouseName: record.spouseName,
-                numberOfChildren: record.numberOfChildren, referral: record.referral, nativePlace: record.nativePlace,
+                numberOfChildren: record.numberOfChildren,
                 temporaryAddress: record.temporaryAddress, permanentSameAsTemporary: record.permanentSameAsTemporary,
                 permanentAddress: record.permanentAddress, bloodGroup: record.bloodGroup,
+                motherTongue: record.motherTongue, languagesKnown: record.languagesKnown,
+                heightFeet: record.heightFeet, heightInches: record.heightInches, weightKg: record.weightKg,
+                pfNumber: record.pfNumber,
               }
-            : { academicProfile: record.academicProfile };
+            : moduleKey === "experience"
+              // Total Experience is calculated from Academic/Industry/Research
+              // Experience's From/To dates, combined, not typed manually - see
+              // experienceCalc.ts. Kept in sync with the top-level
+              // FacultyMember.experienceYears field (shown on the list/PDF/
+              // profile) every time this module is saved.
+              ? { academicProfile: record.academicProfile, experienceYears: totalPreviousExperienceYears(allPreviousExperienceEntries(record.academicProfile)) }
+              : { academicProfile: record.academicProfile };
 
         const res = await fetch(`/api/college/faculty/${facultyId}`, {
           method: "PATCH",
@@ -180,7 +212,9 @@ export default function HodFacultyModuleEditPage() {
               facultyId={facultyId}
               teachingRows={teachingRows}
               onTeachingRowsChange={setTeachingRows}
+              department={department}
               collegeType={collegeType}
+              requiredPersonalFields={FACULTY_REQUIRED_PERSONAL_FIELDS}
             />
             <div className="flex justify-end gap-3 pt-4 border-t">
               <Button variant="outline" onClick={() => router.push(`/hod/faculty/${facultyId}/${moduleKey}`)}>Cancel</Button>

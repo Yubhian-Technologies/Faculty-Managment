@@ -25,6 +25,15 @@ function headcountKey(designation: string, employmentType: string): string {
   return `${designation}|${employmentType}`;
 }
 
+// Salary Structures still key on the legacy EmploymentType spelling
+// (PERMANENT/CONTRACT/VISITING/PART_TIME) - faculty records now have
+// employeeCategory (REGULAR/VISITING/CONTRACT/PART_TIME) instead. Only the
+// first spelling differs; the other 3 are unchanged. Keeps this table's
+// headcount keys in the same (legacy) space as salaryStructureLabel above.
+function toLegacyEmploymentType(employeeCategory: string): string {
+  return employeeCategory === "REGULAR" ? "PERMANENT" : employeeCategory;
+}
+
 function emptyItem(category: string): BudgetRequestItem {
   const cfg = fieldConfigForCategory(category);
   return {
@@ -90,7 +99,7 @@ export function BudgetItemsTable({ items, onChange, readOnly = false, category, 
         if (cancelled) return;
         const map = new Map<string, number>();
         for (const f of data.faculty ?? []) {
-          const key = headcountKey(f.designation, f.employmentType);
+          const key = headcountKey(f.designation, f.employeeCategory ? toLegacyEmploymentType(f.employeeCategory) : (f.employmentType ?? ""));
           map.set(key, (map.get(key) ?? 0) + 1);
         }
         setHeadcountByKey(map);

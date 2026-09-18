@@ -101,12 +101,13 @@ export async function POST(request: Request) {
         const facultyRef = collegeRef.collection("facultyMembers").doc(facultyId);
         const facultySnap = await facultyRef.get();
         if (!facultySnap.exists) continue;
-        const facultyData = facultySnap.data() as { status?: FacultyStatus; experienceYears?: number; internalExperience?: number };
+        const facultyData = facultySnap.data() as { status?: FacultyStatus; experienceYears?: number };
         if (facultyData.status !== "ACTIVE") continue;
 
+        // internalExperience is no longer a stored field - it's computed
+        // live from joiningDate wherever shown (see experienceCalc.ts).
         batch.update(facultyRef, {
           experienceYears: (facultyData.experienceYears ?? 0) + 1,
-          internalExperience: (facultyData.internalExperience ?? 0) + 1,
           updatedAt: now,
         });
         facultyUpdated++;

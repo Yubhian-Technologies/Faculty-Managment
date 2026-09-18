@@ -75,6 +75,7 @@ export default function OfficeStudentsPage() {
   const [deptFilter, setDeptFilter] = useState("all");
   const [yearFilter, setYearFilter] = useState<string>("all");
   const [courseFilter, setCourseFilter] = useState<string>("all");
+  const [studentTypeFilter, setStudentTypeFilter] = useState<string>("all");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
 
@@ -158,6 +159,7 @@ export default function OfficeStudentsPage() {
       if (deptFilter !== "all") params.set("department", deptFilter);
       if (courseFilter !== "all") params.set("course", courseFilter);
       if (yearFilter !== "all") params.set("year", yearFilter);
+      if (studentTypeFilter !== "all") params.set("studentType", studentTypeFilter);
 
       const res = await fetch(`/api/college/students?${params.toString()}`);
       const json = await res.json() as { students?: StudentListItem[]; total?: number; error?: string };
@@ -183,7 +185,7 @@ export default function OfficeStudentsPage() {
       setIsFetching(false);
       setIsLoading(false);
     }
-  }, [page, pageSize, debouncedSearch, deptFilter, courseFilter, yearFilter]);
+  }, [page, pageSize, debouncedSearch, deptFilter, courseFilter, yearFilter, studentTypeFilter]);
 
   // Wrapped so the loaders' setState calls aren't reachable synchronously from
   // the effect body (react-hooks/set-state-in-effect).
@@ -314,6 +316,11 @@ export default function OfficeStudentsPage() {
     setPage(1);
   }
 
+  function onStudentTypeFilterChange(value: string) {
+    setStudentTypeFilter(value);
+    setPage(1);
+  }
+
   function onPageSizeChange(value: number) {
     setPageSize(value);
     setPage(1);
@@ -359,6 +366,7 @@ export default function OfficeStudentsPage() {
       if (deptFilter !== "all") params.set("department", deptFilter);
       if (courseFilter !== "all") params.set("course", courseFilter);
       if (yearFilter !== "all") params.set("year", yearFilter);
+      if (studentTypeFilter !== "all") params.set("studentType", studentTypeFilter);
       const res = await fetch(`/api/college/students?${params.toString()}`);
       const json = await res.json() as { ids?: string[]; error?: string };
       if (!res.ok) { toast({ variant: "destructive", title: json.error ?? "Failed to select all matching students" }); return; }
@@ -613,6 +621,14 @@ export default function OfficeStudentsPage() {
           <SelectContent>
             <SelectItem value="all">All years</SelectItem>
             {yearFilterOptions.map((y) => <SelectItem key={y} value={String(y)}>{ordinalYear(y)}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={studentTypeFilter} onValueChange={onStudentTypeFilterChange}>
+          <SelectTrigger className="sm:w-40"><SelectValue placeholder="All types" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All types</SelectItem>
+            <SelectItem value="Regular">Regular</SelectItem>
+            <SelectItem value="Lateral">Lateral</SelectItem>
           </SelectContent>
         </Select>
       </div>

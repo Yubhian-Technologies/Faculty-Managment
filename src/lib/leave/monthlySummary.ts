@@ -1,6 +1,7 @@
 import type { Firestore } from "firebase-admin/firestore";
 import type { EffectiveLeaveCategory, LeaveBalance, LeaveRequest, LeaveTypeCode } from "@/types/leave";
 import { LEAVE_TYPE_SEED } from "./seedData";
+import { unprovenODLopDays } from "./odProof";
 import { REQUESTS_COL, computeEntitlement, loadBalances, initBalancesForYear } from "./balanceEngine";
 import { computeEffectiveCategory } from "./categoryEngine";
 import { getOrCreateProfile } from "./profile";
@@ -103,7 +104,12 @@ function computeMonthSummary(
   balanceByType: Map<LeaveTypeCode, LeaveBalance>,
   holidayDates: Set<string>,
   year: number,
-  month: number // 1-12
+  month: number, // 1-12
+  // Evaluated against, not stored: whether an On Duty request has gone
+  // unproven is derived from its own dates every time this runs (see
+  // odProof.ts - there is no scheduler to write that verdict down).
+  // Parameterised purely so a test can freeze time.
+  asOf: Date = new Date()
 ): PeriodLeaveSummary {
   const approved = allApproved.filter((r) => r.leaveTypeCode);
 
@@ -165,7 +171,14 @@ function computeMonthSummary(
   const otherLopDays = otherRequests
     .filter((r) => r.isPaidLeave === false)
     .reduce((s, r) => s + daysInMonth(r), 0);
-  const lopDays = standardLopDays + otherLopDays;
+  // An APPROVED On Duty request whose proof window expired without a verified
+  // proof (see lib/leave/odProof.ts) - OD is only paid when the duty is
+  // actually evidenced. Keyed on leaveTypeCode "OD" inside that helper, NOT on
+  // rules.unlimited: Summer Vacation (SH) shares that flag and must never be
+  // swept in. Note these days still count as *taken* in the OD column above -
+  // LOP has always been a parallel tally, never a deduction from taken.
+  const odLopDays = unprovenODLopDays(approved, daysInMonth, asOf);
+  const lopDays = standardLopDays + otherLopDays + odLopDays;
 
   return { types, lopDays, otherDays };
 }
@@ -224,10 +237,11 @@ export async function computeMonthlyLeaveSummary(
   collegeId: string,
   uid: string,
   year: number,
-  month: number // 1-12
+  month: number, // 1-12
+  asOf: Date = new Date()
 ): Promise<MonthlyLeaveSummary> {
   const { category, dateOfJoining, balanceByType, allApproved, holidayDates } = await loadEmployeeLeaveData(db, collegeId, uid, year);
-  const summary = computeMonthSummary(allApproved, category, balanceByType, holidayDates, year, month);
+  const summary = computeMonthSummary(allApproved, category, balanceByType, holidayDates, year, month, asOf);
   return { uid, category, dateOfJoining, ...summary };
 }
 
@@ -238,13 +252,14 @@ export async function computeYearlyLeaveSummary(
   db: Firestore,
   collegeId: string,
   uid: string,
-  year: number
+  year: number,
+  asOf: Date = new Date()
 ): Promise<YearlyLeaveSummary> {
   const { category, dateOfJoining, balanceByType, allApproved, holidayDates } = await loadEmployeeLeaveData(db, collegeId, uid, year);
 
   const months: YearlyMonthSummary[] = [];
   for (let month = 1; month <= 12; month++) {
-    months.push({ month, ...computeMonthSummary(allApproved, category, balanceByType, holidayDates, year, month) });
+    months.push({ month, ...computeMonthSummary(allApproved, category, balanceByType, holidayDates, year, month, asOf) });
   }
 
   const totals: PeriodLeaveSummary = { types: {}, lopDays: 0, otherDays: 0 };

@@ -83,6 +83,10 @@ export async function decideFinalStageLeave(params: {
       lopDays,
       updatedAt: now,
       ...(newlyTaggedPaidLeave !== undefined ? { isPaidLeave: newlyTaggedPaidLeave } : {}),
+      // Same OD proof obligation the HOD approval path stamps - this branch
+      // covers an HOD's own OD (Principal-decided) and a Principal's own
+      // (Management-decided). See lib/leave/odProof.ts.
+      ...(req.leaveTypeCode === "OD" ? { odProofRequired: true } : {}),
     });
   }
 

@@ -10,13 +10,14 @@ import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { Avatar } from "@/components/shared/Avatar";
 import { toast } from "@/hooks/useToast";
+import { supportingStaffDisplayName } from "@/lib/supportingStaff/supportingStaffDisplayName";
 import {
   NON_TECHNICAL_STAFF_DESIGNATION_LABELS,
-  EMPLOYMENT_TYPE_LABELS, FACULTY_STATUS_LABELS,
+  FACULTY_STATUS_LABELS,
 } from "@/types";
 import type {
   SupportingStaffMember, SupportingStaffDesignation,
-  EmploymentType, FacultyStatus,
+  FacultyStatus,
 } from "@/types";
 
 type StaffRow = Record<string, unknown> & SupportingStaffMember;
@@ -62,7 +63,7 @@ export default function CollegeOfficeNonTechnicalStaffPage() {
     try {
       const res = await fetch(`/api/college/supporting-staff/${deleteTarget.id}`, { method: "DELETE" });
       if (!res.ok) throw new Error();
-      toast({ variant: "success", title: `${deleteTarget.name} removed` });
+      toast({ variant: "success", title: `${supportingStaffDisplayName(deleteTarget)} removed` });
       setDeleteTarget(null);
       void load();
     } catch {
@@ -78,9 +79,9 @@ export default function CollegeOfficeNonTechnicalStaffPage() {
       header: "Staff Member",
       render: (row) => (
         <div className="flex items-start gap-3 min-w-0">
-          <Avatar name={row.name} photoUrl={row.profilePhotoUrl} size="sm" className="mt-0.5" />
+          <Avatar name={supportingStaffDisplayName(row) || "?"} photoUrl={row.profilePhotoUrl} size="sm" className="mt-0.5" />
           <div className="space-y-0.5 min-w-0">
-            <p className="font-medium leading-tight">{row.name}</p>
+            <p className="font-medium leading-tight">{supportingStaffDisplayName(row)}</p>
             {row.collegeEmail && <p className="text-xs text-muted-foreground">{row.collegeEmail}</p>}
             <p className="text-xs text-muted-foreground">ID: {row.employeeId}</p>
           </div>
@@ -101,12 +102,6 @@ export default function CollegeOfficeNonTechnicalStaffPage() {
       header: "Department",
       hideOnMobile: true,
       render: (row) => <span className="text-sm text-muted-foreground">{row.department || "Centrally managed"}</span>,
-    },
-    {
-      key: "employmentType",
-      header: "Employment",
-      hideOnMobile: true,
-      render: (row) => <Badge variant="outline">{EMPLOYMENT_TYPE_LABELS[row.employmentType as EmploymentType] ?? row.employmentType}</Badge>,
     },
     {
       key: "status",
@@ -178,7 +173,7 @@ export default function CollegeOfficeNonTechnicalStaffPage() {
         open={!!deleteTarget}
         onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}
         title="Delete staff record?"
-        description={`This will permanently remove ${deleteTarget?.name ?? "this staff member"} (${deleteTarget?.employeeId ?? ""}). This cannot be undone.`}
+        description={`This will permanently remove ${supportingStaffDisplayName(deleteTarget) || "this staff member"} (${deleteTarget?.employeeId ?? ""}). This cannot be undone.`}
         confirmLabel="Delete"
         variant="destructive"
         onConfirm={() => void handleDelete()}

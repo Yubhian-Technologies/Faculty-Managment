@@ -168,7 +168,7 @@ export default function CandidateProfilePage() {
           dateOfJoining: a.dateOfJoining,
         })),
         generatedByName: user?.name ?? "College Office",
-        generatedByRole: user?.role ? ROLE_LABELS[user.role] : undefined,
+        generatedByRole: user?.role ? ROLE_LABELS[user.realRole ?? user.role] : undefined,
       }, candidate.name);
     } catch (err) {
       toast({ variant: "destructive", title: "Failed to generate candidate profile", description: err instanceof Error ? err.message : undefined });
@@ -368,8 +368,16 @@ export default function CandidateProfilePage() {
                   ) : (
                     <div className="space-y-2 pt-2 border-t">
                       {feedbackForBatch.map((f) => {
-                        const panelAvg = f.panelScores
-                          ? (f.panelScores.subjectKnowledge + f.panelScores.presentationSkills + f.panelScores.research + f.panelScores.specificAttributes + f.panelScores.others) / 5
+                        // Averaged over the criteria actually recorded, not a
+                        // fixed divisor: Communication and ICT tools were added
+                        // to the rubric later, so feedback saved before then
+                        // has five scores and newer feedback has seven.
+                        // Counting a missing criterion as 0 would drag every
+                        // older panellist's average down by two-sevenths.
+                        const panelValues = Object.values(f.panelScores ?? {})
+                          .filter((v): v is number => typeof v === "number");
+                        const panelAvg = panelValues.length > 0
+                          ? panelValues.reduce((sum, v) => sum + v, 0) / panelValues.length
                           : null;
                         return (
                           <div key={f.id} className="flex items-center justify-between gap-3">

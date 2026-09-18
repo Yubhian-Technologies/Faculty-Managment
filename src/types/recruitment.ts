@@ -373,11 +373,17 @@ export interface PanelFeedback {
 
   // Panel evaluation module — marks out of 10 per criterion. This is the active
   // evaluation form used across the HOD / panel / coordinator dashboards.
+  // `communication` and `ictTools` were added after this form went live, so
+  // feedback recorded before then has neither. They're optional for that reason
+  // - anything averaging or listing these must tolerate a missing criterion
+  // rather than counting it as a zero (see candidate-profile's average).
   panelScores?: {
     subjectKnowledge: number;    // 1–10
+    communication?: number;      // 1–10
     presentationSkills: number;  // 1–10
     research: number;            // 1–10
     specificAttributes: number;  // 1–10
+    ictTools?: number;           // 1–10
     others: number;              // 1–10
   };
 
@@ -393,6 +399,7 @@ export interface PanelFeedback {
     presentationSkills?: string;
     research?: string;
     specificAttributes?: string;
+    ictTools?: string;
     others?: string;
   };
   subjectsTested?: string[];

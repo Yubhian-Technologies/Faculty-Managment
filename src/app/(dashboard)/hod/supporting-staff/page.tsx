@@ -14,14 +14,15 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "@/hooks/useToast";
 import { useCollegeType } from "@/hooks/useCollegeType";
-import { getHodTechnicalDesignations } from "@/lib/designations/config";
+import { hasSupportingStaffSplit } from "@/lib/designations/config";
+import { supportingStaffDisplayName } from "@/lib/supportingStaff/supportingStaffDisplayName";
 import {
   NON_TECHNICAL_STAFF_DESIGNATION_LABELS,
-  EMPLOYMENT_TYPE_LABELS, FACULTY_STATUS_LABELS,
+  FACULTY_STATUS_LABELS,
 } from "@/types";
 import type {
   SupportingStaffMember, SupportingStaffDesignation,
-  EmploymentType, FacultyStatus,
+  FacultyStatus,
 } from "@/types";
 
 type StaffRow = Record<string, unknown> & SupportingStaffMember;
@@ -76,7 +77,7 @@ export default function HODSupportingStaffPage() {
     try {
       const res = await fetch(`/api/college/supporting-staff/${deleteTarget.id}`, { method: "DELETE" });
       if (!res.ok) throw new Error();
-      toast({ variant: "success", title: `${deleteTarget.name} removed` });
+      toast({ variant: "success", title: `${supportingStaffDisplayName(deleteTarget)} removed` });
       setDeleteTarget(null);
       void load();
     } catch {
@@ -92,9 +93,9 @@ export default function HODSupportingStaffPage() {
       header: "Staff Member",
       render: (row) => (
         <div className="flex items-start gap-3 min-w-0">
-          <Avatar name={row.name} photoUrl={row.profilePhotoUrl} size="sm" className="mt-0.5" />
+          <Avatar name={supportingStaffDisplayName(row) || "?"} photoUrl={row.profilePhotoUrl} size="sm" className="mt-0.5" />
           <div className="space-y-0.5 min-w-0">
-            <p className="font-medium leading-tight">{row.name}</p>
+            <p className="font-medium leading-tight">{supportingStaffDisplayName(row)}</p>
             {row.collegeEmail && <p className="text-xs text-muted-foreground">{row.collegeEmail}</p>}
             <p className="text-xs text-muted-foreground">ID: {row.employeeId}</p>
           </div>
@@ -109,12 +110,6 @@ export default function HODSupportingStaffPage() {
           {row.designation === "OTHER" && row.otherDesignationTitle ? row.otherDesignationTitle : designationLabel(row.designation)}
         </p>
       ),
-    },
-    {
-      key: "employmentType",
-      header: "Employment",
-      hideOnMobile: true,
-      render: (row) => <Badge variant="outline">{EMPLOYMENT_TYPE_LABELS[row.employmentType as EmploymentType] ?? row.employmentType}</Badge>,
     },
     {
       key: "status",
@@ -153,7 +148,7 @@ export default function HODSupportingStaffPage() {
     },
   ];
 
-  const isCentrallyManaged = !collegeTypeLoading && getHodTechnicalDesignations(collegeType).length === 0;
+  const isCentrallyManaged = !collegeTypeLoading && !hasSupportingStaffSplit(collegeType);
 
   if (isCentrallyManaged) {
     return (
@@ -214,7 +209,7 @@ export default function HODSupportingStaffPage() {
         open={!!deleteTarget}
         onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}
         title="Delete staff record?"
-        description={`This will permanently remove ${deleteTarget?.name ?? "this staff member"} (${deleteTarget?.employeeId ?? ""}). This cannot be undone.`}
+        description={`This will permanently remove ${supportingStaffDisplayName(deleteTarget) || "this staff member"} (${deleteTarget?.employeeId ?? ""}). This cannot be undone.`}
         confirmLabel="Delete"
         variant="destructive"
         onConfirm={() => void handleDelete()}

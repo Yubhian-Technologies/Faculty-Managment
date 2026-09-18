@@ -90,9 +90,14 @@ export interface SupportingStaffMember {
   staffCategory: SupportingStaffCategory;
   designation: SupportingStaffDesignation;
   otherDesignationTitle?: string; // when designation === "OTHER"
+  // Flat mandatory field, distinct from supportingStaffProfile.qualifications
+  // (the deeper qualifications-list module) - mirrors FacultyMember.qualification.
+  qualification?: string;
   experienceYears: number;
   joiningDate: Timestamp;
-  employmentType: EmploymentType; // reused from core.ts
+  // Optional - no longer collected via Add/Edit or CSV import (the college's
+  // own Employee Category catalog was retired; only Designation remains).
+  employmentType?: EmploymentType; // reused from core.ts
   status: FacultyStatus;          // reused from core.ts (INTERVIEW_DONE simply unused here)
   userUid?: string;
   profilePhotoUrl?: string;
@@ -103,6 +108,7 @@ export interface SupportingStaffMember {
   gender?: "Male" | "Female" | "Other";
   dateOfBirth?: Timestamp;
   legalName?: string;
+  nameAsPerAadhar?: string;
   fatherName?: string;
   motherName?: string;
   religion?: Religion;
@@ -111,19 +117,31 @@ export interface SupportingStaffMember {
   aadharNo?: string;
   panNo?: string;
   passportNumber?: string;
+  bankAccountNo?: string;
+  ifscCode?: string;
+  bankName?: string;
+  bankBranch?: string;
+  bankOtherDetails?: string;
   emergencyContactName?: string;
+  emergencyContactRelation?: string; // relation of the emergency contact to this person
   emergencyContactPhone?: string;
   ratificationStatus?: "Ratified" | "Not Ratified";
-  ratificationDate?: Timestamp;
+  ratificationProceedingsNumber?: string;
+  ratificationDate?: Timestamp; // Ratification Proceedings Date
   maritalStatus?: "Single" | "Married";
   spouseName?: string;
   numberOfChildren?: number;
-  referral?: string;
-  nativePlace?: string;
   temporaryAddress?: string;
   permanentSameAsTemporary?: boolean;
   permanentAddress?: string;
   bloodGroup?: string;
+  motherTongue?: string;
+  languagesKnown?: string[];
+  heightFeet?: number;
+  heightInches?: number;
+  weightKg?: number;
+  pfNumber?: string; // Provident Fund number
+  esiNumber?: string; // ESI number
 
   supportingStaffProfile?: SupportingStaffProfileFields;
 

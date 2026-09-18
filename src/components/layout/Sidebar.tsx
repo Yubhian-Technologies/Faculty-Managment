@@ -61,7 +61,7 @@ export function Sidebar({ hiddenModules, hiddenItems }: SidebarProps) {
   // centrally owned by Principal (see hasSupportingStaffSplit).
   const baseNavItems = filterVisibleNavItems(getNavItemsForRole(user.role), hiddenModules, hiddenItems, user.realRole)
     .filter((item) => !hideSubDepartmentsLink || item.href !== "/hod/settings/sub-departments")
-    .filter((item) => hasSupportingStaffSplit(collegeType) || item.href !== "/hod/supporting-staff");
+    .filter((item) => hasSupportingStaffSplit(collegeType) || (item.href !== "/hod/supporting-staff" && item.href !== "/hod/settings/designations"));
 
   // Inject dynamic nav items based on panel assignments (any role can be a panel member)
   let navItems = baseNavItems;
@@ -97,7 +97,7 @@ export function Sidebar({ hiddenModules, hiddenItems }: SidebarProps) {
         <img src="https://res.cloudinary.com/dl88qtudz/image/upload/v1781675822/vishnulogo_r2jsjl.png" alt="Vishnu Logo" className="h-9 w-9 rounded-md object-contain shrink-0" />
         <div className="flex-1 min-w-0">
           <p className="text-sm font-bold truncate">Vishnu People</p>
-          <p className="text-xs text-muted-foreground truncate">{ROLE_LABELS[user.role]}</p>
+          <p className="text-xs text-muted-foreground truncate">{ROLE_LABELS[user.realRole ?? user.role]}</p>
         </div>
       </div>
 

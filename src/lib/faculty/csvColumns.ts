@@ -1,306 +1,229 @@
+import { HIGHEST_QUALIFICATION_OPTIONS } from "@/lib/import/fieldConstraints";
+import { PROFILE_MODULES, type ProfileModuleKey } from "@/lib/faculty/profileModules";
+
 // Faculty CSV column definitions.
 //
-// IMPORT_COLUMNS/IMPORT_HINTS (below COLUMNS/HINTS) are the only columns the
-// bulk-import template (src/app/(dashboard)/hod/faculty/import/page.tsx) and
-// import route (src/app/api/college/faculty/import/route.ts) accept -
-// deliberately just the core identity/employment fields, not the full
-// Academic Profile. COLUMNS/HINTS remain the full column set used only by the
-// full-detail export (src/lib/faculty/exportFacultyCsv.ts) - import and
-// export are intentionally no longer symmetric.
+// getFacultyImportColumns/getFacultyImportHints/getFacultyImportSampleRows
+// (below EXPORT_FIELDS) build the only columns the bulk-import template
+// (src/app/(dashboard)/hod/faculty/import/page.tsx) and import route
+// (src/app/api/college/faculty/import/route.ts) accept - deliberately just
+// the core identity/employment fields, not the full Academic Profile.
+// EXPORT_FIELDS remains the full field set used only by the full-detail
+// export (src/lib/faculty/exportFacultyCsv.ts + ExportFacultyDialog) - import
+// and export are intentionally no longer symmetric.
 
-export interface FacultyCsvColumn {
+// ─── Export field definitions ──────────────────────────────────────────────
+//
+// One entry per exportable field, grouped by the same module a faculty
+// member's own profile is organized into everywhere else in the app (see
+// PROFILE_MODULES in profileModules.ts, and the Add/Edit wizard's own steps
+// in hod/faculty/new/page.tsx). "core" stands in for the wizard's "Identity &
+// Employment" step, which isn't part of PROFILE_MODULES itself.
+//
+// A "scalar" field maps to exactly one CSV column with a plain value. A
+// "group" field also maps to exactly one CSV column, but its value combines
+// every entry of a repeating list (e.g. a faculty member's UG/PG/PhD degrees,
+// previous jobs, publications, ...) into that single cell - one line per
+// entry, labelled "<Label> <n>: <SubField>: <value> | ..." the same way the
+// Add/Edit form numbers a repeated entry ("PhD Details 2", see
+// DegreeFieldsList in ProfileFieldPrimitives.tsx). See combineGroup in
+// exportFacultyCsv.ts for how a group's cell is actually built.
+export type ExportModuleKey = "core" | ProfileModuleKey;
+
+export const EXPORT_MODULE_ORDER: ExportModuleKey[] = [
+  "core", "personal", "qualification", "experience", "research",
+  "mentorship", "financial", "others", "teaching-load",
+];
+
+export const EXPORT_MODULE_LABELS: Record<ExportModuleKey, string> = {
+  core: "Identity & Employment",
+  ...Object.fromEntries(Object.entries(PROFILE_MODULES).map(([k, m]) => [k, m.label])) as Record<ProfileModuleKey, string>,
+};
+
+interface ExportFieldBase {
   key: string;
   label: string;
-  required: boolean;
-  sample: string;
-  // Alternate header wordings that should still map to this column (see matchHeaders in csv.ts).
-  aliases?: string[];
+  module: ExportModuleKey;
+  // true only for "core"/"personal" fields - reproduces today's export
+  // untouched when the HOD opens the dialog and exports without changing
+  // anything.
+  defaultSelected: boolean;
 }
 
-export const COLUMNS: FacultyCsvColumn[] = [
-  { key: "employeeId",        label: "Employee ID",                  required: true,  sample: "VIT001", aliases: ["Emp ID", "Employee Code", "Employee No", "Staff ID"] },
-  { key: "name",               label: "Name",                         required: true,  sample: "Dr. A. Ravi Kumar", aliases: ["Faculty Name", "Full Name", "Employee Name"] },
-  { key: "apaarFacultyId",     label: "APAAR Faculty ID",             required: false, sample: "", aliases: ["APAAR ID"] },
-  { key: "email",              label: "Personal Email",               required: true,  sample: "ravi@gmail.com", aliases: ["Email", "Email ID", "Personal Email ID"] },
-  { key: "password",          label: "Login Password (min 8 characters, optional)", required: false, sample: "", aliases: ["Password", "Login Password"] },
-  { key: "phone",              label: "Mobile No",                    required: false, sample: "9876543210", aliases: ["Phone", "Mobile", "Mobile Number", "Phone Number", "Contact Number"] },
-  { key: "designation",        label: "Designation",                  required: true,  sample: "Asst. Prof." },
-  { key: "qualification",      label: "Qualification",                required: true,  sample: "M.Tech" },
-  { key: "specialization",     label: "Specialization",               required: false, sample: "Machine Learning" },
-  { key: "employmentType",     label: "Employee Category",            required: true,  sample: "Regular", aliases: ["Employment Type", "Employment", "Type of Employment"] },
-  { key: "status",             label: "Status (Active/On Leave/Resigned/Retired)", required: false, sample: "Active", aliases: ["Status"] },
-  { key: "joiningDate",        label: "Joining Date (YYYY-MM-DD)",    required: true,  sample: "2020-06-01", aliases: ["Joining Date", "Date of Joining", "DOJ"] },
-  { key: "dateOfJoiningDepartment", label: "Date of Joining Department (YYYY-MM-DD)", required: false, sample: "", aliases: ["Department Joining Date"] },
-  { key: "aicteEligible",      label: "AICTE Eligible (Yes/No)",      required: false, sample: "Yes" },
-  { key: "experienceYears",    label: "Total Experience (Years)",      required: false, sample: "5" },
-  { key: "internalExperience", label: "Internal Exp (Years)",         required: false, sample: "3" },
-  { key: "externalExperience", label: "External Exp (Years)",         required: false, sample: "1" },
-  { key: "inCampusExperience", label: "In Campus Exp (Years)",        required: false, sample: "1" },
-  { key: "industryExperience", label: "Industry Exp (Years)",         required: false, sample: "2" },
-  { key: "researchExperience", label: "Research Exp (Years)",         required: false, sample: "0" },
-  { key: "gender",            label: "Gender",                       required: false, sample: "Male" },
-  { key: "dateOfBirth",       label: "Date of Birth (YYYY-MM-DD)",   required: false, sample: "1990-05-15" },
-  { key: "legalName",         label: "Legal Name (as per SSC)",      required: false, sample: "RAVI KUMAR ANNAPU" },
-  { key: "nameAsPerAadhar",   label: "Name (as per Aadhar)",         required: false, sample: "Ravi Kumar Annapu" },
-  { key: "fatherName",        label: "Father / Husband Name",        required: false, sample: "ANNAPU SRINIVAS" },
-  { key: "motherName",        label: "Mother Name",                  required: false, sample: "ANNAPU LAKSHMI" },
-  { key: "aadharNo",          label: "Aadhar No",                    required: false, sample: "1234 5678 9012" },
-  { key: "panNo",             label: "PAN No",                       required: false, sample: "ABCDE1234F" },
-  { key: "passportNumber",    label: "Passport No",                  required: false, sample: "" },
-  { key: "sscHallTicketNo",   label: "SSC Hall Ticket No",           required: false, sample: "" },
-  { key: "differentlyAbled",  label: "Differently Abled (Yes/No)",   required: false, sample: "No" },
-  { key: "bankAccountNo",     label: "Bank A/C Number",              required: false, sample: "" },
-  { key: "ifscCode",          label: "IFSC Code",                    required: false, sample: "" },
-  { key: "emergencyContactName",  label: "Emergency Contact Name",   required: false, sample: "" },
-  { key: "emergencyContactPhone", label: "Emergency Contact Phone",  required: false, sample: "" },
-  { key: "religion",          label: "Religion",                     required: false, sample: "Hindu" },
-  { key: "caste",             label: "Caste",                        required: false, sample: "OC" },
-  { key: "subCaste",          label: "Sub Caste",                    required: false, sample: "" },
-  { key: "collegeEmail",      label: "College Email",                required: false, sample: "ravi@vishnu.edu.in" },
-  { key: "ratificationStatus",label: "Ratification Status",          required: false, sample: "Ratified" },
-  { key: "ratificationDate",  label: "Ratification Date (YYYY-MM-DD)", required: false, sample: "2021-04-27" },
-  { key: "hasPHD",            label: "Has PhD (Yes/No)",             required: false, sample: "No" },
+export interface ExportScalarField extends ExportFieldBase {
+  kind: "scalar";
+}
 
-  // ─── Family & Other Details ───────────────────────────────────────────────────
-  { key: "maritalStatus",     label: "Marital Status (Single/Married)", required: false, sample: "Married" },
-  { key: "spouseName",        label: "Spouse Name",                  required: false, sample: "" },
-  { key: "numberOfChildren",  label: "Number of Children",           required: false, sample: "" },
-  { key: "referral",          label: "Referral (if any)",            required: false, sample: "" },
-  { key: "nativePlace",       label: "Native Place",                 required: false, sample: "Vijayawada" },
-  { key: "bloodGroup",        label: "Blood Group",                  required: false, sample: "O+" },
-  { key: "temporaryAddress",  label: "Temporary Address",            required: false, sample: "" },
-  { key: "permanentSameAsTemporary", label: "Permanent Same as Temporary (Yes/No)", required: false, sample: "Yes" },
-  { key: "permanentAddress",  label: "Permanent Address",            required: false, sample: "" },
+export interface ExportGroupField extends ExportFieldBase {
+  kind: "group";
+  // Ordered sub-field labels rendered for each entry's line, e.g.
+  // ["Degree", "Branch", "University/Institute", "Percentage/CGPA", "Year of Completion"].
+  subFieldLabels: string[];
+}
 
-  // ─── Academic Profile (Modules 1-5) - all optional ───────────────────────────
-  { key: "highestQualification",   label: "Highest Qualification Earned",       required: false, sample: "Ph.D" },
-  { key: "ug_degree",              label: "UG Degree",                          required: false, sample: "B.Tech" },
-  { key: "ug_branch",              label: "UG Branch",                          required: false, sample: "CSE" },
-  { key: "ug_university",          label: "UG University/Institute",            required: false, sample: "JNTU Kakinada" },
-  { key: "ug_percentage",          label: "UG Percentage/CGPA",                 required: false, sample: "78%" },
-  { key: "ug_year",                label: "UG Year of Completion",              required: false, sample: "2008" },
-  { key: "pg_degree",              label: "PG Degree",                          required: false, sample: "M.Tech" },
-  { key: "pg_branch",              label: "PG Branch",                          required: false, sample: "CSE" },
-  { key: "pg_university",          label: "PG University/Institute",            required: false, sample: "NIT Warangal" },
-  { key: "pg_percentage",          label: "PG Percentage/CGPA",                 required: false, sample: "82%" },
-  { key: "pg_year",                label: "PG Year of Completion",              required: false, sample: "2011" },
-  { key: "phd_degree",             label: "PhD Degree",                         required: false, sample: "Ph.D" },
-  { key: "phd_specialization",     label: "PhD Specialization",                 required: false, sample: "Machine Learning" },
-  { key: "phd_university",         label: "PhD University/Institute",           required: false, sample: "IIT Hyderabad" },
-  { key: "phd_year",               label: "PhD Year of Completion",             required: false, sample: "2017" },
-  { key: "postdoc_degree",         label: "Post-Doctoral Degree",               required: false, sample: "" },
-  { key: "postdoc_branch",         label: "Post-Doctoral Branch",               required: false, sample: "" },
-  { key: "postdoc_university",     label: "Post-Doctoral University/Institute", required: false, sample: "" },
-  { key: "postdoc_percentage",     label: "Post-Doctoral Percentage/CGPA",      required: false, sample: "" },
-  { key: "postdoc_year",           label: "Post-Doctoral Year of Completion",   required: false, sample: "" },
-  { key: "phdStatus",              label: "Ph.D. Status (Awarded/Pursuing)",    required: false, sample: "Awarded" },
-  { key: "phdMode",                label: "Ph.D. Mode (Full-Time/Part-Time)",   required: false, sample: "Full-Time" },
-  { key: "phdSupervisorName",      label: "Ph.D. Project Supervisor Name",      required: false, sample: "Dr. S. Rao" },
-  { key: "fellowshipsReceived",    label: "Fellowships Received",               required: false, sample: "UGC-NET JRF" },
-  { key: "gateQualifiedYear",      label: "GATE Qualified Year",                required: false, sample: "2009" },
-  { key: "gateScore",              label: "GATE Score",                         required: false, sample: "650" },
-  { key: "netSletQualificationYear", label: "NET/SLET Qualification Year",      required: false, sample: "2010" },
-  { key: "promotion1_fromDesignation", label: "Promotion 1 - From Designation", required: false, sample: "" },
-  { key: "promotion1_toDesignation",   label: "Promotion 1 - To Designation",   required: false, sample: "" },
-  { key: "promotion1_effectiveYear",   label: "Promotion 1 - Effective Year",   required: false, sample: "" },
-  { key: "promotion2_fromDesignation", label: "Promotion 2 - From Designation", required: false, sample: "" },
-  { key: "promotion2_toDesignation",   label: "Promotion 2 - To Designation",   required: false, sample: "" },
-  { key: "promotion2_effectiveYear",   label: "Promotion 2 - Effective Year",   required: false, sample: "" },
-  { key: "promotion3_fromDesignation", label: "Promotion 3 - From Designation", required: false, sample: "" },
-  { key: "promotion3_toDesignation",   label: "Promotion 3 - To Designation",   required: false, sample: "" },
-  { key: "promotion3_effectiveYear",   label: "Promotion 3 - Effective Year",   required: false, sample: "" },
-  { key: "previousInstitution1_name",  label: "Previous Institution 1 - Name",        required: false, sample: "" },
-  { key: "previousInstitution1_designation", label: "Previous Institution 1 - Designation", required: false, sample: "" },
-  { key: "previousInstitution1_years", label: "Previous Institution 1 - Years Worked", required: false, sample: "" },
-  { key: "previousInstitution2_name",  label: "Previous Institution 2 - Name",        required: false, sample: "" },
-  { key: "previousInstitution2_designation", label: "Previous Institution 2 - Designation", required: false, sample: "" },
-  { key: "previousInstitution2_years", label: "Previous Institution 2 - Years Worked", required: false, sample: "" },
-  { key: "previousInstitution3_name",  label: "Previous Institution 3 - Name",        required: false, sample: "" },
-  { key: "previousInstitution3_designation", label: "Previous Institution 3 - Designation", required: false, sample: "" },
-  { key: "previousInstitution3_years", label: "Previous Institution 3 - Years Worked", required: false, sample: "" },
-  { key: "primaryTeachingRole",    label: "Primary Teaching Role/Specialization", required: false, sample: "Data Structures" },
-  { key: "course1_code",           label: "Course 1 - Code",                    required: false, sample: "CS201" },
-  { key: "course1_name",           label: "Course 1 - Name",                    required: false, sample: "Data Structures" },
-  { key: "course1_hours",          label: "Course 1 - Weekly Credit Hours",     required: false, sample: "4" },
-  { key: "course2_code",           label: "Course 2 - Code",                    required: false, sample: "CS305" },
-  { key: "course2_name",           label: "Course 2 - Name",                    required: false, sample: "Algorithms" },
-  { key: "course2_hours",          label: "Course 2 - Weekly Credit Hours",     required: false, sample: "4" },
-  { key: "course3_code",           label: "Course 3 - Code",                    required: false, sample: "" },
-  { key: "course3_name",           label: "Course 3 - Name",                    required: false, sample: "" },
-  { key: "course3_hours",          label: "Course 3 - Weekly Credit Hours",     required: false, sample: "" },
-  { key: "publication1_title",     label: "Publication 1 - Title",              required: false, sample: "" },
-  { key: "publication1_coAuthors", label: "Publication 1 - Co-Authors",         required: false, sample: "" },
-  { key: "publication1_journal",   label: "Publication 1 - Journal/Conference", required: false, sample: "" },
-  { key: "publication1_year",      label: "Publication 1 - Year",               required: false, sample: "" },
-  { key: "publication1_indexing",  label: "Publication 1 - Indexing",           required: false, sample: "" },
-  { key: "publication2_title",     label: "Publication 2 - Title",              required: false, sample: "" },
-  { key: "publication2_coAuthors", label: "Publication 2 - Co-Authors",         required: false, sample: "" },
-  { key: "publication2_journal",   label: "Publication 2 - Journal/Conference", required: false, sample: "" },
-  { key: "publication2_year",      label: "Publication 2 - Year",               required: false, sample: "" },
-  { key: "publication2_indexing",  label: "Publication 2 - Indexing",           required: false, sample: "" },
-  { key: "publication3_title",     label: "Publication 3 - Title",              required: false, sample: "" },
-  { key: "publication3_coAuthors", label: "Publication 3 - Co-Authors",         required: false, sample: "" },
-  { key: "publication3_journal",   label: "Publication 3 - Journal/Conference", required: false, sample: "" },
-  { key: "publication3_year",      label: "Publication 3 - Year",               required: false, sample: "" },
-  { key: "publication3_indexing",  label: "Publication 3 - Indexing",           required: false, sample: "" },
-  { key: "publicationsFirstOrCorrespondingAuthor", label: "First/Corresponding Author Pubs", required: false, sample: "5" },
-  { key: "publicationsQ1OrHighImpact",             label: "Q1 / IF>4.0 Pubs",               required: false, sample: "2" },
-  { key: "sciScopusCount",         label: "SCI/Scopus Count",                   required: false, sample: "8" },
-  { key: "wosCount",               label: "WoS (SCIE/ESCI) Count",              required: false, sample: "3" },
-  { key: "conferencePapersCount",  label: "Conference Papers",                  required: false, sample: "4" },
-  { key: "bookChaptersCount",      label: "Book Chapters",                      required: false, sample: "1" },
-  { key: "reviewPublicationsCount",label: "Review Publications",                required: false, sample: "0" },
-  { key: "totalPublications",      label: "Total Publications (incl. co-authorship)", required: false, sample: "12" },
-  { key: "totalCitations",         label: "Total Citations",                    required: false, sample: "45" },
-  { key: "hIndex",                 label: "H-Index",                            required: false, sample: "4" },
-  { key: "i10Index",               label: "i10-Index",                          required: false, sample: "2" },
-  { key: "googleScholarId",        label: "Google Scholar ID",                  required: false, sample: "" },
-  { key: "scopusAuthorId",         label: "Scopus Author ID",                   required: false, sample: "" },
-  { key: "orcidId",                label: "ORCID iD",                           required: false, sample: "" },
-  { key: "project1_title",         label: "Funded Project 1 - Title",           required: false, sample: "" },
-  { key: "project1_agency",        label: "Funded Project 1 - Funding Agency",  required: false, sample: "" },
-  { key: "project1_amount",        label: "Funded Project 1 - Grant Amount (₹L)", required: false, sample: "" },
-  { key: "project1_year",          label: "Funded Project 1 - Year",            required: false, sample: "" },
-  { key: "project1_status",        label: "Funded Project 1 - Status",          required: false, sample: "" },
-  { key: "project1_role",          label: "Funded Project 1 - Role (PI/Co-PI)", required: false, sample: "" },
-  { key: "project2_title",         label: "Funded Project 2 - Title",           required: false, sample: "" },
-  { key: "project2_agency",        label: "Funded Project 2 - Funding Agency",  required: false, sample: "" },
-  { key: "project2_amount",        label: "Funded Project 2 - Grant Amount (₹L)", required: false, sample: "" },
-  { key: "project2_year",          label: "Funded Project 2 - Year",            required: false, sample: "" },
-  { key: "project2_status",        label: "Funded Project 2 - Status",          required: false, sample: "" },
-  { key: "project2_role",          label: "Funded Project 2 - Role (PI/Co-PI)", required: false, sample: "" },
-  { key: "project3_title",         label: "Funded Project 3 - Title",           required: false, sample: "" },
-  { key: "project3_agency",        label: "Funded Project 3 - Funding Agency",  required: false, sample: "" },
-  { key: "project3_amount",        label: "Funded Project 3 - Grant Amount (₹L)", required: false, sample: "" },
-  { key: "project3_year",          label: "Funded Project 3 - Year",            required: false, sample: "" },
-  { key: "project3_status",        label: "Funded Project 3 - Status",          required: false, sample: "" },
-  { key: "project3_role",          label: "Funded Project 3 - Role (PI/Co-PI)", required: false, sample: "" },
-  { key: "consultancy1_title",     label: "Consultancy 1 - Title",              required: false, sample: "" },
-  { key: "consultancy1_client",    label: "Consultancy 1 - Client/Agency",      required: false, sample: "" },
-  { key: "consultancy1_revenue",   label: "Consultancy 1 - Revenue (₹L)",       required: false, sample: "" },
-  { key: "consultancy1_year",      label: "Consultancy 1 - Year",               required: false, sample: "" },
-  { key: "consultancy1_status",    label: "Consultancy 1 - Status",             required: false, sample: "" },
-  { key: "consultancy2_title",     label: "Consultancy 2 - Title",              required: false, sample: "" },
-  { key: "consultancy2_client",    label: "Consultancy 2 - Client/Agency",      required: false, sample: "" },
-  { key: "consultancy2_revenue",   label: "Consultancy 2 - Revenue (₹L)",       required: false, sample: "" },
-  { key: "consultancy2_year",      label: "Consultancy 2 - Year",               required: false, sample: "" },
-  { key: "consultancy2_status",    label: "Consultancy 2 - Status",             required: false, sample: "" },
-  { key: "consultancy3_title",     label: "Consultancy 3 - Title",              required: false, sample: "" },
-  { key: "consultancy3_client",    label: "Consultancy 3 - Client/Agency",      required: false, sample: "" },
-  { key: "consultancy3_revenue",   label: "Consultancy 3 - Revenue (₹L)",       required: false, sample: "" },
-  { key: "consultancy3_year",      label: "Consultancy 3 - Year",               required: false, sample: "" },
-  { key: "consultancy3_status",    label: "Consultancy 3 - Status",             required: false, sample: "" },
-  { key: "patentIndianFiled",      label: "Patents - Indian Filed",             required: false, sample: "1" },
-  { key: "patentIndianPublished",  label: "Patents - Indian Published",         required: false, sample: "1" },
-  { key: "patentIndianGranted",    label: "Patents - Indian Granted",           required: false, sample: "0" },
-  { key: "patentInternationalFiled",     label: "Patents - International Filed",     required: false, sample: "0" },
-  { key: "patentInternationalPublished", label: "Patents - International Published", required: false, sample: "0" },
-  { key: "patentInternationalGranted",   label: "Patents - International Granted",   required: false, sample: "0" },
-  { key: "patentDetails",          label: "Patents - Details",                  required: false, sample: "" },
-  { key: "phdScholarsPursuingCount",       label: "Ph.D. Scholars Pursuing - Count",        required: false, sample: "1" },
-  { key: "phdScholarsPursuingUniversities", label: "Ph.D. Scholars Pursuing - Universities", required: false, sample: "JNTUK" },
-  { key: "phdScholarsAwardedCount",        label: "Ph.D. Scholars Awarded - Count",         required: false, sample: "0" },
-  { key: "phdScholarsAwardedUniversities", label: "Ph.D. Scholars Awarded - Universities",  required: false, sample: "" },
-  { key: "nationalExposure",       label: "National Exposure (joint pubs w/ IITs/NITs/IIITs/CSIR)", required: false, sample: "" },
-  { key: "internationalExposure",  label: "International Exposure (joint pubs w/ foreign universities)", required: false, sample: "" },
-  { key: "lab1_details",           label: "New Lab 1 - Facility Details",       required: false, sample: "" },
-  { key: "lab1_outcomes",          label: "New Lab 1 - Outcomes",               required: false, sample: "" },
-  { key: "lab2_details",           label: "New Lab 2 - Facility Details",       required: false, sample: "" },
-  { key: "lab2_outcomes",          label: "New Lab 2 - Outcomes",               required: false, sample: "" },
-  { key: "lab3_details",           label: "New Lab 3 - Facility Details",       required: false, sample: "" },
-  { key: "lab3_outcomes",          label: "New Lab 3 - Outcomes",               required: false, sample: "" },
+export type ExportField = ExportScalarField | ExportGroupField;
 
-  // Structured entries matching the Add/Edit Faculty form's repeating groups -
-  // the free-text fields below (administrativeResponsibilities, certificationsAndFdps,
-  // professionalBodyMemberships, notableAwards) are legacy: the form only
-  // displays them read-only now, it doesn't let you edit them, use these instead.
-  { key: "adminResp1_category",    label: "Admin Responsibility 1 - Category",  required: false, sample: "" },
-  { key: "adminResp1_description", label: "Admin Responsibility 1 - Description", required: false, sample: "" },
-  { key: "adminResp1_fromYear",    label: "Admin Responsibility 1 - From Year", required: false, sample: "" },
-  { key: "adminResp1_toYear",      label: "Admin Responsibility 1 - To Year (blank = ongoing)", required: false, sample: "" },
-  { key: "adminResp2_category",    label: "Admin Responsibility 2 - Category",  required: false, sample: "" },
-  { key: "adminResp2_description", label: "Admin Responsibility 2 - Description", required: false, sample: "" },
-  { key: "adminResp2_fromYear",    label: "Admin Responsibility 2 - From Year", required: false, sample: "" },
-  { key: "adminResp2_toYear",      label: "Admin Responsibility 2 - To Year (blank = ongoing)", required: false, sample: "" },
-  { key: "adminResp3_category",    label: "Admin Responsibility 3 - Category",  required: false, sample: "" },
-  { key: "adminResp3_description", label: "Admin Responsibility 3 - Description", required: false, sample: "" },
-  { key: "adminResp3_fromYear",    label: "Admin Responsibility 3 - From Year", required: false, sample: "" },
-  { key: "adminResp3_toYear",      label: "Admin Responsibility 3 - To Year (blank = ongoing)", required: false, sample: "" },
-  { key: "administrativeResponsibilities", label: "Administrative Responsibilities Held (+achievements) - legacy, read-only in the form", required: false, sample: "" },
-  { key: "training1_type",         label: "Training 1 - Type",                  required: false, sample: "" },
-  { key: "training1_role",         label: "Training 1 - Participated/Conducted", required: false, sample: "" },
-  { key: "training1_title",        label: "Training 1 - Title",                 required: false, sample: "" },
-  { key: "training1_organizer",    label: "Training 1 - Organizer",             required: false, sample: "" },
-  { key: "training1_year",         label: "Training 1 - Year",                  required: false, sample: "" },
-  { key: "training1_durationDays", label: "Training 1 - Duration (Days)",       required: false, sample: "" },
-  { key: "training2_type",         label: "Training 2 - Type",                  required: false, sample: "" },
-  { key: "training2_role",         label: "Training 2 - Participated/Conducted", required: false, sample: "" },
-  { key: "training2_title",        label: "Training 2 - Title",                 required: false, sample: "" },
-  { key: "training2_organizer",    label: "Training 2 - Organizer",             required: false, sample: "" },
-  { key: "training2_year",         label: "Training 2 - Year",                  required: false, sample: "" },
-  { key: "training2_durationDays", label: "Training 2 - Duration (Days)",       required: false, sample: "" },
-  { key: "training3_type",         label: "Training 3 - Type",                  required: false, sample: "" },
-  { key: "training3_role",         label: "Training 3 - Participated/Conducted", required: false, sample: "" },
-  { key: "training3_title",        label: "Training 3 - Title",                 required: false, sample: "" },
-  { key: "training3_organizer",    label: "Training 3 - Organizer",             required: false, sample: "" },
-  { key: "training3_year",         label: "Training 3 - Year",                  required: false, sample: "" },
-  { key: "training3_durationDays", label: "Training 3 - Duration (Days)",       required: false, sample: "" },
-  { key: "certificationsAndFdps",  label: "Certifications/FDPs (NPTEL/Coursera/AICTE) - legacy, read-only in the form", required: false, sample: "" },
-  { key: "membership1_body",         label: "Membership 1 - Body",              required: false, sample: "" },
-  { key: "membership1_otherName",    label: "Membership 1 - Body Name (if Other)", required: false, sample: "" },
-  { key: "membership1_membershipId", label: "Membership 1 - Membership ID",     required: false, sample: "" },
-  { key: "membership1_sinceYear",    label: "Membership 1 - Member Since (Year)", required: false, sample: "" },
-  { key: "membership2_body",         label: "Membership 2 - Body",              required: false, sample: "" },
-  { key: "membership2_otherName",    label: "Membership 2 - Body Name (if Other)", required: false, sample: "" },
-  { key: "membership2_membershipId", label: "Membership 2 - Membership ID",     required: false, sample: "" },
-  { key: "membership2_sinceYear",    label: "Membership 2 - Member Since (Year)", required: false, sample: "" },
-  { key: "membership3_body",         label: "Membership 3 - Body",              required: false, sample: "" },
-  { key: "membership3_otherName",    label: "Membership 3 - Body Name (if Other)", required: false, sample: "" },
-  { key: "membership3_membershipId", label: "Membership 3 - Membership ID",     required: false, sample: "" },
-  { key: "membership3_sinceYear",    label: "Membership 3 - Member Since (Year)", required: false, sample: "" },
-  { key: "professionalBodyMemberships", label: "Professional Body Memberships (IEEE/ACM/CSI) - legacy, read-only in the form", required: false, sample: "" },
-  { key: "book1_title",            label: "Authored Book 1 - Title",            required: false, sample: "" },
-  { key: "book1_publisher",        label: "Authored Book 1 - Publisher",        required: false, sample: "" },
-  { key: "book1_year",             label: "Authored Book 1 - Year",             required: false, sample: "" },
-  { key: "book2_title",            label: "Authored Book 2 - Title",            required: false, sample: "" },
-  { key: "book2_publisher",        label: "Authored Book 2 - Publisher",        required: false, sample: "" },
-  { key: "book2_year",             label: "Authored Book 2 - Year",             required: false, sample: "" },
-  { key: "book3_title",            label: "Authored Book 3 - Title",            required: false, sample: "" },
-  { key: "book3_publisher",        label: "Authored Book 3 - Publisher",        required: false, sample: "" },
-  { key: "book3_year",             label: "Authored Book 3 - Year",             required: false, sample: "" },
-  { key: "award1_category",     label: "Award 1 - Category",                    required: false, sample: "" },
-  { key: "award1_title",        label: "Award 1 - Title",                       required: false, sample: "" },
-  { key: "award1_awardingBody", label: "Award 1 - Awarding Body",               required: false, sample: "" },
-  { key: "award1_year",         label: "Award 1 - Year",                        required: false, sample: "" },
-  { key: "award2_category",     label: "Award 2 - Category",                    required: false, sample: "" },
-  { key: "award2_title",        label: "Award 2 - Title",                       required: false, sample: "" },
-  { key: "award2_awardingBody", label: "Award 2 - Awarding Body",               required: false, sample: "" },
-  { key: "award2_year",         label: "Award 2 - Year",                        required: false, sample: "" },
-  { key: "award3_category",     label: "Award 3 - Category",                    required: false, sample: "" },
-  { key: "award3_title",        label: "Award 3 - Title",                       required: false, sample: "" },
-  { key: "award3_awardingBody", label: "Award 3 - Awarding Body",               required: false, sample: "" },
-  { key: "award3_year",         label: "Award 3 - Year",                        required: false, sample: "" },
-  { key: "notableAwards",          label: "Notable Awards - legacy, read-only in the form", required: false, sample: "" },
+function scalar(module: ExportModuleKey, key: string, label: string, defaultSelected = false): ExportScalarField {
+  return { kind: "scalar", module, key, label, defaultSelected };
+}
 
-  // ─── Financial Standing & Budgetary Impact (Module 6) ────────────────────────
-  { key: "presentSalary",          label: "Monthly Salary (₹)",                 required: false, sample: "" },
-  { key: "grossAnnualCTC",         label: "Gross Annual CTC (₹)",               required: false, sample: "" },
-  { key: "incrementsAwarded",      label: "Increments Awarded",                 required: false, sample: "" },
-  { key: "fundingConsultancyRevenue", label: "Funding/Consultancy Revenue Generation (₹)", required: false, sample: "" },
+function group(module: ExportModuleKey, key: string, label: string, subFieldLabels: string[]): ExportGroupField {
+  return { kind: "group", module, key, label, subFieldLabels, defaultSelected: false };
+}
 
-  // ─── Others (Module 7) ────────────────────────────────────────────────────────
-  { key: "otherInformation",       label: "Other Information",                  required: false, sample: "" },
+const DEGREE_SUBFIELDS = ["Degree", "Branch", "University/Institute", "Percentage/CGPA", "Year of Completion"];
+const PHD_SUBFIELDS = ["Degree", "Specialization", "University/Institute", "Year of Completion"];
+const EXPERIENCE_SUBFIELDS = ["Institution Name", "Designation", "From Date", "To Date", "Joining Salary", "Leaving Salary", "Reason for Leaving", "NOC Obtained"];
 
-  // Resume/CV - Teaching Faculty only, no equivalent on the Supporting Staff
-  // templates (src/lib/supportingStaff/csvColumns.ts). A link to an
-  // already-hosted file (Drive/Storage) - this template can't upload files
-  // directly.
-  { key: "resumeUrl",              label: "Resume/CV URL",                      required: false, sample: "" },
+export const EXPORT_FIELDS: ExportField[] = [
+  // ─── Identity & Employment (core) - default ON ───────────────────────────
+  // Ordered to match the Add Faculty wizard's own "Identity & Employment"
+  // step (hod/faculty/new/page.tsx); fields with no add-form home (AICTE
+  // Eligible, Status, Employment Type, Date of Joining Department, Official
+  // Email) are appended at the end rather than interleaved.
+  scalar("core", "employeeId", "Employee ID", true),
+  scalar("core", "legalName", "Full Name (as per SSC)", true),
+  scalar("core", "name", "Name (as per PAN)", true),
+  scalar("core", "apaarFacultyId", "APAAR Faculty ID", true),
+  scalar("core", "collegeEmail", "College Email", true),
+  scalar("core", "designation", "Designation", true),
+  scalar("core", "qualification", "Qualification (Summary)", true),
+  scalar("core", "specialization", "Specialization", true),
+  scalar("core", "experienceYears", "Total Experience (Years)", true),
+  // Internal/External Experience are computed live from joiningDate and the
+  // Academic/Industry/Research Experience entries - not stored fields (see
+  // FacultyIdentityFacts on the profile page, which computes the same way).
+  scalar("core", "internalExperience", "Internal Exp (Years)", true),
+  scalar("core", "externalExperience", "External Exp (Years)", true),
+  scalar("core", "joiningDate", "Date of Joining Institution", true),
+  scalar("core", "aicteFacultyId", "AICTE Faculty ID", true),
+  scalar("core", "email", "Personal Email", true),
+  scalar("core", "phone", "Mobile No", true),
+  group("core", "additionalPhones", "Additional Phone Numbers", ["Label", "Number"]),
+  scalar("core", "aicteEligible", "AICTE Eligible", true),
+  scalar("core", "status", "Status", true),
+  scalar("core", "employeeCategory", "Employee Category", true),
+  scalar("core", "employmentType", "Employment Type (legacy)", true),
+  scalar("core", "dateOfJoiningDepartment", "Date of Joining Department", true),
+  scalar("core", "officialEmail", "Official Email", true),
+
+  // ─── Personal Details - default ON ───────────────────────────────────────
+  // Ordered to match PersonalDetailsFields.tsx (the canonical Add/Edit order).
+  scalar("personal", "nameAsPerAadhar", "Name (as per Aadhar)", true),
+  scalar("personal", "dateOfBirth", "Date of Birth", true),
+  scalar("personal", "gender", "Gender", true),
+  scalar("personal", "fatherName", "Father Name", true),
+  scalar("personal", "motherName", "Mother Name", true),
+  scalar("personal", "religion", "Religion", true),
+  scalar("personal", "caste", "Caste", true),
+  scalar("personal", "subCaste", "Sub Caste", true),
+  scalar("personal", "aadharNo", "Aadhar No", true),
+  scalar("personal", "panNo", "PAN No", true),
+  scalar("personal", "passportNumber", "Passport No", true),
+  scalar("personal", "differentlyAbled", "Differently Abled", true),
+  scalar("personal", "differentlyAbledDetails", "Differently Abled - Details", true),
+  scalar("personal", "motherTongue", "Mother Tongue", true),
+  scalar("personal", "languagesKnown", "Languages Known", true),
+  scalar("personal", "heightFeet", "Height (Feet)", true),
+  scalar("personal", "heightInches", "Height (Inches)", true),
+  scalar("personal", "weightKg", "Weight (Kg)", true),
+  scalar("personal", "maritalStatus", "Marital Status", true),
+  scalar("personal", "bloodGroup", "Blood Group", true),
+  scalar("personal", "spouseName", "Spouse Name", true),
+  scalar("personal", "numberOfChildren", "Number of Children", true),
+  scalar("personal", "temporaryAddress", "Temporary Address", true),
+  scalar("personal", "permanentSameAsTemporary", "Permanent Same as Temporary", true),
+  scalar("personal", "permanentAddress", "Permanent Address", true),
+  scalar("personal", "bankAccountNo", "Bank A/C Number", true),
+  scalar("personal", "ifscCode", "IFSC Code", true),
+  scalar("personal", "bankName", "Bank Name", true),
+  scalar("personal", "bankBranch", "Branch", true),
+  scalar("personal", "pfNumber", "PF Number", true),
+  scalar("personal", "bankOtherDetails", "Bank Other Details", true),
+  scalar("personal", "emergencyContactName", "Emergency Contact Person Name", true),
+  scalar("personal", "emergencyContactRelation", "Relation (with Emergency Contact)", true),
+  scalar("personal", "emergencyContactPhone", "Emergency Contact Mobile No", true),
+  scalar("personal", "ratificationStatus", "Ratification Status", true),
+  scalar("personal", "ratificationProceedingsNumber", "Proceedings Number", true),
+  scalar("personal", "ratificationDate", "Ratification Proceedings Date", true),
+
+  // ─── Academic Qualification ───────────────────────────────────────────────
+  // Ordered to match the Add Faculty wizard's own Qualification step
+  // (QualificationFields in AcademicProfileModuleFields.tsx).
+  scalar("qualification", "highestQualification", "Highest Qualification"),
+  scalar("qualification", "researchAreas", "Research Areas/Interests"),
+  scalar("qualification", "qualifyingExamQualified", "NET/SLET/SET/GATE/Others Qualified"),
+  scalar("qualification", "qualifyingExam", "Qualified Exam"),
+  scalar("qualification", "otherQualifyingExam", "Qualified Exam (Other, specified)"),
+  scalar("qualification", "qualifyingExamScore", "Qualified Exam Score"),
+  scalar("qualification", "qualifyingExamYear", "Qualified Year"),
+  group("qualification", "highSchoolDetails", "Secondary Education (10th)", ["Qualification", "Board", "School", "Percentage/CGPA", "Year of Passing"]),
+  group("qualification", "intermediateDetails", "Intermediate/Diploma (12th)", ["Qualification", "Board", "College", "Percentage/CGPA", "Year of Passing"]),
+  group("qualification", "ugDetailsGroup", "UG Details", DEGREE_SUBFIELDS),
+  group("qualification", "pgDetailsGroup", "PG Details", DEGREE_SUBFIELDS),
+  group("qualification", "phdDetailsGroup", "Ph.D. Details", PHD_SUBFIELDS),
+  scalar("qualification", "phdStatus", "Ph.D. Status"),
+  scalar("qualification", "phdMode", "Ph.D. Mode"),
+  scalar("qualification", "phdSupervisorName", "Ph.D. Project Supervisor Name"),
+  scalar("qualification", "fellowshipsReceived", "Fellowships Received"),
+  group("qualification", "postDoctoralDetailsGroup", "Postdoctoral Fellowship Details", DEGREE_SUBFIELDS),
+  group("qualification", "schoolQualifications", "School Qualifications", ["Level", "Degree/Certificate", "University/Institute/Board", "Percentage/CGPA", "Year of Completion"]),
+
+  // ─── Professional Experience ──────────────────────────────────────────────
+  scalar("experience", "primaryTeachingRole", "Teaching Roles/Responsibilities"),
+  scalar("experience", "primaryIndustryRole", "Industry Roles/Responsibilities"),
+  scalar("experience", "primaryResearchRole", "Research Roles/Responsibilities"),
+  group("experience", "previousInstitutionsGroup", "Academic Experience", EXPERIENCE_SUBFIELDS),
+  group("experience", "industryExperienceGroup", "Industry Experience", EXPERIENCE_SUBFIELDS),
+  group("experience", "researchExperienceGroup", "Research Experience", EXPERIENCE_SUBFIELDS),
+  group("experience", "promotionHistoryGroup", "Teaching / Promotion History", ["Designation", "From Date", "To Date"]),
+  group("experience", "coursesGroup", "Courses Taught", ["Code", "Name", "Weekly Credit Hours"]),
+
+  // ─── Research & Innovation ─────────────────────────────────────────────────
+  scalar("research", "publicationsFirstOrCorrespondingAuthor", "First/Corresponding Author Pubs"),
+  scalar("research", "publicationsQ1OrHighImpact", "Q1 / IF>4.0 Pubs"),
+  scalar("research", "sciScopusCount", "SCI/Scopus Count"),
+  scalar("research", "wosCount", "WoS (SCIE/ESCI) Count"),
+  scalar("research", "conferencePapersCount", "Conference Papers"),
+  scalar("research", "bookChaptersCount", "Book Chapters"),
+  scalar("research", "reviewPublicationsCount", "Review Publications"),
+  scalar("research", "totalPublications", "Total Publications (incl. co-authorship)"),
+  scalar("research", "totalCitations", "Total Citations"),
+  scalar("research", "hIndex", "H-Index"),
+  scalar("research", "i10Index", "i10-Index"),
+  scalar("research", "orcidId", "ORCID iD"),
+  scalar("research", "scopusAuthorId", "Scopus Author ID"),
+  scalar("research", "researcherId", "Researcher ID (WoS/Publons)"),
+  scalar("research", "googleScholarId", "Google Scholar ID"),
+  scalar("research", "irinsProfile", "IRINS Profile"),
+  group("research", "publicationsGroup", "Publications", ["Title", "Co-Authors", "Journal/Conference", "Year", "Indexing"]),
+  group("research", "authoredBooksGroup", "Authored Books", ["Title", "Publisher", "Year"]),
+
+  // ─── Professional Development ──────────────────────────────────────────────
+  group("mentorship", "labsEstablishedGroup", "New Labs Established", ["Facility Details", "Outcomes"]),
+  group("mentorship", "adminResponsibilityGroup", "Academic Responsibilities", ["Category", "Description", "From Year", "To Year"]),
+  group("mentorship", "trainingEntriesGroup", "Trainings / FDPs / Workshops", ["Type", "Participated/Conducted", "Title", "Organizer", "Year", "Duration (Days)"]),
+  group("mentorship", "professionalMembershipsGroup", "Professional Body Memberships", ["Body", "Body Name (if Other)", "Membership ID", "Member Since (Year)"]),
+  group("mentorship", "awardEntriesGroup", "Awards & Recognition", ["Category", "Title", "Awarding Body", "Year"]),
+
+  // ─── Financial Standing ─────────────────────────────────────────────────────
+  scalar("financial", "presentSalary", "Monthly Salary (₹)"),
+  scalar("financial", "grossAnnualCTC", "Gross Annual CTC (₹)"),
+  scalar("financial", "incrementsAwarded", "Increments Awarded"),
+  scalar("financial", "fundingConsultancyRevenue", "Funding/Consultancy Revenue Generation (₹)"),
+
+  // ─── Others ─────────────────────────────────────────────────────────────────
+  scalar("others", "otherInformation", "Other Information"),
+
+  // ─── Teaching Load ────────────────────────────────────────────────────────
+  // Relational - sourced from the Teaching Assignments module, not a stored
+  // field on the faculty document itself (see currentTeachingSummary in
+  // exportFacultyCsv.ts).
+  scalar("teaching-load", "currentTeachingSummary", "Current Teaching (Course / Year / Section / Subject)"),
 ];
 
 export const HINTS = [
   "Designation: any teaching title used by your college (e.g. Professor, Assoc. Prof., Asst. Prof., Lecturer, Visiting Faculty, Adjunct Faculty for Engineering/Pharmacy/Dental; Principal, HOD, PGT, TGT, PRT etc. for Degree/Polytechnic/School colleges)",
-  "Employment Type: Regular, Permanent, Contract, Visiting, Part-Time",
   "Status: Active, On Leave, Resigned, Retired (defaults to Active if left blank)",
   "Gender: Male, Female, Other",
   "Marital Status: Single, Married",
@@ -319,176 +242,142 @@ export const HINTS = [
   "Resume/CV URL: an already-hosted link (Drive/Storage) - this template doesn't upload files directly; use the faculty edit page's Documents section to upload one",
 ];
 
-// A column present in the export but never accepted back on import
-// (Current Teaching is relational - sourced from the Teaching Assignments module).
-export const TEACHING_SUMMARY_COLUMN: FacultyCsvColumn = {
-  key: "currentTeachingSummary",
-  label: "Current Teaching (Course / Year / Section / Subject)",
-  required: false,
-  sample: "",
-};
-
 // ─── Bulk-import template - core fields only ──────────────────────────────────
-// The rest of a faculty member's record (personal details, Academic Profile,
-// Technical Profile, etc.) is filled in afterward from the Edit Faculty page -
-// bulk import is for quickly getting people into the system, not a full data
-// migration path.
-export const IMPORT_COLUMNS: FacultyCsvColumn[] = [
-  { key: "employeeId",   label: "Employee ID",   required: true,  sample: "Required; any text; unique", aliases: ["Emp ID", "Employee Code", "Employee No", "Staff ID"] },
-  // Should match the name on the faculty member's PAN card - it's the name
-  // used across statutory/financial paperwork (PAN, bank, payroll), so a
-  // mismatch here is what causes downstream document rejections.
-  { key: "name",         label: "Full Name (as per PAN)", required: true,  sample: "Required; full name exactly as on PAN card", aliases: ["Faculty Name", "Name", "Employee Name", "Full Name"] },
-  { key: "apaarFacultyId", label: "APAAR Faculty ID", required: false, sample: "Optional; text", aliases: ["APAAR ID"] },
-  { key: "collegeEmail", label: "College Email", required: true,  sample: "Required; must contain @", aliases: ["Email", "Email ID"] },
-  { key: "password",     label: "Login Password (min 8 characters, optional)", required: false, sample: "Optional; minimum 8 characters", aliases: ["Password"] },
-  { key: "phone",        label: "Mobile No",     required: false, sample: "Optional; phone/text", aliases: ["Phone", "Mobile", "Mobile Number", "Phone Number", "Contact Number"] },
-  { key: "designation",  label: "Designation",   required: true,  sample: "Choose one designation according to staff type. Technical: Professor / Associate Professor / Assistant Professor / Lecturer / Visiting Faculty / Adjunct Faculty / Lab Assistant / Programmer / System Administrator / Network Engineer / Other. Supporting: Office Staff / Accountant / Clerk / Attender / Office Assistant / Other. Non-Technical Staff: use the non-technical designation configured in the application / Other." },
-  { key: "qualification", label: "Highest Qualification", required: true, sample: "Required; free text", aliases: ["Qualification"] },
-  { key: "specialization", label: "Specialization", required: false, sample: "Optional; free text" },
-  // Header reworded to say TOTAL: it means the whole career, not service at
-  // this institution, which "Years of Experience" beside a Date of Joining
-  // column read as. The old header stays an alias so sheets already written
-  // against it still import.
-  { key: "experienceYears", label: "Total Years of Experience", required: false, sample: "Optional; number", aliases: ["Experience", "Total Experience", "Years of Experience", "Total Experience (Years)"] },
-  { key: "employmentType", label: "Employee Category", required: true, sample: "Required: Permanent / Contract / Visiting / Part-Time", aliases: ["Employment Type", "Employment", "Type of Employment"] },
-  { key: "joiningDate",  label: "Date of Joining Institution (DD-MM-YYYY)", required: true, sample: "Required; DD-MM-YYYY", aliases: ["Joining Date", "Date of Joining", "DOJ"] },
-  { key: "dateOfJoiningDepartment", label: "Date of Joining Department (DD-MM-YYYY)", required: false, sample: "Optional; DD-MM-YYYY", aliases: ["Department Joining Date"] },
+// Every column here is mandatory - this template is deliberately limited to
+// the identity/employment/statutory fields a faculty member needs on day
+// one. Personal-detail extras (father/mother name, religion, bank details,
+// addresses, etc.) and the Academic Profile aren't part of this template -
+// fill those in afterward from the Edit Faculty page.
+// Designation is this college's own admin-curated catalog (see
+// DesignationCatalogCard) - no hardcoded list, no "Other" any more, so the
+// template's own instructions have to be built from whatever the admin
+// actually configured rather than a fixed string, or they'd describe options
+// that don't exist.
+export interface FacultyCsvColumn {
+  key: string;
+  label: string;
+  required: boolean;
+  sample: string;
+  // Alternate header wordings that should still map to this column (see matchHeaders in csv.ts).
+  aliases?: string[];
+}
 
-  // ─── Personal / statutory details (all optional) ──────────────────────────────
-  { key: "gender",            label: "Gender",                       required: false, sample: "Optional: Male / Female / Other" },
-  { key: "dateOfBirth",       label: "Date of Birth (DD-MM-YYYY)",   required: false, sample: "Optional; DD-MM-YYYY", aliases: ["DOB"] },
-  { key: "legalName",         label: "Legal Name (as per SSC)",      required: false, sample: "Optional; text" },
-  { key: "sscHallTicketNo",   label: "SSC Hall Ticket No",           required: false, sample: "Optional; text" },
-  { key: "fatherName",        label: "Father / Husband Name",        required: false, sample: "Optional; text" },
-  { key: "motherName",        label: "Mother Name",                  required: false, sample: "Optional; text" },
+export function getFacultyImportColumns(designationOptions: string[]): FacultyCsvColumn[] {
+  return [
+  { key: "employeeId",   label: "Employee ID",   required: true,  sample: "Required; any text; unique", aliases: ["Emp ID", "Employee Code", "Employee No", "Staff ID"] },
+  { key: "legalName",    label: "Full Name (as per SSC)", required: true, sample: "Required; text", aliases: ["Legal Name (as per SSC)"] },
+  // Optional - matches the name on the faculty member's PAN card, for
+  // statutory/financial paperwork only. Full Name (as per SSC) above is the
+  // primary/required identity name used everywhere the app displays this
+  // faculty member; when this column is left blank, that's what's used
+  // instead (see finalName in the import route).
+  // "Full Name" (bare) and "Full Name (as per PAN)" are deliberately NOT
+  // aliased here - both would be genuinely ambiguous now that there are two
+  // other name-shaped columns (Full Name as per SSC, Name as per Aadhar);
+  // leave a header that vague unmatched rather than guess which one it means.
+  { key: "name",         label: "Name (as per PAN)", required: false, sample: "Optional; full name exactly as on PAN card", aliases: ["Faculty Name", "Name", "Employee Name"] },
+  { key: "collegeEmail", label: "College Email", required: true,  sample: "Required; must contain @", aliases: ["Email", "Email ID"] },
+  { key: "password",     label: "Login Password (min 8 characters)", required: true, sample: "Required; minimum 8 characters", aliases: ["Password"] },
+  { key: "phone",        label: "Mobile No",     required: true, sample: "Required; phone/text", aliases: ["Phone", "Mobile", "Mobile Number", "Phone Number", "Contact Number"] },
+  { key: "designation",  label: "Designation",   required: true,  sample: designationOptions.length
+      ? `Required: ${designationOptions.join(" / ")} - common abbreviations (Prof., Asst. Prof., Assoc. Prof.) are accepted too`
+      : "Required - add at least one Designation under Settings > Designations first" },
+  // Names the same options the Add/Edit Faculty dropdown offers, so a sheet
+  // uses the spellings the form produces rather than inventing "PhD"/"Mtech".
+  // Still accepts anything else, deliberately: the dropdown's own "Others"
+  // stores whatever was typed, so a closed set here would reject qualifications
+  // the app itself can create.
+  { key: "qualification", label: "Highest Qualification", required: true, sample: `Required; ${HIGHEST_QUALIFICATION_OPTIONS.join(" / ")} / other`, aliases: ["Qualification"] },
+  { key: "joiningDate",  label: "Date of Joining Institution (DD-MM-YYYY)", required: true, sample: "Required; DD-MM-YYYY", aliases: ["Joining Date", "Date of Joining", "DOJ"] },
+  { key: "gender",            label: "Gender",                       required: true, sample: "Required: Male / Female / Other" },
+  { key: "dateOfBirth",       label: "Date of Birth (DD-MM-YYYY)",   required: true, sample: "Required; DD-MM-YYYY", aliases: ["DOB"] },
   { key: "nameAsPerAadhar",   label: "Name (as per Aadhar)",         required: false, sample: "Optional; text" },
-  { key: "aadharNo",          label: "Aadhar No",                    required: false, sample: "Optional; text" },
-  { key: "panNo",             label: "PAN No",                       required: false, sample: "Optional; text" },
-  { key: "passportNumber",    label: "Passport No",                  required: false, sample: "Optional; text" },
-  { key: "differentlyAbled",  label: "Differently Abled (Yes/No)",   required: false, sample: "Optional: Yes / No" },
-  { key: "bankAccountNo",     label: "Bank A/C Number",              required: false, sample: "Optional; text" },
-  { key: "ifscCode",          label: "IFSC Code",                    required: false, sample: "Optional; e.g. SBIN0001234" },
-  { key: "emergencyContactName",  label: "Emergency Contact Name",   required: false, sample: "Optional; text" },
-  { key: "emergencyContactPhone", label: "Emergency Contact Phone",  required: false, sample: "Optional; phone/text" },
-  { key: "religion",          label: "Religion",                     required: false, sample: "Optional: Hindu / Muslim / Christian / Sikh / Jain / Parsi / Buddhist / Other" },
-  { key: "caste",             label: "Caste",                        required: false, sample: "Optional: OC / EBC / EPC / BC / SC / ST / OTHER" },
-  { key: "subCaste",          label: "Sub Caste",                    required: false, sample: "Optional; text" },
-  { key: "ratificationStatus",label: "Ratification Status",          required: false, sample: "Optional: Ratified / Not Ratified" },
-  { key: "ratificationDate",  label: "Ratification Date (DD-MM-YYYY)", required: false, sample: "Optional; DD-MM-YYYY" },
-  { key: "maritalStatus",     label: "Marital Status (Single/Married)", required: false, sample: "Optional: Single / Married" },
-  { key: "spouseName",        label: "Spouse Name",                  required: false, sample: "Optional; text" },
-  { key: "numberOfChildren",  label: "Number of Children",           required: false, sample: "Optional; number (0,1,2...)" },
-  { key: "referral",          label: "Referral (if any)",            required: false, sample: "Optional; text" },
-  { key: "bloodGroup",        label: "Blood Group",                  required: false, sample: "Optional: A+ / A- / B+ / B- / AB+ / AB- / O+ / O-" },
-  { key: "temporaryAddress",  label: "Temporary Address",            required: false, sample: "Optional; text" },
-  { key: "permanentSameAsTemporary", label: "Permanent Same as Temporary (Yes/No)", required: false, sample: "Optional: Yes / No" },
-  // Only needed when Permanent Same as Temporary is No - leave blank when
-  // Yes, since the system fills it in from Temporary Address automatically.
-  { key: "permanentAddress",  label: "Permanent Address (required if Permanent Same as Temporary is No)", required: false, sample: "Required if the above is No; otherwise leave blank" },
-  { key: "nativePlace",       label: "Native Place",                 required: false, sample: "Optional; text" },
-];
+  { key: "aadharNo",          label: "Aadhar No",                    required: true, sample: "Required; text" },
+  { key: "panNo",             label: "PAN No",                       required: true, sample: "Required; text" },
+  { key: "ratificationStatus",label: "Ratification Status",          required: true, sample: "Required: Ratified / Not Ratified" },
+  ];
+}
 
 // Five filled-in rows for the template workbook's second sheet - what a
 // correctly-completed row looks like for every column, which the guidance row
 // on sheet one can only describe. Keyed by column key rather than written as a
 // positional array so adding or reordering a column can't silently shift the
-// data under the wrong headers.
+// data under the wrong headers. Designation cycles through this college's own
+// live catalog (falling back to a plain placeholder if the admin hasn't added
+// any yet) so every sample row is itself a value that would actually pass
+// import, not a stale hardcoded title.
 //
-// Login Password is deliberately blank in all five: filling it in creates a
-// real login on import, and a sample is exactly the sort of thing that gets
-// pasted in wholesale.
-export const IMPORT_SAMPLE_ROWS: Record<string, string>[] = [
+// Login Password now gets a real, distinct-per-row sample value since the
+// column is mandatory (every row creates a real login on import) - each one
+// MUST be changed to something unique before real use; see the Login
+// Password hint below. Never reuse these literal strings for a real account.
+export function getFacultyImportSampleRows(designationOptions: string[]): Record<string, string>[] {
+  const designation = (i: number) => designationOptions[i % designationOptions.length] ?? "";
+  return [
   {
-    employeeId: "FAC001", name: "Dr. Anitha Reddy", apaarFacultyId: "APAAR100001",
-    collegeEmail: "anitha.reddy@college.edu", phone: "9876543210", password: "",
-    designation: "Professor", qualification: "Ph.D", specialization: "Machine Learning",
-    experienceYears: "18", employmentType: "Permanent", joiningDate: "15-06-2012",
-    dateOfJoiningDepartment: "15-06-2012", gender: "Female", dateOfBirth: "22-03-1978",
-    legalName: "Anitha Reddy", nameAsPerAadhar: "Anitha Reddy", fatherName: "Ramachandra Reddy", motherName: "Lakshmi Reddy",
-    aadharNo: "123456789012", panNo: "ABCDE1234F", passportNumber: "",
-    sscHallTicketNo: "1234567", differentlyAbled: "No", bankAccountNo: "62345671234", ifscCode: "SBIN0001234",
-    emergencyContactName: "Ramachandra Reddy", emergencyContactPhone: "9876500001",
-    religion: "Hindu", caste: "OC", subCaste: "", ratificationStatus: "Ratified",
-    ratificationDate: "01-08-2013", maritalStatus: "Married", spouseName: "Suresh Reddy",
-    numberOfChildren: "2", referral: "", nativePlace: "Bhimavaram", bloodGroup: "O+",
-    temporaryAddress: "12-4-56, Gandhi Nagar, Bhimavaram", permanentSameAsTemporary: "Yes",
-    permanentAddress: "",
+    employeeId: "FAC001", legalName: "ANITHA REDDY", name: "Dr. Anitha Reddy",
+    collegeEmail: "anitha.reddy@college.edu", password: "ChangeMe#101", phone: "9876543210",
+    designation: designation(0), qualification: "Ph.D",
+    joiningDate: "15-06-2012",
+    gender: "Female", dateOfBirth: "22-03-1978",
+    nameAsPerAadhar: "Anitha Reddy",
+    aadharNo: "123456789012", panNo: "ABCDE1234F",
+    ratificationStatus: "Ratified",
   },
   {
-    employeeId: "FAC002", name: "Mr. Suresh Kumar", apaarFacultyId: "APAAR100002",
-    collegeEmail: "suresh.kumar@college.edu", phone: "9876543211", password: "",
-    designation: "Assistant Professor", qualification: "M.Tech", specialization: "Computer Networks",
-    experienceYears: "7", employmentType: "Permanent", joiningDate: "01-07-2019",
-    dateOfJoiningDepartment: "01-07-2019", gender: "Male", dateOfBirth: "05-11-1990",
-    legalName: "Suresh Kumar", nameAsPerAadhar: "Suresh Kumar", fatherName: "Venkata Rao", motherName: "Padma",
-    aadharNo: "234567890123", panNo: "BCDEF2345G", passportNumber: "P1234567",
-    sscHallTicketNo: "2345678", differentlyAbled: "No", bankAccountNo: "62345672345", ifscCode: "HDFC0001234",
-    emergencyContactName: "Padma", emergencyContactPhone: "9876500002",
-    religion: "Hindu", caste: "BC", subCaste: "BC-B", ratificationStatus: "Ratified",
-    ratificationDate: "10-09-2020", maritalStatus: "Married", spouseName: "Divya",
-    numberOfChildren: "1", referral: "", nativePlace: "Vijayawada", bloodGroup: "B+",
-    temporaryAddress: "45, Krishna Colony, Vijayawada", permanentSameAsTemporary: "No",
-    permanentAddress: "8-2-1, Gudivada",
+    employeeId: "FAC002", legalName: "SURESH KUMAR", name: "Mr. Suresh Kumar",
+    collegeEmail: "suresh.kumar@college.edu", password: "ChangeMe#102", phone: "9876543211",
+    designation: designation(1), qualification: "M.Tech",
+    joiningDate: "01-07-2019",
+    gender: "Male", dateOfBirth: "05-11-1990",
+    nameAsPerAadhar: "Suresh Kumar",
+    aadharNo: "234567890123", panNo: "BCDEF2345G",
+    ratificationStatus: "Ratified",
   },
   {
-    employeeId: "FAC003", name: "Ms. Divya Nair", apaarFacultyId: "",
-    collegeEmail: "divya.nair@college.edu", phone: "9876543212", password: "",
-    designation: "Assistant Professor", qualification: "M.Tech", specialization: "Data Science",
-    experienceYears: "4", employmentType: "Contract", joiningDate: "16-08-2022",
-    dateOfJoiningDepartment: "16-08-2022", gender: "Female", dateOfBirth: "30-01-1995",
-    legalName: "Divya Nair", nameAsPerAadhar: "Divya Nair", fatherName: "Mohan Nair", motherName: "Sujatha Nair",
-    aadharNo: "345678901234", panNo: "CDEFG3456H", passportNumber: "",
-    sscHallTicketNo: "3456789", differentlyAbled: "No", bankAccountNo: "62345673456", ifscCode: "ICIC0001234",
-    emergencyContactName: "Mohan Nair", emergencyContactPhone: "9876500003",
-    religion: "Hindu", caste: "OC", subCaste: "", ratificationStatus: "Not Ratified",
-    ratificationDate: "", maritalStatus: "Single", spouseName: "",
-    numberOfChildren: "0", referral: "Dr. Anitha Reddy", nativePlace: "Kochi", bloodGroup: "A+",
-    temporaryAddress: "Flat 302, Green Park, Bhimavaram", permanentSameAsTemporary: "No",
-    permanentAddress: "Nair House, Ernakulam",
+    employeeId: "FAC003", legalName: "DIVYA NAIR", name: "Ms. Divya Nair",
+    collegeEmail: "divya.nair@college.edu", password: "ChangeMe#103", phone: "9876543212",
+    designation: designation(2), qualification: "M.Tech",
+    joiningDate: "16-08-2022",
+    gender: "Female", dateOfBirth: "30-01-1995",
+    nameAsPerAadhar: "Divya Nair",
+    aadharNo: "345678901234", panNo: "CDEFG3456H",
+    ratificationStatus: "Not Ratified",
   },
   {
-    employeeId: "FAC004", name: "Dr. Imran Shaik", apaarFacultyId: "APAAR100004",
-    collegeEmail: "imran.shaik@college.edu", phone: "9876543213", password: "",
-    designation: "Associate Professor", qualification: "Ph.D", specialization: "Embedded Systems",
-    experienceYears: "12", employmentType: "Permanent", joiningDate: "04-01-2016",
-    dateOfJoiningDepartment: "01-06-2018", gender: "Male", dateOfBirth: "19-07-1984",
-    legalName: "Imran Shaik", nameAsPerAadhar: "Imran Shaik", fatherName: "Abdul Shaik", motherName: "Fatima Bee",
-    aadharNo: "456789012345", panNo: "DEFGH4567I", passportNumber: "P7654321",
-    sscHallTicketNo: "4567890", differentlyAbled: "No", bankAccountNo: "62345674567", ifscCode: "AXIS0001234",
-    emergencyContactName: "Fatima Bee", emergencyContactPhone: "9876500004",
-    religion: "Muslim", caste: "BC", subCaste: "BC-E", ratificationStatus: "Ratified",
-    ratificationDate: "20-03-2017", maritalStatus: "Married", spouseName: "Ayesha",
-    numberOfChildren: "3", referral: "", nativePlace: "Guntur", bloodGroup: "AB+",
-    temporaryAddress: "23-1-9, Lakshmipuram, Guntur", permanentSameAsTemporary: "Yes",
-    permanentAddress: "",
+    employeeId: "FAC004", legalName: "IMRAN SHAIK", name: "Dr. Imran Shaik",
+    collegeEmail: "imran.shaik@college.edu", password: "ChangeMe#104", phone: "9876543213",
+    designation: designation(3), qualification: "Ph.D",
+    joiningDate: "04-01-2016",
+    gender: "Male", dateOfBirth: "19-07-1984",
+    nameAsPerAadhar: "Imran Shaik",
+    aadharNo: "456789012345", panNo: "DEFGH4567I",
+    ratificationStatus: "Ratified",
   },
   {
-    employeeId: "FAC005", name: "Mrs. Grace Thomas", apaarFacultyId: "",
-    collegeEmail: "grace.thomas@college.edu", phone: "9876543214", password: "",
-    designation: "Lecturer", qualification: "M.Sc", specialization: "Applied Mathematics",
-    experienceYears: "3", employmentType: "Part-Time", joiningDate: "12-06-2023",
-    dateOfJoiningDepartment: "12-06-2023", gender: "Female", dateOfBirth: "08-09-1996",
-    legalName: "Grace Thomas", nameAsPerAadhar: "Grace Thomas", fatherName: "Thomas Mathew", motherName: "Mary Thomas",
-    aadharNo: "567890123456", panNo: "EFGHI5678J", passportNumber: "",
-    sscHallTicketNo: "5678901", differentlyAbled: "Yes", bankAccountNo: "62345675678", ifscCode: "PUNB0001234",
-    emergencyContactName: "Thomas Mathew", emergencyContactPhone: "9876500005",
-    religion: "Christian", caste: "OTHER", subCaste: "", ratificationStatus: "Not Ratified",
-    ratificationDate: "", maritalStatus: "Married", spouseName: "Jacob Varghese",
-    numberOfChildren: "0", referral: "", nativePlace: "Kottayam", bloodGroup: "O-",
-    temporaryAddress: "House 7, St. Mary's Street, Bhimavaram", permanentSameAsTemporary: "No",
-    permanentAddress: "Thomas Villa, Kottayam",
+    employeeId: "FAC005", legalName: "GRACE THOMAS", name: "Mrs. Grace Thomas",
+    collegeEmail: "grace.thomas@college.edu", password: "ChangeMe#105", phone: "9876543214",
+    designation: designation(4), qualification: "M.Sc",
+    joiningDate: "12-06-2023",
+    gender: "Female", dateOfBirth: "08-09-1996",
+    nameAsPerAadhar: "Grace Thomas",
+    aadharNo: "567890123456", panNo: "EFGHI5678J",
+    ratificationStatus: "Not Ratified",
   },
-];
+  ];
+}
 
-export const IMPORT_HINTS = [
-  "Full Name (as per PAN): enter the name exactly as it appears on the faculty member's PAN card - this is the name used on statutory/financial paperwork",
-  "Differently Abled: Yes or No",
-  "Designation: any teaching title used by your college (e.g. Professor, Assoc. Prof., Asst. Prof., Lecturer, Visiting Faculty, Adjunct Faculty for Engineering/Pharmacy/Dental; Principal, HOD, PGT, TGT, PRT etc. for Degree/Polytechnic/School colleges) - Supporting Staff (Lab Assistant, Programmer, Office Assistant, etc.) is added from the Supporting Staff module instead",
-  "Employee Category: Regular, Permanent, Contract, Visiting, Part-Time",
+export function getFacultyImportHints(designationOptions: string[]): string[] {
+  return [
+  "Full Name (as per SSC): enter the name exactly as it appears on the faculty member's SSC (10th class) certificate, in CAPITAL LETTERS - this is the PRIMARY identity name used as their display name everywhere across the app (lists, PDFs, notifications, teaching assignments, etc.).",
+  "Name (as per PAN): optional - only needed for statutory/financial paperwork matching. When left blank, Full Name (as per SSC) is used instead everywhere this faculty member's name is shown.",
+  designationOptions.length
+    ? `Designation: ${designationOptions.join(" / ")} - added under Settings > Designations. Supporting Staff (Lab Assistant, Programmer, Office Assistant, etc.) is added from the Supporting Staff module instead. Common abbreviations (e.g. Prof., Asst. Prof., Assoc. Prof.) are recognized too, case-insensitively.`
+    : "Designation: add at least one under Settings > Designations before importing - a row can only use a title that's been added there.",
   "Dates must be in DD-MM-YYYY format (e.g. 15-06-2020)",
-  "Permanent Address: only needed when Permanent Same as Temporary is No - leave it blank when Yes, since it is filled in automatically from Temporary Address",
   "Department is auto-assigned from your HOD profile",
-  "Login Password (optional): fill this in to create the faculty member's login account (as a Panel Member) automatically during import, using their College Email as the login ID - must be at least 8 characters. Leave it blank to skip login creation for that row; you can still set it up later from the Faculty list's \"Set Login\" button.",
-  "Personal details and Academic Profile aren't part of this template - fill those in afterward from the Edit Faculty page.",
-];
+  "Login Password is mandatory: it creates the faculty member's login account (as a Panel Member) automatically during import, using their College Email as the login ID - must be at least 8 characters. Use a real, unique password per person - never reuse the sample column's placeholder values.",
+  "Every column above is required except Name (as per PAN) and Name (as per Aadhar) - a row missing a required one, or with an invalid value, is rejected and reported back so it can be corrected and re-imported.",
+  "Personal details beyond what's above (father/mother name, religion, bank details, addresses, etc.) and the Academic Profile aren't part of this template - fill those in afterward from the Edit Faculty page.",
+  ];
+}

@@ -1,6 +1,5 @@
 import type { Firestore } from "firebase-admin/firestore";
-import { isTeachingDesignation } from "@/lib/designations/config";
-import type { CollegeType } from "@/types/core";
+import { LEGACY_TECHNICAL_DESIGNATIONS } from "@/lib/designations/config";
 
 export interface ResolvedIdentity {
   name: string;
@@ -75,18 +74,16 @@ export async function resolveEmployeeIdentity(
       designation: string;
       joiningDate?: { toDate(): Date };
     };
-    // Vacation (classroom teaching) entitlement depends on the designation
-    // being a teaching one for this college's type (see
-    // src/lib/designations/config.ts) - every other FacultyMember
-    // designation (e.g. a not-yet-migrated Lab Assistant, see
-    // scripts/migrate-technical-staff-to-supporting-staff.mjs) is
-    // non-vacation, same as all other supporting staff.
-    const collegeSnap = await collegeRef.get();
-    const collegeType = (collegeSnap.data() as { type?: CollegeType } | undefined)?.type;
+    // Vacation (classroom teaching) entitlement - any FacultyMember record is
+    // teaching staff now that every real Faculty designation lives in the
+    // admin-curated FACULTY Designation Catalog, EXCEPT a not-yet-migrated
+    // legacy technical record (see scripts/migrate-technical-staff-to-
+    // supporting-staff.mjs), which is non-vacation like all other supporting
+    // staff.
     return {
       name: f.name,
       department: f.department,
-      isTeachingStaff: isTeachingDesignation(f.designation, collegeType),
+      isTeachingStaff: !LEGACY_TECHNICAL_DESIGNATIONS.includes(f.designation),
       dateOfJoining: f.joiningDate?.toDate?.() ?? new Date(),
     };
   }

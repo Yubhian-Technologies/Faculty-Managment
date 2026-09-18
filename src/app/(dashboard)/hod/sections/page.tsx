@@ -133,6 +133,10 @@ export default function HODSectionsPage() {
   // instead of a flat list, and neither the common department nor its
   // sub-departments (both mere containers) are ever offered as a filter target.
   const useCascadeFilter = !isMultiDept && !isGroupingContainer && Boolean(ownDept?.hasSubDepartments) && groupingChildren.length > 0;
+  // A department the Principal has explicitly flagged as never running its
+  // own sections (Department.parentRunsOwnSections === false) is excluded the
+  // same way a grouping container is - see resolveScopeDepartments.
+  const ownHasNoSections = !isMultiDept && Boolean(ownDept?.hasSubDepartments) && ownDept?.parentRunsOwnSections === false;
 
   // Real departments this (sub-)HOD manages, feeding the branch filter tabs -
   // never a grouping container (sub-department or common parent) itself. A
@@ -141,8 +145,8 @@ export default function HODSectionsPage() {
   const deptOptions = useMemo(
     () => (isMultiDept
       ? mergeOwnDepartmentOptions(departments, myDepartments)
-      : resolveScopeDepartments(ownDept, departments, isGroupingContainer, useCascadeFilter, groupingChildren, plainChildren)),
-    [isMultiDept, myDepartments, departments, ownDept, isGroupingContainer, useCascadeFilter, groupingChildren, plainChildren]
+      : resolveScopeDepartments(ownDept, departments, isGroupingContainer, useCascadeFilter, groupingChildren, plainChildren, ownHasNoSections)),
+    [isMultiDept, myDepartments, departments, ownDept, isGroupingContainer, useCascadeFilter, groupingChildren, plainChildren, ownHasNoSections]
   );
 
   // Each of THIS HOD's own top-level departments (myDepartments - the first is
@@ -363,11 +367,11 @@ export default function HODSectionsPage() {
       return managerYears.length > 0 ? courseYears.filter((y) => managerYears.includes(y)) : courseYears;
     }
 
-    const relevant = resolveScopeDepartments(ownDept, departments, isGroupingContainer, useCascadeFilter, groupingChildren, plainChildren);
+    const relevant = resolveScopeDepartments(ownDept, departments, isGroupingContainer, useCascadeFilter, groupingChildren, plainChildren, ownHasNoSections);
     return yearsInScope(activeDurationYears, relevant, managedBranchYearsForActiveCourse, viewsManagedBranchYears, activeCatalogId, departments);
   }, [
     activeDurationYears, activeCatalogId, deptFilter, departments, ownDept, useCascadeFilter, groupingChildren,
-    plainChildren, isGroupingContainer, viewsManagedBranchYears, subDeptFilter,
+    plainChildren, isGroupingContainer, ownHasNoSections, viewsManagedBranchYears, subDeptFilter,
   ]);
 
   // courseId -> catalogId, so each section (which only stores courseId) can be

@@ -6,7 +6,7 @@ import { toCSV, downloadCSV } from "@/lib/utils/csv";
 import { toDateInputValue } from "@/lib/utils";
 import { STAFF_COLUMNS } from "@/lib/faculty/staffCsvColumns";
 import { ROLE_LABELS, RELIGION_LABELS, CASTE_LABELS } from "@/types";
-import type { FMSUser, FacultyProfileFields, DegreeDetail, CourseAssignment, Publication, PreviousInstitution, FundedProject, ConsultancyProject, LabEstablished, AuthoredBook, Religion, Caste } from "@/types";
+import type { FMSUser, FacultyProfileFields, DegreeDetail, CourseAssignment, Publication, PreviousInstitution, LabEstablished, AuthoredBook, Religion, Caste } from "@/types";
 
 function s(v: unknown): string {
   return v === null || v === undefined ? "" : String(v);
@@ -38,28 +38,18 @@ function courseCells(courses: CourseAssignment[] | undefined, i: number): [strin
 function previousInstitutionCells(items: PreviousInstitution[] | undefined, i: number): [string, string, string] {
   const p = items?.[i];
   if (!p) return ["", "", ""];
-  const years = p.fromYear || p.toYear ? `${p.fromYear ?? ""}-${p.toYear ?? ""}` : "";
-  return [p.institutionName ?? "", p.designation ?? "", years];
+  // Prefers the real dates; falls back to the legacy year-only value for a
+  // record that hasn't been re-saved under the new shape yet.
+  const from = p.fromDate ?? (p.fromYear ? String(p.fromYear) : "");
+  const to = p.toDate ?? (p.toYear ? String(p.toYear) : "");
+  const range = from || to ? `${from}-${to}` : "";
+  return [p.institutionName ?? "", p.designation ?? "", range];
 }
 
 function publicationCells(items: Publication[] | undefined, i: number): [string, string, string, string, string] {
   const p = items?.[i];
   return p
     ? [p.title ?? "", p.coAuthors ?? "", p.journalOrConference ?? "", p.publicationYear ? String(p.publicationYear) : "", p.indexing ?? ""]
-    : ["", "", "", "", ""];
-}
-
-function projectCells(projects: FundedProject[] | undefined, i: number): [string, string, string, string, string] {
-  const p = projects?.[i];
-  return p
-    ? [p.title ?? "", p.fundingAgency ?? "", p.grantAmountLakhs ? String(p.grantAmountLakhs) : "", p.year ? String(p.year) : "", p.status ?? ""]
-    : ["", "", "", "", ""];
-}
-
-function consultancyCells(items: ConsultancyProject[] | undefined, i: number): [string, string, string, string, string] {
-  const c = items?.[i];
-  return c
-    ? [c.title ?? "", c.clientOrAgency ?? "", c.revenueLakhs ? String(c.revenueLakhs) : "", c.year ? String(c.year) : "", c.status ?? ""]
     : ["", "", "", "", ""];
 }
 
@@ -100,16 +90,21 @@ function buildRow(user: FMSUser): Record<string, string> {
     aadharNo: s(user.aadharNo),
     panNo: s(user.panNo),
     passportNumber: s(user.passportNumber),
+    bankAccountNo: s(user.bankAccountNo),
+    ifscCode: s(user.ifscCode),
+    bankName: s(user.bankName),
+    bankBranch: s(user.bankBranch),
+    bankOtherDetails: s(user.bankOtherDetails),
     emergencyContactName: s(user.emergencyContactName),
+    emergencyContactRelation: s(user.emergencyContactRelation),
     emergencyContactPhone: s(user.emergencyContactPhone),
     ratificationStatus: s(user.ratificationStatus),
+    ratificationProceedingsNumber: s(user.ratificationProceedingsNumber),
     ratificationDate: toDateInputValue(user.ratificationDate),
 
     maritalStatus: s(user.maritalStatus),
     spouseName: s(user.spouseName),
     numberOfChildren: s(user.numberOfChildren),
-    referral: s(user.referral),
-    nativePlace: s(user.nativePlace),
     bloodGroup: s(user.bloodGroup),
     temporaryAddress: s(user.temporaryAddress),
     permanentSameAsTemporary: yesNo(user.permanentSameAsTemporary),
@@ -123,10 +118,13 @@ function buildRow(user: FMSUser): Record<string, string> {
     phdMode: s(p.phdMode),
     phdSupervisorName: s(p.phdSupervisorName),
     fellowshipsReceived: s(p.fellowshipsReceived),
-    gateQualifiedYear: s(p.gateQualifiedYear),
-    gateScore: s(p.gateScore),
-    netSletQualificationYear: s(p.netSletQualificationYear),
+    qualifyingExamQualified: s(p.qualifyingExamQualified === "YES" ? "Yes" : p.qualifyingExamQualified === "NO" ? "No" : undefined),
+    qualifyingExam: s(p.qualifyingExam),
+    qualifyingExamScore: s(p.qualifyingExamScore),
+    qualifyingExamYear: s(p.qualifyingExamYear),
     primaryTeachingRole: s(p.teachingAssignment?.primaryTeachingRole),
+    primaryIndustryRole: s(p.primaryIndustryRole),
+    primaryResearchRole: s(p.primaryResearchRole),
 
     publicationsFirstOrCorrespondingAuthor: s(p.publicationsFirstOrCorrespondingAuthor),
     publicationsQ1OrHighImpact: s(p.publicationsQ1OrHighImpact),
@@ -140,24 +138,6 @@ function buildRow(user: FMSUser): Record<string, string> {
     hIndex: s(p.hIndex),
     i10Index: s(p.i10Index),
 
-    patentIndianFiled: s(p.patents?.indianFiled),
-    patentIndianPublished: s(p.patents?.indianPublished),
-    patentIndianGranted: s(p.patents?.indianGranted),
-    patentInternationalFiled: s(p.patents?.internationalFiled),
-    patentInternationalPublished: s(p.patents?.internationalPublished),
-    patentInternationalGranted: s(p.patents?.internationalGranted),
-    patentDetails: s(p.patents?.details),
-
-    phdScholarsPursuingCount: s(p.phdScholarsPursuing?.count),
-    phdScholarsPursuingUniversities: s(p.phdScholarsPursuing?.universities),
-    phdScholarsAwardedCount: s(p.phdScholarsAwarded?.count),
-    phdScholarsAwardedUniversities: s(p.phdScholarsAwarded?.universities),
-    nationalExposure: s(p.nationalExposure),
-    internationalExposure: s(p.internationalExposure),
-    administrativeResponsibilities: s(p.administrativeResponsibilities),
-    certificationsAndFdps: s(p.certificationsAndFdps),
-    professionalBodyMemberships: s(p.professionalBodyMemberships),
-    notableAwards: s(p.notableAwards),
   };
 
   [1, 2, 3].forEach((n) => {
@@ -170,14 +150,6 @@ function buildRow(user: FMSUser): Record<string, string> {
     const [pubTitle, pubCoAuthors, pubJournal, pubYear, pubIndexing] = publicationCells(p.publications, n - 1);
     row[`publication${n}_title`] = pubTitle; row[`publication${n}_coAuthors`] = pubCoAuthors; row[`publication${n}_journal`] = pubJournal;
     row[`publication${n}_year`] = pubYear; row[`publication${n}_indexing`] = pubIndexing;
-
-    const [pTitle, pAgency, pAmount, pYear, pStatus] = projectCells(p.fundedProjects, n - 1);
-    row[`project${n}_title`] = pTitle; row[`project${n}_agency`] = pAgency; row[`project${n}_amount`] = pAmount;
-    row[`project${n}_year`] = pYear; row[`project${n}_status`] = pStatus;
-
-    const [cTitle, cClient, cRevenue, cYear, cStatus] = consultancyCells(p.consultancyProjects, n - 1);
-    row[`consultancy${n}_title`] = cTitle; row[`consultancy${n}_client`] = cClient; row[`consultancy${n}_revenue`] = cRevenue;
-    row[`consultancy${n}_year`] = cYear; row[`consultancy${n}_status`] = cStatus;
 
     const [labDetails, labOutcomes] = labCells(p.labsEstablished, n - 1);
     row[`lab${n}_details`] = labDetails; row[`lab${n}_outcomes`] = labOutcomes;

@@ -3,11 +3,13 @@
 // upload (college/students/import-excel) so the roll-number/status rules and
 // document shape stay in exactly one place.
 
+import { lateralEntryBatch } from "@/lib/college/academicSession";
 import type { Section, StudentStatus } from "@/types";
 
 export interface StudentImportRow {
   rollNumber: string;
   name: string;
+  studentType?: string;
   status?: string;
   gender?: string;
   dateOfBirth?: string;
@@ -35,9 +37,12 @@ export interface StudentImportRow {
   admissionType?: string;
   entranceType?: string;
   entranceRank?: string;
+  jeeRank?: string;
+  jeePercentage?: string;
   seatType?: string;
   scholarship?: string;
-  category?: string;
+  caste?: string;
+  subCaste?: string;
   religion?: string;
   nationality?: string;
   motherTongue?: string;
@@ -99,10 +104,17 @@ export function buildStudentDoc(
   // has one, and callers passing one through should always include it - see
   // StudentRecord.courseId's doc-comment for why this can no longer be
   // treated as optional busywork once a student is genuinely placed.
-  section: Pick<Section, "collegeId" | "department" | "name" | "year" | "regulation"> & { courseId?: string },
+  section: Pick<Section, "collegeId" | "department" | "name" | "year" | "regulation"> & { courseId?: string; batch?: string },
   row: StudentImportRow,
   now: Date
 ): Record<string, unknown> {
+  // A Lateral row joining directly into this real section gets its OWN batch
+  // (see lateralEntryBatch) instead of mirroring the section's - everyone
+  // else (including an unset studentType) just mirrors it, same as before.
+  const isLateral = row.studentType?.trim().toUpperCase() === "LATERAL";
+  const batch = section.batch
+    ? (isLateral ? lateralEntryBatch(section.batch) ?? section.batch : section.batch)
+    : undefined;
   return {
     collegeId: section.collegeId,
     department: section.department,
@@ -115,9 +127,14 @@ export function buildStudentDoc(
     // passed there), left for a later distribute/distribute-cohort call to
     // fill in once an actual section is picked.
     ...(section.regulation ? { regulation: section.regulation } : {}),
+    // One-time snapshot of this student's own batch - see
+    // StudentRecord.batch's doc-comment. Same absent-until-placed rule as
+    // regulation above.
+    ...(batch ? { batch } : {}),
     ...(section.courseId ? { courseId: section.courseId } : {}),
     rollNumber: row.rollNumber.trim(),
     name: row.name.trim(),
+    ...(row.studentType?.trim() ? { studentType: row.studentType.trim() } : {}),
     status: parseStudentStatus(row.status),
     ...(row.gender?.trim() ? { gender: row.gender.trim() } : {}),
     ...(row.dateOfBirth?.trim() ? { dateOfBirth: row.dateOfBirth.trim() } : {}),
@@ -132,9 +149,12 @@ export function buildStudentDoc(
     ...(row.admissionType?.trim() ? { admissionType: row.admissionType.trim() } : {}),
     ...(row.entranceType?.trim() ? { entranceType: row.entranceType.trim() } : {}),
     ...(row.entranceRank?.trim() ? { entranceRank: row.entranceRank.trim() } : {}),
+    ...(row.jeeRank?.trim() ? { jeeRank: row.jeeRank.trim() } : {}),
+    ...(row.jeePercentage?.trim() ? { jeePercentage: row.jeePercentage.trim() } : {}),
     ...(row.seatType?.trim() ? { seatType: row.seatType.trim() } : {}),
     ...(parseYesNo(row.scholarship) !== undefined ? { scholarship: parseYesNo(row.scholarship) } : {}),
-    ...(row.category?.trim() ? { category: row.category.trim() } : {}),
+    ...(row.caste?.trim() ? { caste: row.caste.trim() } : {}),
+    ...(row.subCaste?.trim() ? { subCaste: row.subCaste.trim() } : {}),
     ...(row.religion?.trim() ? { religion: row.religion.trim() } : {}),
     ...(row.nationality?.trim() ? { nationality: row.nationality.trim() } : {}),
     ...(row.motherTongue?.trim() ? { motherTongue: row.motherTongue.trim() } : {}),

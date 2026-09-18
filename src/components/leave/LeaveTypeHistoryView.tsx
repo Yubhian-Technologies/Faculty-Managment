@@ -200,6 +200,10 @@ export function LeaveTypeHistoryView({ uid, backHref, type, showOtherLeaveCatego
                   onCancel={uid ? undefined : (target) => setCancelTarget(target)}
                   cancelling={cancelling && cancelTarget?.id === r.id}
                   onAdjustCoverage={canAdjustCoverage ? (target) => setAdjustTarget(target) : undefined}
+                  // Same ownership test as onCancel above - uploading proof of
+                  // duty is the requester's own obligation, and the server only
+                  // accepts SUBMIT_OD_PROOF from them.
+                  isOwnHistory={!uid}
                 />
               ))}
             </div>

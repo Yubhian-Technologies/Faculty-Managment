@@ -111,6 +111,39 @@ export async function GET(request: Request) {
       return NextResponse.json({ requests: [] });
     }
 
+    // On Duty proof queue: APPROVED ODs whose proof has been uploaded and is
+    // waiting on this caller to verify it (see lib/leave/odProof.ts). Separate
+    // from `approvals` above, which by definition only ever returns PENDING_*
+    // requests - these are already approved and would never appear there.
+    if (url.searchParams.get("scope") === "od-proofs") {
+      // Single equality filter, everything else narrowed in memory - the same
+      // no-composite-index convention the rest of this file follows. Requests
+      // that predate this feature carry no odProofStatus at all, so they match
+      // nothing here and are grandfathered out for free.
+      const snap = await REQUESTS_COL(session.collegeId, db)
+        .where("odProofStatus", "==", "PENDING_VERIFICATION")
+        .get();
+      const all = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as LeaveRequest)
+        // Never your own - the PATCH handler refuses self-verification outright,
+        // so showing it here would only produce a dead button.
+        .filter((r) => r.uid !== session.uid);
+
+      if (session.role === "HOD") {
+        const dept = await resolveUserDepartment(db, session.collegeId, session.uid);
+        return NextResponse.json({
+          requests: sortByCreatedAtDesc(
+            all.filter((r) => !!r.hodAction && r.department === (dept || "__NO_DEPARTMENT__"))
+          ),
+        });
+      }
+      if (session.role === "PRINCIPAL" || session.role === "VICE_PRINCIPAL") {
+        // Only the ones they approved themselves, so the two queues stay
+        // disjoint and a Principal isn't handed every department's backlog.
+        return NextResponse.json({ requests: sortByCreatedAtDesc(all.filter((r) => !r.hodAction)) });
+      }
+      return NextResponse.json({ requests: [] });
+    }
+
     const targetUid = url.searchParams.get("uid") || session.uid;
     if (!(await canAccessLeaveProfile(db, session.collegeId, session.role, session.uid, targetUid))) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });

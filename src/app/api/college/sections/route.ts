@@ -518,9 +518,29 @@ export async function POST(request: Request) {
     if (dept) {
       const allDeptsSnap = await db.collection("colleges").doc(session.collegeId).collection("departments").get();
       const allDepts = allDeptsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as
-        (DepartmentYearRow & { name?: string; secondaryDepartments?: string[]; courseScopes?: Record<string, DepartmentCourseScope>; managedDepartments?: string[] })[];
+        (DepartmentYearRow & {
+          name?: string; secondaryDepartments?: string[]; courseScopes?: Record<string, DepartmentCourseScope>;
+          managedDepartments?: string[]; hasSubDepartments?: boolean; parentRunsOwnSections?: boolean;
+        })[];
       const deptDoc = allDepts.find((d) => d.name === dept);
       if (deptDoc) {
+        // A department the Principal has explicitly flagged as "organizes its
+        // sub-departments only, never enrolls students directly" (see
+        // Department.parentRunsOwnSections's own doc-comment, src/types/core.ts)
+        // must never gain a section of its own - that's exactly the state the
+        // flag exists to prevent. Every real Section belongs to one of its
+        // sub-departments instead. Applies regardless of how `dept` was
+        // resolved above (HOD's own department, an explicit departmentId pick,
+        // or the course's fallback) since this is the actual target being
+        // written to Section.department below.
+        if (deptDoc.hasSubDepartments && deptDoc.parentRunsOwnSections === false) {
+          return NextResponse.json(
+            {
+              error: `"${dept}" doesn't run its own sections - it only organizes its sub-departments. Choose one of its sub-departments instead.`,
+            },
+            { status: 400 }
+          );
+        }
         const deptScope = resolveDepartmentCourseScope(deptDoc, course.catalogId);
         let assignedYears = deptScope.assignedYears;
         // A sub-department created by an HOD carries no assignedYears/

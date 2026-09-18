@@ -101,6 +101,15 @@ export function isValidEmail(raw: string | undefined): boolean {
 // Kept here beside the checks so the guidance row, the Add/Edit form dropdowns
 // and the importer can't state three different things.
 
+// The qualifications offered in the Add/Edit Faculty dropdown, and named in
+// the import template's guidance so a sheet uses the same spellings the form
+// produces. Deliberately NOT enforced as a closed set on import (unlike the
+// options below): "Others" exists precisely because a real qualification can
+// fall outside this list, so a row carrying one must still import.
+export const HIGHEST_QUALIFICATION_OPTIONS = [
+  "Ph.D", "M.Tech", "M.E", "M.Sc", "B.Tech", "B.Sc",
+] as const;
+
 export const GENDER_OPTIONS = ["Male", "Female", "Other"] as const;
 export const BLOOD_GROUP_OPTIONS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"] as const;
 export const MARITAL_STATUS_OPTIONS = ["Single", "Married"] as const;
@@ -108,4 +117,4 @@ export const RATIFICATION_STATUS_OPTIONS = ["Ratified", "Not Ratified"] as const
 export const RELIGION_OPTIONS = [
   "Hindu", "Muslim", "Christian", "Sikh", "Jain", "Parsi", "Buddhist", "Other",
 ] as const;
-export const CASTE_OPTIONS = ["OC", "EBC", "EPC", "BC", "SC", "ST", "OTHER"] as const;
+export const CASTE_OPTIONS = ["OC", "EBC", "EPC", "BC-A", "BC-B", "BC-C", "BC-D", "BC-E", "SC", "ST", "OTHER"] as const;

@@ -7,6 +7,14 @@ interface StructureInfo {
   employmentType: string;
 }
 
+// Salary Structures still store the legacy EmploymentType value
+// (PERMANENT/CONTRACT/VISITING/PART_TIME) - faculty records now have
+// employeeCategory (REGULAR/VISITING/CONTRACT/PART_TIME) instead. Only the
+// first spelling differs; the other 3 are unchanged.
+function toEmployeeCategory(employmentType: string): string {
+  return employmentType === "PERMANENT" ? "REGULAR" : employmentType;
+}
+
 // Staff Salaries items whose HOD picked a designation (extras.salaryStructureId)
 // must use that structure's server-recorded grossSalary, not whatever price the
 // client submitted - closes the gap where a tampered payload could otherwise
@@ -54,7 +62,7 @@ export async function applySalaryStructurePricing(
       const snap = await facultyRef
         .where("department", "==", department)
         .where("designation", "==", info.designation)
-        .where("employmentType", "==", info.employmentType)
+        .where("employeeCategory", "==", toEmployeeCategory(info.employmentType))
         .where("status", "==", "ACTIVE")
         .get();
       headcountByStructureId.set(id, snap.size);

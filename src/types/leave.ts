@@ -153,6 +153,24 @@ export const LEAVE_REQUEST_STATUS_LABELS: Record<LeaveRequestStatus, string> = {
   CANCELLED: "Cancelled",
 };
 
+// ─── On Duty proof ───────────────────────────────────────────────────────────
+// An approved On Duty request is only PAID if the requester uploads proof of
+// the duty (certificate/letter/order) once the OD period ends and their
+// approver verifies it. Days left unproven past the grace window count as Loss
+// of Pay - the whole rule lives in src/lib/leave/odProof.ts, nowhere else.
+//
+// A FOURTH state is the ABSENCE of this field: proof was never submitted. It's
+// deliberately not a member here, so an OD that predates this feature (or one
+// whose proof window hasn't opened yet) is simply undefined and matches no
+// Firestore `==` query.
+export type ODProofStatus = "PENDING_VERIFICATION" | "VERIFIED" | "REJECTED";
+
+export const OD_PROOF_STATUS_LABELS: Record<ODProofStatus, string> = {
+  PENDING_VERIFICATION: "Proof awaiting verification",
+  VERIFIED: "Proof verified",
+  REJECTED: "Proof rejected",
+};
+
 // The Principal/Vice Principal must pick one of these when approving an
 // isOtherRequest at PENDING_PRINCIPAL - a further breakdown of "Other" for
 // the Principal's own record-keeping. Deliberately NOT a field on
@@ -380,6 +398,38 @@ export interface LeaveRequest {
   // cancelled request wherever the approver above them (HOD/Principal/VP/
   // Management) views this person's leave history, e.g. LeaveHistoryRow.
   cancelReason?: string;
+  // ─── On Duty proof (OD only - see ODProofStatus above) ──────────────────
+  // Stamped true at APPROVAL time for an OD request, in both approval paths
+  // (the HOD branch in applications/[id]/route.ts and the shared
+  // decideFinalStageLeave). This flag - not a `leaveTypeCode === "OD"` test
+  // at read time - is what opts a request into the proof regime, so every OD
+  // approved BEFORE this feature shipped stays paid forever, with no backfill
+  // script and no date cutoff to maintain. Never set on any other type: SH
+  // (Summer Vacation) is also `rules.unlimited`, so anything keying on that
+  // flag instead of the literal "OD" would wrongly sweep it in.
+  odProofRequired?: boolean;
+  // The uploaded certificate/letter (PDF or image). Written only by the
+  // requester via SUBMIT_OD_PROOF, and only ever a URL this app's own
+  // /api/upload/leave-proof produced - validated server-side against the
+  // storage path prefix, the same check profilePhotoUrl gets.
+  odProofUrl?: string;
+  odProofUploadedAt?: Timestamp;
+  // How many times proof has been submitted (1 on the first, +1 per re-upload
+  // after a rejection). Its only job is to vary the notification dedupeKey:
+  // emitWorkflowNotification is idempotent on that key, so without an attempt
+  // number a re-upload would be silently swallowed and the approver would
+  // never be told to look again.
+  odProofSubmissionCount?: number;
+  odProofStatus?: ODProofStatus;
+  // Whoever verified/rejected - always the tier that approved the request
+  // itself (HOD for a departmental request, Principal/VP for an HOD's own,
+  // Management for a Principal's own), and never the requester.
+  odProofReviewedBy?: string;
+  odProofReviewedByName?: string;
+  odProofReviewedAt?: Timestamp;
+  // Required on rejection - shown to the requester on the re-upload page so
+  // they know what to fix, same contract as cancelReason above.
+  odProofRejectionReason?: string;
   hodAction?: LeaveActionRecord;
   principalAction?: LeaveActionRecord;
   // Set when a PRINCIPAL's own leave (PENDING_MANAGEMENT) is decided - see

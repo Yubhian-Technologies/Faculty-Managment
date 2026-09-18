@@ -4,7 +4,6 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
-import { loadDepartmentCodes, formatSectionLabel } from "@/lib/attendance/sectionLabel";
 import { countSectionStudents } from "@/lib/students/sectionRoster";
 import type { Section, TeachingAssignment } from "@/types";
 
@@ -44,12 +43,10 @@ export async function GET() {
       .filter((snap) => snap.exists)
       .map((snap) => ({ ...(snap.data() as Section), id: snap.id }));
 
-    const codeByName = await loadDepartmentCodes(collegeRef, sectionEntries.map((s) => s.department));
-
     const sections = await Promise.all(
       sectionEntries.map(async (s) => ({
         sectionId: s.id,
-        label: formatSectionLabel(s.department, s.name, codeByName),
+        label: s.name,
         studentCount: await countSectionStudents(collegeRef, {
           department: s.department,
           sectionName: s.name,

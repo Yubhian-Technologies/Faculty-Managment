@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Plus, Pencil, Trash2, Clock, GraduationCap, CheckCircle2, CalendarClock, Layers, SlidersHorizontal } from "lucide-react";
+import { ArrowLeft, Plus, Pencil, Trash2, Clock, GraduationCap, CheckCircle2, CalendarClock, Layers, SlidersHorizontal, GitBranch, RotateCcw } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -30,6 +30,10 @@ export default function DepartmentDetailPage() {
   const [subDepartments, setSubDepartments] = useState<Department[]>([]);
   const [parentDepartment, setParentDepartment] = useState<Department | null>(null);
   const [courses, setCourses] = useState<Course[]>([]);
+  // Only populated on a sub-department page: everything the parent offers,
+  // used to list the courses this department has removed from its own view so
+  // they can be put back. Empty everywhere else.
+  const [parentCourses, setParentCourses] = useState<Course[]>([]);
   const [timings, setTimings] = useState<CourseYearTiming[]>([]);
   const [academicYears, setAcademicYears] = useState<CourseAcademicYear[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -44,10 +48,41 @@ export default function DepartmentDetailPage() {
   const [structureAssignedYears, setStructureAssignedYears] = useState<number[]>([]);
   const [isSavingStructure, setIsSavingStructure] = useState(false);
 
-  // A sub-department (one with a parent) shares its parent's courses/timings/
-  // academic years rather than owning any - so its detail view is read-only for
-  // those, to stop a course edit/delete here from mutating the parent's.
+  // A sub-department (one with a parent) shows its parent's courses by
+  // default, but can diverge from them: customise one into its own independent
+  // copy, remove one it doesn't run, or add a course only it offers. What it
+  // must never do is edit or delete the PARENT's Course doc, which every
+  // sibling shares - so the actions on an inherited course differ from those on
+  // one this department owns. See lib/departments/subDepartmentCourses.ts.
   const isSubDepartment = !!parentDepartment;
+
+  // An inherited course the sub-department is about to make its own, and one
+  // it's about to remove from its own list - both null when no dialog is open.
+  const [customisingCourse, setCustomisingCourse] = useState<Course | null>(null);
+  const [isCustomising, setIsCustomising] = useState(false);
+  const [removingInherited, setRemovingInherited] = useState<Course | null>(null);
+
+  /** True when this row is this department's own Course doc rather than the parent's. */
+  const isOwnCourse = useCallback(
+    (course: Course) => course.departmentId === id,
+    [id]
+  );
+
+  // The parent's courses this sub-department has removed from its own list -
+  // the ones the courses API deliberately filters out, recovered from the
+  // parent's own list so they can still be restored. A course it has since
+  // customised is not "removed" however stale the exclusion looks, matching
+  // resolveSubDepartmentCourses' own precedence.
+  const removedCourses = useMemo(() => {
+    const excluded = new Set(department?.excludedCourseCatalogIds ?? []);
+    if (excluded.size === 0) return [];
+    const ownCatalogIds = new Set(
+      courses.filter(isOwnCourse).map((c) => c.catalogId).filter((v): v is string => !!v)
+    );
+    return parentCourses
+      .filter((c) => c.catalogId && excluded.has(c.catalogId) && !ownCatalogIds.has(c.catalogId))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [department, parentCourses, courses, isOwnCourse]);
 
   const load = useCallback(async () => {
     setIsLoading(true);
@@ -78,13 +113,30 @@ export default function DepartmentDetailPage() {
       // feeder's course rendered alongside would show as a confusing duplicate
       // and could be edited/deleted from the wrong department's page. A real
       // sub-department (parentDepartmentId set) is the one case that's
-      // supposed to show it - it owns no course of its own by construction, so
-      // everything the API returns for it IS the parent's.
+      // supposed to show it: the API has already settled its list against its
+      // parent's (filterSubDepartmentCourses - removals dropped, its own
+      // customised copies standing in), so everything that comes back is
+      // either the parent's to inherit or this department's own, and the card
+      // tells the two apart by departmentId rather than by filtering here.
       const isSubDept = !!dept?.parentDepartmentId;
       const sortedCourses = (coursesRes.courses ?? [])
         .filter((c) => isSubDept || c.departmentId === id)
         .sort((a, b) => a.name.localeCompare(b.name));
       setCourses(sortedCourses);
+
+      // A course this sub-department has removed is filtered out of its own
+      // list by the API (that's the point), so the parent's full list is
+      // fetched alongside purely to render those rows back as "Removed here"
+      // with a way to restore them. Without it a removal would be a one-way
+      // door with nothing left on screen to undo.
+      if (isSubDept && dept?.parentDepartmentId) {
+        const parentRes = await fetch(
+          `/api/college/courses?departmentId=${encodeURIComponent(dept.parentDepartmentId)}`
+        ).then((r) => r.json() as Promise<{ courses: Course[] }>);
+        setParentCourses(parentRes.courses ?? []);
+      } else {
+        setParentCourses([]);
+      }
 
       const [timingLists, academicYearLists] = await Promise.all([
         Promise.all(
@@ -180,6 +232,74 @@ export default function DepartmentDetailPage() {
       toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to save" });
     } finally {
       setIsSavingStructure(false);
+    }
+  }
+
+  // Turn an inherited course into this sub-department's own independent copy.
+  // The server creates a Course doc owned by this department for the same
+  // catalog programme and copies the parent's current timings and academic
+  // years onto it, so the department carries on from what it already had
+  // rather than an empty schedule. From here the two diverge: edits on either
+  // side stop affecting the other.
+  async function handleCustomiseCourse() {
+    if (!customisingCourse?.catalogId || !department) return;
+    setIsCustomising(true);
+    try {
+      const res = await fetch("/api/college/courses", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          departmentId: department.id,
+          catalogId: customisingCourse.catalogId,
+          copyFromCourseId: customisingCourse.id,
+          // The years this department already ran the shared course for, so
+          // the copy starts identical rather than asking again.
+          courseScope: { assignedYears: scopeForCourse(customisingCourse).assignedYears },
+        }),
+      });
+      const json = await res.json() as { error?: string };
+      if (!res.ok) throw new Error(json.error ?? "Failed to customise course");
+      toast({
+        variant: "success",
+        title: `${customisingCourse.name} is now managed by ${department.name}`,
+        description: `${parentDepartment?.name}'s copy is unchanged.`,
+      });
+      setCustomisingCourse(null);
+      await load();
+    } catch (err) {
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to customise course" });
+    } finally {
+      setIsCustomising(false);
+    }
+  }
+
+  // Remove an inherited course from THIS sub-department only, or put it back.
+  // Recorded against this department (excludedCourseCatalogIds) - the parent's
+  // Course doc is never touched, so its other children keep the course.
+  async function setInheritedCourseExcluded(course: Course, excluded: boolean) {
+    if (!course.catalogId || !department) return;
+    try {
+      const res = await fetch("/api/college/departments", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          deptId: department.id,
+          courseExclusion: { catalogId: course.catalogId, excluded },
+        }),
+      });
+      const json = await res.json() as { error?: string };
+      if (!res.ok) throw new Error(json.error ?? "Failed to update");
+      toast({
+        variant: "success",
+        title: excluded
+          ? `${course.name} removed from ${department.name}`
+          : `${course.name} restored to ${department.name}`,
+        description: excluded ? `${parentDepartment?.name} still offers it.` : undefined,
+      });
+      setRemovingInherited(null);
+      await load();
+    } catch (err) {
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to update" });
     }
   }
 
@@ -292,24 +412,23 @@ export default function DepartmentDetailPage() {
             <CardTitle className="text-base flex items-center gap-2">
               <GraduationCap className="h-4 w-4" />Courses
             </CardTitle>
-            {/* A sub-department shares its parent's program - it never owns
-                courses of its own (courses resolve to the parent, see
-                getRelatedDepartmentIds). So course creation and edits stay on
-                the parent's page; here they'd delete/edit the parent's course. */}
-            {!isSubDepartment && (
-              <Button size="sm" onClick={() => router.push(`/principal/departments/${id}/courses/new`)}>
-                <Plus className="h-4 w-4 mr-2" />Add Course
-              </Button>
-            )}
+            {/* On a sub-department this adds a course only IT runs - the same
+                Add flow, filed against this department rather than the parent,
+                so the parent and its other children are unaffected. */}
+            <Button size="sm" onClick={() => router.push(`/principal/departments/${id}/courses/new`)}>
+              <Plus className="h-4 w-4 mr-2" />Add Course
+            </Button>
           </CardHeader>
           <CardContent>
             {isSubDepartment && courses.length > 0 && (
               <div className="mb-3 flex items-start gap-2 rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
                 <Layers className="h-3.5 w-3.5 mt-0.5 shrink-0" />
                 <span>
-                  These courses, timings and academic years belong to{" "}
-                  <span className="text-foreground">{parentDepartment?.name}</span> and are shared by this
-                  sub-department. Manage them from the parent department.
+                  Courses marked <span className="text-foreground">Shared</span> come from{" "}
+                  <span className="text-foreground">{parentDepartment?.name}</span> and follow it. Customise one to
+                  manage it here independently, or remove it if this sub-department doesn&apos;t run it - either way{" "}
+                  <span className="text-foreground">{parentDepartment?.name}</span> and its other sub-departments are
+                  unaffected.
                 </span>
               </div>
             )}
@@ -333,6 +452,11 @@ export default function DepartmentDetailPage() {
                   // scope before that fallback applies - see scopeForCourse.
                   const allYears = Array.from({ length: c.durationYears }, (_, i) => i + 1);
                   const scope = scopeForCourse(c);
+                  // The parent's Course doc, shown here but owned elsewhere.
+                  // Its timings and academic years are keyed by ITS courseId,
+                  // so opening those editors from here would edit the parent's
+                  // schedule for every sibling - customise it first.
+                  const inherited = isSubDepartment && !isOwnCourse(c);
                   const years = scope.assignedYears.length > 0
                     ? allYears.filter((y) => scope.assignedYears.includes(y))
                     : allYears;
@@ -340,7 +464,17 @@ export default function DepartmentDetailPage() {
                     <div key={c.id} className="rounded-lg border p-3 space-y-3">
                       <div className="flex items-start justify-between gap-2">
                         <div>
-                          <Badge variant="secondary" className="text-xs font-mono mb-1">{c.code}</Badge>
+                          <div className="flex flex-wrap items-center gap-1 mb-1">
+                            <Badge variant="secondary" className="text-xs font-mono">{c.code}</Badge>
+                            {/* Which of the two kinds of row this is - the
+                                whole point of the sub-department view, and
+                                what decides the actions available above. */}
+                            {isSubDepartment && (
+                              <Badge variant="outline" className="text-[10px] font-normal">
+                                {isOwnCourse(c) ? `Managed by ${department?.name}` : `Shared from ${parentDepartment?.name}`}
+                              </Badge>
+                            )}
+                          </div>
                           <p className="font-semibold text-sm">{c.name}</p>
                           <p className="text-xs text-muted-foreground mt-0.5">{c.durationYears} year{c.durationYears !== 1 ? "s" : ""}</p>
                           {/* The programme's own length stays above - a B.Tech
@@ -360,26 +494,59 @@ export default function DepartmentDetailPage() {
                             </div>
                           )}
                         </div>
-                        {!isSubDepartment && (
-                          <div className="flex gap-1 shrink-0">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7"
-                              disabled={!c.catalogId}
-                              title={c.catalogId ? "Edit academic structure" : "This course predates the catalog system and can't have its own academic structure"}
-                              onClick={() => openStructureEditor(c)}
-                            >
-                              <SlidersHorizontal className="h-3.5 w-3.5" />
-                            </Button>
-                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => router.push(`/principal/departments/${id}/courses/${c.id}/edit`)}>
-                              <Pencil className="h-3.5 w-3.5" />
-                            </Button>
-                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setDeletingCourse(c)}>
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          </div>
-                        )}
+                        <div className="flex gap-1 shrink-0">
+                          {/* Years Taught is this department's own either way -
+                              a sub-department's courseScopes entry already
+                              takes precedence over its parent's (scopeForCourse),
+                              so this needs no copy of the course to act on. */}
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            disabled={!c.catalogId}
+                            title={c.catalogId ? "Edit academic structure" : "This course predates the catalog system and can't have its own academic structure"}
+                            onClick={() => openStructureEditor(c)}
+                          >
+                            <SlidersHorizontal className="h-3.5 w-3.5" />
+                          </Button>
+                          {/* Editing or deleting an inherited course would hit
+                              the PARENT's doc and every sibling with it, so on
+                              those rows these become "make it mine" and
+                              "remove it from my list" instead. */}
+                          {isSubDepartment && !isOwnCourse(c) ? (
+                            <>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7"
+                                disabled={!c.catalogId}
+                                title={c.catalogId ? `Manage this course in ${department?.name} independently` : "This course predates the catalog system and can't be customised"}
+                                onClick={() => setCustomisingCourse(c)}
+                              >
+                                <GitBranch className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 text-destructive"
+                                disabled={!c.catalogId}
+                                title={c.catalogId ? `Remove from ${department?.name} only` : "This course predates the catalog system and can't be removed here"}
+                                onClick={() => setRemovingInherited(c)}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </>
+                          ) : (
+                            <>
+                              <Button variant="ghost" size="icon" className="h-7 w-7" title="Edit course" onClick={() => router.push(`/principal/departments/${id}/courses/${c.id}/edit`)}>
+                                <Pencil className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" title="Delete course" onClick={() => setDeletingCourse(c)}>
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </>
+                          )}
+                        </div>
                       </div>
 
                       <div className="space-y-1.5 border-t pt-2">
@@ -392,8 +559,8 @@ export default function DepartmentDetailPage() {
                           return (
                             <div
                               key={y}
-                              onClick={isSubDepartment ? undefined : () => router.push(`/principal/departments/${id}/courses/${c.id}/timing/${y}/edit`)}
-                              className={`flex w-full flex-col gap-1 rounded-md border px-2 py-1.5 text-xs ${isSubDepartment ? "" : "hover:bg-muted/50 transition-colors cursor-pointer"}`}
+                              onClick={inherited ? undefined : () => router.push(`/principal/departments/${id}/courses/${c.id}/timing/${y}/edit`)}
+                              className={`flex w-full flex-col gap-1 rounded-md border px-2 py-1.5 text-xs ${inherited ? "" : "hover:bg-muted/50 transition-colors cursor-pointer"}`}
                             >
                               <div className="flex items-center justify-between gap-2">
                                 <span className="flex items-center gap-1.5 font-medium">
@@ -410,7 +577,7 @@ export default function DepartmentDetailPage() {
                                 )}
                               </div>
                               <span
-                                onClick={isSubDepartment ? undefined : (e) => {
+                                onClick={inherited ? undefined : (e) => {
                                   e.stopPropagation();
                                   router.push(`/principal/departments/${id}/courses/${c.id}/academic-year/${y}/edit`);
                                 }}
@@ -432,16 +599,76 @@ export default function DepartmentDetailPage() {
                 })}
               </div>
             )}
+
+            {/* Courses the parent offers that this sub-department has taken
+                off its own list. Kept visible (and restorable) rather than
+                vanishing - otherwise a removal is a one-way door with nothing
+                on screen to undo it. */}
+            {isSubDepartment && removedCourses.length > 0 && (
+              <div className="mt-4 border-t pt-3">
+                <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide mb-2">
+                  Not offered by {department?.name}
+                </p>
+                <div className="space-y-2">
+                  {removedCourses.map((c) => (
+                    <div key={c.id} className="flex items-center justify-between gap-2 rounded-md border border-dashed px-3 py-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Badge variant="outline" className="text-xs font-mono shrink-0">{c.code}</Badge>
+                        <span className="text-sm text-muted-foreground truncate">{c.name}</span>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 shrink-0 text-xs"
+                        onClick={() => void setInheritedCourseExcluded(c, false)}
+                      >
+                        <RotateCcw className="h-3.5 w-3.5 mr-1.5" />Restore
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
         </>
       )}
 
       <ConfirmDialog
+        open={!!customisingCourse}
+        onOpenChange={(open) => !open && setCustomisingCourse(null)}
+        title={`Manage ${customisingCourse?.name ?? "this course"} in ${department?.name ?? "this sub-department"}?`}
+        description={`${department?.name} gets its own copy of this course, with ${parentDepartment?.name}'s current timings and academic years copied across. From then on the two are independent - changes here won't follow ${parentDepartment?.name}, and its other sub-departments keep sharing the original.`}
+        confirmLabel={isCustomising ? "Setting up..." : "Manage here"}
+        onConfirm={() => void handleCustomiseCourse()}
+      />
+
+      <ConfirmDialog
+        open={!!removingInherited}
+        onOpenChange={(open) => !open && setRemovingInherited(null)}
+        title={`Remove ${removingInherited?.name ?? "this course"} from ${department?.name ?? "this sub-department"}?`}
+        description={`${department?.name} will no longer offer this course. ${parentDepartment?.name} and its other sub-departments are unaffected, and you can restore it here at any time.`}
+        confirmLabel="Remove"
+        variant="destructive"
+        onConfirm={() => {
+          if (removingInherited) void setInheritedCourseExcluded(removingInherited, true);
+        }}
+      />
+
+      <ConfirmDialog
         open={!!deletingCourse}
         onOpenChange={(open) => !open && setDeletingCourse(null)}
         title={`Delete ${deletingCourse?.name ?? "course"}?`}
-        description="This will permanently remove the course. Courses with existing sections cannot be deleted."
+        // Deleting a sub-department's own customised copy doesn't remove the
+        // course from it - the parent still offers it, so it goes back to
+        // being shared, along with the parent's timings. Saying "permanently
+        // remove" there would describe the wrong outcome. (Use Remove instead
+        // to stop offering it at all.)
+        description={
+          isSubDepartment && deletingCourse && isOwnCourse(deletingCourse) && parentCourses.some((p) => p.catalogId && p.catalogId === deletingCourse.catalogId)
+            ? `${department?.name}'s own copy is deleted and this course goes back to following ${parentDepartment?.name}, including its timings. Courses with existing sections cannot be deleted.`
+            : "This will permanently remove the course. Courses with existing sections cannot be deleted."
+        }
         confirmLabel="Delete"
         variant="destructive"
         onConfirm={() => void handleDeleteCourse()}

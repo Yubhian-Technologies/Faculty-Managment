@@ -12,11 +12,10 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AvatarUploadField } from "@/components/shared/AvatarUploadField";
 import { DesignationOptions } from "@/components/faculty/DesignationOptions";
-import { useCollegeType } from "@/hooks/useCollegeType";
 import { toast } from "@/hooks/useToast";
 import { toDateInputValue } from "@/lib/utils";
-import { EMPLOYMENT_TYPE_LABELS, FACULTY_STATUS_LABELS } from "@/types";
-import type { EmploymentType, FacultyStatus, SupportingStaffDesignation, Department } from "@/types";
+import { FACULTY_STATUS_LABELS } from "@/types";
+import type { FacultyStatus, SupportingStaffDesignation, Department } from "@/types";
 
 interface StaffForm {
   name: string;
@@ -25,15 +24,15 @@ interface StaffForm {
   designation: SupportingStaffDesignation;
   otherDesignationTitle: string;
   department: string;
+  qualification: string;
   experienceYears: number;
-  employmentType: EmploymentType;
   status: FacultyStatus;
   joiningDate: string;
 }
 
 const EMPTY_FORM: StaffForm = {
   name: "", phone: "", collegeEmail: "", designation: "", otherDesignationTitle: "",
-  department: "", experienceYears: 0, employmentType: "PERMANENT", status: "ACTIVE", joiningDate: "",
+  department: "", qualification: "", experienceYears: 0, status: "ACTIVE", joiningDate: "",
 };
 
 // Account/employment fields only - Personal Details and the Profile modules
@@ -44,7 +43,6 @@ export default function EditNonTechnicalStaffAccountPage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
   const staffId = params.id;
-  const { collegeType } = useCollegeType();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -80,8 +78,8 @@ export default function EditNonTechnicalStaffAccountPage() {
           designation: (m.designation as SupportingStaffDesignation) ?? "",
           otherDesignationTitle: (m.otherDesignationTitle as string) ?? "",
           department: (m.department as string) ?? "",
+          qualification: (m.qualification as string) ?? "",
           experienceYears: (m.experienceYears as number) ?? 0,
-          employmentType: (m.employmentType as EmploymentType) ?? "PERMANENT",
           status: (m.status as FacultyStatus) ?? "ACTIVE",
           joiningDate: toDateInputValue(m.joiningDate as never),
         });
@@ -103,6 +101,14 @@ export default function EditNonTechnicalStaffAccountPage() {
     }
     if (!form.collegeEmail.trim()) {
       toast({ variant: "destructive", title: "College email is required" });
+      return;
+    }
+    if (!form.phone.trim()) {
+      toast({ variant: "destructive", title: "Mobile No is required" });
+      return;
+    }
+    if (!form.qualification.trim()) {
+      toast({ variant: "destructive", title: "Highest Qualification is required" });
       return;
     }
     setSaving(true);
@@ -167,11 +173,11 @@ export default function EditNonTechnicalStaffAccountPage() {
                   <Input value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} placeholder="EMP-001" />
                 </div>
                 <div className="space-y-2">
-                  <Label>Full Name *</Label>
+                  <Label>Name (as per PAN)</Label>
                   <Input value={form.name} onChange={(e) => set({ name: e.target.value })} />
                 </div>
                 <div className="space-y-2">
-                  <Label>Phone</Label>
+                  <Label>Mobile No *</Label>
                   <Input value={form.phone} onChange={(e) => set({ phone: e.target.value })} placeholder="+91 98765 43210" />
                 </div>
               </div>
@@ -197,7 +203,7 @@ export default function EditNonTechnicalStaffAccountPage() {
                 <Label>Designation *</Label>
                 <Select value={form.designation} onValueChange={(v) => set({ designation: v as SupportingStaffDesignation })}>
                   <SelectTrigger><SelectValue placeholder="Select designation" /></SelectTrigger>
-                  <SelectContent><DesignationOptions collegeType={collegeType} kind="non-technical" /></SelectContent>
+                  <SelectContent><DesignationOptions kind="non-technical" /></SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
@@ -219,6 +225,10 @@ export default function EditNonTechnicalStaffAccountPage() {
             )}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
+                <Label>Highest Qualification *</Label>
+                <Input value={form.qualification} onChange={(e) => set({ qualification: e.target.value })} placeholder="e.g. Diploma, B.Com, ITI" />
+              </div>
+              <div className="space-y-2">
                 <Label>Total Years of Experience</Label>
                 <Input type="number" min={0} value={form.experienceYears} onChange={(e) => set({ experienceYears: e.target.value === "" ? 0 : Number(e.target.value) })} />
               </div>
@@ -237,15 +247,6 @@ export default function EditNonTechnicalStaffAccountPage() {
               <p className="text-sm font-medium text-muted-foreground">Employment Details</p>
             </div>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label>Employment Type *</Label>
-                <Select value={form.employmentType} onValueChange={(v) => set({ employmentType: v as EmploymentType })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {Object.entries(EMPLOYMENT_TYPE_LABELS).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
               <div className="space-y-2">
                 <Label>Joining Date *</Label>
                 <Input type="date" value={form.joiningDate} onChange={(e) => set({ joiningDate: e.target.value })} />

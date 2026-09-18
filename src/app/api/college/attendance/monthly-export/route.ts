@@ -28,10 +28,14 @@ export async function GET(request: Request) {
 
     if (session.role === "HOD") {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
-      const departmentNames = [scope.departmentName, ...scope.childDepartmentNames].filter(Boolean);
+      // An HOD can now head more than one top-level department at once
+      // (scope.ownDepartmentNames) - a plain scope.departmentName here only
+      // ever covered the first, silently dropping their other department(s)'
+      // rosters from the export.
+      const departmentNames = [...scope.ownDepartmentNames, ...scope.childDepartmentNames].filter(Boolean);
       const roster = await resolveDepartmentRoster(db, session.collegeId, departmentNames);
       const rows = await buildRosterMonthlySummary(db, session.collegeId, roster, year, month);
-      return NextResponse.json({ scope: "department", department: scope.departmentName, rows });
+      return NextResponse.json({ scope: "department", department: scope.ownDepartmentNames.join(", ") || scope.departmentName, rows });
     }
 
     if (isCollegeStaffUnitHead(session.role)) {

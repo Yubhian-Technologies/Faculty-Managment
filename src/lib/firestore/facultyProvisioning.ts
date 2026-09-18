@@ -1,6 +1,6 @@
 import { randomBytes } from "crypto";
 import { createFirebaseUser } from "@/lib/firebase/authRest";
-import type { EmploymentType } from "@/types";
+import type { EmployeeCategory } from "@/types";
 
 export type ProvisionResult =
   | { status: "created"; facultyId: string; employeeId: string; generatedPassword: string }
@@ -38,8 +38,9 @@ export async function provisionFacultyFromOffer(
   // Office-supplied extras from a faculty-account request (see
   // facultyAccountRequests) — fill in exactly the fields this function used
   // to always leave blank/wrong (qualification/specialization were always
-  // "", employmentType was the invalid literal "FULL_TIME").
-  profileFields?: { employmentType?: EmploymentType; qualification?: string; specialization?: string }
+  // "", employeeCategory was never actually threaded through until this
+  // rename, so it always fell back to REGULAR below).
+  profileFields?: { employeeCategory?: EmployeeCategory; qualification?: string; specialization?: string }
 ): Promise<ProvisionResult> {
   const letterSnap = await db.collection("colleges").doc(collegeId).collection("offerLetters").doc(offerId).get();
   if (!letterSnap.exists) return { status: "not_found" };
@@ -148,7 +149,7 @@ export async function provisionFacultyFromOffer(
     specialization: profileFields?.specialization ?? "",
     experienceYears: 0,
     joiningDate,
-    employmentType: profileFields?.employmentType ?? "PERMANENT",
+    employeeCategory: profileFields?.employeeCategory ?? "REGULAR",
     // Account creation is normally deferred until after the candidate accepts
     // (see Request Credentials on college-office/offers, fulfilled via
     // webmaster/credential-requests), so the accept-time flip in
@@ -274,7 +275,7 @@ export async function linkFacultyToExistingAccount(
     specialization: "",
     experienceYears: 0,
     joiningDate,
-    employmentType: "PERMANENT",
+    employeeCategory: "REGULAR",
     status: letter.status === "ACCEPTED" ? "ACTIVE" : "INTERVIEW_DONE",
     userUid: existingUid,
     linkedExistingAccount: true,

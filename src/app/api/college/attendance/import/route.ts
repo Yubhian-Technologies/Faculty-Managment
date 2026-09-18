@@ -83,7 +83,9 @@ export async function POST(request: Request) {
 
     if (session.role === "HOD") {
       const scope = await getHodDepartmentScope(db, collegeId, session.uid);
-      const deptNames = new Set([scope.departmentName, ...scope.childDepartmentNames].filter(Boolean));
+      // ownDepartmentNames, not just the first (scope.departmentName) - an
+      // HOD can head more than one top-level department at once.
+      const deptNames = new Set([...scope.ownDepartmentNames, ...scope.childDepartmentNames].filter(Boolean));
       allowedRoles = ["PANEL_MEMBER"];
       departmentFilter = (dept) => deptNames.has(dept);
     } else if (isCollegeStaffUnitHead(session.role)) {

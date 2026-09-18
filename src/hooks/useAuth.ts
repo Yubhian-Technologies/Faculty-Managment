@@ -135,6 +135,14 @@ export function useAuth() {
             realRole = "COLLEGE_ADMIN";
             profile = { ...profile, role: "PRINCIPAL" };
           }
+          // Same normalization, same reasoning, for a department's own office
+          // head: identical authority to that department's HOD, so it reads as
+          // "HOD" everywhere auth and navigation are decided. `realRole` keeps
+          // the truth for the few leadership actions they're fenced out of.
+          if (profile && (profile.role as string) === "DEPARTMENT_OFFICE") {
+            realRole = "DEPARTMENT_OFFICE";
+            profile = { ...profile, role: "HOD" };
+          }
           setUser(
             profile
               ? { ...profile, realRole: (realRole as UserRole | undefined) ?? profile.role }

@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { CertificateUploadField } from "@/components/shared/CertificateUploadField";
 import { Trash2, ExternalLink, X } from "lucide-react";
 import { splitDegreeAndBranch } from "@/lib/faculty/legacyProfileFallbacks";
-import type { DegreeDetail, StaffQualification } from "@/types";
+import type { DegreeDetail, StaffQualification, PhdStatus } from "@/types";
 
 // Education level a DegreeFields block represents. Graduation/Post Graduation/
 // Doctoral go through the Domain -> Course cascade below; Post-Doctoral,
@@ -21,6 +21,13 @@ const DOMAIN_LEVELS: DegreeLevel[] = ["UG", "PG", "DOCTORAL"];
 const FLAT_OPTIONS_BY_LEVEL: Partial<Record<DegreeLevel, string[]>> = {
   POST_DOCTORAL: ["Post-Doctoral Fellowship", "D.Sc"],
 };
+
+// The two school-level entries offer a fixed Qualification list instead of
+// School's old free-text field - "Others" reveals a text box alongside it so
+// a board/track not on the list can still be recorded.
+const OTHER_QUALIFICATION = "Others";
+const HIGH_SCHOOL_QUALIFICATION_OPTIONS = ["SSC", "CBSE", "ICSE", OTHER_QUALIFICATION];
+const INTERMEDIATE_QUALIFICATION_OPTIONS = ["Intermediate", "ITI", "Diploma", OTHER_QUALIFICATION];
 
 // Domain shown ahead of Course for Graduation/Post Graduation/Doctoral
 // entries - picking a domain narrows the Course dropdown to that domain's
@@ -63,7 +70,7 @@ const COURSES_BY_DOMAIN: Record<EducationDomain, string[]> = {
 // repeating-list UI instead of maintaining two near-duplicate copies.
 
 export const EMPTY_DEGREE: DegreeDetail = {
-  degree: "", branch: "", specialization: "", universityOrInstitute: "", percentageOrDivision: "",
+  degree: "", branch: "", specialization: "", universityOrInstitute: "", location: "", percentageOrDivision: "",
   yearOfCompletion: new Date().getFullYear(), certificateNumber: "", certificateUrl: "",
 };
 
@@ -97,6 +104,30 @@ export function NumInput({ label, value, onChange }: { label: string; value: num
   );
 }
 
+export function DateInput({
+  label, value, onChange, min, max,
+}: { label: string; value: string | undefined; onChange: (v: string) => void; min?: string; max?: string }) {
+  return (
+    <div className="space-y-2">
+      <Label>{label}</Label>
+      {/* min/max only steer the native picker's own UI - a typed/pasted value
+          outside that range still reaches onChange, so a caller enforcing an
+          order (e.g. To Date >= From Date) must still re-check it there. */}
+      <Input type="date" value={value ?? ""} onChange={(e) => onChange(e.target.value)} min={min} max={max} />
+    </div>
+  );
+}
+
+export function MonthInput({ label, value, onChange }: { label: string; value: string | undefined; onChange: (v: string) => void }) {
+  return (
+    <div className="space-y-2">
+      <Label>{label}</Label>
+      {/* "YYYY-MM" - the native month picker, no day component. */}
+      <Input type="month" value={value ?? ""} onChange={(e) => onChange(e.target.value)} />
+    </div>
+  );
+}
+
 export function TextInput({ label, value, onChange, placeholder }: { label: string; value: string | undefined; onChange: (v: string) => void; placeholder?: string }) {
   return (
     <div className="space-y-2">
@@ -106,10 +137,30 @@ export function TextInput({ label, value, onChange, placeholder }: { label: stri
   );
 }
 
-export function DegreeFields({ label, level, value, onChange }: { label: string; level: DegreeLevel; value: DegreeDetail | undefined; onChange: (v: DegreeDetail) => void }) {
+export function DegreeFields({
+  label, level, value, onChange, extraFields, status,
+}: {
+  label: string; level: DegreeLevel; value: DegreeDetail | undefined; onChange: (v: DegreeDetail) => void;
+  // Extra fields rendered inside this same bordered card, before the standard
+  // ones - used to fold Ph.D./Postdoctoral Status/Mode into the card itself
+  // rather than a separate section (DegreeDetail has no notion of either;
+  // they're FacultyProfileFields-level, so the caller supplies them).
+  extraFields?: React.ReactNode;
+  // This entry's own Ph.D./Postdoctoral Status (Doctoral/Post-Doctoral only -
+  // ignored otherwise), also FacultyProfileFields-level and so also supplied
+  // by the caller - decides whether "Year of Award" or "Name of the Guide /
+  // Supervisor" shows below (see isDoctoralOrPostDoc).
+  status?: PhdStatus;
+}) {
   const v = resolveDegree(value);
   const hasDomain = DOMAIN_LEVELS.includes(level);
   const domain = v.domain as EducationDomain | undefined;
+  // "Others" is a sentinel in v.domain itself (same pattern as Course's own
+  // "Other" below) until the user types the real domain name - a legacy
+  // value that matches none of the fixed domains also falls into this so it
+  // surfaces for correction rather than silently hiding behind an unselected
+  // dropdown.
+  const domainIsOther = !!domain && !(domain in EDUCATION_DOMAIN_LABELS);
   const courseOptions = hasDomain ? (domain ? (COURSES_BY_DOMAIN[domain] ?? []) : []) : (FLAT_OPTIONS_BY_LEVEL[level] ?? []);
   const degreeIsOther = !!v.degree && !courseOptions.includes(v.degree);
   // Intermediate (12th) and High School (10th) have no fixed course
@@ -119,21 +170,32 @@ export function DegreeFields({ label, level, value, onChange }: { label: string;
   // UG/PG Course dropdowns are for) - they take a free-text Specialization
   // instead, and skip Branch/Percentage-CGPA which don't apply to a PhD.
   const isDoctoral = level === "DOCTORAL";
+  const isDoctoralOrPostDoc = level === "DOCTORAL" || level === "POST_DOCTORAL";
+  const isUgOrPg = level === "UG" || level === "PG";
   // Records saved before Specialization existed have this in Branch instead -
   // fall back to it (same legacy-migration idea as resolveDegree's
   // degreeAndBranch handling above) so existing PhD entries don't appear to
   // have silently lost their data the moment this field was added.
   const doctoralSpecialization = v.specialization || (isDoctoral ? v.branch : "");
+  // The fixed Qualification list for whichever school-level entry this is -
+  // "Others" is a sentinel value in v.degree itself (same pattern as the
+  // Course dropdown's own "Other" below) until the user types a custom one,
+  // so a legacy free-typed value that matches none of these options also
+  // falls into it, surfacing the existing text in the box for correction
+  // rather than silently hiding it behind an unselected dropdown.
+  const schoolQualificationOptions = level === "HIGH_SCHOOL" ? HIGH_SCHOOL_QUALIFICATION_OPTIONS : INTERMEDIATE_QUALIFICATION_OPTIONS;
+  const schoolQualificationIsOther = v.degree === OTHER_QUALIFICATION || (!!v.degree && !schoolQualificationOptions.includes(v.degree));
 
   return (
     <div className="space-y-3 rounded-lg border p-3">
       <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{label}</p>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {extraFields}
         {hasDomain && (
           <div className="space-y-2">
             <Label>Domain</Label>
             <Select
-              value={domain ?? ""}
+              value={domainIsOther ? "OTHERS" : (domain ?? "")}
               onValueChange={(x) => onChange({ ...v, domain: x, degree: "" })}
             >
               <SelectTrigger><SelectValue placeholder="Select domain" /></SelectTrigger>
@@ -141,10 +203,35 @@ export function DegreeFields({ label, level, value, onChange }: { label: string;
                 {Object.entries(EDUCATION_DOMAIN_LABELS).map(([k, lbl]) => <SelectItem key={k} value={k}>{lbl}</SelectItem>)}
               </SelectContent>
             </Select>
+            {(domain === "OTHERS" || domainIsOther) && (
+              <Input
+                value={domain === "OTHERS" ? "" : domain}
+                onChange={(e) => onChange({ ...v, domain: e.target.value || "OTHERS" })}
+                placeholder="Please specify domain"
+              />
+            )}
           </div>
         )}
         {isSchoolLevel ? (
-          <TextInput label="Qualification" value={v.degree} onChange={(x) => onChange({ ...v, degree: x })} placeholder={level === "HIGH_SCHOOL" ? "e.g. SSC / State Board" : "e.g. MPC, State Board"} />
+          <div className="space-y-2">
+            <Label>Qualification</Label>
+            <Select
+              value={schoolQualificationIsOther ? OTHER_QUALIFICATION : v.degree}
+              onValueChange={(x) => onChange({ ...v, degree: x })}
+            >
+              <SelectTrigger><SelectValue placeholder="Select qualification" /></SelectTrigger>
+              <SelectContent>
+                {schoolQualificationOptions.map((opt) => <SelectItem key={opt} value={opt}>{opt}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            {schoolQualificationIsOther && (
+              <Input
+                value={v.degree === OTHER_QUALIFICATION ? "" : v.degree}
+                onChange={(e) => onChange({ ...v, degree: e.target.value || OTHER_QUALIFICATION })}
+                placeholder="Please specify"
+              />
+            )}
+          </div>
         ) : isDoctoral ? (
           <TextInput label="Specialization" value={doctoralSpecialization} onChange={(x) => onChange({ ...v, specialization: x })} placeholder="e.g. Machine Learning" />
         ) : (
@@ -170,15 +257,75 @@ export function DegreeFields({ label, level, value, onChange }: { label: string;
             )}
           </div>
         )}
+        {/* Board sits second, right after Qualification - School/Intermediate
+            only, no fixed catalogue, so no equivalent for UG/PG/Doctoral. */}
+        {isSchoolLevel && (
+          <TextInput label="Board" value={v.board} onChange={(x) => onChange({ ...v, board: x })} placeholder="e.g. State Board" />
+        )}
         {!isSchoolLevel && !isDoctoral && (
           <TextInput label="Branch" value={v.branch} onChange={(x) => onChange({ ...v, branch: x })} placeholder="e.g. CSE" />
         )}
-        <TextInput label="University / Institute" value={v.universityOrInstitute} onChange={(x) => onChange({ ...v, universityOrInstitute: x })} />
+        {isUgOrPg ? (
+          <>
+            <div className="space-y-2">
+              <Label>University / Institute</Label>
+              <Select
+                value={v.institutionType ?? ""}
+                onValueChange={(x) => onChange({ ...v, institutionType: x as DegreeDetail["institutionType"] })}
+              >
+                <SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="UNIVERSITY">University</SelectItem>
+                  <SelectItem value="INSTITUTE">Institute</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <TextInput
+              label={v.institutionType === "INSTITUTE" ? "Institute Name" : "University Name"}
+              value={v.universityOrInstitute}
+              onChange={(x) => onChange({ ...v, universityOrInstitute: x })}
+            />
+            {/* Only when Institute is picked - an Institute is typically
+                affiliated to a University, which a plain University entry
+                has no separate concept of. */}
+            {v.institutionType === "INSTITUTE" && (
+              <TextInput
+                label="University"
+                value={v.affiliatedUniversity}
+                onChange={(x) => onChange({ ...v, affiliatedUniversity: x })}
+                placeholder="Affiliating university"
+              />
+            )}
+          </>
+        ) : (
+          <TextInput
+            label={level === "HIGH_SCHOOL" ? "School" : level === "INTERMEDIATE" ? "College" : "University / Institute"}
+            value={v.universityOrInstitute}
+            onChange={(x) => onChange({ ...v, universityOrInstitute: x })}
+          />
+        )}
+        <TextInput label="Place" value={v.location} onChange={(x) => onChange({ ...v, location: x })} placeholder="e.g. Bhimavaram" />
         {!isDoctoral && (
           <TextInput label="Percentage / CGPA" value={v.percentageOrDivision} onChange={(x) => onChange({ ...v, percentageOrDivision: x })} />
         )}
-        <NumInput label="Year of Completion" value={v.yearOfCompletion} onChange={(x) => onChange({ ...v, yearOfCompletion: x })} />
-        <TextInput label="Certificate Number" value={v.certificateNumber} onChange={(x) => onChange({ ...v, certificateNumber: x })} />
+        {/* Registration precedes the award/pass date - Doctoral/Post-Doctoral
+            only, where the two can be years apart. */}
+        {isDoctoralOrPostDoc && (
+          <NumInput label="Year of Registration" value={v.yearOfRegistration} onChange={(x) => onChange({ ...v, yearOfRegistration: x })} />
+        )}
+        {isDoctoralOrPostDoc ? (
+          // Which of the two shows depends on this entry's own Status
+          // (Ph.D./Postdoctoral Status, picked in extraFields above) - not
+          // yet awarded means no year yet, but a guide/supervisor instead.
+          status === "AWARDED" ? (
+            <NumInput label="Year of Award" value={v.yearOfCompletion} onChange={(x) => onChange({ ...v, yearOfCompletion: x })} />
+          ) : status === "PURSUING" ? (
+            <TextInput label="Name of the Guide / Supervisor" value={v.guideOrSupervisorName} onChange={(x) => onChange({ ...v, guideOrSupervisorName: x })} />
+          ) : null
+        ) : (
+          <NumInput label="Year of Passing" value={v.yearOfCompletion} onChange={(x) => onChange({ ...v, yearOfCompletion: x })} />
+        )}
+        <TextInput label="Hall Ticket Number" value={v.certificateNumber} onChange={(x) => onChange({ ...v, certificateNumber: x })} />
       </div>
       {isDoctoral && v.percentageOrDivision && (
         <p className="text-xs text-muted-foreground italic">Legacy note: Percentage/CGPA on file for this entry - {v.percentageOrDivision}</p>
@@ -231,7 +378,12 @@ export function RepeatingGroup<T>({
 }: {
   title: string;
   items: T[] | undefined;
-  empty: T;
+  // A plain object is reused as-is for every new row (existing behavior).
+  // Pass a function instead when each new row needs its own unique value
+  // (e.g. a fresh id) rather than sharing one object reference - see the
+  // FDP/Workshop/MOOC training-entries list, whose rows need a stable id
+  // for cross-profile co-conductor sync.
+  empty: T | (() => T);
   onChange: (next: T[]) => void;
   renderRow: (item: T, update: (patch: Partial<T>) => void) => React.ReactNode;
   addLabel?: string;
@@ -241,7 +393,7 @@ export function RepeatingGroup<T>({
     <div className="space-y-3 rounded-lg border p-3">
       <div className="flex items-center justify-between">
         <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{title}</p>
-        <Button type="button" variant="outline" size="sm" onClick={() => onChange([...list, empty])}>
+        <Button type="button" variant="outline" size="sm" onClick={() => onChange([...list, typeof empty === "function" ? (empty as () => T)() : empty])}>
           {addLabel}
         </Button>
       </div>
@@ -264,6 +416,71 @@ export function RepeatingGroup<T>({
   );
 }
 
+// A repeating list edited as an actual table (Sl. No. + one column per
+// field) rather than RepeatingGroup's stacked cards - used wherever the
+// source spec calls for a literal table (e.g. Equipment Procured / Papers
+// Published / Patents under Research & Innovation's Seed Funding and
+// Sponsored Research Projects tabs).
+export function TableRepeatingGroup<T>({
+  title, items, empty, onChange, addLabel = "Add Row", columns,
+}: {
+  title: string;
+  items: T[];
+  empty: T;
+  onChange: (next: T[]) => void;
+  addLabel?: string;
+  columns: { header: string; render: (item: T, update: (patch: Partial<T>) => void) => React.ReactNode }[];
+}) {
+  return (
+    <div className="space-y-2 rounded-lg border p-3">
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{title}</p>
+        <Button type="button" variant="outline" size="sm" onClick={() => onChange([...items, empty])}>
+          {addLabel}
+        </Button>
+      </div>
+      {items.length === 0 ? (
+        <p className="text-xs text-muted-foreground">None added yet.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm border-collapse">
+            <thead>
+              <tr className="border-b">
+                <th className="text-left font-medium text-muted-foreground p-1.5 w-10">Sl. No.</th>
+                {columns.map((c) => (
+                  <th key={c.header} className="text-left font-medium text-muted-foreground p-1.5 min-w-[140px]">{c.header}</th>
+                ))}
+                <th className="p-1.5 w-8" />
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((item, i) => (
+                <tr key={i} className="border-b last:border-0">
+                  <td className="p-1.5 align-top text-muted-foreground">{i + 1}</td>
+                  {columns.map((c) => (
+                    <td key={c.header} className="p-1.5 align-top">
+                      {c.render(item, (patch) => {
+                        const next = [...items];
+                        next[i] = { ...next[i], ...patch };
+                        onChange(next);
+                      })}
+                    </td>
+                  ))}
+                  <td className="p-1.5 align-top">
+                    <Button type="button" variant="ghost" size="sm" onClick={() => onChange(items.filter((_, idx) => idx !== i))}>
+                      <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Shared by Supporting Staff (every college type) and Faculty at School-type
 // colleges (see College.type, src/lib/designations/config.ts) - a repeating
 // list of {level, degree/university/year/certificate} entries, standing in
@@ -282,7 +499,7 @@ export function QualificationsFields({
   title?: string;
 }) {
   const empty: StaffQualification = {
-    level: "", degree: "", branch: "", universityOrInstitute: "", percentageOrDivision: "",
+    level: "", degree: "", branch: "", universityOrInstitute: "", location: "", percentageOrDivision: "",
     yearOfCompletion: new Date().getFullYear(), certificateNumber: "", certificateUrl: "",
   };
   return (
@@ -314,6 +531,7 @@ export function QualificationsFields({
             </div>
             <TextInput label="Degree / Certificate Name" value={item.degree} onChange={(v) => update({ degree: v })} />
             <TextInput label="University / Institute / Board" value={item.universityOrInstitute} onChange={(v) => update({ universityOrInstitute: v })} />
+            <TextInput label="Location" value={item.location} onChange={(v) => update({ location: v })} placeholder="e.g. Bhimavaram" />
             <TextInput label="Percentage / CGPA" value={item.percentageOrDivision} onChange={(v) => update({ percentageOrDivision: v })} />
             <NumInput label="Year of Completion" value={item.yearOfCompletion} onChange={(v) => update({ yearOfCompletion: v })} />
             <TextInput label="Certificate Number" value={item.certificateNumber} onChange={(v) => update({ certificateNumber: v })} />
@@ -343,6 +561,7 @@ export function QualificationsView({ items, title = "Educational Qualifications"
             <Field label="Level" value={item.level} />
             <Field label="Degree / Certificate Name" value={item.degree} />
             <Field label="University / Institute / Board" value={item.universityOrInstitute} />
+            <Field label="Location" value={item.location} />
             <Field label="Percentage / CGPA" value={item.percentageOrDivision} />
             <Field label="Year of Completion" value={item.yearOfCompletion} />
             <Field label="Certificate Number" value={item.certificateNumber} />
@@ -453,27 +672,55 @@ export function Field({ label, value }: { label: string; value: string | number 
   );
 }
 
-export function DegreeView({ label, degree: degreeInput, level }: { label: string; degree: DegreeDetail | undefined; level?: DegreeLevel }) {
+export function DegreeView({
+  label, degree: degreeInput, level, extraFields, status,
+}: { label: string; degree: DegreeDetail | undefined; level?: DegreeLevel; extraFields?: React.ReactNode; status?: PhdStatus }) {
   const degree = resolveDegree(degreeInput);
   const isDoctoral = level === "DOCTORAL";
+  const isDoctoralOrPostDoc = level === "DOCTORAL" || level === "POST_DOCTORAL";
+  const isUgOrPg = level === "UG" || level === "PG";
+  const isSchoolLevel = level === "INTERMEDIATE" || level === "HIGH_SCHOOL";
   // Records saved before Specialization existed have this in Branch instead -
   // same legacy fallback as DegreeFields, so it doesn't just disappear.
   const doctoralSpecialization = degree?.specialization || (isDoctoral ? degree?.branch : "");
   return (
     <div className="rounded-lg border bg-muted/20 shadow-sm p-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
       <p className="col-span-2 sm:col-span-4 text-xs font-medium text-muted-foreground uppercase tracking-wide">{label}</p>
+      {extraFields}
       {degree?.domain && <Field label="Domain" value={EDUCATION_DOMAIN_LABELS[degree.domain as EducationDomain] ?? degree.domain} />}
-      <Field label="Degree" value={degree?.degree} />
+      <Field label={isSchoolLevel ? "Qualification" : "Degree"} value={degree?.degree} />
       {isDoctoral ? (
         <Field label="Specialization" value={doctoralSpecialization} />
-      ) : (
+      ) : !isSchoolLevel ? (
         <Field label="Branch" value={degree?.branch} />
+      ) : null}
+      {isSchoolLevel && <Field label="Board" value={degree?.board} />}
+      {isUgOrPg ? (
+        <>
+          <Field label="University / Institute" value={degree?.institutionType === "INSTITUTE" ? "Institute" : degree?.institutionType === "UNIVERSITY" ? "University" : undefined} />
+          <Field label={degree?.institutionType === "INSTITUTE" ? "Institute Name" : "University Name"} value={degree?.universityOrInstitute} />
+          {degree?.institutionType === "INSTITUTE" && <Field label="University" value={degree?.affiliatedUniversity} />}
+        </>
+      ) : (
+        <Field
+          label={level === "HIGH_SCHOOL" ? "School" : level === "INTERMEDIATE" ? "College" : "University / Institute"}
+          value={degree?.universityOrInstitute}
+        />
       )}
-      <Field label="University / Institute" value={degree?.universityOrInstitute} />
+      <Field label="Place" value={degree?.location} />
       {!isDoctoral && <Field label="Percentage / CGPA" value={degree?.percentageOrDivision} />}
       {isDoctoral && degree?.percentageOrDivision && <Field label="Percentage / CGPA (legacy)" value={degree.percentageOrDivision} />}
-      <Field label="Year of Completion" value={degree?.yearOfCompletion} />
-      <Field label="Certificate Number" value={degree?.certificateNumber} />
+      {isDoctoralOrPostDoc && <Field label="Year of Registration" value={degree?.yearOfRegistration} />}
+      {isDoctoralOrPostDoc ? (
+        status === "AWARDED" ? (
+          <Field label="Year of Award" value={degree?.yearOfCompletion} />
+        ) : status === "PURSUING" ? (
+          <Field label="Name of the Guide / Supervisor" value={degree?.guideOrSupervisorName} />
+        ) : null
+      ) : (
+        <Field label="Year of Passing" value={degree?.yearOfCompletion} />
+      )}
+      <Field label="Hall Ticket Number" value={degree?.certificateNumber} />
       {degree?.certificateUrl && (
         <div className="col-span-2 sm:col-span-4">
           <a

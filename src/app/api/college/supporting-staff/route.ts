@@ -7,10 +7,10 @@ import { createFirebaseUser } from "@/lib/firebase/authRest";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
 import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
 import { SUPPORTING_STAFF_ROLE_CATEGORY, canRolePostCategory, supportingStaffCategoryLabel } from "@/lib/supportingStaff/roleCategory";
-import { getHodTechnicalDesignations } from "@/lib/designations/config";
+import { hasSupportingStaffSplit } from "@/lib/designations/config";
 import { NON_TECHNICAL_STAFF_DESIGNATION_LABELS, ROLE_LABELS } from "@/types";
 import type {
-  SupportingStaffCategory, SupportingStaffDesignation, EmploymentType, FacultyStatus, CollegeType,
+  SupportingStaffCategory, SupportingStaffDesignation, FacultyStatus, CollegeType,
 } from "@/types";
 
 function designationLabel(designation: SupportingStaffDesignation): string {
@@ -72,7 +72,7 @@ export async function POST(request: Request) {
 
     const body = (await request.json()) as {
       employeeId: string;
-      name: string;
+      name?: string;
       email?: string;
       collegeEmail: string;
       password: string;
@@ -80,21 +80,30 @@ export async function POST(request: Request) {
       staffCategory: SupportingStaffCategory;
       designation: SupportingStaffDesignation;
       otherDesignationTitle?: string;
+      qualification: string;
       experienceYears: number;
       joiningDate: string;
-      employmentType: EmploymentType;
       department?: string;
       supportingStaffProfile?: Record<string, unknown>;
       profilePhotoUrl?: string;
     } & PersonalDetailsInput;
 
     const {
-      employeeId, name, collegeEmail, password, staffCategory, designation,
-      experienceYears, joiningDate, employmentType, profilePhotoUrl,
+      employeeId, collegeEmail, password, staffCategory, designation, qualification,
+      experienceYears, joiningDate, profilePhotoUrl,
     } = body;
+    // Name (as per PAN) is optional - falls back to "" (used as the login
+    // account's display name and the record's own `name`, both fine blank).
+    const name = body.name?.trim() ?? "";
 
-    if (!employeeId || !name || !collegeEmail || !password || !staffCategory || !designation || !employmentType || !joiningDate) {
+    if (!employeeId || !collegeEmail || !password || !staffCategory || !designation || !qualification || !joiningDate) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    }
+    // Matches the mandatory field set the bulk-import template and Add Staff
+    // wizard's Personal Details step now both enforce. Name (as per PAN) and
+    // Name (as per Aadhar) are deliberately excluded - both are optional.
+    if (!body.phone || !body.legalName || !body.gender || !body.dateOfBirth || !body.aadharNo || !body.panNo || !body.ratificationStatus) {
+      return NextResponse.json({ error: "Missing required personal details - Mobile No, Full Name (as per SSC), Gender, Date of Birth, Aadhar No, PAN No, and Ratification Status are all required" }, { status: 400 });
     }
     if (!canRolePostCategory(session.role, staffCategory)) {
       return NextResponse.json(
@@ -105,6 +114,13 @@ export async function POST(request: Request) {
     if (profilePhotoUrl !== undefined && !profilePhotoUrl.startsWith("https://firebasestorage.googleapis.com/")) {
       return NextResponse.json({ error: "Invalid photo URL" }, { status: 400 });
     }
+
+    // The name used everywhere this record is displayed/copied from (login
+    // account, lists, timetable in-charge pickers, leave rosters) - Full Name
+    // (as per SSC) is the primary identity name, so it takes precedence; Name
+    // (as per PAN) is only a fallback for the rare case legalName is blank.
+    // Mirrors Faculty's own `finalName` (src/app/api/college/faculty/route.ts).
+    const finalName = body.legalName.trim() || name || "";
 
     const db = getAdminDb();
     const collegeId = session.collegeId;
@@ -119,7 +135,7 @@ export async function POST(request: Request) {
       // HOD has nothing to create. Backstops the nav-hide in Sidebar.tsx.
       const collegeSnap = await db.collection("colleges").doc(collegeId).get();
       const collegeType = (collegeSnap.data() as { type?: CollegeType } | undefined)?.type;
-      if (getHodTechnicalDesignations(collegeType).length === 0) {
+      if (!hasSupportingStaffSplit(collegeType)) {
         return NextResponse.json(
           { error: "Supporting Staff for your college type is managed centrally by Principal" },
           { status: 403 },
@@ -157,7 +173,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Employee ID already exists" }, { status: 409 });
     }
 
-    const uid = await createFirebaseUser(collegeEmail, password, name);
+    const uid = await createFirebaseUser(collegeEmail, password, finalName);
     const now = new Date();
 
     await db
@@ -168,7 +184,7 @@ export async function POST(request: Request) {
       .set({
         uid,
         collegeId,
-        name,
+        name: finalName,
         email: collegeEmail,
         role: "COLLEGE_STAFF",
         designation: designationLabel(designation),
@@ -185,6 +201,9 @@ export async function POST(request: Request) {
       collegeId,
       ...(department ? { department } : {}),
       employeeId,
+      // Stores Name (as per PAN) verbatim - genuinely optional. Anything that
+      // needs "the" display name reads legalName first - see finalName above
+      // and supportingStaffDisplayName() (src/lib/supportingStaff/supportingStaffDisplayName.ts).
       name,
       collegeEmail,
       ...(body.email ? { email: body.email } : {}),
@@ -192,9 +211,9 @@ export async function POST(request: Request) {
       staffCategory,
       designation,
       ...(body.otherDesignationTitle ? { otherDesignationTitle: body.otherDesignationTitle } : {}),
+      qualification,
       experienceYears: Number(experienceYears),
       joiningDate: new Date(joiningDate),
-      employmentType,
       status: "ACTIVE" as FacultyStatus,
       userUid: uid,
       ...(body.supportingStaffProfile ? { supportingStaffProfile: body.supportingStaffProfile } : {}),
@@ -205,7 +224,7 @@ export async function POST(request: Request) {
     });
 
     await db.collection("systemUsers").doc(uid).set({
-      uid, role: "COLLEGE_STAFF", collegeId, email: collegeEmail, name,
+      uid, role: "COLLEGE_STAFF", collegeId, email: collegeEmail, name: finalName,
       ...(profilePhotoUrl ? { profilePhotoUrl } : {}),
     });
 

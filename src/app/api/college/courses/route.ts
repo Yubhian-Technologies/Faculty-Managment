@@ -3,11 +3,13 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { FieldValue } from "firebase-admin/firestore";
 import { getRelatedDepartmentIds } from "@/lib/departments/scope";
 import { fedYears, type DepartmentWithId } from "@/lib/college/academicStructure";
 import { ensureAssignedYearsOpen } from "@/lib/departments/courseScopeValidation";
 import { deriveHodScope } from "@/lib/departments/hodScope";
 import { groupCoursesByIdentity } from "@/lib/departments/courseGrouping";
+import { filterSubDepartmentCourses } from "@/lib/departments/subDepartmentCourses";
 import type { Department, Course } from "@/types";
 
 export async function GET(request: Request) {
@@ -28,6 +30,14 @@ export async function GET(request: Request) {
     // hoisted to this scope so the post-filter after the query can reuse it
     // too, rather than fetching it a third time.
     let allDepartments: Department[] = [];
+    // Set when this request resolves to exactly ONE sub-department, which is
+    // the only case where "which of the parent's courses does this child
+    // offer" has a single answer: an explicitly-requested sub-department, or
+    // a sub-HOD whose own list is that one child. A parent HOD, or an HOD
+    // heading several departments, deliberately keeps the unfiltered union -
+    // one child's removal must never hide a course from its siblings, and the
+    // superset is what every one of those callers showed before this existed.
+    let targetSubDepartment: (Department & { id: string }) | null = null;
 
     const db = getAdminDb();
 
@@ -53,11 +63,17 @@ export async function GET(request: Request) {
           for (const name of ownDeptNames) {
             const deptDoc = byName.get(name);
             if (!deptDoc) continue;
-            // A sub-department never owns courses of its own - it shares its
-            // parent's program - so a sub-HOD resolves courses against the
-            // parent instead, same fallback already used for section creation.
+            // A sub-department shares its parent's programme by default, so a
+            // sub-HOD resolves courses against the parent - same fallback
+            // already used for section creation. It can also hold its OWN
+            // Course docs now (a customised copy of a shared course, or a
+            // programme only it runs - see subDepartmentCourses.ts), so its
+            // own id goes in alongside the parent's rather than instead of it;
+            // which of the two wins per course is decided by the resolution
+            // below, once both sides have actually been fetched.
             const courseDeptId = deptDoc.parentDepartmentId ?? deptDoc.id;
             courseDeptIdSet.add(courseDeptId);
+            courseDeptIdSet.add(deptDoc.id);
             const relatedIds = await getRelatedDepartmentIds(db, session.collegeId, courseDeptId);
             for (const id of relatedIds) courseDeptIdSet.add(id);
 
@@ -75,6 +91,10 @@ export async function GET(request: Request) {
           }
           if (courseDeptIdSet.size > 0) {
             unionDepartmentIds = Array.from(courseDeptIdSet).slice(0, 30);
+            if (ownDeptNames.length === 1) {
+              const only = byName.get(ownDeptNames[0]);
+              if (only?.parentDepartmentId) targetSubDepartment = only as Department & { id: string };
+            }
           } else {
             departmentId = "__none__";
           }
@@ -134,6 +154,16 @@ export async function GET(request: Request) {
       query = relatedIds.length > 1
         ? query.where("departmentId", "in", relatedIds)
         : query.where("departmentId", "==", departmentId);
+
+      // The requested department may be a sub-department, whose list is its
+      // parent's minus whatever it has removed, with its own customised copies
+      // standing in - resolved after the query, once both sides are in hand.
+      const targetSnap = await db.collection("colleges").doc(session.collegeId)
+        .collection("departments").doc(departmentId).get();
+      const targetData = targetSnap.data() as Department | undefined;
+      if (targetSnap.exists && targetData?.parentDepartmentId) {
+        targetSubDepartment = { ...targetData, id: targetSnap.id };
+      }
     } else if (departmentId === "__none__") {
       query = query.where("departmentId", "==", "__none__");
     }
@@ -160,6 +190,16 @@ export async function GET(request: Request) {
         if (!deptName) return false;
         return fedYears({ name: deptName }, allDepartments, c.catalogId).length > 0;
       });
+    }
+
+    // For a single sub-department, settle its list against its parent's:
+    // drop a parent course this child has removed, and let the child's own
+    // customised copy stand in for the parent's doc rather than appearing
+    // beside it as a duplicate. Runs before the grouping below, which only
+    // collapses duplicates within ONE department and so would leave the
+    // parent/child pair for the same programme showing twice.
+    if (targetSubDepartment) {
+      rawCourses = filterSubDepartmentCourses(targetSubDepartment, rawCourses) as (Course & { id: string })[];
     }
 
     // Collapse duplicate docs for the same conceptual course WITHIN one
@@ -200,6 +240,15 @@ export async function POST(request: Request) {
       // follows the department's own flat secondaryDepartments (see below),
       // never re-picked per course.
       courseScope?: { assignedYears: number[] };
+      // Set when a sub-department is CUSTOMISING a course it currently
+      // inherits from its parent, rather than adding a brand-new one: the
+      // parent's Course doc to copy from. The new doc keeps the same
+      // catalogId (it's the same programme) but is owned by the child, so it
+      // carries its own timings and academic years from here on - those are
+      // keyed `${courseId}_year${n}` and this is a different courseId. The
+      // parent's current timings/academic years are copied across so the
+      // child starts from what it already had rather than an empty schedule.
+      copyFromCourseId?: string;
     };
 
     const { departmentId, catalogId } = body;
@@ -239,6 +288,29 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Department not found" }, { status: 400 });
     }
     const dept = { id: deptSnap.id, ...(deptSnap.data() as object) } as DepartmentWithId;
+
+    // Customising an inherited course: the source must be the same programme
+    // (same catalogId) owned by this sub-department's own parent. Anything
+    // else - a sibling's copy, an unrelated department's course, a different
+    // programme - would be copying a schedule this department has no claim to.
+    let copySource: FirebaseFirestore.DocumentSnapshot | null = null;
+    if (body.copyFromCourseId) {
+      if (!dept.parentDepartmentId) {
+        return NextResponse.json({ error: "Only a sub-department can customise an inherited course" }, { status: 400 });
+      }
+      const sourceSnap = await collegeRef.collection("courses").doc(body.copyFromCourseId).get();
+      const source = sourceSnap.data() as { departmentId?: string; catalogId?: string } | undefined;
+      if (!sourceSnap.exists || !source) {
+        return NextResponse.json({ error: "The course being customised no longer exists" }, { status: 404 });
+      }
+      if (source.departmentId !== dept.parentDepartmentId) {
+        return NextResponse.json({ error: "That course doesn't belong to this sub-department's parent" }, { status: 403 });
+      }
+      if (source.catalogId !== catalogId) {
+        return NextResponse.json({ error: "A customised copy must stay the same course" }, { status: 400 });
+      }
+      copySource = sourceSnap;
+    }
 
     const years = Array.from(new Set(body.courseScope.assignedYears.map(Number).filter((y) => Number.isFinite(y))));
     const tooLong = years.filter((y) => y > catalog.durationYears);
@@ -302,7 +374,40 @@ export async function POST(request: Request) {
       await collegeRef.collection("departments").doc(departmentId).update({
         [`courseScopes.${catalogId}`]: scopeToWrite,
         updatedAt: now,
+        // Customising a course the child had previously removed brings it
+        // back: the live doc is the newer, more specific statement of intent,
+        // and leaving the exclusion would strand a course it can see nowhere.
+        ...(copySource ? { excludedCourseCatalogIds: FieldValue.arrayRemove(catalogId) } : {}),
       });
+    }
+
+    // Copy the parent's current schedule onto the child's own course, so
+    // customising starts from what the department already had rather than a
+    // blank timetable. Both collections key on `${courseId}_year${n}`, so the
+    // new courseId gives the child docs of its own with no id collision - and
+    // the parent's are left exactly as they were, still serving every sibling.
+    if (copySource) {
+      const sourceId = copySource.id;
+      const [timingsSnap, yearsSnap] = await Promise.all([
+        collegeRef.collection("courseYearTimings").where("courseId", "==", sourceId).get(),
+        collegeRef.collection("courseAcademicYears").where("courseId", "==", sourceId).get(),
+      ]);
+      const copyBatch = db.batch();
+      for (const d of timingsSnap.docs) {
+        const data = d.data() as { year?: number };
+        if (typeof data.year !== "number") continue;
+        copyBatch.set(collegeRef.collection("courseYearTimings").doc(`${ref.id}_year${data.year}`), {
+          ...data, departmentId, courseId: ref.id, createdAt: now, updatedAt: now,
+        });
+      }
+      for (const d of yearsSnap.docs) {
+        const data = d.data() as { year?: number };
+        if (typeof data.year !== "number") continue;
+        copyBatch.set(collegeRef.collection("courseAcademicYears").doc(`${ref.id}_year${data.year}`), {
+          ...data, departmentId, courseId: ref.id, createdAt: now, updatedAt: now,
+        });
+      }
+      await copyBatch.commit();
     }
 
     return NextResponse.json({ id: ref.id }, { status: 201 });

@@ -52,7 +52,12 @@ export async function notifyRole(
   link?: string
 ) {
   const isGlobal = ROLE_SCOPE[role as UserRole] === "GLOBAL";
-  const roles = role === "PRINCIPAL" ? ["PRINCIPAL", "COLLEGE_ADMIN"] : [role];
+  // Same reasoning for a Department Office head, whose authority mirrors their
+  // HOD end-to-end: a notifyRole(..., "HOD", ...) must reach them too, or they
+  // would silently miss every role-broadcast their HOD acts on.
+  const roles = role === "PRINCIPAL"
+    ? ["PRINCIPAL", "COLLEGE_ADMIN"]
+    : role === "HOD" ? ["HOD", "DEPARTMENT_OFFICE"] : [role];
   const snap = isGlobal
     ? await db.collection("systemUsers").where("role", "==", role).get()
     : await db.collection("colleges").doc(collegeId).collection("users").where("role", "in", roles).get();

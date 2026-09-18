@@ -25,6 +25,21 @@ export function isCollegeAdmin(session: Pick<SessionPayload, "realRole">): boole
   return session.realRole === "COLLEGE_ADMIN";
 }
 
+/**
+ * A Department Office login, whose `role` always reads "HOD" (see
+ * api/auth/session's normalization). They hold the same authority as their
+ * department's HOD over everything operational, so this must NOT be used to
+ * narrow ordinary permissions - `role` is still the right check for those.
+ *
+ * It exists for the one deliberate exception: appointing or removing leadership
+ * stays with the actual HOD, so an office head can neither appoint another
+ * office head nor remove a Sub-HOD. Otherwise whoever was appointed could
+ * remove the person who appointed them.
+ */
+export function isDepartmentOffice(session: Pick<SessionPayload, "realRole">): boolean {
+  return session.realRole === "DEPARTMENT_OFFICE";
+}
+
 export async function verifySession(): Promise<SessionPayload | null> {
   const cookieStore = await cookies();
   const sessionCookie = cookieStore.get("fms-session")?.value;

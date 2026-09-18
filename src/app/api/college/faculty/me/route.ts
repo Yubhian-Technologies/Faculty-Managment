@@ -4,8 +4,13 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
+import { syncTrainingEntryCoConductors } from "@/lib/faculty/syncTrainingEntryCoConductors";
+import type { TrainingEntry } from "@/types";
 
 const FINANCIAL_ACADEMIC_KEYS = ["presentSalary", "grossAnnualCTC", "incrementsAwarded", "fundingConsultancyRevenue"];
+// Researcher IDs go through R&D verification (POST /api/college/research-profile)
+// instead - stripped here so a direct PATCH can't set them unverified.
+const RESEARCH_PROFILE_KEYS = ["orcidId", "scopusAuthorId", "researcherId", "googleScholarId", "irinsProfile"];
 
 // Self-service lookup for "My Profile" pages. Two different data shapes can hold
 // "this person's own details" depending on how their account was provisioned:
@@ -78,6 +83,15 @@ export async function PATCH(request: Request) {
       name: string;
       email: string;
       phone: string;
+      // Identity & Employment fields a Faculty member may edit about
+      // themselves - deliberately excludes employeeId, collegeEmail,
+      // designation, department, joiningDate, aicteEligible, aicteFacultyId
+      // and employmentType, which stay HR/HOD-controlled (see PATCH
+      // /api/college/faculty/[id], HOD/Principal/VP only).
+      apaarFacultyId: string;
+      qualification: string;
+      specialization: string;
+      additionalPhoneNumbers: { label?: string; number: string }[];
       academicProfile: Record<string, unknown>;
       profilePhotoUrl: string;
     }> & PersonalDetailsInput;
@@ -110,14 +124,36 @@ export async function PATCH(request: Request) {
     if (body.name?.trim()) facultyUpdates.name = body.name.trim();
     if (body.email?.trim()) facultyUpdates.email = body.email.trim();
     if (body.phone !== undefined) facultyUpdates.phone = body.phone;
+    if (body.apaarFacultyId !== undefined) facultyUpdates.apaarFacultyId = body.apaarFacultyId;
+    if (body.qualification?.trim()) facultyUpdates.qualification = body.qualification.trim();
+    if (body.specialization !== undefined) facultyUpdates.specialization = body.specialization;
+    if (body.additionalPhoneNumbers !== undefined) {
+      facultyUpdates.additionalPhoneNumbers = body.additionalPhoneNumbers.filter((p) => p.number?.trim());
+    }
     if (body.profilePhotoUrl !== undefined) facultyUpdates.profilePhotoUrl = body.profilePhotoUrl;
     if (body.academicProfile !== undefined) {
       const ap = { ...body.academicProfile };
       for (const k of FINANCIAL_ACADEMIC_KEYS) delete ap[k];
+      for (const k of RESEARCH_PROFILE_KEYS) delete ap[k];
       facultyUpdates.academicProfile = ap;
     }
 
+    const previousFacultyData = facultyDoc.data() as { legalName?: string; name?: string; academicProfile?: { trainingEntries?: TrainingEntry[] } };
+
     await facultyDoc.ref.update(facultyUpdates);
+
+    if (body.academicProfile !== undefined) {
+      try {
+        const ownerName = previousFacultyData.legalName?.trim() || previousFacultyData.name?.trim() || "";
+        const nextEntries = (facultyUpdates.academicProfile as { trainingEntries?: TrainingEntry[] } | undefined)?.trainingEntries;
+        await syncTrainingEntryCoConductors(
+          db, session.collegeId, facultyDoc.id, ownerName,
+          previousFacultyData.academicProfile?.trainingEntries, nextEntries
+        );
+      } catch (syncErr) {
+        console.error("[college/faculty/me PATCH] co-conductor sync failed:", syncErr);
+      }
+    }
 
     // Keep the thin users/{uid} doc in sync so auth store reflects latest name/photo
     const userUpdates: Record<string, unknown> = { updatedAt: now };

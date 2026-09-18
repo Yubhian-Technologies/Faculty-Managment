@@ -14,13 +14,25 @@ interface CertificateUploadFieldProps {
   onUploaded: (url: string) => void;
   onRemoved: () => void;
   className?: string;
+  // Lets a caller reuse this same upload widget for a differently-named
+  // document (e.g. a Brochure alongside the Certificate on an FDP/Workshop
+  // entry - see TrainingEntryFields) without duplicating the component.
+  // Every existing caller omits these and keeps the original Certificate wording.
+  label?: string;         // caption above the field - default "Certificate / Transcript"
+  uploadedText?: string;  // shown once a file is attached - default "Certificate uploaded"
+  buttonText?: string;    // empty-state button - default "Upload Certificate (PNG / JPG / PDF, max 5 MB)"
 }
 
 function isImage(url: string) {
   return /\.(png|jpe?g)(\?|$)/i.test(url);
 }
 
-export function CertificateUploadField({ value, onUploaded, onRemoved, className }: CertificateUploadFieldProps) {
+export function CertificateUploadField({
+  value, onUploaded, onRemoved, className,
+  label = "Certificate / Transcript",
+  uploadedText = "Certificate uploaded",
+  buttonText = "Upload Certificate (PNG / JPG / PDF, max 5 MB)",
+}: CertificateUploadFieldProps) {
   const { toast } = useToast();
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
@@ -42,7 +54,7 @@ export function CertificateUploadField({ value, onUploaded, onRemoved, className
       const data = (await res.json()) as { url?: string; error?: string };
       if (!res.ok || !data.url) throw new Error(data.error ?? "Upload failed");
       onUploaded(data.url);
-      toast({ variant: "success", title: "Certificate uploaded" });
+      toast({ variant: "success", title: uploadedText });
     } catch (err) {
       toast({ variant: "destructive", title: err instanceof Error ? err.message : "Upload failed" });
     } finally {
@@ -58,7 +70,7 @@ export function CertificateUploadField({ value, onUploaded, onRemoved, className
 
   return (
     <div className={cn("space-y-1.5", className)}>
-      <p className="text-xs font-medium text-muted-foreground">Certificate / Transcript</p>
+      <p className="text-xs font-medium text-muted-foreground">{label}</p>
 
       {value ? (
         <div className="flex items-center gap-2 rounded-md border bg-muted/30 px-3 py-2">
@@ -67,7 +79,7 @@ export function CertificateUploadField({ value, onUploaded, onRemoved, className
           ) : (
             <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
           )}
-          <span className="flex-1 text-xs text-muted-foreground truncate">Certificate uploaded</span>
+          <span className="flex-1 text-xs text-muted-foreground truncate">{uploadedText}</span>
           <div className="flex items-center gap-1 shrink-0">
             <a
               href={value}
@@ -109,7 +121,7 @@ export function CertificateUploadField({ value, onUploaded, onRemoved, className
           {uploading ? (
             <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />Uploading…</>
           ) : (
-            <><Upload className="h-3.5 w-3.5 mr-1.5" />Upload Certificate (PNG / JPG / PDF, max 5 MB)</>
+            <><Upload className="h-3.5 w-3.5 mr-1.5" />{buttonText}</>
           )}
         </Button>
       )}

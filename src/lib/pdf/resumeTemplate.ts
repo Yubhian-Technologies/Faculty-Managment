@@ -1,7 +1,9 @@
 import { formatCurrency, formatDate } from "@/lib/utils";
-import { DESIGNATION_LABELS, EMPLOYMENT_TYPE_LABELS, FACULTY_STATUS_LABELS, ROLE_LABELS, RELIGION_LABELS, CASTE_LABELS } from "@/types";
+import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
+import { DESIGNATION_LABELS, FACULTY_STATUS_LABELS, ROLE_LABELS, RELIGION_LABELS, CASTE_LABELS } from "@/types";
 import type { Religion, Caste } from "@/types";
 import { buildTeachingLoadRows, formatClassColumn, type TeachingLoadRow } from "@/lib/teaching/buildTeachingLoadRows";
+import { allPreviousExperienceEntries, totalYearsOfExperience, formatDuration } from "@/lib/faculty/experienceCalc";
 
 type TimestampLike = { toDate?: () => Date; seconds?: number; _seconds?: number } | string | null | undefined;
 
@@ -33,14 +35,17 @@ interface CourseAssignment {
 }
 
 interface TeachingAssignmentSummary {
-  primaryTeachingRole?: string;
+  primaryTeachingRole?: string; // Academic Experience tab's role box
   courses?: CourseAssignment[];
 }
 
 interface PreviousInstitution {
   institutionName?: string;
   designation?: string;
-  yearsWorked?: number;
+  fromDate?: string;
+  toDate?: string;
+  fromYear?: number;
+  toYear?: number;
 }
 
 interface Publication {
@@ -50,32 +55,6 @@ interface Publication {
   publicationYear?: number;
   indexing?: string;
   driveLink?: string;
-}
-
-interface FundedProject {
-  title?: string;
-  fundingAgency?: string;
-  grantAmountLakhs?: number;
-  year?: number;
-  status?: string;
-}
-
-interface ConsultancyProject {
-  title?: string;
-  clientOrAgency?: string;
-  revenueLakhs?: number;
-  year?: number;
-  status?: string;
-}
-
-interface PatentSummary {
-  indianFiled?: number;
-  indianPublished?: number;
-  indianGranted?: number;
-  internationalFiled?: number;
-  internationalPublished?: number;
-  internationalGranted?: number;
-  details?: string;
 }
 
 interface LabEstablished {
@@ -92,6 +71,7 @@ interface AuthoredBook {
 interface FacultyProfileFieldsLike {
   highestQualification?: string;
   ugDetails?: DegreeDetail;
+  additionalUgDetails?: DegreeDetail[];
   pgDetails?: DegreeDetail;
   additionalPgDetails?: DegreeDetail[];
   phdDetails?: DegreeDetail;
@@ -100,12 +80,17 @@ interface FacultyProfileFieldsLike {
   phdMode?: string;
   phdSupervisorName?: string;
   fellowshipsReceived?: string;
-  gateQualifiedYear?: number;
-  gateScore?: number;
-  netSletQualificationYear?: number;
+  qualifyingExamQualified?: string;
+  qualifyingExam?: string;
+  qualifyingExamScore?: string;
+  qualifyingExamYear?: number;
 
   teachingAssignment?: TeachingAssignmentSummary;
+  primaryIndustryRole?: string;
+  primaryResearchRole?: string;
   previousInstitutions?: PreviousInstitution[];
+  industryExperienceEntries?: PreviousInstitution[];
+  researchExperienceEntries?: PreviousInstitution[];
 
   publications?: Publication[];
   publicationsFirstOrCorrespondingAuthor?: number;
@@ -120,20 +105,8 @@ interface FacultyProfileFieldsLike {
   hIndex?: number;
   i10Index?: number;
 
-  fundedProjects?: FundedProject[];
-  consultancyProjects?: ConsultancyProject[];
-  patents?: PatentSummary;
-
-  phdScholarsPursuing?: { count?: number; universities?: string };
-  phdScholarsAwarded?: { count?: number; universities?: string };
-  nationalExposure?: string;
-  internationalExposure?: string;
   labsEstablished?: LabEstablished[];
-  administrativeResponsibilities?: string;
-  certificationsAndFdps?: string;
-  professionalBodyMemberships?: string;
   authoredBooks?: AuthoredBook[];
-  notableAwards?: string;
 
   presentSalary?: number;
   grossAnnualCTC?: number;
@@ -144,7 +117,9 @@ interface FacultyProfileFieldsLike {
 }
 
 export interface ResumeData {
-  name: string;
+  // Name (as per PAN) - optional; legalName below is the primary display
+  // name. See facultyDisplayName() usage in the header rendering.
+  name?: string;
   role?: string;
   designation?: string;
   /** R&D-managed publication records (see /api/college/publications) - the
@@ -164,18 +139,11 @@ export interface ResumeData {
   resumeUrl?: string;
 
   joiningDate?: TimestampLike;
-  employmentType?: string;
   status?: string;
   isActive?: boolean;
-  hasPHD?: boolean;
   qualification?: string;
   specialization?: string;
   experienceYears?: number;
-  internalExperience?: number;
-  externalExperience?: number;
-  inCampusExperience?: number;
-  industryExperience?: number;
-  researchExperience?: number;
 
   gender?: string;
   dateOfBirth?: TimestampLike;
@@ -189,14 +157,14 @@ export interface ResumeData {
   panNo?: string;
   passportNumber?: string;
   emergencyContactName?: string;
+  emergencyContactRelation?: string;
   emergencyContactPhone?: string;
   ratificationStatus?: string;
+  ratificationProceedingsNumber?: string;
   ratificationDate?: TimestampLike;
   maritalStatus?: string;
   spouseName?: string;
   numberOfChildren?: number;
-  referral?: string;
-  nativePlace?: string;
   temporaryAddress?: string;
   permanentSameAsTemporary?: boolean;
   permanentAddress?: string;
@@ -352,9 +320,6 @@ export function getResumeHTML(data: ResumeData): string {
   const designationLabel = data.designation
     ? (DESIGNATION_LABELS[data.designation as keyof typeof DESIGNATION_LABELS] ?? data.designation)
     : "";
-  const employmentTypeLabel = data.employmentType
-    ? (EMPLOYMENT_TYPE_LABELS[data.employmentType as keyof typeof EMPLOYMENT_TYPE_LABELS] ?? data.employmentType)
-    : "";
   const statusLabel = data.status
     ? (FACULTY_STATUS_LABELS[data.status as keyof typeof FACULTY_STATUS_LABELS] ?? data.status)
     : typeof data.isActive === "boolean"
@@ -378,14 +343,13 @@ export function getResumeHTML(data: ResumeData): string {
     (ap?.additionalPhdDetails ?? []).map((d) => degreeEntry("Ph.D.", d, true)).join("") +
     degreeEntry("Postgraduate", ap?.pgDetails) +
     (ap?.additionalPgDetails ?? []).map((d) => degreeEntry("Postgraduate", d)).join("") +
-    degreeEntry("Undergraduate", ap?.ugDetails);
+    degreeEntry("Undergraduate", ap?.ugDetails) +
+    (ap?.additionalUgDetails ?? []).map((d) => degreeEntry("Undergraduate", d)).join("");
   const educationExtras = bullets([
     highestQualification && !ap?.phdDetails && !ap?.pgDetails && !ap?.ugDetails && `Highest Qualification: ${esc(highestQualification)}`,
-    (ap?.phdStatus || ap?.phdMode) && `PhD Status: ${esc(ap?.phdStatus) || "-"} (${esc(ap?.phdMode) || "mode not recorded"})`,
-    ap?.phdSupervisorName && `PhD Supervisor: ${esc(ap.phdSupervisorName)}`,
-    ap?.fellowshipsReceived && `Fellowships Received: ${esc(ap.fellowshipsReceived)}`,
-    ap?.gateQualifiedYear && `GATE Qualified: ${esc(ap.gateQualifiedYear)}${ap.gateScore ? ` (Score: ${esc(ap.gateScore)})` : ""}`,
-    ap?.netSletQualificationYear && `NET / SLET Qualified: ${esc(ap.netSletQualificationYear)}`,
+    (ap?.phdStatus || ap?.phdMode) && `Ph.D. Status: ${esc(ap?.phdStatus) || "-"} (${esc(ap?.phdMode) || "mode not recorded"})`,
+    ap?.qualifyingExamQualified === "YES" && ap?.qualifyingExam &&
+      `${esc(ap.qualifyingExam)} Qualified${ap.qualifyingExamYear ? ` (${esc(ap.qualifyingExamYear)})` : ""}${ap.qualifyingExamScore ? ` - Score: ${esc(ap.qualifyingExamScore)}` : ""}`,
   ]);
   const educationBody = educationEntries + educationExtras;
 
@@ -396,21 +360,33 @@ export function getResumeHTML(data: ResumeData): string {
     data.department || "",
     data.joiningDate ? `${formatDate(data.joiningDate as Parameters<typeof formatDate>[0])} - ${data.isActive === false ? "Left" : "Present"}` : ""
   );
+  // Internal (time served since Date of Joining) / External (Academic +
+  // Industry + Research Experience entries combined) - computed live the
+  // same way as the faculty profile page (FacultyProfileHub) and CSV export,
+  // rather than read from a separately-stored, rarely-written field.
+  const previousExperienceEntries = allPreviousExperienceEntries(ap);
+  const hasPreviousExperience = previousExperienceEntries.length > 0;
+  const hasJoiningDate = !!data.joiningDate;
+  const internalExperienceDuration = totalYearsOfExperience(undefined, data.joiningDate as Parameters<typeof formatDate>[0]);
+  const externalExperienceDuration = totalYearsOfExperience(previousExperienceEntries, undefined);
   const experienceBullets = bullets([
     data.experienceYears &&
       `Total Professional Experience: ${esc(data.experienceYears)} years`,
-    (data.internalExperience || data.externalExperience) &&
-      `Internal / External Experience: ${data.internalExperience ?? 0} yrs internal, ${data.externalExperience ?? 0} yrs external`,
-    (data.inCampusExperience || data.industryExperience) &&
-      `In-Campus / Industry Experience: ${data.inCampusExperience ?? 0} yrs in-campus, ${data.industryExperience ?? 0} yrs industry`,
-    data.researchExperience &&
-      `Research / Industry Experience: ${esc(data.researchExperience)} years`,
+    hasJoiningDate && `Internal Experience: ${formatDuration(internalExperienceDuration)}`,
+    hasPreviousExperience && `External Experience: ${formatDuration(externalExperienceDuration)}`,
     data.specialization && `Specialization: ${esc(data.specialization)}`,
     data.qualification && `Qualification: ${esc(data.qualification)}`,
   ]);
   const previousInstitutionEntries = ap?.previousInstitutions?.length
     ? ap.previousInstitutions
-        .map((pi) => entry(pi.institutionName || "Previous Institution", pi.yearsWorked ? `${pi.yearsWorked} yrs` : "", pi.designation || ""))
+        .map((pi) => {
+          // Prefers the real dates; falls back to the legacy year-only value
+          // for a record that hasn't been re-saved under the new shape yet.
+          const from = pi.fromDate ?? (pi.fromYear ? String(pi.fromYear) : "");
+          const to = pi.toDate ?? (pi.toYear ? String(pi.toYear) : "");
+          const range = from || to ? `${from} - ${to}` : "";
+          return entry(pi.institutionName || "Previous Institution", range, pi.designation || "");
+        })
         .join("")
     : "";
   const experienceBody = experienceEntry + experienceBullets + previousInstitutionEntries;
@@ -420,7 +396,9 @@ export function getResumeHTML(data: ResumeData): string {
   // course/section assignments + the Module 2 course summary vs. structured
   // past assignments (past rows carry a pass %, current ones never do).
   const teachingLoadBullets = bullets([
-    ap?.teachingAssignment?.primaryTeachingRole && `Primary Teaching Role: ${esc(ap.teachingAssignment.primaryTeachingRole)}`,
+    ap?.teachingAssignment?.primaryTeachingRole && `Teaching Roles/Responsibilities: ${esc(ap.teachingAssignment.primaryTeachingRole)}`,
+    ap?.primaryIndustryRole && `Industry Roles/Responsibilities: ${esc(ap.primaryIndustryRole)}`,
+    ap?.primaryResearchRole && `Research Roles/Responsibilities: ${esc(ap.primaryResearchRole)}`,
   ]);
   const teachingLoadGroups = buildTeachingLoadRows({
     currentAssignments: data.teachingAssignments,
@@ -463,57 +441,15 @@ export function getResumeHTML(data: ResumeData): string {
     : "";
   const publicationsBody = publicationEntries + publicationStatsBullets + booksEntries;
 
-  // ── Projects, grants & consultancy ──────────────────────────────────────
-  const fundedProjectEntries = ap?.fundedProjects?.length
-    ? ap.fundedProjects
-        .map((p) =>
-          entry(p.title || "Funded Project", p.year ? String(p.year) : "", p.fundingAgency || "", p.status || "") +
-          bullets([p.grantAmountLakhs && `Grant Amount: ₹${esc(p.grantAmountLakhs)} Lakhs`])
-        )
-        .join("")
-    : "";
-  const consultancyEntries = ap?.consultancyProjects?.length
-    ? ap.consultancyProjects
-        .map((p) =>
-          entry(p.title || "Consultancy Project", p.year ? String(p.year) : "", p.clientOrAgency || "", p.status || "") +
-          bullets([p.revenueLakhs && `Revenue: ₹${esc(p.revenueLakhs)} Lakhs`])
-        )
-        .join("")
-    : "";
+  // ── Mentorship & institutional contribution ─────────────────────────────
   const labEntries = ap?.labsEstablished?.length
     ? ap.labsEstablished.map((l) => entry(l.facilityDetails || "Facility Established", "") + bullets([l.outcomes && `Outcomes: ${esc(l.outcomes)}`])).join("")
     : "";
-  const patentsBullets = ap?.patents && (ap.patents.indianFiled || ap.patents.internationalFiled || ap.patents.details)
-    ? bullets([
-        (ap.patents.indianFiled || ap.patents.indianPublished || ap.patents.indianGranted) &&
-          `Indian Patents (Filed / Published / Granted): ${ap.patents.indianFiled ?? 0} / ${ap.patents.indianPublished ?? 0} / ${ap.patents.indianGranted ?? 0}`,
-        (ap.patents.internationalFiled || ap.patents.internationalPublished || ap.patents.internationalGranted) &&
-          `International Patents (Filed / Published / Granted): ${ap.patents.internationalFiled ?? 0} / ${ap.patents.internationalPublished ?? 0} / ${ap.patents.internationalGranted ?? 0}`,
-        ap.patents.details && `Patent Details: ${esc(ap.patents.details)}`,
-      ])
-    : "";
-  const grantsBody = fundedProjectEntries + consultancyEntries + labEntries + patentsBullets;
-
-  // ── Mentorship & institutional contribution ─────────────────────────────
-  const mentorshipBody = bullets([
-    ap?.phdScholarsPursuing?.count && `PhD Scholars Pursuing: ${esc(ap.phdScholarsPursuing.count)}${ap.phdScholarsPursuing.universities ? ` (${esc(ap.phdScholarsPursuing.universities)})` : ""}`,
-    ap?.phdScholarsAwarded?.count && `PhD Scholars Awarded: ${esc(ap.phdScholarsAwarded.count)}${ap.phdScholarsAwarded.universities ? ` (${esc(ap.phdScholarsAwarded.universities)})` : ""}`,
-    ap?.nationalExposure && `National Exposure: ${esc(ap.nationalExposure)}`,
-    ap?.internationalExposure && `International Exposure: ${esc(ap.internationalExposure)}`,
-    ap?.administrativeResponsibilities && `Administrative Responsibilities: ${esc(ap.administrativeResponsibilities)}`,
-    ap?.notableAwards && `Notable Awards: ${esc(ap.notableAwards)}`,
-  ]);
-
-  // ── Certifications & memberships ────────────────────────────────────────
-  const certificationsBody = bullets([
-    ap?.certificationsAndFdps && esc(ap.certificationsAndFdps),
-    ap?.professionalBodyMemberships && esc(ap.professionalBodyMemberships),
-  ]);
+  const mentorshipBody = labEntries;
 
   // ── Personal & contact details ──────────────────────────────────────────
   const personalBody = detailTable(
     detail("Status", statusLabel) +
-    detail("Employment Type", employmentTypeLabel) +
     detail(
       data.status === "INTERVIEW_DONE" ? "Expected to Join" : "Date of Joining",
       data.joiningDate ? formatDate(data.joiningDate as Parameters<typeof formatDate>[0]) : ""
@@ -523,20 +459,19 @@ export function getResumeHTML(data: ResumeData): string {
     detail("Blood Group", data.bloodGroup) +
     detail("Marital Status", data.maritalStatus) +
     detail("Legal Name", data.legalName) +
-    detail("Father / Husband", data.fatherName) +
+    detail("Father", data.fatherName) +
     detail("Mother", data.motherName) +
-    detail("Spouse", data.spouseName) +
+    detail(data.gender === "Female" ? "Husband" : "Spouse", data.spouseName) +
     detail("Children", data.numberOfChildren) +
     detail("Religion", data.religion ? (RELIGION_LABELS[data.religion as Religion] ?? data.religion) : undefined) +
-    detail("Caste", data.caste ? (CASTE_LABELS[data.caste as Caste] ?? data.caste) : undefined) +
+    detail("Caste", data.caste && data.caste !== "BC" ? (CASTE_LABELS[data.caste as Caste] ?? data.caste) : undefined) +
     detail("Sub Caste", data.subCaste) +
-    detail("Native Place", data.nativePlace) +
     detail("Aadhar No.", data.aadharNo) +
     detail("PAN No.", data.panNo) +
     detail("Passport No.", data.passportNumber) +
-    detail("Emergency Contact Name", data.emergencyContactName) +
-    detail("Emergency Contact Phone", data.emergencyContactPhone) +
-    detail("Referral", data.referral) +
+    detail("Emergency Contact Person Name", data.emergencyContactName) +
+    detail("Relation (with Emergency Contact)", data.emergencyContactRelation) +
+    detail("Emergency Contact Mobile No", data.emergencyContactPhone) +
     addressFacts(data)
   );
 
@@ -563,9 +498,9 @@ export function getResumeHTML(data: ResumeData): string {
     <div class="header-left">
       ${data.profilePhotoUrl
         ? `<img class="avatar" src="${esc(data.profilePhotoUrl)}" alt="">`
-        : `<div class="avatar-fallback">${esc(initials(data.name))}</div>`}
+        : `<div class="avatar-fallback">${esc(initials(facultyDisplayName(data)))}</div>`}
       <div>
-        <div class="name">${esc(data.name)}</div>
+        <div class="name">${esc(facultyDisplayName(data))}</div>
         ${subtitle ? `<div class="subtitle">${esc(subtitle)}</div>` : ""}
         ${data.collegeName ? `<div class="college">${esc(data.collegeName)}</div>` : ""}
       </div>
@@ -579,10 +514,8 @@ export function getResumeHTML(data: ResumeData): string {
   ${renderSection("Education", educationBody)}
   ${renderSection("Previous Experience", experienceBody)}
   ${renderSection("Teaching Load", teachingLoadBody)}
-  ${renderSection("Research Publications", publicationsBody)}
-  ${renderSection("Projects, Grants & Consultancy", grantsBody)}
+  ${renderSection("Research & Innovation", publicationsBody)}
   ${renderSection("Mentorship & Institutional Contribution", mentorshipBody)}
-  ${renderSection("Certifications & Professional Memberships", certificationsBody)}
   ${renderSection("Other Information", otherInfoBody)}
   ${renderSection("Financial Standing", financialBody)}
 

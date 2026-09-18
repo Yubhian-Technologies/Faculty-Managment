@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/useToast";
+import { OD_PROOF_GRACE_DAYS } from "@/lib/leave/odProof";
 import { AlertTriangle, CalendarPlus, Users } from "lucide-react";
 import { countWorkingDays, dateKey, isoDateKey, todayISODate } from "@/lib/leave/dayCounter";
 import { HALF_DAY_ELIGIBLE_TYPES } from "@/lib/leave/seedData";
@@ -413,6 +414,14 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
               </SelectContent>
             </Select>
             {extendId && <p className="text-xs text-muted-foreground">Kept the same as the leave you&rsquo;re extending.</p>}
+            {/* Set the expectation before they apply, not after they're
+                already overdue. Shared by all 17 apply routes for free. */}
+            {leaveTypeCode === "OD" && (
+              <p className="text-xs text-muted-foreground">
+                You&rsquo;ll need to upload proof of duty (certificate, letter or order) within {OD_PROOF_GRACE_DAYS}{" "}
+                days of this On Duty period ending. Unproven days are treated as Loss of Pay.
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">

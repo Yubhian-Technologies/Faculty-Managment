@@ -122,6 +122,15 @@ export function DepartmentScopeSelect({
   // it from the choices and offer only the real branches it manages.
   const isGroupingContainer = managedNames.size > 0;
 
+  // A department the Principal has explicitly flagged as never enrolling
+  // students directly (Department.parentRunsOwnSections === false - see its
+  // own doc-comment, src/types/core.ts) must never be offered as a section
+  // target either - same exclusion as a grouping container, just an explicit
+  // Principal-set reason instead of an inferred one (managedDepartments).
+  // Only meaningful when hasSubDepartments is true, matching the field's own
+  // semantics; unset/true changes nothing (today's behaviour).
+  const ownHasNoSections = Boolean(own?.hasSubDepartments) && own?.parentRunsOwnSections === false;
+
   // Main/common HOD case: their own department has sub-departments and isn't
   // itself a grouping container. If at least one sub-department groups real
   // branches, the choice must go Sub-Department -> Department instead of a
@@ -157,21 +166,39 @@ export function DepartmentScopeSelect({
   // Memoized so the default-seeding effect below doesn't re-run every render.
   const options = useMemo(() => {
     if (!own) return [];
-    return isGroupingContainer ? [...children, ...managed] : [own, ...children, ...managed];
-  }, [own, children, managed, isGroupingContainer]);
+    return (isGroupingContainer || ownHasNoSections) ? [...children, ...managed] : [own, ...children, ...managed];
+  }, [own, children, managed, isGroupingContainer, ownHasNoSections]);
 
-  // For a grouping container the caller's own department isn't a valid target,
-  // so seed the parent form with the first real branch instead of letting it
-  // fall back to the container server-side. Only applies to the flat
-  // (non-cascading) shape - the cascade always starts unselected so a branch
-  // is never picked without the user explicitly choosing its sub-department.
+  // For a grouping container (or a department flagged as never running its
+  // own sections) the caller's own department isn't a valid target, so seed
+  // the parent form with the first real branch/sub-department instead of
+  // letting it fall back to the container server-side (which now rejects it -
+  // see sections/route.ts POST). Only applies to the flat (non-cascading)
+  // shape - the cascade always starts unselected so a branch is never picked
+  // without the user explicitly choosing its sub-department (see the
+  // matching cascade-shape default effect below).
   useEffect(() => {
-    if (useCascade || didDefault.current || value !== "" || !isGroupingContainer || options.length === 0) return;
+    if (useCascade || didDefault.current || value !== "" || (!isGroupingContainer && !ownHasNoSections) || options.length === 0) return;
     didDefault.current = true;
     // `options` is empty whenever `own` is null, so the guard above already
     // rules that out - the fallback is only here to satisfy the narrowing.
     onChange(options[0].name, options[0].id, own?.id ?? "");
-  }, [useCascade, value, isGroupingContainer, options, own, onChange]);
+  }, [useCascade, value, isGroupingContainer, ownHasNoSections, options, own, onChange]);
+
+  // Cascade shape counterpart of the default above: when the common
+  // department itself can't own a section, "nothing selected" (subDeptId ===
+  // "") can no longer mean "use the common department" - default to its
+  // first sub-department instead, via the exact same resolution the select's
+  // own onChange uses (a grouping sub-department needs the Department step
+  // below; a plain one resolves immediately).
+  useEffect(() => {
+    if (!useCascade || !ownHasNoSections || didDefault.current || value !== "" || subDeptId !== "" || children.length === 0) return;
+    didDefault.current = true;
+    const first = children[0];
+    setSubDeptId(first.id);
+    if ((first.managedDepartments?.length ?? 0) > 0) onChange("", "", first.id);
+    else onChange(first.name, first.id, first.id);
+  }, [useCascade, ownHasNoSections, value, subDeptId, children, onChange]);
 
   if (!own || (children.length === 0 && managed.length === 0)) return null;
 
@@ -204,16 +231,24 @@ export function DepartmentScopeSelect({
                 same empty value that already meant "own department" to every
                 caller (the sections API falls back to it when no departmentId
                 is sent), so this names the existing default instead of adding
-                a new one. */}
-            <option value="">
-              {own.name} (your department{freshmanDepartmentIds.has(own.id) ? " - Freshman's Department" : ""})
-            </option>
+                a new one. Omitted entirely when this department is flagged as
+                never running its own sections (ownHasNoSections) - a real
+                sub-department is the only valid choice then, and the default
+                effect above already seeds one so the select is never left on
+                an invalid empty selection. */}
+            {!ownHasNoSections && (
+              <option value="">
+                {own.name} (your department{freshmanDepartmentIds.has(own.id) ? " - Freshman's Department" : ""})
+              </option>
+            )}
             {children.map((c) => (
               <option key={c.id} value={c.id}>{c.name}</option>
             ))}
           </select>
           <p className="text-xs text-muted-foreground">
-            {hint ?? `Which of ${own.name}'s sub-departments manages this section - or ${own.name} itself.`}
+            {hint ?? (ownHasNoSections
+              ? `Which of ${own.name}'s sub-departments manages this section - ${own.name} itself doesn't run its own sections.`
+              : `Which of ${own.name}'s sub-departments manages this section - or ${own.name} itself.`)}
           </p>
         </div>
 
@@ -223,8 +258,11 @@ export function DepartmentScopeSelect({
             department directly and takes a typed name. Picking a branch
             resolves to that branch exactly as the Sub-Department -> Department
             path does, so the section lands in the same place with the same
-            derived name (BSE-CIVIL-A) either way. */}
-        {!selectedChild && rolledUpBranches.length > 0 && (
+            derived name (BSE-CIVIL-A) either way. Never rendered when
+            ownHasNoSections - "own itself" isn't a valid target then, and the
+            cascade default effect above ensures selectedChild is always set
+            in that case. */}
+        {!ownHasNoSections && !selectedChild && rolledUpBranches.length > 0 && (
           <div className="space-y-1.5">
             {/* "Core Department" is the term used for the Principal's own
                 branches (CIVIL, IT, EEE …) as distinct from a sub-department

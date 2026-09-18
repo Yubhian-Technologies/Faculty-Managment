@@ -5,26 +5,23 @@ import { useRouter } from "next/navigation";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectGroup, SelectLabel, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/useToast";
+import { useAuthStore } from "@/store/authStore";
 import { PUBLICATION_ELIGIBLE_ROLES } from "@/lib/publications/eligibleRoles";
+import { PublicationDetailsForm, emptyPublicationDetails, isPublicationDetailsValid } from "@/components/research/PublicationDetailsForm";
 import { ROLE_LABELS } from "@/types";
-import type { FMSUser } from "@/types";
+import type { FMSUser, PublicationDetails } from "@/types";
 
 type StaffOption = Pick<FMSUser, "uid" | "name" | "role">;
 
 export default function NewPublicationPage() {
   const router = useRouter();
+  const ownCollegeId = useAuthStore((s) => s.user?.collegeId ?? "");
   const [staff, setStaff] = useState<StaffOption[]>([]);
   const [uid, setUid] = useState("");
-  const [title, setTitle] = useState("");
-  const [coAuthors, setCoAuthors] = useState("");
-  const [journalOrConference, setJournalOrConference] = useState("");
-  const [publicationYear, setPublicationYear] = useState(new Date().getFullYear());
-  const [indexing, setIndexing] = useState("");
-  const [driveLink, setDriveLink] = useState("");
+  const [details, setDetails] = useState<PublicationDetails>(emptyPublicationDetails());
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -48,7 +45,7 @@ export default function NewPublicationPage() {
     .map((role) => ({ role, members: staff.filter((s) => s.role === role) }))
     .filter((g) => g.members.length > 0);
 
-  const isValid = !!uid && title.trim().length > 1 && journalOrConference.trim().length > 1 && !!publicationYear;
+  const isValid = !!uid && isPublicationDetailsValid(details);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -58,7 +55,7 @@ export default function NewPublicationPage() {
       const res = await fetch("/api/college/publications", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ uid, title, coAuthors, journalOrConference, publicationYear, indexing, driveLink }),
+        body: JSON.stringify({ uid, details }),
       });
       if (!res.ok) {
         const json = await res.json().catch(() => ({})) as { error?: string };
@@ -75,7 +72,7 @@ export default function NewPublicationPage() {
   }
 
   return (
-    <div className="max-w-xl">
+    <div className="max-w-2xl">
       <PageHeader title="Add Publication" description="Record an official publication for a staff member" />
       <Card>
         <CardHeader><CardTitle className="text-base">Publication Details</CardTitle></CardHeader>
@@ -97,34 +94,9 @@ export default function NewPublicationPage() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
-              <Label>Title <span className="text-destructive">*</span></Label>
-              <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Paper title" />
-            </div>
-            <div className="space-y-2">
-              <Label>Co-Authors</Label>
-              <Input value={coAuthors} onChange={(e) => setCoAuthors(e.target.value)} placeholder="Comma-separated names" />
-            </div>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label>Journal / Conference <span className="text-destructive">*</span></Label>
-                <Input value={journalOrConference} onChange={(e) => setJournalOrConference(e.target.value)} />
-              </div>
-              <div className="space-y-2">
-                <Label>Year <span className="text-destructive">*</span></Label>
-                <Input type="number" value={publicationYear} onChange={(e) => setPublicationYear(Number(e.target.value))} />
-              </div>
-            </div>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label>Indexing</Label>
-                <Input value={indexing} onChange={(e) => setIndexing(e.target.value)} placeholder="e.g. SCI, Scopus, WoS, UGC-CARE" />
-              </div>
-              <div className="space-y-2">
-                <Label>Publication Link</Label>
-                <Input value={driveLink} onChange={(e) => setDriveLink(e.target.value)} placeholder="DOI / Scopus / Drive link" />
-              </div>
-            </div>
+
+            <PublicationDetailsForm value={details} onChange={setDetails} ownCollegeId={ownCollegeId} />
+
             <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end pt-4 border-t">
               <Button type="button" variant="outline" onClick={() => router.back()}>Cancel</Button>
               <Button type="submit" loading={saving} disabled={!isValid}>Add Publication</Button>

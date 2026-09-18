@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/useToast";
 import { cn, formatDate } from "@/lib/utils";
-import { CalendarClock, Check, X, ChevronDown, ChevronUp } from "lucide-react";
+import { CalendarClock, Check, X, ChevronDown, ChevronUp, FileCheck } from "lucide-react";
 import { EFFECTIVE_CATEGORY_LABELS, EFFECTIVE_CATEGORY_ORDER, LEAVE_TYPE_LABELS, OTHER_LEAVE_CATEGORY_DESCRIPTIONS, OTHER_LEAVE_CATEGORY_LABELS, OTHER_LEAVE_CATEGORY_ORDER } from "@/types/leave";
 import type { EffectiveLeaveCategory, LeaveRequest, OtherLeaveCategory } from "@/types/leave";
 
@@ -75,6 +75,12 @@ export function LeaveApprovalQueue() {
   const [coverageModeById, setCoverageModeById] = useState<Record<string, "ADJUSTMENT" | "REPLACEMENT">>({});
   const [replacementFacultyById, setReplacementFacultyById] = useState<Record<string, string>>({});
 
+  // On Duty proof submissions awaiting this approver - see the section below
+  // the main queue.
+  const [odProofs, setOdProofs] = useState<LeaveRequest[]>([]);
+  const [odProofReasonById, setOdProofReasonById] = useState<Record<string, string>>({});
+  const [odProofActingId, setOdProofActingId] = useState<string | null>(null);
+
   const load = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -89,9 +95,61 @@ export function LeaveApprovalQueue() {
     }
   }, []);
 
+  // Approved On Duty leaves whose proof of duty is waiting on this approver.
+  // A separate fetch because these are APPROVED - `scope=approvals` only ever
+  // returns PENDING_* requests, so they could never arrive through it.
+  const loadOdProofs = useCallback(async () => {
+    try {
+      const res = await fetch("/api/leave/applications?scope=od-proofs");
+      const data = (await res.json()) as { requests?: LeaveRequest[]; error?: string };
+      if (!res.ok) throw new Error(data.error ?? "Failed to load proof submissions");
+      setOdProofs(data.requests ?? []);
+    } catch {
+      // Deliberately quiet: the pending-approvals queue above is the primary
+      // job of this screen and must still render if this secondary list fails.
+      setOdProofs([]);
+    }
+  }, []);
+
+  async function reviewOdProof(request: LeaveRequest, verify: boolean) {
+    const reason = (odProofReasonById[request.id] ?? "").trim();
+    if (!verify && !reason) {
+      toast({ variant: "destructive", title: "Add a reason so they know what to fix" });
+      return;
+    }
+    setOdProofActingId(request.id);
+    try {
+      const res = await fetch(`/api/leave/applications/${request.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: verify ? "VERIFY_OD_PROOF" : "REJECT_OD_PROOF",
+          ...(verify ? {} : { reason }),
+        }),
+      });
+      const json = (await res.json()) as { error?: string };
+      if (!res.ok) throw new Error(json.error ?? "Failed to record the decision");
+      toast({
+        variant: "success",
+        title: verify ? "Proof verified" : "Proof rejected",
+        description: verify
+          ? `${request.employeeName}'s On Duty days remain paid.`
+          : `${request.employeeName} has been asked to re-upload.`,
+      });
+      setOdProofs((prev) => prev.filter((r) => r.id !== request.id));
+    } catch (err) {
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to record the decision" });
+    } finally {
+      setOdProofActingId(null);
+    }
+  }
+
   useEffect(() => {
     load();
-  }, [load]);
+    // Fetched alongside the pending queue rather than from its own effect -
+    // two independent lists, but one mount-time load.
+    loadOdProofs();
+  }, [load, loadOdProofs]);
 
   useEffect(() => {
     if (!expandedId) return;
@@ -536,6 +594,81 @@ export function LeaveApprovalQueue() {
               </Card>
             );
           })}
+        </div>
+      )}
+
+      {/* Proof of duty for leaves that are ALREADY approved - a separate list,
+          not another tab, because the tab strip above is spent on the
+          new-joining/vacation/non-vacation split and these rows aren't part of
+          that dimension. Renders nothing at all when there's none outstanding. */}
+      {odProofs.length > 0 && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <FileCheck className="h-4 w-4 text-muted-foreground" />
+            <h3 className="text-sm font-semibold">On Duty Proof Verification ({odProofs.length})</h3>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            On Duty leave is only paid once the duty is evidenced. Verify the document, or reject it with a reason so
+            they can re-upload.
+          </p>
+          {odProofs.map((r) => (
+            <Card key={r.id}>
+              <CardContent className="p-4 space-y-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <Avatar name={r.employeeName} size="sm" />
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium leading-tight">{r.employeeName}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {formatDate(r.fromDate)} – {formatDate(r.toDate)} · {r.totalDays} day
+                        {r.totalDays === 1 ? "" : "s"}
+                        {r.department ? ` · ${r.department}` : ""}
+                      </p>
+                    </div>
+                  </div>
+                  <Badge variant="pending" className="shrink-0">On Duty</Badge>
+                </div>
+
+                {r.reason && <p className="text-xs text-muted-foreground">{r.reason}</p>}
+
+                {r.odProofUrl && (
+                  <a
+                    href={r.odProofUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                  >
+                    <FileCheck className="h-3.5 w-3.5" /> View proof of duty
+                  </a>
+                )}
+
+                <div>
+                  <label className="text-xs font-medium">Reason (required to reject)</label>
+                  <Textarea
+                    className="mt-1 text-xs"
+                    rows={2}
+                    placeholder="e.g. the certificate doesn't cover these dates"
+                    value={odProofReasonById[r.id] ?? ""}
+                    onChange={(e) => setOdProofReasonById((prev) => ({ ...prev, [r.id]: e.target.value }))}
+                  />
+                </div>
+
+                <div className="flex justify-end gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={odProofActingId === r.id}
+                    onClick={() => void reviewOdProof(r, false)}
+                  >
+                    <X className="h-4 w-4 mr-1" /> Reject
+                  </Button>
+                  <Button size="sm" disabled={odProofActingId === r.id} onClick={() => void reviewOdProof(r, true)}>
+                    <Check className="h-4 w-4 mr-1" /> Verify
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
         </div>
       )}
     </div>

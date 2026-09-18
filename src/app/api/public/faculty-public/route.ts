@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import type { FacultyMember, DegreeDetail } from "@/types";
 
 // Public "meet the faculty" page — no auth, reached via a short, human-
@@ -63,7 +64,7 @@ export async function GET(request: Request) {
     return NextResponse.json({
       profile: {
         collegeName,
-        name: faculty.name,
+        name: facultyDisplayName(faculty),
         designation: faculty.designation,
         department: faculty.department,
         profilePhotoUrl: faculty.profilePhotoUrl || undefined,
@@ -77,14 +78,16 @@ export async function GET(request: Request) {
           ? {
               highestQualification: ap.highestQualification,
               ugDetails: publicDegree(ap.ugDetails),
+              additionalUgDetails: (ap.additionalUgDetails ?? []).map(publicDegree),
               pgDetails: publicDegree(ap.pgDetails),
               additionalPgDetails: (ap.additionalPgDetails ?? []).map(publicDegree),
               phdDetails: publicDegree(ap.phdDetails),
               additionalPhdDetails: (ap.additionalPhdDetails ?? []).map(publicDegree),
               postDoctoralDetails: publicDegree(ap.postDoctoralDetails),
               phdStatus: ap.phdStatus,
-              netSletQualificationYear: ap.netSletQualificationYear,
-              gateQualifiedYear: ap.gateQualifiedYear,
+              qualifyingExamQualified: ap.qualifyingExamQualified,
+              qualifyingExam: ap.qualifyingExam,
+              qualifyingExamYear: ap.qualifyingExamYear,
             }
           : undefined,
 
@@ -115,32 +118,6 @@ export async function GET(request: Request) {
             }
           : undefined,
 
-        projects: ap
-          ? {
-              fundedProjects: (ap.fundedProjects ?? []).map((p) => ({
-                title: p.title,
-                fundingAgency: p.fundingAgency,
-                year: p.year,
-                status: p.status,
-                piOrCoPi: p.piOrCoPi,
-              })),
-              consultancyProjects: (ap.consultancyProjects ?? []).map((p) => ({
-                title: p.title,
-                clientOrAgency: p.clientOrAgency,
-                year: p.year,
-                status: p.status,
-              })),
-              patents: ap.patents
-                ? {
-                    indianGranted: ap.patents.indianGranted,
-                    indianFiled: ap.patents.indianFiled,
-                    internationalGranted: ap.patents.internationalGranted,
-                    internationalFiled: ap.patents.internationalFiled,
-                  }
-                : undefined,
-            }
-          : undefined,
-
         recognition: ap
           ? {
               awardEntries: (ap.awardEntries ?? []).map((a) => ({
@@ -155,6 +132,7 @@ export async function GET(request: Request) {
               })),
               adminResponsibilityEntries: (ap.adminResponsibilityEntries ?? []).map((r) => ({
                 category: r.category,
+                otherCategory: r.otherCategory,
                 description: r.description,
                 fromYear: r.fromYear,
                 toYear: r.toYear,
@@ -166,8 +144,6 @@ export async function GET(request: Request) {
                 organizer: t.organizer,
                 year: t.year,
               })),
-              nationalExposure: ap.nationalExposure,
-              internationalExposure: ap.internationalExposure,
             }
           : undefined,
 

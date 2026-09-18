@@ -47,16 +47,19 @@ export interface StudentListQuery {
   course: string;
   /** null means no filter. */
   year: number | null;
+  /** Exact studentType ("Regular"/"Lateral"). "" means no filter. */
+  studentType: string;
 }
 
 type Doc = FirebaseFirestore.QueryDocumentSnapshot;
 
 function matchesRemaining(
   data: FirebaseFirestore.DocumentData,
-  opts: Pick<StudentListQuery, "search" | "course" | "year">
+  opts: Pick<StudentListQuery, "search" | "course" | "year" | "studentType">
 ): boolean {
   if (opts.year !== null && Number(data.year) !== opts.year) return false;
   if (opts.course && data.course !== opts.course) return false;
+  if (opts.studentType && data.studentType !== opts.studentType) return false;
   if (opts.search) {
     const name = String(data.name ?? "").toLowerCase();
     const roll = String(data.rollNumber ?? "").toLowerCase();
@@ -118,7 +121,7 @@ export async function fetchStudentsPage(
   studentsColl: FirebaseFirestore.CollectionReference,
   params: StudentListQuery
 ): Promise<{ students: StudentListItem[]; total: number }> {
-  const hasFilter = params.departments.length > 0 || params.year !== null || !!params.course || !!params.search;
+  const hasFilter = params.departments.length > 0 || params.year !== null || !!params.course || !!params.search || !!params.studentType;
 
   if (!hasFilter) {
     const [countSnap, pageSnap] = await Promise.all([
@@ -143,7 +146,7 @@ export async function fetchStudentsPage(
  */
 export async function fetchMatchingStudentIds(
   studentsColl: FirebaseFirestore.CollectionReference,
-  params: Pick<StudentListQuery, "departments" | "year" | "course" | "search">
+  params: Pick<StudentListQuery, "departments" | "year" | "course" | "search" | "studentType">
 ): Promise<string[]> {
   const candidates = await resolveCandidates(studentsColl, params);
   return candidates.filter((d) => matchesRemaining(d.data(), params)).map((d) => d.id);

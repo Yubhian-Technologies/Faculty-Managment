@@ -2,7 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
-import { requireCollegeMember } from "@/lib/auth/verifySession";
+import { requireCollegeMember, isDepartmentOffice } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope } from "@/lib/departments/scope";
 import {
@@ -11,6 +11,7 @@ import {
   type DepartmentClaimRow,
 } from "@/lib/departments/managedBranches";
 import { validateAssignedYears, validateSecondaryDepartmentNames, ensureAssignedYearsOpen } from "@/lib/departments/courseScopeValidation";
+import { cascadeDepartmentRename } from "@/lib/departments/renameCascade";
 
 // yyyy-mm-dd, the same shape StudentRecord.dateOfBirth already uses.
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -546,15 +547,57 @@ export async function PATCH(request: Request) {
       courseScope?:
         | { catalogId: string; assignedYears: number[] }
         | { catalogId: string; clear: true };
+      // Sub-departments only: remove (or restore) one of the parent's courses
+      // from THIS child's list, without touching the parent's Course doc -
+      // which every sibling shares. See Department.excludedCourseCatalogIds.
+      courseExclusion?: { catalogId: string; excluded: boolean };
+      // Retries a previously-failed rename cascade (see renameCascade.ts and
+      // cascadeStatus below) without requiring another actual rename - this
+      // route has no cron/background-job infrastructure to retry it
+      // automatically, so a stuck "FAILED" cascade needs an explicit,
+      // deliberate re-run. Every other field on the body is ignored when this
+      // is set. Idempotent, same as the cascade itself - safe to call even if
+      // the previous attempt actually finished (a no-op in that case).
+      resyncNameCascade?: boolean;
+      // Explicit acknowledgement that this department already has real
+      // Section docs directly under it (see the existing-sections warning
+      // below) - set by the Edit Department page after the Principal accepts
+      // the confirmation dialog it shows when the first attempt comes back
+      // with HAS_EXISTING_SECTIONS. Ignored unless parentRunsOwnSections is
+      // actually being turned to false in this same request.
+      confirmExistingSections?: boolean;
     };
 
-    const { deptId, ...rawUpdates } = body;
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- destructured only to exclude it from rawUpdates/updates below
+    const { deptId, resyncNameCascade: _resyncNameCascade, ...rawUpdates } = body;
     if (!deptId) {
       return NextResponse.json({ error: "deptId required" }, { status: 400 });
     }
 
     const db = getAdminDb();
     const deptRef = db.collection("colleges").doc(session.collegeId).collection("departments").doc(deptId);
+
+    if (body.resyncNameCascade) {
+      if (session.role === "HOD") {
+        return NextResponse.json({ error: "Only Principal/VP/Super Admin can retry a department rename sync" }, { status: 403 });
+      }
+      const snap = await deptRef.get();
+      if (!snap.exists) return NextResponse.json({ error: "Not found" }, { status: 404 });
+      const data = snap.data() as { name?: string; cascadeOldName?: string };
+      if (!data.cascadeOldName || !data.name || data.cascadeOldName === data.name) {
+        return NextResponse.json({ ok: true, cascade: { status: "DONE" as const } });
+      }
+      const result = await cascadeDepartmentRename(db, session.collegeId, data.cascadeOldName, data.name);
+      const cascade = result.failedStep
+        ? { status: "FAILED" as const, failedStep: result.failedStep, error: result.error }
+        : { status: "DONE" as const };
+      await deptRef.update({
+        cascadeStatus: cascade.status,
+        ...(cascade.status === "FAILED" ? { cascadeError: `${cascade.failedStep}: ${cascade.error}` } : { cascadeError: FieldValue.delete() }),
+        cascadeUpdatedAt: new Date(),
+      });
+      return NextResponse.json({ ok: true, cascade });
+    }
 
     // A (main) HOD may only manage their own sub-departments here - the
     // "sub-HOD" management surface, not general department admin - and only
@@ -569,6 +612,17 @@ export async function PATCH(request: Request) {
       if (!targetDept?.parentDepartmentId || !scope.ownDepartmentIds.includes(targetDept.parentDepartmentId)) {
         return NextResponse.json({ error: "You can only manage your own sub-departments" }, { status: 403 });
       }
+      // A Department Office head's session reads "HOD" everywhere, which is
+      // what gives them equal authority over everything operational. Who HOLDS
+      // authority is the exception: appointing or removing a Sub-HOD stays with
+      // the actual HOD, otherwise an appointee could dismantle the leadership
+      // of the department they were appointed into.
+      if (isDepartmentOffice(session) && ("hodUid" in rawUpdates || "hodName" in rawUpdates)) {
+        return NextResponse.json(
+          { error: "Only the Head of Department can assign or remove a Sub-HOD" },
+          { status: 403 }
+        );
+      }
       const restricted: typeof rawUpdates = {};
       if ("hodUid" in rawUpdates) restricted.hodUid = rawUpdates.hodUid;
       if ("hodName" in rawUpdates) restricted.hodName = rawUpdates.hodName;
@@ -577,11 +631,70 @@ export async function PATCH(request: Request) {
       updates = restricted;
     }
 
+    // parentRunsOwnSections is only meaningful alongside hasSubDepartments
+    // (see its own doc-comment, src/types/core.ts) - POST already gates
+    // writing it on hasSubDepartments being true in the same request; PATCH
+    // previously had no such gate at all, letting it be set on a department
+    // that isn't (or isn't becoming) a sub-department container. Also clears
+    // the stored value outright when hasSubDepartments is explicitly turned
+    // off here, rather than leaving it to linger and silently resurface with
+    // stale meaning if sub-departments are re-enabled later with no
+    // re-confirmation.
+    const clearParentRunsOwnSections: Record<string, unknown> = {};
+    if (updates.parentRunsOwnSections !== undefined || updates.hasSubDepartments === false) {
+      const curSnap = await deptRef.get();
+      const curData = curSnap.data() as { hasSubDepartments?: boolean; name?: string } | undefined;
+      let finalHasSubDepartments = updates.hasSubDepartments;
+      if (finalHasSubDepartments === undefined) finalHasSubDepartments = curData?.hasSubDepartments;
+
+      if (finalHasSubDepartments !== true) {
+        delete updates.parentRunsOwnSections;
+      }
+      if (updates.hasSubDepartments === false) {
+        clearParentRunsOwnSections.parentRunsOwnSections = FieldValue.delete();
+      }
+
+      // Turning this OFF (an explicit false, not undefined/absent) doesn't
+      // touch any Section already filed directly under this department - see
+      // sections/route.ts POST's own guard, added alongside this flag, which
+      // only stops NEW ones from landing here. Still surfaced as a deliberate
+      // confirmation rather than a silent toggle, since it's easy not to
+      // realize this department already has real sections/students sitting
+      // here when flipping the checkbox. Skipped once the caller has already
+      // confirmed (confirmExistingSections) - the Edit Department page
+      // re-submits with that set after the Principal accepts the warning.
+      if (updates.parentRunsOwnSections === false && !body.confirmExistingSections && curData?.name) {
+        const sectionsColl = db.collection("colleges").doc(session.collegeId).collection("sections");
+        const ownSectionsSnap = await sectionsColl.where("department", "==", curData.name).limit(1).get();
+        if (!ownSectionsSnap.empty) {
+          const countSnap = await sectionsColl.where("department", "==", curData.name).count().get();
+          const existingSectionCount = countSnap.data().count;
+          return NextResponse.json(
+            {
+              error: `"${curData.name}" already has ${existingSectionCount} section${existingSectionCount === 1 ? "" : "s"} directly under it. Turning this off will stop new sections from being created here, but won't move or remove the existing one${existingSectionCount === 1 ? "" : "s"}.`,
+              code: "HAS_EXISTING_SECTIONS",
+              existingSectionCount,
+            },
+            { status: 409 }
+          );
+        }
+      }
+    }
+
     // Renaming (or re-coding) a department must not collide with another one -
     // the scope model joins departments on their name, and codes seed batch
     // IDs/reports, so both stay unique per college (same rule as create). Only
     // runs when name/code is actually part of this update (HOD edits can't
     // touch either - they're stripped above).
+    //
+    // A real name change (not just the field being resent unchanged) is
+    // recorded here - oldName/newName exactly as they'll actually be written
+    // below (newName deliberately NOT re-trimmed here beyond what `updates`
+    // already holds, so the cascade below writes the identical string that
+    // lands in this department doc's own `name` field) - and used after the
+    // write commits to cascade the rename into every collection that stores a
+    // copy of the department name (see renameCascade.ts).
+    let departmentRename: { oldName: string; newName: string } | null = null;
     if (updates.name !== undefined || updates.code !== undefined) {
       const [allSnap, currentSnap] = await Promise.all([
         db.collection("colleges").doc(session.collegeId).collection("departments").get(),
@@ -600,6 +713,9 @@ export async function PATCH(request: Request) {
           return NextResponse.json({ error: `Short code "${finalCode}" is already used by another department` }, { status: 409 });
         }
       }
+      if (updates.name !== undefined && cur?.name && cur.name !== updates.name) {
+        departmentRename = { oldName: cur.name, newName: updates.name };
+      }
     }
 
     // Per-course override of assignedYears/secondaryDepartments - see
@@ -609,7 +725,7 @@ export async function PATCH(request: Request) {
     // declared up front so both the flat secondaryDepartments cascade
     // (immediately below) and the courseScope branch (further down) can add
     // to it.
-    const { courseScope, ...updatesWithoutCourseScope } = updates;
+    const { courseScope, courseExclusion, ...updatesWithoutCourseScope } = updates;
     updates = updatesWithoutCourseScope;
     const courseScopePatch: Record<string, unknown> = {};
 
@@ -640,11 +756,27 @@ export async function PATCH(request: Request) {
     }
 
     if (courseScope) {
-      const courseSnap = await db.collection("colleges").doc(session.collegeId).collection("courses")
+      const coursesColl = db.collection("colleges").doc(session.collegeId).collection("courses");
+      let courseSnap = await coursesColl
         .where("departmentId", "==", deptId)
         .where("catalogId", "==", courseScope.catalogId)
         .limit(1)
         .get();
+      // A sub-department that hasn't customised this course owns no Course doc
+      // for it - it runs the parent's (see subDepartmentCourses.ts). Its own
+      // Years Taught is still its own to set, and resolveDepartmentCourseScope
+      // already prefers a child's entry over the parent's, so fall back to the
+      // parent's doc for the duration check rather than refusing the edit.
+      if (courseSnap.empty) {
+        const parentId = ((await deptRef.get()).data() as { parentDepartmentId?: string } | undefined)?.parentDepartmentId;
+        if (parentId) {
+          courseSnap = await coursesColl
+            .where("departmentId", "==", parentId)
+            .where("catalogId", "==", courseScope.catalogId)
+            .limit(1)
+            .get();
+        }
+      }
       if (courseSnap.empty) {
         return NextResponse.json({ error: "This department does not offer that course yet" }, { status: 400 });
       }
@@ -688,6 +820,51 @@ export async function PATCH(request: Request) {
         delete courseScopePatch[`courseScopes.${courseScope.catalogId}.secondaryDepartments`];
         courseScopePatch[`courseScopes.${courseScope.catalogId}`] = { assignedYears: years, secondaryDepartments: names };
       }
+    }
+
+    // Remove (or restore) one of the parent's courses on THIS sub-department
+    // only. The parent's Course doc is never touched - every sibling shares
+    // it, so deleting it to express "AIDS doesn't run the M.Tech" would take
+    // it away from AIML too.
+    if (courseExclusion) {
+      const deptSnap = await deptRef.get();
+      const deptData = deptSnap.data() as { name?: string; parentDepartmentId?: string } | undefined;
+      if (!deptData?.parentDepartmentId) {
+        return NextResponse.json(
+          { error: "Only a sub-department can remove an inherited course. Delete the course itself instead." },
+          { status: 400 }
+        );
+      }
+
+      if (courseExclusion.excluded) {
+        // Refuse while the child still has sections on that course - the same
+        // protection DELETE /api/college/courses/[id] gives, for the same
+        // reason: the sections would be left pointing at a course their own
+        // department no longer lists, invisible in every picker that reads it.
+        const coursesColl = db.collection("colleges").doc(session.collegeId).collection("courses");
+        const inheritedSnap = await coursesColl
+          .where("departmentId", "==", deptData.parentDepartmentId)
+          .where("catalogId", "==", courseExclusion.catalogId)
+          .get();
+        const courseIds = inheritedSnap.docs.map((d) => d.id);
+        if (courseIds.length > 0 && deptData.name) {
+          const sectionsSnap = await db.collection("colleges").doc(session.collegeId).collection("sections")
+            .where("department", "==", deptData.name)
+            .where("courseId", "in", courseIds.slice(0, 30))
+            .limit(1)
+            .get();
+          if (!sectionsSnap.empty) {
+            return NextResponse.json(
+              { error: "Cannot remove a course this sub-department still has sections for. Remove its sections first." },
+              { status: 409 }
+            );
+          }
+        }
+      }
+
+      courseScopePatch.excludedCourseCatalogIds = courseExclusion.excluded
+        ? FieldValue.arrayUnion(courseExclusion.catalogId)
+        : FieldValue.arrayRemove(courseExclusion.catalogId);
     }
 
     if (updates.managedDepartments !== undefined) {
@@ -802,6 +979,7 @@ export async function PATCH(request: Request) {
         tx.update(deptRef, {
           ...updates,
           ...courseScopePatch,
+          ...clearParentRunsOwnSections,
           ...(clearParentDepartmentId ? { parentDepartmentId: FieldValue.delete() } : {}),
           updatedAt: now,
         });
@@ -810,12 +988,43 @@ export async function PATCH(request: Request) {
       await deptRef.update({
         ...updates,
         ...courseScopePatch,
+        ...clearParentRunsOwnSections,
         ...(clearParentDepartmentId ? { parentDepartmentId: FieldValue.delete() } : {}),
         updatedAt: now,
       });
     }
 
-    return NextResponse.json({ ok: true });
+    // The rename itself has committed - every other collection holding a copy
+    // of the old name (facultyMembers, sections, subjects, students,
+    // teachingAssignments, other departments' cross-lists, etc.) is cascaded
+    // now, synchronously, so nothing is left pointing at the old string (see
+    // renameCascade.ts's own doc-comment for why this runs inline rather than
+    // as a background job). Every write there is idempotent, so a failure
+    // partway through is safe to retry - re-PATCHing this same rename (name
+    // unchanged from what it already is) re-runs the cascade from scratch;
+    // already-fixed docs simply no longer match the old-name query and are
+    // skipped for free. The rename response itself still succeeds even if the
+    // cascade hits a problem - the department doc's own name is correct
+    // either way - but cascadeStatus tells the caller whether every connected
+    // record is confirmed in sync yet.
+    let cascade: { status: "DONE" | "FAILED"; failedStep?: string; error?: string } | undefined;
+    if (departmentRename) {
+      const result = await cascadeDepartmentRename(db, session.collegeId, departmentRename.oldName, departmentRename.newName);
+      cascade = result.failedStep
+        ? { status: "FAILED", failedStep: result.failedStep, error: result.error }
+        : { status: "DONE" };
+      await deptRef.update({
+        cascadeStatus: cascade.status,
+        cascadeOldName: departmentRename.oldName,
+        ...(cascade.status === "FAILED" ? { cascadeError: `${cascade.failedStep}: ${cascade.error}` } : { cascadeError: FieldValue.delete() }),
+        cascadeUpdatedAt: new Date(),
+      }).catch((err) => console.error("[college/departments PATCH] failed to record cascade status:", err));
+      if (cascade.status === "FAILED") {
+        console.error(`[college/departments PATCH] rename cascade for ${deptId} stopped at ${cascade.failedStep}: ${cascade.error}`);
+      }
+    }
+
+    return NextResponse.json({ ok: true, ...(cascade ? { cascade } : {}) });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

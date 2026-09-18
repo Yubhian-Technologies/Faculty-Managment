@@ -226,7 +226,7 @@ export default function CollegeOfficeCandidateDetailPage() {
           department: candidate.department,
           checkedDocs: checklist,
           verifiedByName: user?.name ?? "College Office",
-          verifiedByRole: user?.role ? ROLE_LABELS[user.role] : "College Office",
+          verifiedByRole: user?.role ? ROLE_LABELS[user.realRole ?? user.role] : "College Office",
           verifiedAt: new Date().toISOString(),
         },
         candidate.name

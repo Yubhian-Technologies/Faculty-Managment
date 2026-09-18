@@ -62,7 +62,7 @@ export function MyProfileModulePage({ basePath }: { basePath: string }) {
       {isLoading ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
       ) : faculty ? (
-        <FacultyProfileModuleContent moduleKey={moduleKey} faculty={faculty} teachingAssignments={teachingAssignments} collegeType={collegeType} />
+        <FacultyProfileModuleContent moduleKey={moduleKey} faculty={faculty} teachingAssignments={teachingAssignments} collegeType={collegeType} isOwnProfile />
       ) : (
         <p className="text-sm text-muted-foreground">No profile record found.</p>
       )}

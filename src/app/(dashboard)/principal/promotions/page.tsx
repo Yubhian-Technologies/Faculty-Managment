@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, GraduationCap, Users, Upload, FileSpreadsheet, AlertTriangle } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { SegmentedTabs } from "@/components/shared/SegmentedTabs";
+import { StaffPromotionsPanel } from "./StaffPromotionsPanel";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -36,7 +38,7 @@ interface AdvancePreview {
   missing: { department: string; year: number; section: string; students: number }[];
 }
 
-export default function StudentPromotionsPage() {
+function StudentPromotionsPanel() {
   const [sections, setSections] = useState<Section[]>([]);
   const [openYears, setOpenYears] = useState<AcademicYear[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -653,6 +655,27 @@ export default function StudentPromotionsPage() {
           </Card>
         </>
       )}
+    </div>
+  );
+}
+
+// Students (existing year-advancement flow, untouched above) and Staff (role
+// promotion - same login/account, just a new role - see StaffPromotionsPanel)
+// share this one "Promotions" entry point per the Principal's own naming for
+// both concepts.
+export default function PromotionsPage() {
+  const [tab, setTab] = useState<"STUDENTS" | "STAFF">("STUDENTS");
+  return (
+    <div className="space-y-6">
+      <SegmentedTabs
+        value={tab}
+        onChange={(v) => setTab(v as "STUDENTS" | "STAFF")}
+        options={[
+          { key: "STUDENTS", label: "Students" },
+          { key: "STAFF", label: "Staff" },
+        ]}
+      />
+      {tab === "STUDENTS" ? <StudentPromotionsPanel /> : <StaffPromotionsPanel />}
     </div>
   );
 }

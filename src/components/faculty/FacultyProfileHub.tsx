@@ -10,9 +10,11 @@ import { Button } from "@/components/ui/button";
 import { Avatar } from "@/components/shared/Avatar";
 import { AvatarUploadField } from "@/components/shared/AvatarUploadField";
 import { getFacultyProfileModules, type ProfileModuleKey } from "@/lib/faculty/profileModules";
+import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
+import { totalYearsOfExperience, formatDuration, allPreviousExperienceEntries } from "@/lib/faculty/experienceCalc";
 import { formatDate } from "@/lib/utils";
 import { toast } from "@/hooks/useToast";
-import { DESIGNATION_LABELS, FACULTY_STATUS_LABELS } from "@/types";
+import { DESIGNATION_LABELS, FACULTY_STATUS_LABELS, EMPLOYEE_CATEGORY_LABELS, EMPLOYMENT_TYPE_LABELS } from "@/types";
 import type { FacultyMember, FacultyStatus } from "@/types";
 import type { Timestamp } from "firebase/firestore";
 
@@ -32,6 +34,114 @@ function Fact({ label, value }: { label: string; value: React.ReactNode }) {
       <p className="text-sm font-medium">{value}</p>
     </div>
   );
+}
+
+// The read-only fields grid (Employee ID, Designation, Qualification,
+// Experience, Date of Joining, ...) - shared so a faculty member's own "My
+// Profile" page (/panel/profile) shows exactly the same fields their HOD
+// sees on the faculty detail page, instead of a separately hand-rolled
+// (and easily out-of-sync) subset.
+export function FacultyIdentityFacts({
+  faculty, parentDeptName,
+}: {
+  faculty: Partial<FacultyMember> & { dateOfJoining?: Timestamp };
+  parentDeptName?: string | null;
+}) {
+  const designationLabel = faculty.designation ? (DESIGNATION_LABELS[faculty.designation] ?? faculty.designation) : undefined;
+  // A record saved before the employmentType -> employeeCategory rename
+  // still has the old field/values (PERMANENT/CONTRACT/VISITING/PART_TIME) -
+  // PERMANENT maps to the new "Regular" label, the other 3 spell the same.
+  const employeeCategoryLabel = faculty.employeeCategory
+    ? EMPLOYEE_CATEGORY_LABELS[faculty.employeeCategory]
+    : faculty.employmentType === "PERMANENT"
+      ? "Regular"
+      : faculty.employmentType
+        ? (EMPLOYMENT_TYPE_LABELS[faculty.employmentType] ?? faculty.employmentType)
+        : undefined;
+
+  // Every Previous Experience row PLUS time actually served since Date of
+  // Joining, ticking up day by day - see experienceCalc.ts's own doc-comment.
+  // `dateOfJoining` is the fallback for a bare login account with no real
+  // FacultyMember record (see FacultyProfileHubProps' own doc-comment).
+  const joiningDate = faculty.joiningDate ?? faculty.dateOfJoining;
+  // Academic + Industry + Research Experience tabs, combined (see
+  // experienceCalc.ts's own doc-comment on allPreviousExperienceEntries).
+  const previousExperienceEntries = allPreviousExperienceEntries(faculty.academicProfile);
+  const hasExperienceData = !!(joiningDate || previousExperienceEntries.length > 0);
+  const totalExperience = totalYearsOfExperience(previousExperienceEntries, joiningDate);
+  // Internal = time actually served at THIS institution since Date of
+  // Joining, ticking up day by day - same live tenure component as above,
+  // just without any Previous Experience rows folded in.
+  const hasJoiningDate = !!joiningDate;
+  const internalExperience = totalYearsOfExperience(undefined, joiningDate);
+  // External = every Previous Experience row's own duration (all 3
+  // Professional Experience tabs) - fetched automatically from there, never
+  // typed in separately; not a live-ticking value like the two above since
+  // it only changes when a Previous Experience row is added/edited.
+  const hasPreviousExperience = previousExperienceEntries.length > 0;
+  const externalExperience = totalYearsOfExperience(previousExperienceEntries, undefined);
+
+  return (
+    // Same order the Add/Edit Faculty wizard follows (Identity & Employment
+    // -> Role/Employment Details -> Contact Details) so this summary reads
+    // as "the same fields, just read-only".
+    <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+      <Fact label="Employee ID" value={faculty.employeeId} />
+      <Fact label="Full Name (as per SSC)" value={faculty.legalName} />
+      <Fact label="Name (as per PAN)" value={faculty.name} />
+      <Fact label="APAAR Faculty ID" value={faculty.apaarFacultyId} />
+      <Fact
+        label="Department"
+        value={
+          <span className="flex items-center gap-1.5">
+            {faculty.department}
+            {parentDeptName && <Badge variant="secondary" className="text-xs">Sub-department of {parentDeptName}</Badge>}
+          </span>
+        }
+      />
+      <Fact label="College Email" value={faculty.collegeEmail} />
+      <Fact label="Designation" value={designationLabel} />
+      <Fact label="Highest Qualification" value={faculty.qualification} />
+      <Fact label="Specialization" value={faculty.specialization} />
+      <Fact label="Total Years of Experience" value={hasExperienceData ? formatDuration(totalExperience) : undefined} />
+      <Fact label="Internal Experience" value={hasJoiningDate ? formatDuration(internalExperience) : undefined} />
+      <Fact label="External Experience" value={hasPreviousExperience ? formatDuration(externalExperience) : undefined} />
+      <Fact
+        label={faculty.status === "INTERVIEW_DONE" ? "Expected to Join" : "Date of Joining"}
+        value={
+          faculty.joiningDate ? formatDate(faculty.joiningDate)
+            : faculty.dateOfJoining ? formatDate(faculty.dateOfJoining)
+            : undefined
+        }
+      />
+      <Fact label="AICTE Faculty ID" value={faculty.aicteFacultyId} />
+      <Fact label="Personal Email" value={faculty.email} />
+      <Fact label="Mobile No" value={faculty.phone} />
+      {(faculty.additionalPhoneNumbers ?? []).length > 0 && (
+        <Fact
+          label="Additional Mobile Numbers"
+          value={
+            <span className="flex flex-col gap-0.5">
+              {faculty.additionalPhoneNumbers?.map((p, i) => (
+                <span key={i}>{p.number}{p.label ? ` (${p.label})` : ""}</span>
+              ))}
+            </span>
+          }
+        />
+      )}
+      {/* Fields with no home in the Add Faculty wizard - shown last since they're not entered at Add time. */}
+      <Fact label="AICTE Eligible" value={faculty.aicteEligible === undefined ? undefined : faculty.aicteEligible ? "Yes" : "No"} />
+      <Fact label="Employee Category" value={employeeCategoryLabel} />
+    </div>
+  );
+}
+
+// Status badge for a faculty record - shared between the HOD's faculty
+// detail view and a faculty member's own "My Profile" page so both show the
+// same Active/On Leave/Resigned/... indicator.
+export function FacultyStatusBadge({ status }: { status?: FacultyStatus }) {
+  if (!status) return null;
+  return <Badge variant={STATUS_VARIANTS[status] ?? "secondary"}>{FACULTY_STATUS_LABELS[status] ?? status}</Badge>;
 }
 
 interface FacultyProfileHubProps {
@@ -97,6 +207,7 @@ export function FacultyProfileHub({
   faculty, basePath, hideFinancialModule, excludeModules, backHref, editHref, parentDeptName, onReRegisterFace, viewAttendanceHref,
 }: FacultyProfileHubProps) {
   const designationLabel = faculty.designation ? (DESIGNATION_LABELS[faculty.designation] ?? faculty.designation) : undefined;
+  const headerDescription = [designationLabel, faculty.department].filter(Boolean).join(" • ") || undefined;
   const [photoUrl, setPhotoUrl] = useState(faculty.profilePhotoUrl);
 
   function copyPublicProfileLink() {
@@ -126,8 +237,8 @@ export function FacultyProfileHub({
   return (
     <div className="space-y-6">
       <PageHeader
-        title={faculty.name ?? "Faculty Member"}
-        description={designationLabel}
+        title={facultyDisplayName(faculty) || "Faculty Member"}
+        description={headerDescription}
         actions={
           <div className="flex gap-2">
             {backHref && (
@@ -164,45 +275,18 @@ export function FacultyProfileHub({
           <div className="flex items-center gap-4 flex-wrap">
             {faculty.id ? (
               <AvatarUploadField
-                name={faculty.name ?? "?"}
+                name={facultyDisplayName(faculty) || "?"}
                 photoUrl={photoUrl}
                 targetId={faculty.id}
                 onUploaded={handlePhotoUploaded}
                 onDeleted={() => void handlePhotoUploaded("")}
               />
             ) : (
-              <Avatar name={faculty.name ?? "?"} photoUrl={photoUrl} size="lg" />
+              <Avatar name={facultyDisplayName(faculty) || "?"} photoUrl={photoUrl} size="lg" />
             )}
-            {faculty.status && <Badge variant={STATUS_VARIANTS[faculty.status] ?? "secondary"}>{FACULTY_STATUS_LABELS[faculty.status] ?? faculty.status}</Badge>}
+            <FacultyStatusBadge status={faculty.status} />
           </div>
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-            <Fact label="Employee ID" value={faculty.employeeId} />
-            <Fact label="Email" value={faculty.email} />
-            <Fact label="College Email" value={faculty.collegeEmail} />
-            <Fact label="Phone" value={faculty.phone} />
-            <Fact
-              label="Department"
-              value={
-                <span className="flex items-center gap-1.5">
-                  {faculty.department}
-                  {parentDeptName && <Badge variant="secondary" className="text-xs">Sub-department of {parentDeptName}</Badge>}
-                </span>
-              }
-            />
-            <Fact label="Designation" value={designationLabel} />
-            <Fact
-              label={faculty.status === "INTERVIEW_DONE" ? "Expected to Join" : "Date of Joining"}
-              value={
-                faculty.joiningDate ? formatDate(faculty.joiningDate)
-                  : faculty.dateOfJoining ? formatDate(faculty.dateOfJoining)
-                  : undefined
-              }
-            />
-            <Fact label="Qualification" value={faculty.qualification} />
-            <Fact label="Specialization" value={faculty.specialization} />
-            <Fact label="Experience (yrs)" value={faculty.experienceYears} />
-            <Fact label="APAAR Faculty ID" value={faculty.apaarFacultyId} />
-          </div>
+          <FacultyIdentityFacts faculty={faculty} parentDeptName={parentDeptName} />
         </CardContent>
       </Card>
 

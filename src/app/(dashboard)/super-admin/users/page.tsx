@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
 import { downloadResumePdf } from "@/lib/pdf/downloadResume";
+import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { ROLE_LABELS, DESIGNATION_LABELS } from "@/types";
 import type { FMSUser, UserRole, Designation } from "@/types";
 import type { College, Location } from "@/types";
@@ -167,9 +168,9 @@ export default function UsersPage() {
       header: "Name",
       render: (row) => (
         <div className="flex items-center gap-3">
-          <Avatar name={row.name as string} photoUrl={row.profilePhotoUrl as string | undefined} size="sm" />
+          <Avatar name={facultyDisplayName(row) || (row.name as string)} photoUrl={row.profilePhotoUrl as string | undefined} size="sm" />
           <div>
-            <p className="font-medium">{row.name as string}</p>
+            <p className="font-medium">{facultyDisplayName(row) || (row.name as string)}</p>
             <p className="text-xs text-muted-foreground">{row.email as string}</p>
           </div>
         </div>

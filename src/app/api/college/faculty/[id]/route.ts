@@ -4,7 +4,13 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodManageFacultyDepartment } from "@/lib/departments/scope";
-import type { Designation, EmploymentType, FacultyStatus } from "@/types";
+import { syncTrainingEntryCoConductors } from "@/lib/faculty/syncTrainingEntryCoConductors";
+import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
+import type { Designation, EmployeeCategory, FacultyStatus, TrainingEntry } from "@/types";
+
+// Exactly these 4 values are accepted anywhere Employee Category is set -
+// see EmployeeCategory's own doc-comment in types/core.ts.
+const EMPLOYEE_CATEGORY_VALUES: EmployeeCategory[] = ["REGULAR", "VISITING", "CONTRACT", "PART_TIME"];
 
 export async function GET(
   _request: Request,
@@ -66,47 +72,12 @@ export async function PATCH(
       qualification: string;
       specialization: string;
       experienceYears: number;
-      internalExperience: number;
-      externalExperience: number;
-      inCampusExperience: number;
-      industryExperience: number;
-      researchExperience: number;
       joiningDate: string;
       dateOfJoiningDepartment: string;
-      dateOfBirth: string;
-      employmentType: EmploymentType;
+      employeeCategory: EmployeeCategory;
       aicteEligible: boolean;
+      aicteFacultyId: string;
       status: FacultyStatus;
-      gender: string;
-      legalName: string;
-      nameAsPerAadhar: string;
-      fatherName: string;
-      motherName: string;
-      religion: string;
-      caste: string;
-      subCaste: string;
-      aadharNo: string;
-      panNo: string;
-      passportNumber: string;
-      sscHallTicketNo: string;
-      differentlyAbled: boolean;
-      differentlyAbledDetails: string;
-      bankAccountNo: string;
-      ifscCode: string;
-      emergencyContactName: string;
-      emergencyContactPhone: string;
-      ratificationStatus: string;
-      ratificationDate: string;
-      maritalStatus: string;
-      spouseName: string;
-      numberOfChildren: number;
-      referral: string;
-      nativePlace: string;
-      temporaryAddress: string;
-      permanentSameAsTemporary: boolean;
-      permanentAddress: string;
-      bloodGroup: string;
-      hasPHD: boolean;
       userUid: string;
       academicProfile: Record<string, unknown>;
       technicalProfile: Record<string, unknown>;
@@ -114,7 +85,8 @@ export async function PATCH(
       joiningLetterUrl: string;
       appointmentLetterUrl: string;
       resumeUrl: string;
-    }>;
+    }> &
+      PersonalDetailsInput;
 
     const db = getAdminDb();
     const ref = db
@@ -146,6 +118,27 @@ export async function PATCH(
       return NextResponse.json({ error: "Invalid photo URL" }, { status: 400 });
     }
 
+    // These fields are mandatory on both the import template and Add Faculty
+    // wizard - Edit must not be able to blank one out via a partial PATCH
+    // that explicitly sends an empty string for it (a field simply left out
+    // of the body is untouched, which is fine). `name` (Name as per PAN) is
+    // deliberately NOT in this list - it's optional; legalName (Full Name as
+    // per SSC) is the required primary identity name.
+    const REQUIRED_IF_PRESENT = [
+      "collegeEmail", "phone", "designation", "qualification",
+      "gender", "legalName", "aadharNo", "panNo", "ratificationStatus",
+    ] as const;
+    for (const key of REQUIRED_IF_PRESENT) {
+      if (body[key] !== undefined && !body[key].trim()) {
+        return NextResponse.json({ error: `${key} cannot be blanked out - it is a required field` }, { status: 400 });
+      }
+    }
+    // Exactly these 4 values are accepted anywhere Employee Category is set -
+    // see EmployeeCategory's own doc-comment in types/core.ts.
+    if (body.employeeCategory !== undefined && !EMPLOYEE_CATEGORY_VALUES.includes(body.employeeCategory)) {
+      return NextResponse.json({ error: "Employee Category must be one of Regular, Visiting, Contract, or Part Time" }, { status: 400 });
+    }
+
     const updates: Record<string, unknown> = { updatedAt: new Date() };
 
     // Employee ID must stay unique across every college, not just this one -
@@ -169,53 +162,30 @@ export async function PATCH(
       updates.employeeId = newEmployeeId;
     }
 
-    // permanentAddress is deliberately excluded here - see the dedicated
-    // handling below, which overrides it with temporaryAddress whenever
-    // permanentSameAsTemporary is true rather than trusting whatever (if
-    // anything) the caller sent for it directly.
+    // Personal/statutory details (gender, name variants, bank, address, PF
+    // number, mother tongue, languages known, height/weight, etc.) - shared
+    // builder also used by the create route (POST /api/college/faculty), so
+    // an edit persists exactly the fields creation does instead of a second,
+    // easily-incomplete hand-rolled whitelist (a prior version of this route
+    // omitted pfNumber/motherTongue/languagesKnown/heightFeet/heightInches/
+    // weightKg entirely, so those silently failed to save on edit).
+    Object.assign(updates, buildPersonalDetailsUpdate(body));
+
+    // Non-personal string fields
     const stringFields = [
-      "name", "email", "phone", "collegeEmail", "apaarFacultyId", "designation", "qualification",
-      "specialization", "employmentType", "status", "gender", "legalName", "nameAsPerAadhar",
-      "fatherName", "motherName", "religion", "caste", "subCaste", "aadharNo", "passportNumber",
-      "sscHallTicketNo", "differentlyAbledDetails", "bankAccountNo",
-      "emergencyContactName", "emergencyContactPhone", "ratificationStatus", "userUid",
-      "maritalStatus", "spouseName", "referral", "nativePlace", "temporaryAddress", "bloodGroup",
+      "name", "email", "phone", "collegeEmail", "apaarFacultyId", "aicteFacultyId", "designation", "qualification",
+      "specialization", "employeeCategory", "status", "userUid",
     ] as const;
 
     for (const key of stringFields) {
       if (body[key] !== undefined) updates[key] = body[key];
     }
 
-    // PAN / IFSC always uppercase
-    if (body.panNo !== undefined) updates.panNo = body.panNo.toUpperCase();
-    if (body.ifscCode !== undefined) updates.ifscCode = body.ifscCode.toUpperCase();
-
     // Numeric fields
-    const numFields = [
-      "experienceYears", "internalExperience", "externalExperience",
-      "inCampusExperience", "industryExperience", "researchExperience", "numberOfChildren",
-    ] as const;
-    for (const key of numFields) {
-      if (body[key] !== undefined) updates[key] = Number(body[key]);
-    }
+    if (body.experienceYears !== undefined) updates.experienceYears = Number(body.experienceYears);
 
     // Boolean
-    if (body.hasPHD !== undefined) updates.hasPHD = body.hasPHD;
     if (body.aicteEligible !== undefined) updates.aicteEligible = body.aicteEligible;
-    if (body.permanentSameAsTemporary !== undefined) updates.permanentSameAsTemporary = body.permanentSameAsTemporary;
-    if (body.differentlyAbled !== undefined) updates.differentlyAbled = body.differentlyAbled;
-
-    // "Same as temporary" means the permanent address IS the temporary
-    // address - copied automatically rather than left blank or trusting a
-    // stray permanentAddress value sent alongside. Only applies when
-    // temporaryAddress is part of this same call (the personal-module editor
-    // always sends the whole section together); otherwise a direct
-    // permanentAddress update still goes through untouched.
-    if (body.permanentSameAsTemporary === true && body.temporaryAddress !== undefined) {
-      updates.permanentAddress = body.temporaryAddress;
-    } else if (body.permanentAddress !== undefined) {
-      updates.permanentAddress = body.permanentAddress;
-    }
 
     // Academic profile (Modules 1-5) / Technical profile - mutually exclusive by designation
     if (body.academicProfile !== undefined) updates.academicProfile = body.academicProfile;
@@ -224,8 +194,6 @@ export async function PATCH(
     // Date fields
     if (body.joiningDate) updates.joiningDate = new Date(body.joiningDate);
     if (body.dateOfJoiningDepartment) updates.dateOfJoiningDepartment = new Date(body.dateOfJoiningDepartment);
-    if (body.dateOfBirth) updates.dateOfBirth = new Date(body.dateOfBirth);
-    if (body.ratificationDate) updates.ratificationDate = new Date(body.ratificationDate);
 
     if (body.profilePhotoUrl !== undefined) updates.profilePhotoUrl = body.profilePhotoUrl;
 
@@ -241,23 +209,91 @@ export async function PATCH(
 
     await ref.update(updates);
 
+    // The record's display name (facultyDisplayName() logic, inlined here
+    // since this route works with plain Firestore data, not a typed
+    // FacultyMember) - Full Name (as per SSC) preferred, Name (as per PAN)
+    // only as a fallback. Recomputed from the POST-update values (whichever
+    // of legalName/name this PATCH actually changed, falling back to what
+    // was already on the doc for the other) so a rename via either field is
+    // detected and propagated correctly.
+    const before = snap.data() as { name?: string; legalName?: string; userUid?: string };
+    const effectiveLegalName = body.legalName !== undefined ? body.legalName : before.legalName;
+    const effectiveName = body.name !== undefined ? body.name : before.name;
+    const newDisplayName = effectiveLegalName?.trim() || effectiveName?.trim() || "";
+    const oldDisplayName = before.legalName?.trim() || before.name?.trim() || "";
+    const displayNameChanged = (body.legalName !== undefined || body.name !== undefined) && newDisplayName !== oldDisplayName;
+
     // Best-effort: if this faculty record has a linked system login, keep their
     // name/photo in sync there too - the login doc (colleges/{id}/users) is what
     // panel-member pickers, notifications, and the nav/avatar read from, so edits
     // made here on the faculty details page must propagate or those surfaces show
     // stale data from account creation time.
-    if (body.profilePhotoUrl !== undefined || body.name !== undefined) {
-      const linkedUid = (snap.data() as { userUid?: string }).userUid;
+    if (body.profilePhotoUrl !== undefined || displayNameChanged) {
+      const linkedUid = before.userUid;
       if (linkedUid) {
         const loginSync: Record<string, string> = {};
         if (body.profilePhotoUrl !== undefined) loginSync.profilePhotoUrl = body.profilePhotoUrl;
-        if (body.name !== undefined) loginSync.name = body.name;
+        if (displayNameChanged) loginSync.name = newDisplayName;
         try {
           await db.collection("colleges").doc(session.collegeId).collection("users").doc(linkedUid)
             .set(loginSync, { merge: true });
           await db.collection("systemUsers").doc(linkedUid)
             .set(loginSync, { merge: true });
         } catch { /* non-fatal */ }
+      }
+    }
+
+    // A faculty's display name is copied into teachingAssignments/timetableSlots/
+    // Section at assignment/incharge-set time and never re-read afterward - a
+    // rename here must be cascaded into every one of those copies or they show
+    // the old name forever. Historical Tier-2 records (attendance, marks,
+    // payroll, etc.) are deliberately NOT touched - those are point-in-time
+    // snapshots, not live state.
+    if (displayNameChanged) {
+      try {
+        const newName = newDisplayName;
+        const collegeRef = db.collection("colleges").doc(session.collegeId);
+        const now = new Date();
+
+        const [assignmentsSnap, slotsSnap] = await Promise.all([
+          collegeRef.collection("teachingAssignments").where("facultyId", "==", id).get(),
+          collegeRef.collection("timetableSlots").where("facultyId", "==", id).get(),
+        ]);
+        for (const [snapshot, field] of [[assignmentsSnap, "facultyName"], [slotsSnap, "facultyName"]] as const) {
+          for (let i = 0; i < snapshot.docs.length; i += 400) {
+            const chunk = snapshot.docs.slice(i, i + 400);
+            const chunkBatch = db.batch();
+            for (const doc of chunk) chunkBatch.update(doc.ref, { [field]: newName, updatedAt: now });
+            await chunkBatch.commit();
+          }
+        }
+
+        // Section.facultyInchargeUid holds either this faculty's linked login
+        // uid (the form new writes use) or - on some older records - the
+        // FacultyMember doc id itself (see getFacultyIdCandidates's own
+        // doc-comment); match both so a section set up under either form
+        // still gets its facultyInchargeName kept in sync.
+        const linkedUid = before.userUid;
+        const inchargeCandidates = linkedUid && linkedUid !== id ? [linkedUid, id] : [id];
+        const sectionsSnap = await collegeRef.collection("sections").where("facultyInchargeUid", "in", inchargeCandidates).get();
+        for (let i = 0; i < sectionsSnap.docs.length; i += 400) {
+          const chunk = sectionsSnap.docs.slice(i, i + 400);
+          const chunkBatch = db.batch();
+          for (const doc of chunk) chunkBatch.update(doc.ref, { facultyInchargeName: newName, updatedAt: now });
+          await chunkBatch.commit();
+        }
+      } catch (cascadeErr) {
+        console.error("[college/faculty/[id] PATCH] facultyName cascade failed:", cascadeErr);
+      }
+    }
+
+    if (body.academicProfile !== undefined) {
+      try {
+        const previousEntries = (snap.data() as { academicProfile?: { trainingEntries?: TrainingEntry[] } }).academicProfile?.trainingEntries;
+        const nextEntries = (body.academicProfile as { trainingEntries?: TrainingEntry[] } | undefined)?.trainingEntries;
+        await syncTrainingEntryCoConductors(db, session.collegeId, id, newDisplayName || oldDisplayName, previousEntries, nextEntries);
+      } catch (syncErr) {
+        console.error("[college/faculty/[id] PATCH] co-conductor sync failed:", syncErr);
       }
     }
 
@@ -297,6 +333,26 @@ export async function DELETE(
       if (!canHodManageFacultyDepartment(scope, facultyData.department ?? "")) {
         return NextResponse.json({ error: "That faculty member is outside your department scope" }, { status: 403 });
       }
+    }
+
+    // Refuse to hard-delete a faculty member who still has live teaching
+    // assignments/timetable slots - deleting the doc out from under them would
+    // orphan those references (facultyId pointing at nothing). Use the
+    // RESIGNED/RETIRED status instead, which keeps the record (and every
+    // assignment that names it) intact.
+    const collegeRef = db.collection("colleges").doc(session.collegeId);
+    const [assignmentSnap, slotSnap] = await Promise.all([
+      collegeRef.collection("teachingAssignments").where("facultyId", "==", id).limit(1).get(),
+      collegeRef.collection("timetableSlots").where("facultyId", "==", id).limit(1).get(),
+    ]);
+    if (!assignmentSnap.empty || !slotSnap.empty) {
+      return NextResponse.json(
+        {
+          error:
+            "This faculty member still has active teaching assignments or timetable slots. Remove/reassign those first, or set their status to Resigned/Retired instead of deleting the record.",
+        },
+        { status: 409 }
+      );
     }
 
     await ref.delete();
