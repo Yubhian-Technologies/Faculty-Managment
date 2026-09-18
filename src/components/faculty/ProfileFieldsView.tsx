@@ -365,6 +365,19 @@ export function MentorshipModule({
           ))
         )}
       </div>
+
+      <div className="space-y-2">
+        <SubLabel>Authored Books</SubLabel>
+        {(p.authoredBooks ?? []).length === 0 ? <p className="text-xs text-muted-foreground">None recorded.</p> : (
+          p.authoredBooks?.map((b, i) => (
+            <div key={i} className="rounded-md border bg-muted/20 shadow-sm p-2 grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <Field label="Title" value={b.title} />
+              <Field label="Publisher" value={b.publisher} />
+              <Field label="Year" value={b.year} />
+            </div>
+          ))
+        )}
+      </div>
     </Section>
   );
 }

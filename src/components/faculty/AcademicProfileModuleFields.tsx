@@ -27,6 +27,7 @@ import type {
   AwardEntry,
   AwardCategory,
   AwardLevel,
+  AuthoredBook,
 } from "@/types";
 import {
   PROFESSIONAL_BODY_LABELS, MEMBERSHIP_VALIDITY_LABELS,
@@ -55,6 +56,7 @@ const EMPTY_TRAINING: TrainingEntry = { type: "FDP", title: "", organizer: "" };
 const EMPTY_MEMBERSHIP: ProfessionalMembership = { body: "IEEE" };
 const EMPTY_ADMIN_RESPONSIBILITY: AdminResponsibilityEntry = { category: "COMMITTEE_MEMBER", description: "" };
 const EMPTY_AWARD: AwardEntry = { category: "BEST_TEACHER", title: "", awardingBody: "", year: new Date().getFullYear() };
+const EMPTY_BOOK: AuthoredBook = { title: "", publisher: "", year: new Date().getFullYear() };
 
 export function QualificationFields({ value, onChange, collegeType }: ModuleFieldsProps & { collegeType?: CollegeType }) {
   function set<K extends keyof FacultyProfileFields>(key: K, v: FacultyProfileFields[K]) {
@@ -583,6 +585,19 @@ export function MentorshipFields({
                 onRemoved={() => update({ certificateUrl: "" })}
               />
             </div>
+          </>
+        )}
+      />
+      <RepeatingGroup
+        title="Authored Books"
+        items={value.authoredBooks}
+        empty={EMPTY_BOOK}
+        onChange={(v) => set("authoredBooks", v)}
+        renderRow={(item, update) => (
+          <>
+            <TextInput label="Title" value={item.title} onChange={(v) => update({ title: v })} />
+            <TextInput label="Publisher" value={item.publisher} onChange={(v) => update({ publisher: v })} />
+            <NumInput label="Year" value={item.year} onChange={(v) => update({ year: v })} />
           </>
         )}
       />

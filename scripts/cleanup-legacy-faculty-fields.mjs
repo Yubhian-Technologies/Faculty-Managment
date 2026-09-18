@@ -23,12 +23,15 @@
  * Removed academicProfile.* fields (the "Grants, Consultancy & IP" module,
  * permanently removed from the app, plus 4 legacy Professional Development
  * free-text fields already superseded by structured lists, plus 2 Ph.D.
- * fields with no Add/Edit UI, superseded by DegreeDetail.guideOrSupervisorName):
+ * fields with no Add/Edit UI, superseded by DegreeDetail.guideOrSupervisorName,
+ * plus per-subject feedback records superseded by the separate Teaching
+ * Assignments feature - see src/app/api/college/teaching-assignments):
  *   - fundedProjects, consultancyProjects, patents
  *   - phdScholarsPursuing, phdScholarsAwarded, nationalExposure, internationalExposure
  *   - administrativeResponsibilities, certificationsAndFdps,
  *     professionalBodyMemberships, notableAwards
  *   - phdSupervisorName, fellowshipsReceived
+ *   - tenurePresentRecords
  *
  * Dry-run by default - prints exactly what it would touch without writing
  * anything. Pass --apply to actually perform the cleanup.
@@ -88,6 +91,7 @@ const ACADEMIC_PROFILE_FIELDS = [
   "notableAwards",
   "phdSupervisorName",
   "fellowshipsReceived",
+  "tenurePresentRecords",
 ];
 
 async function run() {
