@@ -17,7 +17,7 @@ import type { ResearchServiceRequest, ResearchServiceType } from "@/types";
 type ResearchServiceRow = ResearchServiceRequest & Record<string, unknown>;
 
 const SERVICE_TYPE_LABELS: Record<ResearchServiceType, string> = {
-  CONFERENCE: "Conference", WORKSHOP: "Workshop", REVIEWER: "Reviewer", EDITOR: "Editor",
+  CONFERENCE: "Conference", WORKSHOP: "Research Workshop", REVIEWER: "Reviewer", EDITOR: "Editor",
 };
 
 export default function RAndDResearchServicesPage() {
