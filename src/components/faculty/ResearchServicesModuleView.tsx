@@ -22,10 +22,10 @@ import type {
 const PREVIEW_COUNT = 3;
 const EMPTY_CONVENER: ConvenerCoordinatorItem = { name: "", department: "", type: "" };
 const EMPTY_COMMITTEE_MEMBER: OrganizingCommitteeMemberItem = { name: "", department: "" };
-const EMPTY_RESOURCE_PERSON: ResourcePersonItem = { name: "", affiliation: "" };
+const EMPTY_RESOURCE_PERSON: ResourcePersonItem = { name: "", affiliation: "", phone: "" };
 
 const SERVICE_TYPE_LABELS: Record<ResearchServiceType, string> = {
-  CONFERENCE: "Conference", WORKSHOP: "Workshop", REVIEWER: "Reviewer", EDITOR: "Editor",
+  CONFERENCE: "Conference", WORKSHOP: "Research Workshop", REVIEWER: "Reviewer", EDITOR: "Editor",
 };
 const EDITORIAL_ROLE_LABELS: Record<EditorialRole, string> = {
   EDITOR: "Editor", CHIEF_EDITOR: "Chief Editor", ASSOCIATE_EDITOR: "Associate Editor",
@@ -216,9 +216,10 @@ function initialFormState(editing: ResearchServiceRequest | null): RecordFormSta
 }
 
 function RecordFormFields({
-  editingRecord, onCancel, onSaved,
+  editingRecord, existingRecords, onCancel, onSaved,
 }: {
   editingRecord: ResearchServiceRequest | null;
+  existingRecords: ResearchServiceRequest[];
   onCancel: () => void;
   onSaved: () => void;
 }) {
@@ -233,6 +234,9 @@ function RecordFormFields({
   const isConference = form.serviceType === "CONFERENCE";
   const isWorkshop = form.serviceType === "WORKSHOP";
   const isConferenceOrWorkshop = isConference || isWorkshop;
+
+  const previousJournalReviews = existingRecords.filter((r) => r.id !== editingId && r.serviceType === "REVIEWER" && r.reviewerType === "JOURNAL").length;
+  const previousConferenceReviews = existingRecords.filter((r) => r.id !== editingId && r.serviceType === "REVIEWER" && r.reviewerType === "CONFERENCE").length;
 
   const isValid =
     !!form.serviceType &&
@@ -481,6 +485,7 @@ function RecordFormFields({
                   <>
                     <TextInput label="Name of the Resource Person" value={item.name} onChange={(v) => update({ name: v })} />
                     <TextInput label="Affiliation of Resource Person" value={item.affiliation} onChange={(v) => update({ affiliation: v })} />
+                    <TextInput label="Phone Number of Resource Person" value={item.phone} onChange={(v) => update({ phone: v })} />
                   </>
                 )}
               />
@@ -501,8 +506,8 @@ function RecordFormFields({
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <NumInput label="Participants Registered - Internal" value={toNumberOrUndefined(form.participantsRegisteredInternal)} onChange={(v) => set("participantsRegisteredInternal", String(v))} />
                     <NumInput label="Participants Registered - External" value={toNumberOrUndefined(form.participantsRegisteredExternal)} onChange={(v) => set("participantsRegisteredExternal", String(v))} />
-                    <NumInput label="Papers Attended - Internal" value={toNumberOrUndefined(form.papersAttendedInternal)} onChange={(v) => set("papersAttendedInternal", String(v))} />
-                    <NumInput label="Papers Attended - External" value={toNumberOrUndefined(form.papersAttendedExternal)} onChange={(v) => set("papersAttendedExternal", String(v))} />
+                    <NumInput label="Workshop Participants Attended (Internal)" value={toNumberOrUndefined(form.papersAttendedInternal)} onChange={(v) => set("papersAttendedInternal", String(v))} />
+                    <NumInput label="Workshop Participants Attended (External)" value={toNumberOrUndefined(form.papersAttendedExternal)} onChange={(v) => set("papersAttendedExternal", String(v))} />
                   </div>
                 </div>
               )}
@@ -544,6 +549,9 @@ function RecordFormFields({
                   <SelectItem value="CONFERENCE">Conference</SelectItem>
                 </SelectContent>
               </Select>
+              <p className="text-xs text-muted-foreground">
+                Previously entered: {previousJournalReviews} Journal, {previousConferenceReviews} Conference
+              </p>
             </div>
             <TextInput label="Name of the Journal/Conference" value={form.reviewerPublicationName} onChange={(v) => set("reviewerPublicationName", v)} />
             <TextInput label="Publisher Name" value={form.reviewerPublisherName} onChange={(v) => set("reviewerPublisherName", v)} />
@@ -644,11 +652,12 @@ function RecordFormFields({
 }
 
 function AddResearchServiceDialog({
-  open, onOpenChange, editingRecord, onSaved,
+  open, onOpenChange, editingRecord, existingRecords, onSaved,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   editingRecord: ResearchServiceRequest | null;
+  existingRecords: ResearchServiceRequest[];
   onSaved: () => void;
 }) {
   return (
@@ -657,6 +666,7 @@ function AddResearchServiceDialog({
         {open && (
           <RecordFormFields
             editingRecord={editingRecord}
+            existingRecords={existingRecords}
             onCancel={() => onOpenChange(false)}
             onSaved={() => { onOpenChange(false); onSaved(); }}
           />
@@ -741,6 +751,7 @@ export function ResearchServicesSection({
           open={formOpen}
           onOpenChange={setFormOpen}
           editingRecord={editingRecord}
+          existingRecords={records ?? []}
           onSaved={() => onChanged?.()}
         />
       )}

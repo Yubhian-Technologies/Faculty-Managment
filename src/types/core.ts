@@ -1733,6 +1733,7 @@ export interface OrganizingCommitteeMemberItem {
 export interface ResourcePersonItem {
   name: string;
   affiliation: string;
+  phone: string;
 }
 
 // A staff-submitted Research Services & Contributions record (Research &
