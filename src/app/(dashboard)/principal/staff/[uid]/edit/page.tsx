@@ -164,7 +164,7 @@ export default function EditStaffAccountPage() {
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label>Email <span className="text-destructive">*</span></Label>
-                <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="user@vishnu.edu.in" />
+                <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="user@example.com" />
               </div>
               <div className="space-y-2">
                 <Label>College Email</Label>

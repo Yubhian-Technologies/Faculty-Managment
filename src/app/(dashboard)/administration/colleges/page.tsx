@@ -17,35 +17,45 @@ export default function AdministrationCollegesPage() {
   const [colleges, setColleges] = useState<College[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  // undefined = not loaded yet (only true briefly, while the bulk fetch below
+  // is in flight) - loaded eagerly for every college on mount so the Add
+  // Principal/VP button's visibility is never a guess. Previously this was
+  // fetched lazily per row only when expanded, defaulting to "show the
+  // button" for every collapsed row until it was, which is what made the
+  // button flash/linger incorrectly for colleges that already had one.
   const [principalMap, setPrincipalMap] = useState<Record<string, PrincipalRow[]>>({});
-  const [loadingPrincipals, setLoadingPrincipals] = useState<string | null>(null);
+  const [principalsLoaded, setPrincipalsLoaded] = useState(false);
 
-  useEffect(() => {
+  function loadAll() {
+    setIsLoading(true);
+    setPrincipalsLoaded(false);
     fetch("/api/admin/colleges")
       .then((r) => r.json() as Promise<{ colleges: College[] }>)
       .then((d) => setColleges(d.colleges ?? []))
       .catch(() => toast({ variant: "destructive", title: "Failed to load colleges" }))
       .finally(() => setIsLoading(false));
+
+    fetch("/api/administration/principals")
+      .then((r) => r.json() as Promise<{ principalsByCollege: Record<string, PrincipalRow[]> }>)
+      .then((d) => setPrincipalMap(d.principalsByCollege ?? {}))
+      .catch(() => toast({ variant: "destructive", title: "Failed to load principals" }))
+      .finally(() => setPrincipalsLoaded(true));
+  }
+
+  useEffect(() => {
+    loadAll();
+    // Re-fetch whenever the tab regains focus (e.g. coming back from the "Add
+    // Principal/VP" page via the browser's back button, which can restore
+    // this page's previous in-memory state via Next's router cache instead
+    // of remounting it) so a newly-added Principal/VP is reflected without
+    // needing a manual hard reload.
+    function onFocus() { loadAll(); }
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
   }, []);
 
-  async function toggleExpand(college: College) {
-    if (expandedId === college.id) {
-      setExpandedId(null);
-      return;
-    }
-    setExpandedId(college.id);
-    if (!principalMap[college.id]) {
-      setLoadingPrincipals(college.id);
-      try {
-        const res = await fetch(`/api/administration/principals?collegeId=${college.id}`);
-        const data = await res.json() as { principals: PrincipalRow[] };
-        setPrincipalMap((prev) => ({ ...prev, [college.id]: data.principals ?? [] }));
-      } catch {
-        toast({ variant: "destructive", title: "Failed to load principals" });
-      } finally {
-        setLoadingPrincipals(null);
-      }
-    }
+  function toggleExpand(college: College) {
+    setExpandedId((prev) => (prev === college.id ? null : college.id));
   }
 
   if (isLoading) {
@@ -78,11 +88,13 @@ export default function AdministrationCollegesPage() {
         )}
         {colleges.map((college) => {
           const isExpanded = expandedId === college.id;
-          const principalList = principalMap[college.id]; // undefined = not loaded yet
+          const principalList = principalMap[college.id];
           const hasPrincipal = principalList?.some((p) => p.role === "PRINCIPAL") ?? false;
           const hasVP = principalList?.some((p) => p.role === "VICE_PRINCIPAL") ?? false;
-          // After loading: hide button if both slots filled; before loading: always show
-          const showAddBtn = principalList === undefined || !hasPrincipal || !hasVP;
+          // Before the bulk fetch resolves, don't show the button at all
+          // (rather than defaulting to "show") - it appears as soon as we
+          // actually know whether a slot is open, never as a guess.
+          const showAddBtn = principalsLoaded && (!hasPrincipal || !hasVP);
           const addBtnLabel = hasPrincipal && !hasVP ? "Add Vice Principal" : "Add Principal";
           const addBtnDefaultRole = hasPrincipal && !hasVP ? "VICE_PRINCIPAL" : "PRINCIPAL";
 
@@ -126,7 +138,7 @@ export default function AdministrationCollegesPage() {
                   <Button
                     size="sm"
                     variant="ghost"
-                    onClick={() => void toggleExpand(college)}
+                    onClick={() => toggleExpand(college)}
                   >
                     {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                   </Button>
@@ -137,7 +149,7 @@ export default function AdministrationCollegesPage() {
               {isExpanded && (
                 <div className="border-t px-4 pb-4 pt-3 bg-muted/30">
                   <p className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide">Principals & Vice Principals</p>
-                  {loadingPrincipals === college.id ? (
+                  {!principalsLoaded ? (
                     <div className="h-8 w-32 bg-muted animate-pulse rounded" />
                   ) : (principalList ?? []).length === 0 ? (
                     <p className="text-sm text-muted-foreground">No principals assigned yet.</p>

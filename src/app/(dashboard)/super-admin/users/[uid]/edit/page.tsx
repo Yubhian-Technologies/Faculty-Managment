@@ -274,7 +274,7 @@ export default function EditUserPage() {
                   </div>
                   <div className="space-y-2">
                     <Label>College Email</Label>
-                    <Input type="email" value={collegeEmail} onChange={(e) => setCollegeEmail(e.target.value)} placeholder="name@vishnu.edu.in" />
+                    <Input type="email" value={collegeEmail} onChange={(e) => setCollegeEmail(e.target.value)} placeholder="name@example.com" />
                   </div>
                   <div className="space-y-2">
                     <Label>Employee ID</Label>

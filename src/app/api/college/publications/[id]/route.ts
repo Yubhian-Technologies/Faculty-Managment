@@ -102,6 +102,16 @@ export async function PATCH(
         ...(body.decision === "REJECTED" ? { rejectionReason: body.rejectionReason ?? "" } : { rejectionReason: FieldValue.delete() }),
       });
 
+      await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
+        collegeId: session.collegeId,
+        action: "RD_PUBLICATION_UPDATED",
+        performedBy: session.uid,
+        performedByName: reviewedByName,
+        targetId: id,
+        details: { title: pub.title, decision: body.decision },
+        timestamp: now,
+      });
+
       await notify(
         db, session.collegeId, pub.uid,
         "PUBLICATION_REVIEWED",
@@ -158,6 +168,15 @@ export async function PATCH(
       }
 
       await ref.update(updates);
+      await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
+        collegeId: session.collegeId,
+        action: "RD_PUBLICATION_UPDATED",
+        performedBy: session.uid,
+        performedByName: editorName,
+        targetId: id,
+        details: { title: body.title ?? pub.title },
+        timestamp: now,
+      });
       await notifyRole(
         db, session.collegeId, "R_AND_D",
         "PUBLICATION_PENDING_VERIFICATION",
@@ -193,6 +212,20 @@ export async function PATCH(
     if (body.driveLink !== undefined) updates.driveLink = body.driveLink;
 
     await ref.update(updates);
+    let actorName = "Unknown";
+    try {
+      const actorSnap = await db.collection("colleges").doc(session.collegeId).collection("users").doc(session.uid).get();
+      actorName = (actorSnap.data() as { name?: string } | undefined)?.name ?? "Unknown";
+    } catch { /* best-effort */ }
+    await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
+      collegeId: session.collegeId,
+      action: "RD_PUBLICATION_UPDATED",
+      performedBy: session.uid,
+      performedByName: actorName,
+      targetId: id,
+      details: { title: body.title ?? pub.title },
+      timestamp: new Date(),
+    });
     return NextResponse.json({ ok: true });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
@@ -217,8 +250,23 @@ export async function DELETE(
     if (!snap.exists) {
       return NextResponse.json({ error: "Publication not found" }, { status: 404 });
     }
+    const pub = snap.data() as { title?: string; uid?: string };
 
     await ref.delete();
+    let actorName = "Unknown";
+    try {
+      const actorSnap = await db.collection("colleges").doc(session.collegeId).collection("users").doc(session.uid).get();
+      actorName = (actorSnap.data() as { name?: string } | undefined)?.name ?? "Unknown";
+    } catch { /* best-effort */ }
+    await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
+      collegeId: session.collegeId,
+      action: "RD_PUBLICATION_DELETED",
+      performedBy: session.uid,
+      performedByName: actorName,
+      targetId: id,
+      details: { title: pub.title, uid: pub.uid },
+      timestamp: new Date(),
+    });
     return NextResponse.json({ ok: true });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {

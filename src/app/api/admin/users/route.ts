@@ -78,7 +78,7 @@ export async function GET(request: Request) {
 const SUPER_ADMIN_CREATABLE: UserRole[] = [
   "MANAGEMENT", "FINANCE", "PURCHASE_DEPT",   // L1 · GLOBAL
   "ADMINISTRATION", "ACCOUNTS",               // L2 · LOCATION
-  "PRINCIPAL", "VICE_PRINCIPAL",              // L3 · COLLEGE
+  "PRINCIPAL",                                // L3 · COLLEGE
 ];
 // Global-scoped subset - used by the GET ?scope=global (System-Wide) listing.
 const GLOBAL_ROLES: UserRole[] = SUPER_ADMIN_CREATABLE.filter((r) => ROLE_SCOPE[r] === "GLOBAL");
@@ -165,7 +165,7 @@ export async function POST(request: Request) {
       // ADMINISTRATION / ACCOUNTS: location subcollection.
       uid = await provisionLocationUser(db, locationId, role, { name, email, password, phone, academicProfile, profilePhotoUrl });
     } else if (scope === "COLLEGE" && collegeId) {
-      // PRINCIPAL / VICE_PRINCIPAL: college subcollection.
+      // PRINCIPAL: college subcollection.
       uid = await provisionCollegeUser(
         db, collegeId, role,
         { ...body, name, email, password, phone, department, academicProfile, profilePhotoUrl },

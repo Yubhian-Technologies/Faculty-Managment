@@ -153,7 +153,7 @@ export default function NewCollegeStaffPage() {
                 type="email"
                 value={form.email}
                 onChange={(e) => set({ email: e.target.value })}
-                placeholder="staff@vishnu.edu.in"
+                placeholder="staff@example.com"
               />
             </div>
             <div className="space-y-2">

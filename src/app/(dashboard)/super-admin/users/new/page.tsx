@@ -22,7 +22,7 @@ import type { College, Location, FacultyProfileFields, UserRole } from "@/types"
 const CREATABLE_ROLES: UserRole[] = [
   "MANAGEMENT", "FINANCE", "PURCHASE_DEPT",   // L1 · GLOBAL
   "ADMINISTRATION", "ACCOUNTS",               // L2 · LOCATION
-  "PRINCIPAL", "VICE_PRINCIPAL",              // L3 · COLLEGE
+  "PRINCIPAL",                                // L3 · COLLEGE
 ];
 
 // Creatable roles grouped by their L0–L6 level, so the role picker is level-scoped.
@@ -122,13 +122,13 @@ export default function NewUserPage() {
                 </div>
                 <div className="space-y-2">
                   <Label>Email <span className="text-destructive">*</span></Label>
-                  <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="user@vishnu.edu.in" />
+                  <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="user@example.com" />
                 </div>
                 {role === "PRINCIPAL" && (
                   <>
                     <div className="space-y-2">
                       <Label>College Email</Label>
-                      <Input type="email" value={collegeEmail} onChange={(e) => setCollegeEmail(e.target.value)} placeholder="name@vishnu.edu.in" />
+                      <Input type="email" value={collegeEmail} onChange={(e) => setCollegeEmail(e.target.value)} placeholder="name@example.com" />
                     </div>
                     <div className="space-y-2">
                       <Label>Employee ID</Label>

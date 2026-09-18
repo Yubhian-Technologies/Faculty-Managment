@@ -58,6 +58,7 @@ import {
   Presentation,
   Trophy,
   Sparkles,
+  KeyRound,
   type LucideProps,
 } from "lucide-react";
 
@@ -121,6 +122,7 @@ const icons: Record<string, React.ComponentType<LucideProps>> = {
   Presentation,
   Trophy,
   Sparkles,
+  KeyRound,
 };
 
 export function NavIcon({ name, ...props }: { name: string } & LucideProps) {

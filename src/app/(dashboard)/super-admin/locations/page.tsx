@@ -58,9 +58,14 @@ export default function LocationsPage() {
               badge={<Badge variant={loc.isActive ? "default" : "secondary"}>{loc.isActive ? "Active" : "Inactive"}</Badge>}
               fields={[{ label: "State", value: loc.state ?? "-" }]}
               actions={
-                <Button size="sm" variant="outline" onClick={() => void toggleActive(loc)}>
-                  {loc.isActive ? "Deactivate" : "Activate"}
-                </Button>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" asChild>
+                    <Link href={`/super-admin/locations/${loc.id}/edit`}>Edit</Link>
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => void toggleActive(loc)}>
+                    {loc.isActive ? "Deactivate" : "Activate"}
+                  </Button>
+                </div>
               }
             />
           ))}
@@ -92,9 +97,14 @@ export default function LocationsPage() {
               render: (r) => {
                 const loc = r as unknown as Location;
                 return (
-                  <Button size="sm" variant="outline" onClick={() => void toggleActive(loc)}>
-                    {loc.isActive ? "Deactivate" : "Activate"}
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="outline" asChild>
+                      <Link href={`/super-admin/locations/${loc.id}/edit`}>Edit</Link>
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => void toggleActive(loc)}>
+                      {loc.isActive ? "Deactivate" : "Activate"}
+                    </Button>
+                  </div>
                 );
               },
             },

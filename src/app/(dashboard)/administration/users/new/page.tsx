@@ -118,7 +118,7 @@ export default function NewLocationUserPage() {
             </div>
             <div className="space-y-2">
               <Label>Email <span className="text-destructive">*</span></Label>
-              <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="email@vishnu.edu.in" />
+              <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="email@example.com" />
             </div>
             <div className="space-y-2">
               <Label>Role <span className="text-destructive">*</span></Label>

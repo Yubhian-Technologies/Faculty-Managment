@@ -189,7 +189,7 @@ export default function EditHodSupportingStaffPage() {
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label>College Email *</Label>
-                <Input type="email" value={form.collegeEmail} onChange={(e) => set({ collegeEmail: e.target.value })} placeholder="name@vishnu.edu.in" />
+                <Input type="email" value={form.collegeEmail} onChange={(e) => set({ collegeEmail: e.target.value })} placeholder="name@example.com" />
                 <p className="text-xs text-muted-foreground">This is their login username.</p>
               </div>
               <div className="space-y-2">
