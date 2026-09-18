@@ -20,7 +20,11 @@ export function useMyDepartments(): string[] {
   const departments = useAuthStore((s) => s.user?.departments);
   const department = useAuthStore((s) => s.user?.department);
   return useMemo(() => {
-    if (departments && departments.length > 0) return departments;
+    // Deduped defensively - every caller renders this straight into
+    // React keys (<SelectItem key={d}>) and a repeated name (bad data from
+    // a stale write predating the arrayUnion-based writers, or a manual
+    // Firestore edit) crashes the whole tree with a duplicate-key error.
+    if (departments && departments.length > 0) return Array.from(new Set(departments));
     return department ? [department] : EMPTY;
   }, [departments, department]);
 }

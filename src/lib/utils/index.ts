@@ -101,7 +101,8 @@ export function slugify(text: string): string {
     .replace(/(^-|-$)/g, "");
 }
 
-export function getInitials(name: string): string {
+export function getInitials(name: string | undefined | null): string {
+  if (!name) return "?";
   return name
     .split(" ")
     .map((n) => n[0])
