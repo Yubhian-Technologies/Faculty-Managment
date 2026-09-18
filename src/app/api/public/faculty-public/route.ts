@@ -84,7 +84,7 @@ export async function GET(request: Request) {
               phdDetails: publicDegree(ap.phdDetails),
               additionalPhdDetails: (ap.additionalPhdDetails ?? []).map(publicDegree),
               postDoctoralDetails: publicDegree(ap.postDoctoralDetails),
-              phdStatus: ap.phdStatus,
+              phdStatus: ap.phdDetails?.status,
               qualifyingExamQualified: ap.qualifyingExamQualified,
               qualifyingExam: ap.qualifyingExam,
               qualifyingExamYear: ap.qualifyingExamYear,

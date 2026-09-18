@@ -99,7 +99,7 @@ export function BudgetItemsTable({ items, onChange, readOnly = false, category, 
         if (cancelled) return;
         const map = new Map<string, number>();
         for (const f of data.faculty ?? []) {
-          const key = headcountKey(f.designation, f.employeeCategory ? toLegacyEmploymentType(f.employeeCategory) : (f.employmentType ?? ""));
+          const key = headcountKey(f.designation, f.employeeCategory ? toLegacyEmploymentType(f.employeeCategory) : "");
           map.set(key, (map.get(key) ?? 0) + 1);
         }
         setHeadcountByKey(map);

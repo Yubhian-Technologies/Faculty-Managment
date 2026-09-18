@@ -97,31 +97,9 @@ export function QualificationModule({ profile, collegeType }: { profile: Partial
         {(p.additionalUgDetails ?? []).map((d, i) => <DegreeView key={`ug-${i}`} label={`UG Details ${i + 2}`} degree={d} level="UG" />)}
         <DegreeView label="PG Details" degree={p.pgDetails} level="PG" />
         {(p.additionalPgDetails ?? []).map((d, i) => <DegreeView key={`pg-${i}`} label={`PG Details ${i + 2}`} degree={d} level="PG" />)}
-        <DegreeView
-          label="Ph.D. Details"
-          degree={p.phdDetails}
-          level="DOCTORAL"
-          status={p.phdStatus}
-          extraFields={
-            <>
-              <Field label="Ph.D. Status" value={p.phdStatus} />
-              <Field label="Ph.D. Mode" value={p.phdMode} />
-            </>
-          }
-        />
+        <DegreeView label="Ph.D. Details" degree={p.phdDetails} level="DOCTORAL" />
         {(p.additionalPhdDetails ?? []).map((d, i) => <DegreeView key={`phd-${i}`} label={`Ph.D. Details ${i + 2}`} degree={d} level="DOCTORAL" />)}
-        <DegreeView
-          label="Postdoctoral Fellowship Details"
-          degree={p.postDoctoralDetails}
-          level="POST_DOCTORAL"
-          status={p.postDoctoralStatus}
-          extraFields={
-            <>
-              <Field label="Postdoctoral Status" value={p.postDoctoralStatus} />
-              <Field label="Postdoctoral Mode" value={p.postDoctoralMode} />
-            </>
-          }
-        />
+        <DegreeView label="Postdoctoral Fellowship Details" degree={p.postDoctoralDetails} level="POST_DOCTORAL" />
       </div>
     </Section>
   );

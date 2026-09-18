@@ -14,7 +14,7 @@ import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { totalYearsOfExperience, formatDuration, allPreviousExperienceEntries } from "@/lib/faculty/experienceCalc";
 import { formatDate } from "@/lib/utils";
 import { toast } from "@/hooks/useToast";
-import { DESIGNATION_LABELS, FACULTY_STATUS_LABELS, EMPLOYEE_CATEGORY_LABELS, EMPLOYMENT_TYPE_LABELS } from "@/types";
+import { DESIGNATION_LABELS, FACULTY_STATUS_LABELS, EMPLOYEE_CATEGORY_LABELS } from "@/types";
 import type { FacultyMember, FacultyStatus } from "@/types";
 import type { Timestamp } from "firebase/firestore";
 
@@ -48,16 +48,7 @@ export function FacultyIdentityFacts({
   parentDeptName?: string | null;
 }) {
   const designationLabel = faculty.designation ? (DESIGNATION_LABELS[faculty.designation] ?? faculty.designation) : undefined;
-  // A record saved before the employmentType -> employeeCategory rename
-  // still has the old field/values (PERMANENT/CONTRACT/VISITING/PART_TIME) -
-  // PERMANENT maps to the new "Regular" label, the other 3 spell the same.
-  const employeeCategoryLabel = faculty.employeeCategory
-    ? EMPLOYEE_CATEGORY_LABELS[faculty.employeeCategory]
-    : faculty.employmentType === "PERMANENT"
-      ? "Regular"
-      : faculty.employmentType
-        ? (EMPLOYMENT_TYPE_LABELS[faculty.employmentType] ?? faculty.employmentType)
-        : undefined;
+  const employeeCategoryLabel = faculty.employeeCategory ? EMPLOYEE_CATEGORY_LABELS[faculty.employeeCategory] : undefined;
 
   // Every Previous Experience row PLUS time actually served since Date of
   // Joining, ticking up day by day - see experienceCalc.ts's own doc-comment.
@@ -129,8 +120,7 @@ export function FacultyIdentityFacts({
           }
         />
       )}
-      {/* Fields with no home in the Add Faculty wizard - shown last since they're not entered at Add time. */}
-      <Fact label="AICTE Eligible" value={faculty.aicteEligible === undefined ? undefined : faculty.aicteEligible ? "Yes" : "No"} />
+      {/* No home in the Add Faculty wizard - shown last since it's not entered at Add time. */}
       <Fact label="Employee Category" value={employeeCategoryLabel} />
     </div>
   );
@@ -261,11 +251,6 @@ export function FacultyProfileHub({
                 <Share2 className="h-4 w-4 mr-2" />Copy Public Profile Link
               </Button>
             )}
-            {editHref && (
-              <Button asChild>
-                <Link href={editHref}><Pencil className="h-4 w-4 mr-2" />Edit</Link>
-              </Button>
-            )}
           </div>
         }
       />
@@ -287,6 +272,13 @@ export function FacultyProfileHub({
             <FacultyStatusBadge status={faculty.status} />
           </div>
           <FacultyIdentityFacts faculty={faculty} parentDeptName={parentDeptName} />
+          {editHref && (
+            <div className="flex justify-end pt-4 border-t">
+              <Button asChild>
+                <Link href={editHref}><Pencil className="h-4 w-4 mr-2" />Edit Details</Link>
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
 

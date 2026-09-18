@@ -71,25 +71,34 @@ function group(module: ExportModuleKey, key: string, label: string, subFieldLabe
   return { kind: "group", module, key, label, subFieldLabels, defaultSelected: false };
 }
 
-const DEGREE_SUBFIELDS = ["Degree", "Branch", "University/Institute", "Percentage/CGPA", "Year of Completion"];
-const PHD_SUBFIELDS = ["Degree", "Specialization", "University/Institute", "Year of Completion"];
+// Every DegreeFields entry (any level) also carries Place and Hall Ticket
+// Number - included on all 3 subfield sets below so nothing typed into
+// those two boxes gets silently left out of export.
+const DEGREE_SUBFIELDS = ["Degree", "Branch", "University/Institute", "Affiliated University", "Percentage/CGPA", "Year of Completion", "Place", "Hall Ticket Number"];
+const SCHOOL_DEGREE_SUBFIELDS = ["Qualification", "Board", "School/College", "Percentage/CGPA", "Year of Passing", "Place", "Hall Ticket Number"];
+// Doctoral/Post-Doctoral entries (Ph.D. Details, Postdoctoral Fellowship
+// Details) - Specialization instead of Branch/Percentage-CGPA, plus this
+// entry's own Status/Mode (live on DegreeDetail.status/.mode, not a separate
+// FacultyProfileFields-level scalar - see DegreeFields in
+// ProfileFieldPrimitives.tsx) and Year of Registration/Name of the
+// Guide-Supervisor (shown while Pursuing, instead of Year of Award).
+const DOCTORAL_SUBFIELDS = ["Degree", "Specialization", "University/Institute", "Status", "Mode", "Year of Registration", "Name of the Guide/Supervisor", "Year of Award", "Place", "Hall Ticket Number"];
 const EXPERIENCE_SUBFIELDS = ["Institution Name", "Designation", "From Date", "To Date", "Joining Salary", "Leaving Salary", "Reason for Leaving", "NOC Obtained"];
 
 export const EXPORT_FIELDS: ExportField[] = [
   // ─── Identity & Employment (core) - default ON ───────────────────────────
   // Ordered to match the Add Faculty wizard's own "Identity & Employment"
-  // step (hod/faculty/new/page.tsx); fields with no add-form home (AICTE
-  // Eligible, Status, Employment Type, Date of Joining Department, Official
-  // Email) are appended at the end rather than interleaved.
+  // step (hod/faculty/new/page.tsx); fields with no add-form home (Status,
+  // Official Email) are appended at the end rather than interleaved.
   scalar("core", "employeeId", "Employee ID", true),
   scalar("core", "legalName", "Full Name (as per SSC)", true),
   scalar("core", "name", "Name (as per PAN)", true),
   scalar("core", "apaarFacultyId", "APAAR Faculty ID", true),
   scalar("core", "collegeEmail", "College Email", true),
   scalar("core", "designation", "Designation", true),
-  scalar("core", "qualification", "Qualification (Summary)", true),
+  scalar("core", "qualification", "Highest Qualification", true),
   scalar("core", "specialization", "Specialization", true),
-  scalar("core", "experienceYears", "Total Experience (Years)", true),
+  scalar("core", "experienceYears", "Total Years of Experience", true),
   // Internal/External Experience are computed live from joiningDate and the
   // Academic/Industry/Research Experience entries - not stored fields (see
   // FacultyIdentityFacts on the profile page, which computes the same way).
@@ -100,11 +109,8 @@ export const EXPORT_FIELDS: ExportField[] = [
   scalar("core", "email", "Personal Email", true),
   scalar("core", "phone", "Mobile No", true),
   group("core", "additionalPhones", "Additional Phone Numbers", ["Label", "Number"]),
-  scalar("core", "aicteEligible", "AICTE Eligible", true),
   scalar("core", "status", "Status", true),
   scalar("core", "employeeCategory", "Employee Category", true),
-  scalar("core", "employmentType", "Employment Type (legacy)", true),
-  scalar("core", "dateOfJoiningDepartment", "Date of Joining Department", true),
   scalar("core", "officialEmail", "Official Email", true),
 
   // ─── Personal Details - default ON ───────────────────────────────────────
@@ -157,25 +163,26 @@ export const EXPORT_FIELDS: ExportField[] = [
   scalar("qualification", "otherQualifyingExam", "Qualified Exam (Other, specified)"),
   scalar("qualification", "qualifyingExamScore", "Qualified Exam Score"),
   scalar("qualification", "qualifyingExamYear", "Qualified Year"),
-  group("qualification", "highSchoolDetails", "Secondary Education (10th)", ["Qualification", "Board", "School", "Percentage/CGPA", "Year of Passing"]),
-  group("qualification", "intermediateDetails", "Intermediate/Diploma (12th)", ["Qualification", "Board", "College", "Percentage/CGPA", "Year of Passing"]),
+  group("qualification", "highSchoolDetails", "Secondary Education (10th)", SCHOOL_DEGREE_SUBFIELDS),
+  group("qualification", "intermediateDetails", "Intermediate/Diploma (12th)", SCHOOL_DEGREE_SUBFIELDS),
   group("qualification", "ugDetailsGroup", "UG Details", DEGREE_SUBFIELDS),
   group("qualification", "pgDetailsGroup", "PG Details", DEGREE_SUBFIELDS),
-  group("qualification", "phdDetailsGroup", "Ph.D. Details", PHD_SUBFIELDS),
-  scalar("qualification", "phdStatus", "Ph.D. Status"),
-  scalar("qualification", "phdMode", "Ph.D. Mode"),
-  scalar("qualification", "phdSupervisorName", "Ph.D. Project Supervisor Name"),
-  scalar("qualification", "fellowshipsReceived", "Fellowships Received"),
-  group("qualification", "postDoctoralDetailsGroup", "Postdoctoral Fellowship Details", DEGREE_SUBFIELDS),
-  group("qualification", "schoolQualifications", "School Qualifications", ["Level", "Degree/Certificate", "University/Institute/Board", "Percentage/CGPA", "Year of Completion"]),
+  group("qualification", "phdDetailsGroup", "Ph.D. Details", DOCTORAL_SUBFIELDS),
+  group("qualification", "postDoctoralDetailsGroup", "Postdoctoral Fellowship Details", DOCTORAL_SUBFIELDS),
+  // StaffQualification (QualificationsFields) has its own shape - no
+  // separate Board field like HIGH_SCHOOL/INTERMEDIATE DegreeFields; the
+  // exam board (if any) is folded into University/Institute/Board itself.
+  group("qualification", "schoolQualifications", "School Qualifications", ["Level", "Degree/Certificate Name", "University/Institute/Board", "Location", "Percentage/CGPA", "Year of Completion", "Certificate Number"]),
 
   // ─── Professional Experience ──────────────────────────────────────────────
-  scalar("experience", "primaryTeachingRole", "Teaching Roles/Responsibilities"),
-  scalar("experience", "primaryIndustryRole", "Industry Roles/Responsibilities"),
-  scalar("experience", "primaryResearchRole", "Research Roles/Responsibilities"),
+  // Each role box is kept right next to its own Experience group, matching
+  // how the Add/Edit form shows it (nested inside that same tab's card).
   group("experience", "previousInstitutionsGroup", "Academic Experience", EXPERIENCE_SUBFIELDS),
+  scalar("experience", "primaryTeachingRole", "Teaching Roles/Responsibilities"),
   group("experience", "industryExperienceGroup", "Industry Experience", EXPERIENCE_SUBFIELDS),
+  scalar("experience", "primaryIndustryRole", "Industry Roles/Responsibilities"),
   group("experience", "researchExperienceGroup", "Research Experience", EXPERIENCE_SUBFIELDS),
+  scalar("experience", "primaryResearchRole", "Research Roles/Responsibilities"),
   group("experience", "promotionHistoryGroup", "Teaching / Promotion History", ["Designation", "From Date", "To Date"]),
   group("experience", "coursesGroup", "Courses Taught", ["Code", "Name", "Weekly Credit Hours"]),
 
@@ -202,9 +209,16 @@ export const EXPORT_FIELDS: ExportField[] = [
   // ─── Professional Development ──────────────────────────────────────────────
   group("mentorship", "labsEstablishedGroup", "New Labs Established", ["Facility Details", "Outcomes"]),
   group("mentorship", "adminResponsibilityGroup", "Academic Responsibilities", ["Category", "Description", "From Year", "To Year"]),
-  group("mentorship", "trainingEntriesGroup", "Trainings / FDPs / Workshops", ["Type", "Participated/Conducted", "Title", "Organizer", "Year", "Duration (Days)"]),
-  group("mentorship", "professionalMembershipsGroup", "Professional Body Memberships", ["Body", "Body Name (if Other)", "Membership ID", "Member Since (Year)"]),
-  group("mentorship", "awardEntriesGroup", "Awards & Recognition", ["Category", "Title", "Awarding Body", "Year"]),
+  group("mentorship", "trainingEntriesGroup", "FDPs, Workshops, MOOCs & Certifications", [
+    "Type", "Participated/Conducted", "Certification Type", "Title", "Name of Faculty/Coordinator",
+    "From Date", "To Date", "Duration", "National/International", "Place", "Mode of the Program",
+    "Beneficiaries", "Number of Resource Persons", "Resource Persons - Details",
+    "Remark", "Co-Conducting Faculty", "Other Details",
+  ]),
+  group("mentorship", "professionalMembershipsGroup", "Professional Body Memberships", [
+    "Body", "Body Name (if Other)", "Membership Type", "Membership ID", "Membership Validity", "Member Since / Valid From", "Valid To",
+  ]),
+  group("mentorship", "awardEntriesGroup", "Awards & Recognition", ["Category", "Title", "Awarding Body", "Date of Award", "Level", "Other Details"]),
 
   // ─── Financial Standing ─────────────────────────────────────────────────────
   scalar("financial", "presentSalary", "Monthly Salary (₹)"),

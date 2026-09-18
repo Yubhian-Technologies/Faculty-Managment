@@ -902,12 +902,13 @@ export const EMPLOYEE_CATEGORY_LABELS: Record<EmployeeCategory, string> = {
   PART_TIME: "Part Time",
 };
 
-// Legacy field/type this replaced (see FacultyMember.employmentType) - Salary
-// Structures/Budget (src/lib/budget/applySalaryStructurePricing.ts,
-// BudgetItemsTable.tsx) still store/select this exact shape for their own
-// records, independent of the faculty-side rename above; PERMANENT there
-// maps to REGULAR on the faculty side (the other 3 values are spelled the
-// same in both).
+// Legacy type FacultyMember.employmentType used to share before that field
+// was retired in favor of EmployeeCategory above. Salary Structures/Budget
+// (src/lib/budget/applySalaryStructurePricing.ts, BudgetItemsTable.tsx)
+// still store/select this exact shape for their own records, independent of
+// the faculty side; PERMANENT there maps to REGULAR on the faculty side (the
+// other 3 values are spelled the same in both) - see toLegacyEmploymentType
+// in BudgetItemsTable.tsx.
 export type EmploymentType = string;
 
 export const EMPLOYMENT_TYPE_LABELS: Record<string, string> = {
@@ -961,7 +962,6 @@ export interface FacultyMember {
   specialization?: string;
   experienceYears: number;
   joiningDate: Timestamp; // Date of Joining Institution
-  dateOfJoiningDepartment?: Timestamp; // Date of Joining Department (NBA/AICTE — may differ from institution)
   // Set on the "Identity & Employment" step of Add Faculty and by the hiring
   // pipeline's provisioning step (src/lib/firestore/facultyProvisioning.ts);
   // editable afterward only by HOD/Principal/VP via PATCH /api/college/faculty/[id].
@@ -969,13 +969,7 @@ export interface FacultyMember {
   // (src/lib/budget/applySalaryStructurePricing.ts) - see EmployeeCategory's
   // own doc-comment for how that legacy-keyed feature maps to this.
   employeeCategory?: EmployeeCategory;
-  // Legacy field name/values (PERMANENT/CONTRACT/VISITING/PART_TIME) - a
-  // record saved before this rename still has this instead; kept only for
-  // read-time fallback display (see facultyDisplayEmployeeCategory-style
-  // helpers at each read site), never written to any more.
-  employmentType?: EmploymentType;
-  aicteEligible?: boolean; // AICTE Eligibility
-  aicteFacultyId?: string; // Required whenever aicteEligible is true
+  aicteFacultyId?: string;
   status: FacultyStatus;
   userUid?: string; // links to users/{uid} if they have a system login
   profilePhotoUrl?: string;
@@ -1073,14 +1067,19 @@ export interface DegreeDetail {
   location?: string; // city/town where the institute is located
   percentageOrDivision: string;
   // "Year of Passing" everywhere except Doctoral/Post-Doctoral, where it's
-  // "Year of Award" - shown only once that entry's own Status (Ph.D./
-  // Postdoctoral Status, on FacultyProfileFields) is AWARDED.
+  // "Year of Award" - shown only once this entry's own status (below) is AWARDED.
   yearOfCompletion: number;
   yearOfRegistration?: number; // Doctoral/Post-Doctoral only
   // Doctoral/Post-Doctoral only, shown instead of yearOfCompletion while
-  // that entry's own Status is PURSUING (not yet awarded, so no year yet -
+  // this entry's own status is PURSUING (not yet awarded, so no year yet -
   // who's guiding it instead).
   guideOrSupervisorName?: string;
+  // Doctoral/Post-Doctoral only - this specific degree entry's own Awarded/
+  // Pursuing status and Full-Time/Part-Time mode. Lives on the entry itself
+  // (not a single FacultyProfileFields-level scalar) so a second/third
+  // doctorate (see additionalPhdDetails) can each have their own.
+  status?: PhdStatus;
+  mode?: PhdMode;
   certificateNumber?: string; // certificate/registration number printed on the degree certificate
   certificateUrl?: string; // Google Drive public-view link for the degree/transcript certificate
 }
@@ -2275,13 +2274,11 @@ export interface FacultyProfileFields {
   additionalPgDetails?: DegreeDetail[];
   phdDetails?: DegreeDetail;
   additionalPhdDetails?: DegreeDetail[];
+  // Status/Mode for Ph.D./Postdoctoral live on phdDetails.status/.mode and
+  // postDoctoralDetails.status/.mode (see DegreeDetail) - not separate
+  // scalars here, so they can never drift apart from the degree entry they
+  // describe.
   postDoctoralDetails?: DegreeDetail;
-  phdStatus?: PhdStatus;
-  phdMode?: PhdMode;
-  postDoctoralStatus?: PhdStatus;
-  postDoctoralMode?: PhdMode;
-  phdSupervisorName?: string;
-  fellowshipsReceived?: string;
   // Whether NET/SLET/SET/GATE/Others was qualified - exam/score/year below
   // only apply when this is "YES".
   qualifyingExamQualified?: "YES" | "NO";

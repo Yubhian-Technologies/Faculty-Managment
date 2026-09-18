@@ -16,14 +16,19 @@
  *   - inCampusExperience     (dead - no UI ever wrote this)
  *   - industryExperience     (dead - duplicate of academicProfile.industryExperienceEntries)
  *   - researchExperience     (dead - duplicate of academicProfile.researchExperienceEntries)
+ *   - employmentType         (legacy - superseded by employeeCategory)
+ *   - dateOfJoiningDepartment (dead - accepted by old routes but never set by any UI)
+ *   - aicteEligible          (removed at the user's request - see conversation)
  *
  * Removed academicProfile.* fields (the "Grants, Consultancy & IP" module,
  * permanently removed from the app, plus 4 legacy Professional Development
- * free-text fields already superseded by structured lists):
+ * free-text fields already superseded by structured lists, plus 2 Ph.D.
+ * fields with no Add/Edit UI, superseded by DegreeDetail.guideOrSupervisorName):
  *   - fundedProjects, consultancyProjects, patents
  *   - phdScholarsPursuing, phdScholarsAwarded, nationalExposure, internationalExposure
  *   - administrativeResponsibilities, certificationsAndFdps,
  *     professionalBodyMemberships, notableAwards
+ *   - phdSupervisorName, fellowshipsReceived
  *
  * Dry-run by default - prints exactly what it would touch without writing
  * anything. Pass --apply to actually perform the cleanup.
@@ -64,6 +69,9 @@ const TOP_LEVEL_FIELDS = [
   "inCampusExperience",
   "industryExperience",
   "researchExperience",
+  "employmentType",
+  "dateOfJoiningDepartment",
+  "aicteEligible",
 ];
 
 const ACADEMIC_PROFILE_FIELDS = [
@@ -78,6 +86,8 @@ const ACADEMIC_PROFILE_FIELDS = [
   "certificationsAndFdps",
   "professionalBodyMemberships",
   "notableAwards",
+  "phdSupervisorName",
+  "fellowshipsReceived",
 ];
 
 async function run() {
