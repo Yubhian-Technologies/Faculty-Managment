@@ -85,8 +85,8 @@ export async function PATCH(request: Request) {
       phone: string;
       // Identity & Employment fields a Faculty member may edit about
       // themselves - deliberately excludes employeeId, collegeEmail,
-      // designation, department, joiningDate, aicteEligible, aicteFacultyId
-      // and employmentType, which stay HR/HOD-controlled (see PATCH
+      // designation, department, joiningDate, employeeCategory and
+      // aicteFacultyId, which stay HR/HOD-controlled (see PATCH
       // /api/college/faculty/[id], HOD/Principal/VP only).
       apaarFacultyId: string;
       qualification: string;
@@ -140,7 +140,52 @@ export async function PATCH(request: Request) {
 
     const previousFacultyData = facultyDoc.data() as { legalName?: string; name?: string; academicProfile?: { trainingEntries?: TrainingEntry[] } };
 
+    // Full Name (as per SSC) preferred, Name (as per PAN) only as a fallback -
+    // same precedence facultyDisplayName() uses everywhere else.
+    const effectiveLegalName = body.legalName !== undefined ? body.legalName : previousFacultyData.legalName;
+    const effectiveName = body.name?.trim() ? body.name.trim() : previousFacultyData.name;
+    const newDisplayName = effectiveLegalName?.trim() || effectiveName?.trim() || "";
+    const oldDisplayName = previousFacultyData.legalName?.trim() || previousFacultyData.name?.trim() || "";
+    const displayNameChanged = (body.legalName !== undefined || !!body.name?.trim()) && newDisplayName !== oldDisplayName;
+
     await facultyDoc.ref.update(facultyUpdates);
+
+    // A faculty's display name is copied into teachingAssignments/timetableSlots/
+    // Section at assignment/incharge-set time and never re-read afterward - a
+    // self-service rename here must cascade into every one of those copies too,
+    // same as the HOD/Principal-side PATCH /api/college/faculty/[id] does.
+    if (displayNameChanged) {
+      try {
+        const collegeRef = db.collection("colleges").doc(session.collegeId);
+
+        const [assignmentsSnap, slotsSnap] = await Promise.all([
+          collegeRef.collection("teachingAssignments").where("facultyId", "==", facultyDoc.id).get(),
+          collegeRef.collection("timetableSlots").where("facultyId", "==", facultyDoc.id).get(),
+        ]);
+        for (const [snapshot, field] of [[assignmentsSnap, "facultyName"], [slotsSnap, "facultyName"]] as const) {
+          for (let i = 0; i < snapshot.docs.length; i += 400) {
+            const chunk = snapshot.docs.slice(i, i + 400);
+            const chunkBatch = db.batch();
+            for (const doc of chunk) chunkBatch.update(doc.ref, { [field]: newDisplayName, updatedAt: now });
+            await chunkBatch.commit();
+          }
+        }
+
+        // Section.facultyInchargeUid holds either this faculty's linked login
+        // uid or, on some older records, the FacultyMember doc id itself - see
+        // PATCH /api/college/faculty/[id]'s own doc-comment on this.
+        const inchargeCandidates = session.uid !== facultyDoc.id ? [session.uid, facultyDoc.id] : [facultyDoc.id];
+        const sectionsSnap = await collegeRef.collection("sections").where("facultyInchargeUid", "in", inchargeCandidates).get();
+        for (let i = 0; i < sectionsSnap.docs.length; i += 400) {
+          const chunk = sectionsSnap.docs.slice(i, i + 400);
+          const chunkBatch = db.batch();
+          for (const doc of chunk) chunkBatch.update(doc.ref, { facultyInchargeName: newDisplayName, updatedAt: now });
+          await chunkBatch.commit();
+        }
+      } catch (cascadeErr) {
+        console.error("[college/faculty/me PATCH] facultyName cascade failed:", cascadeErr);
+      }
+    }
 
     if (body.academicProfile !== undefined) {
       try {

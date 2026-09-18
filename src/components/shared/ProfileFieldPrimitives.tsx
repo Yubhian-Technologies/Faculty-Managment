@@ -9,7 +9,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { CertificateUploadField } from "@/components/shared/CertificateUploadField";
 import { Trash2, ExternalLink, X } from "lucide-react";
 import { splitDegreeAndBranch } from "@/lib/faculty/legacyProfileFallbacks";
-import type { DegreeDetail, StaffQualification, PhdStatus } from "@/types";
+import type { DegreeDetail, StaffQualification, PhdStatus, PhdMode } from "@/types";
+
+const PHD_STATUS_OPTIONS: { value: PhdStatus; label: string }[] = [
+  { value: "AWARDED", label: "Awarded" },
+  { value: "PURSUING", label: "Pursuing" },
+];
+const PHD_MODE_OPTIONS: { value: PhdMode; label: string }[] = [
+  { value: "FULL_TIME", label: "Full-Time" },
+  { value: "PART_TIME", label: "Part-Time" },
+];
 
 // Education level a DegreeFields block represents. Graduation/Post Graduation/
 // Doctoral go through the Domain -> Course cascade below; Post-Doctoral,
@@ -148,19 +157,9 @@ export function TextInput({ label, value, onChange, placeholder, required }: { l
 }
 
 export function DegreeFields({
-  label, level, value, onChange, extraFields, status,
+  label, level, value, onChange,
 }: {
   label: string; level: DegreeLevel; value: DegreeDetail | undefined; onChange: (v: DegreeDetail) => void;
-  // Extra fields rendered inside this same bordered card, before the standard
-  // ones - used to fold Ph.D./Postdoctoral Status/Mode into the card itself
-  // rather than a separate section (DegreeDetail has no notion of either;
-  // they're FacultyProfileFields-level, so the caller supplies them).
-  extraFields?: React.ReactNode;
-  // This entry's own Ph.D./Postdoctoral Status (Doctoral/Post-Doctoral only -
-  // ignored otherwise), also FacultyProfileFields-level and so also supplied
-  // by the caller - decides whether "Year of Award" or "Name of the Guide /
-  // Supervisor" shows below (see isDoctoralOrPostDoc).
-  status?: PhdStatus;
 }) {
   const v = resolveDegree(value);
   const hasDomain = DOMAIN_LEVELS.includes(level);
@@ -200,7 +199,28 @@ export function DegreeFields({
     <div className="space-y-3 rounded-lg border p-3">
       <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{label}</p>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        {extraFields}
+        {isDoctoralOrPostDoc && (
+          <>
+            <div className="space-y-2">
+              <Label>{level === "POST_DOCTORAL" ? "Postdoctoral Status" : "Ph.D. Status"}</Label>
+              <Select value={v.status ?? ""} onValueChange={(x) => onChange({ ...v, status: x as PhdStatus })}>
+                <SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger>
+                <SelectContent>
+                  {PHD_STATUS_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>{level === "POST_DOCTORAL" ? "Postdoctoral Mode" : "Ph.D. Mode"}</Label>
+              <Select value={v.mode ?? ""} onValueChange={(x) => onChange({ ...v, mode: x as PhdMode })}>
+                <SelectTrigger><SelectValue placeholder="Select mode" /></SelectTrigger>
+                <SelectContent>
+                  {PHD_MODE_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          </>
+        )}
         {hasDomain && (
           <div className="space-y-2">
             <Label>Domain</Label>
@@ -324,12 +344,11 @@ export function DegreeFields({
           <NumInput label="Year of Registration" value={v.yearOfRegistration} onChange={(x) => onChange({ ...v, yearOfRegistration: x })} />
         )}
         {isDoctoralOrPostDoc ? (
-          // Which of the two shows depends on this entry's own Status
-          // (Ph.D./Postdoctoral Status, picked in extraFields above) - not
-          // yet awarded means no year yet, but a guide/supervisor instead.
-          status === "AWARDED" ? (
+          // Which of the two shows depends on this entry's own Status above -
+          // not yet awarded means no year yet, but a guide/supervisor instead.
+          v.status === "AWARDED" ? (
             <NumInput label="Year of Award" value={v.yearOfCompletion} onChange={(x) => onChange({ ...v, yearOfCompletion: x })} />
-          ) : status === "PURSUING" ? (
+          ) : v.status === "PURSUING" ? (
             <TextInput label="Name of the Guide / Supervisor" value={v.guideOrSupervisorName} onChange={(x) => onChange({ ...v, guideOrSupervisorName: x })} />
           ) : null
         ) : (
@@ -682,9 +701,12 @@ export function Field({ label, value }: { label: string; value: string | number 
   );
 }
 
+const PHD_STATUS_VIEW_LABELS: Record<PhdStatus, string> = { AWARDED: "Awarded", PURSUING: "Pursuing" };
+const PHD_MODE_VIEW_LABELS: Record<PhdMode, string> = { FULL_TIME: "Full-Time", PART_TIME: "Part-Time" };
+
 export function DegreeView({
-  label, degree: degreeInput, level, extraFields, status,
-}: { label: string; degree: DegreeDetail | undefined; level?: DegreeLevel; extraFields?: React.ReactNode; status?: PhdStatus }) {
+  label, degree: degreeInput, level,
+}: { label: string; degree: DegreeDetail | undefined; level?: DegreeLevel }) {
   const degree = resolveDegree(degreeInput);
   const isDoctoral = level === "DOCTORAL";
   const isDoctoralOrPostDoc = level === "DOCTORAL" || level === "POST_DOCTORAL";
@@ -696,7 +718,12 @@ export function DegreeView({
   return (
     <div className="rounded-lg border bg-muted/20 shadow-sm p-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
       <p className="col-span-2 sm:col-span-4 text-xs font-medium text-muted-foreground uppercase tracking-wide">{label}</p>
-      {extraFields}
+      {isDoctoralOrPostDoc && (
+        <>
+          <Field label={level === "POST_DOCTORAL" ? "Postdoctoral Status" : "Ph.D. Status"} value={degree?.status ? PHD_STATUS_VIEW_LABELS[degree.status] : undefined} />
+          <Field label={level === "POST_DOCTORAL" ? "Postdoctoral Mode" : "Ph.D. Mode"} value={degree?.mode ? PHD_MODE_VIEW_LABELS[degree.mode] : undefined} />
+        </>
+      )}
       {degree?.domain && <Field label="Domain" value={EDUCATION_DOMAIN_LABELS[degree.domain as EducationDomain] ?? degree.domain} />}
       <Field label={isSchoolLevel ? "Qualification" : "Degree"} value={degree?.degree} />
       {isDoctoral ? (
@@ -722,9 +749,9 @@ export function DegreeView({
       {isDoctoral && degree?.percentageOrDivision && <Field label="Percentage / CGPA (legacy)" value={degree.percentageOrDivision} />}
       {isDoctoralOrPostDoc && <Field label="Year of Registration" value={degree?.yearOfRegistration} />}
       {isDoctoralOrPostDoc ? (
-        status === "AWARDED" ? (
+        degree?.status === "AWARDED" ? (
           <Field label="Year of Award" value={degree?.yearOfCompletion} />
-        ) : status === "PURSUING" ? (
+        ) : degree?.status === "PURSUING" ? (
           <Field label="Name of the Guide / Supervisor" value={degree?.guideOrSupervisorName} />
         ) : null
       ) : (

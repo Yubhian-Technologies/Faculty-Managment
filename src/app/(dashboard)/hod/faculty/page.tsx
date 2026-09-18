@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { Avatar } from "@/components/shared/Avatar";
@@ -65,6 +66,10 @@ export default function HODFacultyPage() {
   const [faculty, setFaculty] = useState<FacultyRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<string>("");
+  // Export-only selection - when empty, ExportFacultyDialog exports everyone
+  // in the register (unchanged default behavior); picking specific rows here
+  // narrows it to just those faculty members.
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const [deleteTarget, setDeleteTarget] = useState<FacultyRow | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -194,6 +199,10 @@ export default function HODFacultyPage() {
     // synchronously from the effect body (react-hooks/set-state-in-effect).
     void (async () => {
         await load(statusFilter);
+        // Switching tabs changes which rows exist at all - a stale selection
+        // from the previous tab would otherwise silently export rows no
+        // longer even shown.
+        setSelectedIds(new Set());
     })();
   }, [statusFilter]);
 
@@ -212,6 +221,12 @@ export default function HODFacultyPage() {
       }
       toast({ variant: "success", title: `${facultyDisplayName(deleteTarget)} removed from faculty register` });
       setDeleteTarget(null);
+      setSelectedIds((prev) => {
+        if (!prev.has(deleteTarget.id as string)) return prev;
+        const next = new Set(prev);
+        next.delete(deleteTarget.id as string);
+        return next;
+      });
       void load(statusFilter);
     } catch {
       toast({ variant: "destructive", title: "Failed to delete faculty record", description: "Network error - please try again." });
@@ -255,7 +270,35 @@ export default function HODFacultyPage() {
     { key: "RETIRED", label: "Retired" },
   ];
 
+  const allSelected = faculty.length > 0 && selectedIds.size === faculty.length;
+  const someSelected = selectedIds.size > 0 && !allSelected;
+
   const columns: Column<FacultyRow>[] = [
+    {
+      key: "select",
+      header: (
+        <Checkbox
+          checked={allSelected ? true : someSelected ? "indeterminate" : false}
+          onCheckedChange={(checked) => setSelectedIds(checked ? new Set(faculty.map((f) => f.id as string)) : new Set())}
+          aria-label="Select all faculty"
+        />
+      ),
+      render: (row) => (
+        <div onClick={(e) => e.stopPropagation()}>
+          <Checkbox
+            checked={selectedIds.has(row.id as string)}
+            onCheckedChange={(checked) =>
+              setSelectedIds((prev) => {
+                const next = new Set(prev);
+                if (checked) next.add(row.id as string); else next.delete(row.id as string);
+                return next;
+              })
+            }
+            aria-label={`Select ${facultyDisplayName(row)}`}
+          />
+        </div>
+      ),
+    },
     {
       key: "name",
       header: "Faculty Member",
@@ -291,7 +334,7 @@ export default function HODFacultyPage() {
           {(row.specialization as string) && (
             <p className="text-xs text-muted-foreground italic">{row.specialization as string}</p>
           )}
-          {row.academicProfile?.phdStatus === "AWARDED" && (
+          {row.academicProfile?.phdDetails?.status === "AWARDED" && (
             <span className="inline-flex items-center rounded-full border border-violet-200 bg-violet-50 px-1.5 py-0.5 text-[10px] font-medium text-violet-700">Ph.D</span>
           )}
         </div>
@@ -386,11 +429,22 @@ export default function HODFacultyPage() {
         title="Faculty Register"
         description="Teaching staff records for your department"
         actions={
-          <div className="flex gap-2">
+          <div className="flex items-center gap-2">
+            {selectedIds.size > 0 && (
+              <span className="text-xs text-muted-foreground">
+                {selectedIds.size} selected
+                <Button variant="link" size="sm" className="h-auto p-0 pl-1.5 text-xs" onClick={() => setSelectedIds(new Set())}>
+                  Clear
+                </Button>
+              </span>
+            )}
             <Button variant="outline" onClick={() => router.push("/hod/faculty/import")}>
               <Upload className="h-4 w-4 mr-2" />Import
             </Button>
-            <ExportFacultyDialog faculty={faculty} />
+            <ExportFacultyDialog
+              faculty={selectedIds.size > 0 ? faculty.filter((f) => selectedIds.has(f.id as string)) : faculty}
+              isSelection={selectedIds.size > 0}
+            />
             <Button onClick={() => router.push("/hod/faculty/new")}>
               <UserPlus className="h-4 w-4 mr-2" />Add Faculty
             </Button>

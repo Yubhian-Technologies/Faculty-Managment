@@ -1,14 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Share2 } from "lucide-react";
+import Link from "next/link";
+import { Pencil, Share2 } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { ProfilePhotoUpload } from "@/components/shared/ProfilePhotoUpload";
 import { ChangePasswordDialog } from "@/components/shared/ChangePasswordDialog";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { MyProfileModuleTiles, FacultyIdentityFacts, FacultyStatusBadge } from "@/components/faculty/FacultyProfileHub";
-import { EditFacultyIdentityDialog } from "@/components/faculty/EditFacultyIdentityDialog";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/hooks/useToast";
 import type { FacultyMember } from "@/types";
@@ -65,10 +65,9 @@ export default function FacultyProfilePage() {
           <FacultyIdentityFacts faculty={faculty ?? {}} />
           {faculty && (
             <div className="flex justify-end pt-4 border-t">
-              <EditFacultyIdentityDialog
-                faculty={faculty}
-                onSaved={(updates) => setFaculty((f) => ({ ...(f ?? {}), ...updates }))}
-              />
+              <Button asChild>
+                <Link href="/panel/profile/edit"><Pencil className="h-4 w-4 mr-2" />Edit Details</Link>
+              </Button>
             </div>
           )}
         </CardContent>
