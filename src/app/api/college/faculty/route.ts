@@ -7,6 +7,7 @@ import { createFirebaseUser } from "@/lib/firebase/authRest";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
 import { getHodDepartmentScope, getDepartmentTreeNames, canHodEditDepartment, facultyManageableDepartmentNames } from "@/lib/departments/scope";
 import { LEGACY_TECHNICAL_DESIGNATIONS } from "@/lib/designations/config";
+import { experienceBreakdown, allPreviousExperienceEntries } from "@/lib/faculty/experienceCalc";
 import type { Designation, FacultyStatus, EmployeeCategory } from "@/types";
 
 // Exactly these 4 values are accepted anywhere Employee Category is set -
@@ -167,7 +168,6 @@ export async function POST(request: Request) {
       designation,
       employeeCategory,
       qualification,
-      experienceYears,
       joiningDate,
       profilePhotoUrl,
     } = body;
@@ -311,7 +311,15 @@ export async function POST(request: Request) {
       employeeCategory,
       qualification,
       specialization: body.specialization ?? "",
-      experienceYears: Number(experienceYears),
+      // Total Years of Experience (Internal since Date of Joining + External
+      // from the Academic/Industry/Research Experience entries) - computed
+      // here server-side rather than trusted from the client, same as PATCH
+      // /api/college/faculty/[id], so it can't drift from what Faculty
+      // Details/the Faculty List compute live from the same two inputs.
+      experienceYears: experienceBreakdown(
+        allPreviousExperienceEntries(body.academicProfile as Parameters<typeof allPreviousExperienceEntries>[0]),
+        new Date(joiningDate)
+      ).total,
       joiningDate: new Date(joiningDate),
       ...(body.aicteFacultyId?.trim() ? { aicteFacultyId: body.aicteFacultyId.trim() } : {}),
       status: "ACTIVE" as FacultyStatus,

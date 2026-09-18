@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
+import { experienceBreakdown, allPreviousExperienceEntries } from "@/lib/faculty/experienceCalc";
 import type { FacultyMember, DegreeDetail } from "@/types";
 
 // Public "meet the faculty" page — no auth, reached via a short, human-
@@ -70,7 +71,11 @@ export async function GET(request: Request) {
         profilePhotoUrl: faculty.profilePhotoUrl || undefined,
         qualification: faculty.qualification,
         specialization: faculty.specialization,
-        experienceYears: faculty.experienceYears,
+        // Total Years of Experience - computed live from Date of Joining +
+        // the Academic/Industry/Research Experience entries, same canonical
+        // calc as Faculty Details, not the stored (and only periodically
+        // re-saved) experienceYears field.
+        experienceYears: experienceBreakdown(allPreviousExperienceEntries(ap), faculty.joiningDate).total,
         officialEmail: faculty.officialEmail || undefined,
         joiningYear: faculty.joiningDate ? faculty.joiningDate.toDate().getFullYear() : undefined,
 

@@ -39,11 +39,6 @@ function fmtDate(val: unknown): string {
   } catch { return "-"; }
 }
 
-function fmtExp(val: unknown): string {
-  if (val == null || val === "") return "0";
-  return String(+(Number(val).toFixed(1)));
-}
-
 // INTERVIEW_DONE faculty haven't actually joined yet - their joiningDate is the
 // proposed date from the offer letter, so it reads as an expectation, not a fact.
 function joiningLabel(status: unknown): string {
@@ -342,7 +337,7 @@ export default function HODFacultyPage() {
     },
     {
       key: "joiningDate",
-      header: "Joining",
+      header: "Date of Joining",
       hideOnMobile: true,
       render: (row) => (
         <p className="text-xs text-muted-foreground">{joiningLabel(row.status)}: {fmtDate(row.joiningDate)}</p>
@@ -350,19 +345,21 @@ export default function HODFacultyPage() {
     },
     {
       key: "experienceYears",
-      header: "Experience",
+      header: "Total Experience",
       hideOnMobile: true,
       render: (row) => {
-        // Internal (time served since Date of Joining) / External (Academic +
-        // Industry + Research Experience entries combined) - computed live,
-        // same as the faculty profile page (FacultyProfileHub), not read
-        // from a stored field.
+        // Total/Internal/External Years of Experience - computed live from
+        // Date of Joining + the Academic/Industry/Research Experience
+        // entries, same canonical calc as the Faculty Details page
+        // (FacultyProfileHub), not read from the stored (and only
+        // periodically re-saved) experienceYears field.
         const previousExperienceEntries = allPreviousExperienceEntries(row.academicProfile);
+        const totalYears = totalYearsOfExperience(previousExperienceEntries, row.joiningDate).years;
         const internalYears = totalYearsOfExperience(undefined, row.joiningDate).years;
         const externalYears = totalYearsOfExperience(previousExperienceEntries, undefined).years;
         return (
           <div className="space-y-0.5">
-            <p className="text-sm font-medium">{fmtExp(row.experienceYears)} yrs</p>
+            <p className="text-sm font-medium">{totalYears} yrs</p>
             {row.joiningDate != null && (
               <p className="text-xs text-muted-foreground">Int: {internalYears} · Ext: {externalYears}</p>
             )}

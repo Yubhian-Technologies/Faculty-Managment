@@ -5,6 +5,7 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
 import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
+import { experienceBreakdown, allPreviousExperienceEntries } from "@/lib/faculty/experienceCalc";
 import type { Designation, FacultyStatus } from "@/types";
 
 // An HOD or Sub-HOD login (Department.hodUid/hodName, role "HOD" on their
@@ -44,7 +45,7 @@ export async function POST(request: Request) {
 
     const {
       linkUid, department, employeeId, name, designation, qualification,
-      experienceYears, joiningDate, profilePhotoUrl,
+      joiningDate, profilePhotoUrl,
     } = body;
 
     if (!linkUid || !department || !employeeId || !designation || !qualification || !joiningDate) {
@@ -126,7 +127,13 @@ export async function POST(request: Request) {
       designation,
       qualification,
       specialization: body.specialization ?? "",
-      experienceYears: Number(experienceYears),
+      // Total Years of Experience - computed server-side, same as POST
+      // /api/college/faculty and PATCH /api/college/faculty/[id], never
+      // trusted from the client.
+      experienceYears: experienceBreakdown(
+        allPreviousExperienceEntries(body.academicProfile as Parameters<typeof allPreviousExperienceEntries>[0]),
+        new Date(joiningDate)
+      ).total,
       joiningDate: new Date(joiningDate),
       ...(body.aicteFacultyId?.trim() ? { aicteFacultyId: body.aicteFacultyId.trim() } : {}),
       status: "ACTIVE" as FacultyStatus,

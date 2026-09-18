@@ -189,3 +189,33 @@ export function totalYearsOfExperience(
   const anchorStart = new Date(asOf.getTime() - totalDays * 86400000);
   return calendarDiff(anchorStart, asOf);
 }
+
+export interface ExperienceBreakdown {
+  internal: number; // decimal years - time served since Date of Joining (0 for a future joiningDate)
+  external: number; // decimal years - Academic + Industry + Research Experience entries summed
+  total: number; // decimal years - internal + external
+}
+
+// The one decimal-years Internal/External/Total snapshot every "give me a
+// plain sortable/exportable number" call site should use - FacultyMember.
+// experienceYears (see the create/update API routes), the CSV export, the
+// resume PDF, and the public profile all go through this rather than each
+// re-deriving their own rounding. Internal and external day counts are
+// summed FIRST and each rounded to 1 decimal only once at the very end
+// (same convention as totalPreviousExperienceYears), so total isn't just
+// internal + external re-rounded on top of two already-rounded numbers.
+export function experienceBreakdown(
+  previousInstitutions: PreviousInstitutionLike[] | undefined,
+  joiningDate: Parameters<typeof toDate>[0],
+  asOf: Date = new Date()
+): ExperienceBreakdown {
+  const externalDays = totalPreviousExperienceDays(previousInstitutions);
+  const joined = toDate(joiningDate);
+  const internalDays = joined ? Math.max(0, exactDays(joined, asOf)) : 0;
+  const daysToYears = (days: number) => Math.round((days / 365.25) * 10) / 10;
+  return {
+    internal: daysToYears(internalDays),
+    external: daysToYears(externalDays),
+    total: daysToYears(internalDays + externalDays),
+  };
+}

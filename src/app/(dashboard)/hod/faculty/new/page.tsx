@@ -21,7 +21,7 @@ import {
 } from "@/components/faculty/AcademicProfileModuleFields";
 import { TextInput } from "@/components/shared/ProfileFieldPrimitives";
 import { syncTeachingAssignments } from "@/lib/teaching/syncTeachingAssignments";
-import { totalPreviousExperienceYears, totalYearsOfExperience, formatDuration, allPreviousExperienceEntries } from "@/lib/faculty/experienceCalc";
+import { experienceBreakdown, totalYearsOfExperience, formatDuration, allPreviousExperienceEntries } from "@/lib/faculty/experienceCalc";
 import { PHONE_REGEX } from "@/lib/validations";
 import { AvatarUploadField } from "@/components/shared/AvatarUploadField";
 import { PROFILE_MODULES } from "@/lib/faculty/profileModules";
@@ -165,10 +165,12 @@ export default function NewFacultyPage() {
   const name = watch("name");
   const joiningDateValue = watch("joiningDate");
 
-  // FacultyMember.experienceYears is calculated from Academic/Industry/Research
-  // Experience's From/To dates alone, combined (see experienceCalc.ts), not
-  // typed manually - kept in sync with the form's own experienceYears field
-  // so submit sends the computed total as-is.
+  // FacultyMember.experienceYears (Total Years of Experience = Internal
+  // since Date of Joining + External from Academic/Industry/Research
+  // Experience's From/To dates) is actually recomputed server-side on
+  // submit (see POST /api/college/faculty), from the same academicProfile/
+  // joiningDate this form sends - this mirrors that so the "core" step's
+  // read-only preview below always matches what gets saved.
   const allExperienceEntries = useMemo(
     () => allPreviousExperienceEntries(academicProfile),
     // The 3 specific arrays read are the real deps; academicProfile itself is
@@ -177,17 +179,16 @@ export default function NewFacultyPage() {
     [academicProfile.previousInstitutions, academicProfile.industryExperienceEntries, academicProfile.researchExperienceEntries]
   );
   const totalExperience = useMemo(
-    () => totalPreviousExperienceYears(allExperienceEntries),
-    [allExperienceEntries]
+    () => experienceBreakdown(allExperienceEntries, joiningDateValue).total,
+    [allExperienceEntries, joiningDateValue]
   );
   useEffect(() => {
     setValue("experienceYears", totalExperience);
   }, [totalExperience, setValue]);
 
-  // The "core" step's read-only preview goes further than the stored number
-  // above - it also adds time served since Date of Joining (if filled in
-  // yet), live, the same "Total Years of Experience" figure the profile will
-  // show once this faculty member is added.
+  // The "core" step's read-only preview - live Total Years of Experience
+  // (Internal + External), the same figure the profile will show once this
+  // faculty member is added.
   const previewTotalExperience = useMemo(
     () => totalYearsOfExperience(allExperienceEntries, joiningDateValue),
     [allExperienceEntries, joiningDateValue]

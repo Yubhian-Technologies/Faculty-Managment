@@ -3,7 +3,7 @@ import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { DESIGNATION_LABELS, FACULTY_STATUS_LABELS, ROLE_LABELS, RELIGION_LABELS, CASTE_LABELS } from "@/types";
 import type { Religion, Caste } from "@/types";
 import { buildTeachingLoadRows, formatClassColumn, type TeachingLoadRow } from "@/lib/teaching/buildTeachingLoadRows";
-import { allPreviousExperienceEntries, totalYearsOfExperience, formatDuration } from "@/lib/faculty/experienceCalc";
+import { allPreviousExperienceEntries, totalYearsOfExperience, experienceBreakdown, formatDuration } from "@/lib/faculty/experienceCalc";
 
 type TimestampLike = { toDate?: () => Date; seconds?: number; _seconds?: number } | string | null | undefined;
 
@@ -369,9 +369,10 @@ export function getResumeHTML(data: ResumeData): string {
   const hasJoiningDate = !!data.joiningDate;
   const internalExperienceDuration = totalYearsOfExperience(undefined, data.joiningDate as Parameters<typeof formatDate>[0]);
   const externalExperienceDuration = totalYearsOfExperience(previousExperienceEntries, undefined);
+  const totalExperienceYears = experienceBreakdown(previousExperienceEntries, data.joiningDate as Parameters<typeof formatDate>[0]).total;
   const experienceBullets = bullets([
-    data.experienceYears &&
-      `Total Professional Experience: ${esc(data.experienceYears)} years`,
+    (hasJoiningDate || hasPreviousExperience) &&
+      `Total Professional Experience: ${esc(totalExperienceYears)} years`,
     hasJoiningDate && `Internal Experience: ${formatDuration(internalExperienceDuration)}`,
     hasPreviousExperience && `External Experience: ${formatDuration(externalExperienceDuration)}`,
     data.specialization && `Specialization: ${esc(data.specialization)}`,

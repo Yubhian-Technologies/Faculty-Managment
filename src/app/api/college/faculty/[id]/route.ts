@@ -6,6 +6,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodManageFacultyDepartment } from "@/lib/departments/scope";
 import { syncTrainingEntryCoConductors } from "@/lib/faculty/syncTrainingEntryCoConductors";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
+import { experienceBreakdown, allPreviousExperienceEntries } from "@/lib/faculty/experienceCalc";
 import type { Designation, EmployeeCategory, FacultyStatus, TrainingEntry } from "@/types";
 
 // Exactly these 4 values are accepted anywhere Employee Category is set -
@@ -189,15 +190,29 @@ export async function PATCH(
         .filter((p) => p.number);
     }
 
-    // Numeric fields
-    if (body.experienceYears !== undefined) updates.experienceYears = Number(body.experienceYears);
-
     // Academic profile (Modules 1-5) / Technical profile - mutually exclusive by designation
     if (body.academicProfile !== undefined) updates.academicProfile = body.academicProfile;
     if (body.technicalProfile !== undefined) updates.technicalProfile = body.technicalProfile;
 
     // Date fields
     if (body.joiningDate) updates.joiningDate = new Date(body.joiningDate);
+
+    // Total Years of Experience (Internal since Date of Joining + External
+    // from the Academic/Industry/Research Experience entries) - always
+    // recomputed here server-side, never taken from the client, so it can't
+    // drift from what Faculty Details/the Faculty List compute live from the
+    // same two inputs. Only recomputed when this PATCH actually touches one
+    // of those inputs; whichever of academicProfile/joiningDate it doesn't
+    // touch falls back to what's already on the doc.
+    if (body.academicProfile !== undefined || body.joiningDate) {
+      const existing = snap.data() as { academicProfile?: Record<string, unknown>; joiningDate?: FirebaseFirestore.Timestamp };
+      const effectiveAcademicProfile = body.academicProfile !== undefined ? body.academicProfile : existing.academicProfile;
+      const effectiveJoiningDate = body.joiningDate ? new Date(body.joiningDate) : existing.joiningDate;
+      updates.experienceYears = experienceBreakdown(
+        allPreviousExperienceEntries(effectiveAcademicProfile as Parameters<typeof allPreviousExperienceEntries>[0]),
+        effectiveJoiningDate
+      ).total;
+    }
 
     if (body.profilePhotoUrl !== undefined) updates.profilePhotoUrl = body.profilePhotoUrl;
 

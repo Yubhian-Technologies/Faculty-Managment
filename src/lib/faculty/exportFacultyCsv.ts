@@ -18,7 +18,7 @@ import type {
   PreviousInstitution, LabEstablished, AuthoredBook, PromotionRecord,
   AdminResponsibilityEntry, TrainingEntry, ProfessionalMembership, AwardEntry, Religion, Caste,
 } from "@/types";
-import { allPreviousExperienceEntries, totalYearsOfExperience } from "@/lib/faculty/experienceCalc";
+import { allPreviousExperienceEntries, experienceBreakdown } from "@/lib/faculty/experienceCalc";
 import { normalizeResourcePersonsDetails } from "@/components/faculty/TrainingEntryFields";
 
 function s(v: unknown): string {
@@ -223,17 +223,12 @@ function buildRow(faculty: FacultyMember, teachingSummary: string): Record<strin
   const p: Partial<FacultyProfileFields> = faculty.academicProfile ?? {};
   const teaching = p.teachingAssignment;
 
-  // Internal (time served since Date of Joining) / External (Academic +
-  // Industry + Research Experience entries combined) - computed live the
-  // same way as the faculty profile page (FacultyProfileHub), not read from
-  // a separately-stored, rarely-written field. Rounded to one decimal place,
-  // same convention as experienceYears (see totalPreviousExperienceYears).
-  function decimalYears(d: { years: number; months: number; days: number }): number {
-    return Math.round((d.years + d.months / 12 + d.days / 365) * 10) / 10;
-  }
+  // Total/Internal/External Years of Experience - computed live the same
+  // canonical way as the faculty profile page (FacultyProfileHub), not read
+  // from the stored (and only periodically re-saved) experienceYears field.
   const previousExperienceEntries = allPreviousExperienceEntries(p);
-  const internalExperience = decimalYears(totalYearsOfExperience(undefined, faculty.joiningDate));
-  const externalExperience = decimalYears(totalYearsOfExperience(previousExperienceEntries, undefined));
+  const { internal: internalExperience, external: externalExperience, total: totalExperience } =
+    experienceBreakdown(previousExperienceEntries, faculty.joiningDate);
 
   const row: Record<string, string> = {
     // ─── Identity & Employment ───────────────────────────────────────────
@@ -245,7 +240,7 @@ function buildRow(faculty: FacultyMember, teachingSummary: string): Record<strin
     designation: s(faculty.designation),
     qualification: s(faculty.qualification),
     specialization: s(faculty.specialization),
-    experienceYears: s(faculty.experienceYears),
+    experienceYears: s(totalExperience),
     internalExperience: faculty.joiningDate ? s(internalExperience) : "",
     externalExperience: previousExperienceEntries.length > 0 ? s(externalExperience) : "",
     joiningDate: toDateInputValue(faculty.joiningDate),
