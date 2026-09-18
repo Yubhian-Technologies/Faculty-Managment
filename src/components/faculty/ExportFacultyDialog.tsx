@@ -15,6 +15,10 @@ import type { FacultyMember, TeachingAssignment } from "@/types";
 
 interface Props {
   faculty: FacultyMember[];
+  // True when `faculty` is a hand-picked subset (some rows checked in the
+  // register) rather than everyone - just changes the dialog's own wording
+  // so it's clear which set is about to be exported.
+  isSelection?: boolean;
 }
 
 const DEFAULT_SELECTED = EXPORT_FIELDS.filter((f) => f.defaultSelected).map((f) => f.key);
@@ -30,7 +34,7 @@ const FIELDS_BY_MODULE = new Map(
 // repeating field (e.g. Ph.D. Details, Previous Experience) is a single
 // checkbox whose exported column combines every one of that faculty
 // member's entries into one cell - see exportFacultyCsv.ts's combineGroup.
-export function ExportFacultyDialog({ faculty }: Props) {
+export function ExportFacultyDialog({ faculty, isSelection }: Props) {
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set(DEFAULT_SELECTED));
   const [activeModule, setActiveModule] = useState<ExportModuleKey>("core");
@@ -109,12 +113,12 @@ export function ExportFacultyDialog({ faculty }: Props) {
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
         <Button variant="outline" disabled={faculty.length === 0}>
-          <Download className="h-4 w-4 mr-2" />Export Faculty Details
+          <Download className="h-4 w-4 mr-2" />{isSelection ? `Export Selected (${faculty.length})` : "Export Faculty Details"}
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Export Faculty Details</DialogTitle>
+          <DialogTitle>{isSelection ? `Export ${faculty.length} Selected Faculty Member${faculty.length === 1 ? "" : "s"}` : "Export Faculty Details"}</DialogTitle>
         </DialogHeader>
 
         <div className="flex items-center justify-between gap-2 flex-wrap">

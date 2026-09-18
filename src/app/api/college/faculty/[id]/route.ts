@@ -67,15 +67,14 @@ export async function PATCH(
       apaarFacultyId: string;
       email: string;
       phone: string;
+      additionalPhoneNumbers: { label?: string; number: string }[];
       collegeEmail: string;
       designation: Designation;
       qualification: string;
       specialization: string;
       experienceYears: number;
       joiningDate: string;
-      dateOfJoiningDepartment: string;
       employeeCategory: EmployeeCategory;
-      aicteEligible: boolean;
       aicteFacultyId: string;
       status: FacultyStatus;
       userUid: string;
@@ -181,11 +180,17 @@ export async function PATCH(
       if (body[key] !== undefined) updates[key] = body[key];
     }
 
+    // Extra contact numbers beyond the primary Mobile No - cleaned/filtered
+    // the same way the create route does. Writing [] (not omitting the key)
+    // is how a caller clears every extra number back out.
+    if (body.additionalPhoneNumbers !== undefined) {
+      updates.additionalPhoneNumbers = body.additionalPhoneNumbers
+        .map((p) => ({ ...(p.label?.trim() ? { label: p.label.trim() } : {}), number: p.number?.trim() ?? "" }))
+        .filter((p) => p.number);
+    }
+
     // Numeric fields
     if (body.experienceYears !== undefined) updates.experienceYears = Number(body.experienceYears);
-
-    // Boolean
-    if (body.aicteEligible !== undefined) updates.aicteEligible = body.aicteEligible;
 
     // Academic profile (Modules 1-5) / Technical profile - mutually exclusive by designation
     if (body.academicProfile !== undefined) updates.academicProfile = body.academicProfile;
@@ -193,7 +198,6 @@ export async function PATCH(
 
     // Date fields
     if (body.joiningDate) updates.joiningDate = new Date(body.joiningDate);
-    if (body.dateOfJoiningDepartment) updates.dateOfJoiningDepartment = new Date(body.dateOfJoiningDepartment);
 
     if (body.profilePhotoUrl !== undefined) updates.profilePhotoUrl = body.profilePhotoUrl;
 

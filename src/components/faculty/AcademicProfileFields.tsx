@@ -115,69 +115,9 @@ export function AcademicProfileFields({ value, onChange, includeTeachingAssignme
           <DegreeFieldsList label="UG Details" level="UG" items={value.additionalUgDetails} onChange={(v) => set("additionalUgDetails", v)} />
           <DegreeFields label="PG Details" level="PG" value={value.pgDetails} onChange={(v) => set("pgDetails", v)} />
           <DegreeFieldsList label="PG Details" level="PG" items={value.additionalPgDetails} onChange={(v) => set("additionalPgDetails", v)} />
-          <DegreeFields
-            label="Ph.D. Details"
-            level="DOCTORAL"
-            value={value.phdDetails}
-            onChange={(v) => set("phdDetails", v)}
-            status={value.phdStatus}
-            extraFields={
-              <>
-                <div className="space-y-2">
-                  <Label>Ph.D. Status</Label>
-                  <Select value={value.phdStatus ?? ""} onValueChange={(v) => set("phdStatus", v as FacultyProfileFields["phdStatus"])}>
-                    <SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="AWARDED">Awarded</SelectItem>
-                      <SelectItem value="PURSUING">Pursuing</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Ph.D. Mode</Label>
-                  <Select value={value.phdMode ?? ""} onValueChange={(v) => set("phdMode", v as FacultyProfileFields["phdMode"])}>
-                    <SelectTrigger><SelectValue placeholder="Select mode" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="FULL_TIME">Full-Time</SelectItem>
-                      <SelectItem value="PART_TIME">Part-Time</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </>
-            }
-          />
+          <DegreeFields label="Ph.D. Details" level="DOCTORAL" value={value.phdDetails} onChange={(v) => set("phdDetails", v)} />
           <DegreeFieldsList label="Ph.D. Details" level="DOCTORAL" items={value.additionalPhdDetails} onChange={(v) => set("additionalPhdDetails", v)} />
-          <DegreeFields
-            label="Postdoctoral Fellowship Details"
-            level="POST_DOCTORAL"
-            value={value.postDoctoralDetails}
-            onChange={(v) => set("postDoctoralDetails", v)}
-            status={value.postDoctoralStatus}
-            extraFields={
-              <>
-                <div className="space-y-2">
-                  <Label>Postdoctoral Status</Label>
-                  <Select value={value.postDoctoralStatus ?? ""} onValueChange={(v) => set("postDoctoralStatus", v as FacultyProfileFields["postDoctoralStatus"])}>
-                    <SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="AWARDED">Awarded</SelectItem>
-                      <SelectItem value="PURSUING">Pursuing</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Postdoctoral Mode</Label>
-                  <Select value={value.postDoctoralMode ?? ""} onValueChange={(v) => set("postDoctoralMode", v as FacultyProfileFields["postDoctoralMode"])}>
-                    <SelectTrigger><SelectValue placeholder="Select mode" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="FULL_TIME">Full-Time</SelectItem>
-                      <SelectItem value="PART_TIME">Part-Time</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </>
-            }
-          />
+          <DegreeFields label="Postdoctoral Fellowship Details" level="POST_DOCTORAL" value={value.postDoctoralDetails} onChange={(v) => set("postDoctoralDetails", v)} />
         </>
       )}
 

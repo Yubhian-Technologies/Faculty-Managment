@@ -15,6 +15,8 @@ interface DegreeDetail {
   universityOrInstitute?: string;
   percentageOrDivision?: string;
   yearOfCompletion?: number;
+  status?: string; // Doctoral/Post-Doctoral only - Awarded/Pursuing
+  mode?: string; // Doctoral/Post-Doctoral only - Full-Time/Part-Time
   certificateUrl?: string;
 }
 
@@ -76,10 +78,7 @@ interface FacultyProfileFieldsLike {
   additionalPgDetails?: DegreeDetail[];
   phdDetails?: DegreeDetail;
   additionalPhdDetails?: DegreeDetail[];
-  phdStatus?: string;
-  phdMode?: string;
-  phdSupervisorName?: string;
-  fellowshipsReceived?: string;
+  postDoctoralDetails?: DegreeDetail;
   qualifyingExamQualified?: string;
   qualifyingExam?: string;
   qualifyingExamScore?: string;
@@ -347,7 +346,8 @@ export function getResumeHTML(data: ResumeData): string {
     (ap?.additionalUgDetails ?? []).map((d) => degreeEntry("Undergraduate", d)).join("");
   const educationExtras = bullets([
     highestQualification && !ap?.phdDetails && !ap?.pgDetails && !ap?.ugDetails && `Highest Qualification: ${esc(highestQualification)}`,
-    (ap?.phdStatus || ap?.phdMode) && `Ph.D. Status: ${esc(ap?.phdStatus) || "-"} (${esc(ap?.phdMode) || "mode not recorded"})`,
+    (ap?.phdDetails?.status || ap?.phdDetails?.mode) && `Ph.D. Status: ${esc(ap?.phdDetails?.status) || "-"} (${esc(ap?.phdDetails?.mode) || "mode not recorded"})`,
+    (ap?.postDoctoralDetails?.status || ap?.postDoctoralDetails?.mode) && `Postdoctoral Status: ${esc(ap?.postDoctoralDetails?.status) || "-"} (${esc(ap?.postDoctoralDetails?.mode) || "mode not recorded"})`,
     ap?.qualifyingExamQualified === "YES" && ap?.qualifyingExam &&
       `${esc(ap.qualifyingExam)} Qualified${ap.qualifyingExamYear ? ` (${esc(ap.qualifyingExamYear)})` : ""}${ap.qualifyingExamScore ? ` - Score: ${esc(ap.qualifyingExamScore)}` : ""}`,
   ]);

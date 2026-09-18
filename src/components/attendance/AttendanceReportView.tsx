@@ -464,7 +464,7 @@ export function AttendanceReportView({ title, description, groupByDepartmentAndC
 
   function handleGroupedExport() {
     const rows = [...(searchedHod ? [searchedHod] : []), ...searchedFaculty];
-    exportToCSV(rows, `attendance-${date}`, columns.map((c) => ({ key: c.key, header: c.header })));
+    exportToCSV(rows, `attendance-${date}`, columns.map((c) => ({ key: c.key, header: typeof c.header === "string" ? c.header : c.key })));
   }
 
   async function handleExportMonth(scope: "department" | "college") {
