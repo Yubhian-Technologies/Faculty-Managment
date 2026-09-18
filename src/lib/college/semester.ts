@@ -60,6 +60,53 @@ export function filterByCurrentSemester<T extends { semester?: number | null }>(
   return items.filter((i) => matchesCurrentSemester(i.semester, currentSemester));
 }
 
+// Either a real configured semester, or a specific Year that has no semester
+// concept at all - used by the Student Timetable cascade (Course ->
+// Department -> Semester -> Section, see class-leader/timetable page and
+// route) to let a Year with an empty `semesters` list still be picked,
+// instead of disappearing from an otherwise-mandatory Semester step.
+export type SemesterChoice = { kind: "semester"; value: number } | { kind: "fullYear"; year: number };
+
+// Every Semester-step option for a set of candidate Years (typically every
+// Year a Course+Department combination actually has a Section for - see
+// candidateYears in the Timetable page) - one entry per distinct configured
+// semester number across all of them, plus one "Full Year" entry per Year
+// that has none configured at all, so it's never silently unreachable.
+export function computeSemesterOptions(
+  years: number[],
+  timingByYear: Map<number, Pick<CourseYearTiming, "year" | "semesters"> | undefined>
+): SemesterChoice[] {
+  const semesterNumbers = new Set<number>();
+  const fullYearYears: number[] = [];
+  for (const year of years) {
+    const semesters = timingByYear.get(year)?.semesters;
+    if (semesters?.length) {
+      for (const s of semesters) semesterNumbers.add(s.semester);
+    } else {
+      fullYearYears.push(year);
+    }
+  }
+  return [
+    ...Array.from(semesterNumbers).sort((a, b) => a - b).map((value): SemesterChoice => ({ kind: "semester", value })),
+    ...fullYearYears.map((year): SemesterChoice => ({ kind: "fullYear", year })),
+  ];
+}
+
+// Which Year(s) a picked SemesterChoice resolves to. A "Full Year" choice is
+// always exactly the one Year it was offered for. A real semester number can
+// resolve to MORE than one Year when two different Years both configure that
+// same semester number (e.g. a shared Semester 5 marking the point two
+// specializations diverge) - every matching Year is returned, unioned by the
+// caller into one combined Section list, rather than picking one arbitrarily.
+export function resolveYearsForSemesterChoice(
+  years: number[],
+  timingByYear: Map<number, Pick<CourseYearTiming, "year" | "semesters"> | undefined>,
+  choice: SemesterChoice
+): number[] {
+  if (choice.kind === "fullYear") return [choice.year];
+  return years.filter((year) => timingByYear.get(year)?.semesters?.some((s) => s.semester === choice.value));
+}
+
 // Shared doc-id convention for colleges/{id}/timetableDrafts - == sectionId
 // when the course-year has no semesters configured (or never did, the still
 // very common case), `${sectionId}_sem${semester}` once it does, so building

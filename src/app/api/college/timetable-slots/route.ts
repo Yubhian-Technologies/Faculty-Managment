@@ -112,6 +112,10 @@ export async function POST(request: Request) {
       // another subject to this period" action, never inferred, so an
       // ordinary double-booking still gets rejected below by default.
       allowSplit?: boolean;
+      // Free-text lab sub-group label - see TimetableSlot.labBatch's own
+      // doc-comment. Set only at creation time from the row's "Lab Batch"
+      // field in TeachingAssignmentsEditor.
+      labBatch?: string;
     };
 
     const { assignmentId, day, periodNumber } = body;
@@ -219,6 +223,7 @@ export async function POST(request: Request) {
       day,
       periodNumber: Number(periodNumber),
       classroom: body.classroom ?? null,
+      ...(body.labBatch ? { labBatch: body.labBatch } : {}),
       // This route backs the per-faculty "Weekly Schedule" picker, so anything
       // created here was placed deliberately by a human. Marking it MANUAL/pinned
       // makes the generator schedule around it and stops publish from replacing

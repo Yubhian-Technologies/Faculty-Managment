@@ -305,7 +305,7 @@ export async function POST(request: Request) {
       // subjects/faculty sharing one section+day+period). Only set by a
       // deliberate "add another subject to this period" action; omitted
       // (the default) keeps today's section-conflict rejection below.
-      slots?: { day: string; periodNumber: number; classroom?: string; allowSplit?: boolean }[];
+      slots?: { day: string; periodNumber: number; classroom?: string; allowSplit?: boolean; labBatch?: string }[];
       // Course/section-scoped only - which of the course-year's configured
       // semesters (see lib/college/semester.ts) this assignment and its
       // slots are for. Omitted when the course-year has none configured, or
@@ -515,6 +515,7 @@ export async function POST(request: Request) {
             day: slot.day,
             periodNumber: slot.periodNumber,
             classroom: slot.classroom ?? null,
+            ...(slot.labBatch ? { labBatch: slot.labBatch } : {}),
             ...(timetableSemester != null ? { semester: timetableSemester } : {}),
             academicYear: currentAcademicYear,
             createdAt: now,

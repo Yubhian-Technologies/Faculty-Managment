@@ -45,6 +45,12 @@ export interface StagedTeachingRow {
   isPast?: boolean;
   passPercentage?: number;
   studentFeedback?: number;
+  // Free-text lab sub-group label (e.g. "Batch 1") - only shown/meaningful
+  // when the picked subject is PRACTICAL. Stamped onto every slot this row
+  // creates (see syncTeachingAssignments.ts) so two rows can deliberately
+  // split the same section+day+period into parallel lab groups - see
+  // TimetableSlot.labBatch's own doc-comment.
+  labBatch?: string;
 }
 
 const DAYS: DayOfWeek[] = ["MON", "TUE", "WED", "THU", "FRI", "SAT"];
@@ -344,6 +350,7 @@ export function TeachingAssignmentsEditor({ value, onChange, department }: Props
         // own regulation filter): a subject with no regulation of its own
         // still shows, and an unset section regulation shows everything.
         const selectedSection = sections.find((s) => s.id === row.sectionId);
+        const selectedSubject = subjects.find((s) => s.id === row.subjectId);
         const regulationFiltered = subjects.filter(
           (s) => !selectedSection?.regulation || !s.regulation || s.regulation === selectedSection.regulation
         );
@@ -454,6 +461,20 @@ export function TeachingAssignmentsEditor({ value, onChange, department }: Props
                       }}
                       placeholder="0-100"
                     />
+                  </div>
+                )}
+                {!row.isPast && selectedSubject?.type === "PRACTICAL" && (
+                  <div className="space-y-1">
+                    <Label className="text-xs">Lab Batch (optional)</Label>
+                    <Input
+                      value={row.labBatch ?? ""}
+                      onChange={(e) => updateRow(row.localId, { labBatch: e.target.value })}
+                      placeholder="e.g. Batch 1"
+                    />
+                    <p className="text-[10px] text-muted-foreground">
+                      Label this row&rsquo;s periods as a lab sub-group - add a second row for the
+                      same subject/section with a different batch label and faculty to split it.
+                    </p>
                   </div>
                 )}
                 {row.isPast && (
