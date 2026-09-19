@@ -17,6 +17,7 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const locationId = searchParams.get("locationId") ?? session.locationId;
     if (!locationId) return NextResponse.json({ error: "locationId required" }, { status: 400 });
+    const collegeIdFilter = searchParams.get("collegeId");
 
     const db = getAdminDb();
     const snap = await db
@@ -27,6 +28,14 @@ export async function GET(request: Request) {
       .get();
 
     let requests = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+    // Optional college filter (see the Administration dashboard's college
+    // picker) - plain post-fetch filter, same style as the role-based ones
+    // below, since this collection is never large enough to need a composite
+    // Firestore index for it.
+    if (collegeIdFilter) {
+      requests = requests.filter((r) => (r as { collegeId?: string }).collegeId === collegeIdFilter);
+    }
 
     // Dept Head sees only their own submissions
     if (session.role === "LOCATION_DEPT_HEAD") {
@@ -67,14 +76,30 @@ export async function POST(request: Request) {
       requiredCount: number;
       availableCount?: number;
       justification?: string;
+      collegeId: string;
     };
 
-    const { department, qualification, requiredCount, availableCount, justification } = body;
+    const { department, qualification, requiredCount, availableCount, justification, collegeId } = body;
     if (!department || !requiredCount) {
       return NextResponse.json({ error: "department and requiredCount are required" }, { status: 400 });
     }
+    if (!collegeId) {
+      return NextResponse.json({ error: "College is required" }, { status: 400 });
+    }
 
     const db = getAdminDb();
+
+    // Which college this vacancy is for - the root of the college-scoped
+    // filter on the Administration dashboard (see LocationCollegeSelect);
+    // every downstream interview/offer inherits it from here rather than
+    // asking again. Verified against the caller's own location, not trusted
+    // blindly from the client, since GET /api/admin/colleges (the picker's
+    // own data source) can theoretically be bypassed by a hand-crafted request.
+    const collegeSnap = await db.collection("colleges").doc(collegeId).get();
+    if (!collegeSnap.exists || (collegeSnap.data() as { locationId?: string }).locationId !== session.locationId) {
+      return NextResponse.json({ error: "Invalid college" }, { status: 400 });
+    }
+    const collegeName = (collegeSnap.data() as { name?: string }).name ?? "";
 
     // Get dept head name
     const userSnap = await db
@@ -93,6 +118,8 @@ export async function POST(request: Request) {
       .collection("locationVacancyRequests")
       .add({
         locationId: session.locationId,
+        collegeId,
+        collegeName,
         deptHeadUid: session.uid,
         deptHeadName,
         department: department.trim(),
