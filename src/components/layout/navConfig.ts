@@ -450,6 +450,76 @@ export function getNavItemsForRoles(primary: UserRole, roles: readonly UserRole[
   return out;
 }
 
+// ─── "Working as" contexts ──────────────────────────────────────────────────
+// A login that holds seats (Principal, HOD, ...) would otherwise see every
+// module of every seat in one long sidebar. Instead it works in ONE context at
+// a time: a seat ("Principal", "Head of Department") or "My Work" (its own
+// primary role). A seat's context shows that seat's position modules plus a
+// small "My Work" group (dashboard, profile, leave, attendance, teaching), so
+// personal things are always one click away. This only shapes the sidebar -
+// what a login may actually do is decided by its held roles on the server.
+export type WorkContextKey = "ME" | UserRole;
+export interface WorkContext { key: WorkContextKey; label: string }
+
+function seatRolesOf(primary: UserRole, roles: readonly UserRole[]): UserRole[] {
+  return roles.filter((r, i) => r !== primary && roles.indexOf(r) === i);
+}
+
+// Empty for a login with no seats (nothing to switch between). `roles` lists
+// seat roles most senior first, so the first context is the default.
+export function getWorkContexts(primary: UserRole, roles: readonly UserRole[] = []): WorkContext[] {
+  const seats = seatRolesOf(primary, roles);
+  if (seats.length === 0) return [];
+  return [
+    ...seats.map((r) => ({ key: r as WorkContextKey, label: ROLE_LABELS[r] })),
+    { key: "ME" as WorkContextKey, label: "My Work" },
+  ];
+}
+
+export function getNavItemsForContext(primary: UserRole, roles: readonly UserRole[], context: WorkContextKey): NavItem[] {
+  const seats = seatRolesOf(primary, roles);
+  const own = getNavItemsForRole(primary);
+  if (seats.length === 0 || context === "ME" || !seats.includes(context as UserRole)) return [...own];
+
+  const out: NavItem[] = [];
+  const seen = new Set<string>();
+  const push = (item: NavItem) => { if (!seen.has(item.href)) { seen.add(item.href); out.push(item); } };
+
+  let first = true;
+  for (const item of getNavItemsForRole(context as UserRole)) {
+    if (isPersonalNavItem(item)) continue;
+    push({ ...item, ...(first ? { section: ROLE_LABELS[context as UserRole] } : {}) });
+    first = false;
+  }
+  let firstMine = true;
+  own.forEach((item, i) => {
+    if (i !== 0 && !isPersonalNavItem(item)) return;
+    push({
+      ...item,
+      ...(firstMine ? { section: "My Work" } : {}),
+      label: i === 0 ? "My Dashboard" : item.label,
+    });
+    firstMine = false;
+  });
+  return out;
+}
+
+// The context to show: the one the person chose (or the most senior seat if
+// none / no longer held) - unless they've landed on a page that belongs to
+// another context (a link, a notification, the back button), in which case
+// that context, so the sidebar always contains the page they're on.
+export function resolveWorkContext(
+  primary: UserRole, roles: readonly UserRole[], chosen: string | null | undefined, pathname: string
+): WorkContextKey | null {
+  const contexts = getWorkContexts(primary, roles);
+  if (contexts.length === 0) return null;
+  const base = contexts.find((c) => c.key === chosen)?.key ?? contexts[0].key;
+  const owns = (key: WorkContextKey) =>
+    getNavItemsForContext(primary, roles, key).some((i) => pathname === i.href || (i.href !== "/" && pathname.startsWith(i.href + "/")));
+  if (owns(base)) return base;
+  return contexts.find((c) => owns(c.key))?.key ?? base;
+}
+
 // ─── Module visibility (Super Admin, per-college) ──────────────────────────
 // A "module" is the group of items following a `section` header, up to (not
 // including) the next item that declares its own `section`. Items before the

@@ -2,7 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebase/admin";
-import { createSeat, listSeats, SeatError } from "@/lib/roles/seats";
+import { convertLegacyAccounts, createSeat, listSeats, SeatError } from "@/lib/roles/seats";
 import { assertCanAssign, requireSeatManager } from "@/lib/roles/seatContext";
 import { SEAT_ROLES, normalizeStoredRole } from "@/lib/roles/seatRoles";
 
@@ -12,6 +12,17 @@ export async function GET(request: Request) {
   try {
     const ctx = await requireSeatManager(request);
     const db = getAdminDb();
+
+    // Existing role logins (HOD, Principal, VP, ...) become seats the first
+    // time anyone opens this page - nobody has to click anything. Idempotent,
+    // and marked on the college so it only runs once; anything created later
+    // is converted by the account-creation hooks.
+    const collegeRef = db.collection("colleges").doc(ctx.collegeId);
+    const collegeSnap = await collegeRef.get();
+    if (!(collegeSnap.data() as { seatsConvertedAt?: unknown } | undefined)?.seatsConvertedAt) {
+      await convertLegacyAccounts(db, ctx.collegeId, ctx.actor);
+      await collegeRef.set({ seatsConvertedAt: new Date() }, { merge: true });
+    }
 
     const [seats, usersSnap, deptsSnap] = await Promise.all([
       listSeats(db, ctx.collegeId),

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { canAssignSeat, canHoldSeat, isSingletonSeatRole, orderHeldRoles, pickEffectiveRole, roleMatchesSeat, SEAT_ROLES } from "./seatRoles";
-import { getNavItemsForRoles, isPersonalNavItem } from "@/components/layout/navConfig";
+import { getNavItemsForContext, getNavItemsForRoles, getWorkContexts, isPersonalNavItem, resolveWorkContext } from "@/components/layout/navConfig";
 
 describe("pickEffectiveRole", () => {
   it("treats a faculty member who is also an HOD as an HOD where the endpoint accepts both", () => {
@@ -97,5 +97,31 @@ describe("multi-role navigation", () => {
     expect(getNavItemsForRoles("PANEL_MEMBER", ["PANEL_MEMBER"]).map((i) => i.href)).toEqual(
       getNavItemsForRoles("PANEL_MEMBER").map((i) => i.href)
     );
+  });
+});
+
+describe("working-as contexts", () => {
+  const roles = ["PRINCIPAL", "HOD", "PANEL_MEMBER"] as never;
+  it("has no contexts without seats", () => {
+    expect(getWorkContexts("PANEL_MEMBER", ["PANEL_MEMBER"])).toEqual([]);
+  });
+  it("lists seats first, then My Work, and defaults to the most senior seat", () => {
+    expect(getWorkContexts("PANEL_MEMBER", roles).map((c) => c.key)).toEqual(["PRINCIPAL", "HOD", "ME"]);
+    expect(resolveWorkContext("PANEL_MEMBER", roles, undefined, "/principal")).toBe("PRINCIPAL");
+  });
+  it("shows only the chosen seat's modules plus a My Work group", () => {
+    const hrefs = getNavItemsForContext("PANEL_MEMBER", roles, "HOD").map((i) => i.href);
+    expect(hrefs).toContain("/hod/leave-approvals");
+    expect(hrefs).toContain("/panel/profile");
+    expect(hrefs).not.toContain("/principal/settings");
+    expect(new Set(hrefs).size).toBe(hrefs.length);
+  });
+  it("My Work is the primary role's own sidebar, without seat modules", () => {
+    const hrefs = getNavItemsForContext("PANEL_MEMBER", roles, "ME").map((i) => i.href);
+    expect(hrefs).toEqual(getNavItemsForRoles("PANEL_MEMBER").map((i) => i.href));
+  });
+  it("follows the page: landing on another seat's page switches to that context", () => {
+    expect(resolveWorkContext("PANEL_MEMBER", roles, "PRINCIPAL", "/hod/leave-approvals")).toBe("HOD");
+    expect(resolveWorkContext("PANEL_MEMBER", roles, "HOD", "/hod/leave-approvals")).toBe("HOD");
   });
 });

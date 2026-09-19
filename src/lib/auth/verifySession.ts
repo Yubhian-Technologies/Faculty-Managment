@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { readSession } from "@/lib/auth/sessionToken";
 import { canRoleAccessRole } from "@/types";
 import type { UserRole } from "@/types";
 import { resolveHeldRoles } from "@/lib/auth/liveRoles";
@@ -51,16 +52,10 @@ export async function verifySession(): Promise<SessionPayload | null> {
   const sessionCookie = cookieStore.get("fms-session")?.value;
   if (!sessionCookie) return null;
 
-  try {
-    const payload = JSON.parse(
-      Buffer.from(sessionCookie.split(".")[1], "base64").toString()
-    ) as SessionPayload;
-
-    if (payload.exp && Date.now() / 1000 > payload.exp) return null;
-    return payload;
-  } catch {
-    return null;
-  }
+  const payload = await readSession<SessionPayload>(sessionCookie);
+  if (!payload) return null;
+  if (payload.exp && Date.now() / 1000 > payload.exp) return null;
+  return payload;
 }
 
 export async function requireSuperAdmin(): Promise<SessionPayload> {

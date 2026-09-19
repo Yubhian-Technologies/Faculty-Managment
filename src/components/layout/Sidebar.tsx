@@ -14,8 +14,10 @@ import { useIsSubDepartmentHod } from "@/hooks/useIsSubDepartmentHod";
 import { usePrincipalPendingHiring } from "@/hooks/usePrincipalPendingHiring";
 import { useCollegeType } from "@/hooks/useCollegeType";
 import { hasSupportingStaffSplit } from "@/lib/designations/config";
-import { getNavItemsForRoles, isNavItemActive, filterVisibleNavItems, ROLES_WITH_EMBEDDED_PANEL_ACCESS, type NavItem } from "./navConfig";
+import { isNavItemActive, filterVisibleNavItems, ROLES_WITH_EMBEDDED_PANEL_ACCESS, type NavItem } from "./navConfig";
 import { NavIcon } from "./NavIcon";
+import { WorkContextSwitcher } from "./WorkContextSwitcher";
+import { useWorkContext } from "@/hooks/useWorkContext";
 import { OrgScopeTree } from "./OrgScopeTree";
 import { ROLE_LABELS } from "@/types";
 import { getInitials } from "@/lib/utils";
@@ -50,6 +52,7 @@ export function Sidebar({ hiddenModules, hiddenItems }: SidebarProps) {
   const { hideSubDepartmentsLink } = useIsSubDepartmentHod();
   const { pendingCount: pendingHiringCount } = usePrincipalPendingHiring();
   const { collegeType } = useCollegeType();
+  const { items: contextItems } = useWorkContext();
 
   if (!user) return null;
 
@@ -59,7 +62,7 @@ export function Sidebar({ hiddenModules, hiddenItems }: SidebarProps) {
   // "Supporting Staff" is hidden for college types with no Technical/Non-
   // Technical split (School) - HOD has nothing to manage there, it's all
   // centrally owned by Principal (see hasSupportingStaffSplit).
-  const baseNavItems = filterVisibleNavItems(getNavItemsForRoles(user.role, user.roles ?? user.seatRoles ?? []), hiddenModules, hiddenItems, user.realRole)
+  const baseNavItems = filterVisibleNavItems(contextItems, hiddenModules, hiddenItems, user.realRole)
     .filter((item) => !hideSubDepartmentsLink || item.href !== "/hod/settings/sub-departments")
     .filter((item) => hasSupportingStaffSplit(collegeType) || (item.href !== "/hod/supporting-staff" && item.href !== "/hod/settings/designations"));
 
@@ -100,6 +103,8 @@ export function Sidebar({ hiddenModules, hiddenItems }: SidebarProps) {
           <p className="text-xs text-muted-foreground truncate">{ROLE_LABELS[user.realRole ?? user.role]}</p>
         </div>
       </div>
+
+      <WorkContextSwitcher />
 
       {/* Navigation */}
       <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">

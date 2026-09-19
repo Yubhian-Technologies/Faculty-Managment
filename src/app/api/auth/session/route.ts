@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { verifyFirebaseToken } from "@/lib/auth/verifyFirebaseToken";
 import { getAdminDb, getAdminAuth } from "@/lib/firebase/admin";
 import { LOCATION_SCOPED_ROLES } from "@/types";
+import { signSession } from "@/lib/auth/sessionToken";
 import { orderHeldRoles } from "@/lib/roles/seatRoles";
 import { migrateUserDoc } from "@/lib/faculty/fieldRenames";
 
@@ -151,8 +152,7 @@ export async function POST(request: Request) {
       exp: decoded.exp,
     };
 
-    const sessionPayload = Buffer.from(JSON.stringify(sessionData)).toString("base64");
-    const sessionCookie = `header.${sessionPayload}.signature`;
+    const sessionCookie = await signSession(sessionData);
 
     const response = NextResponse.json({ ok: true, role, realRole, roles, collegeId, locationId, name, email, profile, refreshToken: !claimsWereSet });
     response.cookies.set("fms-session", sessionCookie, {

@@ -24,3 +24,10 @@ export function unitLabelForHeadRole(role: string): string | undefined {
 export function isCollegeStaffUnitHead(role: string): role is UnitHeadRole {
   return COLLEGE_STAFF_UNIT_HEAD_ROLES.includes(role as UnitHeadRole);
 }
+
+// Someone the Principal / VP marks attendance for: an HOD or a unit head - by
+// their own role, or (now that those are seats a faculty / staff login holds)
+// by a seat they hold.
+export function isHodOrUnitHead(person: { role?: string; seatRoles?: string[] }): boolean {
+  return [person.role ?? "", ...(person.seatRoles ?? [])].some((r) => r === "HOD" || isCollegeStaffUnitHead(r));
+}

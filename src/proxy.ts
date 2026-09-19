@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { readSession } from "@/lib/auth/sessionToken";
 import type { NextRequest } from "next/server";
 import { ROLE_DASHBOARD_PATHS, rolesInheritedBy } from "@/types/core";
 import type { UserRole } from "@/types/core";
@@ -114,9 +115,8 @@ export async function proxy(request: NextRequest) {
   }
 
   try {
-    const payload = JSON.parse(
-      Buffer.from(sessionCookie.split(".")[1], "base64").toString()
-    ) as { role?: string; roles?: string[]; exp?: number };
+    const payload = await readSession<{ role?: string; roles?: string[]; exp?: number }>(sessionCookie);
+    if (!payload) throw new Error("invalid session");
 
     if (payload.exp && Date.now() / 1000 > payload.exp) {
       const loginUrl = new URL("/login", request.url);
@@ -143,8 +143,10 @@ export async function proxy(request: NextRequest) {
 
     return NextResponse.next();
   } catch {
-    const loginUrl = new URL("/login", request.url);
-    return NextResponse.redirect(loginUrl);
+    // Unsigned / tampered / pre-signing cookie: drop it and sign in again.
+    const response = NextResponse.redirect(new URL("/login", request.url));
+    response.cookies.delete("fms-session");
+    return response;
   }
 }
 
