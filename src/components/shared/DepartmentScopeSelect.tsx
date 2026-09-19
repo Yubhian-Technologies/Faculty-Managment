@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState, useRef } from "react";
+import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { Label } from "@/components/ui/label";
 import { useAuthStore } from "@/store/authStore";
-import { getFreshmanDepartmentIds, type DepartmentWithId } from "@/lib/college/academicStructure";
+import { getFreshmanDepartmentIds, replaceNoOwnSectionsParents, type DepartmentWithId } from "@/lib/college/academicStructure";
 import type { Department } from "@/types";
 
 // Lets an HOD file a new section / subject / faculty member under their own
@@ -61,10 +61,19 @@ export interface DepartmentScopeSelectProps {
    * (unchanged behaviour for every single-department HOD).
    */
   ownDepartmentName?: string;
+  /**
+   * Which department this field should START on, by id - e.g. the department
+   * chip the Sections list was filtered by when "Add Section" was pressed.
+   * Applied once, and only while nothing has been chosen yet, so it seeds the
+   * form without ever fighting the user's own later picks. Ignored when the id
+   * isn't reachable from this caller's scope (a stale link), which falls back
+   * to the ordinary default below.
+   */
+  preferredDepartmentId?: string;
 }
 
 export function DepartmentScopeSelect({
-  value, onChange, label = "Department", hint, disabled, ownDepartmentName,
+  value, onChange, label = "Department", hint, disabled, ownDepartmentName, preferredDepartmentId,
 }: DepartmentScopeSelectProps) {
   const { user } = useAuthStore();
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -111,10 +120,52 @@ export function DepartmentScopeSelect({
   // Branches grouped under this (sub-)department - the sub-HOD manages them
   // fully, so they can create sections directly under IT/CSBS.
   const managedNames = useMemo(() => new Set(own?.managedDepartments ?? []), [own]);
-  const managed = useMemo(
-    () => (own ? departments.filter((d) => managedNames.has(d.name)).sort((a, b) => a.name.localeCompare(b.name)) : []),
-    [departments, own, managedNames]
+  // Every "Core Department" list below runs through this. A grouped branch the
+  // Principal flagged as never running its own sections (e.g. "AI", split into
+  // AIML/AIDS) is a container, not a destination - `api/college/sections` POST
+  // rejects a section filed under it - so it's replaced here by its real
+  // sub-departments. Grouping the parent is enough; its children never need to
+  // be grouped individually as well.
+  const narrow = useCallback(
+    (names: string[]) => replaceNoOwnSectionsParents(departments as DepartmentWithId[], names),
+    [departments]
   );
+  const byName = useCallback(
+    (names: string[]) => names
+      .map((n) => departments.find((d) => d.name === n))
+      .filter((d): d is Department => Boolean(d))
+      .sort((a, b) => a.name.localeCompare(b.name)),
+    [departments]
+  );
+  const managed = useMemo(
+    () => (own ? byName(narrow(Array.from(managedNames))) : []),
+    [own, byName, narrow, managedNames]
+  );
+
+  // Which container a picked name is routed THROUGH - the single rule both the
+  // default-seeding effect and the select's own onChange must apply.
+  //
+  // A managed/grouped branch is reached THROUGH `own` (a container feeding it),
+  // so the caller prefixes the section name with own's code: BS-CIVIL-A. So is
+  // a child standing in for a flagged parent this department groups (AIML in
+  // place of AI) - `managedNames` holds only what was literally configured, so
+  // such a child has to be recognised through its parent.
+  //
+  // But a genuine child sub-department IS the target, not a container feeding
+  // one - it routes through ITSELF, exactly as `own` picked directly does, or
+  // the caller's "routed through itself, no prefix" check (viaDept.id ===
+  // activeDept.id) never fires and the section is double-prefixed:
+  // "AI-AIDS-A" instead of "AIDS-A", "ECE-ECEVLSI-A" instead of "ECEVLSI-A".
+  const resolveViaId = useCallback((name: string, matchId: string | undefined): string => {
+    if (!own) return "";
+    if (managedNames.has(name)) return own.id;
+    const picked = departments.find((x) => x.name === name);
+    const parent = picked?.parentDepartmentId
+      ? departments.find((x) => x.id === picked.parentDepartmentId)
+      : undefined;
+    if (parent && managedNames.has(parent.name)) return own.id;
+    return matchId ?? own.id;
+  }, [own, departments, managedNames]);
 
   // A grouping container (a sub-department created ONLY to group real branches
   // under a Sub-HOD, e.g. "BS-Maths" managing IT + CSE) is not itself a real
@@ -151,16 +202,14 @@ export function DepartmentScopeSelect({
     if (!own) return [];
     const names = new Set<string>(own.managedDepartments ?? []);
     for (const c of children) for (const n of c.managedDepartments ?? []) names.add(n);
-    return departments.filter((d) => names.has(d.name)).sort((a, b) => a.name.localeCompare(b.name));
-  }, [departments, own, children]);
+    return byName(narrow(Array.from(names)));
+  }, [own, children, byName, narrow]);
 
   const selectedChild = useCascade ? children.find((c) => c.id === subDeptId) ?? null : null;
   const childIsGrouping = (selectedChild?.managedDepartments?.length ?? 0) > 0;
   const branchOptions = useMemo(
-    () => (selectedChild
-      ? departments.filter((d) => (selectedChild.managedDepartments ?? []).includes(d.name)).sort((a, b) => a.name.localeCompare(b.name))
-      : []),
-    [departments, selectedChild]
+    () => (selectedChild ? byName(narrow(selectedChild.managedDepartments ?? [])) : []),
+    [selectedChild, byName, narrow]
   );
 
   // Memoized so the default-seeding effect below doesn't re-run every render.
@@ -168,6 +217,50 @@ export function DepartmentScopeSelect({
     if (!own) return [];
     return (isGroupingContainer || ownHasNoSections) ? [...children, ...managed] : [own, ...children, ...managed];
   }, [own, children, managed, isGroupingContainer, ownHasNoSections]);
+
+  // Honoured ahead of both ordinary defaults below (all three share
+  // `didDefault`, so whichever runs first wins and the others stand down).
+  // Resolves the same way the selects themselves do, so a preferred
+  // department lands in a state the user could have produced by hand:
+  // directly when it's one of the flat options, and via its Sub-Department
+  // step when this caller uses the cascade.
+  // Where a preferred department lands in the CASCADE shape: either one of
+  // this department's own sub-departments, or a real branch one of them
+  // groups - in which case that grouping sub-department is what the
+  // Sub-Department step must show. Resolved outside the effect below so the
+  // effect body stays a single guard plus straight-line work.
+  const preferredCascadeTarget = useMemo(() => {
+    if (!preferredDepartmentId || options.some((d) => d.id === preferredDepartmentId)) return null;
+    const child = children.find((c) => c.id === preferredDepartmentId);
+    if (child) return { subDept: child, branch: null as Department | null };
+    const branch = departments.find((d) => d.id === preferredDepartmentId) ?? null;
+    const owner = branch ? children.find((c) => (c.managedDepartments ?? []).includes(branch.name)) : undefined;
+    return branch && owner ? { subDept: owner, branch } : null;
+  }, [preferredDepartmentId, options, children, departments]);
+
+  // Flat shape: the preference is one of the options as-is.
+  useEffect(() => {
+    if (didDefault.current || value !== "" || !preferredDepartmentId) return;
+    const direct = options.find((d) => d.id === preferredDepartmentId);
+    if (!direct) return;
+    didDefault.current = true;
+    onChange(direct.name, direct.id, resolveViaId(direct.name, direct.id));
+  }, [preferredDepartmentId, value, options, onChange, resolveViaId]);
+
+  // Cascade shape counterpart, same guards as the cascade default further
+  // below - including `subDeptId`, since a Sub-Department already on screen is
+  // a choice that must not be overwritten.
+  useEffect(() => {
+    if (!useCascade || didDefault.current || value !== "" || subDeptId !== "" || !preferredCascadeTarget) return;
+    didDefault.current = true;
+    const { subDept, branch } = preferredCascadeTarget;
+    setSubDeptId(subDept.id);
+    if (branch) onChange(branch.name, branch.id, subDept.id);
+    // A grouping sub-department needs its own Department step before there is
+    // a valid target; a plain one resolves immediately, as picking it does.
+    else if ((subDept.managedDepartments?.length ?? 0) > 0) onChange("", "", subDept.id);
+    else onChange(subDept.name, subDept.id, subDept.id);
+  }, [useCascade, value, subDeptId, preferredCascadeTarget, onChange]);
 
   // For a grouping container (or a department flagged as never running its
   // own sections) the caller's own department isn't a valid target, so seed
@@ -180,10 +273,13 @@ export function DepartmentScopeSelect({
   useEffect(() => {
     if (useCascade || didDefault.current || value !== "" || (!isGroupingContainer && !ownHasNoSections) || options.length === 0) return;
     didDefault.current = true;
-    // `options` is empty whenever `own` is null, so the guard above already
-    // rules that out - the fallback is only here to satisfy the narrowing.
-    onChange(options[0].name, options[0].id, own?.id ?? "");
-  }, [useCascade, value, isGroupingContainer, ownHasNoSections, options, own, onChange]);
+    // Routed through resolveViaId, not blindly through `own`: the seeded
+    // default here is normally a plain child sub-department (the shape a "no
+    // own sections" parent always produces), which must route through itself.
+    // Passing `own` unconditionally handed the caller a managed-branch
+    // relationship that doesn't exist, before the user had touched anything.
+    onChange(options[0].name, options[0].id, resolveViaId(options[0].name, options[0].id));
+  }, [useCascade, value, isGroupingContainer, ownHasNoSections, options, onChange, resolveViaId]);
 
   // Cascade shape counterpart of the default above: when the common
   // department itself can't own a section, "nothing selected" (subDeptId ===
@@ -334,20 +430,7 @@ export function DepartmentScopeSelect({
         onChange={(e) => {
           const name = e.target.value;
           const match = options.find((d) => d.name === name);
-          // A managed/grouped branch (reached via this department's own
-          // managedDepartments, e.g. Basic Science -> CIVIL) is routed
-          // THROUGH `own` - own is a container feeding it, so the caller adds
-          // own's prefix to the section name (BS-CIVIL-A). A genuine child
-          // sub-department (parentDepartmentId === own.id, e.g. ECE ->
-          // ECE-VLSI) IS the target itself, not a container feeding one - it
-          // must route through itself (viaDepartmentId === its own id), same
-          // as `own` being picked directly, or the caller's "routed through
-          // itself, no prefix" check (viaDept.id === activeDept.id) never
-          // fires and a plain sub-department wrongly gets treated as a
-          // managed branch (double-prefixed section name, e.g.
-          // "ECE-ECEVLSI-A" instead of "ECEVLSI-A").
-          const viaId = managedNames.has(name) ? own.id : (match?.id ?? own.id);
-          onChange(name, match?.id ?? "", viaId);
+          onChange(name, match?.id ?? "", resolveViaId(name, match?.id));
         }}
       >
         {options.map((d) => (

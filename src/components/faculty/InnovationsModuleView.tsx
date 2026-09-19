@@ -235,9 +235,9 @@ function RecordFormFields({
         <div className="space-y-4">
           <SubLabel>Overview</SubLabel>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <TextInput label="Academic Year" value={form.academicYear} onChange={(v) => set("academicYear", v)} placeholder="e.g. 2024-25" />
+            <TextInput label="Academic Year" value={form.academicYear} onChange={(v) => set("academicYear", v)} placeholder="e.g. 2024-25" required />
             <div className="space-y-2">
-              <Label>Type of Innovation</Label>
+              <Label>Type of Innovation <span className="text-destructive">*</span></Label>
               <Select value={form.innovatorType} onValueChange={(v) => set("innovatorType", v as InnovatorType)}>
                 <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
                 <SelectContent>
@@ -250,7 +250,7 @@ function RecordFormFields({
 
           {form.innovatorType === "FACULTY" && (
             <div className="space-y-4 rounded-lg border p-3">
-              <NumInput label="No. of Faculty Involved" value={toNumberOrUndefined(form.facultyInvolvedCount)} onChange={(v) => set("facultyInvolvedCount", String(v))} />
+              <NumInput label="No. of Faculty Involved" value={toNumberOrUndefined(form.facultyInvolvedCount)} onChange={(v) => set("facultyInvolvedCount", String(v))} required />
               <RepeatingGroup
                 title="Faculty Involved"
                 items={form.facultyMembers}
@@ -259,9 +259,9 @@ function RecordFormFields({
                 addLabel="Add Faculty"
                 renderRow={(item, update) => (
                   <>
-                    <TextInput label="Name of the Faculty" value={item.name} onChange={(v) => update({ name: v })} />
-                    <TextInput label="Dept. of Faculty" value={item.department} onChange={(v) => update({ department: v })} />
-                    <TextInput label="Contribution" value={item.contribution} onChange={(v) => update({ contribution: v })} />
+                    <TextInput label="Name of the Faculty" value={item.name} onChange={(v) => update({ name: v })} required />
+                    <TextInput label="Dept. of Faculty" value={item.department} onChange={(v) => update({ department: v })} required />
+                    <TextInput label="Contribution" value={item.contribution} onChange={(v) => update({ contribution: v })} required />
                   </>
                 )}
               />
@@ -271,24 +271,24 @@ function RecordFormFields({
           {form.innovatorType === "STUDENT" && (
             <div className="space-y-4 rounded-lg border p-3">
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <TextInput label="Name of the Student" value={form.studentName} onChange={(v) => set("studentName", v)} />
-                <TextInput label="Regd. No." value={form.studentRegdNo} onChange={(v) => set("studentRegdNo", v)} />
+                <TextInput label="Name of the Student" value={form.studentName} onChange={(v) => set("studentName", v)} required />
+                <TextInput label="Regd. No." value={form.studentRegdNo} onChange={(v) => set("studentRegdNo", v)} required />
               </div>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <TextInput label="Year of Study" value={form.studentYearOfStudy} onChange={(v) => set("studentYearOfStudy", v)} />
-                <TextInput label="Department" value={form.studentDepartment} onChange={(v) => set("studentDepartment", v)} />
+                <TextInput label="Year of Study" value={form.studentYearOfStudy} onChange={(v) => set("studentYearOfStudy", v)} required />
+                <TextInput label="Department" value={form.studentDepartment} onChange={(v) => set("studentDepartment", v)} required />
               </div>
-              <TextInput label="Name of the Faculty Mentor" value={form.facultyMentorName} onChange={(v) => set("facultyMentorName", v)} />
+              <TextInput label="Name of the Faculty Mentor" value={form.facultyMentorName} onChange={(v) => set("facultyMentorName", v)} required />
             </div>
           )}
         </div>
 
         <div className="space-y-4">
           <SubLabel>Innovation Details</SubLabel>
-          <TextInput label="Innovation Title" value={form.innovationTitle} onChange={(v) => set("innovationTitle", v)} />
+          <TextInput label="Innovation Title" value={form.innovationTitle} onChange={(v) => set("innovationTitle", v)} required />
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label>Innovation Type</Label>
+              <Label>Innovation Type <span className="text-destructive">*</span></Label>
               <Select value={form.innovationType} onValueChange={(v) => set("innovationType", v as InnovationType)}>
                 <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
                 <SelectContent>
@@ -297,7 +297,7 @@ function RecordFormFields({
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>TRL Level</Label>
+              <Label>TRL Level <span className="text-destructive">*</span></Label>
               <Select value={form.trlLevel} onValueChange={(v) => set("trlLevel", v)}>
                 <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
                 <SelectContent>
@@ -307,11 +307,11 @@ function RecordFormFields({
             </div>
           </div>
           <div className="space-y-2">
-            <Label>Problem Statement</Label>
+            <Label>Problem Statement <span className="text-destructive">*</span></Label>
             <Textarea value={form.problemStatement} onChange={(e) => set("problemStatement", e.target.value)} rows={2} placeholder="Problem addressed by the idea" />
           </div>
           <div className="space-y-2">
-            <Label>Brief Description</Label>
+            <Label>Brief Description <span className="text-destructive">*</span></Label>
             <Textarea value={form.briefDescription} onChange={(e) => set("briefDescription", e.target.value)} rows={3} placeholder="Short description of the innovation" />
           </div>
         </div>
@@ -321,7 +321,7 @@ function RecordFormFields({
         <div className="space-y-4">
           <SubLabel>Development Status</SubLabel>
           <div className="space-y-2 max-w-[200px]">
-            <Label>Prototype Developed</Label>
+            <Label>Prototype Developed <span className="text-destructive">*</span></Label>
             <Select value={form.prototypeDeveloped} onValueChange={(v) => set("prototypeDeveloped", v as "YES" | "NO")}>
               <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
               <SelectContent>
@@ -332,13 +332,13 @@ function RecordFormFields({
           </div>
           {form.prototypeDeveloped === "YES" && (
             <div className="space-y-2">
-              <Label>Prototype Details</Label>
+              <Label>Prototype Details <span className="text-destructive">*</span></Label>
               <Textarea value={form.prototypeDetails} onChange={(e) => set("prototypeDetails", e.target.value)} rows={2} placeholder="Description of developed prototype" />
             </div>
           )}
 
           <div className="space-y-2 max-w-[200px]">
-            <Label>Business Model Developed</Label>
+            <Label>Business Model Developed <span className="text-destructive">*</span></Label>
             <Select value={form.businessModelDeveloped} onValueChange={(v) => set("businessModelDeveloped", v as "YES" | "NO")}>
               <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
               <SelectContent>
@@ -349,13 +349,13 @@ function RecordFormFields({
           </div>
           {form.businessModelDeveloped === "YES" && (
             <div className="space-y-2">
-              <Label>Business Model Details</Label>
+              <Label>Business Model Details <span className="text-destructive">*</span></Label>
               <Textarea value={form.businessModelDetails} onChange={(e) => set("businessModelDetails", e.target.value)} rows={2} placeholder="Description of Business Model" />
             </div>
           )}
 
           <div className="space-y-2 max-w-[200px]">
-            <Label>Start-up Formed</Label>
+            <Label>Start-up Formed <span className="text-destructive">*</span></Label>
             <Select value={form.startupFormed} onValueChange={(v) => set("startupFormed", v as "YES" | "NO")}>
               <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
               <SelectContent>
@@ -366,9 +366,9 @@ function RecordFormFields({
           </div>
           {form.startupFormed === "YES" && (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-              <TextInput label="Start-up Name" value={form.startupName} onChange={(v) => set("startupName", v)} />
-              <TextInput label="Name of the Incubation" value={form.incubationName} onChange={(v) => set("incubationName", v)} />
-              <TextInput label="YUKTI ID" value={form.yuktiId} onChange={(v) => set("yuktiId", v)} />
+              <TextInput label="Start-up Name" value={form.startupName} onChange={(v) => set("startupName", v)} required />
+              <TextInput label="Name of the Incubation" value={form.incubationName} onChange={(v) => set("incubationName", v)} required />
+              <TextInput label="YUKTI ID" value={form.yuktiId} onChange={(v) => set("yuktiId", v)} required />
             </div>
           )}
         </div>
@@ -376,8 +376,20 @@ function RecordFormFields({
         <div className="space-y-4">
           <SubLabel>YUKTI</SubLabel>
           <div className="space-y-2 max-w-[200px]">
-            <Label>Verified &amp; Recommended in YUKTI</Label>
-            <Select value={form.verifiedRecommendedYukti} onValueChange={(v) => set("verifiedRecommendedYukti", v as "YES" | "NO")}>
+            <Label>Verified &amp; Recommended in YUKTI <span className="text-destructive">*</span></Label>
+            <Select
+              value={form.verifiedRecommendedYukti}
+              onValueChange={(v) => {
+                // Switching to No hides the upload, so drop anything already
+                // attached rather than saving a screenshot the record no
+                // longer claims to have.
+                setForm((f) => ({
+                  ...f,
+                  verifiedRecommendedYukti: v as "YES" | "NO",
+                  yuktiScreenshotUrl: v === "YES" ? f.yuktiScreenshotUrl : "",
+                }));
+              }}
+            >
               <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="YES">Yes</SelectItem>
@@ -385,20 +397,25 @@ function RecordFormFields({
               </SelectContent>
             </Select>
           </div>
-          <DocumentUploadField
-            label="Screen Shot of YUKTI Status"
-            value={form.yuktiScreenshotUrl}
-            uploadEndpoint="/api/upload/innovation-doc"
-            extraFields={{ kind: "yukti-screenshot" }}
-            onUploaded={(url) => set("yuktiScreenshotUrl", url)}
-            onRemoved={() => set("yuktiScreenshotUrl", "")}
-          />
+          {/* Only asked for when there IS a YUKTI verification to evidence -
+              the same conditional shape the Prototype / Business Model /
+              Start-up blocks above already use. */}
+          {form.verifiedRecommendedYukti === "YES" && (
+            <DocumentUploadField
+              label="Screen Shot of YUKTI Status"
+              value={form.yuktiScreenshotUrl}
+              uploadEndpoint="/api/upload/innovation-doc"
+              extraFields={{ kind: "yukti-screenshot" }}
+              onUploaded={(url) => set("yuktiScreenshotUrl", url)}
+              onRemoved={() => set("yuktiScreenshotUrl", "")}
+            />
+          )}
         </div>
 
         <div className="space-y-4">
           <SubLabel>Competition</SubLabel>
           <div className="space-y-2 max-w-[200px]">
-            <Label>Presented in any Competition</Label>
+            <Label>Presented in any Competition <span className="text-destructive">*</span></Label>
             <Select value={form.presentedInCompetition} onValueChange={(v) => set("presentedInCompetition", v as "YES" | "NO")}>
               <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
               <SelectContent>
@@ -409,14 +426,14 @@ function RecordFormFields({
           </div>
           {form.presentedInCompetition === "YES" && (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <TextInput label="Name of the Competition" value={form.competitionName} onChange={(v) => set("competitionName", v)} />
-              <TextInput label="Organized By" value={form.organizedBy} onChange={(v) => set("organizedBy", v)} />
+              <TextInput label="Name of the Competition" value={form.competitionName} onChange={(v) => set("competitionName", v)} required />
+              <TextInput label="Organized By" value={form.organizedBy} onChange={(v) => set("organizedBy", v)} required />
             </div>
           )}
         </div>
 
         <div className="space-y-2">
-          <Label>Remarks</Label>
+          <Label>Remarks <span className="text-destructive">*</span></Label>
           <Textarea value={form.remarks} onChange={(e) => set("remarks", e.target.value)} rows={2} placeholder="Additional information" />
         </div>
       </div>

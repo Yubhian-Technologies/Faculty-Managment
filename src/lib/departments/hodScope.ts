@@ -1,5 +1,5 @@
 import { findBranchManager } from "@/lib/departments/managedBranches";
-import { resolveDepartmentCourseScope, fedYears } from "@/lib/college/academicStructure";
+import { resolveDepartmentCourseScope, fedYears, expandDepartmentNameForRollup, type DepartmentWithId } from "@/lib/college/academicStructure";
 import type { Course, Department } from "@/types";
 
 // Client-side counterpart to getHodDepartmentScope (which is server-only, since
@@ -31,14 +31,29 @@ export function resolveScopeDepartments(
 ): Department[] {
   if (!ownDept) return [];
   if (useCascadeFilter) {
-    const managedBranches = groupingChildren.flatMap((c) =>
-      departments.filter((d) => (c.managedDepartments ?? []).includes(d.name))
-    );
+    const managedBranches = groupingChildren.flatMap((c) => expandManaged(departments, c.managedDepartments));
     return [...plainChildren, ...managedBranches];
   }
   const children = departments.filter((d) => d.parentDepartmentId === ownDept.id);
-  const managed = departments.filter((d) => (ownDept.managedDepartments ?? []).includes(d.name));
+  const managed = expandManaged(departments, ownDept.managedDepartments);
   return (isGroupingContainer || ownHasNoSections) ? [...children, ...managed] : [ownDept, ...children, ...managed];
+}
+
+/**
+ * The departments a `managedDepartments` name list actually resolves to. A
+ * managed branch flagged as never running its own sections (e.g. "AI" split
+ * into AIML/AIDS) also brings its children, since that's where its sections
+ * and students really live - the client mirror of the same rollup
+ * getHodDepartmentScope applies server-side. Additive, like
+ * expandDepartmentNameForRollup itself: this feeds FILTERS over stored
+ * documents, so the parent's own (pre-flag) rows must still match. The
+ * pickers use replaceNoOwnSectionsParents instead, which narrows.
+ */
+function expandManaged(departments: Department[], managedNames: string[] | undefined): Department[] {
+  const names = new Set(
+    (managedNames ?? []).flatMap((n) => expandDepartmentNameForRollup(departments as DepartmentWithId[], n))
+  );
+  return departments.filter((d) => names.has(d.name));
 }
 
 export interface HodScope {

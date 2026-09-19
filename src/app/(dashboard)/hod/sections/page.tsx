@@ -267,14 +267,29 @@ export default function HODSectionsPage() {
   );
 
   function openCreate() {
+    // Carry whichever department is currently being filtered on into the form,
+    // so "Add Section" continues with the department already on screen instead
+    // of resetting to whatever happens to come first. `deptFilter` names a real
+    // department; with only a grouping sub-department picked (cascade shape,
+    // deptFilter still "all") that sub-department is carried instead, which
+    // seeds its own Department step.
+    const scopedName = deptFilter !== "all" ? deptFilter : subDeptFilter;
+    const scopedId = scopedName ? departments.find((d) => d.name === scopedName)?.id : undefined;
+    const params = new URLSearchParams();
+
     const group = activeCourseKey !== "all" ? courseGroups.find((g) => g.key === activeCourseKey) ?? null : null;
-    if (!group) { router.push("/hod/sections/new"); return; }
-    // Prefer one of this HOD's own department's instance of the course so a
-    // created section's stored courseId lines up with their department
-    // rather than a feeder's - both share the same catalog, so year options
-    // are identical.
-    const own = group.courseIds.find((id) => ownDeptIds.has(courses.find((c) => c.id === id)?.departmentId ?? ""));
-    router.push(`/hod/sections/new?courseId=${own ?? group.courseIds[0]}`);
+    if (group) {
+      // Prefer one of this HOD's own department's instance of the course so a
+      // created section's stored courseId lines up with their department
+      // rather than a feeder's - both share the same catalog, so year options
+      // are identical.
+      const own = group.courseIds.find((id) => ownDeptIds.has(courses.find((c) => c.id === id)?.departmentId ?? ""));
+      params.set("courseId", own ?? group.courseIds[0]);
+    }
+    if (scopedId) params.set("departmentId", scopedId);
+
+    const qs = params.toString();
+    router.push(`/hod/sections/new${qs ? `?${qs}` : ""}`);
   }
 
   async function handleDelete() {
