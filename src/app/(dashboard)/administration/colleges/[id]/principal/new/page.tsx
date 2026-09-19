@@ -63,6 +63,7 @@ export default function NewPrincipalPage() {
         title: `${form.role === "PRINCIPAL" ? "Principal" : "Vice Principal"} account created`,
         description: `Default password: ${form.password}`,
       });
+      router.refresh();
       router.push("/administration/colleges");
     } catch {
       toast({ variant: "destructive", title: "Network error" });
@@ -115,7 +116,7 @@ export default function NewPrincipalPage() {
                 type="email"
                 value={form.email}
                 onChange={(e) => set({ email: e.target.value })}
-                placeholder="principal@vishnu.edu.in"
+                placeholder="principal@example.com"
               />
             </div>
             <div className="space-y-2">

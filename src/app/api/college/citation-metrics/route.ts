@@ -97,6 +97,16 @@ export async function POST(request: Request) {
       updatedAt: now,
     });
 
+    await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
+      collegeId: session.collegeId,
+      action: existing.exists ? "RD_CITATION_METRICS_UPDATED" : "RD_CITATION_METRICS_CREATED",
+      performedBy: session.uid,
+      performedByName: owner?.name ?? "Unknown",
+      targetId: session.uid,
+      details: { uid: session.uid, totalCitations: fields.totalCitations, hIndex: fields.hIndex },
+      timestamp: now,
+    });
+
     if (isRnD) {
       await applyCitationMetricsFields(db, session.collegeId, session.uid, fields);
     } else {

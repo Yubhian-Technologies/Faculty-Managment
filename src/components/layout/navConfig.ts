@@ -17,6 +17,13 @@ export interface NavItem {
   // a general per-item permission system (that's filterVisibleNavItems' own
   // Super-Admin-configurable hiddenModules/hiddenItems).
   hideForRealRoles?: UserRole[];
+  // The inverse of hideForRealRoles: shows this item ONLY for a login whose
+  // real, un-normalized role (FMSUser.realRole) is one of these, even though
+  // `roles` above matches its normalized `role` more broadly. Exists for
+  // COLLEGE_ADMIN-only items (e.g. resetting another member's password) that
+  // must stay invisible to an ordinary Principal, who shares the same
+  // normalized "PRINCIPAL" role. Leave unset for every ordinary item.
+  showOnlyForRealRoles?: UserRole[];
 }
 
 // A nav item is "active" if its href exactly matches the current path, or —
@@ -72,6 +79,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Interview Plans", href: "/administration/interviews", iconName: "CalendarCheck", roles: ["ADMINISTRATION"] },
   { label: "Offer Letters", href: "/administration/offers", iconName: "FileText", roles: ["ADMINISTRATION"] },
   { label: "My Profile", href: "/administration/profile", iconName: "UserCircle", roles: ["ADMINISTRATION"], section: "Personal" },
+  { label: "Settings", href: "/administration/settings", iconName: "Settings2", roles: ["ADMINISTRATION"] },
 
   // HR Admin
   { label: "Dashboard", href: "/hr-admin", iconName: "LayoutDashboard", roles: ["HR_ADMIN"] },
@@ -166,6 +174,8 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "My Attendance", href: "/principal/attendance", iconName: "ClipboardCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "My Leave", href: "/principal/leave", iconName: "CalendarClock", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Settings", href: "/principal/settings", iconName: "Settings2", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
+  { label: "Audit Logs", href: "/principal/audit-logs", iconName: "History", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Administration" },
+  { label: "Reset Member Password", href: "/principal/reset-password", iconName: "KeyRound", roles: ["PRINCIPAL"], showOnlyForRealRoles: ["COLLEGE_ADMIN"] },
 
   // HOD
   // Full module set — Super Admin controls which modules/items are actually
@@ -432,9 +442,11 @@ export function filterVisibleNavItems(
   // configurable, and applies regardless of it.
   realRole?: UserRole
 ): NavItem[] {
-  const roleFiltered = realRole
-    ? items.filter((item) => !item.hideForRealRoles?.includes(realRole))
-    : items;
+  const roleFiltered = items.filter((item) => {
+    if (realRole && item.hideForRealRoles?.includes(realRole)) return false;
+    if (item.showOnlyForRealRoles && !(realRole && item.showOnlyForRealRoles.includes(realRole))) return false;
+    return true;
+  });
 
   if (hiddenModules.length === 0 && hiddenItems.length === 0) return roleFiltered;
 

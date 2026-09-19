@@ -141,7 +141,7 @@ export default function NewStaffPage() {
               </div>
               <div className="space-y-2">
                 <Label>College Email <span className="text-destructive">*</span></Label>
-                <Input type="email" value={collegeEmail} onChange={(e) => setCollegeEmail(e.target.value)} placeholder="user@vishnu.edu.in" />
+                <Input type="email" value={collegeEmail} onChange={(e) => setCollegeEmail(e.target.value)} placeholder="user@example.com" />
               </div>
               <div className="space-y-2">
                 <Label>Personal Email</Label>

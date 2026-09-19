@@ -91,7 +91,7 @@ export function MyAccountProfileEditPage({ basePath, fetchEndpoint, patchEndpoin
               </div>
               <div className="space-y-2">
                 <Label>Email <span className="text-destructive">*</span></Label>
-                <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@vishnu.edu.in" />
+                <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" />
               </div>
               <div className="space-y-2">
                 <Label>Phone</Label>

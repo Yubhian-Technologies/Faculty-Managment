@@ -301,6 +301,22 @@ export async function PATCH(
       }
     }
 
+    let actorName = "Unknown";
+    try {
+      const actorSnap = await db.collection("colleges").doc(session.collegeId).collection("users").doc(session.uid).get();
+      actorName = (actorSnap.data() as { name?: string } | undefined)?.name ?? "Unknown";
+    } catch { /* best-effort */ }
+
+    await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
+      collegeId: session.collegeId,
+      action: "FACULTY_UPDATED",
+      performedBy: session.uid,
+      performedByName: actorName,
+      targetId: id,
+      details: { name: newDisplayName || oldDisplayName, fields: Object.keys(updates).filter((k) => k !== "updatedAt") },
+      timestamp: new Date(),
+    });
+
     return NextResponse.json({ success: true });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {

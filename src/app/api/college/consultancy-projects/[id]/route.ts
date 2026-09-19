@@ -129,6 +129,16 @@ export async function PATCH(
         ...(body.decision === "REJECTED" ? { rejectionReason: body.rejectionReason ?? "" } : { rejectionReason: FieldValue.delete() }),
       });
 
+      await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
+        collegeId: session.collegeId,
+        action: "RD_CONSULTANCY_PROJECT_UPDATED",
+        performedBy: session.uid,
+        performedByName: reviewedByName,
+        targetId: id,
+        details: { title: project.title, decision: body.decision },
+        timestamp: now,
+      });
+
       await notify(
         db, session.collegeId, project.uid,
         "CONSULTANCY_PROJECT_REVIEWED",
@@ -157,7 +167,21 @@ export async function PATCH(
         rejectionReason: FieldValue.delete(),
       };
 
+      let editorName = "Unknown";
+      try {
+        const editorSnap = await db.collection("colleges").doc(session.collegeId).collection("users").doc(session.uid).get();
+        editorName = (editorSnap.data() as { name?: string } | undefined)?.name ?? "Unknown";
+      } catch { /* best-effort */ }
       await ref.update(updates);
+      await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
+        collegeId: session.collegeId,
+        action: "RD_CONSULTANCY_PROJECT_UPDATED",
+        performedBy: session.uid,
+        performedByName: editorName,
+        targetId: id,
+        details: { title: body.title ?? project.title },
+        timestamp: now,
+      });
       await notifyRole(
         db, session.collegeId, "R_AND_D",
         "CONSULTANCY_PROJECT_PENDING_VERIFICATION",
@@ -170,6 +194,20 @@ export async function PATCH(
 
     // R&D's own full edit - any field, any status.
     await ref.update({ ...pickEditableFields(body), updatedAt: new Date() });
+    let actorName = "Unknown";
+    try {
+      const actorSnap = await db.collection("colleges").doc(session.collegeId).collection("users").doc(session.uid).get();
+      actorName = (actorSnap.data() as { name?: string } | undefined)?.name ?? "Unknown";
+    } catch { /* best-effort */ }
+    await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
+      collegeId: session.collegeId,
+      action: "RD_CONSULTANCY_PROJECT_UPDATED",
+      performedBy: session.uid,
+      performedByName: actorName,
+      targetId: id,
+      details: { title: project.title },
+      timestamp: new Date(),
+    });
     return NextResponse.json({ ok: true });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
@@ -194,8 +232,23 @@ export async function DELETE(
     if (!snap.exists) {
       return NextResponse.json({ error: "Consultancy project not found" }, { status: 404 });
     }
+    const project = snap.data() as { title?: string; uid?: string };
 
     await ref.delete();
+    let actorName = "Unknown";
+    try {
+      const actorSnap = await db.collection("colleges").doc(session.collegeId).collection("users").doc(session.uid).get();
+      actorName = (actorSnap.data() as { name?: string } | undefined)?.name ?? "Unknown";
+    } catch { /* best-effort */ }
+    await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
+      collegeId: session.collegeId,
+      action: "RD_CONSULTANCY_PROJECT_DELETED",
+      performedBy: session.uid,
+      performedByName: actorName,
+      targetId: id,
+      details: { title: project.title, uid: project.uid },
+      timestamp: new Date(),
+    });
     return NextResponse.json({ ok: true });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {

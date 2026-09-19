@@ -17,11 +17,18 @@ const OPTIONAL_L2_ROLES: UserRole[] = ["ACCOUNTS"];
 // Management gained location-creation rights so it can act as a real L1 role
 // per the org hierarchy (creates locations, assigns Administrators to them).
 // PURCHASE_DEPT and FINANCE are read-only here - they only need the list to
-// populate their Location → College → Department browse views.
+// populate their Location → College → Department browse views. ADMINISTRATION
+// is also read-only, but scoped to only its own location (its Settings page's
+// Location Information card) - never the full org-wide list.
 export async function GET() {
   try {
-    await requireRole("SUPER_ADMIN", "MANAGEMENT", "PURCHASE_DEPT", "FINANCE");
+    const session = await requireRole("SUPER_ADMIN", "MANAGEMENT", "PURCHASE_DEPT", "FINANCE", "ADMINISTRATION");
     const db = getAdminDb();
+    if (session.role === "ADMINISTRATION") {
+      if (!session.locationId) return NextResponse.json({ locations: [] });
+      const doc = await db.collection("locations").doc(session.locationId).get();
+      return NextResponse.json({ locations: doc.exists ? [{ id: doc.id, ...doc.data() }] : [] });
+    }
     const snap = await db.collection("locations").orderBy("name").get();
     const locations = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     return NextResponse.json({ locations });

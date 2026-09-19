@@ -204,7 +204,7 @@ export default function NewNonTechnicalStaffPage() {
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
                     <Label htmlFor="collegeEmail">College Email *</Label>
-                    <Input id="collegeEmail" type="email" {...register("collegeEmail")} placeholder="name@vishnu.edu.in" />
+                    <Input id="collegeEmail" type="email" {...register("collegeEmail")} placeholder="name@example.com" />
                     {errors.collegeEmail && <p className="text-sm text-destructive">{errors.collegeEmail.message}</p>}
                     <p className="text-xs text-muted-foreground">This is used as their login username.</p>
                   </div>
