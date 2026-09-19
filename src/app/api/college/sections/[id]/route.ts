@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodEditDepartment, canHodEditDepartmentId } from "@/lib/departments/scope";
-import { resolveBranchYearOwner, type DepartmentYearRow } from "@/lib/departments/managedBranches";
+import { canHodEditDepartmentYear, type DepartmentYearRow } from "@/lib/departments/managedBranches";
 import { departmentHistoryEntry } from "@/lib/students/departmentHistory";
 import { ChunkedBatch } from "@/lib/firestore/chunkedBatch";
 import { resolveLoginUidForFacultyMember } from "@/lib/faculty/resolveFacultyMemberId";
@@ -36,6 +36,8 @@ async function assertHodOwnsSection(
   sectionYear: number,
   sectionCourseId: string | undefined
 ): Promise<boolean> {
+  // Cheap gate first, so a department plainly outside this HOD's tree costs no
+  // Firestore reads. The real decision is the year-aware one below.
   if (!canHodEditDepartment(scope, sectionDepartment)) return false;
   const [deptsSnap, courseSnap] = await Promise.all([
     db.collection("colleges").doc(collegeId).collection("departments").get(),
@@ -45,8 +47,18 @@ async function assertHodOwnsSection(
   // A manager can run more than one course with different years, so ownership
   // must resolve against THIS section's own course, not just its department.
   const catalogId = courseSnap?.exists ? (courseSnap.data() as { catalogId?: string } | undefined)?.catalogId : undefined;
-  const owner = resolveBranchYearOwner(departments, sectionDepartment, sectionYear, catalogId);
-  return scope.ownDepartmentNames.includes(owner) || scope.childDepartmentNames.includes(owner);
+  // The canonical rule (managedBranches.ts), shared with the students routes -
+  // NOT a second copy of it. This used to resolve the year-owner inline and
+  // require it to be one of the HOD's own/child departments, which silently
+  // dropped the rule's first clause: a true sub-department is owned OUTRIGHT,
+  // no year check, because only a MANAGED branch is year-scoped. That omission
+  // made editing fail where creating and listing both succeed - an HOD whose
+  // own department is grouped under some shared-year manager could create a
+  // section in their own sub-department, see it listed with full access, and
+  // then be refused on save, because the year-owner resolved to that manager
+  // rather than to them. college/sections GET already carries this carve-out
+  // explicitly; now both sides answer with the same function.
+  return canHodEditDepartmentYear(scope, departments, sectionDepartment, sectionYear, catalogId);
 }
 
 export async function PATCH(

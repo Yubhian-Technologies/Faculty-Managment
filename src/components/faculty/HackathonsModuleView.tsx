@@ -265,12 +265,12 @@ function RecordFormFields({
         <div className="space-y-4">
           <SubLabel>Overview</SubLabel>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <TextInput label="Academic Year" value={form.academicYear} onChange={(v) => set("academicYear", v)} placeholder="e.g. 2024-25" />
-            <TextInput label="Event Title" value={form.eventTitle} onChange={(v) => set("eventTitle", v)} />
+            <TextInput label="Academic Year" value={form.academicYear} onChange={(v) => set("academicYear", v)} placeholder="e.g. 2024-25" required />
+            <TextInput label="Event Title" value={form.eventTitle} onChange={(v) => set("eventTitle", v)} required />
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label>Event Type</Label>
+              <Label>Event Type <span className="text-destructive">*</span></Label>
               <Select value={form.eventType} onValueChange={(v) => set("eventType", v as HackathonEventType)}>
                 <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
                 <SelectContent>
@@ -279,7 +279,7 @@ function RecordFormFields({
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Level of Event</Label>
+              <Label>Level of Event <span className="text-destructive">*</span></Label>
               <Select value={form.levelOfEvent} onValueChange={(v) => set("levelOfEvent", v as HackathonLevel)}>
                 <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
                 <SelectContent>
@@ -288,33 +288,33 @@ function RecordFormFields({
               </Select>
             </div>
           </div>
-          <TextInput label="Organizing Department / Cell" value={form.organizingDeptCell} onChange={(v) => set("organizingDeptCell", v)} placeholder="Department / IIC / Incubation Cell / Idea Lab / EDC" />
+          <TextInput label="Organizing Department / Cell" value={form.organizingDeptCell} onChange={(v) => set("organizingDeptCell", v)} placeholder="Department / IIC / Incubation Cell / Idea Lab / EDC" required />
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <DateInput label="Start Date" value={form.startDate} onChange={(v) => set("startDate", v)} />
-            <DateInput label="End Date" value={form.endDate} onChange={(v) => set("endDate", v)} />
+            <DateInput label="Start Date" value={form.startDate} onChange={(v) => set("startDate", v)} required />
+            <DateInput label="End Date" value={form.endDate} onChange={(v) => set("endDate", v)} required />
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <NumInput label="Duration (Hrs)" value={toNumberOrUndefined(form.durationHours)} onChange={(v) => set("durationHours", String(v))} />
-            <TextInput label="Venue" value={form.venue} onChange={(v) => set("venue", v)} />
+            <NumInput label="Duration (Hrs)" value={toNumberOrUndefined(form.durationHours)} onChange={(v) => set("durationHours", String(v))} required />
+            <TextInput label="Venue" value={form.venue} onChange={(v) => set("venue", v)} required />
           </div>
-          <TextInput label="Theme / Domain" value={form.themeDomain} onChange={(v) => set("themeDomain", v)} placeholder="AI, Healthcare, Agriculture, Women Safety, Sustainability, etc." />
+          <TextInput label="Theme / Domain" value={form.themeDomain} onChange={(v) => set("themeDomain", v)} placeholder="AI, Healthcare, Agriculture, Women Safety, Sustainability, etc." required />
         </div>
 
         <div className="space-y-4">
           <SubLabel>Participation</SubLabel>
-          <NumInput label="No. of Problem Statements" value={toNumberOrUndefined(form.noOfProblemStatements)} onChange={(v) => set("noOfProblemStatements", String(v))} />
+          <NumInput label="No. of Problem Statements" value={toNumberOrUndefined(form.noOfProblemStatements)} onChange={(v) => set("noOfProblemStatements", String(v))} required />
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <NumInput label="Teams Registered - Internal" value={toNumberOrUndefined(form.teamsRegisteredInternal)} onChange={(v) => set("teamsRegisteredInternal", String(v))} />
-            <NumInput label="Teams Registered - External" value={toNumberOrUndefined(form.teamsRegisteredExternal)} onChange={(v) => set("teamsRegisteredExternal", String(v))} />
+            <NumInput label="Teams Registered - Internal" value={toNumberOrUndefined(form.teamsRegisteredInternal)} onChange={(v) => set("teamsRegisteredInternal", String(v))} required />
+            <NumInput label="Teams Registered - External" value={toNumberOrUndefined(form.teamsRegisteredExternal)} onChange={(v) => set("teamsRegisteredExternal", String(v))} required />
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <NumInput label="Participants - Internal" value={toNumberOrUndefined(form.participantsInternal)} onChange={(v) => set("participantsInternal", String(v))} />
-            <NumInput label="Participants - External" value={toNumberOrUndefined(form.participantsExternal)} onChange={(v) => set("participantsExternal", String(v))} />
+            <NumInput label="Participants - Internal" value={toNumberOrUndefined(form.participantsInternal)} onChange={(v) => set("participantsInternal", String(v))} required />
+            <NumInput label="Participants - External" value={toNumberOrUndefined(form.participantsExternal)} onChange={(v) => set("participantsExternal", String(v))} required />
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <NumInput label="Ideas Presented" value={toNumberOrUndefined(form.ideasPresentedCount)} onChange={(v) => set("ideasPresentedCount", String(v))} />
-            <NumInput label="PoC's Presented" value={toNumberOrUndefined(form.pocsPresentedCount)} onChange={(v) => set("pocsPresentedCount", String(v))} />
-            <NumInput label="Products/Prototypes Presented" value={toNumberOrUndefined(form.productsPresentedCount)} onChange={(v) => set("productsPresentedCount", String(v))} />
+            <NumInput label="Ideas Presented" value={toNumberOrUndefined(form.ideasPresentedCount)} onChange={(v) => set("ideasPresentedCount", String(v))} required />
+            <NumInput label="PoC's Presented" value={toNumberOrUndefined(form.pocsPresentedCount)} onChange={(v) => set("pocsPresentedCount", String(v))} required />
+            <NumInput label="Products/Prototypes Presented" value={toNumberOrUndefined(form.productsPresentedCount)} onChange={(v) => set("productsPresentedCount", String(v))} required />
           </div>
         </div>
 
@@ -326,8 +326,8 @@ function RecordFormFields({
           addLabel="Add Evaluator"
           renderRow={(item, update) => (
             <>
-              <TextInput label="Name of the Evaluator" value={item.name} onChange={(v) => update({ name: v })} />
-              <TextInput label="Affiliation of the Evaluator" value={item.affiliation} onChange={(v) => update({ affiliation: v })} />
+              <TextInput label="Name of the Evaluator" value={item.name} onChange={(v) => update({ name: v })} required />
+              <TextInput label="Affiliation of the Evaluator" value={item.affiliation} onChange={(v) => update({ affiliation: v })} required />
             </>
           )}
         />
@@ -340,9 +340,9 @@ function RecordFormFields({
           addLabel="Add Coordinator"
           renderRow={(item, update) => (
             <>
-              <TextInput label="Name" value={item.name} onChange={(v) => update({ name: v })} />
-              <TextInput label="Designation" value={item.designation} onChange={(v) => update({ designation: v })} />
-              <TextInput label="Department/Cell" value={item.departmentOrCell} onChange={(v) => update({ departmentOrCell: v })} />
+              <TextInput label="Name" value={item.name} onChange={(v) => update({ name: v })} required />
+              <TextInput label="Designation" value={item.designation} onChange={(v) => update({ designation: v })} required />
+              <TextInput label="Department/Cell" value={item.departmentOrCell} onChange={(v) => update({ departmentOrCell: v })} required />
             </>
           )}
         />
@@ -352,10 +352,10 @@ function RecordFormFields({
         <div className="space-y-4">
           <SubLabel>YUKTI</SubLabel>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <NumInput label="Ideas Uploaded in YUKTI" value={toNumberOrUndefined(form.ideasUploadedYukti)} onChange={(v) => set("ideasUploadedYukti", String(v))} />
-            <NumInput label="Ideas Verified & Recommended" value={toNumberOrUndefined(form.ideasVerifiedRecommendedYukti)} onChange={(v) => set("ideasVerifiedRecommendedYukti", String(v))} />
-            <NumInput label="Prototypes Uploaded in YUKTI" value={toNumberOrUndefined(form.prototypesUploadedYukti)} onChange={(v) => set("prototypesUploadedYukti", String(v))} />
-            <NumInput label="Prototypes Verified & Recommended" value={toNumberOrUndefined(form.prototypesVerifiedRecommendedYukti)} onChange={(v) => set("prototypesVerifiedRecommendedYukti", String(v))} />
+            <NumInput label="Ideas Uploaded in YUKTI" value={toNumberOrUndefined(form.ideasUploadedYukti)} onChange={(v) => set("ideasUploadedYukti", String(v))} required />
+            <NumInput label="Ideas Verified & Recommended" value={toNumberOrUndefined(form.ideasVerifiedRecommendedYukti)} onChange={(v) => set("ideasVerifiedRecommendedYukti", String(v))} required />
+            <NumInput label="Prototypes Uploaded in YUKTI" value={toNumberOrUndefined(form.prototypesUploadedYukti)} onChange={(v) => set("prototypesUploadedYukti", String(v))} required />
+            <NumInput label="Prototypes Verified & Recommended" value={toNumberOrUndefined(form.prototypesVerifiedRecommendedYukti)} onChange={(v) => set("prototypesVerifiedRecommendedYukti", String(v))} required />
           </div>
           <TableRepeatingGroup
             title="YUKTI Reference / Proof"
@@ -417,7 +417,7 @@ function RecordFormFields({
             onRemoved={() => set("eventReportUrl", "")}
           />
           <div className="space-y-2">
-            <Label>Remarks</Label>
+            <Label>Remarks <span className="text-destructive">*</span></Label>
             <Textarea value={form.remarks} onChange={(e) => set("remarks", e.target.value)} rows={2} placeholder="Any additional information" />
           </div>
         </div>
