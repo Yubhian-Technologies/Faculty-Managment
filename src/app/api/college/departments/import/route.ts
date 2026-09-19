@@ -3,13 +3,14 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { resolveDepartmentCourseSelections, type DepartmentCourseSelection } from "@/lib/departments/courseSelections";
 
 type ImportRow = { name: string; code: string; hodEmail?: string };
 
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");
-    const body = (await request.json()) as { records: ImportRow[] };
+    const body = (await request.json()) as { records: ImportRow[]; courses?: DepartmentCourseSelection[] };
 
     if (!body.records || !Array.isArray(body.records) || body.records.length === 0) {
       return NextResponse.json({ error: "No records provided" }, { status: 400 });
@@ -20,7 +21,15 @@ export async function POST(request: Request) {
 
     const db = getAdminDb();
     const collegeId = session.collegeId;
+
+    // Every imported department gets the same course(s) - a department can't
+    // exist without one (see college/departments POST).
+    const resolved = await resolveDepartmentCourseSelections(db, collegeId, body.courses);
+    if ("error" in resolved) return NextResponse.json({ error: resolved.error }, { status: 400 });
+    const newCourses = resolved.courses;
+
     const deptsColl = db.collection("colleges").doc(collegeId).collection("departments");
+    const coursesColl = db.collection("colleges").doc(collegeId).collection("courses");
     const usersColl = db.collection("colleges").doc(collegeId).collection("users");
 
     const [existingDeptsSnap, hodUsersSnap] = await Promise.all([
@@ -49,7 +58,7 @@ export async function POST(request: Request) {
     const warnings: { row: number; name: string; message: string }[] = [];
 
     const batch = db.batch();
-    let batchCount = 0;
+    let batchWrites = 0;
 
     for (let i = 0; i < body.records.length; i++) {
       const row = body.records[i];
@@ -76,6 +85,13 @@ export async function POST(request: Request) {
         }
       }
 
+      // Firestore batch limit is 500 writes - department + its courses (+ HOD sync).
+      const rowWrites = 1 + newCourses.length + (hodUid ? 1 : 0);
+      if (batchWrites + rowWrites > 500) {
+        failed.push({ row: rowNum, name, error: "Import batch limit reached - import the remaining rows in a second file" });
+        continue;
+      }
+
       const deptRef = deptsColl.doc();
       batch.set(deptRef, {
         collegeId,
@@ -84,9 +100,25 @@ export async function POST(request: Request) {
         hodUid,
         hodName,
         isActive: true,
+        courseScopes: Object.fromEntries(
+          newCourses.map((c) => [c.catalogId, { assignedYears: c.assignedYears, secondaryDepartments: [] }])
+        ),
         createdAt: now,
         updatedAt: now,
       });
+      for (const c of newCourses) {
+        batch.set(coursesColl.doc(), {
+          collegeId,
+          departmentId: deptRef.id,
+          catalogId: c.catalogId,
+          name: c.name,
+          code: c.code,
+          durationYears: c.durationYears,
+          isActive: true,
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
 
       // Keep the HOD's own profile department in sync, same as the single-add route.
       if (hodUid) {
@@ -96,10 +128,7 @@ export async function POST(request: Request) {
       existingCodes.add(code); // prevent duplicate codes within the same batch
       existingNames.add(name.toLowerCase()); // ...and duplicate names
       created.push(name);
-      batchCount++;
-
-      // Firestore batch limit is 500 writes
-      if (batchCount === 499) break;
+      batchWrites += rowWrites;
     }
 
     await batch.commit();

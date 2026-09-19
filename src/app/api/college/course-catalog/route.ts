@@ -4,9 +4,11 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 
-// colleges/{collegeId}/courseCatalog - the Dean's master list of course
-// definitions (canonical name + short code + duration). Departments only *select*
-// from this list, they never re-type a course name, so duplicates can't creep in.
+// colleges/{collegeId}/courseCatalog - the college's master list of course
+// definitions (canonical name + short code + duration), created by the
+// Principal / Vice Principal / College Admin in the Courses module.
+// Departments only *select* from this list (at least one is required to create
+// a department), they never re-type a course name, so duplicates can't creep in.
 
 export async function GET() {
   try {
@@ -37,7 +39,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember("DEAN", "SUPER_ADMIN");
+    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");
     const body = (await request.json()) as {
       name?: string;
       code?: string;
@@ -105,6 +107,16 @@ export async function POST(request: Request) {
     if (duplicateError) {
       return NextResponse.json({ error: duplicateError }, { status: 409 });
     }
+
+    await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
+      collegeId: session.collegeId,
+      action: "COURSE_CATALOG_CREATED" as string,
+      performedBy: session.uid,
+      performedByName: actorName,
+      targetId: ref.id,
+      details: { name, code, durationYears },
+      timestamp: now,
+    });
 
     return NextResponse.json({ id: ref.id }, { status: 201 });
   } catch (err) {

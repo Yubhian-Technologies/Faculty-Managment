@@ -153,10 +153,10 @@ export default function NewCoursePage() {
           ) : catalog.length === 0 ? (
             <div className="space-y-4 text-center py-4">
               <p className="text-sm text-muted-foreground">
-                No courses are set up yet. Add your college&apos;s courses in Settings first, then select them here.
+                No courses are set up yet. Add your college&apos;s courses in the Courses module first, then select them here.
               </p>
               <Button asChild variant="outline">
-                <Link href="/principal/settings">Go to Settings</Link>
+                <Link href="/principal/courses">Go to Courses</Link>
               </Button>
             </div>
           ) : (
@@ -176,7 +176,7 @@ export default function NewCoursePage() {
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">
-                  Courses are managed by the Principal in Settings. Select one — its code and duration fill in
+                  Courses are created in the Courses module. Select one — its code and duration fill in
                   automatically.
                 </p>
               </div>

@@ -148,7 +148,8 @@ export const NAV_ITEMS: NavItem[] = [
   // (see PrincipalPipelineBoard.tsx) since they're just later stages of the
   // same hiring request, not independent destinations.
   { label: "Hiring Requests", href: "/principal/vacancies", iconName: "ClipboardList", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Hiring Pipeline" },
-  { label: "Departments", href: "/principal/departments", iconName: "BookOpen", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Academic Management" },
+  { label: "Courses", href: "/principal/courses", iconName: "GraduationCap", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Academic Management" },
+  { label: "Departments", href: "/principal/departments", iconName: "BookOpen", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Students", href: "/principal/students", iconName: "GraduationCap", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Faculty", href: "/principal/faculty", iconName: "UsersRound", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Student Promotion", href: "/principal/promotions", iconName: "GraduationCap", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
@@ -159,6 +160,9 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Staff", href: "/principal/staff", iconName: "UsersRound", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Staff & HR Management" },
   { label: "Leave Approvals", href: "/principal/leave-approvals", iconName: "CalendarClock", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Leave History", href: "/principal/leave-history", iconName: "History", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
+  // Arrange cover for someone below them (Vice Principal / Dean / HODs) who has
+  // other work on a date or range - see StaffAdjustmentsPage.
+  { label: "Adjustments", href: "/principal/adjustments", iconName: "UserCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Attendance Report", href: "/principal/attendance-report", iconName: "ClipboardCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   // Views whether faculty submitted student attendance for their scheduled
   // periods, and whether it was on time - distinct from "Attendance Report"
@@ -173,6 +177,9 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "My Profile", href: "/principal/profile", iconName: "UserCircle", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Personal" },
   { label: "My Attendance", href: "/principal/attendance", iconName: "ClipboardCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "My Leave", href: "/principal/leave", iconName: "CalendarClock", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
+  // The Principal is never named as anyone's substitute/handover, so only the
+  // Vice Principal has requests to accept or decline here.
+  { label: "Adjustment Requests", href: "/leave/adjustments", iconName: "UserCheck", roles: ["VICE_PRINCIPAL"] },
   { label: "Settings", href: "/principal/settings", iconName: "Settings2", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Audit Logs", href: "/principal/audit-logs", iconName: "History", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Administration" },
   { label: "Reset Member Password", href: "/principal/reset-password", iconName: "KeyRound", roles: ["PRINCIPAL"], showOnlyForRealRoles: ["COLLEGE_ADMIN"] },
@@ -203,6 +210,9 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Attendance History", href: "/hod/attendance-history", iconName: "CalendarCheck", roles: ["HOD"] },
   { label: "Leave Approvals", href: "/hod/leave-approvals", iconName: "CalendarClock", roles: ["HOD"], section: "Approvals" },
   { label: "Leave History", href: "/hod/leave-history", iconName: "History", roles: ["HOD"] },
+  // Arrange cover for their department's faculty / supporting staff who have
+  // other work on a date or range - see StaffAdjustmentsPage.
+  { label: "Adjustments", href: "/hod/adjustments", iconName: "UserCheck", roles: ["HOD"] },
   { label: "Faculty Attendance", href: "/hod/faculty-attendance", iconName: "ClipboardCheck", roles: ["HOD"] },
   // Same view as Principal's "Attendance Completion" - own department's
   // faculty only (see faculty-attendance-completion/route.ts's HOD scoping).
@@ -238,6 +248,8 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Candidates", href: "/college-office/candidates", iconName: "UserCog", roles: ["COLLEGE_OFFICE"] },
   { label: "Leave History", href: "/college-office/leave-history", iconName: "History", roles: ["COLLEGE_OFFICE"], section: "Leave & Attendance" },
   { label: "Leave Profiles", href: "/college-office/leave/profiles", iconName: "ClipboardList", roles: ["COLLEGE_OFFICE"] },
+  // Arrange cover for supporting staff who have other work on a date or range.
+  { label: "Adjustments", href: "/college-office/adjustments", iconName: "UserCheck", roles: ["COLLEGE_OFFICE"] },
   { label: "Holidays", href: "/college-office/holidays", iconName: "CalendarDays", roles: ["COLLEGE_OFFICE"] },
   { label: "Staff Attendance", href: "/college-office/staff-attendance", iconName: "ClipboardCheck", roles: ["COLLEGE_OFFICE"] },
   { label: "Import Attendance", href: "/college-office/attendance-import", iconName: "Upload", roles: ["COLLEGE_OFFICE"] },

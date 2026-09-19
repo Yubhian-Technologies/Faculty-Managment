@@ -1,8 +1,10 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { DepartmentCoursePicker, type CourseSelection } from "@/components/college/DepartmentCoursePicker";
+import type { CourseCatalogItem } from "@/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -24,6 +26,17 @@ export default function DepartmentsImportPage() {
   const [parseError, setParseError] = useState("");
   const [isImporting, setIsImporting] = useState(false);
   const [result, setResult] = useState<ImportResult | null>(null);
+  // Every imported department needs at least one course (same rule as Add
+  // Department) - the chosen set is applied to all rows in the file.
+  const [catalog, setCatalog] = useState<CourseCatalogItem[]>([]);
+  const [courseSelections, setCourseSelections] = useState<CourseSelection[]>([]);
+
+  useEffect(() => {
+    fetch("/api/college/course-catalog")
+      .then((r) => r.json() as Promise<{ items: CourseCatalogItem[] }>)
+      .then((d) => setCatalog(d.items ?? []))
+      .catch(() => toast({ variant: "destructive", title: "Failed to load courses" }));
+  }, []);
 
   function downloadTemplate() {
     const headers = COLUMNS.map((c) => c.label);
@@ -95,7 +108,7 @@ export default function DepartmentsImportPage() {
       const res = await fetch("/api/college/departments/import", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ records: rows }),
+        body: JSON.stringify({ records: rows, courses: courseSelections }),
       });
       const json = await res.json() as ImportResult & { error?: string };
       if (!res.ok) { toast({ variant: "destructive", title: json.error ?? "Import failed" }); return; }
@@ -238,8 +251,19 @@ export default function DepartmentsImportPage() {
                 Some rows have missing required fields (highlighted in red above). Those rows will be skipped during import.
               </div>
             )}
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Courses these departments offer *</p>
+              <p className="text-xs text-muted-foreground">
+                Applied to every department in the file. You can add or change a department&apos;s courses later from its page.
+              </p>
+              <DepartmentCoursePicker catalog={catalog} value={courseSelections} onChange={setCourseSelections} />
+            </div>
             <div className="flex gap-3">
-              <Button onClick={() => void handleImport()} loading={isImporting} disabled={isImporting}>
+              <Button
+                onClick={() => void handleImport()}
+                loading={isImporting}
+                disabled={isImporting || courseSelections.length === 0 || courseSelections.some((c) => c.assignedYears.length === 0)}
+              >
                 <Upload className="h-4 w-4 mr-2" />
                 Import {rows.length} Department{rows.length !== 1 ? "s" : ""}
               </Button>

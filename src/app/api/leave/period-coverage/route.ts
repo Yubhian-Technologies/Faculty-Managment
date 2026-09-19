@@ -82,7 +82,10 @@ export async function GET(request: Request) {
 
     const facultyMemberId = await resolveFacultyMemberId(db, session.collegeId, targetUid);
     const holidayDates = await getHolidayDateKeys(db, session.collegeId, fromDate, toDate);
-    const periods = await buildPeriodCoverage(db, session.collegeId, facultyMemberId, department, fromDate, toDate, holidayDates);
+    const periods = await buildPeriodCoverage(
+      db, session.collegeId, facultyMemberId, department, fromDate, toDate, holidayDates,
+      { excludeRequestId: requestId ?? undefined }
+    );
 
     return NextResponse.json({ periods });
   } catch (err) {

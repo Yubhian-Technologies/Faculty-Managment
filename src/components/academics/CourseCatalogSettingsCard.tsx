@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -121,16 +122,25 @@ function RegulationBatchesEditor({
 }
 
 interface CourseCatalogSettingsCardProps {
-  // Dean's dashboard reads the same catalog off the Principal's own GET
-  // endpoint, but can't POST/PATCH/DELETE it - so this hides the add form
-  // and per-item edit/delete/activate controls and shows courses + their
-  // assigned regulations only.
+  // Hides the add form and every per-item edit/delete/activate control and
+  // shows courses + their assigned regulations only.
   readOnly?: boolean;
+  // The Dean's view: courses themselves are created/renamed/deleted by the
+  // Principal / VP / College Admin, but the Dean still maintains each
+  // course's curriculum regulations - so only that part stays editable.
+  regulationsOnly?: boolean;
+  // Lists, under each course, the departments that offer it (a department
+  // offering several courses appears under each of them).
+  showDepartments?: boolean;
 }
 
-export function CourseCatalogSettingsCard({ readOnly = false }: CourseCatalogSettingsCardProps) {
+interface OfferingDepartment { id: string; name: string; code: string }
+
+export function CourseCatalogSettingsCard({ readOnly = false, regulationsOnly = false, showDepartments = false }: CourseCatalogSettingsCardProps) {
   const [items, setItems] = useState<CourseCatalogItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [departmentsByCatalogId, setDepartmentsByCatalogId] = useState<Map<string, OfferingDepartment[]>>(new Map());
+  const canCreate = !readOnly && !regulationsOnly;
   // Every regulation code any course already uses - purely a reuse/autocomplete
   // suggestion for RegulationBatchesEditor's Code field (see its own doc-comment),
   // not a separate registry: typing a new code there is the only way one gets
@@ -151,11 +161,34 @@ export function CourseCatalogSettingsCard({ readOnly = false }: CourseCatalogSet
   const [isDeleting, setIsDeleting] = useState(false);
 
   function load() {
-    return fetch("/api/college/course-catalog")
-      .then((r) => r.json() as Promise<{ items: CourseCatalogItem[] }>)
-      .then((d) => setItems(d.items ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load course catalog" }))
-      .finally(() => setIsLoading(false));
+    const departmentsLoad = showDepartments
+      ? Promise.all([
+          fetch("/api/college/courses").then((r) => r.json() as Promise<{ courses: { departmentId: string; catalogId?: string }[] }>),
+          fetch("/api/college/departments").then((r) => r.json() as Promise<{ departments: { id: string; name: string; code: string }[] }>),
+        ])
+          .then(([coursesRes, deptsRes]) => {
+            const deptById = new Map((deptsRes.departments ?? []).map((d) => [d.id, d]));
+            const grouped = new Map<string, OfferingDepartment[]>();
+            for (const c of coursesRes.courses ?? []) {
+              const dept = deptById.get(c.departmentId);
+              if (!c.catalogId || !dept) continue;
+              const list = grouped.get(c.catalogId) ?? [];
+              if (!list.some((d) => d.id === dept.id)) list.push({ id: dept.id, name: dept.name, code: dept.code });
+              grouped.set(c.catalogId, list);
+            }
+            for (const list of grouped.values()) list.sort((a, b) => a.name.localeCompare(b.name));
+            setDepartmentsByCatalogId(grouped);
+          })
+          .catch(() => toast({ variant: "destructive", title: "Failed to load departments" }))
+      : Promise.resolve();
+
+    return Promise.all([
+      fetch("/api/college/course-catalog")
+        .then((r) => r.json() as Promise<{ items: CourseCatalogItem[] }>)
+        .then((d) => setItems(d.items ?? []))
+        .catch(() => toast({ variant: "destructive", title: "Failed to load course catalog" })),
+      departmentsLoad,
+    ]).finally(() => setIsLoading(false));
   }
 
   useEffect(() => {
@@ -219,13 +252,17 @@ export function CourseCatalogSettingsCard({ readOnly = false }: CourseCatalogSet
       const res = await fetch(`/api/college/course-catalog/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: editDraft.name.trim(),
-          code: editDraft.code.trim(),
-          durationYears: Number(editDraft.durationYears),
-          regulations: editDraft.regulations,
-          regulationBatches: editDraft.regulationBatches,
-        }),
+        body: JSON.stringify(
+          regulationsOnly
+            ? { regulations: editDraft.regulations, regulationBatches: editDraft.regulationBatches }
+            : {
+                name: editDraft.name.trim(),
+                code: editDraft.code.trim(),
+                durationYears: Number(editDraft.durationYears),
+                regulations: editDraft.regulations,
+                regulationBatches: editDraft.regulationBatches,
+              }
+        ),
       });
       if (!res.ok) {
         const j = await res.json() as { error?: string };
@@ -281,17 +318,18 @@ export function CourseCatalogSettingsCard({ readOnly = false }: CourseCatalogSet
     <Card>
       <CardHeader>
         <CardTitle className="text-base flex items-center gap-2">
-          <GraduationCap className="h-4 w-4" /> Course Catalog
+          <GraduationCap className="h-4 w-4" /> {showDepartments ? "Courses" : "Course Catalog"}
         </CardTitle>
         <CardDescription>
-          The fixed list of courses for your entire college. Departments can only select from these — this keeps
-          course names and codes consistent and prevents duplicates. Each course&apos;s curriculum regulations (e.g. R23)
-          are created right here too - give one a starting year and a duration and it covers those years automatically.
+          The fixed list of courses for your entire college. Create a course here first - departments can only select
+          from these (a department needs at least one), which keeps course names and codes consistent and prevents
+          duplicates. Each course&apos;s curriculum regulations (e.g. R23) are created right here too - give one a
+          starting year and a duration and it covers those years automatically.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
         {/* Add new - course details, then its regulations. */}
-        {!readOnly && (
+        {canCreate && (
           <div className="space-y-4 rounded-lg border bg-muted/30 p-3">
             <div className="space-y-1.5">
               <Label className="text-xs font-semibold text-foreground">1. Course details</Label>
@@ -361,25 +399,36 @@ export function CourseCatalogSettingsCard({ readOnly = false }: CourseCatalogSet
                   <div className="flex flex-wrap items-center gap-3">
                     {isEditing ? (
                       <>
-                        <Input
-                          value={editDraft.name}
-                          onChange={(e) => setEditDraft((d) => ({ ...d, name: e.target.value }))}
-                          className="flex-1 min-w-40"
-                        />
-                        <Input
-                          value={editDraft.code}
-                          onChange={(e) => setEditDraft((d) => ({ ...d, code: e.target.value.toUpperCase() }))}
-                          className="w-28 uppercase"
-                          maxLength={10}
-                        />
-                        <Input
-                          type="number"
-                          min={1}
-                          max={10}
-                          value={editDraft.durationYears}
-                          onChange={(e) => setEditDraft((d) => ({ ...d, durationYears: stripLeadingZeros(e.target.value) }))}
-                          className="w-20"
-                        />
+                        {regulationsOnly ? (
+                          <div className="flex-1 min-w-40">
+                            <p className="text-sm font-medium">{item.name}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {item.code} · {item.durationYears} {item.durationYears === 1 ? "year" : "years"}
+                            </p>
+                          </div>
+                        ) : (
+                          <>
+                            <Input
+                              value={editDraft.name}
+                              onChange={(e) => setEditDraft((d) => ({ ...d, name: e.target.value }))}
+                              className="flex-1 min-w-40"
+                            />
+                            <Input
+                              value={editDraft.code}
+                              onChange={(e) => setEditDraft((d) => ({ ...d, code: e.target.value.toUpperCase() }))}
+                              className="w-28 uppercase"
+                              maxLength={10}
+                            />
+                            <Input
+                              type="number"
+                              min={1}
+                              max={10}
+                              value={editDraft.durationYears}
+                              onChange={(e) => setEditDraft((d) => ({ ...d, durationYears: stripLeadingZeros(e.target.value) }))}
+                              className="w-20"
+                            />
+                          </>
+                        )}
                         <div className="flex gap-1 ml-auto">
                           <Button size="icon" variant="ghost" onClick={() => saveEdit(item.id)} loading={busy} aria-label="Save">
                             <Check className="h-4 w-4" />
@@ -402,20 +451,41 @@ export function CourseCatalogSettingsCard({ readOnly = false }: CourseCatalogSet
                         </div>
                         {!readOnly && (
                           <div className="flex gap-1 ml-auto">
-                            <Button size="sm" variant="ghost" onClick={() => toggleActive(item)} disabled={busy}>
-                              {item.isActive ? "Deactivate" : "Activate"}
-                            </Button>
+                            {canCreate && (
+                              <Button size="sm" variant="ghost" onClick={() => toggleActive(item)} disabled={busy}>
+                                {item.isActive ? "Deactivate" : "Activate"}
+                              </Button>
+                            )}
                             <Button size="icon" variant="ghost" onClick={() => startEdit(item)} aria-label="Edit">
                               <Pencil className="h-4 w-4" />
                             </Button>
-                            <Button size="icon" variant="ghost" onClick={() => setDeleteTarget(item)} aria-label="Delete">
-                              <Trash2 className="h-4 w-4 text-destructive" />
-                            </Button>
+                            {canCreate && (
+                              <Button size="icon" variant="ghost" onClick={() => setDeleteTarget(item)} aria-label="Delete">
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                              </Button>
+                            )}
                           </div>
                         )}
                       </>
                     )}
                   </div>
+
+                  {showDepartments && !isEditing && (
+                    <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                      <span className="text-muted-foreground">Departments:</span>
+                      {(departmentsByCatalogId.get(item.id) ?? []).length === 0 ? (
+                        <span className="text-muted-foreground">none yet</span>
+                      ) : (
+                        (departmentsByCatalogId.get(item.id) ?? []).map((d) => (
+                          <Link key={d.id} href={`/principal/departments/${d.id}`}>
+                            <Badge variant="outline" className="text-xs hover:border-primary/50">
+                              {d.name} <span className="ml-1 font-mono text-muted-foreground">{d.code}</span>
+                            </Badge>
+                          </Link>
+                        ))
+                      )}
+                    </div>
+                  )}
 
                   {isEditing ? (
                     <div className="space-y-1">

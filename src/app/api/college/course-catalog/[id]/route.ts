@@ -9,7 +9,9 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await requireCollegeMember("DEAN", "SUPER_ADMIN");
+    // Courses themselves belong to the Principal / VP / College Admin; the
+    // Dean keeps only the curriculum regulations attached to each course.
+    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "DEAN");
     const { id } = await params;
     const body = (await request.json()) as {
       name?: string;
@@ -19,6 +21,16 @@ export async function PATCH(
       regulations?: string[];
       regulationBatches?: Record<string, string>;
     };
+
+    if (
+      session.role === "DEAN" &&
+      (body.name != null || body.code != null || body.durationYears != null || body.isActive != null)
+    ) {
+      return NextResponse.json(
+        { error: "Only the Principal, Vice Principal or College Admin can change a course's details. The Dean can edit its regulations." },
+        { status: 403 }
+      );
+    }
 
     const db = getAdminDb();
     const catalogCol = db.collection("colleges").doc(session.collegeId).collection("courseCatalog");
@@ -68,6 +80,21 @@ export async function PATCH(
     }
 
     await ref.update(updates);
+
+    const actorSnap = await db.collection("colleges").doc(session.collegeId).collection("users").doc(session.uid).get();
+    await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
+      collegeId: session.collegeId,
+      action: "COURSE_CATALOG_UPDATED" as string,
+      performedBy: session.uid,
+      performedByName: (actorSnap.data() as { name?: string } | undefined)?.name ?? session.email ?? "Unknown",
+      targetId: id,
+      details: {
+        name: (snap.data() as { name?: string }).name ?? "",
+        changed: Object.keys(updates).filter((k) => k !== "updatedAt"),
+      },
+      timestamp: new Date(),
+    });
+
     return NextResponse.json({ success: true });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
@@ -83,7 +110,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await requireCollegeMember("DEAN", "SUPER_ADMIN");
+    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");
     const { id } = await params;
 
     const db = getAdminDb();
@@ -108,6 +135,18 @@ export async function DELETE(
     }
 
     await ref.delete();
+
+    const actorSnap = await db.collection("colleges").doc(session.collegeId).collection("users").doc(session.uid).get();
+    await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
+      collegeId: session.collegeId,
+      action: "COURSE_CATALOG_DELETED" as string,
+      performedBy: session.uid,
+      performedByName: (actorSnap.data() as { name?: string } | undefined)?.name ?? session.email ?? "Unknown",
+      targetId: id,
+      details: { name: (snap.data() as { name?: string }).name ?? "" },
+      timestamp: new Date(),
+    });
+
     return NextResponse.json({ success: true });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {

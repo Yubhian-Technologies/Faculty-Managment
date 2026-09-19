@@ -13,9 +13,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { CreateHodDialog } from "@/components/college/CreateHodDialog";
 import { YearsTaughtAndSecondaryFields } from "@/components/college/YearsTaughtAndSecondaryFields";
+import { DepartmentCoursePicker, type CourseSelection } from "@/components/college/DepartmentCoursePicker";
 import { departmentSchema, type DepartmentFormData } from "@/lib/validations";
 import { toast } from "@/hooks/useToast";
-import type { Department, FMSUser } from "@/types";
+import type { CourseCatalogItem, Department, FMSUser } from "@/types";
 
 export default function NewDepartmentPage() {
   const router = useRouter();
@@ -30,8 +31,19 @@ export default function NewDepartmentPage() {
   // gets the same unrestricted behavior every department had before this
   // field existed.
   const [parentRunsOwnSections, setParentRunsOwnSections] = useState(true);
+  // A department can't be created without at least one course - see
+  // college/departments POST.
+  const [catalog, setCatalog] = useState<CourseCatalogItem[]>([]);
+  const [catalogLoaded, setCatalogLoaded] = useState(false);
+  const [courseSelections, setCourseSelections] = useState<CourseSelection[]>([]);
 
   useEffect(() => {
+    fetch("/api/college/course-catalog")
+      .then((r) => r.json() as Promise<{ items: CourseCatalogItem[] }>)
+      .then((d) => setCatalog(d.items ?? []))
+      .catch(() => toast({ variant: "destructive", title: "Failed to load courses" }))
+      .finally(() => setCatalogLoaded(true));
+
     fetch("/api/college/users?role=HOD")
       .then((r) => r.json() as Promise<{ users: FMSUser[] }>)
       .then((d) => setHods(d.users ?? []))
@@ -73,6 +85,14 @@ export default function NewDepartmentPage() {
   }
 
   const onSubmit = async (data: DepartmentFormData) => {
+    if (courseSelections.length === 0) {
+      toast({ variant: "destructive", title: "Select at least one course for this department" });
+      return;
+    }
+    if (courseSelections.some((c) => c.assignedYears.length === 0)) {
+      toast({ variant: "destructive", title: "Select at least one year for each chosen course" });
+      return;
+    }
     setIsSubmitting(true);
     try {
       const selectedHod = hods.find((h) => h.uid === data.hodUid);
@@ -81,6 +101,7 @@ export default function NewDepartmentPage() {
         code: data.code.toUpperCase(),
         hodUid: data.hodUid ?? "",
         hodName: selectedHod?.name ?? "",
+        courses: courseSelections,
         hasSubDepartments,
         ...(hasSubDepartments ? { parentRunsOwnSections } : {}),
         secondaryDepartments: secondaryDepartments.length > 0 ? secondaryDepartments : undefined,
@@ -107,7 +128,7 @@ export default function NewDepartmentPage() {
     <div className="max-w-xl">
       <PageHeader
         title="Add Department"
-        description="Add a new department and optionally assign a Head of Department"
+        description="Add a new department under one or more courses, and optionally assign a Head of Department"
       />
 
       <Card>
@@ -139,6 +160,19 @@ export default function NewDepartmentPage() {
               />
               <p className="text-xs text-muted-foreground">2-10 uppercase letters, used in reports and batch IDs</p>
               {errors.code && <p className="text-sm text-destructive">{errors.code.message}</p>}
+            </div>
+
+            <div className="space-y-2">
+              <Label>Courses *</Label>
+              <p className="text-xs text-muted-foreground">
+                Pick every course this department offers (e.g. CSE under both B.Tech and M.Tech) - it will be listed
+                under each of them in the Courses module.
+              </p>
+              {catalogLoaded ? (
+                <DepartmentCoursePicker catalog={catalog} value={courseSelections} onChange={setCourseSelections} />
+              ) : (
+                <div className="h-16 bg-muted animate-pulse rounded-md" />
+              )}
             </div>
 
             <div className="space-y-2">
@@ -247,7 +281,13 @@ export default function NewDepartmentPage() {
 
             <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end pt-4 border-t">
               <Button type="button" variant="outline" onClick={() => router.back()}>Cancel</Button>
-              <Button type="submit" loading={isSubmitting}>Add Department</Button>
+              <Button
+                type="submit"
+                loading={isSubmitting}
+                disabled={!catalogLoaded || courseSelections.length === 0}
+              >
+                Add Department
+              </Button>
             </div>
           </form>
         </CardContent>
