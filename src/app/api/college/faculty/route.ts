@@ -11,6 +11,7 @@ import { experienceBreakdown, allPreviousExperienceEntries } from "@/lib/faculty
 import { normalizeAcademicProfile } from "@/lib/faculty/academicProfileCompat";
 import { migrateFacultyDoc } from "@/lib/faculty/fieldRenames";
 import { normalizeHighestQualification } from "@/lib/faculty/highestQualification";
+import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import type { Designation, FacultyStatus, EmployeeCategory } from "@/types";
 import { EMPLOYEE_CATEGORY_VALUES, EMPLOYEE_CATEGORY_ERROR_MESSAGE } from "@/types";
 
@@ -119,11 +120,11 @@ export async function GET(request: Request) {
     // any pre-migration record still sitting in facultyMembers.
     const teachingOnly = faculty.filter((f) => !LEGACY_TECHNICAL_DESIGNATIONS.includes(f.designation as string));
 
-    teachingOnly.sort((a, b) => {
-      const an = (a.name as string | undefined) ?? "";
-      const bn = (b.name as string | undefined) ?? "";
-      return an.localeCompare(bn);
-    });
+    teachingOnly.sort((a, b) =>
+      facultyDisplayName(a as { legalName?: string; name?: string }).localeCompare(
+        facultyDisplayName(b as { legalName?: string; name?: string })
+      )
+    );
     return NextResponse.json({ faculty: teachingOnly });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {

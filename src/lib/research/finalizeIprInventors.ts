@@ -29,7 +29,9 @@ export async function finalizeIprInventors(
       const f = snap.docs[0]?.data() as { name?: string; legalName?: string } | undefined;
       if (f) {
         finalized.push({
-          ...inv, isInternal: true, name: f.name || f.legalName || inv.name,
+          // Full Name (as per SSC) preferred, Name (as per PAN) only as a fallback -
+          // same precedence facultyDisplayName() uses everywhere else.
+          ...inv, isInternal: true, name: f.legalName?.trim() || f.name?.trim() || inv.name,
           affiliationCollegeId: ownCollegeId, affiliationCollegeName: await ownCollege(), affiliationCountry: undefined,
         });
         continue;

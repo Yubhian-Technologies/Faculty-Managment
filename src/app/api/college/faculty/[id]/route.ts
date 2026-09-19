@@ -8,6 +8,10 @@ import { syncTrainingEntryCoConductors } from "@/lib/faculty/syncTrainingEntryCo
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
 import { experienceBreakdown, allPreviousExperienceEntries } from "@/lib/faculty/experienceCalc";
 import { normalizeAcademicProfile } from "@/lib/faculty/academicProfileCompat";
+import {
+  academicProfileFirestoreUpdates, applyAcademicProfileChanges, parseAcademicProfileChanges, touchesTrainingEntries,
+  type AcademicProfileChanges,
+} from "@/lib/faculty/academicProfileChanges";
 import { migrateFacultyDoc } from "@/lib/faculty/fieldRenames";
 import { withLegacyFacultyKeysDeleted } from "@/lib/faculty/legacyKeyDeletes";
 import { normalizeHighestQualification } from "@/lib/faculty/highestQualification";
@@ -81,6 +85,9 @@ export async function PATCH(
       status: FacultyStatus;
       userUid: string;
       academicProfile: Record<string, unknown>;
+      // Section-scoped alternative to `academicProfile`: only the keys that changed
+      // ({ set, remove }) - see academicProfileChanges.ts. Never combined with it.
+      academicProfileChanges: unknown;
       technicalProfile: Record<string, unknown>;
       profilePhotoUrl: string;
       joiningLetterUrl: string;
@@ -195,8 +202,22 @@ export async function PATCH(
         .filter((p) => p.number);
     }
 
-    // Academic profile (Modules 1-5) / Technical profile - mutually exclusive by designation
-    if (body.academicProfile !== undefined) updates.academicProfile = normalizeAcademicProfile(body.academicProfile);
+    // Academic profile (Modules 1-5) / Technical profile - mutually exclusive by designation.
+    // The edit pages send `academicProfileChanges` (only the keys the tab changed), written
+    // as dot-paths so every other key of the stored profile is left exactly as it is;
+    // `academicProfile` (the whole object) is still accepted and replaces it wholesale.
+    let academicChanges: AcademicProfileChanges | undefined;
+    if (body.academicProfileChanges !== undefined) {
+      if (body.academicProfile !== undefined) {
+        return NextResponse.json({ error: "Send either academicProfile or academicProfileChanges, not both" }, { status: 400 });
+      }
+      const parsed = parseAcademicProfileChanges(body.academicProfileChanges);
+      if (!parsed) return NextResponse.json({ error: "Invalid academicProfileChanges" }, { status: 400 });
+      academicChanges = parsed;
+      Object.assign(updates, academicProfileFirestoreUpdates((snap.data() as { academicProfile?: unknown }).academicProfile, academicChanges, FieldValue.delete()));
+    } else if (body.academicProfile !== undefined) {
+      updates.academicProfile = normalizeAcademicProfile(body.academicProfile);
+    }
     if (body.technicalProfile !== undefined) updates.technicalProfile = body.technicalProfile;
 
     // Date fields
@@ -209,9 +230,11 @@ export async function PATCH(
     // same two inputs. Only recomputed when this PATCH actually touches one
     // of those inputs; whichever of academicProfile/joiningDate it doesn't
     // touch falls back to what's already on the doc.
-    if (body.academicProfile !== undefined || body.joiningDate) {
+    if (body.academicProfile !== undefined || academicChanges || body.joiningDate) {
       const existing = snap.data() as { academicProfile?: Record<string, unknown>; joiningDate?: FirebaseFirestore.Timestamp };
-      const effectiveAcademicProfile = body.academicProfile !== undefined ? updates.academicProfile : normalizeAcademicProfile(existing.academicProfile);
+      const effectiveAcademicProfile = academicChanges
+        ? applyAcademicProfileChanges(existing.academicProfile, academicChanges)
+        : body.academicProfile !== undefined ? updates.academicProfile : normalizeAcademicProfile(existing.academicProfile);
       const effectiveJoiningDate = body.joiningDate ? new Date(body.joiningDate) : existing.joiningDate;
       updates.totalYearsOfExperience = experienceBreakdown(
         allPreviousExperienceEntries(effectiveAcademicProfile as Parameters<typeof allPreviousExperienceEntries>[0]),
@@ -314,10 +337,13 @@ export async function PATCH(
       }
     }
 
-    if (body.academicProfile !== undefined) {
+    if (body.academicProfile !== undefined || (academicChanges && touchesTrainingEntries(academicChanges))) {
       try {
-        const previousEntries = normalizeAcademicProfile((snap.data() as { academicProfile?: { fdpsWorkshopsMoocsCertifications?: TrainingEntry[] } }).academicProfile)?.fdpsWorkshopsMoocsCertifications;
-        const nextEntries = (updates.academicProfile as { fdpsWorkshopsMoocsCertifications?: TrainingEntry[] } | undefined)?.fdpsWorkshopsMoocsCertifications;
+        const storedProfile = (snap.data() as { academicProfile?: { fdpsWorkshopsMoocsCertifications?: TrainingEntry[] } }).academicProfile;
+        const previousEntries = normalizeAcademicProfile(storedProfile)?.fdpsWorkshopsMoocsCertifications;
+        const nextEntries = academicChanges
+          ? (applyAcademicProfileChanges(storedProfile, academicChanges) as { fdpsWorkshopsMoocsCertifications?: TrainingEntry[] }).fdpsWorkshopsMoocsCertifications
+          : (updates.academicProfile as { fdpsWorkshopsMoocsCertifications?: TrainingEntry[] } | undefined)?.fdpsWorkshopsMoocsCertifications;
         await syncTrainingEntryCoConductors(db, session.collegeId, id, newDisplayName || oldDisplayName, previousEntries, nextEntries);
       } catch (syncErr) {
         console.error("[college/faculty/[id] PATCH] co-conductor sync failed:", syncErr);
@@ -353,7 +379,7 @@ export async function DELETE(
     if (!snap.exists) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
-    const facultyData = snap.data() as { name?: string; userUid?: string; department?: string };
+    const facultyData = snap.data() as { name?: string; legalName?: string; userUid?: string; department?: string };
 
     if (session.role === "HOD") {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
@@ -415,7 +441,9 @@ export async function DELETE(
       performedBy: session.uid,
       performedByName: actorName,
       targetId: id,
-      details: { name: facultyData.name ?? "" },
+      // Full Name (as per SSC) preferred, Name (as per PAN) only as a fallback -
+      // same precedence facultyDisplayName() uses everywhere else.
+      details: { name: facultyData.legalName?.trim() || facultyData.name?.trim() || "" },
       timestamp: new Date(),
     });
 

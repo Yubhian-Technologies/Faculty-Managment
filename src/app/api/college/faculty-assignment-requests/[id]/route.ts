@@ -6,6 +6,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { notify } from "@/lib/notify";
 import { getHodDepartmentScope, canHodEditDepartment, ownDepartmentNames } from "@/lib/departments/scope";
 import { isTimetableInchargeForDepartment } from "@/lib/departments/timetableIncharge";
+import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import type { FacultyAssignmentRequest } from "@/types";
 
 // Fulfills (allocate) or declines an incoming faculty-assignment request -
@@ -92,7 +93,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
     const facultySnap = await collegeRef.collection("facultyMembers").doc(body.facultyId).get();
     if (!facultySnap.exists) return NextResponse.json({ error: "Faculty not found" }, { status: 404 });
-    const faculty = facultySnap.data() as { name?: string; department?: string };
+    const faculty = facultySnap.data() as { name?: string; legalName?: string; department?: string };
+    const allocatedName = facultyDisplayName(faculty);
     // An Incharge (no HOD scope tree) may only offer up faculty from the
     // exact department the request targeted - an HOD may also reach into a
     // sub-department's own faculty, same as before.
@@ -119,7 +121,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     await taRef.set({
       collegeId: session.collegeId,
       facultyId: body.facultyId,
-      facultyName: faculty.name ?? body.facultyName ?? "",
+      facultyName: allocatedName || body.facultyName || "",
       department: reqData.requestingDepartment,
       departmentId: course?.departmentId ?? "",
       courseId: reqData.courseId,
@@ -142,7 +144,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     await reqRef.update({
       status: "ALLOCATED",
       allocatedFacultyId: body.facultyId,
-      allocatedFacultyName: faculty.name ?? body.facultyName ?? "",
+      allocatedFacultyName: allocatedName || body.facultyName || "",
       allocatedBy: session.uid,
       teachingAssignmentId: taRef.id,
       updatedAt: now,
@@ -154,14 +156,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       performedBy: session.uid,
       performedByName: session.role,
       targetId: id,
-      details: { subjectName: reqData.subjectName, sectionName: reqData.sectionName, facultyName: faculty.name ?? "" },
+      details: { subjectName: reqData.subjectName, sectionName: reqData.sectionName, facultyName: allocatedName },
       timestamp: now,
     });
 
     await notify(
       db, session.collegeId, reqData.requestedBy, "FACULTY_ASSIGNMENT_ALLOCATED",
       "Faculty assignment fulfilled",
-      `${reqData.targetDepartmentName} assigned ${faculty.name ?? "a faculty member"} to ${reqData.subjectName} (Section ${reqData.sectionName}) - pick its weekly periods on the Timetable page`,
+      `${reqData.targetDepartmentName} assigned ${allocatedName || "a faculty member"} to ${reqData.subjectName} (Section ${reqData.sectionName}) - pick its weekly periods on the Timetable page`,
       "/hod/assignment-requests"
     );
 

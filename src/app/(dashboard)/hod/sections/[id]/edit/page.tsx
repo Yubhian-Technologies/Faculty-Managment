@@ -14,6 +14,7 @@ import { toast } from "@/hooks/useToast";
 import { buildCourseGroups } from "@/lib/departments/hodScope";
 import { regulationsForBatchStartYear } from "@/lib/college/academicStructure";
 import { currentAcademicStartYear, admissionStartYearForCourseYear, deriveBatch, sectionBatchIntakeYears, parseBatchStartYear } from "@/lib/college/academicSession";
+import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import type { Course, CourseCatalogItem, Department, Section, Subject, TeachingAssignment } from "@/types";
 
 type SectionRow = Section & { id: string };
@@ -106,9 +107,9 @@ export default function EditSectionPage() {
   useEffect(() => {
     fetch("/api/college/faculty?status=ACTIVE")
       .then((r) => r.json())
-      .then((d: { faculty?: FacultyOption[] }) => {
+      .then((d: { faculty?: (FacultyOption & { legalName?: string })[] }) => {
         setFacultyList((d.faculty ?? []).map((f) => ({
-          id: f.id, name: f.name, designation: f.designation, department: f.department, accessLevel: f.accessLevel, userUid: f.userUid,
+          id: f.id, name: facultyDisplayName(f), designation: f.designation, department: f.department, accessLevel: f.accessLevel, userUid: f.userUid,
         })));
       })
       .catch(() => { /* non-critical */ });
