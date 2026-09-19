@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { designationKey } from "@/lib/designations/config";
 import type { DesignationCadre, DesignationCategory } from "@/types";
 
 const CATEGORIES: DesignationCategory[] = ["FACULTY", "TECHNICAL", "NON_TECHNICAL"];
@@ -82,8 +83,10 @@ export async function POST(request: Request) {
     let duplicateError: string | null = null;
     await db.runTransaction(async (tx) => {
       const existing = await tx.get(coll.where("category", "==", category));
-      const nameKey = name.toLowerCase();
-      const clash = existing.docs.find((d) => ((d.data() as { name?: string }).name ?? "").trim().toLowerCase() === nameKey);
+      // designationKey compares display labels, so a legacy code entry
+      // ("ASSISTANT_PROFESSOR") and its readable spelling clash.
+      const nameKey = designationKey(name);
+      const clash = existing.docs.find((d) => designationKey((d.data() as { name?: string }).name) === nameKey);
       if (clash) {
         duplicateError = "A designation with this name already exists";
         return;

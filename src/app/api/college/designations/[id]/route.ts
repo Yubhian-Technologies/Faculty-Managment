@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { designationKey } from "@/lib/designations/config";
 import { MANAGE_ROLES_BY_CATEGORY } from "../route";
 import type { DesignationCadre, DesignationCategory } from "@/types";
 
@@ -36,9 +37,26 @@ export async function PATCH(
     }
     if (nextName != null) {
       const all = await coll.where("category", "==", existing.category).get();
-      const nameKey = nextName.toLowerCase();
-      const clash = all.docs.find((d) => d.id !== id && ((d.data() as { name?: string }).name ?? "").trim().toLowerCase() === nameKey);
+      const nameKey = designationKey(nextName);
+      const clash = all.docs.find((d) => d.id !== id && designationKey((d.data() as { name?: string }).name) === nameKey);
       if (clash) return NextResponse.json({ error: "A designation with this name already exists" }, { status: 409 });
+
+      // Faculty/Supporting Staff store this exact string (not a reference), so
+      // renaming an entry that's in use would silently orphan those records -
+      // same reasoning as DELETE's in-use guard below.
+      if (nextName !== existing.name) {
+        const collegeRef = db.collection("colleges").doc(session.collegeId);
+        const inUseSnap = await (existing.category === "FACULTY"
+          ? collegeRef.collection("facultyMembers")
+          : collegeRef.collection("supportingStaff")
+        ).where("designation", "==", existing.name).limit(1).get();
+        if (!inUseSnap.empty) {
+          return NextResponse.json(
+            { error: "This designation is in use, so it can't be renamed. Add a new designation instead, or deactivate this one." },
+            { status: 409 }
+          );
+        }
+      }
       updates.name = nextName;
     }
 

@@ -17,6 +17,7 @@ import { PHONE_REGEX } from "@/lib/validations";
 import { toast } from "@/hooks/useToast";
 import { migrateFacultyDoc } from "@/lib/faculty/fieldRenames";
 import { toDateInputValue } from "@/lib/utils";
+import { designationLabel } from "@/lib/designations/config";
 import { EMPLOYEE_CATEGORY_LABELS } from "@/types";
 import type { DesignationCatalogItem, Designation, EmployeeCategory } from "@/types";
 
@@ -254,7 +255,13 @@ export default function EditHodFacultyIdentityPage() {
                 <Select value={form.designation} onValueChange={(v) => set({ designation: v as Designation })}>
                   <SelectTrigger><SelectValue placeholder="Select designation" /></SelectTrigger>
                   <SelectContent>
-                    {designationOptions.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                    {designationOptions.map((d) => <SelectItem key={d} value={d}>{designationLabel(d)}</SelectItem>)}
+                    {/* A saved designation that's no longer an active catalog entry (deactivated,
+                        removed, or the catalog not loaded yet) must still show as selected rather
+                        than a blank picker - the record keeps its value either way. */}
+                    {form.designation && !designationOptions.includes(form.designation) && (
+                      <SelectItem value={form.designation}>{designationLabel(form.designation)}{designationOptions.length > 0 ? " (not in active list)" : ""}</SelectItem>
+                    )}
                   </SelectContent>
                 </Select>
               </div>

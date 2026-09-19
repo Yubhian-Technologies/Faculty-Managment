@@ -28,6 +28,7 @@ import { PROFILE_MODULES } from "@/lib/faculty/profileModules";
 import { EMPLOYEE_CATEGORY_LABELS } from "@/types";
 import type { DesignationCatalogItem, EmployeeCategory } from "@/types";
 import { useCollegeType } from "@/hooks/useCollegeType";
+import { designationLabel } from "@/lib/designations/config";
 import { useAuthStore } from "@/store/authStore";
 import { toast } from "@/hooks/useToast";
 import type { FacultyProfileFields } from "@/types";
@@ -475,7 +476,7 @@ export default function NewFacultyPage() {
                     >
                       <SelectTrigger><SelectValue placeholder="Select designation" /></SelectTrigger>
                       <SelectContent>
-                        {designationOptions.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                        {designationOptions.map((d) => <SelectItem key={d} value={d}>{designationLabel(d)}</SelectItem>)}
                       </SelectContent>
                     </Select>
                     {errors.designation && <p className="text-sm text-destructive">{errors.designation.message}</p>}
