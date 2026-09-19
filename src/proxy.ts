@@ -63,6 +63,9 @@ const ROLE_PATH_MAP: Record<string, string[]> = {
   // separate home path of its own (role is normalized to PRINCIPAL for auth,
   // see src/app/api/auth/session/route.ts and src/hooks/useAuth.ts).
   COLLEGE_ADMIN: ["/principal", PANEL_INTERVIEWS_PATH, EVALUATION_PATH, CANDIDATE_PROFILE_PATH, LEAVE_ADJUSTMENTS_PATH],
+  // Director mirrors Principal's authority exactly, same as College Admin
+  // above - normalized to PRINCIPAL for auth (api/auth/session, useAuth.ts).
+  DIRECTOR: ["/principal", PANEL_INTERVIEWS_PATH, EVALUATION_PATH, CANDIDATE_PROFILE_PATH, LEAVE_ADJUSTMENTS_PATH],
   HOD: ["/hod", "/coordinator", PANEL_INTERVIEWS_PATH, EVALUATION_PATH, CANDIDATE_PROFILE_PATH, LEAVE_ADJUSTMENTS_PATH],
   // Normalized to HOD before the cookie is written (api/auth/session), so
   // this is only reached by a session issued before that existed - same paths.

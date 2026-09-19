@@ -36,7 +36,8 @@ export function useAuth() {
         let serverName: string | undefined;
         let serverEmail: string | undefined;
         // True underlying role from /api/auth/session's own realRole (only
-        // ever differs from `role` for COLLEGE_ADMIN) - see FMSUser.realRole.
+        // ever differs from `role` for COLLEGE_ADMIN or DIRECTOR) - see
+        // FMSUser.realRole.
         let serverRealRole: string | undefined;
 
         // Users created via REST API have no JWT custom claims.
@@ -133,6 +134,12 @@ export function useAuth() {
           // must tell College Admin apart from Principal (see FMSUser.realRole).
           if (profile && (profile.role as string) === "COLLEGE_ADMIN") {
             realRole = "COLLEGE_ADMIN";
+            profile = { ...profile, role: "PRINCIPAL" };
+          }
+          // Same normalization, same reasoning, for Director (Super Admin-
+          // provisioned, full Principal authority).
+          if (profile && (profile.role as string) === "DIRECTOR") {
+            realRole = "DIRECTOR";
             profile = { ...profile, role: "PRINCIPAL" };
           }
           // Same normalization, same reasoning, for a department's own office

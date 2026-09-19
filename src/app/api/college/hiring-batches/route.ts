@@ -170,7 +170,7 @@ export async function POST(request: Request) {
       .collection("colleges")
       .doc(session.collegeId)
       .collection("users")
-      .where("role", "in", ["PRINCIPAL", "COLLEGE_ADMIN"])
+      .where("role", "in", ["PRINCIPAL", "COLLEGE_ADMIN", "DIRECTOR"])
       .get();
 
     const notifBatch = db.batch();

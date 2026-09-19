@@ -577,6 +577,15 @@ export const BOTTOM_NAV_ITEMS: Record<UserRole, NavItem[]> = {
     { label: "Faculty", href: "/principal/faculty", iconName: "UsersRound", roles: ["COLLEGE_ADMIN"] },
     { label: "Profile", href: "/principal/profile", iconName: "UserCircle", roles: ["COLLEGE_ADMIN"] },
   ],
+  // Same reasoning as COLLEGE_ADMIN just above - Director's session role is
+  // also normalized to PRINCIPAL, so this is dead at runtime too. Kept only
+  // to satisfy Record<UserRole, ...>.
+  DIRECTOR: [
+    { label: "Home", href: "/principal", iconName: "LayoutDashboard", roles: ["DIRECTOR"] },
+    { label: "Vacancies", href: "/principal/vacancies", iconName: "ClipboardList", roles: ["DIRECTOR"] },
+    { label: "Faculty", href: "/principal/faculty", iconName: "UsersRound", roles: ["DIRECTOR"] },
+    { label: "Profile", href: "/principal/profile", iconName: "UserCircle", roles: ["DIRECTOR"] },
+  ],
   HOD: [
     { label: "Home", href: "/hod", iconName: "LayoutDashboard", roles: ["HOD"] },
     { label: "Pipeline", href: "/hod/pipeline", iconName: "GitBranch", roles: ["HOD"] },

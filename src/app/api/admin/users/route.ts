@@ -78,7 +78,7 @@ export async function GET(request: Request) {
 const SUPER_ADMIN_CREATABLE: UserRole[] = [
   "MANAGEMENT", "FINANCE", "PURCHASE_DEPT",   // L1 · GLOBAL
   "ADMINISTRATION", "ACCOUNTS",               // L2 · LOCATION
-  "PRINCIPAL",                                // L3 · COLLEGE
+  "PRINCIPAL", "DIRECTOR",                    // L3 · COLLEGE
 ];
 // Global-scoped subset - used by the GET ?scope=global (System-Wide) listing.
 const GLOBAL_ROLES: UserRole[] = SUPER_ADMIN_CREATABLE.filter((r) => ROLE_SCOPE[r] === "GLOBAL");

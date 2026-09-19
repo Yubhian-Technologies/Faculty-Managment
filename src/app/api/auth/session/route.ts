@@ -51,6 +51,11 @@ export async function POST(request: Request) {
     // shows up as its own entry in staff lists.
     if (role === "COLLEGE_ADMIN") role = "PRINCIPAL";
 
+    // Director (Super Admin-provisioned, L3 · College Leadership) follows the
+    // exact same normalization for the exact same reason - full Principal
+    // authority, own real role preserved on the Firestore doc.
+    if (role === "DIRECTOR") role = "PRINCIPAL";
+
     // A department's own office head carries the same authority as that
     // department's HOD, so it normalizes the same way for exactly the same
     // reason: ~420 role==="HOD" checks across 154 files keep working untouched
@@ -116,6 +121,10 @@ export async function POST(request: Request) {
           profile = { uid: userSnap.id, ...userSnap.data() };
           if (profile.role === "COLLEGE_ADMIN") {
             realRole = "COLLEGE_ADMIN";
+            profile.role = "PRINCIPAL";
+          }
+          if (profile.role === "DIRECTOR") {
+            realRole = "DIRECTOR";
             profile.role = "PRINCIPAL";
           }
           if (profile.role === "DEPARTMENT_OFFICE") {

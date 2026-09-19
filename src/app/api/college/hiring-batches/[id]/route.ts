@@ -369,7 +369,7 @@ export async function PATCH(
         .collection("colleges")
         .doc(session.collegeId)
         .collection("users")
-        .where("role", "in", ["PRINCIPAL", "COLLEGE_ADMIN"])
+        .where("role", "in", ["PRINCIPAL", "COLLEGE_ADMIN", "DIRECTOR"])
         .get();
       for (const d of principalSnap.docs) {
         const ref = db.collection("colleges").doc(session.collegeId).collection("notifications").doc();

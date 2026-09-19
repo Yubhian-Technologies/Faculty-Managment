@@ -22,7 +22,7 @@ import type { College, Location, FacultyProfileFields, UserRole } from "@/types"
 const CREATABLE_ROLES: UserRole[] = [
   "MANAGEMENT", "FINANCE", "PURCHASE_DEPT",   // L1 · GLOBAL
   "ADMINISTRATION", "ACCOUNTS",               // L2 · LOCATION
-  "PRINCIPAL",                                // L3 · COLLEGE
+  "PRINCIPAL", "DIRECTOR",                    // L3 · COLLEGE
 ];
 
 // Creatable roles grouped by their L0–L6 level, so the role picker is level-scoped.
@@ -81,7 +81,7 @@ export default function NewUserPage() {
         body: JSON.stringify({
           name, email, password, role, collegeId, locationId, phone,
           academicProfile,
-          ...(role === "PRINCIPAL" ? { ...personalDetails, collegeEmail, employeeId } : {}),
+          ...(role === "PRINCIPAL" || role === "DIRECTOR" ? { ...personalDetails, collegeEmail, employeeId } : {}),
           ...(photoUrl ? { profilePhotoUrl: photoUrl } : {}),
         }),
       });
@@ -121,10 +121,10 @@ export default function NewUserPage() {
                   <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Full name" />
                 </div>
                 <div className="space-y-2">
-                  <Label>Email <span className="text-destructive">*</span></Label>
+                  <Label>Personal Email <span className="text-destructive">*</span></Label>
                   <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="user@example.com" />
                 </div>
-                {role === "PRINCIPAL" && (
+                {(role === "PRINCIPAL" || role === "DIRECTOR") && (
                   <>
                     <div className="space-y-2">
                       <Label>College Email</Label>
@@ -225,7 +225,7 @@ export default function NewUserPage() {
         </CardContent>
       </Card>
 
-      {role === "PRINCIPAL" ? (
+      {role === "PRINCIPAL" || role === "DIRECTOR" ? (
         <>
           <Card className="mt-6">
             <CardHeader><CardTitle className="text-base">Personal Details</CardTitle></CardHeader>

@@ -16,10 +16,11 @@ import { ShieldCheck, KeyRound, UserCheck } from "lucide-react";
 import { ROLE_LABELS, MEETING_PLATFORM_LABELS } from "@/types";
 import type { VacancyRequest, Candidate, CandidateApplication, FMSUser, HiringBatch, MeetingPlatform } from "@/types";
 
-// COLLEGE_ADMIN mirrors Principal's authority (see UserRole's own doc-comment)
-// but keeps its real "COLLEGE_ADMIN" role on its own Firestore doc, so it
-// needs its own entry here to be locked in as a default panel member too.
-const DEFAULT_ROLES = ["PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_ADMIN"] as const;
+// COLLEGE_ADMIN and DIRECTOR mirror Principal's authority (see UserRole's own
+// doc-comment) but keep their real "COLLEGE_ADMIN"/"DIRECTOR" role on their
+// own Firestore doc, so they need their own entries here to be locked in as
+// default panel members too.
+const DEFAULT_ROLES = ["PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_ADMIN", "DIRECTOR"] as const;
 const SELECTABLE_ROLES = ["HOD", "PANEL_MEMBER"] as const;
 const MEETING_PLATFORMS = Object.keys(MEETING_PLATFORM_LABELS) as MeetingPlatform[];
 
