@@ -76,6 +76,7 @@ export default function PrincipalNonTechnicalStaffModuleEditPage() {
           heightInches: m.heightInches as number | undefined,
           weightKg: m.weightKg as number | undefined,
           pfNumber: (m.pfNumber as string) ?? "",
+          uanNumber: (m.uanNumber as string) ?? "",
           esiNumber: (m.esiNumber as string) ?? "",
           supportingStaffProfile: (m.supportingStaffProfile as SupportingStaffEditRecord["supportingStaffProfile"]) ?? {},
         });
@@ -117,7 +118,7 @@ export default function PrincipalNonTechnicalStaffModuleEditPage() {
               permanentAddress: record.permanentAddress, bloodGroup: record.bloodGroup,
               motherTongue: record.motherTongue, languagesKnown: record.languagesKnown,
               heightFeet: record.heightFeet, heightInches: record.heightInches, weightKg: record.weightKg,
-              pfNumber: record.pfNumber, esiNumber: record.esiNumber,
+              pfNumber: record.pfNumber, uanNumber: record.uanNumber, esiNumber: record.esiNumber,
             }
           : { supportingStaffProfile: record.supportingStaffProfile };
 

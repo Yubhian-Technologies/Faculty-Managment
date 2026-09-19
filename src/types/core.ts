@@ -1039,6 +1039,7 @@ export interface FacultyMember {
   heightInches?: number;
   weightKg?: number;
   pfNumber?: string; // Provident Fund number
+  uanNumber?: string; // Universal Account Number (EPFO) - shown right after PF Number
   // Internal Experience (time served since Date of Joining) and External
   // Experience (Academic + Industry + Research Experience entries combined,
   // see academicProfile below) are NOT stored fields - both are computed

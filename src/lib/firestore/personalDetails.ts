@@ -42,6 +42,7 @@ export interface PersonalDetailsInput {
   heightInches?: number;
   weightKg?: number;
   pfNumber?: string; // Provident Fund number - Faculty and Supporting/Non-Technical Staff alike
+  uanNumber?: string; // Universal Account Number (EPFO) - Faculty and Supporting/Non-Technical Staff alike, shown right after PF Number
   esiNumber?: string; // ESI number - Supporting/Non-Technical Staff only (no equivalent field on FacultyMember)
 }
 
@@ -54,7 +55,7 @@ const STRING_FIELDS = [
   "ratificationProceedingsNumber",
   "passportNo", "differentlyAbledDetails", "bankAccountNumber", "bankName", "bankBranch", "bankOtherDetails",
   "emergencyContactName", "emergencyContactRelation", "emergencyContactMobileNo", "maritalStatus", "spouseName", "temporaryAddress", "bloodGroup",
-  "motherTongue", "pfNumber", "esiNumber",
+  "motherTongue", "pfNumber", "uanNumber", "esiNumber",
 ] as const;
 
 // The manual Add/Edit forms only ever write "Ratified" or "Not Ratified"
@@ -97,7 +98,29 @@ export function buildPersonalDetailsUpdate(rawBody: PersonalDetailsInput): Recor
   if (body.panNo !== undefined) updates.panNo = body.panNo.toUpperCase();
   if (body.ifscCode !== undefined) updates.ifscCode = body.ifscCode.toUpperCase();
   if (body.dateOfBirth) updates.dateOfBirth = new Date(body.dateOfBirth);
-  if (body.ratificationDate) updates.ratificationDate = new Date(body.ratificationDate);
+  // Ratification Proceedings Number/Date only make sense once Ratified - the
+  // instant this call sets ratificationStatus to literally "Not Ratified",
+  // both are force-cleared here regardless of whatever the caller separately
+  // sent for them, so a Ratified -> Not Ratified save can never leave a stale
+  // Proceedings Number/Date in Firestore. Checked against "Not Ratified"
+  // specifically (not just "isn't Ratified") - personalRecordFromDoc/
+  // personalPatchBody always send ratificationStatus as "" for a legacy
+  // record that never had one, and that blank/unset state must NOT be
+  // treated as "Not Ratified" or every unrelated Personal Details save on
+  // such a record would wipe a Proceedings Number/Date it never touched.
+  // An empty string (rather than deleting the key) matches how every other
+  // clearable field here is cleared, and is exactly what an unset
+  // Ratification Date already reads back as everywhere it's displayed
+  // (falsy -> "-").
+  if (body.ratificationStatus === "Not Ratified") {
+    updates.ratificationProceedingsNumber = "";
+    updates.ratificationDate = "";
+  } else if (body.ratificationDate !== undefined) {
+    // `!== undefined` (not truthy) so an explicit empty string - clearing the
+    // date without necessarily touching ratificationStatus in this same call
+    // - actually clears it instead of being silently dropped.
+    updates.ratificationDate = body.ratificationDate ? new Date(body.ratificationDate) : "";
+  }
   if (body.numberOfChildren !== undefined) updates.numberOfChildren = body.numberOfChildren;
   if (body.languagesKnown !== undefined) updates.languagesKnown = body.languagesKnown;
   if (body.heightFeet !== undefined) updates.heightFeet = body.heightFeet;
