@@ -892,15 +892,25 @@ export const DESIGNATION_LABELS: Record<string, string> = {
 // FacultyMember.employeeCategory - set on Add Faculty's "Identity &
 // Employment" step and by the hiring pipeline's provisioning step, editable
 // afterward only by HOD/Principal/VP (see FacultyMember.employeeCategory's
-// own doc-comment). Exactly these 4 values are accepted anywhere this is set
-// - no catalog, no free text.
-export type EmployeeCategory = "REGULAR" | "VISITING" | "CONTRACT" | "PART_TIME";
+// own doc-comment). Exactly the keys of EMPLOYEE_CATEGORY_LABELS below are
+// accepted anywhere this is set - no catalog, no free text. Professor of
+// Practice / Asst.prof. of Practice are employee categories (how the person is
+// engaged), not designations; a person's designation is a separate field.
+export type EmployeeCategory =
+  | "REGULAR" | "VISITING" | "CONTRACT" | "PART_TIME"
+  | "PROFESSOR_OF_PRACTICE" | "ASST_PROF_OF_PRACTICE";
 export const EMPLOYEE_CATEGORY_LABELS: Record<EmployeeCategory, string> = {
   REGULAR: "Regular",
   VISITING: "Visiting",
   CONTRACT: "Contract",
   PART_TIME: "Part Time",
+  PROFESSOR_OF_PRACTICE: "Professor of Practice",
+  ASST_PROF_OF_PRACTICE: "Asst.prof. of Practice",
 };
+// Single source of truth for API validation (faculty POST/PATCH, faculty
+// account requests) so the accepted list can't drift between routes.
+export const EMPLOYEE_CATEGORY_VALUES = Object.keys(EMPLOYEE_CATEGORY_LABELS) as EmployeeCategory[];
+export const EMPLOYEE_CATEGORY_ERROR_MESSAGE = `Employee Category must be one of ${Object.values(EMPLOYEE_CATEGORY_LABELS).join(", ")}`;
 
 // Legacy type FacultyMember.employmentType used to share before that field
 // was retired in favor of EmployeeCategory above. Salary Structures/Budget

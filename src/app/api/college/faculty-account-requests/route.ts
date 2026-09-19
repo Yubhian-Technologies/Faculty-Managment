@@ -4,10 +4,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import type { EmployeeCategory } from "@/types";
-
-// Exactly these 4 values are accepted anywhere Employee Category is set -
-// see EmployeeCategory's own doc-comment in types/core.ts.
-const EMPLOYEE_CATEGORY_VALUES: EmployeeCategory[] = ["REGULAR", "VISITING", "CONTRACT", "PART_TIME"];
+import { EMPLOYEE_CATEGORY_VALUES, EMPLOYEE_CATEGORY_ERROR_MESSAGE } from "@/types";
 
 export async function GET(request: Request) {
   try {
@@ -53,10 +50,10 @@ export async function POST(request: Request) {
     if (!offerId || !officialEmail?.trim()) {
       return NextResponse.json({ error: "offerId and officialEmail required" }, { status: 400 });
     }
-    // Exactly these 4 values are accepted anywhere Employee Category is set -
-    // see EmployeeCategory's own doc-comment in types/core.ts.
+    // Only the EMPLOYEE_CATEGORY_VALUES keys are accepted anywhere Employee
+    // Category is set - see EmployeeCategory's doc-comment in types/core.ts.
     if (!employeeCategory || !EMPLOYEE_CATEGORY_VALUES.includes(employeeCategory)) {
-      return NextResponse.json({ error: "Employee Category must be one of Regular, Visiting, Contract, or Part Time" }, { status: 400 });
+      return NextResponse.json({ error: EMPLOYEE_CATEGORY_ERROR_MESSAGE }, { status: 400 });
     }
 
     const db = getAdminDb();

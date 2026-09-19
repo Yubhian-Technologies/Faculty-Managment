@@ -9,10 +9,7 @@ import { getHodDepartmentScope, getDepartmentTreeNames, canHodEditDepartment, fa
 import { LEGACY_TECHNICAL_DESIGNATIONS } from "@/lib/designations/config";
 import { experienceBreakdown, allPreviousExperienceEntries } from "@/lib/faculty/experienceCalc";
 import type { Designation, FacultyStatus, EmployeeCategory } from "@/types";
-
-// Exactly these 4 values are accepted anywhere Employee Category is set -
-// see EmployeeCategory's own doc-comment in types/core.ts.
-const EMPLOYEE_CATEGORY_VALUES: EmployeeCategory[] = ["REGULAR", "VISITING", "CONTRACT", "PART_TIME"];
+import { EMPLOYEE_CATEGORY_VALUES, EMPLOYEE_CATEGORY_ERROR_MESSAGE } from "@/types";
 
 export async function GET(request: Request) {
   try {
@@ -175,10 +172,10 @@ export async function POST(request: Request) {
     if (!employeeId || !collegeEmail || !password || !designation || !qualification || !joiningDate) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
-    // Exactly these 4 values are accepted anywhere Employee Category is set -
-    // enforced here, not just in the Add Faculty dropdown.
+    // Only the EMPLOYEE_CATEGORY_VALUES keys are accepted anywhere Employee
+    // Category is set - enforced here, not just in the Add Faculty dropdown.
     if (!EMPLOYEE_CATEGORY_VALUES.includes(employeeCategory)) {
-      return NextResponse.json({ error: "Employee Category must be one of Regular, Visiting, Contract, or Part Time" }, { status: 400 });
+      return NextResponse.json({ error: EMPLOYEE_CATEGORY_ERROR_MESSAGE }, { status: 400 });
     }
     // Matches the mandatory field set the bulk-import template and Add
     // Faculty wizard's Personal Details step now both enforce. Name (as per

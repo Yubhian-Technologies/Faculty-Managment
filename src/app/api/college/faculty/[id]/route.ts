@@ -8,10 +8,7 @@ import { syncTrainingEntryCoConductors } from "@/lib/faculty/syncTrainingEntryCo
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
 import { experienceBreakdown, allPreviousExperienceEntries } from "@/lib/faculty/experienceCalc";
 import type { Designation, EmployeeCategory, FacultyStatus, TrainingEntry } from "@/types";
-
-// Exactly these 4 values are accepted anywhere Employee Category is set -
-// see EmployeeCategory's own doc-comment in types/core.ts.
-const EMPLOYEE_CATEGORY_VALUES: EmployeeCategory[] = ["REGULAR", "VISITING", "CONTRACT", "PART_TIME"];
+import { EMPLOYEE_CATEGORY_VALUES, EMPLOYEE_CATEGORY_ERROR_MESSAGE } from "@/types";
 
 export async function GET(
   _request: Request,
@@ -133,10 +130,10 @@ export async function PATCH(
         return NextResponse.json({ error: `${key} cannot be blanked out - it is a required field` }, { status: 400 });
       }
     }
-    // Exactly these 4 values are accepted anywhere Employee Category is set -
-    // see EmployeeCategory's own doc-comment in types/core.ts.
+    // Only the EMPLOYEE_CATEGORY_VALUES keys are accepted anywhere Employee
+    // Category is set - see EmployeeCategory's doc-comment in types/core.ts.
     if (body.employeeCategory !== undefined && !EMPLOYEE_CATEGORY_VALUES.includes(body.employeeCategory)) {
-      return NextResponse.json({ error: "Employee Category must be one of Regular, Visiting, Contract, or Part Time" }, { status: 400 });
+      return NextResponse.json({ error: EMPLOYEE_CATEGORY_ERROR_MESSAGE }, { status: 400 });
     }
 
     const updates: Record<string, unknown> = { updatedAt: new Date() };
