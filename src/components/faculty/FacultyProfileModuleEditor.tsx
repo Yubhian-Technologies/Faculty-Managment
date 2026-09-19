@@ -44,6 +44,15 @@ interface Props {
   // (undefined -> PersonalDetailsFields' own STAFF_REQUIRED_PERSONAL_FIELDS)
   // preserves every existing caller's behavior unless they opt in.
   requiredPersonalFields?: (keyof PersonalDetailsValue)[];
+  // Full Name (as per SSC) lives only under Identity & Employment, right after
+  // Employee ID - passed by the two callers that have a dedicated Identity &
+  // Employment editor of their own (hod/faculty/[id]/edit and panel/profile/edit)
+  // so it isn't shown a second time on this Personal Details tab. Every other
+  // caller of this editor (Principal/VP and the ~12 non-Faculty self-profile
+  // roles sharing MyProfileModuleEditPage) has no such separate page, so this
+  // Personal Details tab stays their only place to set it - default false
+  // preserves that.
+  hideLegalName?: boolean;
 }
 
 // Edit-side sibling of FacultyProfileModuleContent.tsx - given one moduleKey,
@@ -53,7 +62,7 @@ interface Props {
 // routes replace the field wholesale rather than deep-merging.
 export function FacultyProfileModuleEditor({
   moduleKey, record, onChange, facultyId, includeTeachingAssignment = true, teachingRows = [], onTeachingRowsChange, collegeType,
-  requiredPersonalFields, department,
+  requiredPersonalFields, department, hideLegalName = false,
 }: Props) {
   const academicProfile = record.academicProfile ?? {};
 
@@ -62,7 +71,14 @@ export function FacultyProfileModuleEditor({
       // Every caller of this editor is Faculty-shaped (see its own doc-comment)
       // - Supporting/Non-Technical Staff have their own SupportingStaffModuleEditor
       // - so ESI Number (statutory ID with no Faculty equivalent) never applies here.
-      return <PersonalDetailsFields value={record} onChange={(v) => onChange(v)} requiredFields={requiredPersonalFields} hiddenFields={["esiNumber"]} />;
+      return (
+        <PersonalDetailsFields
+          value={record}
+          onChange={(v) => onChange(v)}
+          requiredFields={requiredPersonalFields}
+          hiddenFields={hideLegalName ? ["legalName", "esiNumber"] : ["esiNumber"]}
+        />
+      );
     case "qualification":
       return <QualificationFields value={academicProfile} onChange={(ap) => onChange({ academicProfile: ap })} collegeType={collegeType} />;
     case "experience":

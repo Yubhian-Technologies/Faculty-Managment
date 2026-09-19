@@ -15,6 +15,7 @@ import { findBranchManager } from "@/lib/departments/managedBranches";
 import { buildCourseGroups, managerEffectiveYears } from "@/lib/departments/hodScope";
 import { resolveDepartmentCourseScope, regulationsForBatchStartYear, replaceNoOwnSectionsParents, type DepartmentWithId } from "@/lib/college/academicStructure";
 import { currentAcademicStartYear, admissionStartYearForCourseYear, deriveBatch, sectionBatchIntakeYears, parseBatchStartYear } from "@/lib/college/academicSession";
+import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import type { Course, CourseCatalogItem, Department } from "@/types";
 
 // `id` is the facultyMembers doc id — used only as the React/Select key.
@@ -98,8 +99,8 @@ export default function NewSectionPage() {
   useEffect(() => {
     fetch("/api/college/faculty?status=ACTIVE")
       .then((r) => r.json())
-      .then((d: { faculty?: { id: string; name: string; designation: string; userUid?: string }[] }) => {
-        setFacultyList((d.faculty ?? []).map((f) => ({ id: f.id, name: f.name, designation: f.designation, userUid: f.userUid })));
+      .then((d: { faculty?: { id: string; name?: string; legalName?: string; designation: string; userUid?: string }[] }) => {
+        setFacultyList((d.faculty ?? []).map((f) => ({ id: f.id, name: facultyDisplayName(f), designation: f.designation, userUid: f.userUid })));
       })
       .catch(() => { /* non-critical */ });
 

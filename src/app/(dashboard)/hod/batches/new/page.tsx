@@ -14,6 +14,7 @@ import { useMyDepartments } from "@/hooks/useMyDepartments";
 import { toast } from "@/hooks/useToast";
 import { ShieldCheck, KeyRound, UserCheck } from "lucide-react";
 import { ROLE_LABELS, MEETING_PLATFORM_LABELS } from "@/types";
+import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import type { VacancyRequest, Candidate, CandidateApplication, FMSUser, HiringBatch, MeetingPlatform } from "@/types";
 
 // COLLEGE_ADMIN mirrors Principal's authority (see UserRole's own doc-comment)
@@ -75,8 +76,8 @@ export default function NewBatchPage() {
         .then((r) => r.json() as Promise<{ users: FMSUser[] }>)
         .then((d) => d.users ?? []),
       fetch("/api/college/faculty")
-        .then((r) => r.json() as Promise<{ faculty: FacultyRecord[] }>)
-        .then((d) => d.faculty ?? [])
+        .then((r) => r.json() as Promise<{ faculty: (FacultyRecord & { legalName?: string })[] }>)
+        .then((d) => (d.faculty ?? []).map((rec) => ({ ...rec, name: facultyDisplayName(rec) })))
         .catch(() => [] as FacultyRecord[]),
       fetch("/api/college/hiring-batches")
         .then((r) => r.json() as Promise<{ batches: HiringBatch[] }>)

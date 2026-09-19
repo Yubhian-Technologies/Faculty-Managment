@@ -63,11 +63,11 @@ export default function EditMyProfileIdentityPage() {
 
   useEffect(() => {
     fetch("/api/college/faculty/me")
-      .then((r) => r.json() as Promise<{ faculty: Partial<FacultyMember> | null }>)
+      .then((r) => r.json() as Promise<{ faculty: Partial<FacultyMember> | null; message?: string }>)
       .then((d) => {
         const m = d.faculty ? (migrateFacultyDoc(d.faculty as Record<string, unknown>) as Partial<FacultyMember>) : null;
         if (!m) {
-          toast({ variant: "destructive", title: "Profile record not found" });
+          toast({ variant: "destructive", title: d.message ?? "Profile record not found" });
           router.push("/panel/profile");
           return;
         }

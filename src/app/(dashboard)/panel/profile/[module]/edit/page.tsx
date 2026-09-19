@@ -12,7 +12,9 @@ export default function PanelProfileModuleEditPage() {
     <MyProfileModuleEditPage
       basePath="/panel/profile"
       patchEndpoint="/api/college/faculty/me"
+      sectionScopedProfileSave
       requiredPersonalFields={FACULTY_REQUIRED_PERSONAL_FIELDS}
+      hideLegalName
     />
   );
 }

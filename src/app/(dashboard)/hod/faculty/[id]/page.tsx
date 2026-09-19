@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { FacultyProfileHub } from "@/components/faculty/FacultyProfileHub";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
+import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { toast } from "@/hooks/useToast";
 import type { FacultyMember } from "@/types";
 
@@ -45,7 +46,7 @@ export default function HodFacultyViewPage() {
         toast({ variant: "destructive", title: json.error ?? "Failed to reset face registration" });
         return;
       }
-      toast({ title: `${faculty?.name ?? "Faculty"} can now register their face again from My Attendance` });
+      toast({ title: `${facultyDisplayName(faculty) || "Faculty"} can now register their face again from My Attendance` });
       setConfirmingReRegister(false);
     } catch {
       toast({ variant: "destructive", title: "Failed to reset face registration" });
@@ -71,7 +72,7 @@ export default function HodFacultyViewPage() {
         open={confirmingReRegister}
         onOpenChange={(open) => { if (!open) setConfirmingReRegister(false); }}
         title="Re-register face?"
-        description={`${faculty.name ?? "This faculty member"}'s current registered face will stop working for check-in. They'll be prompted to register their face again the next time they open My Attendance.`}
+        description={`${facultyDisplayName(faculty) || "This faculty member"}'s current registered face will stop working for check-in. They'll be prompted to register their face again the next time they open My Attendance.`}
         confirmLabel="Re-register Face"
         onConfirm={() => void handleReRegisterFace()}
         loading={isResetting}
