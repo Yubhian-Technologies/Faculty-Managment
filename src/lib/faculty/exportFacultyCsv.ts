@@ -10,7 +10,8 @@ import { EXPORT_FIELDS, type ExportField, type ExportGroupField } from "@/lib/fa
 import { designationLabel } from "@/lib/designations/config";
 import {
   ADMIN_RESPONSIBILITY_CATEGORY_LABELS, TRAINING_ENTRY_TYPE_LABELS, TRAINING_PARTICIPATION_ROLE_LABELS, EMPLOYEE_CATEGORY_LABELS,
-  PROFESSIONAL_BODY_LABELS, AWARD_CATEGORY_LABELS, QUALIFYING_EXAM_LABELS, RELIGION_LABELS, CASTE_LABELS,
+  PROFESSIONAL_BODY_LABELS, AWARD_CATEGORY_LABELS, AWARD_LEVEL_LABELS, QUALIFYING_EXAM_LABELS, RELIGION_LABELS, CASTE_LABELS,
+  CERTIFICATION_TYPE_LABELS, TRAINING_PROGRAM_LEVEL_LABELS, TRAINING_PROGRAM_MODE_LABELS, MEMBERSHIP_VALIDITY_LABELS,
 } from "@/types";
 import type {
   FacultyMember, FacultyProfileFields, DegreeDetail, StaffQualification, CourseAssignment, Publication,
@@ -18,6 +19,7 @@ import type {
   AdminResponsibilityEntry, TrainingEntry, ProfessionalMembership, AwardEntry, Religion, Caste,
 } from "@/types";
 import { allPreviousExperienceEntries, totalYearsOfExperience } from "@/lib/faculty/experienceCalc";
+import { normalizeResourcePersonsDetails } from "@/components/faculty/TrainingEntryFields";
 
 function s(v: unknown): string {
   return v === null || v === undefined ? "" : String(v);
@@ -35,24 +37,47 @@ const PHD_MODE_LABELS: Record<string, string> = { FULL_TIME: "Full-Time", PART_T
 // `subFieldLabels` in csvColumns.ts.
 
 function degreeCells(d: DegreeDetail): string[] {
-  return [d.degree ?? "", d.branch ?? "", d.universityOrInstitute ?? "", d.percentageOrDivision ?? "", d.yearOfCompletion ? String(d.yearOfCompletion) : ""];
+  return [
+    d.degree ?? "", d.branch ?? "", d.universityOrInstitute ?? "", d.affiliatedUniversity ?? "",
+    d.percentageOrDivision ?? "", d.yearOfCompletion ? String(d.yearOfCompletion) : "",
+    d.location ?? "", d.certificateNumber ?? "",
+  ];
 }
 
-// PhD entries take Specialization instead of Branch/Percentage-CGPA (see
-// DegreeFields in ProfileFieldPrimitives.tsx).
-function phdDegreeCells(d: DegreeDetail): string[] {
-  return [d.degree ?? "", d.specialization || d.branch || "", d.universityOrInstitute ?? "", d.yearOfCompletion ? String(d.yearOfCompletion) : ""];
+// Doctoral/Post-Doctoral entries (Ph.D. Details, Postdoctoral Fellowship
+// Details) take Specialization instead of Branch/Percentage-CGPA, plus this
+// entry's own Status/Mode (live on DegreeDetail.status/.mode - see
+// DegreeFields in ProfileFieldPrimitives.tsx) and Year of Registration/Name
+// of the Guide-Supervisor - shown instead of Year of Award while Pursuing.
+function doctoralDegreeCells(d: DegreeDetail): string[] {
+  return [
+    d.degree ?? "", d.specialization || d.branch || "", d.universityOrInstitute ?? "",
+    d.status ? (PHD_STATUS_LABELS[d.status] ?? d.status) : "",
+    d.mode ? (PHD_MODE_LABELS[d.mode] ?? d.mode) : "",
+    d.yearOfRegistration ? String(d.yearOfRegistration) : "",
+    d.guideOrSupervisorName ?? "",
+    d.yearOfCompletion ? String(d.yearOfCompletion) : "",
+    d.location ?? "", d.certificateNumber ?? "",
+  ];
 }
 
 // School-level entries (10th/12th): `degree` holds the Qualification name,
 // `universityOrInstitute` holds the School/College name (see DegreeFields'
 // isSchoolLevel branch in ProfileFieldPrimitives.tsx).
 function schoolDegreeCells(d: DegreeDetail): string[] {
-  return [d.degree ?? "", d.board ?? "", d.universityOrInstitute ?? "", d.percentageOrDivision ?? "", d.yearOfCompletion ? String(d.yearOfCompletion) : ""];
+  return [
+    d.degree ?? "", d.board ?? "", d.universityOrInstitute ?? "", d.percentageOrDivision ?? "",
+    d.yearOfCompletion ? String(d.yearOfCompletion) : "", d.location ?? "", d.certificateNumber ?? "",
+  ];
 }
 
+// StaffQualification (School-type colleges' flat qualifications list, see
+// QualificationsFields) - its own shape, no separate Board field.
 function staffQualificationCells(q: StaffQualification): string[] {
-  return [q.level ?? "", q.degree ?? "", q.universityOrInstitute ?? "", q.percentageOrDivision ?? "", q.yearOfCompletion ? String(q.yearOfCompletion) : ""];
+  return [
+    q.level ?? "", q.degree ?? "", q.universityOrInstitute ?? "", q.location ?? "",
+    q.percentageOrDivision ?? "", q.yearOfCompletion ? String(q.yearOfCompletion) : "", q.certificateNumber ?? "",
+  ];
 }
 
 // Prefers the real from/to dates; falls back to the legacy year-only shape
@@ -96,24 +121,75 @@ function adminRespCells(a: AdminResponsibilityEntry): string[] {
   return [a.category === "OTHER" ? (a.otherCategory ?? "Other") : (ADMIN_RESPONSIBILITY_CATEGORY_LABELS[a.category] ?? a.category), a.description ?? "", fromYear, toYear];
 }
 
+// One-line "who this program served" summary - same condensed format the
+// read-only view uses (see beneficiarySummary in ProfileFieldsView.tsx).
+function trainingBeneficiarySummary(t: TrainingEntry): string {
+  if (t.beneficiaryType === "STUDENTS") {
+    const parts = (t.beneficiaryDepartments ?? []).map(
+      (d) => `${d.courseName} - ${d.department} Yr ${d.year} (${d.sections.map((s) => `${s.sectionName}: ${s.count}`).join(", ")})`
+    );
+    const total = t.beneficiaryTotalCount !== undefined ? `${t.beneficiaryTotalCount} Students` : "Students";
+    return parts.length > 0 ? `${total} - ${parts.join("; ")}` : total;
+  }
+  if (t.beneficiaryType === "FACULTY") {
+    const bits = [
+      t.beneficiaryTotalCount !== undefined ? `${t.beneficiaryTotalCount} Faculty` : "Faculty",
+      t.beneficiaryInternalCount !== undefined ? `${t.beneficiaryInternalCount} Internal` : undefined,
+      t.beneficiaryExternalCount !== undefined ? `${t.beneficiaryExternalCount} External` : undefined,
+    ].filter(Boolean);
+    return bits.join(" · ");
+  }
+  return "";
+}
+
 function trainingCells(t: TrainingEntry): string[] {
-  const year = t.fromDate ? String(new Date(t.fromDate).getFullYear()) : (t.year ? String(t.year) : "");
+  // MOOC/CERTIFICATION are measured in weeks, not a date range - see
+  // TrainingEntryFields' own From/To Date vs Number of Weeks branch.
+  const duration = (t.type === "MOOC" || t.type === "CERTIFICATION")
+    ? (t.durationWeeks ? `${t.durationWeeks} week${t.durationWeeks === 1 ? "" : "s"}` : "")
+    : (t.durationDays ? `${t.durationDays} day${t.durationDays === 1 ? "" : "s"}` : "");
+  const resourcePersons = normalizeResourcePersonsDetails(t.resourcePersonsDetails);
+  const coConductors = (t.coConductors ?? []).map((c) => `${c.order}. ${c.name} (${c.department})`).join(", ");
   return [
     t.type === "OTHER" ? (t.otherType ?? "Other") : (TRAINING_ENTRY_TYPE_LABELS[t.type] ?? t.type),
     t.role ? TRAINING_PARTICIPATION_ROLE_LABELS[t.role] : "",
-    t.title ?? "", t.organizer ?? "", year,
-    t.durationDays ? String(t.durationDays) : "",
+    t.certificationType ? (CERTIFICATION_TYPE_LABELS[t.certificationType] ?? t.certificationType) : "",
+    t.title ?? "",
+    t.organizer ?? "",
+    t.fromDate ?? (t.year ? String(t.year) : ""),
+    t.toDate ?? "",
+    duration,
+    t.levelOfProgram ? (TRAINING_PROGRAM_LEVEL_LABELS[t.levelOfProgram] ?? t.levelOfProgram) : "",
+    t.place ?? "",
+    t.mode ? (TRAINING_PROGRAM_MODE_LABELS[t.mode] ?? t.mode) : "",
+    trainingBeneficiarySummary(t),
+    t.numberOfResourcePersons ? String(t.numberOfResourcePersons) : "",
+    resourcePersons.length > 0 ? resourcePersons.map((d, i) => `${i + 1}. ${d}`).join("; ") : "",
+    t.role === "PARTICIPATED" ? (t.remark ?? "") : "",
+    coConductors,
+    t.otherDetails ?? "",
   ];
 }
 
 function membershipCells(m: ProfessionalMembership): string[] {
-  const since = m.sinceYear ? String(m.sinceYear) : (m.sinceDate ? String(new Date(m.sinceDate).getFullYear()) : (m.sinceMonthYear ?? ""));
-  return [PROFESSIONAL_BODY_LABELS[m.body] ?? m.body, m.otherName ?? "", m.membershipId ?? "", since];
+  const since = m.validity === "ANNUAL"
+    ? (m.validFrom ?? "")
+    : (m.sinceDate ?? (m.sinceYear ? String(m.sinceYear) : (m.sinceMonthYear ?? "")));
+  return [
+    PROFESSIONAL_BODY_LABELS[m.body] ?? m.body, m.otherName ?? "", m.membershipType ?? "", m.membershipId ?? "",
+    m.validity ? (MEMBERSHIP_VALIDITY_LABELS[m.validity] ?? m.validity) : "",
+    since, m.validity === "ANNUAL" ? (m.validTo ?? "") : "",
+  ];
 }
 
 function awardCells(a: AwardEntry): string[] {
-  const year = a.dateAwarded ? String(new Date(a.dateAwarded).getFullYear()) : (a.year ? String(a.year) : "");
-  return [a.category === "OTHER" ? (a.otherCategory ?? "Other") : (AWARD_CATEGORY_LABELS[a.category] ?? a.category), a.title ?? "", a.awardingBody ?? "", year];
+  const dateAwarded = a.dateAwarded ?? (a.year ? String(a.year) : "");
+  return [
+    a.category === "OTHER" ? (a.otherCategory ?? "Other") : (AWARD_CATEGORY_LABELS[a.category] ?? a.category),
+    a.title ?? "", a.awardingBody ?? "", dateAwarded,
+    a.level ? (AWARD_LEVEL_LABELS[a.level] ?? a.level) : "",
+    a.otherDetails ?? "",
+  ];
 }
 
 // ─── Combining multiple entries of the same group into one CSV cell ───────
@@ -174,14 +250,11 @@ function buildRow(faculty: FacultyMember, teachingSummary: string): Record<strin
     externalExperience: previousExperienceEntries.length > 0 ? s(externalExperience) : "",
     joiningDate: toDateInputValue(faculty.joiningDate),
     aicteFacultyId: s(faculty.aicteFacultyId),
-    aicteEligible: yesNo(faculty.aicteEligible),
     email: s(faculty.email),
     phone: s(faculty.phone),
     additionalPhones: combineGroup("additionalPhones", (faculty.additionalPhoneNumbers ?? []).map((n) => [n.label ?? "", n.number ?? ""])),
     status: s(faculty.status),
     employeeCategory: faculty.employeeCategory ? (EMPLOYEE_CATEGORY_LABELS[faculty.employeeCategory] ?? s(faculty.employeeCategory)) : "",
-    employmentType: s(faculty.employmentType),
-    dateOfJoiningDepartment: toDateInputValue(faculty.dateOfJoiningDepartment),
     officialEmail: s(faculty.officialEmail),
 
     // ─── Personal Details ─────────────────────────────────────────────────
@@ -226,10 +299,6 @@ function buildRow(faculty: FacultyMember, teachingSummary: string): Record<strin
     // ─── Academic Qualification ─────────────────────────────────────────────
     highestQualification: s(p.highestQualification),
     researchAreas: (p.researchAreas ?? []).join(", "),
-    phdStatus: p.phdStatus ? (PHD_STATUS_LABELS[p.phdStatus] ?? p.phdStatus) : "",
-    phdMode: p.phdMode ? (PHD_MODE_LABELS[p.phdMode] ?? p.phdMode) : "",
-    phdSupervisorName: s(p.phdSupervisorName),
-    fellowshipsReceived: s(p.fellowshipsReceived),
     qualifyingExamQualified: s(p.qualifyingExamQualified === "YES" ? "Yes" : p.qualifyingExamQualified === "NO" ? "No" : undefined),
     qualifyingExam: p.qualifyingExam ? (p.qualifyingExam === "OTHER" ? (p.otherQualifyingExam || "Other") : (QUALIFYING_EXAM_LABELS[p.qualifyingExam] ?? p.qualifyingExam)) : "",
     otherQualifyingExam: s(p.otherQualifyingExam),
@@ -239,8 +308,8 @@ function buildRow(faculty: FacultyMember, teachingSummary: string): Record<strin
     intermediateDetails: combineGroup("intermediateDetails", p.intermediateDetails ? [schoolDegreeCells(p.intermediateDetails)] : []),
     ugDetailsGroup: combineGroup("ugDetailsGroup", degreeList(p.ugDetails, p.additionalUgDetails).map(degreeCells)),
     pgDetailsGroup: combineGroup("pgDetailsGroup", degreeList(p.pgDetails, p.additionalPgDetails).map(degreeCells)),
-    phdDetailsGroup: combineGroup("phdDetailsGroup", degreeList(p.phdDetails, p.additionalPhdDetails).map(phdDegreeCells)),
-    postDoctoralDetailsGroup: combineGroup("postDoctoralDetailsGroup", p.postDoctoralDetails ? [degreeCells(p.postDoctoralDetails)] : []),
+    phdDetailsGroup: combineGroup("phdDetailsGroup", degreeList(p.phdDetails, p.additionalPhdDetails).map(doctoralDegreeCells)),
+    postDoctoralDetailsGroup: combineGroup("postDoctoralDetailsGroup", p.postDoctoralDetails ? [doctoralDegreeCells(p.postDoctoralDetails)] : []),
     schoolQualifications: combineGroup("schoolQualifications", (p.schoolQualifications ?? []).map(staffQualificationCells)),
 
     // ─── Professional Experience ────────────────────────────────────────────

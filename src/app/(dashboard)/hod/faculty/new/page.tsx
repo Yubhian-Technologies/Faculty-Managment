@@ -59,7 +59,6 @@ const schema = z.object({
   specialization: z.string().optional(),
   experienceYears: z.number().min(0, "Cannot be negative").optional(),
   joiningDate: z.string().min(1, "Joining date is required"),
-  dateOfJoiningDepartment: z.string().optional(),
   aicteFacultyId: z.string().optional(),
 });
 

@@ -152,8 +152,6 @@ export async function POST(request: Request) {
       specialization?: string;
       experienceYears: number;
       joiningDate: string;
-      dateOfJoiningDepartment?: string;
-      aicteEligible?: boolean;
       aicteFacultyId?: string;
       department?: string;
       academicProfile?: Record<string, unknown>;
@@ -315,8 +313,6 @@ export async function POST(request: Request) {
       specialization: body.specialization ?? "",
       experienceYears: Number(experienceYears),
       joiningDate: new Date(joiningDate),
-      ...(body.dateOfJoiningDepartment ? { dateOfJoiningDepartment: new Date(body.dateOfJoiningDepartment) } : {}),
-      ...(body.aicteEligible !== undefined ? { aicteEligible: body.aicteEligible } : {}),
       ...(body.aicteFacultyId?.trim() ? { aicteFacultyId: body.aicteFacultyId.trim() } : {}),
       status: "ACTIVE" as FacultyStatus,
       userUid: uid,
