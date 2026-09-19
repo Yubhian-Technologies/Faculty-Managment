@@ -28,6 +28,7 @@ interface IdentityForm {
   legalName: string;
   name: string;
   apaarFacultyId: string;
+  aicteFacultyId: string;
   highestQualification: string;
   specialization: string;
   email: string;
@@ -35,7 +36,7 @@ interface IdentityForm {
 }
 
 const EMPTY_FORM: IdentityForm = {
-  legalName: "", name: "", apaarFacultyId: "", highestQualification: "", specialization: "", email: "", phone: "",
+  legalName: "", name: "", apaarFacultyId: "", aicteFacultyId: "", highestQualification: "", specialization: "", email: "", phone: "",
 };
 
 // Self-service Identity & Employment editor for the "My Profile" page - the
@@ -56,7 +57,6 @@ export default function EditMyProfileIdentityPage() {
   const [designationLabel, setDesignationLabel] = useState("");
   const [employeeCategoryLabel, setEmployeeCategoryLabel] = useState("");
   const [joiningDateLabel, setJoiningDateLabel] = useState("");
-  const [aicteFacultyId, setAicteFacultyId] = useState("");
   const [form, setForm] = useState<IdentityForm>(EMPTY_FORM);
   const [qualIsOther, setQualIsOther] = useState(false);
   const [extraPhones, setExtraPhones] = useState<{ label?: string; number: string }[]>([]);
@@ -77,13 +77,13 @@ export default function EditMyProfileIdentityPage() {
         setDesignationLabel(m.designation ? (DESIGNATION_LABELS[m.designation] ?? m.designation) : "-");
         setEmployeeCategoryLabel(m.employeeCategory ? (EMPLOYEE_CATEGORY_LABELS[m.employeeCategory] ?? m.employeeCategory) : "-");
         setJoiningDateLabel(m.joiningDate ? formatDate(m.joiningDate) : "-");
-        setAicteFacultyId(m.aicteFacultyId ?? "-");
         const highestQualification = normalizeHighestQualification(m.highestQualification);
         setQualIsOther(!!highestQualification && !(HIGHEST_QUALIFICATION_OPTIONS as readonly string[]).includes(highestQualification));
         setForm({
           legalName: m.legalName ?? "",
           name: m.name ?? "",
           apaarFacultyId: m.apaarFacultyId ?? "",
+          aicteFacultyId: m.aicteFacultyId ?? "",
           highestQualification,
           specialization: m.specialization ?? "",
           email: m.email ?? "",
@@ -124,6 +124,7 @@ export default function EditMyProfileIdentityPage() {
           legalName: form.legalName.trim().toUpperCase(),
           name: form.name.trim(),
           apaarFacultyId: form.apaarFacultyId.trim(),
+          aicteFacultyId: form.aicteFacultyId.trim(),
           highestQualification: form.highestQualification.trim(),
           specialization: form.specialization.trim(),
           email: form.email.trim(),
@@ -163,7 +164,7 @@ export default function EditMyProfileIdentityPage() {
           <CardHeader><CardTitle className="text-base">Identity & Employment</CardTitle></CardHeader>
           <CardContent className="space-y-5">
             <p className="text-xs text-muted-foreground -mt-2">
-              Employee ID, College Email, Department, Designation, Employee Category, Date of Joining and AICTE Faculty ID are set by your HOD/Principal and can&apos;t be changed here.
+              Employee ID, College Email, Department, Designation, Employee Category, and Date of Joining are set by your HOD/Principal and can&apos;t be changed here.
             </p>
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -247,7 +248,7 @@ export default function EditMyProfileIdentityPage() {
               </div>
               <div className="space-y-2">
                 <Label>AICTE Faculty ID</Label>
-                <Input value={aicteFacultyId} disabled />
+                <Input value={form.aicteFacultyId} onChange={(e) => set({ aicteFacultyId: e.target.value })} placeholder="AICTE Faculty ID" />
               </div>
             </div>
 

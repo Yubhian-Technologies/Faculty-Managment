@@ -107,10 +107,12 @@ export async function PATCH(request: Request) {
       phone: string;
       // Identity & Employment fields a Faculty member may edit about
       // themselves - deliberately excludes employeeId, collegeEmail,
-      // designation, department, joiningDate, employeeCategory and
-      // aicteFacultyId, which stay HR/HOD-controlled (see PATCH
-      // /api/college/faculty/[id], HOD/Principal/VP only).
+      // designation, department, joiningDate and employeeCategory, which stay
+      // HR/HOD-controlled (see PATCH /api/college/faculty/[id], HOD/Principal/VP
+      // only). aicteFacultyId is self-editable - this route only ever writes
+      // the caller's own linked record (looked up by userUid below).
       apaarFacultyId: string;
+      aicteFacultyId: string;
       highestQualification: string;
       specialization: string;
       additionalPhoneNumbers: { label?: string; number: string }[];
@@ -152,6 +154,7 @@ export async function PATCH(request: Request) {
     if (body.email?.trim()) facultyUpdates.email = body.email.trim();
     if (body.phone !== undefined) facultyUpdates.phone = body.phone;
     if (body.apaarFacultyId !== undefined) facultyUpdates.apaarFacultyId = body.apaarFacultyId;
+    if (body.aicteFacultyId !== undefined) facultyUpdates.aicteFacultyId = body.aicteFacultyId.trim();
     if (body.highestQualification?.trim()) facultyUpdates.highestQualification = normalizeHighestQualification(body.highestQualification);
     if (body.specialization !== undefined) facultyUpdates.specialization = body.specialization;
     if (body.additionalPhoneNumbers !== undefined) {

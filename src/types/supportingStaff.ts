@@ -141,6 +141,7 @@ export interface SupportingStaffMember {
   heightInches?: number;
   weightKg?: number;
   pfNumber?: string; // Provident Fund number
+  uanNumber?: string; // Universal Account Number (EPFO) - shown right after PF Number
   esiNumber?: string; // ESI number
 
   supportingStaffProfile?: SupportingStaffProfileFields;

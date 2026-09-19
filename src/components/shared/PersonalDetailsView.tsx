@@ -43,6 +43,7 @@ export interface PersonalDetailsSource {
   heightInches?: number;
   weightKg?: number;
   pfNumber?: string;
+  uanNumber?: string;
   esiNumber?: string;
 }
 
@@ -142,6 +143,7 @@ export function PersonalDetailsView({ value, hideLegalName = false, hiddenFields
         </div>
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 mt-3">
           <Field label="PF Number" value={p.pfNumber} />
+          <Field label="UAN Number" value={p.uanNumber} />
           {!hiddenFields.includes("esiNumber") && <Field label="ESI Number" value={p.esiNumber} />}
         </div>
         {p.bankOtherDetails && (
@@ -164,8 +166,12 @@ export function PersonalDetailsView({ value, hideLegalName = false, hiddenFields
         <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Ratification</p>
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           <Field label="Ratification Status" value={p.ratificationStatus} />
-          <Field label="Ratification Proceedings Number" value={p.ratificationProceedingsNumber} />
-          <Field label="Ratification Date" value={p.ratificationDate ? formatDate(p.ratificationDate) : undefined} />
+          {p.ratificationStatus === "Ratified" && (
+            <>
+              <Field label="Ratification Proceedings Number" value={p.ratificationProceedingsNumber} />
+              <Field label="Ratification Date" value={p.ratificationDate ? formatDate(p.ratificationDate) : undefined} />
+            </>
+          )}
         </div>
       </div>
     </div>

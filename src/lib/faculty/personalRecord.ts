@@ -58,6 +58,7 @@ export function personalRecordFromDoc(m: Doc): Partial<FacultyEditRecord> {
     heightInches: m.heightInches as number | undefined,
     weightKg: m.weightKg as number | undefined,
     pfNumber: str(m.pfNumber),
+    uanNumber: str(m.uanNumber),
   };
 }
 
@@ -81,6 +82,6 @@ export function personalPatchBody(record: FacultyEditRecord): Record<string, unk
     permanentAddress: record.permanentAddress, bloodGroup: record.bloodGroup,
     motherTongue: record.motherTongue, languagesKnown: record.languagesKnown,
     heightFeet: record.heightFeet, heightInches: record.heightInches, weightKg: record.weightKg,
-    pfNumber: record.pfNumber,
+    pfNumber: record.pfNumber, uanNumber: record.uanNumber,
   };
 }

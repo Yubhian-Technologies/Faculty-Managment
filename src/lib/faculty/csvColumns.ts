@@ -151,6 +151,7 @@ export const EXPORT_FIELDS: ExportField[] = [
   scalar("personal", "bankName", "Bank Name", true),
   scalar("personal", "bankBranch", "Bank Branch", true),
   scalar("personal", "pfNumber", "PF Number", true),
+  scalar("personal", "uanNumber", "UAN Number", true),
   scalar("personal", "bankOtherDetails", "Bank Other Details", true),
   scalar("personal", "emergencyContactName", "Emergency Contact Name", true),
   scalar("personal", "emergencyContactRelation", "Emergency Contact Relation", true),

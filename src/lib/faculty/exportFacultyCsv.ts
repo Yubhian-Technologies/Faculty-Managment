@@ -299,6 +299,7 @@ function buildRow(rawFaculty: FacultyMember, teachingSummary: string): Record<st
     bankBranch: s(faculty.bankBranch),
     bankOtherDetails: s(faculty.bankOtherDetails),
     pfNumber: s(faculty.pfNumber),
+    uanNumber: s(faculty.uanNumber),
     emergencyContactName: s(faculty.emergencyContactName),
     emergencyContactRelation: s(faculty.emergencyContactRelation),
     emergencyContactMobileNo: s(faculty.emergencyContactMobileNo),

@@ -54,6 +54,7 @@ export interface PersonalDetailsValue {
   heightInches?: number;
   weightKg?: number;
   pfNumber?: string; // Provident Fund number - shown for every caller
+  uanNumber?: string; // Universal Account Number (EPFO) - shown for every caller, right after PF Number
   esiNumber?: string; // ESI number - Supporting/Non-Technical Staff only, see hiddenFields
 }
 
@@ -454,6 +455,10 @@ export function PersonalDetailsFields({ value: rawValue, onChange, requiredField
           <Label>PF Number</Label>
           <Input value={value.pfNumber ?? ""} onChange={(e) => set("pfNumber", e.target.value)} placeholder="Provident Fund number" />
         </div>
+        <div className="space-y-2">
+          <Label>UAN Number</Label>
+          <Input value={value.uanNumber ?? ""} onChange={(e) => set("uanNumber", e.target.value)} placeholder="Universal Account Number" />
+        </div>
         {!hidden("esiNumber") && (
           <div className="space-y-2">
             <Label>ESI Number</Label>
@@ -493,7 +498,19 @@ export function PersonalDetailsFields({ value: rawValue, onChange, requiredField
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="space-y-2">
           <Label>Ratification Status{mark("ratificationStatus")}</Label>
-          <Select value={value.ratificationStatus ?? ""} onValueChange={(v) => set("ratificationStatus", v)}>
+          <Select
+            value={value.ratificationStatus ?? ""}
+            onValueChange={(v) => {
+              // Proceedings Number/Date only make sense once Ratified - cleared
+              // the moment status moves away from it, so a later Save can never
+              // resend (and re-persist) a stale value from before this switch.
+              if (v !== "Ratified") {
+                onChange({ ...value, ratificationStatus: v, ratificationProceedingsNumber: "", ratificationDate: "" });
+              } else {
+                set("ratificationStatus", v);
+              }
+            }}
+          >
             <SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="Ratified">Ratified</SelectItem>
@@ -501,14 +518,18 @@ export function PersonalDetailsFields({ value: rawValue, onChange, requiredField
             </SelectContent>
           </Select>
         </div>
-        <div className="space-y-2">
-          <Label>Ratification Proceedings Number</Label>
-          <Input value={value.ratificationProceedingsNumber ?? ""} onChange={(e) => set("ratificationProceedingsNumber", e.target.value)} placeholder="Proceedings number" />
-        </div>
-        <div className="space-y-2">
-          <Label>Ratification Date</Label>
-          <Input type="date" value={value.ratificationDate ?? ""} onChange={(e) => set("ratificationDate", e.target.value)} />
-        </div>
+        {value.ratificationStatus === "Ratified" && (
+          <>
+            <div className="space-y-2">
+              <Label>Ratification Proceedings Number</Label>
+              <Input value={value.ratificationProceedingsNumber ?? ""} onChange={(e) => set("ratificationProceedingsNumber", e.target.value)} placeholder="Proceedings number" />
+            </div>
+            <div className="space-y-2">
+              <Label>Ratification Date</Label>
+              <Input type="date" value={value.ratificationDate ?? ""} onChange={(e) => set("ratificationDate", e.target.value)} />
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
