@@ -1,5 +1,6 @@
 import { randomBytes } from "crypto";
 import { createFirebaseUser } from "@/lib/firebase/authRest";
+import { normalizeHighestQualification } from "@/lib/faculty/highestQualification";
 import type { EmployeeCategory } from "@/types";
 
 export type ProvisionResult =
@@ -145,7 +146,7 @@ export async function provisionFacultyFromOffer(
     phone: candidate.phone ?? "",
     department,
     designation: letter.designation ?? "Assistant Professor",
-    highestQualification: profileFields?.highestQualification ?? "",
+    highestQualification: normalizeHighestQualification(profileFields?.highestQualification),
     specialization: profileFields?.specialization ?? "",
     totalYearsOfExperience: 0,
     joiningDate,

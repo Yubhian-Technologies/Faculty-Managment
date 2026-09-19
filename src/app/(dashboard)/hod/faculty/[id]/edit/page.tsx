@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { AvatarUploadField } from "@/components/shared/AvatarUploadField";
 import { TextInput } from "@/components/shared/ProfileFieldPrimitives";
 import { HIGHEST_QUALIFICATION_OPTIONS } from "@/lib/import/fieldConstraints";
+import { normalizeHighestQualification } from "@/lib/faculty/highestQualification";
 import { PHONE_REGEX } from "@/lib/validations";
 import { toast } from "@/hooks/useToast";
 import { migrateFacultyDoc } from "@/lib/faculty/fieldRenames";
@@ -82,7 +83,7 @@ export default function EditHodFacultyIdentityPage() {
         setEmployeeId((m.employeeId as string) ?? "");
         setCollegeEmail((m.collegeEmail as string) ?? "");
         setDepartment((m.department as string) ?? "");
-        const highestQualification = (m.highestQualification as string) ?? "";
+        const highestQualification = normalizeHighestQualification(m.highestQualification);
         setQualIsOther(!!highestQualification && !(HIGHEST_QUALIFICATION_OPTIONS as readonly string[]).includes(highestQualification));
         setForm({
           legalName: (m.legalName as string) ?? "",
@@ -293,7 +294,7 @@ export default function EditHodFacultyIdentityPage() {
                   </SelectContent>
                 </Select>
                 {qualIsOther && (
-                  <Input value={form.highestQualification} onChange={(e) => set({ highestQualification: e.target.value })} placeholder="e.g. MBA, M.Phil, M.A" />
+                  <Input value={form.highestQualification} onChange={(e) => set({ highestQualification: e.target.value })} placeholder="e.g. B.Ed, MCA" />
                 )}
               </div>
               <div className="space-y-2">

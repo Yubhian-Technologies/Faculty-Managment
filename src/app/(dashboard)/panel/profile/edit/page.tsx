@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TextInput } from "@/components/shared/ProfileFieldPrimitives";
 import { HIGHEST_QUALIFICATION_OPTIONS } from "@/lib/import/fieldConstraints";
+import { normalizeHighestQualification } from "@/lib/faculty/highestQualification";
 import { PHONE_REGEX } from "@/lib/validations";
 import { toast } from "@/hooks/useToast";
 import { migrateFacultyDoc } from "@/lib/faculty/fieldRenames";
@@ -77,7 +78,7 @@ export default function EditMyProfileIdentityPage() {
         setEmployeeCategoryLabel(m.employeeCategory ? (EMPLOYEE_CATEGORY_LABELS[m.employeeCategory] ?? m.employeeCategory) : "-");
         setJoiningDateLabel(m.joiningDate ? formatDate(m.joiningDate) : "-");
         setAicteFacultyId(m.aicteFacultyId ?? "-");
-        const highestQualification = m.highestQualification ?? "";
+        const highestQualification = normalizeHighestQualification(m.highestQualification);
         setQualIsOther(!!highestQualification && !(HIGHEST_QUALIFICATION_OPTIONS as readonly string[]).includes(highestQualification));
         setForm({
           legalName: m.legalName ?? "",
@@ -227,7 +228,7 @@ export default function EditMyProfileIdentityPage() {
                   </SelectContent>
                 </Select>
                 {qualIsOther && (
-                  <Input value={form.highestQualification} onChange={(e) => set({ highestQualification: e.target.value })} placeholder="e.g. MBA, M.Phil, M.A" />
+                  <Input value={form.highestQualification} onChange={(e) => set({ highestQualification: e.target.value })} placeholder="e.g. B.Ed, MCA" />
                 )}
               </div>
               <div className="space-y-2">

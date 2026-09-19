@@ -10,6 +10,7 @@ import { experienceBreakdown, allPreviousExperienceEntries } from "@/lib/faculty
 import { normalizeAcademicProfile } from "@/lib/faculty/academicProfileCompat";
 import { migrateFacultyDoc } from "@/lib/faculty/fieldRenames";
 import { withLegacyFacultyKeysDeleted } from "@/lib/faculty/legacyKeyDeletes";
+import { normalizeHighestQualification } from "@/lib/faculty/highestQualification";
 import { FieldValue } from "firebase-admin/firestore";
 import type { Designation, EmployeeCategory, FacultyStatus, TrainingEntry } from "@/types";
 import { EMPLOYEE_CATEGORY_VALUES, EMPLOYEE_CATEGORY_ERROR_MESSAGE } from "@/types";
@@ -179,6 +180,10 @@ export async function PATCH(
 
     for (const key of stringFields) {
       if (body[key] !== undefined) updates[key] = body[key];
+    }
+    // One category per faculty member, whatever spelling/casing the caller sent.
+    if (typeof updates.highestQualification === "string") {
+      updates.highestQualification = normalizeHighestQualification(updates.highestQualification);
     }
 
     // Extra contact numbers beyond the primary Mobile No - cleaned/filtered

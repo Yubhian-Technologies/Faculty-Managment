@@ -520,7 +520,7 @@ export default function NewFacultyPage() {
                       </SelectContent>
                     </Select>
                     {qualIsOther && (
-                      <Input {...register("highestQualification")} placeholder="e.g. MBA, M.Phil, M.A" />
+                      <Input {...register("highestQualification")} placeholder="e.g. B.Ed, MCA" />
                     )}
                     {errors.highestQualification && <p className="text-sm text-destructive">{errors.highestQualification.message}</p>}
                   </div>

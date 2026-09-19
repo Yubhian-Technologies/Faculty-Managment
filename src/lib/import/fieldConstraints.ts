@@ -105,10 +105,10 @@ export function isValidEmail(raw: string | undefined): boolean {
 // the import template's guidance so a sheet uses the same spellings the form
 // produces. Deliberately NOT enforced as a closed set on import (unlike the
 // options below): "Others" exists precisely because a real qualification can
-// fall outside this list, so a row carrying one must still import.
-export const HIGHEST_QUALIFICATION_OPTIONS = [
-  "Ph.D", "M.Tech", "M.E", "M.Sc", "B.Tech", "B.Sc",
-] as const;
+// fall outside this list, so a row carrying one must still import - the
+// importer folds spelling variants ("M.TECH", "M.Tech.") into these values via
+// normalizeHighestQualification. Defined in src/lib/faculty/highestQualification.ts.
+export { HIGHEST_QUALIFICATION_OPTIONS } from "@/lib/faculty/highestQualification";
 
 export const GENDER_OPTIONS = ["Male", "Female", "Other"] as const;
 export const BLOOD_GROUP_OPTIONS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"] as const;

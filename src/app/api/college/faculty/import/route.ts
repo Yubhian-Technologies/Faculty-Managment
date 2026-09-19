@@ -11,6 +11,7 @@ import {
 } from "@/lib/import/fieldConstraints";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
 import { getHodDepartmentScope } from "@/lib/departments/scope";
+import { normalizeHighestQualification } from "@/lib/faculty/highestQualification";
 import type { Designation } from "@/types";
 
 type ImportRow = {
@@ -322,7 +323,7 @@ export async function POST(request: Request) {
         collegeEmail: loginEmail,
         phone: checkPhone(row.phone, "Phone") ?? "",
         designation,
-        highestQualification: row.highestQualification.trim(),
+        highestQualification: normalizeHighestQualification(row.highestQualification),
         joiningDate,
         status: "ACTIVE",
         ...buildPersonalDetailsUpdate(personalInput),

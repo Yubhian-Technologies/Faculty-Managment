@@ -10,6 +10,7 @@ import { LEGACY_TECHNICAL_DESIGNATIONS } from "@/lib/designations/config";
 import { experienceBreakdown, allPreviousExperienceEntries } from "@/lib/faculty/experienceCalc";
 import { normalizeAcademicProfile } from "@/lib/faculty/academicProfileCompat";
 import { migrateFacultyDoc } from "@/lib/faculty/fieldRenames";
+import { normalizeHighestQualification } from "@/lib/faculty/highestQualification";
 import type { Designation, FacultyStatus, EmployeeCategory } from "@/types";
 import { EMPLOYEE_CATEGORY_VALUES, EMPLOYEE_CATEGORY_ERROR_MESSAGE } from "@/types";
 
@@ -307,7 +308,7 @@ export async function POST(request: Request) {
       })()),
       designation,
       employeeCategory,
-      highestQualification,
+      highestQualification: normalizeHighestQualification(highestQualification),
       specialization: body.specialization ?? "",
       // Total Years of Experience (Internal since Date of Joining + External
       // from the Academic/Industry/Research Experience entries) - computed

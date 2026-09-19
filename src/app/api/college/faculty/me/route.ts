@@ -9,6 +9,7 @@ import { normalizeAcademicProfile } from "@/lib/faculty/academicProfileCompat";
 import { migrateFacultyDoc, migrateUserDoc } from "@/lib/faculty/fieldRenames";
 import { withLegacyFacultyKeysDeleted } from "@/lib/faculty/legacyKeyDeletes";
 import { FieldValue } from "firebase-admin/firestore";
+import { normalizeHighestQualification } from "@/lib/faculty/highestQualification";
 import type { TrainingEntry } from "@/types";
 
 const FINANCIAL_ACADEMIC_KEYS = ["monthlySalary", "grossAnnualCTC", "incrementsAwarded", "fundingConsultancyRevenueGeneration"];
@@ -129,7 +130,7 @@ export async function PATCH(request: Request) {
     if (body.email?.trim()) facultyUpdates.email = body.email.trim();
     if (body.phone !== undefined) facultyUpdates.phone = body.phone;
     if (body.apaarFacultyId !== undefined) facultyUpdates.apaarFacultyId = body.apaarFacultyId;
-    if (body.highestQualification?.trim()) facultyUpdates.highestQualification = body.highestQualification.trim();
+    if (body.highestQualification?.trim()) facultyUpdates.highestQualification = normalizeHighestQualification(body.highestQualification);
     if (body.specialization !== undefined) facultyUpdates.specialization = body.specialization;
     if (body.additionalPhoneNumbers !== undefined) {
       facultyUpdates.additionalPhoneNumbers = body.additionalPhoneNumbers.filter((p) => p.number?.trim());

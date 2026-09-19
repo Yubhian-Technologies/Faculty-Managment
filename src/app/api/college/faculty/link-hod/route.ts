@@ -7,6 +7,7 @@ import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/fir
 import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
 import { experienceBreakdown, allPreviousExperienceEntries } from "@/lib/faculty/experienceCalc";
 import { normalizeAcademicProfile } from "@/lib/faculty/academicProfileCompat";
+import { normalizeHighestQualification } from "@/lib/faculty/highestQualification";
 import type { Designation, FacultyStatus } from "@/types";
 
 // An HOD or Sub-HOD login (Department.hodUid/hodName, role "HOD" on their
@@ -125,7 +126,7 @@ export async function POST(request: Request) {
         return numbers.length > 0 ? { additionalPhoneNumbers: numbers } : {};
       })()),
       designation,
-      highestQualification,
+      highestQualification: normalizeHighestQualification(highestQualification),
       specialization: body.specialization ?? "",
       // Total Years of Experience - computed server-side, same as POST
       // /api/college/faculty and PATCH /api/college/faculty/[id], never
