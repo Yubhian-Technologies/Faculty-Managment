@@ -7,7 +7,13 @@ import { createFirebaseUser } from "@/lib/firebase/authRest";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
 import { getHodDepartmentScope, getDepartmentTreeNames, canHodEditDepartment, facultyManageableDepartmentNames } from "@/lib/departments/scope";
 import { LEGACY_TECHNICAL_DESIGNATIONS } from "@/lib/designations/config";
-import type { Designation, FacultyStatus } from "@/types";
+import { experienceBreakdown, allPreviousExperienceEntries } from "@/lib/faculty/experienceCalc";
+import { normalizeAcademicProfile } from "@/lib/faculty/academicProfileCompat";
+import { migrateFacultyDoc } from "@/lib/faculty/fieldRenames";
+import { normalizeHighestQualification } from "@/lib/faculty/highestQualification";
+import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
+import type { Designation, FacultyStatus, EmployeeCategory } from "@/types";
+import { EMPLOYEE_CATEGORY_VALUES, EMPLOYEE_CATEGORY_ERROR_MESSAGE } from "@/types";
 
 export async function GET(request: Request) {
   try {
@@ -98,13 +104,13 @@ export async function GET(request: Request) {
     ]);
 
     const faculty: { id: string; accessLevel: "primary"; [key: string]: unknown }[] =
-      primarySnap.docs.map((d) => ({ id: d.id, ...d.data(), accessLevel: "primary" }));
+      primarySnap.docs.map((d) => ({ id: d.id, ...migrateFacultyDoc(d.data()), accessLevel: "primary" }));
     if (childDeptSnap) {
       // "primary": for an HOD this query holds their own sub-departments'
       // faculty, which they fully manage (canHodEditDepartment), so the UI
       // must not mark them view-only.
       for (const d of childDeptSnap.docs) {
-        faculty.push({ id: d.id, ...d.data(), accessLevel: "primary" });
+        faculty.push({ id: d.id, ...migrateFacultyDoc(d.data()), accessLevel: "primary" });
       }
     }
     // Technical designations belong to Supporting Staff now (see
@@ -114,11 +120,11 @@ export async function GET(request: Request) {
     // any pre-migration record still sitting in facultyMembers.
     const teachingOnly = faculty.filter((f) => !LEGACY_TECHNICAL_DESIGNATIONS.includes(f.designation as string));
 
-    teachingOnly.sort((a, b) => {
-      const an = (a.name as string | undefined) ?? "";
-      const bn = (b.name as string | undefined) ?? "";
-      return an.localeCompare(bn);
-    });
+    teachingOnly.sort((a, b) =>
+      facultyDisplayName(a as { legalName?: string; name?: string }).localeCompare(
+        facultyDisplayName(b as { legalName?: string; name?: string })
+      )
+    );
     return NextResponse.json({ faculty: teachingOnly });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
@@ -143,12 +149,11 @@ export async function POST(request: Request) {
       phone?: string;
       additionalPhoneNumbers?: { label?: string; number: string }[];
       designation: Designation;
-      qualification: string;
+      employeeCategory: EmployeeCategory;
+      highestQualification: string;
       specialization?: string;
-      experienceYears: number;
       joiningDate: string;
-      dateOfJoiningDepartment?: string;
-      aicteEligible?: boolean;
+      aicteFacultyId?: string;
       department?: string;
       academicProfile?: Record<string, unknown>;
       technicalProfile?: Record<string, unknown>;
@@ -161,14 +166,19 @@ export async function POST(request: Request) {
       collegeEmail,
       password,
       designation,
-      qualification,
-      experienceYears,
+      employeeCategory,
+      highestQualification,
       joiningDate,
       profilePhotoUrl,
     } = body;
 
-    if (!employeeId || !collegeEmail || !password || !designation || !qualification || !joiningDate) {
+    if (!employeeId || !collegeEmail || !password || !designation || !highestQualification || !joiningDate) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    }
+    // Only the EMPLOYEE_CATEGORY_VALUES keys are accepted anywhere Employee
+    // Category is set - enforced here, not just in the Add Faculty dropdown.
+    if (!EMPLOYEE_CATEGORY_VALUES.includes(employeeCategory)) {
+      return NextResponse.json({ error: EMPLOYEE_CATEGORY_ERROR_MESSAGE }, { status: 400 });
     }
     // Matches the mandatory field set the bulk-import template and Add
     // Faculty wizard's Personal Details step now both enforce. Name (as per
@@ -298,15 +308,23 @@ export async function POST(request: Request) {
         return numbers.length > 0 ? { additionalPhoneNumbers: numbers } : {};
       })()),
       designation,
-      qualification,
+      employeeCategory,
+      highestQualification: normalizeHighestQualification(highestQualification),
       specialization: body.specialization ?? "",
-      experienceYears: Number(experienceYears),
+      // Total Years of Experience (Internal since Date of Joining + External
+      // from the Academic/Industry/Research Experience entries) - computed
+      // here server-side rather than trusted from the client, same as PATCH
+      // /api/college/faculty/[id], so it can't drift from what Faculty
+      // Details/the Faculty List compute live from the same two inputs.
+      totalYearsOfExperience: experienceBreakdown(
+        allPreviousExperienceEntries(body.academicProfile as Parameters<typeof allPreviousExperienceEntries>[0]),
+        new Date(joiningDate)
+      ).total,
       joiningDate: new Date(joiningDate),
-      ...(body.dateOfJoiningDepartment ? { dateOfJoiningDepartment: new Date(body.dateOfJoiningDepartment) } : {}),
-      ...(body.aicteEligible !== undefined ? { aicteEligible: body.aicteEligible } : {}),
+      ...(body.aicteFacultyId?.trim() ? { aicteFacultyId: body.aicteFacultyId.trim() } : {}),
       status: "ACTIVE" as FacultyStatus,
       userUid: uid,
-      ...(body.academicProfile ? { academicProfile: body.academicProfile } : {}),
+      ...(body.academicProfile ? { academicProfile: normalizeAcademicProfile(body.academicProfile) } : {}),
       ...(body.technicalProfile ? { technicalProfile: body.technicalProfile } : {}),
       ...(profilePhotoUrl ? { profilePhotoUrl } : {}),
       ...buildPersonalDetailsUpdate(body),

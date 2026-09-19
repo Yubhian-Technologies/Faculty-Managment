@@ -13,7 +13,10 @@ const DEFAULT_PAGE_SIZE = 20;
 
 export interface Column<T> {
   key: string;
-  header: string;
+  // Usually a plain string; a caller that needs interactive content up there
+  // (e.g. a "select all" checkbox) can pass a ReactNode instead - rendered
+  // exactly the same way, so every existing string-header column is unaffected.
+  header: React.ReactNode;
   render?: (row: T) => React.ReactNode;
   className?: string;
   hideOnMobile?: boolean;
@@ -97,7 +100,10 @@ export function DataTable<T extends Record<string, unknown>>({
     exportToCSV(
       filtered,
       csvFilename,
-      columns.map((c) => ({ key: c.key, header: c.header }))
+      // A ReactNode header (e.g. a "select all" checkbox column) has no
+      // sensible CSV text - falls back to the column key rather than
+      // producing a blank header cell.
+      columns.map((c) => ({ key: c.key, header: typeof c.header === "string" ? c.header : c.key }))
     );
   };
 

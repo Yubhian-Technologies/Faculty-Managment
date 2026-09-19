@@ -58,6 +58,11 @@ export default function NewDepartmentPage() {
   });
 
   const nameValue = watch("name");
+  // The department being created, as typed. CreateHodDialog stamps this exact
+  // name onto the new HOD's own profile the moment the account is made, so it
+  // is also what has to be discounted when reporting which OTHER departments
+  // that HOD already heads.
+  const pendingName = (nameValue ?? "").trim();
 
   function toggleSecondaryDepartment(name: string, checked: boolean) {
     setSecondaryDepartments((prev) => (checked ? [...prev, name] : prev.filter((n) => n !== name)));
@@ -183,9 +188,8 @@ export default function NewDepartmentPage() {
                 <div className="space-y-1">
                   <Label htmlFor="dept-has-subdepts" className="font-normal">Has sub-departments</Label>
                   <p className="text-xs text-muted-foreground">
-                    Enable if this department splits into sub-branches (e.g. a Freshman&apos;s Department like Basic
-                    Science → BS-Maths, BS-English). The HOD will get a &quot;Sub-Departments&quot; page to add
-                    sub-departments and assign sub-HODs.
+                    Tick this if the department is divided into smaller departments. Its HOD then gets a
+                    &quot;Sub-Departments&quot; page where they can add each one and give it a head.
                   </p>
                 </div>
               </div>
@@ -202,12 +206,9 @@ export default function NewDepartmentPage() {
                       This department also has its own sections/students, separate from its sub-departments
                     </Label>
                     <p className="text-xs text-muted-foreground">
-                      Turn this OFF if this department exists only to organize its sub-departments and never
-                      enrolls students directly on its own - e.g. a &quot;Basic Science&quot; department whose
-                      sub-departments (Maths, Physics, Chemistry, English) are the only place 1st-year students
-                      actually sit. Leave it ON if this department itself also runs real sections in addition
-                      to its sub-departments - e.g. an &quot;ECE&quot; department that has its own ECE sections
-                      AND a further specialized &quot;ECE-VLSI&quot; sub-department with sections of its own.
+                      Leave this ON if the department teaches its own classes as well as having
+                      sub-departments. Turn it OFF if it only organises its sub-departments and never has
+                      students of its own - the students belong to the sub-departments instead.
                     </p>
                   </div>
                 </div>

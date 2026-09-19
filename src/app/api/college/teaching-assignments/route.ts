@@ -318,7 +318,10 @@ export async function POST(request: Request) {
       studentFeedback?: number;
     };
 
-    const { facultyId, facultyName, courseId, sectionId, subjectId } = body;
+    // `body.facultyName`, if sent, is deliberately ignored below - the display
+    // name is always resolved server-side from the faculty record itself
+    // (resolvedFacultyName / facultyDisplayName(faculty)), never trusted from the client.
+    const { facultyId, courseId, sectionId, subjectId } = body;
     if (!facultyId || !subjectId) {
       return NextResponse.json({ error: "facultyId and subjectId are required" }, { status: 400 });
     }
@@ -340,6 +343,13 @@ export async function POST(request: Request) {
       const section = sectionSnap.data() as { name: string; year: number; department: string };
       const subject = subjectSnap.data() as { name: string; code: string; hoursPerWeek: number };
 
+      // Server-computed, never trusting whatever `facultyName` the client sent -
+      // Full Name (as per SSC) preferred, Name (as per PAN) only as a fallback,
+      // same precedence facultyDisplayName() uses everywhere else.
+      const facultyMemberSnap = await collegeRef.collection("facultyMembers").doc(facultyId).get();
+      if (!facultyMemberSnap.exists) return NextResponse.json({ error: "Faculty not found" }, { status: 404 });
+      const resolvedFacultyName = facultyDisplayName(facultyMemberSnap.data() as { name?: string; legalName?: string });
+
       // A parent department's HOD has full control over their own department and
       // every sub-department beneath it, so both the section and the faculty may
       // come from any of them (e.g. a shared Basic Science section staffed with a
@@ -359,9 +369,7 @@ export async function POST(request: Request) {
           );
         }
 
-        const facultySnap = await collegeRef.collection("facultyMembers").doc(facultyId).get();
-        if (!facultySnap.exists) return NextResponse.json({ error: "Faculty not found" }, { status: 404 });
-        const facultyDept = (facultySnap.data() as { department?: string }).department ?? "";
+        const facultyDept = (facultyMemberSnap.data() as { department?: string }).department ?? "";
         if (!canHodEditDepartment(scope, facultyDept)) {
           return NextResponse.json({ error: "Faculty must be in your department or one of your sub-departments" }, { status: 403 });
         }
@@ -425,7 +433,7 @@ export async function POST(request: Request) {
       await ref.set({
         collegeId: session.collegeId,
         facultyId,
-        facultyName: facultyName ?? "",
+        facultyName: resolvedFacultyName,
         department: section.department,
         departmentId: course.departmentId,
         courseId,
@@ -495,7 +503,7 @@ export async function POST(request: Request) {
           if (facultyConflict) {
             const other = facultyConflict.data() as { subjectName?: string };
             return NextResponse.json({
-              error: `Conflict: ${facultyName || "this faculty"} already teaches ${other.subjectName ?? "another class"} on ${slot.day} period ${slot.periodNumber} in a different section`,
+              error: `Conflict: ${resolvedFacultyName || "this faculty"} already teaches ${other.subjectName ?? "another class"} on ${slot.day} period ${slot.periodNumber} in a different section`,
               assignmentId: ref.id,
             }, { status: 409 });
           }
@@ -506,7 +514,7 @@ export async function POST(request: Request) {
             department: section.department,
             assignmentId: ref.id,
             facultyId,
-            facultyName: facultyName ?? "",
+            facultyName: resolvedFacultyName,
             courseId,
             year: section.year,
             sectionId,

@@ -7,6 +7,9 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
 import { syncDepartmentHod, getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
 import { MANAGEABLE_STAFF_ROLES } from "@/types";
+import { normalizeAcademicProfile } from "@/lib/faculty/academicProfileCompat";
+import { migrateUserDoc } from "@/lib/faculty/fieldRenames";
+import { withLegacyPersonalKeysDeleted } from "@/lib/faculty/legacyKeyDeletes";
 import type { UserRole } from "@/types";
 
 async function loadTargetInScope(
@@ -92,7 +95,7 @@ export async function GET(
     const { targetSnap, error, status } = await loadTargetInScope(db, session, uid);
     if (!targetSnap) return NextResponse.json({ error }, { status });
 
-    return NextResponse.json({ user: { uid: targetSnap.id, ...targetSnap.data() } });
+    return NextResponse.json({ user: { uid: targetSnap.id, ...migrateUserDoc(targetSnap.data() ?? {}) } });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -225,7 +228,7 @@ export async function PATCH(
     }
     if (roleChanged) updates.role = body.role;
     if (body.phone !== undefined) updates.phone = body.phone;
-    if (body.academicProfile !== undefined) updates.academicProfile = body.academicProfile;
+    if (body.academicProfile !== undefined) updates.academicProfile = normalizeAcademicProfile(body.academicProfile);
     if (body.profilePhotoUrl !== undefined) updates.profilePhotoUrl = body.profilePhotoUrl;
 
     await db
@@ -233,7 +236,8 @@ export async function PATCH(
       .doc(session.collegeId)
       .collection("users")
       .doc(uid)
-      .update(updates);
+      // Drop the old-named twin of any personal key written above on a not-yet-migrated doc.
+      .update(withLegacyPersonalKeysDeleted(updates, FieldValue.delete()));
 
     if (body.department !== undefined) {
       await syncDepartmentHod(db, session.collegeId, {

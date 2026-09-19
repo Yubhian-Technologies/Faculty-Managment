@@ -4,14 +4,14 @@
 // yet. Nothing here touches Firestore; the split values just seed the edit
 // form, and saving the form (even untouched) persists the new shape.
 
-// "B.Tech CSE" -> { degree: "B.Tech", branch: "CSE" }. Splits on the first
+// "B.Tech CSE" -> { course: "B.Tech", branch: "CSE" }. Splits on the first
 // space - imprecise for degree names with more words, but good enough to
 // pre-fill the new fields for correction rather than leaving them blank.
-export function splitDegreeAndBranch(combined: string): { degree: string; branch: string } {
+export function splitDegreeAndBranch(combined: string): { course: string; branch: string } {
   const trimmed = combined.trim();
   const spaceIdx = trimmed.indexOf(" ");
-  if (spaceIdx === -1) return { degree: trimmed, branch: "" };
-  return { degree: trimmed.slice(0, spaceIdx), branch: trimmed.slice(spaceIdx + 1).trim() };
+  if (spaceIdx === -1) return { course: trimmed, branch: "" };
+  return { course: trimmed.slice(0, spaceIdx), branch: trimmed.slice(spaceIdx + 1).trim() };
 }
 
 // A legacy PreviousInstitution only ever recorded a single "years worked"

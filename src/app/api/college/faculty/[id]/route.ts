@@ -5,7 +5,19 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodManageFacultyDepartment } from "@/lib/departments/scope";
 import { syncTrainingEntryCoConductors } from "@/lib/faculty/syncTrainingEntryCoConductors";
-import type { Designation, EmploymentType, FacultyStatus, TrainingEntry } from "@/types";
+import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
+import { experienceBreakdown, allPreviousExperienceEntries } from "@/lib/faculty/experienceCalc";
+import { normalizeAcademicProfile } from "@/lib/faculty/academicProfileCompat";
+import {
+  academicProfileFirestoreUpdates, applyAcademicProfileChanges, parseAcademicProfileChanges, touchesTrainingEntries,
+  type AcademicProfileChanges,
+} from "@/lib/faculty/academicProfileChanges";
+import { migrateFacultyDoc } from "@/lib/faculty/fieldRenames";
+import { withLegacyFacultyKeysDeleted } from "@/lib/faculty/legacyKeyDeletes";
+import { normalizeHighestQualification } from "@/lib/faculty/highestQualification";
+import { FieldValue } from "firebase-admin/firestore";
+import type { Designation, EmployeeCategory, FacultyStatus, TrainingEntry } from "@/types";
+import { EMPLOYEE_CATEGORY_VALUES, EMPLOYEE_CATEGORY_ERROR_MESSAGE } from "@/types";
 
 export async function GET(
   _request: Request,
@@ -38,7 +50,7 @@ export async function GET(
       }
     }
 
-    return NextResponse.json({ faculty: { id: snap.id, ...snap.data() } });
+    return NextResponse.json({ faculty: { id: snap.id, ...migrateFacultyDoc(snap.data() ?? {}) } });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -62,62 +74,27 @@ export async function PATCH(
       apaarFacultyId: string;
       email: string;
       phone: string;
+      additionalPhoneNumbers: { label?: string; number: string }[];
       collegeEmail: string;
       designation: Designation;
-      qualification: string;
+      highestQualification: string;
       specialization: string;
-      experienceYears: number;
-      internalExperience: number;
-      externalExperience: number;
-      inCampusExperience: number;
-      industryExperience: number;
-      researchExperience: number;
       joiningDate: string;
-      dateOfJoiningDepartment: string;
-      dateOfBirth: string;
-      employmentType: EmploymentType;
-      aicteEligible: boolean;
+      employeeCategory: EmployeeCategory;
+      aicteFacultyId: string;
       status: FacultyStatus;
-      gender: string;
-      legalName: string;
-      nameAsPerAadhar: string;
-      fatherName: string;
-      motherName: string;
-      religion: string;
-      caste: string;
-      subCaste: string;
-      aadharNo: string;
-      panNo: string;
-      passportNumber: string;
-      differentlyAbled: boolean;
-      differentlyAbledDetails: string;
-      bankAccountNo: string;
-      ifscCode: string;
-      bankName: string;
-      bankBranch: string;
-      bankOtherDetails: string;
-      emergencyContactName: string;
-      emergencyContactRelation: string;
-      emergencyContactPhone: string;
-      ratificationStatus: string;
-      ratificationProceedingsNumber: string;
-      ratificationDate: string;
-      maritalStatus: string;
-      spouseName: string;
-      numberOfChildren: number;
-      temporaryAddress: string;
-      permanentSameAsTemporary: boolean;
-      permanentAddress: string;
-      bloodGroup: string;
-      hasPHD: boolean;
       userUid: string;
       academicProfile: Record<string, unknown>;
+      // Section-scoped alternative to `academicProfile`: only the keys that changed
+      // ({ set, remove }) - see academicProfileChanges.ts. Never combined with it.
+      academicProfileChanges: unknown;
       technicalProfile: Record<string, unknown>;
       profilePhotoUrl: string;
       joiningLetterUrl: string;
       appointmentLetterUrl: string;
       resumeUrl: string;
-    }>;
+    }> &
+      PersonalDetailsInput;
 
     const db = getAdminDb();
     const ref = db
@@ -156,13 +133,18 @@ export async function PATCH(
     // deliberately NOT in this list - it's optional; legalName (Full Name as
     // per SSC) is the required primary identity name.
     const REQUIRED_IF_PRESENT = [
-      "collegeEmail", "phone", "designation", "qualification", "employmentType",
+      "collegeEmail", "phone", "designation", "highestQualification",
       "gender", "legalName", "aadharNo", "panNo", "ratificationStatus",
     ] as const;
     for (const key of REQUIRED_IF_PRESENT) {
       if (body[key] !== undefined && !body[key].trim()) {
         return NextResponse.json({ error: `${key} cannot be blanked out - it is a required field` }, { status: 400 });
       }
+    }
+    // Only the EMPLOYEE_CATEGORY_VALUES keys are accepted anywhere Employee
+    // Category is set - see EmployeeCategory's doc-comment in types/core.ts.
+    if (body.employeeCategory !== undefined && !EMPLOYEE_CATEGORY_VALUES.includes(body.employeeCategory)) {
+      return NextResponse.json({ error: EMPLOYEE_CATEGORY_ERROR_MESSAGE }, { status: 400 });
     }
 
     const updates: Record<string, unknown> = { updatedAt: new Date() };
@@ -188,64 +170,77 @@ export async function PATCH(
       updates.employeeId = newEmployeeId;
     }
 
-    // permanentAddress is deliberately excluded here - see the dedicated
-    // handling below, which overrides it with temporaryAddress whenever
-    // permanentSameAsTemporary is true rather than trusting whatever (if
-    // anything) the caller sent for it directly.
+    // Personal/statutory details (gender, name variants, bank, address, PF
+    // number, mother tongue, languages known, height/weight, etc.) - shared
+    // builder also used by the create route (POST /api/college/faculty), so
+    // an edit persists exactly the fields creation does instead of a second,
+    // easily-incomplete hand-rolled whitelist (a prior version of this route
+    // omitted pfNumber/motherTongue/languagesKnown/heightFeet/heightInches/
+    // weightKg entirely, so those silently failed to save on edit).
+    Object.assign(updates, buildPersonalDetailsUpdate(body));
+
+    // Non-personal string fields
     const stringFields = [
-      "name", "email", "phone", "collegeEmail", "apaarFacultyId", "designation", "qualification",
-      "specialization", "employmentType", "status", "gender", "legalName", "nameAsPerAadhar",
-      "fatherName", "motherName", "religion", "caste", "subCaste", "aadharNo", "passportNumber",
-      "differentlyAbledDetails", "bankAccountNo", "bankName", "bankBranch", "bankOtherDetails",
-      "emergencyContactName", "emergencyContactRelation", "emergencyContactPhone", "ratificationStatus",
-      "ratificationProceedingsNumber", "userUid",
-      "maritalStatus", "spouseName", "temporaryAddress", "bloodGroup",
+      "name", "email", "phone", "collegeEmail", "apaarFacultyId", "aicteFacultyId", "designation", "highestQualification",
+      "specialization", "employeeCategory", "status", "userUid",
     ] as const;
 
     for (const key of stringFields) {
       if (body[key] !== undefined) updates[key] = body[key];
     }
-
-    // PAN / IFSC always uppercase
-    if (body.panNo !== undefined) updates.panNo = body.panNo.toUpperCase();
-    if (body.ifscCode !== undefined) updates.ifscCode = body.ifscCode.toUpperCase();
-
-    // Numeric fields
-    const numFields = [
-      "experienceYears", "internalExperience", "externalExperience",
-      "inCampusExperience", "industryExperience", "researchExperience", "numberOfChildren",
-    ] as const;
-    for (const key of numFields) {
-      if (body[key] !== undefined) updates[key] = Number(body[key]);
+    // One category per faculty member, whatever spelling/casing the caller sent.
+    if (typeof updates.highestQualification === "string") {
+      updates.highestQualification = normalizeHighestQualification(updates.highestQualification);
     }
 
-    // Boolean
-    if (body.hasPHD !== undefined) updates.hasPHD = body.hasPHD;
-    if (body.aicteEligible !== undefined) updates.aicteEligible = body.aicteEligible;
-    if (body.permanentSameAsTemporary !== undefined) updates.permanentSameAsTemporary = body.permanentSameAsTemporary;
-    if (body.differentlyAbled !== undefined) updates.differentlyAbled = body.differentlyAbled;
-
-    // "Same as temporary" means the permanent address IS the temporary
-    // address - copied automatically rather than left blank or trusting a
-    // stray permanentAddress value sent alongside. Only applies when
-    // temporaryAddress is part of this same call (the personal-module editor
-    // always sends the whole section together); otherwise a direct
-    // permanentAddress update still goes through untouched.
-    if (body.permanentSameAsTemporary === true && body.temporaryAddress !== undefined) {
-      updates.permanentAddress = body.temporaryAddress;
-    } else if (body.permanentAddress !== undefined) {
-      updates.permanentAddress = body.permanentAddress;
+    // Extra contact numbers beyond the primary Mobile No - cleaned/filtered
+    // the same way the create route does. Writing [] (not omitting the key)
+    // is how a caller clears every extra number back out.
+    if (body.additionalPhoneNumbers !== undefined) {
+      updates.additionalPhoneNumbers = body.additionalPhoneNumbers
+        .map((p) => ({ ...(p.label?.trim() ? { label: p.label.trim() } : {}), number: p.number?.trim() ?? "" }))
+        .filter((p) => p.number);
     }
 
-    // Academic profile (Modules 1-5) / Technical profile - mutually exclusive by designation
-    if (body.academicProfile !== undefined) updates.academicProfile = body.academicProfile;
+    // Academic profile (Modules 1-5) / Technical profile - mutually exclusive by designation.
+    // The edit pages send `academicProfileChanges` (only the keys the tab changed), written
+    // as dot-paths so every other key of the stored profile is left exactly as it is;
+    // `academicProfile` (the whole object) is still accepted and replaces it wholesale.
+    let academicChanges: AcademicProfileChanges | undefined;
+    if (body.academicProfileChanges !== undefined) {
+      if (body.academicProfile !== undefined) {
+        return NextResponse.json({ error: "Send either academicProfile or academicProfileChanges, not both" }, { status: 400 });
+      }
+      const parsed = parseAcademicProfileChanges(body.academicProfileChanges);
+      if (!parsed) return NextResponse.json({ error: "Invalid academicProfileChanges" }, { status: 400 });
+      academicChanges = parsed;
+      Object.assign(updates, academicProfileFirestoreUpdates((snap.data() as { academicProfile?: unknown }).academicProfile, academicChanges, FieldValue.delete()));
+    } else if (body.academicProfile !== undefined) {
+      updates.academicProfile = normalizeAcademicProfile(body.academicProfile);
+    }
     if (body.technicalProfile !== undefined) updates.technicalProfile = body.technicalProfile;
 
     // Date fields
     if (body.joiningDate) updates.joiningDate = new Date(body.joiningDate);
-    if (body.dateOfJoiningDepartment) updates.dateOfJoiningDepartment = new Date(body.dateOfJoiningDepartment);
-    if (body.dateOfBirth) updates.dateOfBirth = new Date(body.dateOfBirth);
-    if (body.ratificationDate) updates.ratificationDate = new Date(body.ratificationDate);
+
+    // Total Years of Experience (Internal since Date of Joining + External
+    // from the Academic/Industry/Research Experience entries) - always
+    // recomputed here server-side, never taken from the client, so it can't
+    // drift from what Faculty Details/the Faculty List compute live from the
+    // same two inputs. Only recomputed when this PATCH actually touches one
+    // of those inputs; whichever of academicProfile/joiningDate it doesn't
+    // touch falls back to what's already on the doc.
+    if (body.academicProfile !== undefined || academicChanges || body.joiningDate) {
+      const existing = snap.data() as { academicProfile?: Record<string, unknown>; joiningDate?: FirebaseFirestore.Timestamp };
+      const effectiveAcademicProfile = academicChanges
+        ? applyAcademicProfileChanges(existing.academicProfile, academicChanges)
+        : body.academicProfile !== undefined ? updates.academicProfile : normalizeAcademicProfile(existing.academicProfile);
+      const effectiveJoiningDate = body.joiningDate ? new Date(body.joiningDate) : existing.joiningDate;
+      updates.totalYearsOfExperience = experienceBreakdown(
+        allPreviousExperienceEntries(effectiveAcademicProfile as Parameters<typeof allPreviousExperienceEntries>[0]),
+        effectiveJoiningDate
+      ).total;
+    }
 
     if (body.profilePhotoUrl !== undefined) updates.profilePhotoUrl = body.profilePhotoUrl;
 
@@ -259,7 +254,10 @@ export async function PATCH(
       }
     }
 
-    await ref.update(updates);
+    // A doc not yet migrated may still hold the old-named twin of a key written
+    // above (qualification, experienceYears, passportNumber, ...) - drop it so
+    // the doc never carries both.
+    await ref.update(withLegacyFacultyKeysDeleted(updates, FieldValue.delete()));
 
     // The record's display name (facultyDisplayName() logic, inlined here
     // since this route works with plain Firestore data, not a typed
@@ -339,10 +337,13 @@ export async function PATCH(
       }
     }
 
-    if (body.academicProfile !== undefined) {
+    if (body.academicProfile !== undefined || (academicChanges && touchesTrainingEntries(academicChanges))) {
       try {
-        const previousEntries = (snap.data() as { academicProfile?: { trainingEntries?: TrainingEntry[] } }).academicProfile?.trainingEntries;
-        const nextEntries = (body.academicProfile as { trainingEntries?: TrainingEntry[] } | undefined)?.trainingEntries;
+        const storedProfile = (snap.data() as { academicProfile?: { fdpsWorkshopsMoocsCertifications?: TrainingEntry[] } }).academicProfile;
+        const previousEntries = normalizeAcademicProfile(storedProfile)?.fdpsWorkshopsMoocsCertifications;
+        const nextEntries = academicChanges
+          ? (applyAcademicProfileChanges(storedProfile, academicChanges) as { fdpsWorkshopsMoocsCertifications?: TrainingEntry[] }).fdpsWorkshopsMoocsCertifications
+          : (updates.academicProfile as { fdpsWorkshopsMoocsCertifications?: TrainingEntry[] } | undefined)?.fdpsWorkshopsMoocsCertifications;
         await syncTrainingEntryCoConductors(db, session.collegeId, id, newDisplayName || oldDisplayName, previousEntries, nextEntries);
       } catch (syncErr) {
         console.error("[college/faculty/[id] PATCH] co-conductor sync failed:", syncErr);
@@ -394,7 +395,7 @@ export async function DELETE(
     if (!snap.exists) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
-    const facultyData = snap.data() as { name?: string; userUid?: string; department?: string };
+    const facultyData = snap.data() as { name?: string; legalName?: string; userUid?: string; department?: string };
 
     if (session.role === "HOD") {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
@@ -456,7 +457,9 @@ export async function DELETE(
       performedBy: session.uid,
       performedByName: actorName,
       targetId: id,
-      details: { name: facultyData.name ?? "" },
+      // Full Name (as per SSC) preferred, Name (as per PAN) only as a fallback -
+      // same precedence facultyDisplayName() uses everywhere else.
+      details: { name: facultyData.legalName?.trim() || facultyData.name?.trim() || "" },
       timestamp: new Date(),
     });
 

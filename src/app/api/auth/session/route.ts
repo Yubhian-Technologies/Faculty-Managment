@@ -5,6 +5,7 @@ import { verifyFirebaseToken } from "@/lib/auth/verifyFirebaseToken";
 import { getAdminDb, getAdminAuth } from "@/lib/firebase/admin";
 import { LOCATION_SCOPED_ROLES } from "@/types";
 import { orderHeldRoles } from "@/lib/roles/seatRoles";
+import { migrateUserDoc } from "@/lib/faculty/fieldRenames";
 
 export async function POST(request: Request) {
   try {
@@ -114,7 +115,8 @@ export async function POST(request: Request) {
           .doc(decoded.uid)
           .get();
         if (userSnap.exists) {
-          profile = { uid: userSnap.id, ...userSnap.data() };
+          // Lift legacy personal/academicProfile key names so the client only sees the new ones.
+          profile = { uid: userSnap.id, ...migrateUserDoc(userSnap.data() ?? {}) };
           if (profile.role === "COLLEGE_ADMIN") {
             realRole = "COLLEGE_ADMIN";
             profile.role = "PRINCIPAL";

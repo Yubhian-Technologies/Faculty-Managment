@@ -4,6 +4,10 @@ import { NextResponse } from "next/server";
 import { requireSuperAdmin } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
+import { normalizeAcademicProfile } from "@/lib/faculty/academicProfileCompat";
+import { migrateUserDoc } from "@/lib/faculty/fieldRenames";
+import { withLegacyPersonalKeysDeleted } from "@/lib/faculty/legacyKeyDeletes";
+import { FieldValue } from "firebase-admin/firestore";
 import type { UserRole } from "@/types";
 
 export async function GET(
@@ -34,7 +38,7 @@ export async function GET(
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    return NextResponse.json({ user: { uid: snap.id, ...snap.data() } });
+    return NextResponse.json({ user: { uid: snap.id, ...migrateUserDoc(snap.data() ?? {}) } });
   } catch (err) {
     if (err instanceof Error && err.message === "UNAUTHORIZED") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -115,14 +119,15 @@ export async function PATCH(
     if (collegeEmail !== undefined) updates.collegeEmail = collegeEmail;
     if (employeeId !== undefined) updates.employeeId = employeeId;
     if (phone !== undefined) updates.phone = phone;
-    if (academicProfile !== undefined) updates.academicProfile = academicProfile;
+    if (academicProfile !== undefined) updates.academicProfile = normalizeAcademicProfile(academicProfile);
 
     await db
       .collection("colleges")
       .doc(collegeId)
       .collection("users")
       .doc(uid)
-      .set(updates, { merge: true });
+      // Drop the old-named twin of any personal key written above on a not-yet-migrated doc.
+      .set(withLegacyPersonalKeysDeleted(updates, FieldValue.delete()), { merge: true });
 
     // Keep systemUsers in sync for session-role resolution
     const systemUpdates: Record<string, unknown> = {};

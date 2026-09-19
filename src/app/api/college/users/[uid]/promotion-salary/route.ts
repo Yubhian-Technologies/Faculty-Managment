@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { normalizeAcademicProfile } from "@/lib/faculty/academicProfileCompat";
 import type { PromotionRecord } from "@/types";
 
 // HOD and Principal keep their self-reported academic profile on their own
@@ -35,7 +36,7 @@ export async function GET(
     if (!data) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
     return NextResponse.json({
-      user: { uid, name: data.name ?? "", role: data.role, academicProfile: data.academicProfile ?? {} },
+      user: { uid, name: data.name ?? "", role: data.role, academicProfile: normalizeAcademicProfile(data.academicProfile ?? {}) },
     });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
@@ -56,22 +57,28 @@ export async function PATCH(
 
     const body = (await request.json()) as Partial<{
       promotionHistory: PromotionRecord[];
-      presentSalary: number;
+      monthlySalary: number;
       grossAnnualCTC: number;
       incrementsAwarded: number;
-      fundingConsultancyRevenue: number;
+      fundingConsultancyRevenueGeneration: number;
     }>;
+    // The client sends its whole academicProfile; lift any legacy key names in it
+    // (presentSalary, fundingConsultancyRevenue, promotion orderUrl) so a client
+    // still on the old shape can't write the old names back.
+    const normalizedBody = normalizeAcademicProfile(body);
 
     const db = getAdminDb();
     const { ref, data } = await loadTarget(db, session.collegeId, uid);
     if (!ref || !data) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-    const academicProfile = { ...(data.academicProfile ?? {}) };
-    if (body.promotionHistory !== undefined) academicProfile.promotionHistory = body.promotionHistory;
-    if (body.presentSalary !== undefined) academicProfile.presentSalary = Number(body.presentSalary);
-    if (body.grossAnnualCTC !== undefined) academicProfile.grossAnnualCTC = Number(body.grossAnnualCTC);
-    if (body.incrementsAwarded !== undefined) academicProfile.incrementsAwarded = Number(body.incrementsAwarded);
-    if (body.fundingConsultancyRevenue !== undefined) academicProfile.fundingConsultancyRevenue = Number(body.fundingConsultancyRevenue);
+    // Lift the stored profile to the current key names before merging, so the
+    // saved map never mixes old and new keys.
+    const academicProfile = { ...normalizeAcademicProfile(data.academicProfile ?? {}) };
+    if (normalizedBody.promotionHistory !== undefined) academicProfile.promotionHistory = normalizedBody.promotionHistory;
+    if (normalizedBody.monthlySalary !== undefined) academicProfile.monthlySalary = Number(normalizedBody.monthlySalary);
+    if (normalizedBody.grossAnnualCTC !== undefined) academicProfile.grossAnnualCTC = Number(normalizedBody.grossAnnualCTC);
+    if (normalizedBody.incrementsAwarded !== undefined) academicProfile.incrementsAwarded = Number(normalizedBody.incrementsAwarded);
+    if (normalizedBody.fundingConsultancyRevenueGeneration !== undefined) academicProfile.fundingConsultancyRevenueGeneration = Number(normalizedBody.fundingConsultancyRevenueGeneration);
 
     await ref.update({ academicProfile, updatedAt: new Date() });
 

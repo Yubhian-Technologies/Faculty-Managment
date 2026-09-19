@@ -59,6 +59,12 @@ export function branchClaimConflictMessage(conflicts: BranchClaimConflict[]): st
 export interface DepartmentYearRow extends DepartmentClaimRow {
   assignedYears?: number[];
   parentDepartmentId?: string;
+  // Only read by findBranchManager's parent fallback below, to recognize a
+  // "no own sections" shared-first-year parent (see noOwnSectionsChildren,
+  // academicStructure.ts). Optional because every caller already passes whole
+  // department documents - nothing has to start supplying a new field.
+  hasSubDepartments?: boolean;
+  parentRunsOwnSections?: boolean;
   // Per-course override of assignedYears (Department.courseScopes) - a
   // manager can run more than one course with different years (e.g. Chemistry
   // sharing a B.Tech's first year while also running an independent course of
@@ -91,9 +97,60 @@ export function findBranchManager<T extends DepartmentYearRow>(
   branchName: string,
   catalogId?: string
 ): BranchManager<T> | null {
-  const manager = departments.find((d) => (d.managedDepartments ?? []).includes(branchName));
+  const manager = departments.find((d) => (d.managedDepartments ?? []).includes(branchName))
+    ?? findManagerViaNoOwnSectionsParent(departments, branchName);
   if (!manager) return null;
   return { department: manager, years: managerTeachingYears(departments, manager, catalogId) };
+}
+
+/**
+ * Fallback for a branch nothing manages BY NAME: when its parent is a "no own
+ * sections" shared-first-year parent (parentRunsOwnSections === false - see
+ * noOwnSectionsChildren, academicStructure.ts) and something manages THAT
+ * parent, the child inherits the relationship.
+ *
+ * This is what makes grouping such a parent actually work. Grouping "AI" under
+ * BS-ENGLISH says BS-ENGLISH runs AI's shared first year - but AI itself never
+ * houses a section (the flag is exactly that statement, and
+ * `api/college/sections` POST enforces it), so every real section lands under
+ * AIML/AIDS instead. Without this, those sections would resolve to no manager
+ * at all: the shared first year would be rejected on write and the sections
+ * would be invisible to the very HOD who created them.
+ *
+ * Deliberately only consulted when no direct manager exists, and only through
+ * a parent carrying that explicit Principal-set flag - a branch grouped in its
+ * own right, and any ordinary parent/child pair, resolve exactly as before.
+ */
+function findManagerViaNoOwnSectionsParent<T extends DepartmentYearRow>(
+  departments: T[],
+  branchName: string
+): T | undefined {
+  const parentName = noOwnSectionsParentNameOf(departments, branchName);
+  if (!parentName) return undefined;
+  return departments.find((d) => (d.managedDepartments ?? []).includes(parentName));
+}
+
+/**
+ * The name of `branchName`'s parent, when that parent is a "no own sections"
+ * one (parentRunsOwnSections === false). Undefined for everything else - a
+ * top-level department, or a child of a parent that does run its own sections.
+ *
+ * This is the "a child stands in for its flagged parent" rule in one place.
+ * Every picker now offers such a parent's CHILDREN in its stead
+ * (replaceNoOwnSectionsParents, academicStructure.ts), so anything that used
+ * to be looked up by the parent's name has to accept a child's name and
+ * resolve back up - otherwise a relationship configured on the parent
+ * silently stops applying the moment a user picks what the UI actually offers.
+ */
+export function noOwnSectionsParentNameOf<T extends DepartmentYearRow>(
+  departments: T[],
+  branchName: string
+): string | undefined {
+  const branch = departments.find((d) => d.name === branchName);
+  if (!branch?.parentDepartmentId) return undefined;
+  const parent = departments.find((d) => d.id === branch.parentDepartmentId);
+  if (!parent?.name || !parent.hasSubDepartments || parent.parentRunsOwnSections !== false) return undefined;
+  return parent.name;
 }
 
 /**
@@ -195,7 +252,15 @@ export function resolveFreshmanLandingDepartment(
   if (!coreDepartmentName) return resolvedDepartmentName;
   const children = noOwnSectionsChildren(allDepartments, resolvedDepartmentName);
   if (!children) return resolvedDepartmentName;
-  const manager = findBranchManager(children, coreDepartmentName);
+  // The Core Department may be a child standing in for a flagged parent the
+  // manager actually groups (AIML offered in place of AI - see
+  // noOwnSectionsParentNameOf). `children` is deliberately only this parent's
+  // own sub-departments, so that resolution is done against the FULL list
+  // first, then the manager is looked up among the children as before.
+  const managedName = findBranchManager(children, coreDepartmentName)
+    ? coreDepartmentName
+    : noOwnSectionsParentNameOf(allDepartments, coreDepartmentName) ?? coreDepartmentName;
+  const manager = findBranchManager(children, managedName);
   return manager ? manager.department.name : resolvedDepartmentName;
 }
 

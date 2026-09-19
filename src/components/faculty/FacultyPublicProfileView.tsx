@@ -6,10 +6,11 @@ import { Badge } from "@/components/ui/badge";
 import { VISHNU_LOGO_URL } from "@/lib/pdf/logo";
 import {
   Mail, ExternalLink, UserRound, GraduationCap, Microscope, Briefcase,
-  FlaskConical, BookOpen, Landmark, Handshake, Lightbulb, Award, Globe2,
+  FlaskConical, BookOpen, Award,
   Users, Info,
 } from "lucide-react";
 import { DESIGNATION_LABELS } from "@/types";
+import { publicPeriod, publicYear } from "@/lib/faculty/publicProfileDates";
 import type {
   Designation, TrainingEntryType, ProfessionalBody, AdminResponsibilityCategory,
 } from "@/types";
@@ -18,11 +19,14 @@ import {
 } from "@/types";
 
 export interface DegreeSummary {
-  degree: string;
+  course: string;
   branch: string;
   specialization?: string;
-  universityOrInstitute: string;
-  yearOfCompletion: number;
+  institutionName: string;
+  // Exactly one is set: yearOfAward for Doctoral/Post-Doctoral entries,
+  // yearOfPassing for everything else (see publicDegree in the public API route).
+  yearOfPassing?: number;
+  yearOfAward?: number;
 }
 
 export interface FacultyPublicProfile {
@@ -31,9 +35,9 @@ export interface FacultyPublicProfile {
   designation: Designation;
   department: string;
   profilePhotoUrl?: string;
-  qualification: string;
+  highestQualification: string;
   specialization?: string;
-  experienceYears: number;
+  totalYearsOfExperience: number;
   officialEmail?: string;
   joiningYear?: number;
   education?: {
@@ -44,13 +48,15 @@ export interface FacultyPublicProfile {
     additionalPgDetails: (DegreeSummary | undefined)[];
     phdDetails?: DegreeSummary;
     additionalPhdDetails: (DegreeSummary | undefined)[];
-    postDoctoralDetails?: DegreeSummary;
+    postdoctoralFellowshipDetails?: DegreeSummary;
     phdStatus?: "AWARDED" | "PURSUING";
-    qualifyingExamQualified?: "YES" | "NO";
-    qualifyingExam?: string;
-    qualifyingExamYear?: number;
+    netSletSetGateOthers?: "YES" | "NO";
+    qualifiedExam?: string;
+    qualifiedYear?: number;
   };
-  previousInstitutions: { institutionName: string; designation?: string; fromYear?: number; toYear?: number }[];
+  // fromDate/toDate are the real dates the current forms write; fromYear/toYear
+  // are the legacy year-only fallback (see publicProfileDates.ts).
+  academicExperience: { institutionName: string; designation?: string; fromDate?: string; toDate?: string; fromYear?: number; toYear?: number }[];
   research?: {
     publications: { title: string; coAuthors: string; journalOrConference: string; publicationYear: number; indexing?: string }[];
     totalPublications: number;
@@ -60,29 +66,23 @@ export interface FacultyPublicProfile {
     googleScholarId?: string;
     scopusAuthorId?: string;
     orcidId?: string;
-    authoredBooks: { title: string; publisher: string; year: number }[];
-  };
-  projects?: {
-    fundedProjects: { title: string; fundingAgency: string; year: number; status: string; piOrCoPi?: "PI" | "CO_PI" }[];
-    consultancyProjects: { title: string; clientOrAgency: string; year: number; status: string }[];
-    patents?: { indianGranted: number; indianFiled: number; internationalGranted: number; internationalFiled: number };
+    authoredBooks: { title: string; publisher: string; year?: number }[];
   };
   recognition?: {
-    awardEntries: { title: string; awardingBody: string; year: number }[];
-    professionalMemberships: { body: ProfessionalBody; otherName?: string; sinceYear?: number }[];
-    adminResponsibilityEntries: { category: AdminResponsibilityCategory; otherCategory?: string; description: string; fromYear?: number; toYear?: number }[];
-    labsEstablished: { facilityDetails: string; outcomes: string }[];
-    trainingEntries: { type: TrainingEntryType; title: string; organizer: string; year: number }[];
-    nationalExposure?: string;
-    internationalExposure?: string;
+    awardsRecognition: { titleOfAward: string; awardingAgencyBody: string; dateOfAward?: string; year?: number }[];
+    professionalMemberships: { body: ProfessionalBody; bodyName?: string; memberSince?: string; sinceMonthYear?: string; sinceYear?: number }[];
+    academicResponsibilities: { category: AdminResponsibilityCategory; otherCategory?: string; description: string; fromDate?: string; toDate?: string; fromYear?: number; toYear?: number }[];
+    newLabsEstablished: { facilityDetails: string; outcomes: string }[];
+    fdpsWorkshopsMoocsCertifications: { type: TrainingEntryType; pleaseSpecifyType?: string; titleOfTheProgram: string; nameOfTheFacultyCoordinator?: string; fromDate?: string; toDate?: string; year?: number }[];
   };
   otherInformation?: string;
 }
 
 function degreeLine(d?: DegreeSummary) {
   if (!d) return null;
-  const parts = [d.degree, d.specialization || d.branch, d.universityOrInstitute].filter(Boolean);
-  return `${parts.join(", ")}${d.yearOfCompletion ? ` (${d.yearOfCompletion})` : ""}`;
+  const parts = [d.course, d.specialization || d.branch, d.institutionName].filter(Boolean);
+  const year = d.yearOfAward ?? d.yearOfPassing;
+  return `${parts.join(", ")}${year ? ` (${year})` : ""}`;
 }
 
 function InfoRow({ label, value }: { label: string; value?: React.ReactNode }) {
@@ -123,11 +123,7 @@ const SECTION_ICONS = {
   experience: Briefcase,
   research: FlaskConical,
   books: BookOpen,
-  funded: Landmark,
-  consultancy: Handshake,
-  patents: Lightbulb,
   awards: Award,
-  exposure: Globe2,
   engagement: Users,
   other: Info,
 } as const;
@@ -156,8 +152,8 @@ export function FacultyPublicProfileView({ profile }: { profile: FacultyPublicPr
 
   const designationLabel = DESIGNATION_LABELS[p.designation] ?? p.designation;
   const qualBadges = [
-    p.education?.qualifyingExamQualified === "YES" && p.education?.qualifyingExam &&
-      `${p.education.qualifyingExam} Qualified${p.education.qualifyingExamYear ? ` (${p.education.qualifyingExamYear})` : ""}`,
+    p.education?.netSletSetGateOthers === "YES" && p.education?.qualifiedExam &&
+      `${p.education.qualifiedExam} Qualified${p.education.qualifiedYear ? ` (${p.education.qualifiedYear})` : ""}`,
     p.education?.phdStatus === "PURSUING" && "Ph.D. Pursuing",
   ].filter(Boolean) as string[];
 
@@ -168,23 +164,17 @@ export function FacultyPublicProfileView({ profile }: { profile: FacultyPublicPr
     p.research?.orcidId && { label: "ORCID", href: `https://orcid.org/${p.research.orcidId}` },
   ].filter((x): x is { label: string; href: string } => !!x);
 
-  const patents = p.projects?.patents;
-
   const showEducation = degreeEntries.length > 0 || qualBadges.length > 0;
-  const showPostdoc = !!p.education?.postDoctoralDetails;
-  const showExperience = p.previousInstitutions.length > 0;
+  const showPostdoc = !!p.education?.postdoctoralFellowshipDetails;
+  const showExperience = p.academicExperience.length > 0;
   const showResearch = !!hasResearchStats || (p.research?.publications.length ?? 0) > 0 || scholarLinks.length > 0;
   const showBooks = (p.research?.authoredBooks.length ?? 0) > 0;
-  const showFunded = (p.projects?.fundedProjects.length ?? 0) > 0;
-  const showConsultancy = (p.projects?.consultancyProjects.length ?? 0) > 0;
-  const showPatents = !!patents && !!(patents.indianGranted || patents.indianFiled || patents.internationalGranted || patents.internationalFiled);
-  const showAwards = (p.recognition?.awardEntries.length ?? 0) > 0;
-  const showExposure = !!(p.recognition?.nationalExposure || p.recognition?.internationalExposure);
+  const showAwards = (p.recognition?.awardsRecognition.length ?? 0) > 0;
   const showEngagement = !!p.recognition && (
     p.recognition.professionalMemberships.length > 0 ||
-    p.recognition.adminResponsibilityEntries.length > 0 ||
-    p.recognition.labsEstablished.length > 0 ||
-    p.recognition.trainingEntries.length > 0
+    p.recognition.academicResponsibilities.length > 0 ||
+    p.recognition.newLabsEstablished.length > 0 ||
+    p.recognition.fdpsWorkshopsMoocsCertifications.length > 0
   );
   const showOther = !!p.otherInformation;
 
@@ -192,14 +182,10 @@ export function FacultyPublicProfileView({ profile }: { profile: FacultyPublicPr
     { key: "about", label: "About", show: true },
     { key: "education", label: "Educational Details", show: showEducation },
     { key: "postdoc", label: "Post-Doctoral Experience", show: showPostdoc },
-    { key: "experience", label: "Prior Experience", show: showExperience },
+    { key: "experience", label: "Academic Experience", show: showExperience },
     { key: "research", label: "Research Details", show: showResearch },
-    { key: "books", label: "Books / Book Chapters Published", show: showBooks },
-    { key: "funded", label: "Funded Projects", show: showFunded },
-    { key: "consultancy", label: "Consultancy Projects", show: showConsultancy },
-    { key: "patents", label: "Patents Published", show: showPatents },
-    { key: "awards", label: "Awards & Recognitions", show: showAwards },
-    { key: "exposure", label: "International Collaborations", show: showExposure },
+    { key: "books", label: "Authored Books", show: showBooks },
+    { key: "awards", label: "Awards & Recognition", show: showAwards },
     { key: "engagement", label: "Professional Engagement", show: showEngagement },
     { key: "other", label: "Other Information", show: showOther },
   ].filter((s) => s.show);
@@ -327,9 +313,9 @@ export function FacultyPublicProfileView({ profile }: { profile: FacultyPublicPr
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-10 max-w-2xl">
                 <InfoRow label="Designation" value={designationLabel} />
                 <InfoRow label="Department" value={p.department} />
-                <InfoRow label="Qualification" value={p.qualification} />
+                <InfoRow label="Highest Qualification" value={p.highestQualification} />
                 <InfoRow label="Specialization" value={p.specialization} />
-                <InfoRow label="Total Years of Experience" value={p.experienceYears ? `${p.experienceYears}+ years` : undefined} />
+                <InfoRow label="Total Years of Experience" value={p.totalYearsOfExperience ? `${p.totalYearsOfExperience}+ years` : undefined} />
                 <InfoRow label="At the Institution Since" value={p.joiningYear} />
               </div>
               {qualBadges.length > 0 && (
@@ -362,24 +348,27 @@ export function FacultyPublicProfileView({ profile }: { profile: FacultyPublicPr
               </SectionBlock>
             )}
 
-            {showPostdoc && p.education?.postDoctoralDetails && (
+            {showPostdoc && p.education?.postdoctoralFellowshipDetails && (
               <SectionBlock id="postdoc" refCb={registerSectionRef}>
                 <SectionHeading icon={SECTION_ICONS.postdoc}>Post-Doctoral Experience</SectionHeading>
-                <EntryCard>{degreeLine(p.education.postDoctoralDetails)}</EntryCard>
+                <EntryCard>{degreeLine(p.education.postdoctoralFellowshipDetails)}</EntryCard>
               </SectionBlock>
             )}
 
             {showExperience && (
               <SectionBlock id="experience" refCb={registerSectionRef}>
-                <SectionHeading icon={SECTION_ICONS.experience}>Prior Experience</SectionHeading>
+                <SectionHeading icon={SECTION_ICONS.experience}>Academic Experience</SectionHeading>
                 <EntryList>
-                  {p.previousInstitutions.map((inst, i) => (
-                    <EntryCard key={i}>
-                      <span className="font-medium">{inst.institutionName}</span>
-                      {inst.designation ? ` — ${inst.designation}` : ""}
-                      {inst.fromYear && <span className="text-muted-foreground"> &middot; {inst.fromYear}–{inst.toYear ?? "present"}</span>}
-                    </EntryCard>
-                  ))}
+                  {p.academicExperience.map((inst, i) => {
+                    const period = publicPeriod(inst.fromDate, inst.toDate, inst.fromYear, inst.toYear);
+                    return (
+                      <EntryCard key={i}>
+                        <span className="font-medium">{inst.institutionName}</span>
+                        {inst.designation ? ` — ${inst.designation}` : ""}
+                        {period && <span className="text-muted-foreground"> &middot; {period}</span>}
+                      </EntryCard>
+                    );
+                  })}
                 </EntryList>
               </SectionBlock>
             )}
@@ -442,104 +431,26 @@ export function FacultyPublicProfileView({ profile }: { profile: FacultyPublicPr
 
             {showBooks && p.research && (
               <SectionBlock id="books" refCb={registerSectionRef}>
-                <SectionHeading icon={SECTION_ICONS.books}>Books / Book Chapters Published</SectionHeading>
+                <SectionHeading icon={SECTION_ICONS.books}>Authored Books</SectionHeading>
                 <EntryList>
                   {p.research.authoredBooks.map((b, i) => (
-                    <EntryCard key={i}><span className="font-medium">{b.title}</span> — {b.publisher} ({b.year})</EntryCard>
+                    <EntryCard key={i}><span className="font-medium">{b.title}</span> — {b.publisher}{b.year ? ` (${b.year})` : ""}</EntryCard>
                   ))}
                 </EntryList>
-              </SectionBlock>
-            )}
-
-            {showFunded && p.projects && (
-              <SectionBlock id="funded" refCb={registerSectionRef}>
-                <SectionHeading icon={SECTION_ICONS.funded}>Funded Projects</SectionHeading>
-                <EntryList>
-                  {p.projects.fundedProjects.map((proj, i) => (
-                    <EntryCard key={i}>
-                      <span className="font-medium">{proj.title}</span> — {proj.fundingAgency} ({proj.year})
-                      {proj.piOrCoPi ? `, ${proj.piOrCoPi === "PI" ? "Principal Investigator" : "Co-Principal Investigator"}` : ""}
-                      {proj.status && <Badge variant="outline" className="ml-1.5 text-xs">{proj.status}</Badge>}
-                    </EntryCard>
-                  ))}
-                </EntryList>
-              </SectionBlock>
-            )}
-
-            {showConsultancy && p.projects && (
-              <SectionBlock id="consultancy" refCb={registerSectionRef}>
-                <SectionHeading icon={SECTION_ICONS.consultancy}>Consultancy Projects</SectionHeading>
-                <EntryList>
-                  {p.projects.consultancyProjects.map((proj, i) => (
-                    <EntryCard key={i}>
-                      <span className="font-medium">{proj.title}</span> — {proj.clientOrAgency} ({proj.year})
-                      {proj.status && <Badge variant="outline" className="ml-1.5 text-xs">{proj.status}</Badge>}
-                    </EntryCard>
-                  ))}
-                </EntryList>
-              </SectionBlock>
-            )}
-
-            {showPatents && patents && (
-              <SectionBlock id="patents" refCb={registerSectionRef}>
-                <SectionHeading icon={SECTION_ICONS.patents}>Patents Published</SectionHeading>
-                <div className="grid grid-cols-2 gap-3 max-w-md">
-                  {patents.indianGranted > 0 && (
-                    <div className="rounded-lg border bg-muted/30 px-5 py-3 text-center">
-                      <p className="text-2xl font-bold text-primary">{patents.indianGranted}</p>
-                      <p className="text-sm text-muted-foreground">India — Granted</p>
-                    </div>
-                  )}
-                  {patents.indianFiled > 0 && (
-                    <div className="rounded-lg border bg-muted/30 px-5 py-3 text-center">
-                      <p className="text-2xl font-bold text-primary">{patents.indianFiled}</p>
-                      <p className="text-sm text-muted-foreground">India — Filed</p>
-                    </div>
-                  )}
-                  {patents.internationalGranted > 0 && (
-                    <div className="rounded-lg border bg-muted/30 px-5 py-3 text-center">
-                      <p className="text-2xl font-bold text-primary">{patents.internationalGranted}</p>
-                      <p className="text-sm text-muted-foreground">International — Granted</p>
-                    </div>
-                  )}
-                  {patents.internationalFiled > 0 && (
-                    <div className="rounded-lg border bg-muted/30 px-5 py-3 text-center">
-                      <p className="text-2xl font-bold text-primary">{patents.internationalFiled}</p>
-                      <p className="text-sm text-muted-foreground">International — Filed</p>
-                    </div>
-                  )}
-                </div>
               </SectionBlock>
             )}
 
             {showAwards && p.recognition && (
               <SectionBlock id="awards" refCb={registerSectionRef}>
-                <SectionHeading icon={SECTION_ICONS.awards}>Awards & Recognitions</SectionHeading>
+                <SectionHeading icon={SECTION_ICONS.awards}>Awards & Recognition</SectionHeading>
                 <EntryList>
-                  {p.recognition.awardEntries.map((a, i) => (
-                    <EntryCard key={i}><span className="font-medium">{a.title}</span> — {a.awardingBody} ({a.year})</EntryCard>
-                  ))}
+                  {p.recognition.awardsRecognition.map((a, i) => {
+                    const year = publicYear(a.dateOfAward, a.year);
+                    return (
+                      <EntryCard key={i}><span className="font-medium">{a.titleOfAward}</span> — {a.awardingAgencyBody}{year ? ` (${year})` : ""}</EntryCard>
+                    );
+                  })}
                 </EntryList>
-              </SectionBlock>
-            )}
-
-            {showExposure && p.recognition && (
-              <SectionBlock id="exposure" refCb={registerSectionRef}>
-                <SectionHeading icon={SECTION_ICONS.exposure}>International Collaborations</SectionHeading>
-                <div className="space-y-5">
-                  {p.recognition.internationalExposure && (
-                    <div>
-                      <p className="text-sm font-semibold text-muted-foreground mb-1.5 uppercase tracking-wide">International Exposure</p>
-                      <p className="text-base leading-relaxed">{p.recognition.internationalExposure}</p>
-                    </div>
-                  )}
-                  {p.recognition.nationalExposure && (
-                    <div>
-                      <p className="text-sm font-semibold text-muted-foreground mb-1.5 uppercase tracking-wide">National Exposure</p>
-                      <p className="text-base leading-relaxed">{p.recognition.nationalExposure}</p>
-                    </div>
-                  )}
-                </div>
               </SectionBlock>
             )}
 
@@ -547,17 +458,20 @@ export function FacultyPublicProfileView({ profile }: { profile: FacultyPublicPr
               <SectionBlock id="engagement" refCb={registerSectionRef}>
                 <SectionHeading icon={SECTION_ICONS.engagement}>Professional Engagement</SectionHeading>
                 <div className="space-y-6">
-                  {p.recognition.adminResponsibilityEntries.length > 0 && (
+                  {p.recognition.academicResponsibilities.length > 0 && (
                     <div>
-                      <p className="text-sm font-semibold text-muted-foreground mb-2 uppercase tracking-wide">Institutional Responsibilities</p>
+                      <p className="text-sm font-semibold text-muted-foreground mb-2 uppercase tracking-wide">Academic Responsibilities</p>
                       <EntryList>
-                        {p.recognition.adminResponsibilityEntries.map((r, i) => (
-                          <EntryCard key={i}>
-                            <span className="font-medium">{r.category === "OTHER" ? (r.otherCategory || "Other") : ADMIN_RESPONSIBILITY_CATEGORY_LABELS[r.category]}</span>
-                            {r.description ? ` — ${r.description}` : ""}
-                            {r.fromYear && <span className="text-muted-foreground"> &middot; {r.fromYear}–{r.toYear ?? "present"}</span>}
-                          </EntryCard>
-                        ))}
+                        {p.recognition.academicResponsibilities.map((r, i) => {
+                          const period = publicPeriod(r.fromDate, r.toDate, r.fromYear, r.toYear);
+                          return (
+                            <EntryCard key={i}>
+                              <span className="font-medium">{r.category === "OTHER" ? (r.otherCategory || "Other") : ADMIN_RESPONSIBILITY_CATEGORY_LABELS[r.category]}</span>
+                              {r.description ? ` — ${r.description}` : ""}
+                              {period && <span className="text-muted-foreground"> &middot; {period}</span>}
+                            </EntryCard>
+                          );
+                        })}
                       </EntryList>
                     </div>
                   )}
@@ -565,32 +479,42 @@ export function FacultyPublicProfileView({ profile }: { profile: FacultyPublicPr
                     <div>
                       <p className="text-sm font-semibold text-muted-foreground mb-2 uppercase tracking-wide">Professional Memberships</p>
                       <div className="flex flex-wrap gap-1.5">
-                        {p.recognition.professionalMemberships.map((m, i) => (
-                          <Badge key={i} variant="outline">
-                            {m.body === "OTHER" ? m.otherName : PROFESSIONAL_BODY_LABELS[m.body]}
-                            {m.sinceYear ? ` (since ${m.sinceYear})` : ""}
-                          </Badge>
-                        ))}
+                        {p.recognition.professionalMemberships.map((m, i) => {
+                          const since = publicYear(m.memberSince ?? m.sinceMonthYear, m.sinceYear);
+                          return (
+                            <Badge key={i} variant="outline">
+                              {m.body === "OTHER" ? m.bodyName : PROFESSIONAL_BODY_LABELS[m.body]}
+                              {since ? ` (since ${since})` : ""}
+                            </Badge>
+                          );
+                        })}
                       </div>
                     </div>
                   )}
-                  {p.recognition.trainingEntries.length > 0 && (
+                  {p.recognition.fdpsWorkshopsMoocsCertifications.length > 0 && (
                     <div>
-                      <p className="text-sm font-semibold text-muted-foreground mb-2 uppercase tracking-wide">Certifications & Trainings</p>
+                      <p className="text-sm font-semibold text-muted-foreground mb-2 uppercase tracking-wide">FDPs, Workshops, MOOCs &amp; Certifications</p>
                       <EntryList>
-                        {p.recognition.trainingEntries.map((t, i) => (
-                          <EntryCard key={i}>
-                            <span className="font-medium">{t.title}</span> — {TRAINING_ENTRY_TYPE_LABELS[t.type]}, {t.organizer} ({t.year})
-                          </EntryCard>
-                        ))}
+                        {p.recognition.fdpsWorkshopsMoocsCertifications.map((t, i) => {
+                          const year = publicYear(t.fromDate, t.year);
+                          const detail = [
+                            t.type === "OTHER" ? (t.pleaseSpecifyType || "Other") : TRAINING_ENTRY_TYPE_LABELS[t.type],
+                            t.nameOfTheFacultyCoordinator,
+                          ].filter(Boolean).join(", ");
+                          return (
+                            <EntryCard key={i}>
+                              <span className="font-medium">{t.titleOfTheProgram}</span> — {detail}{year ? ` (${year})` : ""}
+                            </EntryCard>
+                          );
+                        })}
                       </EntryList>
                     </div>
                   )}
-                  {p.recognition.labsEstablished.length > 0 && (
+                  {p.recognition.newLabsEstablished.length > 0 && (
                     <div>
-                      <p className="text-sm font-semibold text-muted-foreground mb-2 uppercase tracking-wide">Labs Established</p>
+                      <p className="text-sm font-semibold text-muted-foreground mb-2 uppercase tracking-wide">New Labs Established</p>
                       <EntryList>
-                        {p.recognition.labsEstablished.map((l, i) => (
+                        {p.recognition.newLabsEstablished.map((l, i) => (
                           <EntryCard key={i}><span className="font-medium">{l.facilityDetails}</span>{l.outcomes ? ` — ${l.outcomes}` : ""}</EntryCard>
                         ))}
                       </EntryList>

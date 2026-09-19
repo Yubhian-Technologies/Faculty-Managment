@@ -242,11 +242,37 @@ export async function getHodDepartmentScope(
     const managedSnaps = await Promise.all(
       managedNames.map((n) => deptsColl.where("name", "==", n).limit(1).get())
     );
+    // A managed branch the Principal has flagged as never running its own
+    // sections (Department.parentRunsOwnSections === false, e.g. "AI" split
+    // into AIML/AIDS) is a container, not a destination - api/college/sections
+    // POST refuses to file anything under it, so every real section/student
+    // lands under one of its children instead. Grouping the parent has to
+    // carry those children with it, or the manager could never actually write
+    // the shared year they were given, and would not even see the sections
+    // they created (sections GET scopes its managed-branch query by these
+    // names). Kept ADDITIVE - the parent itself stays in scope so any document
+    // already filed under it before the flag was set is still reachable.
+    const noOwnSectionsParentIds: string[] = [];
     for (let i = 0; i < managedNames.length; i++) {
       const doc = managedSnaps[i].docs[0];
       if (!doc) continue;
       managedDepartmentNames.push(managedNames[i]);
       managedDepartmentIds.push(doc.id);
+      const d = doc.data() as { hasSubDepartments?: boolean; parentRunsOwnSections?: boolean };
+      if (d.hasSubDepartments && d.parentRunsOwnSections === false) noOwnSectionsParentIds.push(doc.id);
+    }
+    if (noOwnSectionsParentIds.length > 0) {
+      const childSnaps = await Promise.all(
+        noOwnSectionsParentIds.map((id) => deptsColl.where("parentDepartmentId", "==", id).get())
+      );
+      for (const snap of childSnaps) {
+        for (const c of snap.docs) {
+          const name = ((c.data() as { name?: string }).name ?? "").trim();
+          if (!name || managedDepartmentNames.includes(name)) continue;
+          managedDepartmentNames.push(name);
+          managedDepartmentIds.push(c.id);
+        }
+      }
     }
   }
 

@@ -28,7 +28,13 @@ export function readFileAsText(file: File): Promise<string> {
 
 export function toCSV(rows: string[][]): string {
   return rows
-    .map((row) => row.map((cell) => (cell.includes(",") || cell.includes('"') ? `"${cell.replace(/"/g, '""')}"` : cell)).join(","))
+    .map((row) => row.map((cell) => (
+      // Combined multi-entry export cells (see exportFacultyCsv.ts's
+      // combineGroup) embed real newlines between entries - those need
+      // quoting exactly like a comma/quote does, or the cell splits into a
+      // spurious extra row when opened in Excel/Sheets.
+      cell.includes(",") || cell.includes('"') || cell.includes("\n") || cell.includes("\r") ? `"${cell.replace(/"/g, '""')}"` : cell
+    )).join(","))
     .join("\r\n");
 }
 

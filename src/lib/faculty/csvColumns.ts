@@ -1,306 +1,254 @@
 import { HIGHEST_QUALIFICATION_OPTIONS } from "@/lib/import/fieldConstraints";
+import { PROFILE_MODULES, type ProfileModuleKey } from "@/lib/faculty/profileModules";
 
 // Faculty CSV column definitions.
 //
 // getFacultyImportColumns/getFacultyImportHints/getFacultyImportSampleRows
-// (below COLUMNS/HINTS) build the only columns the bulk-import template
+// (below EXPORT_FIELDS) build the only columns the bulk-import template
 // (src/app/(dashboard)/hod/faculty/import/page.tsx) and import route
 // (src/app/api/college/faculty/import/route.ts) accept - deliberately just
 // the core identity/employment fields, not the full Academic Profile.
-// COLUMNS/HINTS remain the full column set used only by the full-detail
-// export (src/lib/faculty/exportFacultyCsv.ts) - import and export are
-// intentionally no longer symmetric.
+// EXPORT_FIELDS remains the full field set used only by the full-detail
+// export (src/lib/faculty/exportFacultyCsv.ts + ExportFacultyDialog) - import
+// and export are intentionally no longer symmetric.
 
-export interface FacultyCsvColumn {
+// ─── Export field definitions ──────────────────────────────────────────────
+//
+// One entry per exportable field, grouped by the same module a faculty
+// member's own profile is organized into everywhere else in the app (see
+// PROFILE_MODULES in profileModules.ts, and the Add/Edit wizard's own steps
+// in hod/faculty/new/page.tsx). "core" stands in for the wizard's "Identity &
+// Employment" step, which isn't part of PROFILE_MODULES itself.
+//
+// A "scalar" field maps to exactly one CSV column with a plain value. A
+// "group" field also maps to exactly one CSV column, but its value combines
+// every entry of a repeating list (e.g. a faculty member's UG/PG/PhD degrees,
+// previous jobs, publications, ...) into that single cell - one line per
+// entry, labelled "<Label> <n>: <SubField>: <value> | ..." the same way the
+// Add/Edit form numbers a repeated entry ("PhD Details 2", see
+// DegreeFieldsList in ProfileFieldPrimitives.tsx). See combineGroup in
+// exportFacultyCsv.ts for how a group's cell is actually built.
+export type ExportModuleKey = "core" | ProfileModuleKey;
+
+export const EXPORT_MODULE_ORDER: ExportModuleKey[] = [
+  "core", "personal", "qualification", "experience", "research",
+  "mentorship", "financial", "others", "teaching-load",
+];
+
+export const EXPORT_MODULE_LABELS: Record<ExportModuleKey, string> = {
+  core: "Identity & Employment",
+  ...Object.fromEntries(Object.entries(PROFILE_MODULES).map(([k, m]) => [k, m.label])) as Record<ProfileModuleKey, string>,
+};
+
+interface ExportFieldBase {
   key: string;
   label: string;
-  required: boolean;
-  sample: string;
-  // Alternate header wordings that should still map to this column (see matchHeaders in csv.ts).
-  aliases?: string[];
+  module: ExportModuleKey;
+  // true only for "core"/"personal" fields - reproduces today's export
+  // untouched when the HOD opens the dialog and exports without changing
+  // anything.
+  defaultSelected: boolean;
 }
 
-export const COLUMNS: FacultyCsvColumn[] = [
-  { key: "employeeId",        label: "Employee ID",                  required: true,  sample: "VIT001", aliases: ["Emp ID", "Employee Code", "Employee No", "Staff ID"] },
-  { key: "name",               label: "Name",                         required: true,  sample: "Dr. A. Ravi Kumar", aliases: ["Faculty Name", "Full Name", "Employee Name"] },
-  { key: "apaarFacultyId",     label: "APAAR Faculty ID",             required: false, sample: "", aliases: ["APAAR ID"] },
-  { key: "email",              label: "Personal Email",               required: true,  sample: "ravi@gmail.com", aliases: ["Email", "Email ID", "Personal Email ID"] },
-  { key: "password",          label: "Login Password (min 8 characters, optional)", required: false, sample: "", aliases: ["Password", "Login Password"] },
-  { key: "phone",              label: "Mobile No",                    required: false, sample: "9876543210", aliases: ["Phone", "Mobile", "Mobile Number", "Phone Number", "Contact Number"] },
-  { key: "designation",        label: "Designation",                  required: true,  sample: "Asst. Prof." },
-  { key: "qualification",      label: "Qualification",                required: true,  sample: "M.Tech" },
-  { key: "specialization",     label: "Specialization",               required: false, sample: "Machine Learning" },
-  { key: "status",             label: "Status (Active/On Leave/Resigned/Retired)", required: false, sample: "Active", aliases: ["Status"] },
-  { key: "joiningDate",        label: "Joining Date (YYYY-MM-DD)",    required: true,  sample: "2020-06-01", aliases: ["Joining Date", "Date of Joining", "DOJ"] },
-  { key: "dateOfJoiningDepartment", label: "Date of Joining Department (YYYY-MM-DD)", required: false, sample: "", aliases: ["Department Joining Date"] },
-  { key: "aicteEligible",      label: "AICTE Eligible (Yes/No)",      required: false, sample: "Yes" },
-  { key: "experienceYears",    label: "Total Experience (Years)",      required: false, sample: "5" },
-  { key: "internalExperience", label: "Internal Exp (Years)",         required: false, sample: "3" },
-  { key: "externalExperience", label: "External Exp (Years)",         required: false, sample: "1" },
-  { key: "inCampusExperience", label: "In Campus Exp (Years)",        required: false, sample: "1" },
-  { key: "industryExperience", label: "Industry Exp (Years)",         required: false, sample: "2" },
-  { key: "researchExperience", label: "Research Exp (Years)",         required: false, sample: "0" },
-  { key: "gender",            label: "Gender",                       required: false, sample: "Male" },
-  { key: "dateOfBirth",       label: "Date of Birth (YYYY-MM-DD)",   required: false, sample: "1990-05-15" },
-  { key: "legalName",         label: "Legal Name (as per SSC)",      required: false, sample: "RAVI KUMAR ANNAPU" },
-  { key: "nameAsPerAadhar",   label: "Name (as per Aadhar)",         required: false, sample: "Ravi Kumar Annapu" },
-  { key: "fatherName",        label: "Father Name",        required: false, sample: "ANNAPU SRINIVAS" },
-  { key: "motherName",        label: "Mother Name",                  required: false, sample: "ANNAPU LAKSHMI" },
-  { key: "aadharNo",          label: "Aadhar No",                    required: false, sample: "1234 5678 9012" },
-  { key: "panNo",             label: "PAN No",                       required: false, sample: "ABCDE1234F" },
-  { key: "passportNumber",    label: "Passport No",                  required: false, sample: "" },
-  { key: "differentlyAbled",  label: "Differently Abled (Yes/No)",   required: false, sample: "No" },
-  { key: "bankAccountNo",     label: "Bank A/C Number",              required: false, sample: "" },
-  { key: "ifscCode",          label: "IFSC Code",                    required: false, sample: "" },
-  { key: "bankName",          label: "Bank Name",                    required: false, sample: "" },
-  { key: "bankBranch",        label: "Branch",                       required: false, sample: "" },
-  { key: "bankOtherDetails",  label: "Bank Other Details",           required: false, sample: "" },
-  { key: "emergencyContactName",  label: "Emergency Contact Person Name", required: false, sample: "" },
-  { key: "emergencyContactRelation", label: "Relation (with Emergency Contact)", required: false, sample: "" },
-  { key: "emergencyContactPhone", label: "Emergency Contact Mobile No",   required: false, sample: "" },
-  { key: "religion",          label: "Religion",                     required: false, sample: "Hindu" },
-  { key: "caste",             label: "Caste",                        required: false, sample: "OC" },
-  { key: "subCaste",          label: "Sub Caste",                    required: false, sample: "" },
-  { key: "collegeEmail",      label: "College Email",                required: false, sample: "ravi@vishnu.edu.in" },
-  { key: "ratificationStatus",label: "Ratification Status",          required: false, sample: "Ratified" },
-  { key: "ratificationProceedingsNumber", label: "Proceedings Number", required: false, sample: "" },
-  { key: "ratificationDate",  label: "Ratification Proceedings Date (YYYY-MM-DD)", required: false, sample: "2021-04-27" },
-  { key: "hasPHD",            label: "Has PhD (Yes/No)",             required: false, sample: "No" },
+export interface ExportScalarField extends ExportFieldBase {
+  kind: "scalar";
+}
 
-  // ─── Family & Other Details ───────────────────────────────────────────────────
-  { key: "maritalStatus",     label: "Marital Status (Single/Married)", required: false, sample: "Married" },
-  { key: "spouseName",        label: "Spouse Name",                  required: false, sample: "" },
-  { key: "numberOfChildren",  label: "Number of Children",           required: false, sample: "" },
-  { key: "bloodGroup",        label: "Blood Group",                  required: false, sample: "O+" },
-  { key: "temporaryAddress",  label: "Temporary Address",            required: false, sample: "" },
-  { key: "permanentSameAsTemporary", label: "Permanent Same as Temporary (Yes/No)", required: false, sample: "Yes" },
-  { key: "permanentAddress",  label: "Permanent Address",            required: false, sample: "" },
+export interface ExportGroupField extends ExportFieldBase {
+  kind: "group";
+  // Ordered sub-field labels rendered for each entry's line, e.g.
+  // ["Course", "Branch", "Institution Name", "Percentage / CGPA", "Year of Passing"].
+  subFieldLabels: string[];
+}
 
-  // ─── Academic Profile (Modules 1-5) - all optional ───────────────────────────
-  { key: "highestQualification",   label: "Highest Qualification Earned",       required: false, sample: "Ph.D" },
-  { key: "ug_degree",              label: "UG Degree",                          required: false, sample: "B.Tech" },
-  { key: "ug_branch",              label: "UG Branch",                          required: false, sample: "CSE" },
-  { key: "ug_university",          label: "UG University/Institute",            required: false, sample: "JNTU Kakinada" },
-  { key: "ug_percentage",          label: "UG Percentage/CGPA",                 required: false, sample: "78%" },
-  { key: "ug_year",                label: "UG Year of Completion",              required: false, sample: "2008" },
-  { key: "pg_degree",              label: "PG Degree",                          required: false, sample: "M.Tech" },
-  { key: "pg_branch",              label: "PG Branch",                          required: false, sample: "CSE" },
-  { key: "pg_university",          label: "PG University/Institute",            required: false, sample: "NIT Warangal" },
-  { key: "pg_percentage",          label: "PG Percentage/CGPA",                 required: false, sample: "82%" },
-  { key: "pg_year",                label: "PG Year of Completion",              required: false, sample: "2011" },
-  { key: "phd_degree",             label: "PhD Degree",                         required: false, sample: "Ph.D" },
-  { key: "phd_specialization",     label: "PhD Specialization",                 required: false, sample: "Machine Learning" },
-  { key: "phd_university",         label: "PhD University/Institute",           required: false, sample: "IIT Hyderabad" },
-  { key: "phd_year",               label: "PhD Year of Completion",             required: false, sample: "2017" },
-  { key: "postdoc_degree",         label: "Post-Doctoral Degree",               required: false, sample: "" },
-  { key: "postdoc_branch",         label: "Post-Doctoral Branch",               required: false, sample: "" },
-  { key: "postdoc_university",     label: "Post-Doctoral University/Institute", required: false, sample: "" },
-  { key: "postdoc_percentage",     label: "Post-Doctoral Percentage/CGPA",      required: false, sample: "" },
-  { key: "postdoc_year",           label: "Post-Doctoral Year of Completion",   required: false, sample: "" },
-  { key: "phdStatus",              label: "Ph.D. Status (Awarded/Pursuing)",    required: false, sample: "Awarded" },
-  { key: "phdMode",                label: "Ph.D. Mode (Full-Time/Part-Time)",   required: false, sample: "Full-Time" },
-  { key: "phdSupervisorName",      label: "Ph.D. Project Supervisor Name",      required: false, sample: "Dr. S. Rao" },
-  { key: "fellowshipsReceived",    label: "Fellowships Received",               required: false, sample: "UGC-NET JRF" },
-  { key: "qualifyingExamQualified", label: "NET/SLET/SET/GATE/Others Qualified (Yes/No)", required: false, sample: "Yes" },
-  { key: "qualifyingExam",         label: "Qualified Exam (NET/SLET/SET/GATE/Others)", required: false, sample: "GATE" },
-  { key: "qualifyingExamScore",    label: "Qualified Exam Score",               required: false, sample: "650" },
-  { key: "qualifyingExamYear",     label: "Qualified Year",                     required: false, sample: "2009" },
-  { key: "promotion1_designation", label: "Teaching 1 - Designation", required: false, sample: "" },
-  { key: "promotion1_fromDate",    label: "Teaching 1 - From Date",   required: false, sample: "" },
-  { key: "promotion1_toDate",      label: "Teaching 1 - To Date",     required: false, sample: "" },
-  { key: "promotion2_designation", label: "Teaching 2 - Designation", required: false, sample: "" },
-  { key: "promotion2_fromDate",    label: "Teaching 2 - From Date",   required: false, sample: "" },
-  { key: "promotion2_toDate",      label: "Teaching 2 - To Date",     required: false, sample: "" },
-  { key: "promotion3_designation", label: "Teaching 3 - Designation", required: false, sample: "" },
-  { key: "promotion3_fromDate",    label: "Teaching 3 - From Date",   required: false, sample: "" },
-  { key: "promotion3_toDate",      label: "Teaching 3 - To Date",     required: false, sample: "" },
-  { key: "previousInstitution1_name",  label: "Previous Institution 1 - Name",        required: false, sample: "" },
-  { key: "previousInstitution1_designation", label: "Previous Institution 1 - Designation", required: false, sample: "" },
-  { key: "previousInstitution1_years", label: "Previous Institution 1 - Years Worked", required: false, sample: "" },
-  { key: "previousInstitution2_name",  label: "Previous Institution 2 - Name",        required: false, sample: "" },
-  { key: "previousInstitution2_designation", label: "Previous Institution 2 - Designation", required: false, sample: "" },
-  { key: "previousInstitution2_years", label: "Previous Institution 2 - Years Worked", required: false, sample: "" },
-  { key: "previousInstitution3_name",  label: "Previous Institution 3 - Name",        required: false, sample: "" },
-  { key: "previousInstitution3_designation", label: "Previous Institution 3 - Designation", required: false, sample: "" },
-  { key: "previousInstitution3_years", label: "Previous Institution 3 - Years Worked", required: false, sample: "" },
-  { key: "primaryTeachingRole",    label: "Primary Teaching Role/Specialization", required: false, sample: "Data Structures" },
-  { key: "course1_code",           label: "Course 1 - Code",                    required: false, sample: "CS201" },
-  { key: "course1_name",           label: "Course 1 - Name",                    required: false, sample: "Data Structures" },
-  { key: "course1_hours",          label: "Course 1 - Weekly Credit Hours",     required: false, sample: "4" },
-  { key: "course2_code",           label: "Course 2 - Code",                    required: false, sample: "CS305" },
-  { key: "course2_name",           label: "Course 2 - Name",                    required: false, sample: "Algorithms" },
-  { key: "course2_hours",          label: "Course 2 - Weekly Credit Hours",     required: false, sample: "4" },
-  { key: "course3_code",           label: "Course 3 - Code",                    required: false, sample: "" },
-  { key: "course3_name",           label: "Course 3 - Name",                    required: false, sample: "" },
-  { key: "course3_hours",          label: "Course 3 - Weekly Credit Hours",     required: false, sample: "" },
-  { key: "publication1_title",     label: "Publication 1 - Title",              required: false, sample: "" },
-  { key: "publication1_coAuthors", label: "Publication 1 - Co-Authors",         required: false, sample: "" },
-  { key: "publication1_journal",   label: "Publication 1 - Journal/Conference", required: false, sample: "" },
-  { key: "publication1_year",      label: "Publication 1 - Year",               required: false, sample: "" },
-  { key: "publication1_indexing",  label: "Publication 1 - Indexing",           required: false, sample: "" },
-  { key: "publication2_title",     label: "Publication 2 - Title",              required: false, sample: "" },
-  { key: "publication2_coAuthors", label: "Publication 2 - Co-Authors",         required: false, sample: "" },
-  { key: "publication2_journal",   label: "Publication 2 - Journal/Conference", required: false, sample: "" },
-  { key: "publication2_year",      label: "Publication 2 - Year",               required: false, sample: "" },
-  { key: "publication2_indexing",  label: "Publication 2 - Indexing",           required: false, sample: "" },
-  { key: "publication3_title",     label: "Publication 3 - Title",              required: false, sample: "" },
-  { key: "publication3_coAuthors", label: "Publication 3 - Co-Authors",         required: false, sample: "" },
-  { key: "publication3_journal",   label: "Publication 3 - Journal/Conference", required: false, sample: "" },
-  { key: "publication3_year",      label: "Publication 3 - Year",               required: false, sample: "" },
-  { key: "publication3_indexing",  label: "Publication 3 - Indexing",           required: false, sample: "" },
-  { key: "publicationsFirstOrCorrespondingAuthor", label: "First/Corresponding Author Pubs", required: false, sample: "5" },
-  { key: "publicationsQ1OrHighImpact",             label: "Q1 / IF>4.0 Pubs",               required: false, sample: "2" },
-  { key: "sciScopusCount",         label: "SCI/Scopus Count",                   required: false, sample: "8" },
-  { key: "wosCount",               label: "WoS (SCIE/ESCI) Count",              required: false, sample: "3" },
-  { key: "conferencePapersCount",  label: "Conference Papers",                  required: false, sample: "4" },
-  { key: "bookChaptersCount",      label: "Book Chapters",                      required: false, sample: "1" },
-  { key: "reviewPublicationsCount",label: "Review Publications",                required: false, sample: "0" },
-  { key: "totalPublications",      label: "Total Publications (incl. co-authorship)", required: false, sample: "12" },
-  { key: "totalCitations",         label: "Total Citations",                    required: false, sample: "45" },
-  { key: "hIndex",                 label: "H-Index",                            required: false, sample: "4" },
-  { key: "i10Index",               label: "i10-Index",                          required: false, sample: "2" },
-  { key: "googleScholarId",        label: "Google Scholar ID",                  required: false, sample: "" },
-  { key: "scopusAuthorId",         label: "Scopus Author ID",                   required: false, sample: "" },
-  { key: "orcidId",                label: "ORCID iD",                           required: false, sample: "" },
-  { key: "project1_title",         label: "Funded Project 1 - Title",           required: false, sample: "" },
-  { key: "project1_agency",        label: "Funded Project 1 - Funding Agency",  required: false, sample: "" },
-  { key: "project1_amount",        label: "Funded Project 1 - Grant Amount (₹L)", required: false, sample: "" },
-  { key: "project1_year",          label: "Funded Project 1 - Year",            required: false, sample: "" },
-  { key: "project1_status",        label: "Funded Project 1 - Status",          required: false, sample: "" },
-  { key: "project1_role",          label: "Funded Project 1 - Role (PI/Co-PI)", required: false, sample: "" },
-  { key: "project2_title",         label: "Funded Project 2 - Title",           required: false, sample: "" },
-  { key: "project2_agency",        label: "Funded Project 2 - Funding Agency",  required: false, sample: "" },
-  { key: "project2_amount",        label: "Funded Project 2 - Grant Amount (₹L)", required: false, sample: "" },
-  { key: "project2_year",          label: "Funded Project 2 - Year",            required: false, sample: "" },
-  { key: "project2_status",        label: "Funded Project 2 - Status",          required: false, sample: "" },
-  { key: "project2_role",          label: "Funded Project 2 - Role (PI/Co-PI)", required: false, sample: "" },
-  { key: "project3_title",         label: "Funded Project 3 - Title",           required: false, sample: "" },
-  { key: "project3_agency",        label: "Funded Project 3 - Funding Agency",  required: false, sample: "" },
-  { key: "project3_amount",        label: "Funded Project 3 - Grant Amount (₹L)", required: false, sample: "" },
-  { key: "project3_year",          label: "Funded Project 3 - Year",            required: false, sample: "" },
-  { key: "project3_status",        label: "Funded Project 3 - Status",          required: false, sample: "" },
-  { key: "project3_role",          label: "Funded Project 3 - Role (PI/Co-PI)", required: false, sample: "" },
-  { key: "consultancy1_title",     label: "Consultancy 1 - Title",              required: false, sample: "" },
-  { key: "consultancy1_client",    label: "Consultancy 1 - Client/Agency",      required: false, sample: "" },
-  { key: "consultancy1_revenue",   label: "Consultancy 1 - Revenue (₹L)",       required: false, sample: "" },
-  { key: "consultancy1_year",      label: "Consultancy 1 - Year",               required: false, sample: "" },
-  { key: "consultancy1_status",    label: "Consultancy 1 - Status",             required: false, sample: "" },
-  { key: "consultancy2_title",     label: "Consultancy 2 - Title",              required: false, sample: "" },
-  { key: "consultancy2_client",    label: "Consultancy 2 - Client/Agency",      required: false, sample: "" },
-  { key: "consultancy2_revenue",   label: "Consultancy 2 - Revenue (₹L)",       required: false, sample: "" },
-  { key: "consultancy2_year",      label: "Consultancy 2 - Year",               required: false, sample: "" },
-  { key: "consultancy2_status",    label: "Consultancy 2 - Status",             required: false, sample: "" },
-  { key: "consultancy3_title",     label: "Consultancy 3 - Title",              required: false, sample: "" },
-  { key: "consultancy3_client",    label: "Consultancy 3 - Client/Agency",      required: false, sample: "" },
-  { key: "consultancy3_revenue",   label: "Consultancy 3 - Revenue (₹L)",       required: false, sample: "" },
-  { key: "consultancy3_year",      label: "Consultancy 3 - Year",               required: false, sample: "" },
-  { key: "consultancy3_status",    label: "Consultancy 3 - Status",             required: false, sample: "" },
-  { key: "patentIndianFiled",      label: "Patents - Indian Filed",             required: false, sample: "1" },
-  { key: "patentIndianPublished",  label: "Patents - Indian Published",         required: false, sample: "1" },
-  { key: "patentIndianGranted",    label: "Patents - Indian Granted",           required: false, sample: "0" },
-  { key: "patentInternationalFiled",     label: "Patents - International Filed",     required: false, sample: "0" },
-  { key: "patentInternationalPublished", label: "Patents - International Published", required: false, sample: "0" },
-  { key: "patentInternationalGranted",   label: "Patents - International Granted",   required: false, sample: "0" },
-  { key: "patentDetails",          label: "Patents - Details",                  required: false, sample: "" },
-  { key: "phdScholarsPursuingCount",       label: "Ph.D. Scholars Pursuing - Count",        required: false, sample: "1" },
-  { key: "phdScholarsPursuingUniversities", label: "Ph.D. Scholars Pursuing - Universities", required: false, sample: "JNTUK" },
-  { key: "phdScholarsAwardedCount",        label: "Ph.D. Scholars Awarded - Count",         required: false, sample: "0" },
-  { key: "phdScholarsAwardedUniversities", label: "Ph.D. Scholars Awarded - Universities",  required: false, sample: "" },
-  { key: "nationalExposure",       label: "National Exposure (joint pubs w/ IITs/NITs/IIITs/CSIR)", required: false, sample: "" },
-  { key: "internationalExposure",  label: "International Exposure (joint pubs w/ foreign universities)", required: false, sample: "" },
-  { key: "lab1_details",           label: "New Lab 1 - Facility Details",       required: false, sample: "" },
-  { key: "lab1_outcomes",          label: "New Lab 1 - Outcomes",               required: false, sample: "" },
-  { key: "lab2_details",           label: "New Lab 2 - Facility Details",       required: false, sample: "" },
-  { key: "lab2_outcomes",          label: "New Lab 2 - Outcomes",               required: false, sample: "" },
-  { key: "lab3_details",           label: "New Lab 3 - Facility Details",       required: false, sample: "" },
-  { key: "lab3_outcomes",          label: "New Lab 3 - Outcomes",               required: false, sample: "" },
+export type ExportField = ExportScalarField | ExportGroupField;
 
-  // Structured entries matching the Add/Edit Faculty form's repeating groups -
-  // the free-text fields below (administrativeResponsibilities, certificationsAndFdps,
-  // professionalBodyMemberships, notableAwards) are legacy: the form only
-  // displays them read-only now, it doesn't let you edit them, use these instead.
-  { key: "adminResp1_category",    label: "Admin Responsibility 1 - Category",  required: false, sample: "" },
-  { key: "adminResp1_description", label: "Admin Responsibility 1 - Description", required: false, sample: "" },
-  { key: "adminResp1_fromYear",    label: "Admin Responsibility 1 - From Year", required: false, sample: "" },
-  { key: "adminResp1_toYear",      label: "Admin Responsibility 1 - To Year (blank = ongoing)", required: false, sample: "" },
-  { key: "adminResp2_category",    label: "Admin Responsibility 2 - Category",  required: false, sample: "" },
-  { key: "adminResp2_description", label: "Admin Responsibility 2 - Description", required: false, sample: "" },
-  { key: "adminResp2_fromYear",    label: "Admin Responsibility 2 - From Year", required: false, sample: "" },
-  { key: "adminResp2_toYear",      label: "Admin Responsibility 2 - To Year (blank = ongoing)", required: false, sample: "" },
-  { key: "adminResp3_category",    label: "Admin Responsibility 3 - Category",  required: false, sample: "" },
-  { key: "adminResp3_description", label: "Admin Responsibility 3 - Description", required: false, sample: "" },
-  { key: "adminResp3_fromYear",    label: "Admin Responsibility 3 - From Year", required: false, sample: "" },
-  { key: "adminResp3_toYear",      label: "Admin Responsibility 3 - To Year (blank = ongoing)", required: false, sample: "" },
-  { key: "administrativeResponsibilities", label: "Administrative Responsibilities Held (+achievements) - legacy, read-only in the form", required: false, sample: "" },
-  { key: "training1_type",         label: "Training 1 - Type",                  required: false, sample: "" },
-  { key: "training1_role",         label: "Training 1 - Participated/Conducted", required: false, sample: "" },
-  { key: "training1_title",        label: "Training 1 - Title",                 required: false, sample: "" },
-  { key: "training1_organizer",    label: "Training 1 - Organizer",             required: false, sample: "" },
-  { key: "training1_year",         label: "Training 1 - Year",                  required: false, sample: "" },
-  { key: "training1_durationDays", label: "Training 1 - Duration (Days)",       required: false, sample: "" },
-  { key: "training2_type",         label: "Training 2 - Type",                  required: false, sample: "" },
-  { key: "training2_role",         label: "Training 2 - Participated/Conducted", required: false, sample: "" },
-  { key: "training2_title",        label: "Training 2 - Title",                 required: false, sample: "" },
-  { key: "training2_organizer",    label: "Training 2 - Organizer",             required: false, sample: "" },
-  { key: "training2_year",         label: "Training 2 - Year",                  required: false, sample: "" },
-  { key: "training2_durationDays", label: "Training 2 - Duration (Days)",       required: false, sample: "" },
-  { key: "training3_type",         label: "Training 3 - Type",                  required: false, sample: "" },
-  { key: "training3_role",         label: "Training 3 - Participated/Conducted", required: false, sample: "" },
-  { key: "training3_title",        label: "Training 3 - Title",                 required: false, sample: "" },
-  { key: "training3_organizer",    label: "Training 3 - Organizer",             required: false, sample: "" },
-  { key: "training3_year",         label: "Training 3 - Year",                  required: false, sample: "" },
-  { key: "training3_durationDays", label: "Training 3 - Duration (Days)",       required: false, sample: "" },
-  { key: "certificationsAndFdps",  label: "Certifications/FDPs (NPTEL/Coursera/AICTE) - legacy, read-only in the form", required: false, sample: "" },
-  { key: "membership1_body",         label: "Membership 1 - Body",              required: false, sample: "" },
-  { key: "membership1_otherName",    label: "Membership 1 - Body Name (if Other)", required: false, sample: "" },
-  { key: "membership1_membershipId", label: "Membership 1 - Membership ID",     required: false, sample: "" },
-  { key: "membership1_sinceYear",    label: "Membership 1 - Member Since (Year)", required: false, sample: "" },
-  { key: "membership2_body",         label: "Membership 2 - Body",              required: false, sample: "" },
-  { key: "membership2_otherName",    label: "Membership 2 - Body Name (if Other)", required: false, sample: "" },
-  { key: "membership2_membershipId", label: "Membership 2 - Membership ID",     required: false, sample: "" },
-  { key: "membership2_sinceYear",    label: "Membership 2 - Member Since (Year)", required: false, sample: "" },
-  { key: "membership3_body",         label: "Membership 3 - Body",              required: false, sample: "" },
-  { key: "membership3_otherName",    label: "Membership 3 - Body Name (if Other)", required: false, sample: "" },
-  { key: "membership3_membershipId", label: "Membership 3 - Membership ID",     required: false, sample: "" },
-  { key: "membership3_sinceYear",    label: "Membership 3 - Member Since (Year)", required: false, sample: "" },
-  { key: "professionalBodyMemberships", label: "Professional Body Memberships (IEEE/ACM/CSI) - legacy, read-only in the form", required: false, sample: "" },
-  { key: "book1_title",            label: "Authored Book 1 - Title",            required: false, sample: "" },
-  { key: "book1_publisher",        label: "Authored Book 1 - Publisher",        required: false, sample: "" },
-  { key: "book1_year",             label: "Authored Book 1 - Year",             required: false, sample: "" },
-  { key: "book2_title",            label: "Authored Book 2 - Title",            required: false, sample: "" },
-  { key: "book2_publisher",        label: "Authored Book 2 - Publisher",        required: false, sample: "" },
-  { key: "book2_year",             label: "Authored Book 2 - Year",             required: false, sample: "" },
-  { key: "book3_title",            label: "Authored Book 3 - Title",            required: false, sample: "" },
-  { key: "book3_publisher",        label: "Authored Book 3 - Publisher",        required: false, sample: "" },
-  { key: "book3_year",             label: "Authored Book 3 - Year",             required: false, sample: "" },
-  { key: "award1_category",     label: "Award 1 - Category",                    required: false, sample: "" },
-  { key: "award1_title",        label: "Award 1 - Title",                       required: false, sample: "" },
-  { key: "award1_awardingBody", label: "Award 1 - Awarding Body",               required: false, sample: "" },
-  { key: "award1_year",         label: "Award 1 - Year",                        required: false, sample: "" },
-  { key: "award2_category",     label: "Award 2 - Category",                    required: false, sample: "" },
-  { key: "award2_title",        label: "Award 2 - Title",                       required: false, sample: "" },
-  { key: "award2_awardingBody", label: "Award 2 - Awarding Body",               required: false, sample: "" },
-  { key: "award2_year",         label: "Award 2 - Year",                        required: false, sample: "" },
-  { key: "award3_category",     label: "Award 3 - Category",                    required: false, sample: "" },
-  { key: "award3_title",        label: "Award 3 - Title",                       required: false, sample: "" },
-  { key: "award3_awardingBody", label: "Award 3 - Awarding Body",               required: false, sample: "" },
-  { key: "award3_year",         label: "Award 3 - Year",                        required: false, sample: "" },
-  { key: "notableAwards",          label: "Notable Awards - legacy, read-only in the form", required: false, sample: "" },
+function scalar(module: ExportModuleKey, key: string, label: string, defaultSelected = false): ExportScalarField {
+  return { kind: "scalar", module, key, label, defaultSelected };
+}
 
-  // ─── Financial Standing & Budgetary Impact (Module 6) ────────────────────────
-  { key: "presentSalary",          label: "Monthly Salary (₹)",                 required: false, sample: "" },
-  { key: "grossAnnualCTC",         label: "Gross Annual CTC (₹)",               required: false, sample: "" },
-  { key: "incrementsAwarded",      label: "Increments Awarded",                 required: false, sample: "" },
-  { key: "fundingConsultancyRevenue", label: "Funding/Consultancy Revenue Generation (₹)", required: false, sample: "" },
+function group(module: ExportModuleKey, key: string, label: string, subFieldLabels: string[]): ExportGroupField {
+  return { kind: "group", module, key, label, subFieldLabels, defaultSelected: false };
+}
 
-  // ─── Others (Module 7) ────────────────────────────────────────────────────────
-  { key: "otherInformation",       label: "Other Information",                  required: false, sample: "" },
+// Every DegreeFields entry (any level) also carries Place and Hall Ticket
+// Number - included on all 3 subfield sets below so nothing typed into
+// those two boxes gets silently left out of export. Sub-field wording is
+// exactly the Faculty Details UI label (== the stored key: course,
+// institutionName, percentageCgpa, yearOfPassing, ...).
+const DEGREE_SUBFIELDS = ["Course", "Branch", "Institution Name", "Affiliated University", "Percentage / CGPA", "Year of Passing", "Place", "Hall Ticket Number"];
+const SCHOOL_DEGREE_SUBFIELDS = ["Course", "Board", "Institution Name", "Percentage / CGPA", "Year of Passing", "Place", "Hall Ticket Number"];
+// Doctoral/Post-Doctoral entries (Ph.D. Details, Postdoctoral Fellowship
+// Details) - Specialization instead of Course/Branch/Percentage-CGPA, plus this
+// entry's own Status/Mode (live on DegreeDetail.status/.mode, not a separate
+// FacultyProfileFields-level scalar - see DegreeFields in
+// ProfileFieldPrimitives.tsx) and Year of Registration/Name of the
+// Guide-Supervisor (shown while Pursuing, instead of Year of Award).
+const DOCTORAL_SUBFIELDS = ["Specialization", "Institution Name", "Status", "Mode", "Year of Registration", "Name of the Guide / Supervisor", "Year of Award", "Place", "Hall Ticket Number"];
+const EXPERIENCE_SUBFIELDS = ["Institution Name", "Designation", "From Date", "To Date", "Joining Salary", "Leaving Salary", "Reason for Leaving", "NOC Obtained"];
 
-  // Resume/CV - Teaching Faculty only, no equivalent on the Supporting Staff
-  // templates (src/lib/supportingStaff/csvColumns.ts). A link to an
-  // already-hosted file (Drive/Storage) - this template can't upload files
-  // directly.
-  { key: "resumeUrl",              label: "Resume/CV URL",                      required: false, sample: "" },
+// Professional Experience / Professional Development / Financial sub-field
+// wording is exactly the Faculty Details UI label (== the stored key: e.g.
+// titleOfTheProgram -> "Title of the Program", dateOfAward -> "Date of Award").
+
+export const EXPORT_FIELDS: ExportField[] = [
+  // ─── Identity & Employment (core) - default ON ───────────────────────────
+  // Ordered to match the Add Faculty wizard's own "Identity & Employment"
+  // step (hod/faculty/new/page.tsx); fields with no add-form home (Status,
+  // Official Email) are appended at the end rather than interleaved.
+  scalar("core", "employeeId", "Employee ID", true),
+  scalar("core", "legalName", "Full Name (as per SSC)", true),
+  scalar("core", "name", "Name (as per PAN)", true),
+  scalar("core", "apaarFacultyId", "APAAR Faculty ID", true),
+  scalar("core", "collegeEmail", "College Email", true),
+  scalar("core", "designation", "Designation", true),
+  scalar("core", "highestQualification", "Highest Qualification", true),
+  scalar("core", "specialization", "Specialization", true),
+  scalar("core", "totalYearsOfExperience", "Total Years of Experience", true),
+  // Internal/External Experience are computed live from joiningDate and the
+  // Academic/Industry/Research Experience entries - not stored fields (see
+  // FacultyIdentityFacts on the profile page, which computes the same way).
+  scalar("core", "internalExperience", "Internal Exp (Years)", true),
+  scalar("core", "externalExperience", "External Exp (Years)", true),
+  scalar("core", "joiningDate", "Date of Joining", true),
+  scalar("core", "aicteFacultyId", "AICTE Faculty ID", true),
+  scalar("core", "email", "Personal Email", true),
+  scalar("core", "phone", "Mobile No", true),
+  group("core", "additionalPhones", "Additional Phone Numbers", ["Label", "Number"]),
+  scalar("core", "status", "Status", true),
+  scalar("core", "employeeCategory", "Employee Category", true),
+  scalar("core", "officialEmail", "Official Email", true),
+
+  // ─── Personal Details - default ON ───────────────────────────────────────
+  // Ordered to match PersonalDetailsFields.tsx (the canonical Add/Edit order).
+  scalar("personal", "nameAsPerAadhar", "Name (as per Aadhar)", true),
+  scalar("personal", "dateOfBirth", "Date of Birth", true),
+  scalar("personal", "gender", "Gender", true),
+  scalar("personal", "fatherName", "Father Name", true),
+  scalar("personal", "motherName", "Mother Name", true),
+  scalar("personal", "religion", "Religion", true),
+  scalar("personal", "caste", "Caste", true),
+  scalar("personal", "subCaste", "Sub Caste", true),
+  scalar("personal", "aadharNo", "Aadhar No", true),
+  scalar("personal", "panNo", "PAN No", true),
+  scalar("personal", "passportNo", "Passport No", true),
+  scalar("personal", "differentlyAbled", "Differently Abled", true),
+  scalar("personal", "differentlyAbledDetails", "Differently Abled Details", true),
+  scalar("personal", "motherTongue", "Mother Tongue", true),
+  scalar("personal", "languagesKnown", "Languages Known", true),
+  scalar("personal", "heightFeet", "Height (Feet)", true),
+  scalar("personal", "heightInches", "Height (Inches)", true),
+  scalar("personal", "weightKg", "Weight (Kg)", true),
+  scalar("personal", "maritalStatus", "Marital Status", true),
+  scalar("personal", "bloodGroup", "Blood Group", true),
+  scalar("personal", "spouseName", "Spouse Name", true),
+  scalar("personal", "numberOfChildren", "Number of Children", true),
+  scalar("personal", "temporaryAddress", "Temporary Address", true),
+  scalar("personal", "permanentAddressSameAsTemporary", "Permanent Address Same as Temporary", true),
+  scalar("personal", "permanentAddress", "Permanent Address", true),
+  scalar("personal", "bankAccountNumber", "Bank Account Number", true),
+  scalar("personal", "ifscCode", "IFSC Code", true),
+  scalar("personal", "bankName", "Bank Name", true),
+  scalar("personal", "bankBranch", "Bank Branch", true),
+  scalar("personal", "pfNumber", "PF Number", true),
+  scalar("personal", "uanNumber", "UAN Number", true),
+  scalar("personal", "bankOtherDetails", "Bank Other Details", true),
+  scalar("personal", "emergencyContactName", "Emergency Contact Name", true),
+  scalar("personal", "emergencyContactRelation", "Emergency Contact Relation", true),
+  scalar("personal", "emergencyContactMobileNo", "Emergency Contact Mobile No", true),
+  scalar("personal", "ratificationStatus", "Ratification Status", true),
+  scalar("personal", "ratificationProceedingsNumber", "Ratification Proceedings Number", true),
+  scalar("personal", "ratificationDate", "Ratification Date", true),
+
+  // ─── Academic Qualification ───────────────────────────────────────────────
+  // Ordered to match the Add Faculty wizard's own Qualification step
+  // (QualificationFields in AcademicProfileModuleFields.tsx).
+  // Internal key differs from the core "highestQualification" above (a
+  // FacultyMember-level field) - this one reads academicProfile.highestQualification,
+  // so the two need distinct export keys even though both are labelled
+  // "Highest Qualification" on the Faculty Details UI.
+  scalar("qualification", "academicProfileHighestQualification", "Highest Qualification"),
+  scalar("qualification", "researchAreasInterests", "Research Areas/Interests"),
+  scalar("qualification", "netSletSetGateOthers", "NET/SLET/SET/GATE/Others"),
+  scalar("qualification", "qualifiedExam", "Qualified Exam"),
+  scalar("qualification", "pleaseSpecifyExam", "Please specify exam"),
+  scalar("qualification", "examScore", "Exam Score"),
+  scalar("qualification", "qualifiedYear", "Qualified Year"),
+  group("qualification", "secondaryEducation", "Secondary Education", SCHOOL_DEGREE_SUBFIELDS),
+  group("qualification", "intermediateDiplomaIti", "Intermediate / Diploma / ITI", SCHOOL_DEGREE_SUBFIELDS),
+  group("qualification", "ugDetailsGroup", "UG Details", DEGREE_SUBFIELDS),
+  group("qualification", "pgDetailsGroup", "PG Details", DEGREE_SUBFIELDS),
+  group("qualification", "phdDetailsGroup", "Ph.D. Details", DOCTORAL_SUBFIELDS),
+  group("qualification", "postdoctoralFellowshipDetailsGroup", "Postdoctoral Fellowship Details", DOCTORAL_SUBFIELDS),
+  // StaffQualification (QualificationsFields) has its own shape - no
+  // separate Board field like HIGH_SCHOOL/INTERMEDIATE DegreeFields; the
+  // exam board (if any) is folded into Institution Name itself.
+  group("qualification", "educationalQualifications", "Educational Qualifications", ["Level", "Course", "Institution Name", "Place", "Percentage / CGPA", "Year of Passing", "Hall Ticket Number"]),
+
+  // ─── Professional Experience ──────────────────────────────────────────────
+  // Each role box is kept right next to its own Experience group, matching
+  // how the Add/Edit form shows it (nested inside that same tab's card).
+  group("experience", "academicExperienceGroup", "Academic Experience", EXPERIENCE_SUBFIELDS),
+  scalar("experience", "teachingRolesResponsibilities", "Teaching Roles/Responsibilities"),
+  group("experience", "industryExperienceGroup", "Industry Experience", EXPERIENCE_SUBFIELDS),
+  scalar("experience", "industryRolesResponsibilities", "Industry Roles/Responsibilities"),
+  group("experience", "researchExperienceGroup", "Research Experience", EXPERIENCE_SUBFIELDS),
+  scalar("experience", "researchRolesResponsibilities", "Research Roles/Responsibilities"),
+  group("experience", "promotionHistoryGroup", "Promotion History", ["Designation", "From Date", "To Date"]),
+  group("experience", "coursesGroup", "Courses Taught", ["Code", "Name", "Weekly Credit Hours"]),
+
+  // ─── Research & Innovation ─────────────────────────────────────────────────
+  scalar("research", "publicationsFirstOrCorrespondingAuthor", "First/Corresponding Author Pubs"),
+  scalar("research", "publicationsQ1OrHighImpact", "Q1 / IF>4.0 Pubs"),
+  scalar("research", "sciScopusCount", "SCI/Scopus Count"),
+  scalar("research", "wosCount", "WoS (SCIE/ESCI) Count"),
+  scalar("research", "conferencePapersCount", "Conference Papers"),
+  scalar("research", "bookChaptersCount", "Book Chapters"),
+  scalar("research", "reviewPublicationsCount", "Review Publications"),
+  scalar("research", "totalPublications", "Total Publications (incl. co-authorship)"),
+  scalar("research", "totalCitations", "Total Citations"),
+  scalar("research", "hIndex", "H-Index"),
+  scalar("research", "i10Index", "i10-Index"),
+  scalar("research", "orcidId", "ORCID iD"),
+  scalar("research", "scopusAuthorId", "Scopus Author ID"),
+  scalar("research", "researcherId", "Researcher ID (WoS/Publons)"),
+  scalar("research", "googleScholarId", "Google Scholar ID"),
+  scalar("research", "irinsProfile", "IRINS Profile"),
+  group("research", "publicationsGroup", "Publications", ["Title", "Co-Authors", "Journal/Conference", "Year", "Indexing"]),
+  group("research", "authoredBooksGroup", "Authored Books", ["Title", "Publisher", "Year"]),
+
+  // ─── Professional Development ──────────────────────────────────────────────
+  group("mentorship", "newLabsEstablishedGroup", "New Labs Established", ["Facility Details", "Outcomes"]),
+  group("mentorship", "academicResponsibilitiesGroup", "Academic Responsibilities", ["Category", "Other Category", "Description", "From Date", "To Date"]),
+  group("mentorship", "fdpsWorkshopsMoocsCertificationsGroup", "FDPs, Workshops, MOOCs & Certifications", [
+    "Type", "Please specify type", "Certification Type", "Participated or Conducted", "Title of the Program",
+    "Name of the Faculty / Coordinator", "From Date", "To Date", "Duration", "Number of Weeks",
+    "National / International", "Place", "Mode of the Program",
+    "Beneficiaries", "Total Count", "Internal Count", "External Count",
+    "Number of Resource Persons", "Resource Persons - Details",
+    "Remark", "Co-Conducting Faculty", "Other Details",
+  ]),
+  group("mentorship", "professionalMembershipsGroup", "Professional Memberships", [
+    "Body", "Body Name", "Membership Type", "Membership ID", "Membership Validity", "Member Since", "Valid From", "Valid To",
+  ]),
+  group("mentorship", "awardsRecognitionGroup", "Awards & Recognition", [
+    "Category", "Other Category", "Title of Award", "Awarding Agency/Body", "Date of Award", "State / National / International", "Other Details",
+  ]),
+
+  // ─── Financial Standing ─────────────────────────────────────────────────────
+  scalar("financial", "monthlySalary", "Monthly Salary (₹)"),
+  scalar("financial", "grossAnnualCTC", "Gross Annual CTC (₹)"),
+  scalar("financial", "incrementsAwarded", "Increments Awarded"),
+  scalar("financial", "fundingConsultancyRevenueGeneration", "Funding/Consultancy Revenue Generation (₹)"),
+
+  // ─── Others ─────────────────────────────────────────────────────────────────
+  scalar("others", "otherInformation", "Other Information"),
+
+  // ─── Teaching Load ────────────────────────────────────────────────────────
+  // Relational - sourced from the Teaching Assignments module, not a stored
+  // field on the faculty document itself (see currentTeachingSummary in
+  // exportFacultyCsv.ts).
+  scalar("teaching-load", "currentTeachingSummary", "Current Teaching (Course / Year / Section / Subject)"),
 ];
 
 export const HINTS = [
@@ -323,15 +271,6 @@ export const HINTS = [
   "Resume/CV URL: an already-hosted link (Drive/Storage) - this template doesn't upload files directly; use the faculty edit page's Documents section to upload one",
 ];
 
-// A column present in the export but never accepted back on import
-// (Current Teaching is relational - sourced from the Teaching Assignments module).
-export const TEACHING_SUMMARY_COLUMN: FacultyCsvColumn = {
-  key: "currentTeachingSummary",
-  label: "Current Teaching (Course / Year / Section / Subject)",
-  required: false,
-  sample: "",
-};
-
 // ─── Bulk-import template - core fields only ──────────────────────────────────
 // Every column here is mandatory - this template is deliberately limited to
 // the identity/employment/statutory fields a faculty member needs on day
@@ -343,6 +282,15 @@ export const TEACHING_SUMMARY_COLUMN: FacultyCsvColumn = {
 // template's own instructions have to be built from whatever the admin
 // actually configured rather than a fixed string, or they'd describe options
 // that don't exist.
+export interface FacultyCsvColumn {
+  key: string;
+  label: string;
+  required: boolean;
+  sample: string;
+  // Alternate header wordings that should still map to this column (see matchHeaders in csv.ts).
+  aliases?: string[];
+}
+
 export function getFacultyImportColumns(designationOptions: string[]): FacultyCsvColumn[] {
   return [
   { key: "employeeId",   label: "Employee ID",   required: true,  sample: "Required; any text; unique", aliases: ["Emp ID", "Employee Code", "Employee No", "Staff ID"] },
@@ -368,8 +316,8 @@ export function getFacultyImportColumns(designationOptions: string[]): FacultyCs
   // Still accepts anything else, deliberately: the dropdown's own "Others"
   // stores whatever was typed, so a closed set here would reject qualifications
   // the app itself can create.
-  { key: "qualification", label: "Highest Qualification", required: true, sample: `Required; ${HIGHEST_QUALIFICATION_OPTIONS.join(" / ")} / other`, aliases: ["Qualification"] },
-  { key: "joiningDate",  label: "Date of Joining Institution (DD-MM-YYYY)", required: true, sample: "Required; DD-MM-YYYY", aliases: ["Joining Date", "Date of Joining", "DOJ"] },
+  { key: "highestQualification", label: "Highest Qualification", required: true, sample: `Required; ${HIGHEST_QUALIFICATION_OPTIONS.join(" / ")} / other`, aliases: ["Qualification"] },
+  { key: "joiningDate",  label: "Date of Joining (DD-MM-YYYY)", required: true, sample: "Required; DD-MM-YYYY", aliases: ["Date of Joining Institution (DD-MM-YYYY)", "Date of Joining Institution", "Joining Date", "Date of Joining", "DOJ"] },
   { key: "gender",            label: "Gender",                       required: true, sample: "Required: Male / Female / Other" },
   { key: "dateOfBirth",       label: "Date of Birth (DD-MM-YYYY)",   required: true, sample: "Required; DD-MM-YYYY", aliases: ["DOB"] },
   { key: "nameAsPerAadhar",   label: "Name (as per Aadhar)",         required: false, sample: "Optional; text" },
@@ -398,7 +346,7 @@ export function getFacultyImportSampleRows(designationOptions: string[]): Record
   {
     employeeId: "FAC001", legalName: "ANITHA REDDY", name: "Dr. Anitha Reddy",
     collegeEmail: "anitha.reddy@college.edu", password: "ChangeMe#101", phone: "9876543210",
-    designation: designation(0), qualification: "Ph.D",
+    designation: designation(0), highestQualification: "Ph.D",
     joiningDate: "15-06-2012",
     gender: "Female", dateOfBirth: "22-03-1978",
     nameAsPerAadhar: "Anitha Reddy",
@@ -408,7 +356,7 @@ export function getFacultyImportSampleRows(designationOptions: string[]): Record
   {
     employeeId: "FAC002", legalName: "SURESH KUMAR", name: "Mr. Suresh Kumar",
     collegeEmail: "suresh.kumar@college.edu", password: "ChangeMe#102", phone: "9876543211",
-    designation: designation(1), qualification: "M.Tech",
+    designation: designation(1), highestQualification: "M.Tech",
     joiningDate: "01-07-2019",
     gender: "Male", dateOfBirth: "05-11-1990",
     nameAsPerAadhar: "Suresh Kumar",
@@ -418,7 +366,7 @@ export function getFacultyImportSampleRows(designationOptions: string[]): Record
   {
     employeeId: "FAC003", legalName: "DIVYA NAIR", name: "Ms. Divya Nair",
     collegeEmail: "divya.nair@college.edu", password: "ChangeMe#103", phone: "9876543212",
-    designation: designation(2), qualification: "M.Tech",
+    designation: designation(2), highestQualification: "M.Tech",
     joiningDate: "16-08-2022",
     gender: "Female", dateOfBirth: "30-01-1995",
     nameAsPerAadhar: "Divya Nair",
@@ -428,7 +376,7 @@ export function getFacultyImportSampleRows(designationOptions: string[]): Record
   {
     employeeId: "FAC004", legalName: "IMRAN SHAIK", name: "Dr. Imran Shaik",
     collegeEmail: "imran.shaik@college.edu", password: "ChangeMe#104", phone: "9876543213",
-    designation: designation(3), qualification: "Ph.D",
+    designation: designation(3), highestQualification: "Ph.D",
     joiningDate: "04-01-2016",
     gender: "Male", dateOfBirth: "19-07-1984",
     nameAsPerAadhar: "Imran Shaik",
@@ -438,7 +386,7 @@ export function getFacultyImportSampleRows(designationOptions: string[]): Record
   {
     employeeId: "FAC005", legalName: "GRACE THOMAS", name: "Mrs. Grace Thomas",
     collegeEmail: "grace.thomas@college.edu", password: "ChangeMe#105", phone: "9876543214",
-    designation: designation(4), qualification: "M.Sc",
+    designation: designation(4), highestQualification: "M.Sc",
     joiningDate: "12-06-2023",
     gender: "Female", dateOfBirth: "08-09-1996",
     nameAsPerAadhar: "Grace Thomas",

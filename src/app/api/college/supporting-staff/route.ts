@@ -8,6 +8,8 @@ import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/fir
 import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
 import { SUPPORTING_STAFF_ROLE_CATEGORY, canRolePostCategory, supportingStaffCategoryLabel } from "@/lib/supportingStaff/roleCategory";
 import { hasSupportingStaffSplit } from "@/lib/designations/config";
+import { normalizeSupportingStaffProfile } from "@/lib/faculty/academicProfileCompat";
+import { migrateSupportingStaffDoc } from "@/lib/faculty/fieldRenames";
 import { NON_TECHNICAL_STAFF_DESIGNATION_LABELS, ROLE_LABELS } from "@/types";
 import type {
   SupportingStaffCategory, SupportingStaffDesignation, FacultyStatus, CollegeType,
@@ -53,7 +55,7 @@ export async function GET(request: Request) {
 
     const snap = await query.get();
     const staff = snap.docs
-      .map((d) => ({ id: d.id, ...d.data() }))
+      .map((d) => ({ id: d.id, ...migrateSupportingStaffDoc(d.data()) }))
       .sort((a, b) => ((a as { name?: string }).name ?? "").localeCompare((b as { name?: string }).name ?? ""));
 
     return NextResponse.json({ staff });
@@ -216,7 +218,7 @@ export async function POST(request: Request) {
       joiningDate: new Date(joiningDate),
       status: "ACTIVE" as FacultyStatus,
       userUid: uid,
-      ...(body.supportingStaffProfile ? { supportingStaffProfile: body.supportingStaffProfile } : {}),
+      ...(body.supportingStaffProfile ? { supportingStaffProfile: normalizeSupportingStaffProfile(body.supportingStaffProfile) } : {}),
       ...(profilePhotoUrl ? { profilePhotoUrl } : {}),
       ...buildPersonalDetailsUpdate(body),
       createdAt: now,

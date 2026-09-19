@@ -8,6 +8,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import type { DesignationCatalogItem } from "@/types";
+import { designationLabel } from "@/lib/designations/config";
 
 // Faculty (FacultyMember) is teaching-only; "supporting" is the full
 // Supporting Staff list (Salary Structures, Budget line items - covers
@@ -58,7 +59,7 @@ export function DesignationOptions({ kind = "both" }: Props) {
         <SelectGroup>
           <SelectLabel>Teaching</SelectLabel>
           {teaching.map((d) => (
-            <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>
+            <SelectItem key={d.id} value={d.name}>{designationLabel(d.name)}</SelectItem>
           ))}
         </SelectGroup>
       )}
@@ -67,7 +68,7 @@ export function DesignationOptions({ kind = "both" }: Props) {
         <SelectGroup>
           <SelectLabel>Supporting</SelectLabel>
           {supporting.map((d) => (
-            <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>
+            <SelectItem key={d.id} value={d.name}>{designationLabel(d.name)}</SelectItem>
           ))}
         </SelectGroup>
       )}

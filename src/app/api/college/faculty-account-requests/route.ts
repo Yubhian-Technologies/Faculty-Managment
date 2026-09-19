@@ -3,6 +3,8 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
+import type { EmployeeCategory } from "@/types";
+import { EMPLOYEE_CATEGORY_VALUES, EMPLOYEE_CATEGORY_ERROR_MESSAGE } from "@/types";
 
 export async function GET(request: Request) {
   try {
@@ -39,11 +41,19 @@ export async function POST(request: Request) {
       officialEmail?: string;
       alternateEmail1?: string;
       alternateEmail2?: string;
+      employeeCategory?: EmployeeCategory;
+      specialization?: string;
+      qualification?: string;
     };
 
-    const { offerId, officialEmail } = body;
+    const { offerId, officialEmail, employeeCategory } = body;
     if (!offerId || !officialEmail?.trim()) {
       return NextResponse.json({ error: "offerId and officialEmail required" }, { status: 400 });
+    }
+    // Only the EMPLOYEE_CATEGORY_VALUES keys are accepted anywhere Employee
+    // Category is set - see EmployeeCategory's doc-comment in types/core.ts.
+    if (!employeeCategory || !EMPLOYEE_CATEGORY_VALUES.includes(employeeCategory)) {
+      return NextResponse.json({ error: EMPLOYEE_CATEGORY_ERROR_MESSAGE }, { status: 400 });
     }
 
     const db = getAdminDb();
@@ -114,6 +124,9 @@ export async function POST(request: Request) {
       officialEmail: officialEmail.trim(),
       ...(body.alternateEmail1?.trim() ? { alternateEmail1: body.alternateEmail1.trim() } : {}),
       ...(body.alternateEmail2?.trim() ? { alternateEmail2: body.alternateEmail2.trim() } : {}),
+      employeeCategory,
+      ...(body.specialization?.trim() ? { specialization: body.specialization.trim() } : {}),
+      ...(body.qualification?.trim() ? { qualification: body.qualification.trim() } : {}),
       designation: offer.designation ?? "",
       department: offer.department ?? "",
       status: "SUBMITTED",

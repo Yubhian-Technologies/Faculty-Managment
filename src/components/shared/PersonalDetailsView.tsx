@@ -2,6 +2,7 @@ import { formatDate } from "@/lib/utils";
 import { RELIGION_LABELS, CASTE_LABELS } from "@/types";
 import type { Religion, Caste } from "@/types";
 import type { Timestamp } from "firebase/firestore";
+import { migratePersonalFlat } from "@/lib/faculty/fieldRenames";
 
 export interface PersonalDetailsSource {
   gender?: string;
@@ -15,17 +16,17 @@ export interface PersonalDetailsSource {
   subCaste?: string;
   aadharNo?: string;
   panNo?: string;
-  passportNumber?: string;
+  passportNo?: string;
   differentlyAbled?: boolean;
   differentlyAbledDetails?: string;
-  bankAccountNo?: string;
+  bankAccountNumber?: string;
   ifscCode?: string;
   bankName?: string;
   bankBranch?: string;
   bankOtherDetails?: string;
   emergencyContactName?: string;
   emergencyContactRelation?: string;
-  emergencyContactPhone?: string;
+  emergencyContactMobileNo?: string;
   ratificationStatus?: string;
   ratificationProceedingsNumber?: string;
   ratificationDate?: Timestamp | Date | { _seconds: number; _nanoseconds?: number } | { seconds: number; nanoseconds?: number };
@@ -33,7 +34,7 @@ export interface PersonalDetailsSource {
   spouseName?: string;
   numberOfChildren?: number;
   temporaryAddress?: string;
-  permanentSameAsTemporary?: boolean;
+  permanentAddressSameAsTemporary?: boolean;
   permanentAddress?: string;
   bloodGroup?: string;
   motherTongue?: string;
@@ -42,6 +43,7 @@ export interface PersonalDetailsSource {
   heightInches?: number;
   weightKg?: number;
   pfNumber?: string;
+  uanNumber?: string;
   esiNumber?: string;
 }
 
@@ -54,6 +56,10 @@ interface Props {
   // legalName stays exactly where it always was (matches PersonalDetailsFields'
   // own hiddenFields doc-comment).
   hideLegalName?: boolean;
+  // Fields to skip - mirrors PersonalDetailsFields' hiddenFields, so a surface
+  // whose edit form hides a field (Faculty hides ESI Number) doesn't show it
+  // here either.
+  hiddenFields?: (keyof PersonalDetailsSource)[];
 }
 
 function Field({ label, value }: { label: string; value: string | undefined | null }) {
@@ -65,8 +71,9 @@ function Field({ label, value }: { label: string; value: string | undefined | nu
   );
 }
 
-export function PersonalDetailsView({ value, hideLegalName = false }: Props) {
-  const p = value ?? {};
+export function PersonalDetailsView({ value, hideLegalName = false, hiddenFields = [] }: Props) {
+  // Lift a record still carrying the legacy key names (passportNumber, bankAccountNo, ...).
+  const p = (value ? migratePersonalFlat(value as Record<string, unknown>) : {}) as PersonalDetailsSource;
 
   return (
     <div className="space-y-4">
@@ -86,8 +93,9 @@ export function PersonalDetailsView({ value, hideLegalName = false }: Props) {
         <Field label="Sub Caste" value={p.subCaste} />
         <Field label="Aadhar No" value={p.aadharNo} />
         <Field label="PAN No" value={p.panNo} />
-        <Field label="Passport No" value={p.passportNumber} />
-        <Field label="Differently Abled" value={p.differentlyAbled === undefined ? undefined : p.differentlyAbled ? `Yes${p.differentlyAbledDetails ? ` (${p.differentlyAbledDetails})` : ""}` : "No"} />
+        <Field label="Passport No" value={p.passportNo} />
+        <Field label="Differently Abled" value={p.differentlyAbled === undefined ? undefined : p.differentlyAbled ? "Yes" : "No"} />
+        {p.differentlyAbled && <Field label="Differently Abled Details" value={p.differentlyAbledDetails} />}
       </div>
 
       <div className="rounded-lg border bg-muted/20 shadow-sm p-3">
@@ -107,7 +115,7 @@ export function PersonalDetailsView({ value, hideLegalName = false }: Props) {
           <Field label="Blood Group" value={p.bloodGroup} />
           {p.maritalStatus === "Married" && (
             <>
-              <Field label={p.gender === "Female" ? "Husband Name" : "Spouse Name"} value={p.spouseName} />
+              <Field label="Spouse Name" value={p.spouseName} />
               <Field label="Number of Children" value={p.numberOfChildren !== undefined ? String(p.numberOfChildren) : undefined} />
             </>
           )}
@@ -116,7 +124,11 @@ export function PersonalDetailsView({ value, hideLegalName = false }: Props) {
           <Field label="Temporary Address" value={p.temporaryAddress} />
           <Field
             label="Permanent Address"
-            value={p.permanentSameAsTemporary ? "Same as temporary" : p.permanentAddress}
+            value={p.permanentAddressSameAsTemporary ? p.permanentAddress || p.temporaryAddress : p.permanentAddress}
+          />
+          <Field
+            label="Permanent Address Same as Temporary"
+            value={p.permanentAddressSameAsTemporary === undefined ? undefined : p.permanentAddressSameAsTemporary ? "Yes" : "No"}
           />
         </div>
       </div>
@@ -124,18 +136,19 @@ export function PersonalDetailsView({ value, hideLegalName = false }: Props) {
       <div className="rounded-lg border bg-muted/20 shadow-sm p-3">
         <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Bank Account Details</p>
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-          <Field label="A/C Number" value={p.bankAccountNo} />
+          <Field label="Bank Account Number" value={p.bankAccountNumber} />
           <Field label="IFSC Code" value={p.ifscCode} />
           <Field label="Bank Name" value={p.bankName} />
-          <Field label="Branch" value={p.bankBranch} />
+          <Field label="Bank Branch" value={p.bankBranch} />
         </div>
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 mt-3">
           <Field label="PF Number" value={p.pfNumber} />
-          <Field label="ESI Number" value={p.esiNumber} />
+          <Field label="UAN Number" value={p.uanNumber} />
+          {!hiddenFields.includes("esiNumber") && <Field label="ESI Number" value={p.esiNumber} />}
         </div>
         {p.bankOtherDetails && (
           <div className="mt-3">
-            <Field label="Other Details" value={p.bankOtherDetails} />
+            <Field label="Bank Other Details" value={p.bankOtherDetails} />
           </div>
         )}
       </div>
@@ -143,9 +156,9 @@ export function PersonalDetailsView({ value, hideLegalName = false }: Props) {
       <div className="rounded-lg border bg-muted/20 shadow-sm p-3">
         <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Emergency Contact</p>
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-          <Field label="Emergency Contact Person Name" value={p.emergencyContactName} />
-          <Field label="Relation (with Emergency Contact)" value={p.emergencyContactRelation} />
-          <Field label="Emergency Contact Mobile No" value={p.emergencyContactPhone} />
+          <Field label="Emergency Contact Name" value={p.emergencyContactName} />
+          <Field label="Emergency Contact Relation" value={p.emergencyContactRelation} />
+          <Field label="Emergency Contact Mobile No" value={p.emergencyContactMobileNo} />
         </div>
       </div>
 
@@ -153,8 +166,12 @@ export function PersonalDetailsView({ value, hideLegalName = false }: Props) {
         <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Ratification</p>
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           <Field label="Ratification Status" value={p.ratificationStatus} />
-          <Field label="Proceedings Number" value={p.ratificationProceedingsNumber} />
-          <Field label="Ratification Proceedings Date" value={p.ratificationDate ? formatDate(p.ratificationDate) : undefined} />
+          {p.ratificationStatus === "Ratified" && (
+            <>
+              <Field label="Ratification Proceedings Number" value={p.ratificationProceedingsNumber} />
+              <Field label="Ratification Date" value={p.ratificationDate ? formatDate(p.ratificationDate) : undefined} />
+            </>
+          )}
         </div>
       </div>
     </div>

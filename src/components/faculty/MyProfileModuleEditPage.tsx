@@ -15,11 +15,19 @@ import { getMissingRequiredPersonalFields, STAFF_REQUIRED_PERSONAL_FIELDS, type 
 import { PROFILE_MODULES, SELF_EDIT_DISABLED_MODULES, type ProfileModuleKey } from "@/lib/faculty/profileModules";
 import { useCollegeType } from "@/hooks/useCollegeType";
 import { toast } from "@/hooks/useToast";
-import { toDateInputValue } from "@/lib/utils";
+import { migrateFacultyDoc } from "@/lib/faculty/fieldRenames";
+import { personalRecordFromDoc, personalPatchBody } from "@/lib/faculty/personalRecord";
+import { diffAcademicProfile, isEmptyChanges } from "@/lib/faculty/academicProfileChanges";
 
 interface Props {
   basePath: string;       // e.g. "/hod/profile"
   patchEndpoint: string;  // "/api/college/users/me" | "/api/college/faculty/me"
+  // True only for callers whose patchEndpoint understands `academicProfileChanges`
+  // (PATCH /api/college/faculty/me): a tab's save then sends just the academicProfile
+  // keys it changed instead of the whole object, so it can't overwrite another tab
+  // (or the HOD's own save) with the copy loaded here. Every other endpoint still
+  // takes the whole academicProfile, so this stays off for them.
+  sectionScopedProfileSave?: boolean;
   // This page is reused by many roles beyond Faculty (Webmaster, IQAC
   // Coordinator, College Staff, etc. - see each role's profile/[module]/edit
   // page.tsx) - defaults to the full Staff-shaped requirement (every
@@ -27,6 +35,13 @@ interface Props {
   // caller (Panel, whose patchEndpoint is /api/college/faculty/me) opts into
   // FACULTY_REQUIRED_PERSONAL_FIELDS instead.
   requiredPersonalFields?: (keyof PersonalDetailsValue)[];
+  // Full Name (as per SSC) lives only under Identity & Employment, right after
+  // Employee ID - Panel (the only caller with its own dedicated Identity &
+  // Employment editor, at panel/profile/edit) passes this so it isn't shown a
+  // second time on this Personal Details tab. Every other role sharing this
+  // page has no such separate page, so this tab stays their only place to set
+  // it - default false preserves that.
+  hideLegalName?: boolean;
 }
 
 // Shared self-profile per-module edit page for HOD and Panel (both source
@@ -34,7 +49,7 @@ interface Props {
 // thin users/{uid} doc for roles with no FacultyMember record - see that
 // route's comments). Principal/VP have their own edit page since their View
 // side already bypasses this endpoint entirely (see principal/profile).
-export function MyProfileModuleEditPage({ basePath, patchEndpoint, requiredPersonalFields = STAFF_REQUIRED_PERSONAL_FIELDS }: Props) {
+export function MyProfileModuleEditPage({ basePath, patchEndpoint, sectionScopedProfileSave = false, requiredPersonalFields = STAFF_REQUIRED_PERSONAL_FIELDS, hideLegalName = false }: Props) {
   const router = useRouter();
   const params = useParams<{ module: string }>();
   const moduleKey = params.module as ProfileModuleKey;
@@ -46,45 +61,29 @@ export function MyProfileModuleEditPage({ basePath, patchEndpoint, requiredPerso
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [record, setRecord] = useState<FacultyEditRecord>({});
+  // The academicProfile as loaded - see sectionScopedProfileSave.
+  const [originalAcademicProfile, setOriginalAcademicProfile] = useState<FacultyEditRecord["academicProfile"]>({});
+  // The id of the record actually being edited: the facultyMembers doc id for a Faculty
+  // login (NOT the login uid), the login's own users doc id (= its uid) for roles that
+  // have no separate faculty record. Needed wherever the editor keys something to "this
+  // person" - e.g. Professional Development's "(You)" / exclude-myself co-conductor logic.
+  const [recordId, setRecordId] = useState("");
+  // Set when the server says this login has no faculty record to edit.
+  const [unlinkedMessage, setUnlinkedMessage] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/college/faculty/me")
-      .then((r) => r.json() as Promise<{ faculty?: Record<string, unknown> | null }>)
+      .then((r) => r.json() as Promise<{ faculty?: Record<string, unknown> | null; message?: string }>)
       .then((d) => {
-        const m = d.faculty ?? {};
-        setRecord({
-          gender: (m.gender as string) ?? "",
-          dateOfBirth: toDateInputValue(m.dateOfBirth as never) || undefined,
-          legalName: (m.legalName as string) ?? "",
-          nameAsPerAadhar: (m.nameAsPerAadhar as string) ?? "",
-          fatherName: (m.fatherName as string) ?? "",
-          motherName: (m.motherName as string) ?? "",
-          religion: m.religion as never,
-          caste: m.caste as never,
-          subCaste: (m.subCaste as string) ?? "",
-          aadharNo: (m.aadharNo as string) ?? "",
-          panNo: (m.panNo as string) ?? "",
-          passportNumber: (m.passportNumber as string) ?? "",
-          differentlyAbled: (m.differentlyAbled as boolean) ?? undefined,
-          differentlyAbledDetails: (m.differentlyAbledDetails as string) ?? "",
-          bankAccountNo: (m.bankAccountNo as string) ?? "",
-          ifscCode: (m.ifscCode as string) ?? "",
-          bankName: (m.bankName as string) ?? "",
-          bankBranch: (m.bankBranch as string) ?? "",
-          bankOtherDetails: (m.bankOtherDetails as string) ?? "",
-          emergencyContactName: (m.emergencyContactName as string) ?? "",
-          emergencyContactPhone: (m.emergencyContactPhone as string) ?? "",
-          ratificationStatus: (m.ratificationStatus as string) ?? "",
-          ratificationDate: toDateInputValue(m.ratificationDate as never) || undefined,
-          maritalStatus: (m.maritalStatus as string) ?? "",
-          spouseName: (m.spouseName as string) ?? "",
-          numberOfChildren: m.numberOfChildren as number | undefined,
-          temporaryAddress: (m.temporaryAddress as string) ?? "",
-          permanentSameAsTemporary: (m.permanentSameAsTemporary as boolean) ?? false,
-          permanentAddress: (m.permanentAddress as string) ?? "",
-          bloodGroup: (m.bloodGroup as string) ?? "",
-          academicProfile: (m.academicProfile as FacultyEditRecord["academicProfile"]) ?? {},
-        });
+        if (!d.faculty) {
+          setUnlinkedMessage(d.message ?? "No profile record was found for your login.");
+          return;
+        }
+        const m = migrateFacultyDoc(d.faculty as Record<string, unknown>);
+        const academicProfile = (m.academicProfile as FacultyEditRecord["academicProfile"]) ?? {};
+        setRecordId(typeof d.faculty.id === "string" ? d.faculty.id : "");
+        setOriginalAcademicProfile(academicProfile);
+        setRecord({ ...personalRecordFromDoc(m), academicProfile });
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load profile" }))
       .finally(() => setLoading(false));
@@ -104,33 +103,30 @@ export function MyProfileModuleEditPage({ basePath, patchEndpoint, requiredPerso
     }
     setSaving(true);
     try {
-      const body: Record<string, unknown> =
-        moduleKey === "personal"
-          ? {
-              gender: record.gender, dateOfBirth: record.dateOfBirth, legalName: record.legalName,
-              nameAsPerAadhar: record.nameAsPerAadhar,
-              fatherName: record.fatherName, motherName: record.motherName, religion: record.religion,
-              caste: record.caste, subCaste: record.subCaste, aadharNo: record.aadharNo, panNo: record.panNo,
-              passportNumber: record.passportNumber,
-              differentlyAbled: record.differentlyAbled, differentlyAbledDetails: record.differentlyAbledDetails,
-              bankAccountNo: record.bankAccountNo, ifscCode: record.ifscCode,
-              bankName: record.bankName, bankBranch: record.bankBranch, bankOtherDetails: record.bankOtherDetails,
-              emergencyContactName: record.emergencyContactName, emergencyContactRelation: record.emergencyContactRelation,
-              emergencyContactPhone: record.emergencyContactPhone, ratificationStatus: record.ratificationStatus,
-              ratificationProceedingsNumber: record.ratificationProceedingsNumber,
-              ratificationDate: record.ratificationDate, maritalStatus: record.maritalStatus, spouseName: record.spouseName,
-              numberOfChildren: record.numberOfChildren,
-              temporaryAddress: record.temporaryAddress, permanentSameAsTemporary: record.permanentSameAsTemporary,
-              permanentAddress: record.permanentAddress, bloodGroup: record.bloodGroup,
-            }
-          : { academicProfile: record.academicProfile };
+      let body: Record<string, unknown>;
+      if (moduleKey === "personal") {
+        body = personalPatchBody(record);
+      } else if (sectionScopedProfileSave) {
+        const academicProfileChanges = diffAcademicProfile(originalAcademicProfile, record.academicProfile);
+        if (isEmptyChanges(academicProfileChanges)) {
+          toast({ variant: "success", title: "No changes to save" });
+          router.push(`${basePath}/${moduleKey}`);
+          return;
+        }
+        body = { academicProfileChanges };
+      } else {
+        body = { academicProfile: record.academicProfile };
+      }
 
       const res = await fetch(patchEndpoint, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        const err = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(err.error);
+      }
 
       toast({ variant: "success", title: "Saved" });
 
@@ -143,8 +139,8 @@ export function MyProfileModuleEditPage({ basePath, patchEndpoint, requiredPerso
         }
       }
       router.push(`${basePath}/${moduleKey}`);
-    } catch {
-      toast({ variant: "destructive", title: "Failed to save" });
+    } catch (err) {
+      toast({ variant: "destructive", title: err instanceof Error && err.message ? err.message : "Failed to save" });
     } finally {
       setSaving(false);
     }
@@ -181,6 +177,8 @@ export function MyProfileModuleEditPage({ basePath, patchEndpoint, requiredPerso
 
       {loading ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
+      ) : unlinkedMessage ? (
+        <Card><CardContent className="p-6 text-sm text-muted-foreground">{unlinkedMessage}</CardContent></Card>
       ) : (
         <Card>
           <CardContent className="pt-6 space-y-6">
@@ -188,10 +186,11 @@ export function MyProfileModuleEditPage({ basePath, patchEndpoint, requiredPerso
               moduleKey={moduleKey}
               record={record}
               onChange={patch}
-              facultyId={user?.uid ?? ""}
+              facultyId={recordId}
               includeTeachingAssignment={false}
               collegeType={collegeType}
               requiredPersonalFields={requiredPersonalFields}
+              hideLegalName={hideLegalName}
             />
             <div className="flex justify-end gap-3 pt-4 border-t">
               <Button variant="outline" onClick={() => router.push(`${basePath}/${moduleKey}`)}>Cancel</Button>

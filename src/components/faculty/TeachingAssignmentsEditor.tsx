@@ -420,7 +420,7 @@ export function TeachingAssignmentsEditor({ value, onChange, department }: Props
             {row.subjectId && (
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
                 <div className="space-y-1">
-                  <Label className="text-xs">Hours to Allot / Week</Label>
+                  <Label className="text-xs">Hours Per Week</Label>
                   <p className="text-sm font-medium">{row.hoursPerWeek}</p>
                   <p className="text-[10px] text-muted-foreground">
                     Set on the subject - edit it from Subjects if this needs to change.

@@ -9,12 +9,14 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { PromotionFields, FinancialFields } from "@/components/faculty/AcademicProfileModuleFields";
 import { useCollegeType } from "@/hooks/useCollegeType";
+import { normalizeAcademicProfile } from "@/lib/faculty/academicProfileCompat";
+import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { toast } from "@/hooks/useToast";
 import type { FacultyProfileFields } from "@/types";
 
 type PromotionSalarySlice = Pick<
   FacultyProfileFields,
-  "promotionHistory" | "presentSalary" | "grossAnnualCTC" | "incrementsAwarded" | "fundingConsultancyRevenue"
+  "promotionHistory" | "monthlySalary" | "grossAnnualCTC" | "incrementsAwarded" | "fundingConsultancyRevenueGeneration"
 >;
 
 export default function CollegeOfficeFacultyPromotionSalaryPage() {
@@ -32,15 +34,17 @@ export default function CollegeOfficeFacultyPromotionSalaryPage() {
 
   useEffect(() => {
     fetch(`/api/college/faculty/${facultyId}`)
-      .then((r) => r.json() as Promise<{ faculty?: { name?: string; academicProfile?: PromotionSalarySlice } }>)
+      .then((r) => r.json() as Promise<{ faculty?: { name?: string; legalName?: string; academicProfile?: PromotionSalarySlice } }>)
       .then((data) => {
         if (!data.faculty) {
           toast({ variant: "destructive", title: "Faculty record not found" });
           router.push("/college-office/faculty");
           return;
         }
-        setName(data.faculty.name ?? "");
-        setValue(data.faculty.academicProfile ?? {});
+        setName(facultyDisplayName(data.faculty));
+        // Un-migrated docs still carry legacy key names - lift them so the form
+        // (and the PATCH body) only ever holds the current ones.
+        setValue(normalizeAcademicProfile(data.faculty.academicProfile ?? {}));
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load faculty record" }))
       .finally(() => setLoading(false));

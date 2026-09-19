@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { notifyRole } from "@/lib/notify";
+import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 
 const REQUESTER_ROLES = ["COLLEGE_OFFICE", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN"];
 // WEBMASTER can view (to fulfill requests) but not raise its own — creation stays
@@ -52,6 +53,7 @@ export async function POST(request: Request) {
     }
     const faculty = facultySnap.data() as {
       name?: string;
+      legalName?: string;
       candidateId?: string;
       designation?: string;
       department?: string;
@@ -60,6 +62,7 @@ export async function POST(request: Request) {
       phone?: string;
       officialEmail?: string;
     };
+    const candidateName = facultyDisplayName(faculty);
 
     if (faculty.officialEmail) {
       return NextResponse.json({ error: "This faculty member already has an official email assigned" }, { status: 400 });
@@ -86,7 +89,7 @@ export async function POST(request: Request) {
       collegeId: session.collegeId,
       facultyId: body.facultyId,
       candidateId: faculty.candidateId ?? null,
-      candidateName: faculty.name ?? "",
+      candidateName,
       designation: faculty.designation ?? "",
       department: faculty.department ?? "",
       joiningDate: faculty.joiningDate ?? now,
@@ -107,7 +110,7 @@ export async function POST(request: Request) {
       performedBy: session.uid,
       performedByName: requesterName,
       targetId: ref.id,
-      details: { facultyId: body.facultyId, candidateName: faculty.name ?? "" },
+      details: { facultyId: body.facultyId, candidateName },
       timestamp: now,
     });
 
@@ -117,7 +120,7 @@ export async function POST(request: Request) {
       "WEBMASTER",
       "EMAIL_REQUEST_SUBMITTED",
       "New official email request",
-      `${requesterName} requested an official email for ${faculty.name ?? "a new faculty member"}.`,
+      `${requesterName} requested an official email for ${candidateName || "a new faculty member"}.`,
       "/webmaster"
     );
 

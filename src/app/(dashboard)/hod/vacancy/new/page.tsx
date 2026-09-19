@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { designationLabel } from "@/lib/designations/config";
 import { Badge } from "@/components/ui/badge";
 import { useAuthStore } from "@/store/authStore";
 import { toast } from "@/hooks/useToast";
@@ -365,7 +366,7 @@ export default function NewVacancyPage() {
                             return (
                               <SelectItem key={role} value={role}>
                                 <span className="flex items-center gap-2">
-                                  {role}
+                                  {designationLabel(role)}
                                   {cadreRow && cadreRow.gap > 0 && (
                                     <span className="text-xs text-red-500 font-medium">−{cadreRow.gap}</span>
                                   )}
@@ -464,7 +465,7 @@ export default function NewVacancyPage() {
 
                   {isEntryValid(entry) && (
                     <div className="rounded-lg bg-green-50 border border-green-200 p-3 text-sm text-green-800 sm:col-span-2">
-                      <span className="font-semibold">{entry.requiredCount}</span> × {finalPosition}
+                      <span className="font-semibold">{entry.requiredCount}</span> × {designationLabel(finalPosition)}
                       &nbsp;·&nbsp; {CATEGORY_LABELS[entry.category as Category]}
                       {requirement && requirement.totalStudents > 0 && (
                         <span className="text-xs ml-2 opacity-80">

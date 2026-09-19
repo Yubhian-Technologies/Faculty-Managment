@@ -13,7 +13,7 @@ import { FreshmanDepartmentBadge } from "@/components/shared/FreshmanDepartmentB
 import { DepartmentChipList } from "@/components/shared/DepartmentChipList";
 import { toast } from "@/hooks/useToast";
 import { yearOrdinalLabel } from "@/lib/college/academicYears";
-import { resolveDepartmentCourseScope, type DepartmentWithId } from "@/lib/college/academicStructure";
+import { resolveDepartmentCourseScope, replaceNoOwnSectionsParents, type DepartmentWithId } from "@/lib/college/academicStructure";
 import type { Course, Department } from "@/types";
 
 export default function DepartmentsPage() {
@@ -29,6 +29,12 @@ export default function DepartmentsPage() {
   const topLevelDepartments = departments.filter((d) => !d.parentDepartmentId);
   const childrenOf = (parentId: string) =>
     departments.filter((d) => d.parentDepartmentId === parentId);
+  // Cross-listing chips are shown narrowed (replaceNoOwnSectionsParents): a
+  // department that organises its sub-departments and runs no sections of its
+  // own is never a real destination, so it reads here as those children - the
+  // same substitution every picker and every section/student write path makes.
+  // Purely presentational; the stored value is untouched until the Principal
+  // saves the department again.
   const coursesOf = (departmentId: string) =>
     courses.filter((c) => c.departmentId === departmentId).sort((a, b) => a.name.localeCompare(b.name));
 
@@ -70,8 +76,16 @@ export default function DepartmentsPage() {
       }
       toast({ variant: "success", title: "Department removed" });
       setDepartments((prev) => prev.filter((d) => d.id !== dept.id));
-    } catch {
-      toast({ variant: "destructive", title: "Failed to remove department" });
+    } catch (err) {
+      // The server refuses a delete that would orphan data and says exactly
+      // what is in the way ("still has sub-departments", "still has students
+      // or sections", ...). That message was being swallowed here, leaving
+      // "Failed to remove department" with no way to tell what to clear first.
+      toast({
+        variant: "destructive",
+        title: `Couldn't remove ${dept.name}`,
+        description: err instanceof Error ? err.message : "Please try again.",
+      });
     } finally {
       setDeletingDept(null);
     }
@@ -164,7 +178,10 @@ export default function DepartmentsPage() {
                                     ? scope.assignedYears.map(yearOrdinalLabel).join(", ")
                                     : "No years assigned yet"}
                                   {scope.secondaryDepartments.length > 0 && (
-                                    <DepartmentChipList names={scope.secondaryDepartments} className="mt-1" />
+                                    <DepartmentChipList
+                                      names={replaceNoOwnSectionsParents(departments as DepartmentWithId[], scope.secondaryDepartments)}
+                                      className="mt-1"
+                                    />
                                   )}
                                 </div>
                               );
@@ -186,7 +203,10 @@ export default function DepartmentsPage() {
                           {dept.secondaryDepartments && dept.secondaryDepartments.length > 0 && (
                             <div className="mt-1.5">
                               <p className="text-xs text-muted-foreground">Cross-listed with</p>
-                              <DepartmentChipList names={dept.secondaryDepartments} className="mt-1" />
+                              <DepartmentChipList
+                                names={replaceNoOwnSectionsParents(departments as DepartmentWithId[], dept.secondaryDepartments)}
+                                className="mt-1"
+                              />
                             </div>
                           )}
                         </>

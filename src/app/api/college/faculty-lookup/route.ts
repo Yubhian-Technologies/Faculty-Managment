@@ -21,7 +21,9 @@ export async function GET(request: Request) {
     if (snap.empty) return NextResponse.json({ error: "No faculty member found with that Employee ID" }, { status: 404 });
 
     const f = snap.docs[0].data() as { name?: string; legalName?: string };
-    return NextResponse.json({ name: f.name || f.legalName || "" });
+    // Full Name (as per SSC) preferred, Name (as per PAN) only as a fallback -
+    // same precedence facultyDisplayName() uses everywhere else.
+    return NextResponse.json({ name: f.legalName?.trim() || f.name?.trim() || "" });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

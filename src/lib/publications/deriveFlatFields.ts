@@ -36,7 +36,9 @@ export async function finalizePublicationDetails(
       if (f) {
         if (f.userUid) internalAuthorUids.push(f.userUid);
         authors.push({
-          ...a, isInternal: true, name: f.name || f.legalName || a.name,
+          // Full Name (as per SSC) preferred, Name (as per PAN) only as a fallback -
+          // same precedence facultyDisplayName() uses everywhere else.
+          ...a, isInternal: true, name: f.legalName?.trim() || f.name?.trim() || a.name,
           affiliationCollegeId: ownCollegeId, affiliationCollegeName: await ownCollege(), affiliationCountry: undefined,
         });
         continue;

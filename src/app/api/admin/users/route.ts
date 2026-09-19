@@ -7,6 +7,8 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { createFirebaseUser } from "@/lib/firebase/authRest";
 import { type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
 import { provisionCollegeUser, provisionLocationUser } from "@/lib/firestore/userProvisioning";
+import { normalizeAcademicProfile } from "@/lib/faculty/academicProfileCompat";
+import { migrateUserDoc, migrateFacultyDoc, migrateSupportingStaffDoc } from "@/lib/faculty/fieldRenames";
 import type { UserRole } from "@/types";
 import { ROLE_SCOPE } from "@/types";
 
@@ -47,7 +49,7 @@ export async function GET(request: Request) {
     // src/app/api/college/supporting-staff/route.ts). Merge that record in
     // here so this list (and the "Download resume" button, which just sends
     // the row as-is) has the full picture instead of only login-account fields.
-    const usersRaw = snap.docs.map((d) => ({ uid: d.id, ...d.data() })) as (Record<string, unknown> & { uid: string; role?: string })[];
+    const usersRaw = snap.docs.map((d) => ({ uid: d.id, ...migrateUserDoc(d.data()) })) as (Record<string, unknown> & { uid: string; role?: string })[];
     const users = await Promise.all(
       usersRaw.map(async (u) => {
         let linkedCollection: string | null = null;
@@ -58,7 +60,9 @@ export async function GET(request: Request) {
         const linkedSnap = await db.collection("colleges").doc(collegeId).collection(linkedCollection)
           .where("userUid", "==", u.uid).limit(1).get();
         if (linkedSnap.empty) return u;
-        return { ...linkedSnap.docs[0].data(), ...u, recordId: linkedSnap.docs[0].id };
+        const linkedData = linkedSnap.docs[0].data();
+        const linkedLifted = linkedCollection === "facultyMembers" ? migrateFacultyDoc(linkedData) : migrateSupportingStaffDoc(linkedData);
+        return { ...linkedLifted, ...u, recordId: linkedSnap.docs[0].id };
       })
     );
     users.sort((a, b) => ((a as { name?: string }).name ?? "").localeCompare((b as { name?: string }).name ?? ""));
@@ -158,7 +162,7 @@ export async function POST(request: Request) {
       uid = await createFirebaseUser(email, password, name);
       await db.collection("systemUsers").doc(uid).set({
         uid, role, email, name, phone: phone ?? "", collegeId: "",
-        ...(academicProfile ? { academicProfile } : {}),
+        ...(academicProfile ? { academicProfile: normalizeAcademicProfile(academicProfile) } : {}),
         ...(profilePhotoUrl ? { profilePhotoUrl } : {}),
         isActive: true, createdAt: new Date(),
       });

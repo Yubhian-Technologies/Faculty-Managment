@@ -13,6 +13,7 @@ import { toast } from "@/hooks/useToast";
 import { useAuth } from "@/hooks/useAuth";
 import { sectionDisplayLabel } from "@/lib/sections/sectionLabel";
 import { matchesCurrentSemester } from "@/lib/college/semester";
+import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import type {
   Course, CourseYearTiming, Department, FacultyAssignmentRequest, FacultyMember, Section, Subject, TeachingAssignment,
 } from "@/types";
@@ -105,7 +106,7 @@ export function TeachingAssignmentsEditor({ courseId, year, backHref }: Teaching
           // department regardless.
           fetch(`/api/college/faculty?department=${encodeURIComponent(deptName)}&status=ACTIVE`)
             .then((r) => r.json() as Promise<{ faculty: FacultyMember[] }>)
-            .then((d) => setFaculty(d.faculty ?? []))
+            .then((d) => setFaculty((d.faculty ?? []).map((f) => ({ ...f, name: facultyDisplayName(f) }))))
             .catch(() => toast({ variant: "destructive", title: "Failed to load faculty" }));
         }
       })

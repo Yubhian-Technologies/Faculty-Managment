@@ -3,7 +3,7 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { PersonalDetailsView } from "@/components/shared/PersonalDetailsView";
 import {
-  QualificationModule, ExperienceModule, GrantsModule,
+  QualificationModule, ExperienceModule,
   MentorshipModule, FinancialModule, OthersModule,
 } from "@/components/faculty/ProfileFieldsView";
 import { ResearchInnovationModule } from "@/components/faculty/ResearchInnovationModule";
@@ -73,7 +73,7 @@ export function FacultyProfileModuleContent({ moduleKey, faculty, teachingAssign
   return (
     <Card>
       <CardContent className="pt-6">
-        {moduleKey === "personal" && <PersonalDetailsView value={faculty} hideLegalName={hideLegalName} />}
+        {moduleKey === "personal" && <PersonalDetailsView value={faculty} hideLegalName={hideLegalName} hiddenFields={["esiNumber"]} />}
         {moduleKey === "qualification" && <QualificationModule profile={faculty.academicProfile} collegeType={collegeType} />}
         {moduleKey === "experience" && (
           <ExperienceModule profile={faculty.academicProfile} includeTeachingAssignment={includeTeachingAssignment} joiningDate={faculty.joiningDate} />
@@ -81,7 +81,6 @@ export function FacultyProfileModuleContent({ moduleKey, faculty, teachingAssign
         {moduleKey === "research" && (
           <ResearchInnovationModule uid={faculty.userUid ?? faculty.uid} academicProfile={faculty.academicProfile} publications={publications} isOwnProfile={isOwnProfile} />
         )}
-        {moduleKey === "grants" && <GrantsModule profile={faculty.academicProfile} />}
         {moduleKey === "mentorship" && <MentorshipModule profile={faculty.academicProfile} ownerName={facultyDisplayName(faculty)} />}
         {moduleKey === "financial" && <FinancialModule profile={faculty.academicProfile} />}
         {moduleKey === "others" && <OthersModule profile={faculty.academicProfile} />}

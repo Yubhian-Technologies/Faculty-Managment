@@ -5,7 +5,7 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { provisionFacultyFromOffer, linkFacultyToExistingAccount, generatePassword, type ProvisionResult } from "@/lib/firestore/facultyProvisioning";
 import { notify, notifyRole } from "@/lib/notify";
-import type { FacultyAccountRequestStatus } from "@/types";
+import type { FacultyAccountRequestStatus, EmployeeCategory } from "@/types";
 
 type Action = "START_REVIEW" | "CREATE_CREDENTIALS" | "LINK_EXISTING_ACCOUNT" | "REVEAL_CREDENTIALS";
 
@@ -37,11 +37,12 @@ async function provisionWithFallback(
   collegeId: string,
   offerId: string,
   emails: string[],
-  password: string
+  password: string,
+  profileFields?: { employeeCategory?: EmployeeCategory; highestQualification?: string; specialization?: string }
 ): Promise<{ result: ProvisionResult; assignedEmail?: string }> {
   let lastResult: ProvisionResult = { status: "no_email" };
   for (const email of emails) {
-    const result = await provisionFacultyFromOffer(db, collegeId, offerId, { collegeEmail: email, password });
+    const result = await provisionFacultyFromOffer(db, collegeId, offerId, { collegeEmail: email, password }, profileFields);
     if (result.status !== "email_taken") {
       return { result, assignedEmail: result.status === "created" || result.status === "already_exists" ? email : undefined };
     }
@@ -103,6 +104,9 @@ export async function PATCH(
       officialEmail: string;
       alternateEmail1?: string;
       alternateEmail2?: string;
+      employeeCategory?: EmployeeCategory;
+      specialization?: string;
+      qualification?: string;
       candidateName?: string;
       designation?: string;
       department?: string;
@@ -152,7 +156,9 @@ export async function PATCH(
         session.collegeId,
         reqData.offerId,
         candidateEmails,
-        password
+        password,
+        // The request record's own `qualification` is what the office typed into "Highest Qualification".
+        { employeeCategory: reqData.employeeCategory, highestQualification: reqData.qualification, specialization: reqData.specialization }
       );
       if (result.status === "not_found") {
         return NextResponse.json({ error: "Offer letter or candidate not found" }, { status: 404 });

@@ -3,6 +3,7 @@
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { yearOrdinalLabel } from "@/lib/college/academicYears";
+import { departmentRunsOwnSections } from "@/lib/college/academicStructure";
 import type { Department } from "@/types";
 
 // The "Years Taught" + "Secondary Departments" checkbox blocks, shared by the
@@ -56,6 +57,19 @@ export function YearsTaughtAndSecondaryFields({
 }: Props) {
   const yearOptions = Array.from({ length: maxYear ?? 0 }, (_, i) => i + 1);
 
+  // Only a department that actually enrols students may be cross-listed to.
+  // One flagged as organising its sub-departments only
+  // (parentRunsOwnSections === false) never holds a section or a student, so
+  // naming it here feeds Add Section a destination the server refuses - the
+  // branch's real sections live under its children, which are listed
+  // separately and are what should be picked instead.
+  //
+  // Filtered rather than disabled, and kept separate from
+  // `secondaryDepartmentOptions` so the "(sub-dept. of …)" labels below still
+  // resolve their parent's name from the full list even when that parent is
+  // itself not selectable.
+  const selectableDepartments = secondaryDepartmentOptions.filter(departmentRunsOwnSections);
+
   return (
     <>
       {showYears && (
@@ -85,9 +99,9 @@ export function YearsTaughtAndSecondaryFields({
       {showSecondaryDepartments ? (
         <div className="space-y-2">
           <Label>Core Departments</Label>
-          {secondaryDepartmentOptions.length > 0 ? (
+          {selectableDepartments.length > 0 ? (
             <div className="flex flex-wrap gap-3 border rounded-md px-3 py-2">
-              {secondaryDepartmentOptions.map((d) => {
+              {selectableDepartments.map((d) => {
                 // A sub-department is a valid target (e.g. feeding "ECE-VLSI"
                 // specifically, for students admitted straight into that
                 // specialization) - the parent's name is shown alongside so
@@ -113,9 +127,8 @@ export function YearsTaughtAndSecondaryFields({
             </p>
           )}
           <p className="text-xs text-muted-foreground">
-            Optional - every section College Office creates under this department will be cross-listed to all
-            selected departments, so each one&apos;s HOD gets automatic view-only access to its students,
-            roster, and assigned faculty (e.g. a shared first-year department feeding both CSE and ECE).
+            Optional. Choose the departments these students will move on to. The head of each department you
+            pick can then see this department&apos;s sections, students, and staff, but cannot change anything.
           </p>
         </div>
       ) : (

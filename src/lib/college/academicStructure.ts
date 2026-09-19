@@ -363,6 +363,61 @@ export function expandDepartmentNameForRollup(allDepartments: DepartmentWithId[]
   return Array.from(new Set([name, ...children.map((c) => c.name)]));
 }
 
+/**
+ * Whether this department can itself hold sections and students - false only
+ * for one the Principal has flagged as organising its sub-departments and
+ * nothing else (hasSubDepartments with parentRunsOwnSections === false).
+ *
+ * The single predicate behind both halves of that rule: such a department is
+ * never OFFERED as a cross-listing target or a section target, and one already
+ * configured somewhere is replaced by its children on read
+ * (replaceNoOwnSectionsParents below). Unset reads as true, so every
+ * department that predates the flag is unaffected.
+ */
+export function departmentRunsOwnSections(department: Pick<Department, "hasSubDepartments" | "parentRunsOwnSections">): boolean {
+  return !(department.hasSubDepartments && department.parentRunsOwnSections === false);
+}
+
+/**
+ * The NARROWING counterpart of `expandDepartmentNameForRollup`, for the
+ * department PICKERS (Add Section's Core Department list and the
+ * DepartmentScopeSelect cascade): each "no own sections" shared-first-year
+ * parent in `names` is REPLACED by its real children, because such a parent
+ * can never be the answer - `api/college/sections` POST rejects it outright,
+ * so offering it is offering a choice that always fails. Configuring the
+ * parent as a core department is therefore enough for its children to be
+ * offered; they never need to be listed individually too (the same
+ * "parent implies its children" rule `isNameOrChildAmong` already applies on
+ * the write side).
+ *
+ * Replacing rather than adding is the whole point here and is why this is a
+ * separate function: `expandDepartmentNameForRollup` stays additive because
+ * it filters STORED documents, where a stray pre-migration row filed under
+ * the parent must still match. A picker has no such row to protect - it only
+ * decides what a user may choose next.
+ *
+ * Order is preserved, duplicates are dropped, and a name that resolves to no
+ * department at all (a legacy free-typed branch, or a stale reference left by
+ * a deleted department) is kept as-is rather than silently disappearing.
+ */
+export function replaceNoOwnSectionsParents(allDepartments: DepartmentWithId[], names: string[]): string[] {
+  const out: string[] = [];
+  const push = (n: string) => { if (n && !out.includes(n)) out.push(n); };
+  for (const name of names) {
+    const children = noOwnSectionsChildren(allDepartments, name);
+    // `children` is null for every ordinary department, and an EMPTY array for
+    // a flagged parent that has no sub-departments yet - which must still keep
+    // the parent, or the only option vanishes and the section becomes
+    // impossible to create.
+    if (children && children.length > 0) {
+      for (const c of children) push(c.name);
+      continue;
+    }
+    push(name);
+  }
+  return out;
+}
+
 /** Builds the branch -> owning sub-department index from a set of departments. */
 export function buildManagedBranchOwner(departments: DepartmentWithId[]): Map<string, string> {
   const owner = new Map<string, string>();

@@ -1,8 +1,10 @@
+import { FieldValue } from "firebase-admin/firestore";
 import type { TrainingEntry } from "@/types";
+import { migrateAcademicProfile, migrateTrainingEntries } from "./fieldRenames";
 
 // Keeps a co-conducted FDP/Workshop/MOOC entry in sync onto each
-// co-conductor's own facultyMembers doc. The organizer's own copy (wherever
-// this entry lives in THEIR trainingEntries array) is the master; this never
+// co-conductor's own facultyMembers doc. The coordinator's own copy (wherever
+// this entry lives in THEIR fdpsWorkshopsMoocsCertifications array) is the master; this never
 // touches it - only the OTHER participants' copies. One-directional by
 // design: a co-conductor's own copy renders read-only in the form
 // (TrainingEntryFields, `isCoConductedCopy`), so there is never a conflicting
@@ -12,7 +14,7 @@ import type { TrainingEntry } from "@/types";
 // moment a co-conductor is first added - see TrainingEntryFields). Matching
 // across saves is by that `id`, not array position.
 //
-// Called after the organizer's own doc has already been written, from both
+// Called after the coordinator's own doc has already been written, from both
 // PATCH /api/college/faculty/[id] and PATCH /api/college/faculty/me, wrapped
 // in try/catch by the caller - a sync failure must never block the primary
 // save (same "best-effort cross-doc sync" convention already used a few
@@ -25,6 +27,10 @@ export async function syncTrainingEntryCoConductors(
   previousEntries: TrainingEntry[] | undefined,
   nextEntries: TrainingEntry[] | undefined
 ): Promise<void> {
+  // Both lists may still be in the legacy key shape (previousEntries comes
+  // straight from an un-migrated Firestore doc) - lift them to the current one.
+  previousEntries = migrateTrainingEntries(previousEntries) as TrainingEntry[] | undefined;
+  nextEntries = migrateTrainingEntries(nextEntries) as TrainingEntry[] | undefined;
   const prevById = new Map<string, TrainingEntry>();
   for (const e of previousEntries ?? []) {
     if (e.id && !e.isCoConductedCopy) prevById.set(e.id, e);
@@ -35,8 +41,8 @@ export async function syncTrainingEntryCoConductors(
   }
 
   const relevantIds = new Set<string>();
-  for (const [id, e] of prevById) if ((e.coConductors?.length ?? 0) > 0) relevantIds.add(id);
-  for (const [id, e] of nextById) if ((e.coConductors?.length ?? 0) > 0) relevantIds.add(id);
+  for (const [id, e] of prevById) if ((e.coConductingFaculty?.length ?? 0) > 0) relevantIds.add(id);
+  for (const [id, e] of nextById) if ((e.coConductingFaculty?.length ?? 0) > 0) relevantIds.add(id);
   if (relevantIds.size === 0) return;
 
   // facultyId -> { toDelete: entry ids, toUpsert: entries }
@@ -46,8 +52,8 @@ export async function syncTrainingEntryCoConductors(
   for (const id of relevantIds) {
     const prev = prevById.get(id);
     const next = nextById.get(id);
-    const oldParticipants = new Set((prev?.coConductors ?? []).map((c) => c.facultyId));
-    const newParticipants = new Set((next?.coConductors ?? []).map((c) => c.facultyId));
+    const oldParticipants = new Set((prev?.coConductingFaculty ?? []).map((c) => c.facultyId));
+    const newParticipants = new Set((next?.coConductingFaculty ?? []).map((c) => c.facultyId));
 
     for (const facultyId of oldParticipants) {
       if (!newParticipants.has(facultyId)) {
@@ -59,10 +65,10 @@ export async function syncTrainingEntryCoConductors(
     if (next) {
       const copy: TrainingEntry = {
         ...next,
-        // Guard against a master entry whose own `organizer` was never
+        // Guard against a master entry whose own coordinator name was never
         // properly kept in sync (a stale/blank value would otherwise get
         // copied verbatim, leaving every co-conductor's copy blank too).
-        organizer: next.organizer || ownerFacultyName,
+        nameOfTheFacultyCoordinator: next.nameOfTheFacultyCoordinator || ownerFacultyName,
         ownerFacultyId,
         ownerFacultyName,
         isCoConductedCopy: true,
@@ -91,8 +97,13 @@ export async function syncTrainingEntryCoConductors(
     snaps.forEach((snap, i) => {
       if (!snap.exists) return;
       const facultyId = refs[i].id;
-      const data = snap.data() as { academicProfile?: { trainingEntries?: TrainingEntry[] } };
-      const existing = data.academicProfile?.trainingEntries ?? [];
+      // Other faculty docs may still hold the legacy key names - read their
+      // list through the registry (the legacy `trainingEntries` key included).
+      const data = snap.data() as { academicProfile?: unknown };
+      const profile = migrateAcademicProfile(data.academicProfile) as
+        | { fdpsWorkshopsMoocsCertifications?: TrainingEntry[] }
+        | undefined;
+      const existing = profile?.fdpsWorkshopsMoocsCertifications ?? [];
 
       const idsToDelete = deletesByFaculty.get(facultyId) ?? new Set<string>();
       const toUpsert = upsertsByFaculty.get(facultyId) ?? [];
@@ -102,7 +113,9 @@ export async function syncTrainingEntryCoConductors(
       const nextTrainingEntries = [...kept, ...toUpsert];
 
       tx.update(refs[i], {
-        "academicProfile.trainingEntries": nextTrainingEntries,
+        "academicProfile.fdpsWorkshopsMoocsCertifications": nextTrainingEntries,
+        // A doc must never hold both the new list and its legacy twin.
+        "academicProfile.trainingEntries": FieldValue.delete(),
         updatedAt: new Date(),
       });
     });
