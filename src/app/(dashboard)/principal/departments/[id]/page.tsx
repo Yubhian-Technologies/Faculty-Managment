@@ -2,14 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Plus, Pencil, Trash2, Clock, GraduationCap, CheckCircle2, CalendarClock, Layers, SlidersHorizontal, GitBranch, RotateCcw } from "lucide-react";
+import { ArrowLeft, Plus, Pencil, Trash2, Clock, GraduationCap, CheckCircle2, CalendarClock, Layers, GitBranch, RotateCcw } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
-import { YearsTaughtAndSecondaryFields } from "@/components/college/YearsTaughtAndSecondaryFields";
 import { FreshmanDepartmentBadge } from "@/components/shared/FreshmanDepartmentBadge";
 import { DepartmentChipList } from "@/components/shared/DepartmentChipList";
 import { resolveDepartmentCourseScope, type DepartmentWithId } from "@/lib/college/academicStructure";
@@ -44,9 +42,6 @@ export default function DepartmentDetailPage() {
   // course now has its own explicit courseScopes override (set mandatorily at
   // creation - see courses/new), so this always edits that override directly
   // rather than offering an on/off "custom vs. department default" toggle.
-  const [structureTarget, setStructureTarget] = useState<Course | null>(null);
-  const [structureAssignedYears, setStructureAssignedYears] = useState<number[]>([]);
-  const [isSavingStructure, setIsSavingStructure] = useState(false);
 
   // A sub-department (one with a parent) shows its parent's courses by
   // default, but can diverge from them: customise one into its own independent
@@ -189,51 +184,6 @@ export default function DepartmentDetailPage() {
     return resolveDepartmentCourseScope(parentDepartment, course.catalogId);
   }
 
-  function openStructureEditor(course: Course) {
-    const scope = scopeForCourse(course);
-    setStructureTarget(course);
-    setStructureAssignedYears(scope.assignedYears);
-  }
-
-  function toggleStructureYear(year: number, checked: boolean) {
-    setStructureAssignedYears((prev) => (checked ? [...prev, year].sort((a, b) => a - b) : prev.filter((y) => y !== year)));
-  }
-
-  async function handleSaveStructure() {
-    if (!department || !structureTarget?.catalogId) return;
-    if (structureAssignedYears.length === 0) {
-      toast({ variant: "destructive", title: "Select at least one year this department teaches this course" });
-      return;
-    }
-    setIsSavingStructure(true);
-    try {
-      const body = {
-        deptId: department.id,
-        // Secondary Departments is NOT sent - the server always derives it
-        // from this department's own flat secondaryDepartments field.
-        courseScope: {
-          catalogId: structureTarget.catalogId,
-          assignedYears: structureAssignedYears,
-        },
-      };
-      const res = await fetch("/api/college/departments", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) {
-        const json = await res.json() as { error?: string };
-        throw new Error(json.error ?? "Failed to save");
-      }
-      toast({ variant: "success", title: `${structureTarget.name} academic structure updated` });
-      setStructureTarget(null);
-      await load();
-    } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to save" });
-    } finally {
-      setIsSavingStructure(false);
-    }
-  }
 
   // Turn an inherited course into this sub-department's own independent copy.
   // The server creates a Course doc owned by this department for the same
@@ -495,20 +445,6 @@ export default function DepartmentDetailPage() {
                           )}
                         </div>
                         <div className="flex gap-1 shrink-0">
-                          {/* Years Taught is this department's own either way -
-                              a sub-department's courseScopes entry already
-                              takes precedence over its parent's (scopeForCourse),
-                              so this needs no copy of the course to act on. */}
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7"
-                            disabled={!c.catalogId}
-                            title={c.catalogId ? "Edit academic structure" : "This course predates the catalog system and can't have its own academic structure"}
-                            onClick={() => openStructureEditor(c)}
-                          >
-                            <SlidersHorizontal className="h-3.5 w-3.5" />
-                          </Button>
                           {/* Editing or deleting an inherited course would hit
                               the PARENT's doc and every sibling with it, so on
                               those rows these become "make it mine" and
@@ -674,34 +610,6 @@ export default function DepartmentDetailPage() {
         onConfirm={() => void handleDeleteCourse()}
       />
 
-      <Dialog open={!!structureTarget} onOpenChange={(open) => !open && setStructureTarget(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{structureTarget?.name} - Academic Structure</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <YearsTaughtAndSecondaryFields
-              assignedYears={structureAssignedYears}
-              onToggleYear={toggleStructureYear}
-              maxYear={structureTarget?.durationYears}
-              yearsHelperText={`Which years of this ${structureTarget?.durationYears ?? ""}-year course ${department?.name ?? "this department"} teaches. HODs can only create sections for these years.`}
-              secondaryDepartmentOptions={allDepartments.filter((d) => d.id !== department?.id && d.parentDepartmentId !== department?.id)}
-              secondaryDepartments={department?.secondaryDepartments ?? []}
-              onToggleSecondaryDepartment={() => {}}
-              showSecondaryDepartments={false}
-              secondaryDepartmentsNote={
-                (department?.secondaryDepartments?.length ?? 0) > 0
-                  ? `Cross-listed with ${department!.secondaryDepartments!.join(", ")} - set on ${department?.name ?? "this department"}'s own page, not per course.`
-                  : `${department?.name ?? "This department"} has no Core Departments set - edit the department to cross-list it to others.`
-              }
-            />
-          </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setStructureTarget(null)}>Cancel</Button>
-            <Button onClick={() => void handleSaveStructure()} loading={isSavingStructure} disabled={structureAssignedYears.length === 0}>Save</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
