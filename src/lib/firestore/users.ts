@@ -12,6 +12,7 @@ import {
 } from "firebase/firestore";
 import { db } from "@/lib/firebase/client";
 import type { FMSUser, UserRole } from "@/types";
+import { migrateUserDoc } from "@/lib/faculty/fieldRenames";
 
 export async function getUserById(
   collegeId: string,
@@ -20,7 +21,8 @@ export async function getUserById(
   const ref = doc(db, "colleges", collegeId, "users", uid);
   const snap = await getDoc(ref);
   if (!snap.exists()) return null;
-  return { uid: snap.id, ...snap.data() } as FMSUser;
+  // Lift legacy personal/academicProfile key names (un-migrated docs) to the current ones.
+  return { uid: snap.id, ...migrateUserDoc(snap.data()) } as FMSUser;
 }
 
 export async function getUsersByRole(

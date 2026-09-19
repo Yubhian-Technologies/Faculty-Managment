@@ -13,6 +13,7 @@ import { SUPPORTING_STAFF_MODULES, type SupportingStaffModuleKey } from "@/lib/s
 import { supportingStaffDisplayName } from "@/lib/supportingStaff/supportingStaffDisplayName";
 import { useCollegeType } from "@/hooks/useCollegeType";
 import { toast } from "@/hooks/useToast";
+import { migrateSupportingStaffDoc } from "@/lib/faculty/fieldRenames";
 
 export default function NonTechnicalStaffModuleEditPage() {
   const router = useRouter();
@@ -36,7 +37,7 @@ export default function NonTechnicalStaffModuleEditPage() {
           router.push("/college-office/non-technical-staff");
           return;
         }
-        const m = data.staff;
+        const m = migrateSupportingStaffDoc(data.staff);
         setName((m.name as string) ?? "");
         setRecord({
           gender: (m.gender as string) ?? "",
@@ -50,15 +51,15 @@ export default function NonTechnicalStaffModuleEditPage() {
           subCaste: (m.subCaste as string) ?? "",
           aadharNo: (m.aadharNo as string) ?? "",
           panNo: (m.panNo as string) ?? "",
-          passportNumber: (m.passportNumber as string) ?? "",
-          bankAccountNo: (m.bankAccountNo as string) ?? "",
+          passportNo: (m.passportNo as string) ?? "",
+          bankAccountNumber: (m.bankAccountNumber as string) ?? "",
           ifscCode: (m.ifscCode as string) ?? "",
           bankName: (m.bankName as string) ?? "",
           bankBranch: (m.bankBranch as string) ?? "",
           bankOtherDetails: (m.bankOtherDetails as string) ?? "",
           emergencyContactName: (m.emergencyContactName as string) ?? "",
           emergencyContactRelation: (m.emergencyContactRelation as string) ?? "",
-          emergencyContactPhone: (m.emergencyContactPhone as string) ?? "",
+          emergencyContactMobileNo: (m.emergencyContactMobileNo as string) ?? "",
           ratificationStatus: (m.ratificationStatus as string) ?? "",
           ratificationProceedingsNumber: (m.ratificationProceedingsNumber as string) ?? "",
           ratificationDate: (m.ratificationDate as string) ?? undefined,
@@ -66,7 +67,7 @@ export default function NonTechnicalStaffModuleEditPage() {
           spouseName: (m.spouseName as string) ?? "",
           numberOfChildren: m.numberOfChildren as number | undefined,
           temporaryAddress: (m.temporaryAddress as string) ?? "",
-          permanentSameAsTemporary: (m.permanentSameAsTemporary as boolean) ?? false,
+          permanentAddressSameAsTemporary: (m.permanentAddressSameAsTemporary as boolean) ?? false,
           permanentAddress: (m.permanentAddress as string) ?? "",
           bloodGroup: (m.bloodGroup as string) ?? "",
           motherTongue: (m.motherTongue as string) ?? "",
@@ -104,15 +105,15 @@ export default function NonTechnicalStaffModuleEditPage() {
               nameAsPerAadhar: record.nameAsPerAadhar,
               fatherName: record.fatherName, motherName: record.motherName, religion: record.religion,
               caste: record.caste, subCaste: record.subCaste, aadharNo: record.aadharNo, panNo: record.panNo,
-              passportNumber: record.passportNumber,
-              bankAccountNo: record.bankAccountNo, ifscCode: record.ifscCode,
+              passportNo: record.passportNo,
+              bankAccountNumber: record.bankAccountNumber, ifscCode: record.ifscCode,
               bankName: record.bankName, bankBranch: record.bankBranch, bankOtherDetails: record.bankOtherDetails,
               emergencyContactName: record.emergencyContactName, emergencyContactRelation: record.emergencyContactRelation,
-              emergencyContactPhone: record.emergencyContactPhone, ratificationStatus: record.ratificationStatus,
+              emergencyContactMobileNo: record.emergencyContactMobileNo, ratificationStatus: record.ratificationStatus,
               ratificationProceedingsNumber: record.ratificationProceedingsNumber,
               ratificationDate: record.ratificationDate, maritalStatus: record.maritalStatus, spouseName: record.spouseName,
               numberOfChildren: record.numberOfChildren,
-              temporaryAddress: record.temporaryAddress, permanentSameAsTemporary: record.permanentSameAsTemporary,
+              temporaryAddress: record.temporaryAddress, permanentAddressSameAsTemporary: record.permanentAddressSameAsTemporary,
               permanentAddress: record.permanentAddress, bloodGroup: record.bloodGroup,
               motherTongue: record.motherTongue, languagesKnown: record.languagesKnown,
               heightFeet: record.heightFeet, heightInches: record.heightInches, weightKg: record.weightKg,

@@ -11,6 +11,7 @@ import { Avatar } from "@/components/shared/Avatar";
 import { AvatarUploadField } from "@/components/shared/AvatarUploadField";
 import { getFacultyProfileModules, type ProfileModuleKey } from "@/lib/faculty/profileModules";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
+import { migrateFacultyDoc } from "@/lib/faculty/fieldRenames";
 import { totalYearsOfExperience, formatDuration, allPreviousExperienceEntries } from "@/lib/faculty/experienceCalc";
 import { formatDate } from "@/lib/utils";
 import { toast } from "@/hooks/useToast";
@@ -36,7 +37,7 @@ function Fact({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
-// The read-only fields grid (Employee ID, Designation, Qualification,
+// The read-only fields grid (Employee ID, Designation, Highest Qualification,
 // Experience, Date of Joining, ...) - shared so a faculty member's own "My
 // Profile" page (/panel/profile) shows exactly the same fields their HOD
 // sees on the faculty detail page, instead of a separately hand-rolled
@@ -47,6 +48,8 @@ export function FacultyIdentityFacts({
   faculty: Partial<FacultyMember> & { dateOfJoining?: Timestamp };
   parentDeptName?: string | null;
 }) {
+  // Lifted so a record still carrying the legacy `qualification` key shows its value.
+  const highestQualification = (migrateFacultyDoc(faculty as Record<string, unknown>) as Partial<FacultyMember>).highestQualification;
   const designationLabel = faculty.designation ? (DESIGNATION_LABELS[faculty.designation] ?? faculty.designation) : undefined;
   const employeeCategoryLabel = faculty.employeeCategory ? EMPLOYEE_CATEGORY_LABELS[faculty.employeeCategory] : undefined;
 
@@ -92,7 +95,7 @@ export function FacultyIdentityFacts({
       />
       <Fact label="College Email" value={faculty.collegeEmail} />
       <Fact label="Designation" value={designationLabel} />
-      <Fact label="Highest Qualification" value={faculty.qualification} />
+      <Fact label="Highest Qualification" value={highestQualification} />
       <Fact label="Specialization" value={faculty.specialization} />
       <Fact label="Total Years of Experience" value={hasExperienceData ? formatDuration(totalExperience) : undefined} />
       <Fact label="Internal Experience" value={hasJoiningDate ? formatDuration(internalExperience) : undefined} />

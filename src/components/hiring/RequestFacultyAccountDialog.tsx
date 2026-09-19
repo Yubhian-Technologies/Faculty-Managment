@@ -102,7 +102,7 @@ export function RequestFacultyAccountDialog({
             <Input value={specialization} onChange={(e) => setSpecialization(e.target.value)} placeholder="e.g. Machine Learning" />
           </div>
           <div className="space-y-2">
-            <Label>Qualification</Label>
+            <Label>Highest Qualification</Label>
             <Input value={qualification} onChange={(e) => setQualification(e.target.value)} placeholder="e.g. Ph.D in Computer Science" />
           </div>
         </div>

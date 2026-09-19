@@ -7,11 +7,12 @@ import { createFirebaseUser } from "@/lib/firebase/authRest";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
 import { getHodDepartmentScope, getDepartmentTreeNames, canHodEditDepartment, facultyManageableDepartmentNames } from "@/lib/departments/scope";
 import { LEGACY_TECHNICAL_DESIGNATIONS } from "@/lib/designations/config";
+import { experienceBreakdown, allPreviousExperienceEntries } from "@/lib/faculty/experienceCalc";
+import { normalizeAcademicProfile } from "@/lib/faculty/academicProfileCompat";
+import { migrateFacultyDoc } from "@/lib/faculty/fieldRenames";
+import { normalizeHighestQualification } from "@/lib/faculty/highestQualification";
 import type { Designation, FacultyStatus, EmployeeCategory } from "@/types";
-
-// Exactly these 4 values are accepted anywhere Employee Category is set -
-// see EmployeeCategory's own doc-comment in types/core.ts.
-const EMPLOYEE_CATEGORY_VALUES: EmployeeCategory[] = ["REGULAR", "VISITING", "CONTRACT", "PART_TIME"];
+import { EMPLOYEE_CATEGORY_VALUES, EMPLOYEE_CATEGORY_ERROR_MESSAGE } from "@/types";
 
 export async function GET(request: Request) {
   try {
@@ -102,13 +103,13 @@ export async function GET(request: Request) {
     ]);
 
     const faculty: { id: string; accessLevel: "primary"; [key: string]: unknown }[] =
-      primarySnap.docs.map((d) => ({ id: d.id, ...d.data(), accessLevel: "primary" }));
+      primarySnap.docs.map((d) => ({ id: d.id, ...migrateFacultyDoc(d.data()), accessLevel: "primary" }));
     if (childDeptSnap) {
       // "primary": for an HOD this query holds their own sub-departments'
       // faculty, which they fully manage (canHodEditDepartment), so the UI
       // must not mark them view-only.
       for (const d of childDeptSnap.docs) {
-        faculty.push({ id: d.id, ...d.data(), accessLevel: "primary" });
+        faculty.push({ id: d.id, ...migrateFacultyDoc(d.data()), accessLevel: "primary" });
       }
     }
     // Technical designations belong to Supporting Staff now (see
@@ -148,9 +149,8 @@ export async function POST(request: Request) {
       additionalPhoneNumbers?: { label?: string; number: string }[];
       designation: Designation;
       employeeCategory: EmployeeCategory;
-      qualification: string;
+      highestQualification: string;
       specialization?: string;
-      experienceYears: number;
       joiningDate: string;
       aicteFacultyId?: string;
       department?: string;
@@ -166,19 +166,18 @@ export async function POST(request: Request) {
       password,
       designation,
       employeeCategory,
-      qualification,
-      experienceYears,
+      highestQualification,
       joiningDate,
       profilePhotoUrl,
     } = body;
 
-    if (!employeeId || !collegeEmail || !password || !designation || !qualification || !joiningDate) {
+    if (!employeeId || !collegeEmail || !password || !designation || !highestQualification || !joiningDate) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
-    // Exactly these 4 values are accepted anywhere Employee Category is set -
-    // enforced here, not just in the Add Faculty dropdown.
+    // Only the EMPLOYEE_CATEGORY_VALUES keys are accepted anywhere Employee
+    // Category is set - enforced here, not just in the Add Faculty dropdown.
     if (!EMPLOYEE_CATEGORY_VALUES.includes(employeeCategory)) {
-      return NextResponse.json({ error: "Employee Category must be one of Regular, Visiting, Contract, or Part Time" }, { status: 400 });
+      return NextResponse.json({ error: EMPLOYEE_CATEGORY_ERROR_MESSAGE }, { status: 400 });
     }
     // Matches the mandatory field set the bulk-import template and Add
     // Faculty wizard's Personal Details step now both enforce. Name (as per
@@ -309,14 +308,22 @@ export async function POST(request: Request) {
       })()),
       designation,
       employeeCategory,
-      qualification,
+      highestQualification: normalizeHighestQualification(highestQualification),
       specialization: body.specialization ?? "",
-      experienceYears: Number(experienceYears),
+      // Total Years of Experience (Internal since Date of Joining + External
+      // from the Academic/Industry/Research Experience entries) - computed
+      // here server-side rather than trusted from the client, same as PATCH
+      // /api/college/faculty/[id], so it can't drift from what Faculty
+      // Details/the Faculty List compute live from the same two inputs.
+      totalYearsOfExperience: experienceBreakdown(
+        allPreviousExperienceEntries(body.academicProfile as Parameters<typeof allPreviousExperienceEntries>[0]),
+        new Date(joiningDate)
+      ).total,
       joiningDate: new Date(joiningDate),
       ...(body.aicteFacultyId?.trim() ? { aicteFacultyId: body.aicteFacultyId.trim() } : {}),
       status: "ACTIVE" as FacultyStatus,
       userUid: uid,
-      ...(body.academicProfile ? { academicProfile: body.academicProfile } : {}),
+      ...(body.academicProfile ? { academicProfile: normalizeAcademicProfile(body.academicProfile) } : {}),
       ...(body.technicalProfile ? { technicalProfile: body.technicalProfile } : {}),
       ...(profilePhotoUrl ? { profilePhotoUrl } : {}),
       ...buildPersonalDetailsUpdate(body),

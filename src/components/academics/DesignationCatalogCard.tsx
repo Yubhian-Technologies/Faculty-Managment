@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { Plus, Pencil, Trash2, Check, X, BadgeCheck } from "lucide-react";
 import { toast } from "@/hooks/useToast";
+import { designationLabel } from "@/lib/designations/config";
 import type { DesignationCadre, DesignationCategory, DesignationCatalogItem } from "@/types";
 
 const CADRE_OPTIONS: { value: DesignationCadre; label: string }[] = [
@@ -246,7 +247,7 @@ export function DesignationCatalogCard({ category }: DesignationCatalogCardProps
                     <>
                       <div className="flex-1 min-w-40">
                         <p className="text-sm font-medium">
-                          {item.name}
+                          {designationLabel(item.name)}
                           {!item.isActive && <Badge variant="secondary" className="ml-2 text-[10px]">Inactive</Badge>}
                         </p>
                         {item.cadre && (

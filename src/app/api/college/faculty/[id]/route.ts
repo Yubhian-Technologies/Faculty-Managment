@@ -6,11 +6,14 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodManageFacultyDepartment } from "@/lib/departments/scope";
 import { syncTrainingEntryCoConductors } from "@/lib/faculty/syncTrainingEntryCoConductors";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
+import { experienceBreakdown, allPreviousExperienceEntries } from "@/lib/faculty/experienceCalc";
+import { normalizeAcademicProfile } from "@/lib/faculty/academicProfileCompat";
+import { migrateFacultyDoc } from "@/lib/faculty/fieldRenames";
+import { withLegacyFacultyKeysDeleted } from "@/lib/faculty/legacyKeyDeletes";
+import { normalizeHighestQualification } from "@/lib/faculty/highestQualification";
+import { FieldValue } from "firebase-admin/firestore";
 import type { Designation, EmployeeCategory, FacultyStatus, TrainingEntry } from "@/types";
-
-// Exactly these 4 values are accepted anywhere Employee Category is set -
-// see EmployeeCategory's own doc-comment in types/core.ts.
-const EMPLOYEE_CATEGORY_VALUES: EmployeeCategory[] = ["REGULAR", "VISITING", "CONTRACT", "PART_TIME"];
+import { EMPLOYEE_CATEGORY_VALUES, EMPLOYEE_CATEGORY_ERROR_MESSAGE } from "@/types";
 
 export async function GET(
   _request: Request,
@@ -43,7 +46,7 @@ export async function GET(
       }
     }
 
-    return NextResponse.json({ faculty: { id: snap.id, ...snap.data() } });
+    return NextResponse.json({ faculty: { id: snap.id, ...migrateFacultyDoc(snap.data() ?? {}) } });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -70,9 +73,8 @@ export async function PATCH(
       additionalPhoneNumbers: { label?: string; number: string }[];
       collegeEmail: string;
       designation: Designation;
-      qualification: string;
+      highestQualification: string;
       specialization: string;
-      experienceYears: number;
       joiningDate: string;
       employeeCategory: EmployeeCategory;
       aicteFacultyId: string;
@@ -124,7 +126,7 @@ export async function PATCH(
     // deliberately NOT in this list - it's optional; legalName (Full Name as
     // per SSC) is the required primary identity name.
     const REQUIRED_IF_PRESENT = [
-      "collegeEmail", "phone", "designation", "qualification",
+      "collegeEmail", "phone", "designation", "highestQualification",
       "gender", "legalName", "aadharNo", "panNo", "ratificationStatus",
     ] as const;
     for (const key of REQUIRED_IF_PRESENT) {
@@ -132,10 +134,10 @@ export async function PATCH(
         return NextResponse.json({ error: `${key} cannot be blanked out - it is a required field` }, { status: 400 });
       }
     }
-    // Exactly these 4 values are accepted anywhere Employee Category is set -
-    // see EmployeeCategory's own doc-comment in types/core.ts.
+    // Only the EMPLOYEE_CATEGORY_VALUES keys are accepted anywhere Employee
+    // Category is set - see EmployeeCategory's doc-comment in types/core.ts.
     if (body.employeeCategory !== undefined && !EMPLOYEE_CATEGORY_VALUES.includes(body.employeeCategory)) {
-      return NextResponse.json({ error: "Employee Category must be one of Regular, Visiting, Contract, or Part Time" }, { status: 400 });
+      return NextResponse.json({ error: EMPLOYEE_CATEGORY_ERROR_MESSAGE }, { status: 400 });
     }
 
     const updates: Record<string, unknown> = { updatedAt: new Date() };
@@ -172,12 +174,16 @@ export async function PATCH(
 
     // Non-personal string fields
     const stringFields = [
-      "name", "email", "phone", "collegeEmail", "apaarFacultyId", "aicteFacultyId", "designation", "qualification",
+      "name", "email", "phone", "collegeEmail", "apaarFacultyId", "aicteFacultyId", "designation", "highestQualification",
       "specialization", "employeeCategory", "status", "userUid",
     ] as const;
 
     for (const key of stringFields) {
       if (body[key] !== undefined) updates[key] = body[key];
+    }
+    // One category per faculty member, whatever spelling/casing the caller sent.
+    if (typeof updates.highestQualification === "string") {
+      updates.highestQualification = normalizeHighestQualification(updates.highestQualification);
     }
 
     // Extra contact numbers beyond the primary Mobile No - cleaned/filtered
@@ -189,15 +195,29 @@ export async function PATCH(
         .filter((p) => p.number);
     }
 
-    // Numeric fields
-    if (body.experienceYears !== undefined) updates.experienceYears = Number(body.experienceYears);
-
     // Academic profile (Modules 1-5) / Technical profile - mutually exclusive by designation
-    if (body.academicProfile !== undefined) updates.academicProfile = body.academicProfile;
+    if (body.academicProfile !== undefined) updates.academicProfile = normalizeAcademicProfile(body.academicProfile);
     if (body.technicalProfile !== undefined) updates.technicalProfile = body.technicalProfile;
 
     // Date fields
     if (body.joiningDate) updates.joiningDate = new Date(body.joiningDate);
+
+    // Total Years of Experience (Internal since Date of Joining + External
+    // from the Academic/Industry/Research Experience entries) - always
+    // recomputed here server-side, never taken from the client, so it can't
+    // drift from what Faculty Details/the Faculty List compute live from the
+    // same two inputs. Only recomputed when this PATCH actually touches one
+    // of those inputs; whichever of academicProfile/joiningDate it doesn't
+    // touch falls back to what's already on the doc.
+    if (body.academicProfile !== undefined || body.joiningDate) {
+      const existing = snap.data() as { academicProfile?: Record<string, unknown>; joiningDate?: FirebaseFirestore.Timestamp };
+      const effectiveAcademicProfile = body.academicProfile !== undefined ? updates.academicProfile : normalizeAcademicProfile(existing.academicProfile);
+      const effectiveJoiningDate = body.joiningDate ? new Date(body.joiningDate) : existing.joiningDate;
+      updates.totalYearsOfExperience = experienceBreakdown(
+        allPreviousExperienceEntries(effectiveAcademicProfile as Parameters<typeof allPreviousExperienceEntries>[0]),
+        effectiveJoiningDate
+      ).total;
+    }
 
     if (body.profilePhotoUrl !== undefined) updates.profilePhotoUrl = body.profilePhotoUrl;
 
@@ -211,7 +231,10 @@ export async function PATCH(
       }
     }
 
-    await ref.update(updates);
+    // A doc not yet migrated may still hold the old-named twin of a key written
+    // above (qualification, experienceYears, passportNumber, ...) - drop it so
+    // the doc never carries both.
+    await ref.update(withLegacyFacultyKeysDeleted(updates, FieldValue.delete()));
 
     // The record's display name (facultyDisplayName() logic, inlined here
     // since this route works with plain Firestore data, not a typed
@@ -293,8 +316,8 @@ export async function PATCH(
 
     if (body.academicProfile !== undefined) {
       try {
-        const previousEntries = (snap.data() as { academicProfile?: { trainingEntries?: TrainingEntry[] } }).academicProfile?.trainingEntries;
-        const nextEntries = (body.academicProfile as { trainingEntries?: TrainingEntry[] } | undefined)?.trainingEntries;
+        const previousEntries = normalizeAcademicProfile((snap.data() as { academicProfile?: { fdpsWorkshopsMoocsCertifications?: TrainingEntry[] } }).academicProfile)?.fdpsWorkshopsMoocsCertifications;
+        const nextEntries = (updates.academicProfile as { fdpsWorkshopsMoocsCertifications?: TrainingEntry[] } | undefined)?.fdpsWorkshopsMoocsCertifications;
         await syncTrainingEntryCoConductors(db, session.collegeId, id, newDisplayName || oldDisplayName, previousEntries, nextEntries);
       } catch (syncErr) {
         console.error("[college/faculty/[id] PATCH] co-conductor sync failed:", syncErr);

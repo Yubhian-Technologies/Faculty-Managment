@@ -403,15 +403,15 @@ export interface FMSUser {
   subCaste?: string;
   aadharNo?: string;
   panNo?: string;
-  passportNumber?: string;
-  bankAccountNo?: string;
+  passportNo?: string;
+  bankAccountNumber?: string;
   ifscCode?: string;
   bankName?: string;
   bankBranch?: string;
   bankOtherDetails?: string;
   emergencyContactName?: string;
   emergencyContactRelation?: string; // relation of the emergency contact to this person
-  emergencyContactPhone?: string;
+  emergencyContactMobileNo?: string;
   ratificationStatus?: "Ratified" | "Not Ratified";
   ratificationProceedingsNumber?: string;
   ratificationDate?: Timestamp; // Ratification Proceedings Date
@@ -419,8 +419,8 @@ export interface FMSUser {
   spouseName?: string;
   numberOfChildren?: number;
   temporaryAddress?: string;
-  permanentSameAsTemporary?: boolean;
-  permanentAddress?: string; // ignored/blank when permanentSameAsTemporary is true
+  permanentAddressSameAsTemporary?: boolean;
+  permanentAddress?: string; // ignored/blank when permanentAddressSameAsTemporary is true
   bloodGroup?: string;
 
   academicProfile?: FacultyProfileFields; // Modules 1-5 extended profile; PRINCIPAL/VICE_PRINCIPAL omit teachingAssignment in the UI
@@ -892,15 +892,25 @@ export const DESIGNATION_LABELS: Record<string, string> = {
 // FacultyMember.employeeCategory - set on Add Faculty's "Identity &
 // Employment" step and by the hiring pipeline's provisioning step, editable
 // afterward only by HOD/Principal/VP (see FacultyMember.employeeCategory's
-// own doc-comment). Exactly these 4 values are accepted anywhere this is set
-// - no catalog, no free text.
-export type EmployeeCategory = "REGULAR" | "VISITING" | "CONTRACT" | "PART_TIME";
+// own doc-comment). Exactly the keys of EMPLOYEE_CATEGORY_LABELS below are
+// accepted anywhere this is set - no catalog, no free text. Professor of
+// Practice / Asst.prof. of Practice are employee categories (how the person is
+// engaged), not designations; a person's designation is a separate field.
+export type EmployeeCategory =
+  | "REGULAR" | "VISITING" | "CONTRACT" | "PART_TIME"
+  | "PROFESSOR_OF_PRACTICE" | "ASST_PROF_OF_PRACTICE";
 export const EMPLOYEE_CATEGORY_LABELS: Record<EmployeeCategory, string> = {
   REGULAR: "Regular",
   VISITING: "Visiting",
   CONTRACT: "Contract",
   PART_TIME: "Part Time",
+  PROFESSOR_OF_PRACTICE: "Professor of Practice",
+  ASST_PROF_OF_PRACTICE: "Asst.prof. of Practice",
 };
+// Single source of truth for API validation (faculty POST/PATCH, faculty
+// account requests) so the accepted list can't drift between routes.
+export const EMPLOYEE_CATEGORY_VALUES = Object.keys(EMPLOYEE_CATEGORY_LABELS) as EmployeeCategory[];
+export const EMPLOYEE_CATEGORY_ERROR_MESSAGE = `Employee Category must be one of ${Object.values(EMPLOYEE_CATEGORY_LABELS).join(", ")}`;
 
 // Legacy type FacultyMember.employmentType used to share before that field
 // was retired in favor of EmployeeCategory above. Salary Structures/Budget
@@ -958,9 +968,9 @@ export interface FacultyMember {
   // just whoever's number it is), not a fixed category.
   additionalPhoneNumbers?: { label?: string; number: string }[];
   designation: Designation;
-  qualification: string;
+  highestQualification: string;
   specialization?: string;
-  experienceYears: number;
+  totalYearsOfExperience: number;
   joiningDate: Timestamp; // Date of Joining Institution
   // Set on the "Identity & Employment" step of Add Faculty and by the hiring
   // pipeline's provisioning step (src/lib/firestore/facultyProvisioning.ts);
@@ -1001,17 +1011,17 @@ export interface FacultyMember {
   subCaste?: string;
   aadharNo?: string;
   panNo?: string;
-  passportNumber?: string;
+  passportNo?: string;
   differentlyAbled?: boolean;
   differentlyAbledDetails?: string; // nature of disability, if applicable
-  bankAccountNo?: string; // salary account number
+  bankAccountNumber?: string; // salary account number
   ifscCode?: string; // salary account's bank IFSC code
   bankName?: string;
   bankBranch?: string;
   bankOtherDetails?: string;
   emergencyContactName?: string;
   emergencyContactRelation?: string; // relation of the emergency contact to this person
-  emergencyContactPhone?: string;
+  emergencyContactMobileNo?: string;
   collegeEmail: string; // required — this is the faculty member's login username
   ratificationStatus?: "Ratified" | "Not Ratified";
   ratificationProceedingsNumber?: string;
@@ -1020,8 +1030,8 @@ export interface FacultyMember {
   spouseName?: string;
   numberOfChildren?: number;
   temporaryAddress?: string;
-  permanentSameAsTemporary?: boolean;
-  permanentAddress?: string; // ignored/blank when permanentSameAsTemporary is true
+  permanentAddressSameAsTemporary?: boolean;
+  permanentAddress?: string; // ignored/blank when permanentAddressSameAsTemporary is true
   bloodGroup?: string;
   motherTongue?: string;
   languagesKnown?: string[];
@@ -1052,42 +1062,60 @@ export interface FacultyMember {
 // Identity/contact fields (name, email, phone, employeeId, designation, department,
 // dateOfBirth) live on the host doc itself, not here.
 
+// Storage keys match the Faculty Details UI labels (Course, Institution Name,
+// Place, Percentage / CGPA, Year of Passing / Year of Award, Hall Ticket Number,
+// ...). Legacy records (degree, universityOrInstitute, location,
+// percentageOrDivision, yearOfCompletion, guideOrSupervisorName,
+// certificateNumber) are lifted at read time - see src/lib/faculty/fieldRenames.ts.
 export interface DegreeDetail {
   domain?: string; // Management / Engineering / Arts & Science / Medicine / Law / Others - not applicable to School/Intermediate
-  degree: string;
+  course: string; // UI label "Course" at every level (blank for Doctoral, which uses specialization instead)
   branch: string;
   specialization?: string; // Doctoral only - replaces the Course/Branch fields for PhD entries
   board?: string; // School/Intermediate only - the examining board (e.g. "State Board", "CBSE")
-  // UG/PG only - whether universityOrInstitute below names a University or an
+  // UG/PG only - whether institutionName below names a University or an
   // Institute; an Institute is typically affiliated to a University, which
   // affiliatedUniversity records separately.
   institutionType?: "UNIVERSITY" | "INSTITUTE";
   affiliatedUniversity?: string; // UG/PG only, when institutionType === "INSTITUTE"
-  universityOrInstitute: string;
-  location?: string; // city/town where the institute is located
-  percentageOrDivision: string;
-  // "Year of Passing" everywhere except Doctoral/Post-Doctoral, where it's
-  // "Year of Award" - shown only once this entry's own status (below) is AWARDED.
-  yearOfCompletion: number;
+  institutionName: string;
+  place?: string; // city/town where the institute is located
+  percentageCgpa: string;
+  // "Year of Passing" everywhere except Doctoral/Post-Doctoral, which use
+  // yearOfAward below. See degreeYear() for reading whichever applies.
+  yearOfPassing?: number;
+  // Doctoral/Post-Doctoral only - "Year of Award", shown only once this entry's
+  // own status (below) is AWARDED.
+  yearOfAward?: number;
   yearOfRegistration?: number; // Doctoral/Post-Doctoral only
-  // Doctoral/Post-Doctoral only, shown instead of yearOfCompletion while
+  // Doctoral/Post-Doctoral only, shown instead of yearOfAward while
   // this entry's own status is PURSUING (not yet awarded, so no year yet -
   // who's guiding it instead).
-  guideOrSupervisorName?: string;
+  nameOfTheGuideSupervisor?: string;
   // Doctoral/Post-Doctoral only - this specific degree entry's own Awarded/
   // Pursuing status and Full-Time/Part-Time mode. Lives on the entry itself
   // (not a single FacultyProfileFields-level scalar) so a second/third
   // doctorate (see additionalPhdDetails) can each have their own.
   status?: PhdStatus;
   mode?: PhdMode;
-  certificateNumber?: string; // certificate/registration number printed on the degree certificate
+  hallTicketNumber?: string; // hall ticket / registration number printed on the degree certificate
   certificateUrl?: string; // Google Drive public-view link for the degree/transcript certificate
+}
+
+// The year that applies to a degree entry: yearOfAward for Doctoral/Post-Doctoral
+// entries, yearOfPassing for everything else.
+export function degreeYear(
+  d: Pick<DegreeDetail, "yearOfPassing" | "yearOfAward"> | undefined | null,
+  doctoral: boolean,
+): number | undefined {
+  if (!d) return undefined;
+  return doctoral ? d.yearOfAward : d.yearOfPassing;
 }
 
 // Shared with SupportingStaffProfileFields.qualifications (supportingStaff.ts) -
 // reuses DegreeDetail's shape + a free `level` label (e.g. "SSC", "Intermediate",
 // "Degree", "Post Graduation") for a repeating list of qualification entries.
-// Used by FacultyProfileFields.schoolQualifications for School-type colleges,
+// Used by FacultyProfileFields.educationalQualifications for School-type colleges,
 // which don't fit the fixed UG/PG/PhD DegreeFields slots below (see
 // src/lib/designations/config.ts's SCHOOL_TEACHING_QUALIFICATION_LEVELS /
 // SCHOOL_SUPPORTING_QUALIFICATION_LEVELS).
@@ -1114,7 +1142,6 @@ export interface CourseAssignment {
 }
 
 export interface TeachingAssignmentSummary {
-  primaryTeachingRole: string;
   courses: CourseAssignment[]; // up to 3
 }
 
@@ -1145,7 +1172,7 @@ export interface PromotionRecord {
   // and keeps increasing day by day until one is set.
   fromDate?: string;
   toDate?: string;
-  orderUrl?: string; // promotion order document
+  promotionOrderUrl?: string; // promotion order document (legacy key: orderUrl - see fieldRenames.ts)
 }
 
 export interface Publication {
@@ -2003,7 +2030,7 @@ export interface LabEstablished {
 export interface AuthoredBook {
   title: string;
   publisher: string;
-  year: number;
+  year?: number;
 }
 
 // Shared structured "training/FDP" entry — used by Teaching Faculty Module 5 AND both
@@ -2082,7 +2109,7 @@ export interface TrainingBeneficiaryDepartmentEntry {
   sections: TrainingBeneficiarySection[];
 }
 export interface TrainingCoConductor {
-  order: number; // 2, 3, ... - the organizer themself is implicitly #1
+  order: number; // 2, 3, ... - the coordinator themself is implicitly #1
   facultyId: string;
   name: string;
   department: string;
@@ -2091,32 +2118,32 @@ export interface TrainingCoConductor {
 export interface TrainingEntry {
   // Stable id, generated client-side (crypto.randomUUID()) the first time an
   // entry gets a co-conductor - lets the server match the same entry across
-  // the organizer's and every co-conductor's own trainingEntries array when
+  // the coordinator's and every co-conductor's own fdpsWorkshopsMoocsCertifications array when
   // keeping synced copies up to date (see syncTrainingEntryCoConductors).
   id?: string;
   type: TrainingEntryType;
   // Free-text type name - only meaningful (and shown) when type === "OTHER".
-  otherType?: string;
-  role?: TrainingParticipationRole; // did they attend, or run it themselves - applies to any type, not just FDP
-  title: string; // Title of the Program
+  pleaseSpecifyType?: string;
+  participatedOrConducted?: TrainingParticipationRole; // did they attend, or run it themselves - applies to any type, not just FDP
+  titleOfTheProgram: string;
   // Name of the Faculty / Coordinator - auto-set to the profile owner's own
-  // name whenever role is CONDUCTED (see TrainingEntryFields); not a free
-  // text field the user types into directly any more.
-  organizer: string;
+  // name whenever participatedOrConducted is CONDUCTED (see TrainingEntryFields);
+  // not a free text field the user types into directly any more.
+  nameOfTheFacultyCoordinator: string;
   // "YYYY-MM-DD" - replaces the old year-only shape (see legacy `year` below).
-  // durationDays is auto-computed from these two, not typed in directly.
+  // duration (days) is auto-computed from these two, not typed in directly.
   fromDate?: string;
   toDate?: string;
-  durationDays?: number;
+  duration?: number;
   // MOOC/CERTIFICATION only - shown instead of From/To Date + Duration above,
   // since these are typically measured in weeks rather than a date range.
-  durationWeeks?: number;
+  numberOfWeeks?: number;
   // CERTIFICATION only - replaces Participated/Conducted there (a
-  // certification isn't "conducted", so role/coConductors/remark don't apply).
+  // certification isn't "conducted", so participatedOrConducted/coConductingFaculty/remark don't apply).
   certificationType?: CertificationType;
-  levelOfProgram?: TrainingProgramLevel;
+  nationalInternational?: TrainingProgramLevel;
   place?: string;
-  mode?: TrainingProgramMode;
+  modeOfTheProgram?: TrainingProgramMode;
   numberOfResourcePersons?: number;
   // One entry per resource person - length follows numberOfResourcePersons
   // (see TrainingEntryFields), not typed as one freeform block any more. A
@@ -2132,24 +2159,24 @@ export interface TrainingEntry {
   year?: number;
 
   // Who this program served - shown regardless of Participated/Conducted.
-  beneficiaryType?: TrainingBeneficiaryType;
-  beneficiaryTotalCount?: number;
+  beneficiaries?: TrainingBeneficiaryType;
+  totalCount?: number;
   beneficiaryDepartments?: TrainingBeneficiaryDepartmentEntry[]; // STUDENTS only
-  beneficiaryInternalCount?: number; // FACULTY only
-  beneficiaryExternalCount?: number; // FACULTY only
+  internalCount?: number; // FACULTY only
+  externalCount?: number; // FACULTY only
 
-  // Co-conducting faculty - CONDUCTED only, set on the organizer's own
+  // Co-conducting faculty - CONDUCTED only, set on the coordinator's own
   // ("master") copy of the entry.
-  coConductors?: TrainingCoConductor[];
+  coConductingFaculty?: TrainingCoConductor[];
   // Set on every synced copy (see syncTrainingEntryCoConductors) - whose
   // entry this originally is. Absent on the master copy itself.
   ownerFacultyId?: string;
   ownerFacultyName?: string;
   // True only on a co-conductor's own synced copy - rendered read-only in
-  // the form since edits belong on the organizer's ("master") copy.
+  // the form since edits belong on the coordinator's ("master") copy.
   isCoConductedCopy?: boolean;
 
-  remark?: string; // PARTICIPATED only, replaces organizer/co-conductors there
+  remark?: string; // PARTICIPATED only, replaces the coordinator/co-conducting faculty there
   otherDetails?: string; // always shown, trailing free-text field
 }
 
@@ -2179,14 +2206,14 @@ export const MEMBERSHIP_VALIDITY_LABELS: Record<MembershipValidity, string> = {
 };
 export interface ProfessionalMembership {
   body: ProfessionalBody;
-  otherName?: string; // when body === "OTHER"
+  bodyName?: string; // when body === "OTHER"
   membershipType?: string; // e.g. Senior Fellowship / Associate Fellowship / Fellowship
   membershipId?: string;
-  validity?: MembershipValidity;
-  sinceDate?: string; // "YYYY-MM-DD" - Member Since, LIFETIME only
+  membershipValidity?: MembershipValidity;
+  memberSince?: string; // "YYYY-MM-DD" - Member Since, LIFETIME only
   validFrom?: string; // "YYYY-MM-DD" - ANNUAL only
   validTo?: string; // "YYYY-MM-DD" - ANNUAL only
-  sinceMonthYear?: string; // legacy "YYYY-MM" - Member Since (Month/Year), pre-dates validity split
+  sinceMonthYear?: string; // legacy "YYYY-MM" - Member Since (Month/Year), pre-dates the membershipValidity split
   sinceYear?: number; // legacy - year-only shape this replaced
 }
 
@@ -2246,24 +2273,27 @@ export const AWARD_LEVEL_LABELS: Record<AwardLevel, string> = {
 export interface AwardEntry {
   category: AwardCategory;
   otherCategory?: string; // when category === "OTHER"
-  title: string;
-  awardingBody: string;
-  dateAwarded?: string; // "YYYY-MM-DD" - replaces the year-only shape below
-  year: number; // legacy year-only shape, kept in sync from dateAwarded for back-compat (CSV export/resume)
-  level?: AwardLevel;
+  titleOfAward: string;
+  awardingAgencyBody: string;
+  dateOfAward?: string; // "YYYY-MM-DD" - replaces the year-only shape below
+  // Legacy year-only shape. No longer written: a record saved before dateOfAward
+  // existed keeps this until re-saved; consumers derive the year from dateOfAward
+  // and fall back to this (see awardYear() in src/lib/faculty/awardYear.ts).
+  year?: number;
+  stateNationalInternational?: AwardLevel;
   certificateUrl?: string;
   otherDetails?: string;
 }
 
 export interface FacultyProfileFields {
   // Module 1 — Academic Qualification (Engineering/Degree/Polytechnic/Pharmacy/
-  // Dental colleges). School-type colleges use schoolQualifications instead -
+  // Dental colleges). School-type colleges use educationalQualifications instead -
   // UG/PG/PhD and the PhD-specific fields below don't apply to school teachers
   // (see College.type and src/lib/designations/config.ts).
   highestQualification: string;
-  researchAreas?: string[]; // mandatory (at least one) in the Add/Edit form - see QualificationFields
-  highSchoolDetails?: DegreeDetail; // 10th
-  intermediateDetails?: DegreeDetail; // 12th
+  researchAreasInterests?: string[]; // mandatory (at least one) in the Add/Edit form - see QualificationFields
+  secondaryEducation?: DegreeDetail; // 10th
+  intermediateDiplomaIti?: DegreeDetail; // 12th / Diploma / ITI
   ugDetails?: DegreeDetail;
   // Extra UG/PG/PhD degrees beyond the primary one above (e.g. a second
   // Bachelor's, a second Master's, or a second doctorate). Kept as separate
@@ -2276,35 +2306,33 @@ export interface FacultyProfileFields {
   phdDetails?: DegreeDetail;
   additionalPhdDetails?: DegreeDetail[];
   // Status/Mode for Ph.D./Postdoctoral live on phdDetails.status/.mode and
-  // postDoctoralDetails.status/.mode (see DegreeDetail) - not separate
+  // postdoctoralFellowshipDetails.status/.mode (see DegreeDetail) - not separate
   // scalars here, so they can never drift apart from the degree entry they
   // describe.
-  postDoctoralDetails?: DegreeDetail;
+  postdoctoralFellowshipDetails?: DegreeDetail;
   // Whether NET/SLET/SET/GATE/Others was qualified - exam/score/year below
   // only apply when this is "YES".
-  qualifyingExamQualified?: "YES" | "NO";
-  qualifyingExam?: QualifyingExamType;
-  otherQualifyingExam?: string; // only meaningful when qualifyingExam === "OTHER"
-  qualifyingExamScore?: string;
-  qualifyingExamYear?: number;
+  netSletSetGateOthers?: "YES" | "NO";
+  qualifiedExam?: QualifyingExamType;
+  pleaseSpecifyExam?: string; // only meaningful when qualifiedExam === "OTHER"
+  examScore?: string;
+  qualifiedYear?: number;
   // School-type colleges only - see SCHOOL_TEACHING_QUALIFICATION_LEVELS.
-  schoolQualifications?: StaffQualification[];
+  educationalQualifications?: StaffQualification[];
 
   // Previous Institutions Worked / Current Teaching Assignment
-  teachingAssignment?: TeachingAssignmentSummary; // omitted for PRINCIPAL / VICE_PRINCIPAL - primaryTeachingRole here is the Academic Experience tab's role box specifically
-  // Industry/Research Experience tabs' own role boxes - kept as separate
-  // top-level fields (rather than folded into teachingAssignment, which is
-  // Academic-tab-specific) so filling one tab's "Roles/Responsibilities" box
-  // no longer silently overwrites what was typed on another tab.
-  primaryIndustryRole?: string;
-  primaryResearchRole?: string;
-  previousInstitutions: PreviousInstitution[]; // Academic Experience tab - prior institutions worked at, before this one
-  // Industry/Research Experience tabs - same shape/fields as previousInstitutions
-  // (institutionName/designation relabeled per tab in the UI only - see
-  // ExperienceFields), all three summed into one combined Previous Experience
-  // total (see allPreviousExperienceEntries in experienceCalc.ts).
-  industryExperienceEntries?: PreviousInstitution[];
-  researchExperienceEntries?: PreviousInstitution[];
+  teachingAssignment?: TeachingAssignmentSummary; // omitted for PRINCIPAL / VICE_PRINCIPAL - courses only; its role box is teachingRolesResponsibilities below
+  // The three Experience tabs' "Roles/Responsibilities" boxes - separate
+  // top-level fields so filling one tab's box never overwrites another's.
+  teachingRolesResponsibilities?: string; // legacy home: teachingAssignment.primaryTeachingRole
+  industryRolesResponsibilities?: string;
+  researchRolesResponsibilities?: string;
+  academicExperience: PreviousInstitution[]; // Academic Experience tab - prior institutions worked at, before this one
+  // Industry/Research Experience tabs - same shape/fields as academicExperience,
+  // all three summed into one combined Previous Experience total (see
+  // allPreviousExperienceEntries in experienceCalc.ts).
+  industryExperience?: PreviousInstitution[];
+  researchExperience?: PreviousInstitution[];
   promotionHistory: PromotionRecord[]; // Employment Details — promotions within this institution
 
   // Module 3 — Research Publications
@@ -2337,19 +2365,19 @@ export interface FacultyProfileFields {
   citationsHIndexExcludingSelf?: number;
 
   // Module 5 — Mentorship & Institutional Value
-  labsEstablished: LabEstablished[];
+  newLabsEstablished: LabEstablished[];
   authoredBooks: AuthoredBook[];
   // Structured NBA/AICTE replacements for the 4 legacy free-text fields this module used to carry.
-  trainingEntries: TrainingEntry[];
+  fdpsWorkshopsMoocsCertifications: TrainingEntry[];
   professionalMemberships: ProfessionalMembership[];
-  adminResponsibilityEntries: AdminResponsibilityEntry[];
-  awardEntries: AwardEntry[];
+  academicResponsibilities: AdminResponsibilityEntry[];
+  awardsRecognition: AwardEntry[];
 
   // Module 6 — Financial Standing & Budgetary Impact
-  presentSalary?: number; // Current Financial Standing — present salary drawn by the faculty member
+  monthlySalary?: number; // Current Financial Standing — monthly salary drawn by the faculty member
   grossAnnualCTC?: number; // Budgetary Impact
   incrementsAwarded?: number;
-  fundingConsultancyRevenue?: number; // offsets salary cost against research/consultancy grants brought into the institution
+  fundingConsultancyRevenueGeneration?: number; // offsets salary cost against research/consultancy grants brought into the institution
 
   // Module 7 — Others
   otherInformation?: string;

@@ -3,6 +3,9 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
+import { experienceBreakdown, allPreviousExperienceEntries } from "@/lib/faculty/experienceCalc";
+import { normalizeAcademicProfile } from "@/lib/faculty/academicProfileCompat";
+import { migrateFacultyDoc } from "@/lib/faculty/fieldRenames";
 import type { FacultyMember, DegreeDetail } from "@/types";
 
 // Public "meet the faculty" page — no auth, reached via a short, human-
@@ -19,14 +22,17 @@ import type { FacultyMember, DegreeDetail } from "@/types";
 // addresses, phone, teaching load (weekly credit hours), promotion history,
 // DOB, family details, etc. never leave this allowlist.
 
-function publicDegree(d?: DegreeDetail) {
+// `doctoral` picks which year key is exposed: yearOfAward for Doctoral/
+// Post-Doctoral entries, yearOfPassing for everything else. The other key is
+// omitted (not set to undefined) so the JSON stays minimal.
+function publicDegree(d: DegreeDetail | undefined, doctoral: boolean) {
   if (!d) return undefined;
   return {
-    degree: d.degree,
+    course: d.course,
     branch: d.branch,
     specialization: d.specialization,
-    universityOrInstitute: d.universityOrInstitute,
-    yearOfCompletion: d.yearOfCompletion,
+    institutionName: d.institutionName,
+    ...(doctoral ? { yearOfAward: d.yearOfAward } : { yearOfPassing: d.yearOfPassing }),
   };
 }
 
@@ -57,9 +63,10 @@ export async function GET(request: Request) {
     const collegeRef = facultyDoc.ref.parent.parent;
     const collegeSnap = await collegeRef?.get();
 
-    const faculty = facultyDoc.data() as FacultyMember;
+    // Lift legacy key names on un-migrated docs (qualification/experienceYears, personal keys).
+    const faculty = migrateFacultyDoc(facultyDoc.data()) as unknown as FacultyMember;
     const collegeName = (collegeSnap?.data() as { name?: string } | undefined)?.name ?? "";
-    const ap = faculty.academicProfile;
+    const ap = normalizeAcademicProfile(faculty.academicProfile);
 
     return NextResponse.json({
       profile: {
@@ -68,32 +75,42 @@ export async function GET(request: Request) {
         designation: faculty.designation,
         department: faculty.department,
         profilePhotoUrl: faculty.profilePhotoUrl || undefined,
-        qualification: faculty.qualification,
+        highestQualification: faculty.highestQualification,
         specialization: faculty.specialization,
-        experienceYears: faculty.experienceYears,
+        // Total Years of Experience - computed live from Date of Joining +
+        // the Academic/Industry/Research Experience entries, same canonical
+        // calc as Faculty Details, not the stored (and only periodically
+        // re-saved) totalYearsOfExperience field.
+        totalYearsOfExperience: experienceBreakdown(allPreviousExperienceEntries(ap), faculty.joiningDate).total,
         officialEmail: faculty.officialEmail || undefined,
         joiningYear: faculty.joiningDate ? faculty.joiningDate.toDate().getFullYear() : undefined,
 
         education: ap
           ? {
               highestQualification: ap.highestQualification,
-              ugDetails: publicDegree(ap.ugDetails),
-              additionalUgDetails: (ap.additionalUgDetails ?? []).map(publicDegree),
-              pgDetails: publicDegree(ap.pgDetails),
-              additionalPgDetails: (ap.additionalPgDetails ?? []).map(publicDegree),
-              phdDetails: publicDegree(ap.phdDetails),
-              additionalPhdDetails: (ap.additionalPhdDetails ?? []).map(publicDegree),
-              postDoctoralDetails: publicDegree(ap.postDoctoralDetails),
+              ugDetails: publicDegree(ap.ugDetails, false),
+              additionalUgDetails: (ap.additionalUgDetails ?? []).map((d) => publicDegree(d, false)),
+              pgDetails: publicDegree(ap.pgDetails, false),
+              additionalPgDetails: (ap.additionalPgDetails ?? []).map((d) => publicDegree(d, false)),
+              phdDetails: publicDegree(ap.phdDetails, true),
+              additionalPhdDetails: (ap.additionalPhdDetails ?? []).map((d) => publicDegree(d, true)),
+              postdoctoralFellowshipDetails: publicDegree(ap.postdoctoralFellowshipDetails, true),
               phdStatus: ap.phdDetails?.status,
-              qualifyingExamQualified: ap.qualifyingExamQualified,
-              qualifyingExam: ap.qualifyingExam,
-              qualifyingExamYear: ap.qualifyingExamYear,
+              netSletSetGateOthers: ap.netSletSetGateOthers,
+              qualifiedExam: ap.qualifiedExam,
+              qualifiedYear: ap.qualifiedYear,
             }
           : undefined,
 
-        previousInstitutions: (ap?.previousInstitutions ?? []).map((p) => ({
+        // Dates: the real fromDate/toDate the current forms write, plus the
+        // legacy fromYear/toYear for records not re-saved yet - the public view
+        // shows whichever is present (see publicProfileDates.ts). Omitted
+        // (not undefined) keys are dropped by JSON serialisation anyway.
+        academicExperience: (ap?.academicExperience ?? []).map((p) => ({
           institutionName: p.institutionName,
           designation: p.designation,
+          fromDate: p.fromDate,
+          toDate: p.toDate,
           fromYear: p.fromYear,
           toYear: p.toYear,
         })),
@@ -120,29 +137,37 @@ export async function GET(request: Request) {
 
         recognition: ap
           ? {
-              awardEntries: (ap.awardEntries ?? []).map((a) => ({
-                title: a.title,
-                awardingBody: a.awardingBody,
-                year: a.year,
+              awardsRecognition: (ap.awardsRecognition ?? []).map((a) => ({
+                titleOfAward: a.titleOfAward,
+                awardingAgencyBody: a.awardingAgencyBody,
+                dateOfAward: a.dateOfAward,
+                year: a.year, // legacy fallback
               })),
               professionalMemberships: (ap.professionalMemberships ?? []).map((m) => ({
                 body: m.body,
-                otherName: m.otherName,
+                bodyName: m.bodyName,
+                memberSince: m.memberSince,
+                sinceMonthYear: m.sinceMonthYear, // legacy fallbacks
                 sinceYear: m.sinceYear,
               })),
-              adminResponsibilityEntries: (ap.adminResponsibilityEntries ?? []).map((r) => ({
+              academicResponsibilities: (ap.academicResponsibilities ?? []).map((r) => ({
                 category: r.category,
                 otherCategory: r.otherCategory,
                 description: r.description,
-                fromYear: r.fromYear,
+                fromDate: r.fromDate,
+                toDate: r.toDate,
+                fromYear: r.fromYear, // legacy fallbacks
                 toYear: r.toYear,
               })),
-              labsEstablished: ap.labsEstablished ?? [],
-              trainingEntries: (ap.trainingEntries ?? []).map((t) => ({
+              newLabsEstablished: ap.newLabsEstablished ?? [],
+              fdpsWorkshopsMoocsCertifications: (ap.fdpsWorkshopsMoocsCertifications ?? []).map((t) => ({
                 type: t.type,
-                title: t.title,
-                organizer: t.organizer,
-                year: t.year,
+                pleaseSpecifyType: t.pleaseSpecifyType,
+                titleOfTheProgram: t.titleOfTheProgram,
+                nameOfTheFacultyCoordinator: t.nameOfTheFacultyCoordinator,
+                fromDate: t.fromDate,
+                toDate: t.toDate,
+                year: t.year, // legacy fallback
               })),
             }
           : undefined,

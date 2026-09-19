@@ -35,8 +35,8 @@ export async function GET(request: Request) {
 
 // Upsert - one doc per (courseId, year). First call for a course-year just records
 // the label (no side effects). A call against an *existing* doc is treated as an
-// "advance": every ACTIVE faculty member with a teaching assignment in this course-year
-// gets experienceYears and internalExperience bumped by 1.
+// "advance", logged to the audit trail with a count of every ACTIVE faculty
+// member who has a teaching assignment in this course-year.
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("PRINCIPAL", "SUPER_ADMIN");
@@ -97,19 +97,16 @@ export async function POST(request: Request) {
 
       const batch = db.batch();
 
+      // Total/Internal/External Years of Experience are all computed live
+      // from joiningDate + the Academic/Industry/Research Experience entries
+      // wherever shown (see experienceCalc.ts) - nothing needs bumping here
+      // just because a course-year advanced; this loop now only counts how
+      // many ACTIVE faculty had a teaching assignment in it, for the audit log.
       for (const facultyId of facultyIds) {
-        const facultyRef = collegeRef.collection("facultyMembers").doc(facultyId);
-        const facultySnap = await facultyRef.get();
+        const facultySnap = await collegeRef.collection("facultyMembers").doc(facultyId).get();
         if (!facultySnap.exists) continue;
-        const facultyData = facultySnap.data() as { status?: FacultyStatus; experienceYears?: number };
+        const facultyData = facultySnap.data() as { status?: FacultyStatus };
         if (facultyData.status !== "ACTIVE") continue;
-
-        // internalExperience is no longer a stored field - it's computed
-        // live from joiningDate wherever shown (see experienceCalc.ts).
-        batch.update(facultyRef, {
-          experienceYears: (facultyData.experienceYears ?? 0) + 1,
-          updatedAt: now,
-        });
         facultyUpdated++;
       }
 

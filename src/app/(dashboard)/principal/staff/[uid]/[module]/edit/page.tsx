@@ -11,6 +11,7 @@ import { FacultyProfileModuleEditor, type FacultyEditRecord } from "@/components
 import { PROFILE_MODULES, SELF_EDIT_DISABLED_MODULES, type ProfileModuleKey } from "@/lib/faculty/profileModules";
 import { useCollegeType } from "@/hooks/useCollegeType";
 import { toast } from "@/hooks/useToast";
+import { migrateUserDoc } from "@/lib/faculty/fieldRenames";
 
 // research/financial are excluded from the hub entirely for this flow (see
 // principal/staff/[uid]/page.tsx) - this guard is defense-in-depth against
@@ -37,7 +38,7 @@ export default function PrincipalStaffModuleEditPage() {
           router.push("/principal/staff");
           return;
         }
-        const m = data.user;
+        const m = migrateUserDoc(data.user);
         setName((m.name as string) ?? "");
         setRecord({
           gender: (m.gender as string) ?? "",
@@ -50,15 +51,15 @@ export default function PrincipalStaffModuleEditPage() {
           subCaste: (m.subCaste as string) ?? "",
           aadharNo: (m.aadharNo as string) ?? "",
           panNo: (m.panNo as string) ?? "",
-          passportNumber: (m.passportNumber as string) ?? "",
-          bankAccountNo: (m.bankAccountNo as string) ?? "",
+          passportNo: (m.passportNo as string) ?? "",
+          bankAccountNumber: (m.bankAccountNumber as string) ?? "",
           ifscCode: (m.ifscCode as string) ?? "",
           bankName: (m.bankName as string) ?? "",
           bankBranch: (m.bankBranch as string) ?? "",
           bankOtherDetails: (m.bankOtherDetails as string) ?? "",
           emergencyContactName: (m.emergencyContactName as string) ?? "",
           emergencyContactRelation: (m.emergencyContactRelation as string) ?? "",
-          emergencyContactPhone: (m.emergencyContactPhone as string) ?? "",
+          emergencyContactMobileNo: (m.emergencyContactMobileNo as string) ?? "",
           ratificationStatus: (m.ratificationStatus as string) ?? "",
           ratificationProceedingsNumber: (m.ratificationProceedingsNumber as string) ?? "",
           ratificationDate: (m.ratificationDate as string) ?? undefined,
@@ -66,7 +67,7 @@ export default function PrincipalStaffModuleEditPage() {
           spouseName: (m.spouseName as string) ?? "",
           numberOfChildren: m.numberOfChildren as number | undefined,
           temporaryAddress: (m.temporaryAddress as string) ?? "",
-          permanentSameAsTemporary: (m.permanentSameAsTemporary as boolean) ?? false,
+          permanentAddressSameAsTemporary: (m.permanentAddressSameAsTemporary as boolean) ?? false,
           permanentAddress: (m.permanentAddress as string) ?? "",
           bloodGroup: (m.bloodGroup as string) ?? "",
           academicProfile: (m.academicProfile as FacultyEditRecord["academicProfile"]) ?? {},
@@ -89,15 +90,15 @@ export default function PrincipalStaffModuleEditPage() {
               gender: record.gender, dateOfBirth: record.dateOfBirth, legalName: record.legalName,
               fatherName: record.fatherName, motherName: record.motherName, religion: record.religion,
               caste: record.caste, subCaste: record.subCaste, aadharNo: record.aadharNo, panNo: record.panNo,
-              passportNumber: record.passportNumber,
-              bankAccountNo: record.bankAccountNo, ifscCode: record.ifscCode,
+              passportNo: record.passportNo,
+              bankAccountNumber: record.bankAccountNumber, ifscCode: record.ifscCode,
               bankName: record.bankName, bankBranch: record.bankBranch, bankOtherDetails: record.bankOtherDetails,
               emergencyContactName: record.emergencyContactName, emergencyContactRelation: record.emergencyContactRelation,
-              emergencyContactPhone: record.emergencyContactPhone, ratificationStatus: record.ratificationStatus,
+              emergencyContactMobileNo: record.emergencyContactMobileNo, ratificationStatus: record.ratificationStatus,
               ratificationProceedingsNumber: record.ratificationProceedingsNumber,
               ratificationDate: record.ratificationDate, maritalStatus: record.maritalStatus, spouseName: record.spouseName,
               numberOfChildren: record.numberOfChildren,
-              temporaryAddress: record.temporaryAddress, permanentSameAsTemporary: record.permanentSameAsTemporary,
+              temporaryAddress: record.temporaryAddress, permanentAddressSameAsTemporary: record.permanentAddressSameAsTemporary,
               permanentAddress: record.permanentAddress, bloodGroup: record.bloodGroup,
             }
           : { academicProfile: record.academicProfile };

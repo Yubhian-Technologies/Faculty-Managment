@@ -57,7 +57,7 @@ export interface ExportScalarField extends ExportFieldBase {
 export interface ExportGroupField extends ExportFieldBase {
   kind: "group";
   // Ordered sub-field labels rendered for each entry's line, e.g.
-  // ["Degree", "Branch", "University/Institute", "Percentage/CGPA", "Year of Completion"].
+  // ["Course", "Branch", "Institution Name", "Percentage / CGPA", "Year of Passing"].
   subFieldLabels: string[];
 }
 
@@ -73,17 +73,23 @@ function group(module: ExportModuleKey, key: string, label: string, subFieldLabe
 
 // Every DegreeFields entry (any level) also carries Place and Hall Ticket
 // Number - included on all 3 subfield sets below so nothing typed into
-// those two boxes gets silently left out of export.
-const DEGREE_SUBFIELDS = ["Degree", "Branch", "University/Institute", "Affiliated University", "Percentage/CGPA", "Year of Completion", "Place", "Hall Ticket Number"];
-const SCHOOL_DEGREE_SUBFIELDS = ["Qualification", "Board", "School/College", "Percentage/CGPA", "Year of Passing", "Place", "Hall Ticket Number"];
+// those two boxes gets silently left out of export. Sub-field wording is
+// exactly the Faculty Details UI label (== the stored key: course,
+// institutionName, percentageCgpa, yearOfPassing, ...).
+const DEGREE_SUBFIELDS = ["Course", "Branch", "Institution Name", "Affiliated University", "Percentage / CGPA", "Year of Passing", "Place", "Hall Ticket Number"];
+const SCHOOL_DEGREE_SUBFIELDS = ["Course", "Board", "Institution Name", "Percentage / CGPA", "Year of Passing", "Place", "Hall Ticket Number"];
 // Doctoral/Post-Doctoral entries (Ph.D. Details, Postdoctoral Fellowship
-// Details) - Specialization instead of Branch/Percentage-CGPA, plus this
+// Details) - Specialization instead of Course/Branch/Percentage-CGPA, plus this
 // entry's own Status/Mode (live on DegreeDetail.status/.mode, not a separate
 // FacultyProfileFields-level scalar - see DegreeFields in
 // ProfileFieldPrimitives.tsx) and Year of Registration/Name of the
 // Guide-Supervisor (shown while Pursuing, instead of Year of Award).
-const DOCTORAL_SUBFIELDS = ["Degree", "Specialization", "University/Institute", "Status", "Mode", "Year of Registration", "Name of the Guide/Supervisor", "Year of Award", "Place", "Hall Ticket Number"];
+const DOCTORAL_SUBFIELDS = ["Specialization", "Institution Name", "Status", "Mode", "Year of Registration", "Name of the Guide / Supervisor", "Year of Award", "Place", "Hall Ticket Number"];
 const EXPERIENCE_SUBFIELDS = ["Institution Name", "Designation", "From Date", "To Date", "Joining Salary", "Leaving Salary", "Reason for Leaving", "NOC Obtained"];
+
+// Professional Experience / Professional Development / Financial sub-field
+// wording is exactly the Faculty Details UI label (== the stored key: e.g.
+// titleOfTheProgram -> "Title of the Program", dateOfAward -> "Date of Award").
 
 export const EXPORT_FIELDS: ExportField[] = [
   // ─── Identity & Employment (core) - default ON ───────────────────────────
@@ -96,15 +102,15 @@ export const EXPORT_FIELDS: ExportField[] = [
   scalar("core", "apaarFacultyId", "APAAR Faculty ID", true),
   scalar("core", "collegeEmail", "College Email", true),
   scalar("core", "designation", "Designation", true),
-  scalar("core", "qualification", "Highest Qualification", true),
+  scalar("core", "highestQualification", "Highest Qualification", true),
   scalar("core", "specialization", "Specialization", true),
-  scalar("core", "experienceYears", "Total Years of Experience", true),
+  scalar("core", "totalYearsOfExperience", "Total Years of Experience", true),
   // Internal/External Experience are computed live from joiningDate and the
   // Academic/Industry/Research Experience entries - not stored fields (see
   // FacultyIdentityFacts on the profile page, which computes the same way).
   scalar("core", "internalExperience", "Internal Exp (Years)", true),
   scalar("core", "externalExperience", "External Exp (Years)", true),
-  scalar("core", "joiningDate", "Date of Joining Institution", true),
+  scalar("core", "joiningDate", "Date of Joining", true),
   scalar("core", "aicteFacultyId", "AICTE Faculty ID", true),
   scalar("core", "email", "Personal Email", true),
   scalar("core", "phone", "Mobile No", true),
@@ -125,9 +131,9 @@ export const EXPORT_FIELDS: ExportField[] = [
   scalar("personal", "subCaste", "Sub Caste", true),
   scalar("personal", "aadharNo", "Aadhar No", true),
   scalar("personal", "panNo", "PAN No", true),
-  scalar("personal", "passportNumber", "Passport No", true),
+  scalar("personal", "passportNo", "Passport No", true),
   scalar("personal", "differentlyAbled", "Differently Abled", true),
-  scalar("personal", "differentlyAbledDetails", "Differently Abled - Details", true),
+  scalar("personal", "differentlyAbledDetails", "Differently Abled Details", true),
   scalar("personal", "motherTongue", "Mother Tongue", true),
   scalar("personal", "languagesKnown", "Languages Known", true),
   scalar("personal", "heightFeet", "Height (Feet)", true),
@@ -138,52 +144,56 @@ export const EXPORT_FIELDS: ExportField[] = [
   scalar("personal", "spouseName", "Spouse Name", true),
   scalar("personal", "numberOfChildren", "Number of Children", true),
   scalar("personal", "temporaryAddress", "Temporary Address", true),
-  scalar("personal", "permanentSameAsTemporary", "Permanent Same as Temporary", true),
+  scalar("personal", "permanentAddressSameAsTemporary", "Permanent Address Same as Temporary", true),
   scalar("personal", "permanentAddress", "Permanent Address", true),
-  scalar("personal", "bankAccountNo", "Bank A/C Number", true),
+  scalar("personal", "bankAccountNumber", "Bank Account Number", true),
   scalar("personal", "ifscCode", "IFSC Code", true),
   scalar("personal", "bankName", "Bank Name", true),
-  scalar("personal", "bankBranch", "Branch", true),
+  scalar("personal", "bankBranch", "Bank Branch", true),
   scalar("personal", "pfNumber", "PF Number", true),
   scalar("personal", "bankOtherDetails", "Bank Other Details", true),
-  scalar("personal", "emergencyContactName", "Emergency Contact Person Name", true),
-  scalar("personal", "emergencyContactRelation", "Relation (with Emergency Contact)", true),
-  scalar("personal", "emergencyContactPhone", "Emergency Contact Mobile No", true),
+  scalar("personal", "emergencyContactName", "Emergency Contact Name", true),
+  scalar("personal", "emergencyContactRelation", "Emergency Contact Relation", true),
+  scalar("personal", "emergencyContactMobileNo", "Emergency Contact Mobile No", true),
   scalar("personal", "ratificationStatus", "Ratification Status", true),
-  scalar("personal", "ratificationProceedingsNumber", "Proceedings Number", true),
-  scalar("personal", "ratificationDate", "Ratification Proceedings Date", true),
+  scalar("personal", "ratificationProceedingsNumber", "Ratification Proceedings Number", true),
+  scalar("personal", "ratificationDate", "Ratification Date", true),
 
   // ─── Academic Qualification ───────────────────────────────────────────────
   // Ordered to match the Add Faculty wizard's own Qualification step
   // (QualificationFields in AcademicProfileModuleFields.tsx).
-  scalar("qualification", "highestQualification", "Highest Qualification"),
-  scalar("qualification", "researchAreas", "Research Areas/Interests"),
-  scalar("qualification", "qualifyingExamQualified", "NET/SLET/SET/GATE/Others Qualified"),
-  scalar("qualification", "qualifyingExam", "Qualified Exam"),
-  scalar("qualification", "otherQualifyingExam", "Qualified Exam (Other, specified)"),
-  scalar("qualification", "qualifyingExamScore", "Qualified Exam Score"),
-  scalar("qualification", "qualifyingExamYear", "Qualified Year"),
-  group("qualification", "highSchoolDetails", "Secondary Education (10th)", SCHOOL_DEGREE_SUBFIELDS),
-  group("qualification", "intermediateDetails", "Intermediate/Diploma (12th)", SCHOOL_DEGREE_SUBFIELDS),
+  // Internal key differs from the core "highestQualification" above (a
+  // FacultyMember-level field) - this one reads academicProfile.highestQualification,
+  // so the two need distinct export keys even though both are labelled
+  // "Highest Qualification" on the Faculty Details UI.
+  scalar("qualification", "academicProfileHighestQualification", "Highest Qualification"),
+  scalar("qualification", "researchAreasInterests", "Research Areas/Interests"),
+  scalar("qualification", "netSletSetGateOthers", "NET/SLET/SET/GATE/Others"),
+  scalar("qualification", "qualifiedExam", "Qualified Exam"),
+  scalar("qualification", "pleaseSpecifyExam", "Please specify exam"),
+  scalar("qualification", "examScore", "Exam Score"),
+  scalar("qualification", "qualifiedYear", "Qualified Year"),
+  group("qualification", "secondaryEducation", "Secondary Education", SCHOOL_DEGREE_SUBFIELDS),
+  group("qualification", "intermediateDiplomaIti", "Intermediate / Diploma / ITI", SCHOOL_DEGREE_SUBFIELDS),
   group("qualification", "ugDetailsGroup", "UG Details", DEGREE_SUBFIELDS),
   group("qualification", "pgDetailsGroup", "PG Details", DEGREE_SUBFIELDS),
   group("qualification", "phdDetailsGroup", "Ph.D. Details", DOCTORAL_SUBFIELDS),
-  group("qualification", "postDoctoralDetailsGroup", "Postdoctoral Fellowship Details", DOCTORAL_SUBFIELDS),
+  group("qualification", "postdoctoralFellowshipDetailsGroup", "Postdoctoral Fellowship Details", DOCTORAL_SUBFIELDS),
   // StaffQualification (QualificationsFields) has its own shape - no
   // separate Board field like HIGH_SCHOOL/INTERMEDIATE DegreeFields; the
-  // exam board (if any) is folded into University/Institute/Board itself.
-  group("qualification", "schoolQualifications", "School Qualifications", ["Level", "Degree/Certificate Name", "University/Institute/Board", "Location", "Percentage/CGPA", "Year of Completion", "Certificate Number"]),
+  // exam board (if any) is folded into Institution Name itself.
+  group("qualification", "educationalQualifications", "Educational Qualifications", ["Level", "Course", "Institution Name", "Place", "Percentage / CGPA", "Year of Passing", "Hall Ticket Number"]),
 
   // ─── Professional Experience ──────────────────────────────────────────────
   // Each role box is kept right next to its own Experience group, matching
   // how the Add/Edit form shows it (nested inside that same tab's card).
-  group("experience", "previousInstitutionsGroup", "Academic Experience", EXPERIENCE_SUBFIELDS),
-  scalar("experience", "primaryTeachingRole", "Teaching Roles/Responsibilities"),
+  group("experience", "academicExperienceGroup", "Academic Experience", EXPERIENCE_SUBFIELDS),
+  scalar("experience", "teachingRolesResponsibilities", "Teaching Roles/Responsibilities"),
   group("experience", "industryExperienceGroup", "Industry Experience", EXPERIENCE_SUBFIELDS),
-  scalar("experience", "primaryIndustryRole", "Industry Roles/Responsibilities"),
+  scalar("experience", "industryRolesResponsibilities", "Industry Roles/Responsibilities"),
   group("experience", "researchExperienceGroup", "Research Experience", EXPERIENCE_SUBFIELDS),
-  scalar("experience", "primaryResearchRole", "Research Roles/Responsibilities"),
-  group("experience", "promotionHistoryGroup", "Teaching / Promotion History", ["Designation", "From Date", "To Date"]),
+  scalar("experience", "researchRolesResponsibilities", "Research Roles/Responsibilities"),
+  group("experience", "promotionHistoryGroup", "Promotion History", ["Designation", "From Date", "To Date"]),
   group("experience", "coursesGroup", "Courses Taught", ["Code", "Name", "Weekly Credit Hours"]),
 
   // ─── Research & Innovation ─────────────────────────────────────────────────
@@ -207,24 +217,28 @@ export const EXPORT_FIELDS: ExportField[] = [
   group("research", "authoredBooksGroup", "Authored Books", ["Title", "Publisher", "Year"]),
 
   // ─── Professional Development ──────────────────────────────────────────────
-  group("mentorship", "labsEstablishedGroup", "New Labs Established", ["Facility Details", "Outcomes"]),
-  group("mentorship", "adminResponsibilityGroup", "Academic Responsibilities", ["Category", "Description", "From Year", "To Year"]),
-  group("mentorship", "trainingEntriesGroup", "FDPs, Workshops, MOOCs & Certifications", [
-    "Type", "Participated/Conducted", "Certification Type", "Title", "Name of Faculty/Coordinator",
-    "From Date", "To Date", "Duration", "National/International", "Place", "Mode of the Program",
-    "Beneficiaries", "Number of Resource Persons", "Resource Persons - Details",
+  group("mentorship", "newLabsEstablishedGroup", "New Labs Established", ["Facility Details", "Outcomes"]),
+  group("mentorship", "academicResponsibilitiesGroup", "Academic Responsibilities", ["Category", "Other Category", "Description", "From Date", "To Date"]),
+  group("mentorship", "fdpsWorkshopsMoocsCertificationsGroup", "FDPs, Workshops, MOOCs & Certifications", [
+    "Type", "Please specify type", "Certification Type", "Participated or Conducted", "Title of the Program",
+    "Name of the Faculty / Coordinator", "From Date", "To Date", "Duration", "Number of Weeks",
+    "National / International", "Place", "Mode of the Program",
+    "Beneficiaries", "Total Count", "Internal Count", "External Count",
+    "Number of Resource Persons", "Resource Persons - Details",
     "Remark", "Co-Conducting Faculty", "Other Details",
   ]),
-  group("mentorship", "professionalMembershipsGroup", "Professional Body Memberships", [
-    "Body", "Body Name (if Other)", "Membership Type", "Membership ID", "Membership Validity", "Member Since / Valid From", "Valid To",
+  group("mentorship", "professionalMembershipsGroup", "Professional Memberships", [
+    "Body", "Body Name", "Membership Type", "Membership ID", "Membership Validity", "Member Since", "Valid From", "Valid To",
   ]),
-  group("mentorship", "awardEntriesGroup", "Awards & Recognition", ["Category", "Title", "Awarding Body", "Date of Award", "Level", "Other Details"]),
+  group("mentorship", "awardsRecognitionGroup", "Awards & Recognition", [
+    "Category", "Other Category", "Title of Award", "Awarding Agency/Body", "Date of Award", "State / National / International", "Other Details",
+  ]),
 
   // ─── Financial Standing ─────────────────────────────────────────────────────
-  scalar("financial", "presentSalary", "Monthly Salary (₹)"),
+  scalar("financial", "monthlySalary", "Monthly Salary (₹)"),
   scalar("financial", "grossAnnualCTC", "Gross Annual CTC (₹)"),
   scalar("financial", "incrementsAwarded", "Increments Awarded"),
-  scalar("financial", "fundingConsultancyRevenue", "Funding/Consultancy Revenue Generation (₹)"),
+  scalar("financial", "fundingConsultancyRevenueGeneration", "Funding/Consultancy Revenue Generation (₹)"),
 
   // ─── Others ─────────────────────────────────────────────────────────────────
   scalar("others", "otherInformation", "Other Information"),
@@ -301,8 +315,8 @@ export function getFacultyImportColumns(designationOptions: string[]): FacultyCs
   // Still accepts anything else, deliberately: the dropdown's own "Others"
   // stores whatever was typed, so a closed set here would reject qualifications
   // the app itself can create.
-  { key: "qualification", label: "Highest Qualification", required: true, sample: `Required; ${HIGHEST_QUALIFICATION_OPTIONS.join(" / ")} / other`, aliases: ["Qualification"] },
-  { key: "joiningDate",  label: "Date of Joining Institution (DD-MM-YYYY)", required: true, sample: "Required; DD-MM-YYYY", aliases: ["Joining Date", "Date of Joining", "DOJ"] },
+  { key: "highestQualification", label: "Highest Qualification", required: true, sample: `Required; ${HIGHEST_QUALIFICATION_OPTIONS.join(" / ")} / other`, aliases: ["Qualification"] },
+  { key: "joiningDate",  label: "Date of Joining (DD-MM-YYYY)", required: true, sample: "Required; DD-MM-YYYY", aliases: ["Date of Joining Institution (DD-MM-YYYY)", "Date of Joining Institution", "Joining Date", "Date of Joining", "DOJ"] },
   { key: "gender",            label: "Gender",                       required: true, sample: "Required: Male / Female / Other" },
   { key: "dateOfBirth",       label: "Date of Birth (DD-MM-YYYY)",   required: true, sample: "Required; DD-MM-YYYY", aliases: ["DOB"] },
   { key: "nameAsPerAadhar",   label: "Name (as per Aadhar)",         required: false, sample: "Optional; text" },
@@ -331,7 +345,7 @@ export function getFacultyImportSampleRows(designationOptions: string[]): Record
   {
     employeeId: "FAC001", legalName: "ANITHA REDDY", name: "Dr. Anitha Reddy",
     collegeEmail: "anitha.reddy@college.edu", password: "ChangeMe#101", phone: "9876543210",
-    designation: designation(0), qualification: "Ph.D",
+    designation: designation(0), highestQualification: "Ph.D",
     joiningDate: "15-06-2012",
     gender: "Female", dateOfBirth: "22-03-1978",
     nameAsPerAadhar: "Anitha Reddy",
@@ -341,7 +355,7 @@ export function getFacultyImportSampleRows(designationOptions: string[]): Record
   {
     employeeId: "FAC002", legalName: "SURESH KUMAR", name: "Mr. Suresh Kumar",
     collegeEmail: "suresh.kumar@college.edu", password: "ChangeMe#102", phone: "9876543211",
-    designation: designation(1), qualification: "M.Tech",
+    designation: designation(1), highestQualification: "M.Tech",
     joiningDate: "01-07-2019",
     gender: "Male", dateOfBirth: "05-11-1990",
     nameAsPerAadhar: "Suresh Kumar",
@@ -351,7 +365,7 @@ export function getFacultyImportSampleRows(designationOptions: string[]): Record
   {
     employeeId: "FAC003", legalName: "DIVYA NAIR", name: "Ms. Divya Nair",
     collegeEmail: "divya.nair@college.edu", password: "ChangeMe#103", phone: "9876543212",
-    designation: designation(2), qualification: "M.Tech",
+    designation: designation(2), highestQualification: "M.Tech",
     joiningDate: "16-08-2022",
     gender: "Female", dateOfBirth: "30-01-1995",
     nameAsPerAadhar: "Divya Nair",
@@ -361,7 +375,7 @@ export function getFacultyImportSampleRows(designationOptions: string[]): Record
   {
     employeeId: "FAC004", legalName: "IMRAN SHAIK", name: "Dr. Imran Shaik",
     collegeEmail: "imran.shaik@college.edu", password: "ChangeMe#104", phone: "9876543213",
-    designation: designation(3), qualification: "Ph.D",
+    designation: designation(3), highestQualification: "Ph.D",
     joiningDate: "04-01-2016",
     gender: "Male", dateOfBirth: "19-07-1984",
     nameAsPerAadhar: "Imran Shaik",
@@ -371,7 +385,7 @@ export function getFacultyImportSampleRows(designationOptions: string[]): Record
   {
     employeeId: "FAC005", legalName: "GRACE THOMAS", name: "Mrs. Grace Thomas",
     collegeEmail: "grace.thomas@college.edu", password: "ChangeMe#105", phone: "9876543214",
-    designation: designation(4), qualification: "M.Sc",
+    designation: designation(4), highestQualification: "M.Sc",
     joiningDate: "12-06-2023",
     gender: "Female", dateOfBirth: "08-09-1996",
     nameAsPerAadhar: "Grace Thomas",

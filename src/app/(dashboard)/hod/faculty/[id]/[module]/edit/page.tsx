@@ -11,11 +11,11 @@ import { FacultyProfileModuleEditor, type FacultyEditRecord } from "@/components
 import { getMissingRequiredPersonalFields, FACULTY_REQUIRED_PERSONAL_FIELDS } from "@/components/shared/PersonalDetailsFields";
 import { PROFILE_MODULES, type ProfileModuleKey } from "@/lib/faculty/profileModules";
 import { syncTeachingAssignments } from "@/lib/teaching/syncTeachingAssignments";
-import { totalPreviousExperienceYears, allPreviousExperienceEntries } from "@/lib/faculty/experienceCalc";
 import { toDateInputValue } from "@/lib/utils";
 import type { StagedTeachingRow } from "@/components/faculty/TeachingAssignmentsEditor";
 import { useCollegeType } from "@/hooks/useCollegeType";
 import { toast } from "@/hooks/useToast";
+import { migrateFacultyDoc } from "@/lib/faculty/fieldRenames";
 
 export default function HodFacultyModuleEditPage() {
   const router = useRouter();
@@ -42,7 +42,7 @@ export default function HodFacultyModuleEditPage() {
           router.push("/hod/faculty");
           return;
         }
-        const m = data.faculty;
+        const m = migrateFacultyDoc(data.faculty);
         setName((m.name as string) ?? "");
         setDepartment((m.department as string) ?? "");
         setRecord({
@@ -57,17 +57,17 @@ export default function HodFacultyModuleEditPage() {
           subCaste: (m.subCaste as string) ?? "",
           aadharNo: (m.aadharNo as string) ?? "",
           panNo: (m.panNo as string) ?? "",
-          passportNumber: (m.passportNumber as string) ?? "",
+          passportNo: (m.passportNo as string) ?? "",
           differentlyAbled: (m.differentlyAbled as boolean) ?? undefined,
           differentlyAbledDetails: (m.differentlyAbledDetails as string) ?? "",
-          bankAccountNo: (m.bankAccountNo as string) ?? "",
+          bankAccountNumber: (m.bankAccountNumber as string) ?? "",
           ifscCode: (m.ifscCode as string) ?? "",
           bankName: (m.bankName as string) ?? "",
           bankBranch: (m.bankBranch as string) ?? "",
           bankOtherDetails: (m.bankOtherDetails as string) ?? "",
           emergencyContactName: (m.emergencyContactName as string) ?? "",
           emergencyContactRelation: (m.emergencyContactRelation as string) ?? "",
-          emergencyContactPhone: (m.emergencyContactPhone as string) ?? "",
+          emergencyContactMobileNo: (m.emergencyContactMobileNo as string) ?? "",
           ratificationStatus: (m.ratificationStatus as string) ?? "",
           ratificationProceedingsNumber: (m.ratificationProceedingsNumber as string) ?? "",
           ratificationDate: toDateInputValue(m.ratificationDate as never) || undefined,
@@ -75,7 +75,7 @@ export default function HodFacultyModuleEditPage() {
           spouseName: (m.spouseName as string) ?? "",
           numberOfChildren: m.numberOfChildren as number | undefined,
           temporaryAddress: (m.temporaryAddress as string) ?? "",
-          permanentSameAsTemporary: (m.permanentSameAsTemporary as boolean) ?? false,
+          permanentAddressSameAsTemporary: (m.permanentAddressSameAsTemporary as boolean) ?? false,
           permanentAddress: (m.permanentAddress as string) ?? "",
           bloodGroup: (m.bloodGroup as string) ?? "",
           motherTongue: (m.motherTongue as string) ?? "",
@@ -145,29 +145,27 @@ export default function HodFacultyModuleEditPage() {
                 nameAsPerAadhar: record.nameAsPerAadhar,
                 fatherName: record.fatherName, motherName: record.motherName, religion: record.religion,
                 caste: record.caste, subCaste: record.subCaste, aadharNo: record.aadharNo, panNo: record.panNo,
-                passportNumber: record.passportNumber,
+                passportNo: record.passportNo,
                 differentlyAbled: record.differentlyAbled, differentlyAbledDetails: record.differentlyAbledDetails,
-                bankAccountNo: record.bankAccountNo, ifscCode: record.ifscCode,
+                bankAccountNumber: record.bankAccountNumber, ifscCode: record.ifscCode,
                 bankName: record.bankName, bankBranch: record.bankBranch, bankOtherDetails: record.bankOtherDetails,
                 emergencyContactName: record.emergencyContactName, emergencyContactRelation: record.emergencyContactRelation,
-                emergencyContactPhone: record.emergencyContactPhone, ratificationStatus: record.ratificationStatus,
+                emergencyContactMobileNo: record.emergencyContactMobileNo, ratificationStatus: record.ratificationStatus,
                 ratificationProceedingsNumber: record.ratificationProceedingsNumber,
                 ratificationDate: record.ratificationDate, maritalStatus: record.maritalStatus, spouseName: record.spouseName,
                 numberOfChildren: record.numberOfChildren,
-                temporaryAddress: record.temporaryAddress, permanentSameAsTemporary: record.permanentSameAsTemporary,
+                temporaryAddress: record.temporaryAddress, permanentAddressSameAsTemporary: record.permanentAddressSameAsTemporary,
                 permanentAddress: record.permanentAddress, bloodGroup: record.bloodGroup,
                 motherTongue: record.motherTongue, languagesKnown: record.languagesKnown,
                 heightFeet: record.heightFeet, heightInches: record.heightInches, weightKg: record.weightKg,
                 pfNumber: record.pfNumber,
               }
-            : moduleKey === "experience"
-              // Total Experience is calculated from Academic/Industry/Research
-              // Experience's From/To dates, combined, not typed manually - see
-              // experienceCalc.ts. Kept in sync with the top-level
-              // FacultyMember.experienceYears field (shown on the list/PDF/
-              // profile) every time this module is saved.
-              ? { academicProfile: record.academicProfile, experienceYears: totalPreviousExperienceYears(allPreviousExperienceEntries(record.academicProfile)) }
-              : { academicProfile: record.academicProfile };
+            // FacultyMember.totalYearsOfExperience (Total Years of Experience) is
+            // recomputed server-side from academicProfile + joiningDate on
+            // every PATCH (see /api/college/faculty/[id]/route.ts) - not
+            // sent from here, so it can't drift from what Faculty
+            // Details/the Faculty List compute live from those same inputs.
+            : { academicProfile: record.academicProfile };
 
         const res = await fetch(`/api/college/faculty/${facultyId}`, {
           method: "PATCH",
