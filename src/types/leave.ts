@@ -254,7 +254,56 @@ export interface PeriodSubstitution {
   subjectName: string;
   substituteFacultyId: string;   // FacultyMember doc id, not the login uid
   substituteFacultyName: string;
-  assignedBy: "APPLICANT" | "HOD";
+  // "MANAGER": set directly by a Principal/VP/HOD/College Office through the
+  // Adjustments module (see StaffAdjustment below) - no leave request involved.
+  assignedBy: "APPLICANT" | "HOD" | "MANAGER";
+}
+
+// ─── Leave approval routing ───────────────────────────────────────────────
+// Which approval tier a requester's leave request lands on first - configured
+// per requester role in the college's Settings (see LeaveApprovalRoutingCard
+// and lib/leave/approvalRouting.ts). The three tiers map 1:1 onto the existing
+// PENDING_HOD / PENDING_PRINCIPAL / PENDING_MANAGEMENT statuses, so every
+// downstream approval path is unchanged.
+export type LeaveApproverStage = "HOD" | "PRINCIPAL" | "MANAGEMENT";
+
+export const LEAVE_APPROVER_STAGE_LABELS: Record<LeaveApproverStage, string> = {
+  HOD: "Head of Department",
+  PRINCIPAL: "Principal / Vice Principal",
+  MANAGEMENT: "Management",
+};
+
+// ─── Staff Adjustment (manager-assigned cover) ────────────────────────────
+// doc path: colleges/{collegeId}/staffAdjustments/{id}
+// A Principal/VP/HOD/College Office member covers for someone below them who
+// has other work on a date or date range (no leave request involved): either
+// naming who takes over that person's timetabled periods (periodSubstitutions)
+// and/or a person covering their other duties (coverUid). Effective
+// immediately - it's a direct instruction from the manager, so there is no
+// accept/decline step - and the timetable overlay reads it the same way it
+// reads an approved leave's substitutions (see getActiveSubstitutionsForDates).
+export type StaffAdjustmentStatus = "ACTIVE" | "CANCELLED";
+
+export interface StaffAdjustment {
+  id: string;
+  collegeId: string;
+  createdBy: string;
+  createdByName: string;
+  createdByRole: string;
+  subjectUid: string;
+  subjectName: string;
+  subjectRole: string;
+  department?: string;
+  fromDate: string; // "YYYY-MM-DD"
+  toDate: string;   // "YYYY-MM-DD"
+  reason: string;
+  periodSubstitutions?: PeriodSubstitution[];
+  coverUid?: string;
+  coverName?: string;
+  status: StaffAdjustmentStatus;
+  createdAt: Timestamp;
+  cancelledAt?: Timestamp;
+  cancelledByName?: string;
 }
 
 // ─── Adjustment Requests (substitute / handover consent) ──────────────────

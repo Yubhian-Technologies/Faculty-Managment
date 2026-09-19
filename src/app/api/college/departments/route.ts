@@ -12,6 +12,7 @@ import {
 } from "@/lib/departments/managedBranches";
 import { validateAssignedYears, validateSecondaryDepartmentNames, ensureAssignedYearsOpen } from "@/lib/departments/courseScopeValidation";
 import { cascadeDepartmentRename } from "@/lib/departments/renameCascade";
+import { resolveDepartmentCourseSelections, type DepartmentCourseSelection, type ResolvedDepartmentCourse } from "@/lib/departments/courseSelections";
 
 // yyyy-mm-dd, the same shape StudentRecord.dateOfBirth already uses.
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -103,6 +104,11 @@ export async function POST(request: Request) {
       assignedYears?: number[];
       commonYearStart?: string;
       commonYearEnd?: string;
+      // Required (at least one) when a Principal/VP/Super Admin creates a
+      // top-level department - each entry becomes this department's own Course
+      // doc, so it shows up under that course in the Courses module. Ignored
+      // for an HOD's sub-department, which inherits its parent's courses.
+      courses?: DepartmentCourseSelection[];
     };
 
     const { name, code, hodUid, hodName } = body;
@@ -234,6 +240,15 @@ export async function POST(request: Request) {
       parentDepartmentId = body.parentDepartmentId;
     }
 
+    // A top-level department can't exist without a course - resolved (and
+    // fully validated) before anything is written.
+    let newCourses: ResolvedDepartmentCourse[] = [];
+    if (session.role !== "HOD") {
+      const resolved = await resolveDepartmentCourseSelections(db, collegeId, body.courses);
+      if ("error" in resolved) return NextResponse.json({ error: resolved.error }, { status: 400 });
+      newCourses = resolved.courses;
+    }
+
     const deptsColl = db.collection("colleges").doc(collegeId).collection("departments");
     const docData = {
       collegeId,
@@ -260,10 +275,41 @@ export async function POST(request: Request) {
       ...(session.role !== "HOD" && commonYearEnd !== undefined ? { commonYearEnd } : {}),
       ...(secondaryDepartments.length > 0 ? { secondaryDepartments } : {}),
       ...(managedDepartments.length > 0 ? { managedDepartments } : {}),
+      // Same per-catalog shape college/courses POST writes: this department's
+      // own Years Taught + cross-listing for each course it was created with.
+      ...(newCourses.length > 0
+        ? {
+            courseScopes: Object.fromEntries(
+              newCourses.map((c) => [c.catalogId, { assignedYears: c.assignedYears, secondaryDepartments }])
+            ),
+          }
+        : {}),
       createdAt: now,
       updatedAt: now,
     };
 
+    const coursesColl = db.collection("colleges").doc(collegeId).collection("courses");
+    const writeNewCourses = (
+      write: (courseRef: FirebaseFirestore.DocumentReference, data: Record<string, unknown>) => void,
+      departmentId: string
+    ) => {
+      for (const c of newCourses) {
+        write(coursesColl.doc(), {
+          collegeId,
+          departmentId,
+          catalogId: c.catalogId,
+          name: c.name,
+          code: c.code,
+          durationYears: c.durationYears,
+          isActive: true,
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
+    };
+
+    // The department and its courses are written together so a department is
+    // never left behind without the course(s) it was required to have.
     let ref: FirebaseFirestore.DocumentReference;
     if (managedDepartments.length > 0) {
       // Grouping branches is the one constraint here that must hold under
@@ -281,9 +327,14 @@ export async function POST(request: Request) {
         );
         if (conflicts.length > 0) throw new Error(`BRANCH_CLAIMED:${branchClaimConflictMessage(conflicts)}`);
         tx.set(ref, docData);
+        writeNewCourses((r, d) => tx.set(r, d), ref.id);
       });
     } else {
-      ref = await deptsColl.add(docData);
+      ref = deptsColl.doc();
+      const batch = db.batch();
+      batch.set(ref, docData);
+      writeNewCourses((r, d) => batch.set(r, d), ref.id);
+      await batch.commit();
     }
 
     // Keep the HOD's own profile department in sync - faculty-requirement
@@ -306,7 +357,12 @@ export async function POST(request: Request) {
         performedBy: session.uid,
         performedByName: session.role === "HOD" ? "HOD" : "Principal",
         targetId: ref.id,
-        details: { name, code, ...(parentDepartmentId ? { parentDepartmentId } : {}) },
+        details: {
+          name,
+          code,
+          ...(parentDepartmentId ? { parentDepartmentId } : {}),
+          ...(newCourses.length > 0 ? { courses: newCourses.map((c) => c.name) } : {}),
+        },
         timestamp: now,
       });
 

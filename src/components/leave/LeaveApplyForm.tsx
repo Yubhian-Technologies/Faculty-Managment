@@ -264,12 +264,24 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
     return () => { cancelled = true; };
   }, [leaveTypeCode, fromDate, toDate]);
 
+  // Re-fetched whenever the dates change: the list is role-specific (see
+  // lib/leave/handoverPool.ts) and, once a range is picked, leaves out anyone
+  // who's on leave or tied up in it. A previously picked contact who drops out
+  // of the new list is cleared rather than silently submitted.
   useEffect(() => {
-    fetch("/api/leave/handover-candidates")
+    const range = fromDate && toDate && toDate >= fromDate ? `?fromDate=${fromDate}&toDate=${toDate}` : "";
+    let cancelled = false;
+    fetch(`/api/leave/handover-candidates${range}`)
       .then((r) => r.json() as Promise<{ candidates?: { uid: string; name: string }[] }>)
-      .then((d) => setHandoverCandidates(d.candidates ?? []))
+      .then((d) => {
+        if (cancelled) return;
+        const list = d.candidates ?? [];
+        setHandoverCandidates(list);
+        setHandoverToUid((current) => (current && !list.some((c) => c.uid === current) ? "" : current));
+      })
       .catch(() => { /* Handover picker just stays empty - it's optional */ });
-  }, []);
+    return () => { cancelled = true; };
+  }, [fromDate, toDate]);
 
   useEffect(() => {
     fetch("/api/leave/balances")
@@ -548,7 +560,8 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
             <div className="space-y-2">
               <Label>Handover / point of contact (optional)</Label>
               <p className="text-xs text-muted-foreground">
-                Name a colleague to handle anything else you look after while you&rsquo;re out - separate from any classes above.
+                Name someone to handle anything else you look after while you&rsquo;re out - separate from any classes above.
+                Only people available on your dates are listed.
               </p>
               <Select value={handoverToUid || "NONE"} onValueChange={(v) => setHandoverToUid(v === "NONE" ? "" : v)}>
                 <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>

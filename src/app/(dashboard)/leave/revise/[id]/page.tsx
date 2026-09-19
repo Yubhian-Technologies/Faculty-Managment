@@ -8,6 +8,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/useToast";
+import { isoDateKey } from "@/lib/leave/dayCounter";
+import { toDate as toJsDate } from "@/lib/utils";
 import type { AdjustmentRequest, LeaveRequest } from "@/types/leave";
 
 interface PeriodCoverageEntry {
@@ -58,7 +60,11 @@ export default function ReviseAdjustmentPage() {
         .catch(() => { /* substitute picker just stays empty */ });
     }
     if (declined.some((a) => a.kind === "HANDOVER")) {
-      fetch("/api/leave/handover-candidates")
+      // Same dates as the leave itself, so anyone on leave in that range isn't offered.
+      const from = toJsDate(request.fromDate);
+      const to = toJsDate(request.toDate);
+      const dateQuery = from && to ? `?fromDate=${isoDateKey(from)}&toDate=${isoDateKey(to)}` : "";
+      fetch(`/api/leave/handover-candidates${dateQuery}`)
         .then((r) => r.json() as Promise<{ candidates?: HandoverCandidate[] }>)
         .then((d) => setHandoverCandidates(d.candidates ?? []))
         .catch(() => { /* handover picker just stays empty */ });

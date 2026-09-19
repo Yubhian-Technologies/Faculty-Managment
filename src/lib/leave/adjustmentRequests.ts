@@ -115,18 +115,6 @@ export function withdrawSupersededPeriods(
   return out;
 }
 
-// Same routing rule applications/route.ts POST already uses to pick a fresh
-// request's first real approval stage - factored out so both that route and
-// the accept/decline endpoint (which runs under the ASSIGNEE's session, not
-// the requester's) resolve it identically.
-export function resolvePostAcceptanceStatus(
-  role: string,
-  reportsToHod: boolean
-): "PENDING_MANAGEMENT" | "PENDING_HOD" | "PENDING_PRINCIPAL" {
-  if (role === "PRINCIPAL") return "PENDING_MANAGEMENT";
-  return reportsToHod ? "PENDING_HOD" : "PENDING_PRINCIPAL";
-}
-
 // Notifies every still-PENDING assignee that they've been asked to
 // accept/decline - called once at submission (applications/route.ts POST)
 // and again after a requester revises a DECLINED pick.

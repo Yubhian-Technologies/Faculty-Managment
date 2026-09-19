@@ -4,10 +4,11 @@ import { resolveLoginUidForFacultyMember } from "@/lib/faculty/resolveFacultyMem
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { notify } from "@/lib/notify";
 import { enumerateWorkingDates, isoDateKey, todayISODate } from "@/lib/leave/dayCounter";
+import { loadUnavailability } from "@/lib/leave/availability";
 import { resolveSectionCurrentSemester, matchesCurrentSemester as slotMatchesCurrentSemester } from "@/lib/college/semester";
 import { resolveTimetableAcademicYear, matchesCurrentAcademicYear } from "@/lib/college/academicSession";
 import type { DayOfWeek, FacultyMember, TimetableSlot } from "@/types";
-import type { LeaveRequest, PeriodSubstitution } from "@/types/leave";
+import type { LeaveRequest, PeriodSubstitution, StaffAdjustment } from "@/types/leave";
 
 // Resolves, for a batch of TimetableSlots spanning possibly many course-years,
 // which ones belong to the currently-live semester/session - the same "no
@@ -96,12 +97,6 @@ export function currentWeekDateKeys(anchorISO: string = todayISODate(), extraWee
   return keys;
 }
 
-function isDateWithinLeave(req: LeaveRequest, dateISO: string): boolean {
-  const from = (req.fromDate as unknown as { toDate(): Date }).toDate();
-  const to = (req.toDate as unknown as { toDate(): Date }).toDate();
-  return isoDateKey(from) <= dateISO && dateISO <= isoDateKey(to);
-}
-
 export interface RequiredPeriod {
   date: string;
   day: DayOfWeek;
@@ -130,7 +125,7 @@ export interface PeriodCoverageEntry extends RequiredPeriod {
 // Every TimetableSlot this faculty member teaches, expanded across the
 // working dates of [fromDate, toDate]. Empty for a non-teaching requester
 // (no slots) or a range that happens to fall entirely on non-working days.
-async function resolveRequiredPeriods(
+export async function resolveRequiredPeriods(
   db: Firestore,
   collegeId: string,
   facultyMemberId: string,
@@ -186,6 +181,17 @@ async function resolveRequiredPeriods(
 // an earlier GET), so a pick made on the apply form can still be rejected at
 // submission time if something changed in between (someone else got
 // scheduled, or the candidate went on leave themselves).
+export interface CoverageOptions {
+  /** A leave request whose own picks/leave must not count against candidates
+   *  (it already exists - e.g. re-picking a declined substitute). */
+  excludeRequestId?: string;
+  /** A staff adjustment being re-evaluated, same idea. */
+  excludeAdjustmentId?: string;
+  /** Narrows who may be offered - the Adjustments module limits an HOD to
+   *  their own department's faculty. */
+  candidateFilter?: (f: FacultyMember) => boolean;
+}
+
 export async function buildPeriodCoverage(
   db: Firestore,
   collegeId: string,
@@ -193,13 +199,14 @@ export async function buildPeriodCoverage(
   department: string,
   fromDate: Date,
   toDate: Date,
-  holidayDates: Set<string>
+  holidayDates: Set<string>,
+  opts: CoverageOptions = {}
 ): Promise<PeriodCoverageEntry[]> {
   const required = await resolveRequiredPeriods(db, collegeId, facultyMemberId, fromDate, toDate, holidayDates);
   if (required.length === 0) return [];
 
   const collegeRef = db.collection("colleges").doc(collegeId);
-  const [deptFacultySnap, allSlotsSnap, leaveSnap] = await Promise.all([
+  const [deptFacultySnap, allSlotsSnap, unavailability] = await Promise.all([
     // Every teaching faculty member in the college, not just the applicant's
     // own department: cover is routinely arranged across departments (a
     // shared first-year subject especially), and restricting the list to one
@@ -208,9 +215,15 @@ export async function buildPeriodCoverage(
     // it orders the list below, own department first.
     collegeRef.collection("facultyMembers").get(),
     collegeRef.collection("timetableSlots").get(),
-    // Widened to match: a candidate from another department who is themselves
-    // on approved leave must not be offered either.
-    collegeRef.collection("leaveRequests").where("status", "==", "APPROVED").get(),
+    // Everyone on (or awaiting a decision on) leave, the subject of another
+    // adjustment, or already named to cover a period - not just APPROVED leave
+    // as before, which let people with a pending leave or an existing cover
+    // assignment still show up as "free". Widened past the applicant's own
+    // department for the same reason the faculty list is.
+    loadUnavailability(
+      db, collegeId, required[0].date, required[required.length - 1].date,
+      { excludeRequestId: opts.excludeRequestId, excludeAdjustmentId: opts.excludeAdjustmentId }
+    ),
   ]);
 
   const eligibleFaculty = deptFacultySnap.docs
@@ -220,24 +233,30 @@ export async function buildPeriodCoverage(
     // designation lives in the admin-curated FACULTY Designation Catalog,
     // EXCEPT a not-yet-migrated legacy technical record (see
     // scripts/migrate-technical-staff-to-supporting-staff.mjs).
-    .filter((f) => f.status === "ACTIVE" && !LEGACY_TECHNICAL_DESIGNATIONS.includes(f.designation));
+    .filter((f) => f.status === "ACTIVE" && !LEGACY_TECHNICAL_DESIGNATIONS.includes(f.designation))
+    .filter((f) => !opts.candidateFilter || opts.candidateFilter(f));
 
+  // Only the LIVE timetable counts as "already teaching then" - a section's
+  // earlier semester/session keeps its slot docs as history, and those used to
+  // count too, hiding people who are in fact free.
+  const allSlots = allSlotsSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as TimetableSlot & { id: string });
+  const currentSlots = await filterToCurrentSlots(db, collegeId, allSlots);
   const busyByDayPeriod = new Map<string, Set<string>>();
-  for (const doc of allSlotsSnap.docs) {
-    const s = doc.data() as TimetableSlot;
+  for (const s of currentSlots) {
     const key = `${s.day}:${s.periodNumber}`;
     let set = busyByDayPeriod.get(key);
     if (!set) { set = new Set(); busyByDayPeriod.set(key, set); }
     set.add(s.facultyId);
   }
 
-  const approvedLeaves = leaveSnap.docs.map((d) => d.data() as LeaveRequest);
-
   return required.map((period) => {
     const busyFacultyIds = busyByDayPeriod.get(`${period.day}:${period.periodNumber}`) ?? new Set<string>();
-    const onLeaveUids = new Set(approvedLeaves.filter((r) => isDateWithinLeave(r, period.date)).map((r) => r.uid));
     const candidates = eligibleFaculty
-      .filter((f) => !busyFacultyIds.has(f.id) && !(f.userUid && onLeaveUids.has(f.userUid)))
+      .filter((f) =>
+        !busyFacultyIds.has(f.id) &&
+        !(f.userUid && unavailability.isUnavailableOn(f.userUid, period.date)) &&
+        !unavailability.isCoveringAt(f.id, period.date, period.periodNumber)
+      )
       .map((f) => ({ facultyId: f.id, facultyName: facultyDisplayName(f), facultyDepartment: f.department ?? "" }))
       // Own department first - the usual choice stays at the top of a list
       // that now spans the college - then by name within each group.
@@ -277,9 +296,12 @@ export async function validatePeriodSubstitutions(params: {
   holidayDates: Set<string>;
   submitted: PeriodSubstitutionInput[];
   mode: "FULL" | "PARTIAL";
+  coverageOptions?: CoverageOptions;
+  /** Stamped on each resolved substitution; leave flows use the default. */
+  assignedByOverride?: PeriodSubstitution["assignedBy"];
 }): Promise<ValidatePeriodSubstitutionsResult> {
-  const { db, collegeId, facultyMemberId, department, fromDate, toDate, holidayDates, submitted, mode } = params;
-  const coverage = await buildPeriodCoverage(db, collegeId, facultyMemberId, department, fromDate, toDate, holidayDates);
+  const { db, collegeId, facultyMemberId, department, fromDate, toDate, holidayDates, submitted, mode, coverageOptions, assignedByOverride } = params;
+  const coverage = await buildPeriodCoverage(db, collegeId, facultyMemberId, department, fromDate, toDate, holidayDates, coverageOptions);
 
   if (mode === "FULL" && coverage.length > 0 && submitted.length !== coverage.length) {
     return { ok: false, error: `Select a substitute for all ${coverage.length} affected period(s) before submitting.` };
@@ -306,7 +328,7 @@ export async function validatePeriodSubstitutions(params: {
       sectionId: period.sectionId, sectionName: period.sectionName, courseId: period.courseId,
       subjectId: period.subjectId, subjectName: period.subjectName,
       substituteFacultyId: candidate.facultyId, substituteFacultyName: candidate.facultyName,
-      assignedBy: mode === "FULL" ? "APPLICANT" : "HOD",
+      assignedBy: assignedByOverride ?? (mode === "FULL" ? "APPLICANT" : "HOD"),
     });
   }
 
@@ -367,14 +389,26 @@ export async function getActiveSubstitutionsForDates(
 ): Promise<DateSubstitution[]> {
   const dateSet = new Set(dateISOs);
   const collegeRef = db.collection("colleges").doc(collegeId);
-  const snap = await collegeRef.collection("leaveRequests").where("status", "==", "APPROVED").get();
+  const [snap, adjustmentsSnap] = await Promise.all([
+    collegeRef.collection("leaveRequests").where("status", "==", "APPROVED").get(),
+    collegeRef.collection("staffAdjustments").where("status", "==", "ACTIVE").get(),
+  ]);
 
-  const active: { req: LeaveRequest; sub: PeriodSubstitution }[] = [];
+  // A substitution in force comes either from an APPROVED leave or from an
+  // ACTIVE manager-assigned adjustment (the Adjustments module) - either way
+  // `requester` is whoever's classes are being covered.
+  const active: { req: { uid: string; employeeName: string }; sub: PeriodSubstitution }[] = [];
   for (const doc of snap.docs) {
     const r = doc.data() as LeaveRequest;
     if (!r.periodSubstitutions?.length) continue;
     for (const p of r.periodSubstitutions) {
       if (dateSet.has(p.date)) active.push({ req: r, sub: p });
+    }
+  }
+  for (const doc of adjustmentsSnap.docs) {
+    const a = doc.data() as StaffAdjustment;
+    for (const p of a.periodSubstitutions ?? []) {
+      if (dateSet.has(p.date)) active.push({ req: { uid: a.subjectUid, employeeName: a.subjectName }, sub: p });
     }
   }
   if (active.length === 0) return [];
@@ -406,7 +440,7 @@ export async function getActiveSubstitutionsForDates(
   // strings sort chronologically): this week's own date wins whenever one
   // exists, exactly as before extending the window, and a later week's is
   // only surfaced when this week's slot has no substitution recorded at all.
-  const bestByResolvedId = new Map<string, { req: LeaveRequest; sub: PeriodSubstitution; resolvedId: string }>();
+  const bestByResolvedId = new Map<string, { req: { uid: string; employeeName: string }; sub: PeriodSubstitution; resolvedId: string }>();
   for (const { req, sub } of active) {
     const resolvedId = currentSlotIdByPlacement.get(`${sub.sectionId}|${sub.day}|${sub.periodNumber}|${sub.subjectId}`) ?? sub.timetableSlotId;
     const existing = bestByResolvedId.get(resolvedId);

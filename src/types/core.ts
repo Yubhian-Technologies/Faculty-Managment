@@ -849,6 +849,10 @@ export interface FacultyNorms {
   // must complete before converting into their vacation/non-vacation leave
   // category - see src/lib/leave/categoryEngine.ts.
   newJoiningYears: number;
+  // Which approval tier each requester role's leave request goes to first
+  // (see src/lib/leave/approvalRouting.ts). A role with no entry here uses the
+  // built-in default for that role.
+  leaveApprovalRouting?: Partial<Record<UserRole, "HOD" | "PRINCIPAL" | "MANAGEMENT">>;
   updatedAt?: Timestamp;
   updatedByName?: string;
 }
