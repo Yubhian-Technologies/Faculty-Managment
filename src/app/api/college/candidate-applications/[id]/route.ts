@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { findUsersSnapshot } from "@/lib/roles/findUsersByRoles";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -362,10 +363,7 @@ export async function PATCH(
 
     // Office has verified documents → notify Principal the appointment letter can go out
     if (notifyPrincipalDocsReady) {
-      const principalSnap = await collegeRef
-        .collection("users")
-        .where("role", "in", ["PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_ADMIN"])
-        .get();
+      const principalSnap = await findUsersSnapshot(db, session.collegeId, ["PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_ADMIN"]);
       for (const principalDoc of principalSnap.docs) {
         await collegeRef.collection("notifications").add({
           collegeId: session.collegeId,

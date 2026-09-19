@@ -24,7 +24,8 @@ import type { Department, UserRole } from "@/types";
 // Staff lists. Non-teaching staff must be added via the Supporting Staff
 // modules (HOD for Technical, "Add Non-Technical Staff" for Non-Technical),
 // which create both the login and the profile record.
-const BASE_CREATABLE_ROLES: UserRole[] = ["HOD", "COLLEGE_OFFICE", "COLLEGE_ADMIN", "VICE_PRINCIPAL", "COLLEGE_ACCOUNTS"];
+// HOD and Vice Principal are seats, not accounts - create the person, then appoint them in Role Assignments.
+const BASE_CREATABLE_ROLES: UserRole[] = ["COLLEGE_OFFICE", "COLLEGE_ADMIN", "COLLEGE_ACCOUNTS"];
 
 export default function NewStaffPage() {
   const router = useRouter();

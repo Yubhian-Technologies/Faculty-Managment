@@ -12,7 +12,7 @@ import { useAssignedInterviews } from "@/hooks/useAssignedInterviews";
 import { useAssignedCoordinator } from "@/hooks/useAssignedCoordinator";
 import { useIsSubDepartmentHod } from "@/hooks/useIsSubDepartmentHod";
 import { usePrincipalPendingHiring } from "@/hooks/usePrincipalPendingHiring";
-import { getNavItemsForRole, isNavItemActive, filterVisibleNavItems, ROLES_WITH_EMBEDDED_PANEL_ACCESS, type NavItem } from "./navConfig";
+import { getNavItemsForRoles, isNavItemActive, filterVisibleNavItems, ROLES_WITH_EMBEDDED_PANEL_ACCESS, type NavItem } from "./navConfig";
 import { NavIcon } from "./NavIcon";
 import { ROLE_LABELS } from "@/types";
 
@@ -47,7 +47,7 @@ export function MobileDrawer({ hiddenModules, hiddenItems }: MobileDrawerProps) 
 
   if (!user) return null;
 
-  const baseNavItems = filterVisibleNavItems(getNavItemsForRole(user.role), hiddenModules, hiddenItems, user.realRole)
+  const baseNavItems = filterVisibleNavItems(getNavItemsForRoles(user.role, user.roles ?? user.seatRoles ?? []), hiddenModules, hiddenItems, user.realRole)
     .filter((item) => !hideSubDepartmentsLink || item.href !== "/hod/settings/sub-departments");
   let navItems = baseNavItems;
   {

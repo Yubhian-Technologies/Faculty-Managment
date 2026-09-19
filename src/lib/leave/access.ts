@@ -1,5 +1,5 @@
 import type { Firestore } from "firebase-admin/firestore";
-import { resolveUserDepartment } from "@/lib/budget/departmentScope";
+import { resolveHodDepartments } from "@/lib/budget/departmentScope";
 import { resolveEmployeeIdentity } from "@/lib/leave/identity";
 
 // Self always allowed; Principal/VP/College Office see everyone; HOD only
@@ -14,9 +14,9 @@ export async function canAccessLeaveProfile(
   if (targetUid === callerUid) return true;
   if (role === "PRINCIPAL" || role === "VICE_PRINCIPAL" || role === "COLLEGE_OFFICE") return true;
   if (role === "HOD") {
-    const hodDept = await resolveUserDepartment(db, collegeId, callerUid);
+    const hodDepts = await resolveHodDepartments(db, collegeId, callerUid);
     const targetIdentity = await resolveEmployeeIdentity(db, collegeId, targetUid);
-    return !!hodDept && targetIdentity?.department === hodDept;
+    return !!targetIdentity?.department && hodDepts.includes(targetIdentity.department);
   }
   return false;
 }

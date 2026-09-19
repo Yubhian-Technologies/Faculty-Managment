@@ -1,25 +1,25 @@
 export const dynamic = "force-dynamic";
 
+import { convertLegacyAccounts } from "@/lib/roles/seats";
+import { findUsersByRoles, findUsersWithMatchedRole } from "@/lib/roles/findUsersByRoles";
 import { NextResponse } from "next/server";
 import { requireLocationMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { createFirebaseUser } from "@/lib/firebase/authRest";
 
 async function fetchCollegePrincipals(db: FirebaseFirestore.Firestore, collegeId: string) {
-  const snap = await db
-    .collection("colleges")
-    .doc(collegeId)
-    .collection("users")
-    .where("role", "in", ["PRINCIPAL", "VICE_PRINCIPAL"])
-    .get();
+  // Includes whoever holds the Principal / Vice Principal SEAT (see
+  // types/roleSeats.ts), reported under that seat's role - not just accounts
+  // whose own role is Principal.
+  const matches = await findUsersWithMatchedRole(db, collegeId, ["PRINCIPAL", "VICE_PRINCIPAL"], { exact: true });
 
   // Deduplicate: a college has exactly one Principal slot. A deactivated
   // holder must NOT count as "existing" - otherwise the Add Principal/VP
   // button stays hidden forever after someone is deactivated, with no way
   // to appoint a replacement from this page.
   let principalSeen = false;
-  return snap.docs
-    .map((d) => ({ uid: d.id, ...d.data() }))
+  return matches
+    .map((m) => ({ uid: m.doc.id, ...m.doc.data(), role: m.matchedRole }))
     .filter((u) => (u as unknown as { isActive?: boolean }).isActive !== false)
     .filter((u) => {
       if ((u as unknown as { role: string }).role === "PRINCIPAL") {
@@ -109,10 +109,8 @@ export async function POST(request: Request) {
     // Enforce one Principal per college - a deactivated holder doesn't count,
     // same as the GET listing above, so a replacement can be appointed.
     if (role === "PRINCIPAL") {
-      const existingSnap = await db
-        .collection("colleges").doc(collegeId).collection("users")
-        .where("role", "==", "PRINCIPAL").get();
-      if (existingSnap.docs.some((d) => (d.data() as { isActive?: boolean }).isActive !== false)) {
+      const existing = await findUsersByRoles(db, collegeId, ["PRINCIPAL"], { exact: true });
+      if (existing.length > 0) {
         return NextResponse.json({ error: "A Principal account already exists for this college" }, { status: 409 });
       }
     }
@@ -137,6 +135,9 @@ export async function POST(request: Request) {
       performedBy: session.uid, performedByName: "Administration",
       targetId: uid, details: { email, role, name }, timestamp: now,
     });
+
+    await convertLegacyAccounts(db2, collegeId, { uid: session.uid, name: session.email || "Administration" })
+      .catch((e) => console.error("[administration/principals POST] seat conversion failed:", e));
 
     return NextResponse.json({ uid }, { status: 201 });
   } catch (err) {

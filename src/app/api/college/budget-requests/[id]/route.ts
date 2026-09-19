@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { findUsersSnapshot } from "@/lib/roles/findUsersByRoles";
 import { NextResponse } from "next/server";
 import { requireCollegeContext } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -131,9 +132,7 @@ export async function PATCH(
       // "returned to you, please fix" (from a Principal/Finance return).
       await resolveWorkflowNotifications({ db, collegeId: session.collegeId, entityType: "budgetRequest", entityId: id });
 
-      const principalsSnap = await db
-        .collection("colleges").doc(session.collegeId)
-        .collection("users").where("role", "in", ["PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_ADMIN"]).get();
+      const principalsSnap = await findUsersSnapshot(db, session.collegeId, ["PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_ADMIN"]);
       for (const p of principalsSnap.docs) {
         await emitWorkflowNotification({
           db, collegeId: session.collegeId, toUid: p.id,

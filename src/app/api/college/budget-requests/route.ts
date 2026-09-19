@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { findUsersSnapshot } from "@/lib/roles/findUsersByRoles";
 import { NextResponse } from "next/server";
 import { requireCollegeContext } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -206,12 +207,7 @@ export async function POST(request: Request) {
       timestamp: now,
     });
 
-    const principalsSnap = await db
-      .collection("colleges")
-      .doc(session.collegeId)
-      .collection("users")
-      .where("role", "in", ["PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_ADMIN"])
-      .get();
+    const principalsSnap = await findUsersSnapshot(db, session.collegeId, ["PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_ADMIN"]);
 
     // Actionable - the Principal/VP is the next responsible party until they
     // verify/reject/return it (resolved in budget-requests/[id]/route.ts on

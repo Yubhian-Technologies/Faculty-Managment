@@ -1,4 +1,5 @@
 import type { UserRole } from "@/types";
+import { ROLE_LABELS } from "@/types";
 
 // ─── Location-level nav ────────────────────────────────────────────────────
 
@@ -54,6 +55,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Locations", href: "/management/locations", iconName: "MapPin", roles: ["MANAGEMENT"], section: "Organization" },
   { label: "Add Administrator", href: "/management/users/new", iconName: "UserPlus", roles: ["MANAGEMENT"] },
   { label: "Faculty Details", href: "/management/faculty", iconName: "UsersRound", roles: ["MANAGEMENT"] },
+  { label: "Role Assignments", href: "/management/role-assignments", iconName: "UserCog", roles: ["MANAGEMENT"] },
   { label: "Budget", href: "/management/budget", iconName: "PiggyBank", roles: ["MANAGEMENT"], section: "Reports" },
   { label: "Budget History", href: "/management/indents", iconName: "ClipboardList", roles: ["MANAGEMENT"] },
   { label: "Attendance", href: "/management/attendance", iconName: "ClipboardCheck", roles: ["MANAGEMENT"] },
@@ -66,6 +68,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Colleges", href: "/super-admin/colleges", iconName: "Building2", roles: ["SUPER_ADMIN"] },
   { label: "All Users", href: "/super-admin/users", iconName: "Users", roles: ["SUPER_ADMIN"], section: "Users" },
   { label: "Add User", href: "/super-admin/users/new", iconName: "UserPlus", roles: ["SUPER_ADMIN"] },
+  { label: "Role Assignments", href: "/super-admin/role-assignments", iconName: "UserCog", roles: ["SUPER_ADMIN"] },
   { label: "Audit Logs", href: "/super-admin/audit-logs", iconName: "ScrollText", roles: ["SUPER_ADMIN"], section: "System" },
   { label: "Settings", href: "/super-admin/settings", iconName: "Settings2", roles: ["SUPER_ADMIN"] },
   { label: "My Profile", href: "/super-admin/profile", iconName: "UserCircle", roles: ["SUPER_ADMIN"], section: "Personal" },
@@ -75,6 +78,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Location Staff", href: "/administration/users", iconName: "Users", roles: ["ADMINISTRATION"], section: "Management" },
   { label: "Departments", href: "/administration/departments", iconName: "Settings2", roles: ["ADMINISTRATION"] },
   { label: "Colleges", href: "/administration/colleges", iconName: "Building2", roles: ["ADMINISTRATION"] },
+  { label: "Role Assignments", href: "/administration/role-assignments", iconName: "UserCog", roles: ["ADMINISTRATION"] },
   { label: "Hiring Requests", href: "/administration/vacancies", iconName: "ClipboardList", roles: ["ADMINISTRATION"], section: "Hiring" },
   { label: "Interview Plans", href: "/administration/interviews", iconName: "CalendarCheck", roles: ["ADMINISTRATION"] },
   { label: "Offer Letters", href: "/administration/offers", iconName: "FileText", roles: ["ADMINISTRATION"] },
@@ -182,6 +186,9 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Adjustment Requests", href: "/leave/adjustments", iconName: "UserCheck", roles: ["VICE_PRINCIPAL"] },
   { label: "Settings", href: "/principal/settings", iconName: "Settings2", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Audit Logs", href: "/principal/audit-logs", iconName: "History", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Administration" },
+  // Appoint people to seats (Principal, each HOD, Vice Principal, Dean, ...) -
+  // see types/roleSeats.ts.
+  { label: "Role Assignments", href: "/principal/role-assignments", iconName: "UserCog", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Reset Member Password", href: "/principal/reset-password", iconName: "KeyRound", roles: ["PRINCIPAL"], showOnlyForRealRoles: ["COLLEGE_ADMIN"] },
 
   // HOD
@@ -391,6 +398,56 @@ export const NAV_ITEMS: NavItem[] = [
 
 export function getNavItemsForRole(role: UserRole): NavItem[] {
   return NAV_ITEMS.filter((item) => item.roles.includes(role));
+}
+
+// Items that are about the PERSON, not the position they hold: their own
+// profile (personal details, R&D modules), leave (apply / balances / history),
+// attendance, the adjustment requests addressed to them, and their own
+// teaching load. Every login has these once, from its primary role - a seat's
+// own copy ("My Leave" under HOD, "My Profile" under Principal, ...) would just
+// duplicate them, so seats contribute only their POSITION modules (approvals,
+// department / college management, reports, ...).
+//
+// Decided by href shape rather than by the section an item sits under: the
+// Principal's Settings page, for example, sits under the same section header as
+// "My Profile" but belongs to the position. Everything ending in
+// /profile, /attendance, /leave, /teaching (exactly - so leave-approvals,
+// staff-attendance and attendance-report are NOT personal) plus the shared
+// /leave/adjustments inbox is personal.
+const PERSONAL_HREF = /^\/[a-z-]+\/(profile|attendance|leave|teaching)$/;
+export function isPersonalNavItem(item: Pick<NavItem, "href">): boolean {
+  return PERSONAL_HREF.test(item.href) || item.href === "/leave/adjustments";
+}
+
+// The sidebar for a login that may hold several roles (see FMSUser.roles): the
+// primary role's own modules exactly as before - its dashboard, personal
+// details / R&D / leave, and its own work modules - followed by each seat's
+// POSITION modules under a header named after the seat (Head of Department,
+// Vice Principal, ...). A login with one role gets exactly
+// getNavItemsForRole(primary).
+export function getNavItemsForRoles(primary: UserRole, roles: readonly UserRole[] = []): NavItem[] {
+  const seatRoles = roles.filter((r, i) => r !== primary && roles.indexOf(r) === i);
+  const out: NavItem[] = [...getNavItemsForRole(primary)];
+  if (seatRoles.length === 0) return out;
+
+  const seen = new Set(out.map((i) => i.href));
+  for (const role of seatRoles) {
+    let first = true;
+    for (const item of getNavItemsForRole(role)) {
+      if (isPersonalNavItem(item) || seen.has(item.href)) continue;
+      seen.add(item.href);
+      const isDashboard = item.label === "Dashboard";
+      out.push({
+        ...item,
+        // The seat's header replaces whatever section its first item carried so
+        // the group reads as "this is what you can do as <role>".
+        section: first ? ROLE_LABELS[role] : item.section,
+        label: isDashboard ? `${ROLE_LABELS[role]} Dashboard` : item.label,
+      });
+      first = false;
+    }
+  }
+  return out;
 }
 
 // ─── Module visibility (Super Admin, per-college) ──────────────────────────

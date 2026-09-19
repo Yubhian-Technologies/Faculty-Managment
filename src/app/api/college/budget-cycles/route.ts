@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { findUsersSnapshot } from "@/lib/roles/findUsersByRoles";
 import { NextResponse } from "next/server";
 import { requireCollegeContext } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -124,9 +125,7 @@ export async function POST(request: Request) {
     // Actionable (login-popup) notification - the Principal/VP is the next
     // responsible party until they approve/reject/return it (resolved in
     // src/app/api/college/budget-cycles/[id]/route.ts on that action).
-    const approversSnap = await db
-      .collection("colleges").doc(session.collegeId)
-      .collection("users").where("role", "in", ["PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_ADMIN"]).get();
+    const approversSnap = await findUsersSnapshot(db, session.collegeId, ["PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_ADMIN"]);
     for (const u of approversSnap.docs) {
       await emitWorkflowNotification({
         db, collegeId: session.collegeId, toUid: u.id,

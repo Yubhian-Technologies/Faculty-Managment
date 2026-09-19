@@ -14,7 +14,7 @@ import { useIsSubDepartmentHod } from "@/hooks/useIsSubDepartmentHod";
 import { usePrincipalPendingHiring } from "@/hooks/usePrincipalPendingHiring";
 import { useCollegeType } from "@/hooks/useCollegeType";
 import { hasSupportingStaffSplit } from "@/lib/designations/config";
-import { getNavItemsForRole, isNavItemActive, filterVisibleNavItems, ROLES_WITH_EMBEDDED_PANEL_ACCESS, type NavItem } from "./navConfig";
+import { getNavItemsForRoles, isNavItemActive, filterVisibleNavItems, ROLES_WITH_EMBEDDED_PANEL_ACCESS, type NavItem } from "./navConfig";
 import { NavIcon } from "./NavIcon";
 import { OrgScopeTree } from "./OrgScopeTree";
 import { ROLE_LABELS } from "@/types";
@@ -59,7 +59,7 @@ export function Sidebar({ hiddenModules, hiddenItems }: SidebarProps) {
   // "Supporting Staff" is hidden for college types with no Technical/Non-
   // Technical split (School) - HOD has nothing to manage there, it's all
   // centrally owned by Principal (see hasSupportingStaffSplit).
-  const baseNavItems = filterVisibleNavItems(getNavItemsForRole(user.role), hiddenModules, hiddenItems, user.realRole)
+  const baseNavItems = filterVisibleNavItems(getNavItemsForRoles(user.role, user.roles ?? user.seatRoles ?? []), hiddenModules, hiddenItems, user.realRole)
     .filter((item) => !hideSubDepartmentsLink || item.href !== "/hod/settings/sub-departments")
     .filter((item) => hasSupportingStaffSplit(collegeType) || (item.href !== "/hod/supporting-staff" && item.href !== "/hod/settings/designations"));
 

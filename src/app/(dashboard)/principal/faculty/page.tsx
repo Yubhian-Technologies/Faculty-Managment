@@ -2,9 +2,11 @@
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { BookOpen, ChevronRight } from "lucide-react";
+import { BookOpen, ChevronRight, UserPlus } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
+import { PeopleNotOnRoster } from "@/components/roles/PeopleNotOnRoster";
 import { EmptyState } from "@/components/shared/EmptyState";
 import type { Department, FacultyMember } from "@/types";
 
@@ -32,7 +34,13 @@ export default function PrincipalFacultyDepartmentsPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Faculty" description="Select a department to view its faculty" />
+      <PageHeader
+        title="Faculty"
+        description="Select a department to view its faculty"
+        actions={<Button onClick={() => router.push("/principal/faculty/new")}><UserPlus className="h-4 w-4 mr-2" />Add Faculty</Button>}
+      />
+
+      <PeopleNotOnRoster departments={departments} />
 
       {isLoading ? (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">

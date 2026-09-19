@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { REQUESTS_COL } from "@/lib/leave/balanceEngine";
-import { resolveUserDepartment } from "@/lib/budget/departmentScope";
+import { resolveHodDepartments } from "@/lib/budget/departmentScope";
 import type { LeaveRequest } from "@/types/leave";
 
 function toDate(v: unknown): Date | null {
@@ -45,10 +45,10 @@ export async function GET() {
     const db = getAdminDb();
     const today = new Date();
 
-    let dept: string | undefined;
+    let hodDepts: string[] | undefined;
     if (session.role === "HOD") {
-      dept = (await resolveUserDepartment(db, session.collegeId, session.uid)) || undefined;
-      if (!dept) return NextResponse.json({ entries: [] });
+      hodDepts = await resolveHodDepartments(db, session.collegeId, session.uid);
+      if (hodDepts.length === 0) return NextResponse.json({ entries: [] });
     }
 
     const snap = await REQUESTS_COL(session.collegeId, db).where("status", "==", "APPROVED").get();
@@ -56,7 +56,7 @@ export async function GET() {
     const entries: ActiveLeaveEntry[] = [];
     for (const doc of snap.docs) {
       const r = doc.data() as LeaveRequest;
-      if (dept && r.department !== dept) continue;
+      if (hodDepts && (!r.department || !hodDepts.includes(r.department))) continue;
       const from = toDate(r.fromDate);
       const to = toDate(r.toDate);
       if (!from || !to || !coversToday(today, from, to)) continue;

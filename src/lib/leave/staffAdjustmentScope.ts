@@ -1,7 +1,8 @@
 import type { Firestore } from "firebase-admin/firestore";
 import type { UserRole } from "@/types/core";
 import { loadUnavailability } from "@/lib/leave/availability";
-import { expandStoredRoles, type PoolMember } from "@/lib/leave/handoverPool";
+import type { PoolMember } from "@/lib/leave/handoverPool";
+import { findUsersWithMatchedRole } from "@/lib/roles/findUsersByRoles";
 
 // The Adjustments module: who may adjust whom. A manager arranges cover for
 // someone BELOW them who has other work on a date/range:
@@ -68,16 +69,15 @@ async function listUsersWithRoles(
   roles: UserRole[],
   departments: string[] | null
 ): Promise<(PoolMember & { departments: string[] })[]> {
-  const snap = await db.collection("colleges").doc(collegeId).collection("users")
-    .where("role", "in", expandStoredRoles(roles).slice(0, 30)).get();
-  return snap.docs
-    .map((d) => {
-      const u = d.data() as { name?: string; role?: string; department?: string; departments?: string[]; isActive?: boolean };
-      return { uid: d.id, name: u.name ?? "Unknown", role: normalizeStoredRole(u.role ?? ""), department: u.department ?? "", departments: u.departments ?? [], isActive: u.isActive };
+  // By primary role AND by seat, reported under the role that matched - so the
+  // current HOD (a faculty member holding the seat) is an "HOD" subject here.
+  const matches = await findUsersWithMatchedRole(db, collegeId, roles);
+  return matches
+    .map((m) => {
+      const u = m.doc.data() as { name?: string; department?: string; departments?: string[] };
+      return { uid: m.doc.id, name: u.name ?? "Unknown", role: normalizeStoredRole(m.matchedRole), department: u.department ?? "", departments: u.departments ?? [] };
     })
-    .filter((u) => u.isActive !== false)
     .filter((u) => !departments || departments.some((dep) => u.department === dep || u.departments.includes(dep)))
-    .map(({ uid, name, role, department, departments: deps }) => ({ uid, name, role, department, departments: deps }))
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 

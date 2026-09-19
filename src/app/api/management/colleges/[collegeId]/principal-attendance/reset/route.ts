@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { findUsersSnapshot } from "@/lib/roles/findUsersByRoles";
 import { NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { requireManagement } from "@/lib/auth/verifySession";
@@ -21,7 +22,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ co
     const db = getAdminDb();
     const collegeRef = db.collection("colleges").doc(collegeId);
 
-    const principalSnap = await collegeRef.collection("users").where("role", "==", "PRINCIPAL").limit(1).get();
+    const principalSnap = await findUsersSnapshot(db, collegeId, ["PRINCIPAL"], { exact: true });
     if (principalSnap.empty) {
       return NextResponse.json({ error: "No Principal is currently assigned at this college" }, { status: 404 });
     }

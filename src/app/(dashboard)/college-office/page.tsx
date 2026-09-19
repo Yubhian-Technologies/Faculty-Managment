@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { CardSkeleton } from "@/components/shared/SkeletonLoader";
+import { MyDashboardOverview } from "@/components/dashboard/MyDashboardOverview";
 import { useAuthStore } from "@/store/authStore";
 import type { Candidate, CandidateApplication } from "@/types";
 
@@ -43,6 +44,8 @@ export default function CollegeOfficeDashboard() {
         title={`Hello, ${user?.name ?? "Office"}`}
         description="Principal-approved candidates sent to Accounts"
       />
+
+      <MyDashboardOverview />
 
       <div className="flex flex-wrap gap-4">
         <Link href="/college-office/candidates" className="block">

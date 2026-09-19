@@ -9,18 +9,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { CreateHodDialog } from "@/components/college/CreateHodDialog";
 import { YearsTaughtAndSecondaryFields } from "@/components/college/YearsTaughtAndSecondaryFields";
 import { DepartmentCoursePicker, type CourseSelection } from "@/components/college/DepartmentCoursePicker";
 import { departmentSchema, type DepartmentFormData } from "@/lib/validations";
 import { toast } from "@/hooks/useToast";
-import type { CourseCatalogItem, Department, FMSUser } from "@/types";
+import type { CourseCatalogItem, Department } from "@/types";
 
 export default function NewDepartmentPage() {
   const router = useRouter();
-  const [hods, setHods] = useState<FMSUser[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [secondaryDepartments, setSecondaryDepartments] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -44,11 +41,6 @@ export default function NewDepartmentPage() {
       .catch(() => toast({ variant: "destructive", title: "Failed to load courses" }))
       .finally(() => setCatalogLoaded(true));
 
-    fetch("/api/college/users?role=HOD")
-      .then((r) => r.json() as Promise<{ users: FMSUser[] }>)
-      .then((d) => setHods(d.users ?? []))
-      .catch(() => {});
-
     fetch("/api/college/departments")
       .then((r) => r.json() as Promise<{ departments: Department[] }>)
       .then((d) => setDepartments((d.departments ?? []).sort((a, b) => a.name.localeCompare(b.name))))
@@ -58,27 +50,14 @@ export default function NewDepartmentPage() {
   const {
     register,
     handleSubmit,
-    setValue,
     watch,
     formState: { errors },
   } = useForm<DepartmentFormData>({
     resolver: zodResolver(departmentSchema),
-    defaultValues: { name: "", code: "", hodUid: "" },
+    defaultValues: { name: "", code: "" },
   });
 
-  const hodUid = watch("hodUid");
   const nameValue = watch("name");
-
-  async function handleHodCreated(uid: string) {
-    try {
-      const res = await fetch("/api/college/users?role=HOD");
-      const data = await res.json() as { users: FMSUser[] };
-      setHods(data.users ?? []);
-    } catch {
-      toast({ variant: "destructive", title: "Created, but failed to refresh HOD list" });
-    }
-    setValue("hodUid", uid);
-  }
 
   function toggleSecondaryDepartment(name: string, checked: boolean) {
     setSecondaryDepartments((prev) => (checked ? [...prev, name] : prev.filter((n) => n !== name)));
@@ -95,12 +74,9 @@ export default function NewDepartmentPage() {
     }
     setIsSubmitting(true);
     try {
-      const selectedHod = hods.find((h) => h.uid === data.hodUid);
       const payload = {
         name: data.name,
         code: data.code.toUpperCase(),
-        hodUid: data.hodUid ?? "",
-        hodName: selectedHod?.name ?? "",
         courses: courseSelections,
         hasSubDepartments,
         ...(hasSubDepartments ? { parentRunsOwnSections } : {}),
@@ -128,7 +104,7 @@ export default function NewDepartmentPage() {
     <div className="max-w-xl">
       <PageHeader
         title="Add Department"
-        description="Add a new department under one or more courses, and optionally assign a Head of Department"
+        description="Add a new department under one or more courses"
       />
 
       <Card>
@@ -175,53 +151,12 @@ export default function NewDepartmentPage() {
               )}
             </div>
 
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label>Assign HOD</Label>
-                <CreateHodDialog department={nameValue || undefined} onCreated={handleHodCreated} />
-              </div>
-              {hods.length > 0 ? (
-                <Select
-                  value={hodUid || "none"}
-                  onValueChange={(v) => setValue("hodUid", v === "none" ? "" : v)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select HOD (optional)" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">- No HOD -</SelectItem>
-                    {hods.map((h) => {
-                      const hDepts = h.departments && h.departments.length > 0 ? h.departments : (h.department ? [h.department] : []);
-                      return (
-                        <SelectItem key={h.uid} value={h.uid}>
-                          {h.name} {hDepts.length > 0 ? `(${hDepts.join(", ")})` : ""}
-                        </SelectItem>
-                      );
-                    })}
-                  </SelectContent>
-                </Select>
-              ) : (
-                <p className="text-sm text-muted-foreground border rounded-md px-3 py-2">
-                  No HODs yet - create one above
-                </p>
-              )}
-              {/* An HOD can now head more than one department at once -
-                  picking one who already runs others here ADDS this new
-                  department to their portfolio, it never evicts them. */}
-              {(() => {
-                if (!hodUid) return null;
-                const selectedHod = hods.find((h) => h.uid === hodUid);
-                const hDepts = selectedHod?.departments && selectedHod.departments.length > 0
-                  ? selectedHod.departments
-                  : (selectedHod?.department ? [selectedHod.department] : []);
-                if (!selectedHod || hDepts.length === 0) return null;
-                return (
-                  <p className="text-xs text-muted-foreground rounded-md border p-2.5">
-                    {selectedHod.name} is already HOD of <strong className="text-foreground">{hDepts.join(", ")}</strong> -
-                    saving here adds this new department to their portfolio without removing the rest.
-                  </p>
-                );
-              })()}
+            <div className="space-y-1 rounded-md border p-3">
+              <Label>Head of Department</Label>
+              <p className="text-xs text-muted-foreground">
+                The department gets its own HOD seat automatically. Appoint someone to it afterwards in Role Assignments -
+                the HOD is a seat a person holds on top of their own faculty login, not a separate account.
+              </p>
             </div>
 
             <YearsTaughtAndSecondaryFields

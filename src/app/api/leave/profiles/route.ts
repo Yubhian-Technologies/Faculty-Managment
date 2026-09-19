@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import { resolveUserDepartment } from "@/lib/budget/departmentScope";
+import { resolveHodDepartments } from "@/lib/budget/departmentScope";
 import { loadCollegeSettings } from "@/lib/firestore/collegeSettings";
 import { getOrCreateProfile } from "@/lib/leave/profile";
 import { computeEffectiveCategory } from "@/lib/leave/categoryEngine";
@@ -47,15 +47,19 @@ export async function GET() {
     let facultyMembersQuery: FirebaseFirestore.Query = collegeRef.collection("facultyMembers");
     let supportingStaffQuery: FirebaseFirestore.Query = collegeRef.collection("supportingStaff");
     if (session.role === "HOD") {
-      const dept = await resolveUserDepartment(db, session.collegeId, session.uid);
-      facultyMembersQuery = facultyMembersQuery.where("department", "==", dept || "__NO_DEPARTMENT__");
+      const depts = await resolveHodDepartments(db, session.collegeId, session.uid);
+      const deptFilter = (q: FirebaseFirestore.Query) =>
+        depts.length === 0 ? q.where("department", "==", "__NO_DEPARTMENT__")
+          : depts.length === 1 ? q.where("department", "==", depts[0])
+          : q.where("department", "in", depts.slice(0, 30));
+      facultyMembersQuery = deptFilter(facultyMembersQuery);
       // Technical Supporting Staff created after
       // scripts/migrate-technical-staff-to-supporting-staff.mjs live only in
       // this collection, never in facultyMembers - without this, an HOD's
       // Supporting Staff tab here always showed "No supporting staff found"
       // once a college had migrated, even though /hod/supporting-staff (the
       // module's own list) found them fine via this same department filter.
-      supportingStaffQuery = supportingStaffQuery.where("department", "==", dept || "__NO_DEPARTMENT__");
+      supportingStaffQuery = deptFilter(supportingStaffQuery);
     }
     const institutionalStaffQuery: FirebaseFirestore.Query | null =
       session.role === "HOD" ? null : collegeRef.collection("users").where("role", "in", NON_DEPARTMENTAL_STAFF_ROLES);
