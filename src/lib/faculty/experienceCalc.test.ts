@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { experienceBreakdown, totalYearsOfExperience } from "./experienceCalc";
+import { allPreviousExperienceEntries, experienceBreakdown, totalYearsOfExperience } from "./experienceCalc";
 
 const asOf = new Date("2026-01-01");
 
@@ -12,10 +12,10 @@ function yearsAgo(years: number, from = asOf): string {
 describe("experienceBreakdown", () => {
   it("Internal 2 + External 5 = Total 7", () => {
     const joiningDate = yearsAgo(2); // Internal: 2 years at this institution
-    const previousInstitutions = [
+    const entries = [
       { fromDate: yearsAgo(9), toDate: yearsAgo(4) }, // External: 5 years, pre-joining
     ];
-    const result = experienceBreakdown(previousInstitutions, joiningDate, asOf);
+    const result = experienceBreakdown(entries, joiningDate, asOf);
     expect(result.internal).toBe(2);
     expect(result.external).toBe(5);
     expect(result.total).toBe(7);
@@ -23,12 +23,12 @@ describe("experienceBreakdown", () => {
 
   it("sums multiple Academic/Industry/Research entries", () => {
     const joiningDate = yearsAgo(1);
-    const previousInstitutions = [
+    const entries = [
       { fromDate: yearsAgo(10), toDate: yearsAgo(8) }, // Academic: 2 years
       { fromDate: yearsAgo(6), toDate: yearsAgo(5) }, // Industry: 1 year
       { fromDate: "2020-01-01", toDate: "2022-07-01" }, // Research: 2.5 years
     ];
-    const result = experienceBreakdown(previousInstitutions, joiningDate, asOf);
+    const result = experienceBreakdown(entries, joiningDate, asOf);
     expect(result.external).toBeCloseTo(5.5, 1);
     expect(result.total).toBeCloseTo(6.5, 1);
   });
@@ -50,5 +50,30 @@ describe("experienceBreakdown", () => {
     expect(result.internal).toBe(0);
     expect(result.external).toBe(2);
     expect(result.total).toBe(2);
+  });
+});
+
+describe("allPreviousExperienceEntries", () => {
+  const a = { institutionName: "A" };
+  const b = { institutionName: "B" };
+  const c = { institutionName: "C" };
+
+  it("combines the three current-key tabs", () => {
+    expect(allPreviousExperienceEntries({ academicExperience: [a], industryExperience: [b], researchExperience: [c] })).toEqual([a, b, c]);
+  });
+
+  it("still reads the legacy key names from un-normalised data", () => {
+    expect(
+      allPreviousExperienceEntries({ previousInstitutions: [a], industryExperienceEntries: [b], researchExperienceEntries: [c] })
+    ).toEqual([a, b, c]);
+  });
+
+  it("prefers the current key over its legacy twin, per tab, and mixes shapes", () => {
+    expect(allPreviousExperienceEntries({ academicExperience: [a], previousInstitutions: [c], industryExperienceEntries: [b] })).toEqual([a, b]);
+  });
+
+  it("handles missing data", () => {
+    expect(allPreviousExperienceEntries(undefined)).toEqual([]);
+    expect(allPreviousExperienceEntries({})).toEqual([]);
   });
 });

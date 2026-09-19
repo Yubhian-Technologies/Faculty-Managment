@@ -4,10 +4,13 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
+import { normalizeAcademicProfile } from "@/lib/faculty/academicProfileCompat";
+import { withLegacyPersonalKeysDeleted } from "@/lib/faculty/legacyKeyDeletes";
+import { FieldValue } from "firebase-admin/firestore";
 
 // Fields a Principal/VP must never set about themselves via self-service edit -
 // salary/CTC belongs to the Accounts/Finance payroll domain, not a self-editable profile.
-const FINANCIAL_ACADEMIC_KEYS = ["presentSalary", "grossAnnualCTC", "incrementsAwarded", "fundingConsultancyRevenue"];
+const FINANCIAL_ACADEMIC_KEYS = ["monthlySalary", "grossAnnualCTC", "incrementsAwarded", "fundingConsultancyRevenueGeneration"];
 // Researcher IDs go through R&D verification (POST /api/college/research-profile)
 // instead - stripped here so a direct PATCH can't set them unverified.
 const RESEARCH_PROFILE_KEYS = ["orcidId", "scopusAuthorId", "researcherId", "googleScholarId", "irinsProfile"];
@@ -61,14 +64,15 @@ export async function PATCH(request: Request) {
     }
     if (body.phone !== undefined) updates.phone = body.phone;
     if (body.academicProfile !== undefined) {
-      const academicProfile = { ...body.academicProfile };
+      const academicProfile = { ...normalizeAcademicProfile(body.academicProfile) };
       for (const key of FINANCIAL_ACADEMIC_KEYS) delete academicProfile[key];
       for (const key of RESEARCH_PROFILE_KEYS) delete academicProfile[key];
       updates.academicProfile = academicProfile;
     }
     if (body.profilePhotoUrl !== undefined) updates.profilePhotoUrl = body.profilePhotoUrl;
 
-    await userRef.update(updates);
+    // Drop the old-named twin of any personal key written above on a not-yet-migrated doc.
+    await userRef.update(withLegacyPersonalKeysDeleted(updates, FieldValue.delete()));
 
     if ((body.name !== undefined && body.name.trim()) || body.profilePhotoUrl !== undefined) {
       await db.collection("systemUsers").doc(session.uid).set(

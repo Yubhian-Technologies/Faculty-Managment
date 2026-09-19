@@ -21,7 +21,7 @@ type ImportRow = {
   password: string;
   phone: string;
   designation: string;
-  qualification: string;
+  highestQualification: string;
   joiningDate: string;
   gender: string;
   dateOfBirth: string;
@@ -195,7 +195,7 @@ export async function POST(request: Request) {
       if (!row.password?.trim() || row.password.trim().length < 8) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Login Password is required and must be at least 8 characters" }); continue; }
       if (!row.phone?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Mobile No is required" }); continue; }
       if (!row.designation?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Designation is required" }); continue; }
-      if (!row.qualification?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Highest Qualification is required" }); continue; }
+      if (!row.highestQualification?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Highest Qualification is required" }); continue; }
       if (!row.joiningDate?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Date of Joining Institution is required" }); continue; }
       if (!row.gender?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Gender is required" }); continue; }
       if (!row.dateOfBirth?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Date of Birth is required" }); continue; }
@@ -322,7 +322,7 @@ export async function POST(request: Request) {
         collegeEmail: loginEmail,
         phone: checkPhone(row.phone, "Phone") ?? "",
         designation,
-        qualification: row.qualification.trim(),
+        highestQualification: row.highestQualification.trim(),
         joiningDate,
         status: "ACTIVE",
         ...buildPersonalDetailsUpdate(personalInput),

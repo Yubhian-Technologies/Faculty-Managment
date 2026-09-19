@@ -15,8 +15,8 @@ function LoadTable({ rows, showPastColumns }: { rows: TeachingLoadRow[]; showPas
             <th className="p-2 text-left font-medium text-muted-foreground whitespace-nowrap">Academic Year</th>
             <th className="p-2 text-left font-medium text-muted-foreground whitespace-nowrap">Year / Branch / Semester / Section</th>
             <th className="p-2 text-left font-medium text-muted-foreground whitespace-nowrap">Subject</th>
-            <th className="p-2 text-left font-medium text-muted-foreground whitespace-nowrap">Hr/Week</th>
-            {showPastColumns && <th className="p-2 text-left font-medium text-muted-foreground whitespace-nowrap">Pass %</th>}
+            <th className="p-2 text-left font-medium text-muted-foreground whitespace-nowrap">Hours Per Week</th>
+            {showPastColumns && <th className="p-2 text-left font-medium text-muted-foreground whitespace-nowrap">Student Pass %</th>}
             {showPastColumns && <th className="p-2 text-left font-medium text-muted-foreground whitespace-nowrap">Student Feedback %</th>}
           </tr>
         </thead>

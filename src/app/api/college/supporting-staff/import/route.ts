@@ -149,38 +149,44 @@ function qualifications(row: ImportRow): StaffQualification[] {
   return [1, 2]
     .map((i) => {
       const combined = row[`qualification${i}_degreeAndBranch`]?.trim() ?? "";
-      const { degree, branch } = splitDegreeAndBranch(combined);
+      const { course, branch } = splitDegreeAndBranch(combined);
       return {
         level: row[`qualification${i}_level`]?.trim() ?? "",
-        degree, branch,
-        universityOrInstitute: row[`qualification${i}_university`]?.trim() ?? "",
-        percentageOrDivision: row[`qualification${i}_percentage`]?.trim() ?? "",
-        yearOfCompletion: num(row[`qualification${i}_year`]) ?? 0,
+        course, branch,
+        institutionName: row[`qualification${i}_university`]?.trim() ?? "",
+        percentageCgpa: row[`qualification${i}_percentage`]?.trim() ?? "",
+        yearOfPassing: num(row[`qualification${i}_year`]) ?? 0,
       };
     })
-    .filter((q) => q.level || q.degree || q.branch || q.universityOrInstitute);
+    .filter((q) => q.level || q.course || q.branch || q.institutionName);
 }
 
-function trainingEntries(row: ImportRow): TrainingEntry[] {
+function buildTrainingEntries(row: ImportRow): TrainingEntry[] {
   return [1, 2]
-    .map((i) => ({
+    .map((i): TrainingEntry => ({
       type: TRAINING_TYPE_MAP[(row[`training${i}_type`] ?? "").trim().toLowerCase()] ?? "OTHER",
-      title: row[`training${i}_title`]?.trim() ?? "",
-      organizer: row[`training${i}_organizer`]?.trim() ?? "",
+      titleOfTheProgram: row[`training${i}_title`]?.trim() ?? "",
+      nameOfTheFacultyCoordinator: row[`training${i}_organizer`]?.trim() ?? "",
       year: num(row[`training${i}_year`]) ?? 0,
     }))
-    .filter((t) => t.title || t.organizer);
+    .filter((t) => t.titleOfTheProgram || t.nameOfTheFacultyCoordinator);
 }
 
 function achievementEntries(row: ImportRow): AwardEntry[] {
   return [1, 2]
-    .map((i) => ({
-      category: AWARD_CATEGORY_MAP[(row[`achievement${i}_category`] ?? "").trim().toLowerCase()] ?? "OTHER",
-      title: row[`achievement${i}_title`]?.trim() ?? "",
-      awardingBody: row[`achievement${i}_awardingBody`]?.trim() ?? "",
-      year: num(row[`achievement${i}_year`]) ?? 0,
-    }))
-    .filter((a) => a.title || a.awardingBody);
+    .map((i): AwardEntry => {
+      // The import sheet only carries a year, and AwardEntry no longer writes the
+      // legacy `year` scalar by default - keep it only when the sheet supplied
+      // one (as a read-only fallback; never an empty `year: 0`).
+      const year = num(row[`achievement${i}_year`]);
+      return {
+        category: AWARD_CATEGORY_MAP[(row[`achievement${i}_category`] ?? "").trim().toLowerCase()] ?? "OTHER",
+        titleOfAward: row[`achievement${i}_title`]?.trim() ?? "",
+        awardingAgencyBody: row[`achievement${i}_awardingBody`]?.trim() ?? "",
+        ...(year ? { year } : {}),
+      };
+    })
+    .filter((a) => a.titleOfAward || a.awardingAgencyBody);
 }
 
 // Builds the full SupportingStaffProfileFields object for a row - matches the
@@ -198,7 +204,7 @@ function buildSupportingStaffProfile(
   const responsibilities = mapList(row.responsibilities, NON_TECHNICAL_RESPONSIBILITY_MAP, empId, "Responsibilities", dropped);
   const computerSkills = mapList(row.computerSkills, COMPUTER_SKILL_MAP, empId, "Computer Skills", dropped);
   const typingSpeedWpm = num(row.typingSpeedWpm);
-  const training = trainingEntries(row);
+  const training = buildTrainingEntries(row);
   const achievements = achievementEntries(row);
   const hasContent = responsibilities.length || computerSkills.length || typingSpeedWpm !== undefined || training.length || achievements.length || row.otherResponsibility?.trim() || row.otherComputerSkill?.trim();
   if (hasContent) {

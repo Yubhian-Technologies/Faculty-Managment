@@ -7,6 +7,8 @@ import { createFirebaseUser } from "@/lib/firebase/authRest";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
 import { syncDepartmentHod, getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
 import { getCreatableOfficeRoles } from "@/lib/roles/officeRoles";
+import { normalizeAcademicProfile } from "@/lib/faculty/academicProfileCompat";
+import { migrateUserDoc } from "@/lib/faculty/fieldRenames";
 import type { CollegeType, UserRole } from "@/types";
 
 // Base roles every college type can create; which "internal office" roles
@@ -59,7 +61,7 @@ export async function GET(request: Request) {
 
     const snap = await q.get();
     let users = snap.docs
-      .map((d) => ({ uid: d.id, ...d.data() }))
+      .map((d) => ({ uid: d.id, ...migrateUserDoc(d.data()) }))
       .filter((u) => includeAll || (u as unknown as { role: string }).role !== "PRINCIPAL")
       .sort((a, b) => {
         const an = (a as unknown as { name?: string }).name ?? "";
@@ -323,7 +325,7 @@ export async function POST(request: Request) {
         ...(body.staffType ? { staffType: body.staffType } : {}),
         ...(designation ? { designation } : {}),
         ...(role === "CLASS_LEADER" ? { sectionId, sectionName: sectionData?.name ?? "" } : {}),
-        ...(academicProfile ? { academicProfile } : {}),
+        ...(academicProfile ? { academicProfile: normalizeAcademicProfile(academicProfile) } : {}),
         ...(profilePhotoUrl ? { profilePhotoUrl } : {}),
         ...buildPersonalDetailsUpdate(body),
         isActive: true,

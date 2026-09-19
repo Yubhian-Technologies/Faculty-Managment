@@ -5,9 +5,13 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
 import { syncTrainingEntryCoConductors } from "@/lib/faculty/syncTrainingEntryCoConductors";
+import { normalizeAcademicProfile } from "@/lib/faculty/academicProfileCompat";
+import { migrateFacultyDoc, migrateUserDoc } from "@/lib/faculty/fieldRenames";
+import { withLegacyFacultyKeysDeleted } from "@/lib/faculty/legacyKeyDeletes";
+import { FieldValue } from "firebase-admin/firestore";
 import type { TrainingEntry } from "@/types";
 
-const FINANCIAL_ACADEMIC_KEYS = ["presentSalary", "grossAnnualCTC", "incrementsAwarded", "fundingConsultancyRevenue"];
+const FINANCIAL_ACADEMIC_KEYS = ["monthlySalary", "grossAnnualCTC", "incrementsAwarded", "fundingConsultancyRevenueGeneration"];
 // Researcher IDs go through R&D verification (POST /api/college/research-profile)
 // instead - stripped here so a direct PATCH can't set them unverified.
 const RESEARCH_PROFILE_KEYS = ["orcidId", "scopusAuthorId", "researcherId", "googleScholarId", "irinsProfile"];
@@ -48,7 +52,7 @@ export async function GET() {
         .get();
 
       return NextResponse.json({
-        faculty: { id: facultyDoc.id, ...facultyDoc.data() },
+        faculty: { id: facultyDoc.id, ...migrateFacultyDoc(facultyDoc.data()) },
         teachingAssignments: assignmentsSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
       });
     }
@@ -59,7 +63,7 @@ export async function GET() {
     }
 
     return NextResponse.json({
-      faculty: { id: userSnap.id, ...userSnap.data() },
+      faculty: { id: userSnap.id, ...migrateUserDoc(userSnap.data() ?? {}) },
       teachingAssignments: [],
     });
   } catch (err) {
@@ -89,7 +93,7 @@ export async function PATCH(request: Request) {
       // aicteFacultyId, which stay HR/HOD-controlled (see PATCH
       // /api/college/faculty/[id], HOD/Principal/VP only).
       apaarFacultyId: string;
-      qualification: string;
+      highestQualification: string;
       specialization: string;
       additionalPhoneNumbers: { label?: string; number: string }[];
       academicProfile: Record<string, unknown>;
@@ -125,20 +129,20 @@ export async function PATCH(request: Request) {
     if (body.email?.trim()) facultyUpdates.email = body.email.trim();
     if (body.phone !== undefined) facultyUpdates.phone = body.phone;
     if (body.apaarFacultyId !== undefined) facultyUpdates.apaarFacultyId = body.apaarFacultyId;
-    if (body.qualification?.trim()) facultyUpdates.qualification = body.qualification.trim();
+    if (body.highestQualification?.trim()) facultyUpdates.highestQualification = body.highestQualification.trim();
     if (body.specialization !== undefined) facultyUpdates.specialization = body.specialization;
     if (body.additionalPhoneNumbers !== undefined) {
       facultyUpdates.additionalPhoneNumbers = body.additionalPhoneNumbers.filter((p) => p.number?.trim());
     }
     if (body.profilePhotoUrl !== undefined) facultyUpdates.profilePhotoUrl = body.profilePhotoUrl;
     if (body.academicProfile !== undefined) {
-      const ap = { ...body.academicProfile };
+      const ap = { ...normalizeAcademicProfile(body.academicProfile) };
       for (const k of FINANCIAL_ACADEMIC_KEYS) delete ap[k];
       for (const k of RESEARCH_PROFILE_KEYS) delete ap[k];
       facultyUpdates.academicProfile = ap;
     }
 
-    const previousFacultyData = facultyDoc.data() as { legalName?: string; name?: string; academicProfile?: { trainingEntries?: TrainingEntry[] } };
+    const previousFacultyData = facultyDoc.data() as { legalName?: string; name?: string; academicProfile?: { fdpsWorkshopsMoocsCertifications?: TrainingEntry[] } };
 
     // Full Name (as per SSC) preferred, Name (as per PAN) only as a fallback -
     // same precedence facultyDisplayName() uses everywhere else.
@@ -148,7 +152,8 @@ export async function PATCH(request: Request) {
     const oldDisplayName = previousFacultyData.legalName?.trim() || previousFacultyData.name?.trim() || "";
     const displayNameChanged = (body.legalName !== undefined || !!body.name?.trim()) && newDisplayName !== oldDisplayName;
 
-    await facultyDoc.ref.update(facultyUpdates);
+    // Drop the old-named twin of any key written above on a not-yet-migrated doc.
+    await facultyDoc.ref.update(withLegacyFacultyKeysDeleted(facultyUpdates, FieldValue.delete()));
 
     // A faculty's display name is copied into teachingAssignments/timetableSlots/
     // Section at assignment/incharge-set time and never re-read afterward - a
@@ -190,10 +195,10 @@ export async function PATCH(request: Request) {
     if (body.academicProfile !== undefined) {
       try {
         const ownerName = previousFacultyData.legalName?.trim() || previousFacultyData.name?.trim() || "";
-        const nextEntries = (facultyUpdates.academicProfile as { trainingEntries?: TrainingEntry[] } | undefined)?.trainingEntries;
+        const nextEntries = (facultyUpdates.academicProfile as { fdpsWorkshopsMoocsCertifications?: TrainingEntry[] } | undefined)?.fdpsWorkshopsMoocsCertifications;
         await syncTrainingEntryCoConductors(
           db, session.collegeId, facultyDoc.id, ownerName,
-          previousFacultyData.academicProfile?.trainingEntries, nextEntries
+          normalizeAcademicProfile(previousFacultyData.academicProfile)?.fdpsWorkshopsMoocsCertifications, nextEntries
         );
       } catch (syncErr) {
         console.error("[college/faculty/me PATCH] co-conductor sync failed:", syncErr);

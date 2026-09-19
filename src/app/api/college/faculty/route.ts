@@ -8,6 +8,8 @@ import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/fir
 import { getHodDepartmentScope, getDepartmentTreeNames, canHodEditDepartment, facultyManageableDepartmentNames } from "@/lib/departments/scope";
 import { LEGACY_TECHNICAL_DESIGNATIONS } from "@/lib/designations/config";
 import { experienceBreakdown, allPreviousExperienceEntries } from "@/lib/faculty/experienceCalc";
+import { normalizeAcademicProfile } from "@/lib/faculty/academicProfileCompat";
+import { migrateFacultyDoc } from "@/lib/faculty/fieldRenames";
 import type { Designation, FacultyStatus, EmployeeCategory } from "@/types";
 import { EMPLOYEE_CATEGORY_VALUES, EMPLOYEE_CATEGORY_ERROR_MESSAGE } from "@/types";
 
@@ -100,13 +102,13 @@ export async function GET(request: Request) {
     ]);
 
     const faculty: { id: string; accessLevel: "primary"; [key: string]: unknown }[] =
-      primarySnap.docs.map((d) => ({ id: d.id, ...d.data(), accessLevel: "primary" }));
+      primarySnap.docs.map((d) => ({ id: d.id, ...migrateFacultyDoc(d.data()), accessLevel: "primary" }));
     if (childDeptSnap) {
       // "primary": for an HOD this query holds their own sub-departments'
       // faculty, which they fully manage (canHodEditDepartment), so the UI
       // must not mark them view-only.
       for (const d of childDeptSnap.docs) {
-        faculty.push({ id: d.id, ...d.data(), accessLevel: "primary" });
+        faculty.push({ id: d.id, ...migrateFacultyDoc(d.data()), accessLevel: "primary" });
       }
     }
     // Technical designations belong to Supporting Staff now (see
@@ -146,9 +148,8 @@ export async function POST(request: Request) {
       additionalPhoneNumbers?: { label?: string; number: string }[];
       designation: Designation;
       employeeCategory: EmployeeCategory;
-      qualification: string;
+      highestQualification: string;
       specialization?: string;
-      experienceYears: number;
       joiningDate: string;
       aicteFacultyId?: string;
       department?: string;
@@ -164,12 +165,12 @@ export async function POST(request: Request) {
       password,
       designation,
       employeeCategory,
-      qualification,
+      highestQualification,
       joiningDate,
       profilePhotoUrl,
     } = body;
 
-    if (!employeeId || !collegeEmail || !password || !designation || !qualification || !joiningDate) {
+    if (!employeeId || !collegeEmail || !password || !designation || !highestQualification || !joiningDate) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
     // Only the EMPLOYEE_CATEGORY_VALUES keys are accepted anywhere Employee
@@ -306,14 +307,14 @@ export async function POST(request: Request) {
       })()),
       designation,
       employeeCategory,
-      qualification,
+      highestQualification,
       specialization: body.specialization ?? "",
       // Total Years of Experience (Internal since Date of Joining + External
       // from the Academic/Industry/Research Experience entries) - computed
       // here server-side rather than trusted from the client, same as PATCH
       // /api/college/faculty/[id], so it can't drift from what Faculty
       // Details/the Faculty List compute live from the same two inputs.
-      experienceYears: experienceBreakdown(
+      totalYearsOfExperience: experienceBreakdown(
         allPreviousExperienceEntries(body.academicProfile as Parameters<typeof allPreviousExperienceEntries>[0]),
         new Date(joiningDate)
       ).total,
@@ -321,7 +322,7 @@ export async function POST(request: Request) {
       ...(body.aicteFacultyId?.trim() ? { aicteFacultyId: body.aicteFacultyId.trim() } : {}),
       status: "ACTIVE" as FacultyStatus,
       userUid: uid,
-      ...(body.academicProfile ? { academicProfile: body.academicProfile } : {}),
+      ...(body.academicProfile ? { academicProfile: normalizeAcademicProfile(body.academicProfile) } : {}),
       ...(body.technicalProfile ? { technicalProfile: body.technicalProfile } : {}),
       ...(profilePhotoUrl ? { profilePhotoUrl } : {}),
       ...buildPersonalDetailsUpdate(body),

@@ -15,12 +15,13 @@ import { TextInput } from "@/components/shared/ProfileFieldPrimitives";
 import { HIGHEST_QUALIFICATION_OPTIONS } from "@/lib/import/fieldConstraints";
 import { PHONE_REGEX } from "@/lib/validations";
 import { toast } from "@/hooks/useToast";
+import { migrateFacultyDoc } from "@/lib/faculty/fieldRenames";
 import { toDateInputValue } from "@/lib/utils";
 import { EMPLOYEE_CATEGORY_LABELS } from "@/types";
 import type { DesignationCatalogItem, Designation, EmployeeCategory } from "@/types";
 
 // Sentinel for the "Others" row - matches hod/faculty/new/page.tsx's own
-// qualification picker.
+// highest-qualification picker.
 const OTHER_QUALIFICATION = "__OTHER__";
 
 interface IdentityForm {
@@ -29,7 +30,7 @@ interface IdentityForm {
   apaarFacultyId: string;
   designation: Designation | "";
   employeeCategory: EmployeeCategory | "";
-  qualification: string;
+  highestQualification: string;
   specialization: string;
   joiningDate: string;
   aicteFacultyId: string;
@@ -39,7 +40,7 @@ interface IdentityForm {
 
 const EMPTY_FORM: IdentityForm = {
   legalName: "", name: "", apaarFacultyId: "", designation: "", employeeCategory: "",
-  qualification: "", specialization: "", joiningDate: "", aicteFacultyId: "",
+  highestQualification: "", specialization: "", joiningDate: "", aicteFacultyId: "",
   email: "", phone: "",
 };
 
@@ -76,19 +77,19 @@ export default function EditHodFacultyIdentityPage() {
           router.push("/hod/faculty");
           return;
         }
-        const m = data.faculty;
+        const m = migrateFacultyDoc(data.faculty);
         setEmployeeId((m.employeeId as string) ?? "");
         setCollegeEmail((m.collegeEmail as string) ?? "");
         setDepartment((m.department as string) ?? "");
-        const qualification = (m.qualification as string) ?? "";
-        setQualIsOther(!!qualification && !(HIGHEST_QUALIFICATION_OPTIONS as readonly string[]).includes(qualification));
+        const highestQualification = (m.highestQualification as string) ?? "";
+        setQualIsOther(!!highestQualification && !(HIGHEST_QUALIFICATION_OPTIONS as readonly string[]).includes(highestQualification));
         setForm({
           legalName: (m.legalName as string) ?? "",
           name: (m.name as string) ?? "",
           apaarFacultyId: (m.apaarFacultyId as string) ?? "",
           designation: (m.designation as Designation) ?? "",
           employeeCategory: (m.employeeCategory as EmployeeCategory) ?? "",
-          qualification,
+          highestQualification,
           specialization: (m.specialization as string) ?? "",
           joiningDate: toDateInputValue(m.joiningDate as never),
           aicteFacultyId: (m.aicteFacultyId as string) ?? "",
@@ -133,12 +134,12 @@ export default function EditHodFacultyIdentityPage() {
       toast({ variant: "destructive", title: "Employee Category is required" });
       return;
     }
-    if (!form.qualification.trim()) {
+    if (!form.highestQualification.trim()) {
       toast({ variant: "destructive", title: "Highest Qualification is required" });
       return;
     }
     if (!form.joiningDate) {
-      toast({ variant: "destructive", title: "Date of Joining Institution is required" });
+      toast({ variant: "destructive", title: "Date of Joining is required" });
       return;
     }
     if (!form.phone.trim() || !PHONE_REGEX.test(form.phone)) {
@@ -157,7 +158,7 @@ export default function EditHodFacultyIdentityPage() {
           apaarFacultyId: form.apaarFacultyId.trim(),
           designation: form.designation,
           employeeCategory: form.employeeCategory,
-          qualification: form.qualification.trim(),
+          highestQualification: form.highestQualification.trim(),
           specialization: form.specialization.trim(),
           joiningDate: form.joiningDate,
           aicteFacultyId: form.aicteFacultyId.trim(),
@@ -271,11 +272,11 @@ export default function EditHodFacultyIdentityPage() {
               <div className="space-y-2">
                 <Label>Highest Qualification *</Label>
                 <Select
-                  value={qualIsOther ? OTHER_QUALIFICATION : (HIGHEST_QUALIFICATION_OPTIONS as readonly string[]).includes(form.qualification) ? form.qualification : ""}
+                  value={qualIsOther ? OTHER_QUALIFICATION : (HIGHEST_QUALIFICATION_OPTIONS as readonly string[]).includes(form.highestQualification) ? form.highestQualification : ""}
                   onValueChange={(v) => {
                     const other = v === OTHER_QUALIFICATION;
                     setQualIsOther(other);
-                    set({ qualification: other ? "" : v });
+                    set({ highestQualification: other ? "" : v });
                   }}
                 >
                   <SelectTrigger><SelectValue placeholder="Select qualification" /></SelectTrigger>
@@ -285,7 +286,7 @@ export default function EditHodFacultyIdentityPage() {
                   </SelectContent>
                 </Select>
                 {qualIsOther && (
-                  <Input value={form.qualification} onChange={(e) => set({ qualification: e.target.value })} placeholder="e.g. MBA, M.Phil, M.A" />
+                  <Input value={form.highestQualification} onChange={(e) => set({ highestQualification: e.target.value })} placeholder="e.g. MBA, M.Phil, M.A" />
                 )}
               </div>
               <div className="space-y-2">
@@ -299,7 +300,7 @@ export default function EditHodFacultyIdentityPage() {
             </div>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label>Date of Joining Institution *</Label>
+                <Label>Date of Joining *</Label>
                 <Input type="date" value={form.joiningDate} onChange={(e) => set({ joiningDate: e.target.value })} />
               </div>
               <div className="space-y-2">

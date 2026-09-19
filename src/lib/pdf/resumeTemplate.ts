@@ -1,4 +1,6 @@
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { normalizeAcademicProfile } from "@/lib/faculty/academicProfileCompat";
+import { migratePersonalFlat } from "@/lib/faculty/fieldRenames";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { DESIGNATION_LABELS, FACULTY_STATUS_LABELS, ROLE_LABELS, RELIGION_LABELS, CASTE_LABELS } from "@/types";
 import type { Religion, Caste } from "@/types";
@@ -8,13 +10,14 @@ import { allPreviousExperienceEntries, totalYearsOfExperience, experienceBreakdo
 type TimestampLike = { toDate?: () => Date; seconds?: number; _seconds?: number } | string | null | undefined;
 
 interface DegreeDetail {
-  degree?: string;
+  course?: string;
   branch?: string;
   specialization?: string; // Doctoral only - shown instead of Branch
   degreeAndBranch?: string; // legacy - pre-split records that haven't been re-saved yet
-  universityOrInstitute?: string;
-  percentageOrDivision?: string;
-  yearOfCompletion?: number;
+  institutionName?: string;
+  percentageCgpa?: string;
+  yearOfPassing?: number; // every level except Doctoral/Post-Doctoral
+  yearOfAward?: number; // Doctoral/Post-Doctoral only
   status?: string; // Doctoral/Post-Doctoral only - Awarded/Pursuing
   mode?: string; // Doctoral/Post-Doctoral only - Full-Time/Part-Time
   certificateUrl?: string;
@@ -26,7 +29,7 @@ function degreeAndBranchLabel(d: DegreeDetail, useSpecialization = false): strin
   // resume the moment this field was added (same idea as the degreeAndBranch
   // fallback below, for the pre-split legacy shape).
   const secondary = useSpecialization ? (d.specialization || d.branch) : d.branch;
-  const combined = [d.degree, secondary].filter(Boolean).join(" ");
+  const combined = [d.course, secondary].filter(Boolean).join(" ");
   return combined || d.degreeAndBranch || "";
 }
 
@@ -37,7 +40,6 @@ interface CourseAssignment {
 }
 
 interface TeachingAssignmentSummary {
-  primaryTeachingRole?: string; // Academic Experience tab's role box
   courses?: CourseAssignment[];
 }
 
@@ -78,18 +80,19 @@ interface FacultyProfileFieldsLike {
   additionalPgDetails?: DegreeDetail[];
   phdDetails?: DegreeDetail;
   additionalPhdDetails?: DegreeDetail[];
-  postDoctoralDetails?: DegreeDetail;
-  qualifyingExamQualified?: string;
-  qualifyingExam?: string;
-  qualifyingExamScore?: string;
-  qualifyingExamYear?: number;
+  postdoctoralFellowshipDetails?: DegreeDetail;
+  netSletSetGateOthers?: string;
+  qualifiedExam?: string;
+  examScore?: string;
+  qualifiedYear?: number;
 
   teachingAssignment?: TeachingAssignmentSummary;
-  primaryIndustryRole?: string;
-  primaryResearchRole?: string;
-  previousInstitutions?: PreviousInstitution[];
-  industryExperienceEntries?: PreviousInstitution[];
-  researchExperienceEntries?: PreviousInstitution[];
+  teachingRolesResponsibilities?: string;
+  industryRolesResponsibilities?: string;
+  researchRolesResponsibilities?: string;
+  academicExperience?: PreviousInstitution[];
+  industryExperience?: PreviousInstitution[];
+  researchExperience?: PreviousInstitution[];
 
   publications?: Publication[];
   publicationsFirstOrCorrespondingAuthor?: number;
@@ -104,13 +107,13 @@ interface FacultyProfileFieldsLike {
   hIndex?: number;
   i10Index?: number;
 
-  labsEstablished?: LabEstablished[];
+  newLabsEstablished?: LabEstablished[];
   authoredBooks?: AuthoredBook[];
 
-  presentSalary?: number;
+  monthlySalary?: number;
   grossAnnualCTC?: number;
   incrementsAwarded?: number;
-  fundingConsultancyRevenue?: number;
+  fundingConsultancyRevenueGeneration?: number;
 
   otherInformation?: string;
 }
@@ -140,9 +143,11 @@ export interface ResumeData {
   joiningDate?: TimestampLike;
   status?: string;
   isActive?: boolean;
+  highestQualification?: string;
+  // Legacy name for highestQualification on a not-yet-migrated faculty doc, and
+  // the live key on a Supporting Staff record (a separate type, left as is).
   qualification?: string;
   specialization?: string;
-  experienceYears?: number;
 
   gender?: string;
   dateOfBirth?: TimestampLike;
@@ -154,10 +159,10 @@ export interface ResumeData {
   subCaste?: string;
   aadharNo?: string;
   panNo?: string;
-  passportNumber?: string;
+  passportNo?: string;
   emergencyContactName?: string;
   emergencyContactRelation?: string;
-  emergencyContactPhone?: string;
+  emergencyContactMobileNo?: string;
   ratificationStatus?: string;
   ratificationProceedingsNumber?: string;
   ratificationDate?: TimestampLike;
@@ -165,7 +170,7 @@ export interface ResumeData {
   spouseName?: string;
   numberOfChildren?: number;
   temporaryAddress?: string;
-  permanentSameAsTemporary?: boolean;
+  permanentAddressSameAsTemporary?: boolean;
   permanentAddress?: string;
   bloodGroup?: string;
 
@@ -249,7 +254,7 @@ export function docLinkRow(label: string, url?: string): string {
 }
 
 /** Renders one Teaching Load table - Academic Year / Year-Branch-Semester-Section /
- *  Subject / Hr-Week (+ Pass % + Student Feedback % for past) - leaving cells
+ *  Subject / Hours Per Week (+ Student Pass % + Student Feedback % for past) - leaving cells
  *  blank where a given row's source doesn't carry that field. */
 function renderTeachingLoadTable(rows: TeachingLoadRow[], showPastColumns: boolean): string {
   if (!rows.length) return "";
@@ -259,19 +264,19 @@ function renderTeachingLoadTable(rows: TeachingLoadRow[], showPastColumns: boole
         `<tr><td>${esc(r.academicYear)}</td><td>${esc(formatClassColumn(r))}</td><td>${esc(r.subject)}</td><td>${esc(r.hoursPerWeek)}</td>${showPastColumns ? `<td>${r.passPercentage != null ? `${esc(r.passPercentage)}%` : ""}</td><td>${r.studentFeedback != null ? `${esc(r.studentFeedback)}%` : ""}</td>` : ""}</tr>`
     )
     .join("");
-  const pastHeaders = showPastColumns ? "<th>Pass %</th><th>Student Feedback %</th>" : "";
-  return `<table class="data-table"><tr><th>Academic Year</th><th>Year / Branch / Semester / Section</th><th>Subject</th><th>Hr/Week</th>${pastHeaders}</tr>${body}</table>`;
+  const pastHeaders = showPastColumns ? "<th>Student Pass %</th><th>Student Feedback %</th>" : "";
+  return `<table class="data-table"><tr><th>Academic Year</th><th>Year / Branch / Semester / Section</th><th>Subject</th><th>Hours Per Week</th>${pastHeaders}</tr>${body}</table>`;
 }
 
 /** Renders the Current / Previous Teaching Assignments tables under their own
  *  labeled subheadings, kept visually separate rather than intermixed -
- *  Pass % only ever applies to (and is only shown on) the Previous table. */
+ *  Student Pass % only ever applies to (and is only shown on) the Previous table. */
 function renderTeachingLoadGroups(groups: { current: TeachingLoadRow[]; past: TeachingLoadRow[] }): string {
   const currentBlock = groups.current.length
     ? `<div class="subheading">Current Teaching Assignments</div>${renderTeachingLoadTable(groups.current, false)}`
     : "";
   const pastBlock = groups.past.length
-    ? `<div class="subheading">Previous Teaching Assignments</div>${renderTeachingLoadTable(groups.past, true)}`  // true = show Pass % + Feedback %
+    ? `<div class="subheading">Previous Teaching Assignments</div>${renderTeachingLoadTable(groups.past, true)}`  // true = show Student Pass % + Feedback %
     : "";
   return currentBlock + pastBlock;
 }
@@ -284,23 +289,25 @@ export function renderSection(title: string, body: string): string {
 }
 
 function degreeEntry(label: string, d?: DegreeDetail, useSpecialization = false): string {
-  if (!d || (!degreeAndBranchLabel(d, useSpecialization) && !d.universityOrInstitute)) return "";
+  if (!d || (!degreeAndBranchLabel(d, useSpecialization) && !d.institutionName)) return "";
   const certLink = d.certificateUrl
     ? `<div class="doc-link"><a href="${esc(d.certificateUrl)}" target="_blank">View Certificate ↗</a></div>`
     : "";
   const secondary = degreeAndBranchLabel(d, useSpecialization);
+  const year = useSpecialization ? d.yearOfAward : d.yearOfPassing;
   return (
     entry(
-      d.universityOrInstitute || label,
-      d.yearOfCompletion ? String(d.yearOfCompletion) : "",
+      d.institutionName || label,
+      // useSpecialization is true exactly for the Doctoral entries -> Year of Award.
+      year ? String(year) : "",
       `${label}${secondary ? ` - ${secondary}` : ""}`,
-      d.percentageOrDivision || ""
+      d.percentageCgpa || ""
     ) + certLink
   );
 }
 
 function addressFacts(data: ResumeData): string {
-  const permanent = data.permanentSameAsTemporary ? data.temporaryAddress : data.permanentAddress;
+  const permanent = data.permanentAddressSameAsTemporary ? data.temporaryAddress : data.permanentAddress;
   return detail("Temporary Address", data.temporaryAddress, true) + detail("Permanent Address", permanent, true);
 }
 
@@ -313,8 +320,11 @@ function initials(name: string): string {
     .join("");
 }
 
-export function getResumeHTML(data: ResumeData): string {
-  const ap = data.academicProfile;
+export function getResumeHTML(rawData: ResumeData): string {
+  // Lift legacy flat personal key names (passportNumber, bankAccountNo, ...) on un-migrated docs.
+  const data = migratePersonalFlat(rawData as unknown as Record<string, unknown>) as unknown as ResumeData;
+  // Lift legacy Academic Qualification key names on un-migrated docs.
+  const ap = normalizeAcademicProfile(data.academicProfile);
   const roleLabel = data.role ? (ROLE_LABELS[data.role as keyof typeof ROLE_LABELS] ?? data.role) : "";
   const designationLabel = data.designation
     ? (DESIGNATION_LABELS[data.designation as keyof typeof DESIGNATION_LABELS] ?? data.designation)
@@ -336,7 +346,8 @@ export function getResumeHTML(data: ResumeData): string {
   ].filter(Boolean);
 
   // ── Education ────────────────────────────────────────────────────────────
-  const highestQualification = ap?.highestQualification || data.qualification;
+  const docHighestQualification = data.highestQualification || data.qualification;
+  const highestQualification = ap?.highestQualification || docHighestQualification;
   const educationEntries =
     degreeEntry("Ph.D.", ap?.phdDetails, true) +
     (ap?.additionalPhdDetails ?? []).map((d) => degreeEntry("Ph.D.", d, true)).join("") +
@@ -347,9 +358,9 @@ export function getResumeHTML(data: ResumeData): string {
   const educationExtras = bullets([
     highestQualification && !ap?.phdDetails && !ap?.pgDetails && !ap?.ugDetails && `Highest Qualification: ${esc(highestQualification)}`,
     (ap?.phdDetails?.status || ap?.phdDetails?.mode) && `Ph.D. Status: ${esc(ap?.phdDetails?.status) || "-"} (${esc(ap?.phdDetails?.mode) || "mode not recorded"})`,
-    (ap?.postDoctoralDetails?.status || ap?.postDoctoralDetails?.mode) && `Postdoctoral Status: ${esc(ap?.postDoctoralDetails?.status) || "-"} (${esc(ap?.postDoctoralDetails?.mode) || "mode not recorded"})`,
-    ap?.qualifyingExamQualified === "YES" && ap?.qualifyingExam &&
-      `${esc(ap.qualifyingExam)} Qualified${ap.qualifyingExamYear ? ` (${esc(ap.qualifyingExamYear)})` : ""}${ap.qualifyingExamScore ? ` - Score: ${esc(ap.qualifyingExamScore)}` : ""}`,
+    (ap?.postdoctoralFellowshipDetails?.status || ap?.postdoctoralFellowshipDetails?.mode) && `Postdoctoral Status: ${esc(ap?.postdoctoralFellowshipDetails?.status) || "-"} (${esc(ap?.postdoctoralFellowshipDetails?.mode) || "mode not recorded"})`,
+    ap?.netSletSetGateOthers === "YES" && ap?.qualifiedExam &&
+      `${esc(ap.qualifiedExam)} Qualified${ap.qualifiedYear ? ` (${esc(ap.qualifiedYear)})` : ""}${ap.examScore ? ` - Exam Score: ${esc(ap.examScore)}` : ""}`,
   ]);
   const educationBody = educationEntries + educationExtras;
 
@@ -376,10 +387,10 @@ export function getResumeHTML(data: ResumeData): string {
     hasJoiningDate && `Internal Experience: ${formatDuration(internalExperienceDuration)}`,
     hasPreviousExperience && `External Experience: ${formatDuration(externalExperienceDuration)}`,
     data.specialization && `Specialization: ${esc(data.specialization)}`,
-    data.qualification && `Qualification: ${esc(data.qualification)}`,
+    docHighestQualification && `Highest Qualification: ${esc(docHighestQualification)}`,
   ]);
-  const previousInstitutionEntries = ap?.previousInstitutions?.length
-    ? ap.previousInstitutions
+  const academicExperienceEntries = ap?.academicExperience?.length
+    ? ap.academicExperience
         .map((pi) => {
           // Prefers the real dates; falls back to the legacy year-only value
           // for a record that hasn't been re-saved under the new shape yet.
@@ -390,16 +401,16 @@ export function getResumeHTML(data: ResumeData): string {
         })
         .join("")
     : "";
-  const experienceBody = experienceEntry + experienceBullets + previousInstitutionEntries;
+  const experienceBody = experienceEntry + experienceBullets + academicExperienceEntries;
 
   // ── Teaching load ────────────────────────────────────────────────────────
   // Current and past assignments, kept as two separate tables - current
   // course/section assignments + the Module 2 course summary vs. structured
   // past assignments (past rows carry a pass %, current ones never do).
   const teachingLoadBullets = bullets([
-    ap?.teachingAssignment?.primaryTeachingRole && `Teaching Roles/Responsibilities: ${esc(ap.teachingAssignment.primaryTeachingRole)}`,
-    ap?.primaryIndustryRole && `Industry Roles/Responsibilities: ${esc(ap.primaryIndustryRole)}`,
-    ap?.primaryResearchRole && `Research Roles/Responsibilities: ${esc(ap.primaryResearchRole)}`,
+    ap?.teachingRolesResponsibilities && `Teaching Roles/Responsibilities: ${esc(ap.teachingRolesResponsibilities)}`,
+    ap?.industryRolesResponsibilities && `Industry Roles/Responsibilities: ${esc(ap.industryRolesResponsibilities)}`,
+    ap?.researchRolesResponsibilities && `Research Roles/Responsibilities: ${esc(ap.researchRolesResponsibilities)}`,
   ]);
   const teachingLoadGroups = buildTeachingLoadRows({
     currentAssignments: data.teachingAssignments,
@@ -443,8 +454,8 @@ export function getResumeHTML(data: ResumeData): string {
   const publicationsBody = publicationEntries + publicationStatsBullets + booksEntries;
 
   // ── Mentorship & institutional contribution ─────────────────────────────
-  const labEntries = ap?.labsEstablished?.length
-    ? ap.labsEstablished.map((l) => entry(l.facilityDetails || "Facility Established", "") + bullets([l.outcomes && `Outcomes: ${esc(l.outcomes)}`])).join("")
+  const labEntries = ap?.newLabsEstablished?.length
+    ? ap.newLabsEstablished.map((l) => entry(l.facilityDetails || "Facility Established", "") + bullets([l.outcomes && `Outcomes: ${esc(l.outcomes)}`])).join("")
     : "";
   const mentorshipBody = labEntries;
 
@@ -459,29 +470,29 @@ export function getResumeHTML(data: ResumeData): string {
     detail("Gender", data.gender) +
     detail("Blood Group", data.bloodGroup) +
     detail("Marital Status", data.maritalStatus) +
-    detail("Legal Name", data.legalName) +
-    detail("Father", data.fatherName) +
-    detail("Mother", data.motherName) +
-    detail(data.gender === "Female" ? "Husband" : "Spouse", data.spouseName) +
-    detail("Children", data.numberOfChildren) +
+    detail("Full Name (as per SSC)", data.legalName) +
+    detail("Father Name", data.fatherName) +
+    detail("Mother Name", data.motherName) +
+    detail("Spouse Name", data.spouseName) +
+    detail("Number of Children", data.numberOfChildren) +
     detail("Religion", data.religion ? (RELIGION_LABELS[data.religion as Religion] ?? data.religion) : undefined) +
     detail("Caste", data.caste && data.caste !== "BC" ? (CASTE_LABELS[data.caste as Caste] ?? data.caste) : undefined) +
     detail("Sub Caste", data.subCaste) +
-    detail("Aadhar No.", data.aadharNo) +
-    detail("PAN No.", data.panNo) +
-    detail("Passport No.", data.passportNumber) +
-    detail("Emergency Contact Person Name", data.emergencyContactName) +
-    detail("Relation (with Emergency Contact)", data.emergencyContactRelation) +
-    detail("Emergency Contact Mobile No", data.emergencyContactPhone) +
+    detail("Aadhar No", data.aadharNo) +
+    detail("PAN No", data.panNo) +
+    detail("Passport No", data.passportNo) +
+    detail("Emergency Contact Name", data.emergencyContactName) +
+    detail("Emergency Contact Relation", data.emergencyContactRelation) +
+    detail("Emergency Contact Mobile No", data.emergencyContactMobileNo) +
     addressFacts(data)
   );
 
   // ── Financial standing ──────────────────────────────────────────────────
   const financialBody = ap ? detailTable(
-    detail("Present Salary", ap.presentSalary ? formatCurrency(ap.presentSalary) : "") +
-    detail("Gross Annual CTC", ap.grossAnnualCTC ? formatCurrency(ap.grossAnnualCTC) : "") +
+    detail("Monthly Salary (₹)", ap.monthlySalary ? formatCurrency(ap.monthlySalary) : "") +
+    detail("Gross Annual CTC (₹)", ap.grossAnnualCTC ? formatCurrency(ap.grossAnnualCTC) : "") +
     detail("Increments Awarded", ap.incrementsAwarded ? formatCurrency(ap.incrementsAwarded) : "") +
-    detail("Funding / Consultancy Revenue Offset", ap.fundingConsultancyRevenue ? formatCurrency(ap.fundingConsultancyRevenue) : "")
+    detail("Funding/Consultancy Revenue Generation (₹)", ap.fundingConsultancyRevenueGeneration ? formatCurrency(ap.fundingConsultancyRevenueGeneration) : "")
   ) : "";
 
   // ── Other information ────────────────────────────────────────────────────

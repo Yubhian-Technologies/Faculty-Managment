@@ -2,7 +2,9 @@
 
 import { Card, CardContent } from "@/components/ui/card";
 import { PersonalDetailsView } from "@/components/shared/PersonalDetailsView";
-import { Section, SubLabel, Field, DocLink, QualificationsView, ChipList } from "@/components/shared/ProfileFieldPrimitives";
+import { Section, SubLabel, Field, DocField, QualificationsView, ChipList } from "@/components/shared/ProfileFieldPrimitives";
+import { normalizeSupportingStaffProfile } from "@/lib/faculty/academicProfileCompat";
+import { awardYear } from "@/lib/faculty/awardYear";
 import { TRAINING_ENTRY_TYPE_LABELS, AWARD_CATEGORY_LABELS, NON_TECHNICAL_RESPONSIBILITY_LABELS, COMPUTER_SKILL_LABELS } from "@/types";
 import type { PersonalDetailsSource } from "@/components/shared/PersonalDetailsView";
 import type { SupportingStaffModuleKey } from "@/lib/supportingStaff/profileModules";
@@ -21,7 +23,8 @@ interface Props {
 // hub (SupportingStaffProfileHub) links here per tile, mirroring
 // FacultyProfileModuleContent for the SupportingStaffProfileFields shape.
 export function SupportingStaffModuleContent({ moduleKey, staff }: Props) {
-  const profile = staff.supportingStaffProfile ?? {};
+  // Lift legacy key names on un-migrated docs (training / achievements / qualifications).
+  const profile = normalizeSupportingStaffProfile(staff.supportingStaffProfile) ?? {};
   const nonTechnical = profile.nonTechnicalProfile;
   const responsibilityLabels = (nonTechnical?.responsibilities ?? []).map((r) => NON_TECHNICAL_RESPONSIBILITY_LABELS[r] ?? r);
   const computerSkillLabels = (nonTechnical?.computerSkills ?? []).map((s) => COMPUTER_SKILL_LABELS[s] ?? s);
@@ -63,12 +66,11 @@ export function SupportingStaffModuleContent({ moduleKey, staff }: Props) {
                 {nonTechnical?.training.map((t, i) => (
                   <div key={i} className="rounded-md border bg-muted/20 shadow-sm p-2 grid grid-cols-2 sm:grid-cols-4 gap-2">
                     <Field label="Type" value={TRAINING_ENTRY_TYPE_LABELS[t.type]} />
-                    <Field label="Title" value={t.title} />
-                    <Field label="Organizer" value={t.organizer} />
+                    <Field label="Title of the Program" value={t.titleOfTheProgram} />
+                    <Field label="Name of the Faculty / Coordinator" value={t.nameOfTheFacultyCoordinator} />
                     <Field label="Year" value={t.year} />
-                    {t.certificateUrl && (
-                      <div className="col-span-2 sm:col-span-4"><DocLink url={t.certificateUrl} label="View Certificate" /></div>
-                    )}
+                    <Field label="Duration" value={t.duration ? `${t.duration} day${t.duration === 1 ? "" : "s"}` : undefined} />
+                    <DocField label="Certificate" url={t.certificateUrl} />
                   </div>
                 ))}
               </div>
@@ -83,12 +85,10 @@ export function SupportingStaffModuleContent({ moduleKey, staff }: Props) {
                 {nonTechnical?.achievements.map((a, i) => (
                   <div key={i} className="rounded-md border bg-muted/20 shadow-sm p-2 grid grid-cols-2 sm:grid-cols-4 gap-2">
                     <Field label="Category" value={AWARD_CATEGORY_LABELS[a.category]} />
-                    <Field label="Title" value={a.title} />
-                    <Field label="Awarding Body" value={a.awardingBody} />
-                    <Field label="Year" value={a.year} />
-                    {a.certificateUrl && (
-                      <div className="col-span-2 sm:col-span-4"><DocLink url={a.certificateUrl} label="View Certificate" /></div>
-                    )}
+                    <Field label="Title of Award" value={a.titleOfAward} />
+                    <Field label="Awarding Agency/Body" value={a.awardingAgencyBody} />
+                    <Field label="Date of Award" value={a.dateOfAward ?? awardYear(a)} />
+                    <DocField label="Certificate" url={a.certificateUrl} />
                   </div>
                 ))}
               </div>

@@ -325,7 +325,7 @@ export default function HODFacultyPage() {
       render: (row) => (
         <div className="space-y-0.5">
           <p className="text-sm font-medium">{DESIGNATION_LABELS[row.designation as Designation] ?? (row.designation as string)}</p>
-          <p className="text-xs text-muted-foreground">{row.qualification as string}</p>
+          <p className="text-xs text-muted-foreground">{row.highestQualification as string}</p>
           {(row.specialization as string) && (
             <p className="text-xs text-muted-foreground italic">{row.specialization as string}</p>
           )}
@@ -344,7 +344,7 @@ export default function HODFacultyPage() {
       ),
     },
     {
-      key: "experienceYears",
+      key: "totalYearsOfExperience",
       header: "Total Experience",
       hideOnMobile: true,
       render: (row) => {
@@ -352,7 +352,7 @@ export default function HODFacultyPage() {
         // Date of Joining + the Academic/Industry/Research Experience
         // entries, same canonical calc as the Faculty Details page
         // (FacultyProfileHub), not read from the stored (and only
-        // periodically re-saved) experienceYears field.
+        // periodically re-saved) totalYearsOfExperience field.
         const previousExperienceEntries = allPreviousExperienceEntries(row.academicProfile);
         const totalYears = totalYearsOfExperience(previousExperienceEntries, row.joiningDate).years;
         const internalYears = totalYearsOfExperience(undefined, row.joiningDate).years;

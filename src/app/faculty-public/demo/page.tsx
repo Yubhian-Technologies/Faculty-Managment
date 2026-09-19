@@ -12,48 +12,50 @@ const DEMO_PROFILE: FacultyPublicProfile = {
   designation: "PROFESSOR",
   department: "Computer Science & Engineering",
   profilePhotoUrl: undefined,
-  qualification: "Ph.D. in Computer Science",
+  highestQualification: "Ph.D. in Computer Science",
   specialization: "Machine Learning & Distributed Systems",
-  experienceYears: 16,
+  totalYearsOfExperience: 16,
   officialEmail: "ananya.reddy@vishnu.edu.in",
   joiningYear: 2010,
   education: {
     highestQualification: "Ph.D",
     phdDetails: {
-      degree: "Ph.D.",
+      course: "Ph.D.",
       branch: "Computer Science",
       specialization: "Distributed Machine Learning",
-      universityOrInstitute: "IIT Madras",
-      yearOfCompletion: 2012,
+      institutionName: "IIT Madras",
+      yearOfAward: 2012,
     },
     additionalPhdDetails: [],
-    postDoctoralDetails: {
-      degree: "Post-Doctoral Fellowship",
+    postdoctoralFellowshipDetails: {
+      course: "Post-Doctoral Fellowship",
       branch: "Artificial Intelligence",
-      universityOrInstitute: "National University of Singapore",
-      yearOfCompletion: 2014,
+      institutionName: "National University of Singapore",
+      yearOfAward: 2014,
     },
     pgDetails: {
-      degree: "M.Tech",
+      course: "M.Tech",
       branch: "Computer Science",
-      universityOrInstitute: "IIT Bombay",
-      yearOfCompletion: 2008,
+      institutionName: "IIT Bombay",
+      yearOfPassing: 2008,
     },
     additionalPgDetails: [],
     ugDetails: {
-      degree: "B.Tech",
+      course: "B.Tech",
       branch: "Computer Science & Engineering",
-      universityOrInstitute: "JNTU Hyderabad",
-      yearOfCompletion: 2006,
+      institutionName: "JNTU Hyderabad",
+      yearOfPassing: 2006,
     },
     additionalUgDetails: [],
     phdStatus: "AWARDED",
-    qualifyingExamQualified: "YES",
-    qualifyingExam: "GATE",
-    qualifyingExamYear: 2006,
+    netSletSetGateOthers: "YES",
+    qualifiedExam: "GATE",
+    qualifiedYear: 2006,
   },
-  previousInstitutions: [
-    { institutionName: "National University of Singapore", designation: "Post-Doctoral Fellow", fromYear: 2012, toYear: 2014 },
+  // One row per date shape: real fromDate/toDate (what the current forms write)
+  // and the legacy year-only fallback older records still carry.
+  academicExperience: [
+    { institutionName: "National University of Singapore", designation: "Post-Doctoral Fellow", fromDate: "2012-08-01", toDate: "2014-07-31" },
     { institutionName: "BITS Pilani, Hyderabad Campus", designation: "Assistant Professor", fromYear: 2014, toYear: 2018 },
   ],
   research: {
@@ -76,28 +78,28 @@ const DEMO_PROFILE: FacultyPublicProfile = {
     ],
   },
   recognition: {
-    awardEntries: [
-      { title: "Best Teacher Award", awardingBody: "Shree Vishnu Educational Society", year: 2023 },
-      { title: "Outstanding Reviewer Award", awardingBody: "IEEE Transactions on Neural Networks", year: 2022 },
-      { title: "Early Career Research Excellence Award", awardingBody: "Indian Society for Technical Education", year: 2019 },
+    awardsRecognition: [
+      { titleOfAward: "Best Teacher Award", awardingAgencyBody: "Shree Vishnu Educational Society", dateOfAward: "2023-09-05" },
+      { titleOfAward: "Outstanding Reviewer Award", awardingAgencyBody: "IEEE Transactions on Neural Networks", dateOfAward: "2022-03-14" },
+      { titleOfAward: "Early Career Research Excellence Award", awardingAgencyBody: "Indian Society for Technical Education", year: 2019 },
     ],
     professionalMemberships: [
-      { body: "IEEE", sinceYear: 2012 },
+      { body: "IEEE", memberSince: "2012-04-01" },
       { body: "ACME", sinceYear: 2013 },
       { body: "ISTE", sinceYear: 2015 },
     ],
-    adminResponsibilityEntries: [
-      { category: "IQAC", description: "IQAC Coordinator for the Department of CSE", fromYear: 2022 },
-      { category: "NBA", description: "NBA Documentation Lead for B.Tech CSE Accreditation", fromYear: 2021, toYear: 2023 },
+    academicResponsibilities: [
+      { category: "IQAC", description: "IQAC Coordinator for the Department of CSE", fromDate: "2022-06-01" },
+      { category: "NBA", description: "NBA Documentation Lead for B.Tech CSE Accreditation", fromDate: "2021-01-01", toDate: "2023-06-30" },
       { category: "COMMITTEE_MEMBER", description: "Anti-Ragging Committee Member", fromYear: 2019 },
     ],
-    labsEstablished: [
+    newLabsEstablished: [
       { facilityDetails: "AI & Distributed Systems Research Lab", outcomes: "Supports 6 ongoing PhD projects and 3 externally funded grants" },
     ],
-    trainingEntries: [
-      { type: "FDP", title: "Faculty Development Program on Federated Learning", organizer: "Shree Vishnu Educational Society", year: 2023 },
-      { type: "WORKSHOP", title: "Advanced GPU Computing Workshop", organizer: "NVIDIA Deep Learning Institute", year: 2022 },
-      { type: "CERTIFICATION", title: "TensorFlow Advanced Techniques Specialization", organizer: "Coursera / DeepLearning.AI", year: 2021 },
+    fdpsWorkshopsMoocsCertifications: [
+      { type: "FDP", titleOfTheProgram: "Faculty Development Program on Federated Learning", nameOfTheFacultyCoordinator: "Shree Vishnu Educational Society", fromDate: "2023-05-15" },
+      { type: "WORKSHOP", titleOfTheProgram: "Advanced GPU Computing Workshop", nameOfTheFacultyCoordinator: "NVIDIA Deep Learning Institute", fromDate: "2022-11-02" },
+      { type: "CERTIFICATION", titleOfTheProgram: "TensorFlow Advanced Techniques Specialization", nameOfTheFacultyCoordinator: "Coursera / DeepLearning.AI", year: 2021 },
     ],
   },
   otherInformation: "Reviewer for IEEE Transactions on Neural Networks, ACM Computing Surveys, and Springer Machine Learning. Doctoral committee member for 4 PhD scholars currently pursuing research in federated learning and edge AI.",

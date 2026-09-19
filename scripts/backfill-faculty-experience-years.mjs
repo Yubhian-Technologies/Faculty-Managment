@@ -73,9 +73,12 @@ function rowDates(r) {
 function allPreviousExperienceEntries(ap) {
   if (!ap) return [];
   return [
-    ...(ap.previousInstitutions ?? []),
-    ...(ap.industryExperienceEntries ?? []),
-    ...(ap.researchExperienceEntries ?? []),
+    // Current key names first, legacy names (previousInstitutions /
+    // industryExperienceEntries / researchExperienceEntries) as read-fallbacks
+    // for docs not yet through migrate-faculty-field-names.mjs.
+    ...(ap.academicExperience ?? ap.previousInstitutions ?? []),
+    ...(ap.industryExperience ?? ap.industryExperienceEntries ?? []),
+    ...(ap.researchExperience ?? ap.researchExperienceEntries ?? []),
   ];
 }
 function totalPreviousExperienceDays(rows) {

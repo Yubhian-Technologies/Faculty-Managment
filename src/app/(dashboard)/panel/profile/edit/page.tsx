@@ -14,26 +14,27 @@ import { TextInput } from "@/components/shared/ProfileFieldPrimitives";
 import { HIGHEST_QUALIFICATION_OPTIONS } from "@/lib/import/fieldConstraints";
 import { PHONE_REGEX } from "@/lib/validations";
 import { toast } from "@/hooks/useToast";
+import { migrateFacultyDoc } from "@/lib/faculty/fieldRenames";
 import { formatDate } from "@/lib/utils";
 import { DESIGNATION_LABELS, EMPLOYEE_CATEGORY_LABELS } from "@/types";
 import type { FacultyMember } from "@/types";
 
 // Sentinel for the "Others" row - matches hod/faculty/new/page.tsx's own
-// qualification picker.
+// highest-qualification picker.
 const OTHER_QUALIFICATION = "__OTHER__";
 
 interface IdentityForm {
   legalName: string;
   name: string;
   apaarFacultyId: string;
-  qualification: string;
+  highestQualification: string;
   specialization: string;
   email: string;
   phone: string;
 }
 
 const EMPTY_FORM: IdentityForm = {
-  legalName: "", name: "", apaarFacultyId: "", qualification: "", specialization: "", email: "", phone: "",
+  legalName: "", name: "", apaarFacultyId: "", highestQualification: "", specialization: "", email: "", phone: "",
 };
 
 // Self-service Identity & Employment editor for the "My Profile" page - the
@@ -63,7 +64,7 @@ export default function EditMyProfileIdentityPage() {
     fetch("/api/college/faculty/me")
       .then((r) => r.json() as Promise<{ faculty: Partial<FacultyMember> | null }>)
       .then((d) => {
-        const m = d.faculty;
+        const m = d.faculty ? (migrateFacultyDoc(d.faculty as Record<string, unknown>) as Partial<FacultyMember>) : null;
         if (!m) {
           toast({ variant: "destructive", title: "Profile record not found" });
           router.push("/panel/profile");
@@ -76,13 +77,13 @@ export default function EditMyProfileIdentityPage() {
         setEmployeeCategoryLabel(m.employeeCategory ? (EMPLOYEE_CATEGORY_LABELS[m.employeeCategory] ?? m.employeeCategory) : "-");
         setJoiningDateLabel(m.joiningDate ? formatDate(m.joiningDate) : "-");
         setAicteFacultyId(m.aicteFacultyId ?? "-");
-        const qualification = m.qualification ?? "";
-        setQualIsOther(!!qualification && !(HIGHEST_QUALIFICATION_OPTIONS as readonly string[]).includes(qualification));
+        const highestQualification = m.highestQualification ?? "";
+        setQualIsOther(!!highestQualification && !(HIGHEST_QUALIFICATION_OPTIONS as readonly string[]).includes(highestQualification));
         setForm({
           legalName: m.legalName ?? "",
           name: m.name ?? "",
           apaarFacultyId: m.apaarFacultyId ?? "",
-          qualification,
+          highestQualification,
           specialization: m.specialization ?? "",
           email: m.email ?? "",
           phone: m.phone ?? "",
@@ -104,7 +105,7 @@ export default function EditMyProfileIdentityPage() {
       toast({ variant: "destructive", title: "Full Name (as per SSC) is required" });
       return;
     }
-    if (!form.qualification.trim()) {
+    if (!form.highestQualification.trim()) {
       toast({ variant: "destructive", title: "Highest Qualification is required" });
       return;
     }
@@ -122,7 +123,7 @@ export default function EditMyProfileIdentityPage() {
           legalName: form.legalName.trim().toUpperCase(),
           name: form.name.trim(),
           apaarFacultyId: form.apaarFacultyId.trim(),
-          qualification: form.qualification.trim(),
+          highestQualification: form.highestQualification.trim(),
           specialization: form.specialization.trim(),
           email: form.email.trim(),
           phone: form.phone.trim(),
@@ -212,11 +213,11 @@ export default function EditMyProfileIdentityPage() {
               <div className="space-y-2">
                 <Label>Highest Qualification *</Label>
                 <Select
-                  value={qualIsOther ? OTHER_QUALIFICATION : (HIGHEST_QUALIFICATION_OPTIONS as readonly string[]).includes(form.qualification) ? form.qualification : ""}
+                  value={qualIsOther ? OTHER_QUALIFICATION : (HIGHEST_QUALIFICATION_OPTIONS as readonly string[]).includes(form.highestQualification) ? form.highestQualification : ""}
                   onValueChange={(v) => {
                     const other = v === OTHER_QUALIFICATION;
                     setQualIsOther(other);
-                    set({ qualification: other ? "" : v });
+                    set({ highestQualification: other ? "" : v });
                   }}
                 >
                   <SelectTrigger><SelectValue placeholder="Select qualification" /></SelectTrigger>
@@ -226,7 +227,7 @@ export default function EditMyProfileIdentityPage() {
                   </SelectContent>
                 </Select>
                 {qualIsOther && (
-                  <Input value={form.qualification} onChange={(e) => set({ qualification: e.target.value })} placeholder="e.g. MBA, M.Phil, M.A" />
+                  <Input value={form.highestQualification} onChange={(e) => set({ highestQualification: e.target.value })} placeholder="e.g. MBA, M.Phil, M.A" />
                 )}
               </div>
               <div className="space-y-2">
@@ -240,7 +241,7 @@ export default function EditMyProfileIdentityPage() {
             </div>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label>Date of Joining Institution</Label>
+                <Label>Date of Joining</Label>
                 <Input value={joiningDateLabel} disabled />
               </div>
               <div className="space-y-2">

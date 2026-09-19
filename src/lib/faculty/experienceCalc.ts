@@ -4,7 +4,7 @@ import { toDate } from "@/lib/utils";
 // entry, and (combined with Date of Joining) this faculty member's live
 // Total Years of Experience - used by the read-out shown next to each row
 // (AcademicProfileModuleFields.tsx's ExperienceFields), by
-// FacultyMember.experienceYears (kept in sync at save time - see
+// FacultyMember.totalYearsOfExperience (kept in sync at save time - see
 // hod/faculty/[id]/[module]/edit/page.tsx and the Add Faculty wizard), and by
 // the "Total Years of Experience" fact shown on the profile (FacultyProfileHub).
 
@@ -72,12 +72,22 @@ interface PreviousInstitutionLike {
   institutionName?: string;
 }
 
-// Academic (previousInstitutions), Industry, and Research Experience are 3
-// separate tabs (same row shape, different field labels - see ExperienceFields)
-// that all roll up into one combined "previous experience" total - every
-// caller computing Total/Internal/External Years of Experience combines all
-// three through here rather than reading previousInstitutions alone.
+// Academic, Industry, and Research Experience are 3 separate tabs (same row
+// shape - see ExperienceFields) that all roll up into one combined "previous
+// experience" total - every caller computing Total/Internal/External Years of
+// Experience combines all three through here rather than reading
+// academicExperience alone.
+//
+// Accepts BOTH the current key names (academicExperience / industryExperience /
+// researchExperience) and their legacy twins (previousInstitutions /
+// industryExperienceEntries / researchExperienceEntries - see fieldRenames.ts),
+// so a caller holding an un-normalised academicProfile still works. Per tab the
+// current key wins when both are present, mirroring the registry's semantics.
 interface ExperienceEntriesSource {
+  academicExperience?: PreviousInstitutionLike[];
+  industryExperience?: PreviousInstitutionLike[];
+  researchExperience?: PreviousInstitutionLike[];
+  // legacy read-fallbacks
   previousInstitutions?: PreviousInstitutionLike[];
   industryExperienceEntries?: PreviousInstitutionLike[];
   researchExperienceEntries?: PreviousInstitutionLike[];
@@ -85,9 +95,9 @@ interface ExperienceEntriesSource {
 export function allPreviousExperienceEntries(p: ExperienceEntriesSource | undefined): PreviousInstitutionLike[] {
   if (!p) return [];
   return [
-    ...(p.previousInstitutions ?? []),
-    ...(p.industryExperienceEntries ?? []),
-    ...(p.researchExperienceEntries ?? []),
+    ...(p.academicExperience ?? p.previousInstitutions ?? []),
+    ...(p.industryExperience ?? p.industryExperienceEntries ?? []),
+    ...(p.researchExperience ?? p.researchExperienceEntries ?? []),
   ];
 }
 
@@ -154,7 +164,7 @@ function totalPreviousExperienceDays(rows: PreviousInstitutionLike[] | undefined
 }
 
 // Sum of every Previous Experience row's duration, as a plain decimal-years
-// number - stored on FacultyMember.experienceYears (see hod/faculty/new &
+// number - stored on FacultyMember.totalYearsOfExperience (see hod/faculty/new &
 // [id]/[module]/edit's "experience" save handlers) and read wherever a
 // single sortable/filterable/exportable number is needed (CSV, resume,
 // public profile, faculty list). Every row's exact day count is summed
@@ -177,11 +187,11 @@ export function totalPreviousExperienceYears(rows: PreviousInstitutionLike[] | u
 // ending on `asOf`) instead of leaning on an average year/month length for
 // the conversion.
 export function totalYearsOfExperience(
-  previousInstitutions: PreviousInstitutionLike[] | undefined,
+  entries: PreviousInstitutionLike[] | undefined,
   joiningDate: Parameters<typeof toDate>[0],
   asOf: Date = new Date()
 ): DateDuration {
-  const prevDays = totalPreviousExperienceDays(previousInstitutions);
+  const prevDays = totalPreviousExperienceDays(entries);
   const joined = toDate(joiningDate);
   const tenureDays = joined ? Math.max(0, exactDays(joined, asOf)) : 0;
   const totalDays = prevDays + tenureDays;
@@ -198,18 +208,18 @@ export interface ExperienceBreakdown {
 
 // The one decimal-years Internal/External/Total snapshot every "give me a
 // plain sortable/exportable number" call site should use - FacultyMember.
-// experienceYears (see the create/update API routes), the CSV export, the
+// totalYearsOfExperience (see the create/update API routes), the CSV export, the
 // resume PDF, and the public profile all go through this rather than each
 // re-deriving their own rounding. Internal and external day counts are
 // summed FIRST and each rounded to 1 decimal only once at the very end
 // (same convention as totalPreviousExperienceYears), so total isn't just
 // internal + external re-rounded on top of two already-rounded numbers.
 export function experienceBreakdown(
-  previousInstitutions: PreviousInstitutionLike[] | undefined,
+  entries: PreviousInstitutionLike[] | undefined,
   joiningDate: Parameters<typeof toDate>[0],
   asOf: Date = new Date()
 ): ExperienceBreakdown {
-  const externalDays = totalPreviousExperienceDays(previousInstitutions);
+  const externalDays = totalPreviousExperienceDays(entries);
   const joined = toDate(joiningDate);
   const internalDays = joined ? Math.max(0, exactDays(joined, asOf)) : 0;
   const daysToYears = (days: number) => Math.round((days / 365.25) * 10) / 10;

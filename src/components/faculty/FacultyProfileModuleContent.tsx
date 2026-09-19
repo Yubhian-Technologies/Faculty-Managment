@@ -73,7 +73,7 @@ export function FacultyProfileModuleContent({ moduleKey, faculty, teachingAssign
   return (
     <Card>
       <CardContent className="pt-6">
-        {moduleKey === "personal" && <PersonalDetailsView value={faculty} hideLegalName={hideLegalName} />}
+        {moduleKey === "personal" && <PersonalDetailsView value={faculty} hideLegalName={hideLegalName} hiddenFields={["esiNumber"]} />}
         {moduleKey === "qualification" && <QualificationModule profile={faculty.academicProfile} collegeType={collegeType} />}
         {moduleKey === "experience" && (
           <ExperienceModule profile={faculty.academicProfile} includeTeachingAssignment={includeTeachingAssignment} joiningDate={faculty.joiningDate} />

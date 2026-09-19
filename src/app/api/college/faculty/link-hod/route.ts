@@ -6,6 +6,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
 import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
 import { experienceBreakdown, allPreviousExperienceEntries } from "@/lib/faculty/experienceCalc";
+import { normalizeAcademicProfile } from "@/lib/faculty/academicProfileCompat";
 import type { Designation, FacultyStatus } from "@/types";
 
 // An HOD or Sub-HOD login (Department.hodUid/hodName, role "HOD" on their
@@ -33,9 +34,8 @@ export async function POST(request: Request) {
       phone?: string;
       additionalPhoneNumbers?: { label?: string; number: string }[];
       designation: Designation;
-      qualification: string;
+      highestQualification: string;
       specialization?: string;
-      experienceYears: number;
       joiningDate: string;
       aicteFacultyId?: string;
       academicProfile?: Record<string, unknown>;
@@ -44,11 +44,11 @@ export async function POST(request: Request) {
     } & PersonalDetailsInput;
 
     const {
-      linkUid, department, employeeId, name, designation, qualification,
+      linkUid, department, employeeId, name, designation, highestQualification,
       joiningDate, profilePhotoUrl,
     } = body;
 
-    if (!linkUid || !department || !employeeId || !designation || !qualification || !joiningDate) {
+    if (!linkUid || !department || !employeeId || !designation || !highestQualification || !joiningDate) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
     // Same personal-detail requirements as the default create flow (POST
@@ -125,12 +125,12 @@ export async function POST(request: Request) {
         return numbers.length > 0 ? { additionalPhoneNumbers: numbers } : {};
       })()),
       designation,
-      qualification,
+      highestQualification,
       specialization: body.specialization ?? "",
       // Total Years of Experience - computed server-side, same as POST
       // /api/college/faculty and PATCH /api/college/faculty/[id], never
       // trusted from the client.
-      experienceYears: experienceBreakdown(
+      totalYearsOfExperience: experienceBreakdown(
         allPreviousExperienceEntries(body.academicProfile as Parameters<typeof allPreviousExperienceEntries>[0]),
         new Date(joiningDate)
       ).total,
@@ -138,7 +138,7 @@ export async function POST(request: Request) {
       ...(body.aicteFacultyId?.trim() ? { aicteFacultyId: body.aicteFacultyId.trim() } : {}),
       status: "ACTIVE" as FacultyStatus,
       userUid: linkUid,
-      ...(body.academicProfile ? { academicProfile: body.academicProfile } : {}),
+      ...(body.academicProfile ? { academicProfile: normalizeAcademicProfile(body.academicProfile) } : {}),
       ...(body.technicalProfile ? { technicalProfile: body.technicalProfile } : {}),
       ...(profilePhotoUrl ? { profilePhotoUrl } : {}),
       ...buildPersonalDetailsUpdate(body),

@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { CertificateUploadField } from "@/components/shared/CertificateUploadField";
 import { NumInput, TextInput, DateInput } from "@/components/shared/ProfileFieldPrimitives";
+import { migrateTrainingEntries } from "@/lib/faculty/fieldRenames";
 import type {
   TrainingEntry, TrainingEntryType, TrainingParticipationRole, TrainingProgramLevel, TrainingProgramMode,
   TrainingBeneficiaryType, TrainingBeneficiaryDepartmentEntry, TrainingBeneficiarySection, TrainingCoConductor,
@@ -232,12 +233,12 @@ function CoConductorFields({
   ownerFacultyId?: string;
   ownerFacultyName?: string;
   departments: DepartmentOption[];
-  // True on a co-conductor's own synced copy - only the organizer (the
-  // master copy, i.e. !readOnly) can add/remove co-conductors; everyone else
+  // True on a co-conductor's own synced copy - only the coordinator (the
+  // master copy, i.e. !readOnly) can add/remove co-conducting faculty; everyone else
   // gets a view-only list, per the sync design (syncTrainingEntryCoConductors).
   readOnly: boolean;
 }) {
-  const coConductors = item.coConductors ?? [];
+  const coConductingFaculty = item.coConductingFaculty ?? [];
   const [departmentId, setDepartmentId] = useState("");
   const [facultyOptions, setFacultyOptions] = useState<FacultyOption[]>([]);
   const [facultyId, setFacultyId] = useState("");
@@ -259,39 +260,41 @@ function CoConductorFields({
     setLoadingFaculty(true);
   }
 
-  const alreadyAddedIds = new Set(coConductors.map((c) => c.facultyId));
+  const alreadyAddedIds = new Set(coConductingFaculty.map((c) => c.facultyId));
   const selectableFaculty = facultyOptions.filter((f) => !alreadyAddedIds.has(f.id) && f.id !== ownerFacultyId);
 
   function addCoConductor() {
     const f = selectableFaculty.find((x) => x.id === facultyId);
     if (!f) return;
-    const next: TrainingCoConductor = { order: coConductors.length + 2, facultyId: f.id, name: f.name, department: f.department };
-    update({ coConductors: [...coConductors, next], id: item.id ?? crypto.randomUUID() });
+    const next: TrainingCoConductor = { order: coConductingFaculty.length + 2, facultyId: f.id, name: f.name, department: f.department };
+    update({ coConductingFaculty: [...coConductingFaculty, next], id: item.id ?? crypto.randomUUID() });
     setFacultyId("");
   }
 
   function removeCoConductor(facultyId: string) {
-    const next = coConductors
+    const next = coConductingFaculty
       .filter((c) => c.facultyId !== facultyId)
       .map((c, i) => ({ ...c, order: i + 2 }));
-    update({ coConductors: next });
+    update({ coConductingFaculty: next });
   }
 
-  // The organizer is whoever created this entry - item.ownerFacultyName on a
+  // The coordinator is whoever created this entry - item.ownerFacultyName on a
   // synced copy (set by syncTrainingEntryCoConductors), or the current page's
   // own owner when this IS the master entry. Never the page-viewer's own name
-  // on a copy - that person is a co-conductor here, not the organizer.
-  const organizerName = item.isCoConductedCopy ? (item.ownerFacultyName || "Another faculty member") : (ownerFacultyName || "You");
-  const viewerIsOrganizer = !item.isCoConductedCopy;
+  // on a copy - that person is a co-conductor here, not the coordinator.
+  const coordinatorName = item.isCoConductedCopy ? (item.ownerFacultyName || "Another faculty member") : (ownerFacultyName || "You");
+  const viewerIsCoordinator = !item.isCoConductedCopy;
 
   return (
     <div className="sm:col-span-2 space-y-2 rounded-lg border p-3">
       <Label>Name of the Faculty / Coordinator</Label>
+      <p className="text-sm">
+        1. {coordinatorName} {viewerIsCoordinator && <span className="text-xs text-muted-foreground">(You)</span>}
+      </p>
+      <Label>Co-Conducting Faculty</Label>
       <div className="space-y-1">
-        <p className="text-sm">
-          1. {organizerName} {viewerIsOrganizer && <span className="text-xs text-muted-foreground">(You)</span>}
-        </p>
-        {coConductors.map((c) => (
+        {coConductingFaculty.length === 0 && <p className="text-xs text-muted-foreground">None added yet.</p>}
+        {coConductingFaculty.map((c) => (
           <div key={c.facultyId} className="flex items-center justify-between text-sm">
             <span>
               {c.order}. {c.name} <span className="text-xs text-muted-foreground">({c.department})</span>
@@ -345,7 +348,11 @@ interface TrainingEntryFieldsProps {
   ownerFacultyName?: string;
 }
 
-export function TrainingEntryFields({ item, update, ownerFacultyId, ownerFacultyName }: TrainingEntryFieldsProps) {
+export function TrainingEntryFields({ item: rawItem, update, ownerFacultyId, ownerFacultyName }: TrainingEntryFieldsProps) {
+  // An entry loaded from an un-migrated Firestore doc still has the legacy key
+  // names - lift it so the form shows that data (callers hand in already-lifted
+  // lists, so that the merged patch never mixes old and new keys).
+  const item = (migrateTrainingEntries([rawItem]) as TrainingEntry[])[0];
   const departments = useDepartmentOptions();
   const courses = useCourseOptions();
   const readOnly = !!item.isCoConductedCopy;
@@ -355,7 +362,7 @@ export function TrainingEntryFields({ item, update, ownerFacultyId, ownerFaculty
   // Participated (just attending) and NPTEL/MOOCs (a self-paced course, no
   // one to organize it for) never have a beneficiary audience or resource
   // persons - only someone who ran the program does.
-  const hideBeneficiariesAndResourcePersons = item.role === "PARTICIPATED" || item.type === "MOOC";
+  const hideBeneficiariesAndResourcePersons = item.participatedOrConducted === "PARTICIPATED" || item.type === "MOOC";
 
   // Placement Training and Alumni Talks are always Conducted - there's no
   // "Participated" role for either (see the Type Select below) - and only
@@ -366,30 +373,30 @@ export function TrainingEntryFields({ item, update, ownerFacultyId, ownerFaculty
     ? ["STUDENTS"]
     : ["STUDENTS", "FACULTY"];
 
-  // Keeps beneficiaryType inside whatever this type currently allows -
+  // Keeps beneficiaries inside whatever this type currently allows -
   // switching into/out of Placement Training or Alumni Talks can make a
   // previously valid Faculty pick suddenly disallowed.
   useEffect(() => {
-    if (item.beneficiaryType && !allowedBeneficiaryTypes.includes(item.beneficiaryType)) {
-      update({ beneficiaryType: allowedBeneficiaryTypes[0] });
+    if (item.beneficiaries && !allowedBeneficiaryTypes.includes(item.beneficiaries)) {
+      update({ beneficiaries: allowedBeneficiaryTypes[0] });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isConductedOnlyStudentsOnly, item.beneficiaryType]);
+  }, [isConductedOnlyStudentsOnly, item.beneficiaries]);
 
-  // organizer only ever got set at the moment "Conducted" was first picked
-  // (see the Select below) - if ownerFacultyName wasn't available yet at
+  // The coordinator name only ever got set at the moment "Conducted" was first
+  // picked (see the Select below) - if ownerFacultyName wasn't available yet at
   // that instant (e.g. mid Add-Faculty wizard, before the record has a name
   // locked in), it saved blank and nothing ever corrected it afterwards,
-  // even though the "1. {organizer}" line above the co-conductor list looked
-  // right here the whole time (it renders live from ownerFacultyName, not
+  // even though the "1. {coordinator}" line above the co-conducting faculty list
+  // looked right here the whole time (it renders live from ownerFacultyName, not
   // from the stored field). This keeps the stored value truthfully in sync
   // whenever a real name becomes available, self-healing on next save.
   useEffect(() => {
-    if (!readOnly && item.role === "CONDUCTED" && ownerFacultyName && item.organizer !== ownerFacultyName) {
-      update({ organizer: ownerFacultyName });
+    if (!readOnly && item.participatedOrConducted === "CONDUCTED" && ownerFacultyName && item.nameOfTheFacultyCoordinator !== ownerFacultyName) {
+      update({ nameOfTheFacultyCoordinator: ownerFacultyName });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [readOnly, item.role, item.organizer, ownerFacultyName]);
+  }, [readOnly, item.participatedOrConducted, item.nameOfTheFacultyCoordinator, ownerFacultyName]);
 
   return (
     <>
@@ -405,16 +412,16 @@ export function TrainingEntryFields({ item, update, ownerFacultyId, ownerFaculty
             value={item.type}
             onValueChange={(v) => update({
               type: v as TrainingEntryType,
-              otherType: v === "OTHER" ? item.otherType : undefined,
+              pleaseSpecifyType: v === "OTHER" ? item.pleaseSpecifyType : undefined,
               // MOOC/CERTIFICATION don't have a role at all; Placement
               // Training and Alumni Talks always have exactly one (CONDUCTED,
               // no Participated option) - clear/force role and its dependent
               // fields when switching type.
-              role: (v === "MOOC" || v === "CERTIFICATION") ? undefined
-                : (v === "PLACEMENT_TRAINING" || v === "ALUMNI_TALK") ? "CONDUCTED" : item.role,
-              organizer: (v === "MOOC" || v === "CERTIFICATION") ? ""
-                : (v === "PLACEMENT_TRAINING" || v === "ALUMNI_TALK") ? (ownerFacultyName ?? "") : item.organizer,
-              coConductors: (v === "MOOC" || v === "CERTIFICATION") ? undefined : item.coConductors,
+              participatedOrConducted: (v === "MOOC" || v === "CERTIFICATION") ? undefined
+                : (v === "PLACEMENT_TRAINING" || v === "ALUMNI_TALK") ? "CONDUCTED" : item.participatedOrConducted,
+              nameOfTheFacultyCoordinator: (v === "MOOC" || v === "CERTIFICATION") ? ""
+                : (v === "PLACEMENT_TRAINING" || v === "ALUMNI_TALK") ? (ownerFacultyName ?? "") : item.nameOfTheFacultyCoordinator,
+              coConductingFaculty: (v === "MOOC" || v === "CERTIFICATION") ? undefined : item.coConductingFaculty,
               remark: (v === "MOOC" || v === "CERTIFICATION" || v === "PLACEMENT_TRAINING" || v === "ALUMNI_TALK") ? undefined : item.remark,
               certificationType: v === "CERTIFICATION" ? item.certificationType : undefined,
             })}
@@ -428,7 +435,7 @@ export function TrainingEntryFields({ item, update, ownerFacultyId, ownerFaculty
           </Select>
         </div>
         {item.type === "OTHER" && (
-          <TextInput label="Please specify type" value={item.otherType} onChange={(v) => update({ otherType: v })} />
+          <TextInput label="Please specify type" value={item.pleaseSpecifyType} onChange={(v) => update({ pleaseSpecifyType: v })} />
         )}
         {item.type === "CERTIFICATION" ? (
           <div className="space-y-2">
@@ -451,11 +458,11 @@ export function TrainingEntryFields({ item, update, ownerFacultyId, ownerFaculty
           <div className="space-y-2">
             <Label>Participated or Conducted</Label>
             <Select
-              value={item.role ?? ""}
+              value={item.participatedOrConducted ?? ""}
               onValueChange={(v) => update({
-                role: v as TrainingParticipationRole,
-                organizer: v === "CONDUCTED" ? (ownerFacultyName ?? "") : "",
-                coConductors: v === "CONDUCTED" ? item.coConductors : undefined,
+                participatedOrConducted: v as TrainingParticipationRole,
+                nameOfTheFacultyCoordinator: v === "CONDUCTED" ? (ownerFacultyName ?? "") : "",
+                coConductingFaculty: v === "CONDUCTED" ? item.coConductingFaculty : undefined,
                 remark: v === "PARTICIPATED" ? item.remark : undefined,
               })}
             >
@@ -468,31 +475,31 @@ export function TrainingEntryFields({ item, update, ownerFacultyId, ownerFaculty
             </Select>
           </div>
         ) : null}
-        <TextInput label="Title of the Program" value={item.title} onChange={(v) => update({ title: v })} />
+        <TextInput label="Title of the Program" value={item.titleOfTheProgram} onChange={(v) => update({ titleOfTheProgram: v })} />
         {item.type === "MOOC" || item.type === "CERTIFICATION" ? (
-          <NumInput label="Number of Weeks" value={item.durationWeeks} onChange={(v) => update({ durationWeeks: v })} />
+          <NumInput label="Number of Weeks" value={item.numberOfWeeks} onChange={(v) => update({ numberOfWeeks: v })} />
         ) : (
           <>
             <DateInput
               label="From Date"
               value={item.fromDate}
-              onChange={(v) => update({ fromDate: v, durationDays: calcDurationDays(v, item.toDate) })}
+              onChange={(v) => update({ fromDate: v, duration: calcDurationDays(v, item.toDate) })}
             />
             <DateInput
               label="To Date"
               value={item.toDate}
-              onChange={(v) => update({ toDate: v, durationDays: calcDurationDays(item.fromDate, v) })}
+              onChange={(v) => update({ toDate: v, duration: calcDurationDays(item.fromDate, v) })}
               min={item.fromDate}
             />
             <div className="space-y-2">
               <Label className="text-xs text-muted-foreground">Duration</Label>
-              <p className="text-sm font-medium pt-2">{item.durationDays ? `${item.durationDays} day${item.durationDays === 1 ? "" : "s"}` : "-"}</p>
+              <p className="text-sm font-medium pt-2">{item.duration ? `${item.duration} day${item.duration === 1 ? "" : "s"}` : "-"}</p>
             </div>
           </>
         )}
         <div className="space-y-2">
           <Label>National / International</Label>
-          <Select value={item.levelOfProgram ?? ""} onValueChange={(v) => update({ levelOfProgram: v as TrainingProgramLevel })}>
+          <Select value={item.nationalInternational ?? ""} onValueChange={(v) => update({ nationalInternational: v as TrainingProgramLevel })}>
             <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
             <SelectContent>
               {Object.entries(TRAINING_PROGRAM_LEVEL_LABELS).map(([k, label]) => (
@@ -504,7 +511,7 @@ export function TrainingEntryFields({ item, update, ownerFacultyId, ownerFaculty
         <TextInput label="Place" value={item.place} onChange={(v) => update({ place: v })} placeholder="e.g. Bhimavaram" />
         <div className="space-y-2">
           <Label>Mode of the Program</Label>
-          <Select value={item.mode ?? ""} onValueChange={(v) => update({ mode: v as TrainingProgramMode })}>
+          <Select value={item.modeOfTheProgram ?? ""} onValueChange={(v) => update({ modeOfTheProgram: v as TrainingProgramMode })}>
             <SelectTrigger><SelectValue placeholder="Select mode" /></SelectTrigger>
             <SelectContent>
               {Object.entries(TRAINING_PROGRAM_MODE_LABELS).map(([k, label]) => (
@@ -517,7 +524,7 @@ export function TrainingEntryFields({ item, update, ownerFacultyId, ownerFaculty
         {!hideBeneficiariesAndResourcePersons && (
         <div className="sm:col-span-2 space-y-2 rounded-lg border p-3">
             <Label>Beneficiaries</Label>
-            <Select value={item.beneficiaryType ?? ""} onValueChange={(v) => update({ beneficiaryType: v as TrainingBeneficiaryType })}>
+            <Select value={item.beneficiaries ?? ""} onValueChange={(v) => update({ beneficiaries: v as TrainingBeneficiaryType })}>
               <SelectTrigger className="w-44"><SelectValue placeholder="Students / Faculty" /></SelectTrigger>
               <SelectContent>
                 {Object.entries(TRAINING_BENEFICIARY_TYPE_LABELS)
@@ -528,7 +535,7 @@ export function TrainingEntryFields({ item, update, ownerFacultyId, ownerFaculty
               </SelectContent>
             </Select>
 
-            {item.beneficiaryType === "STUDENTS" && (
+            {item.beneficiaries === "STUDENTS" && (
               <div className="space-y-2">
                 {beneficiaryDepartments.map((d, i) => (
                   <BeneficiaryDepartmentCard
@@ -537,11 +544,11 @@ export function TrainingEntryFields({ item, update, ownerFacultyId, ownerFaculty
                     onChange={(next) => {
                       const nextList = [...beneficiaryDepartments];
                       nextList[i] = next;
-                      update({ beneficiaryDepartments: nextList, beneficiaryTotalCount: sumBeneficiarySections(nextList) });
+                      update({ beneficiaryDepartments: nextList, totalCount: sumBeneficiarySections(nextList) });
                     }}
                     onRemove={() => {
                       const nextList = beneficiaryDepartments.filter((_, idx) => idx !== i);
-                      update({ beneficiaryDepartments: nextList, beneficiaryTotalCount: sumBeneficiarySections(nextList) });
+                      update({ beneficiaryDepartments: nextList, totalCount: sumBeneficiarySections(nextList) });
                     }}
                   />
                 ))}
@@ -550,7 +557,7 @@ export function TrainingEntryFields({ item, update, ownerFacultyId, ownerFaculty
                   existingCourseYears={existingCourseYears}
                   onAdd={(entry) => {
                     const nextList = [...beneficiaryDepartments, entry];
-                    update({ beneficiaryDepartments: nextList, beneficiaryTotalCount: sumBeneficiarySections(nextList) });
+                    update({ beneficiaryDepartments: nextList, totalCount: sumBeneficiarySections(nextList) });
                   }}
                 />
                 <div className="space-y-2">
@@ -561,35 +568,35 @@ export function TrainingEntryFields({ item, update, ownerFacultyId, ownerFaculty
               </div>
             )}
 
-            {item.beneficiaryType === "FACULTY" && (
+            {item.beneficiaries === "FACULTY" && (
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <NumInput
-                  label="Internal"
-                  value={item.beneficiaryInternalCount}
-                  onChange={(v) => update({ beneficiaryInternalCount: v, beneficiaryTotalCount: v + (item.beneficiaryExternalCount ?? 0) })}
+                  label="Internal Count"
+                  value={item.internalCount}
+                  onChange={(v) => update({ internalCount: v, totalCount: v + (item.externalCount ?? 0) })}
                 />
                 <NumInput
-                  label="External"
-                  value={item.beneficiaryExternalCount}
-                  onChange={(v) => update({ beneficiaryExternalCount: v, beneficiaryTotalCount: (item.beneficiaryInternalCount ?? 0) + v })}
+                  label="External Count"
+                  value={item.externalCount}
+                  onChange={(v) => update({ externalCount: v, totalCount: (item.internalCount ?? 0) + v })}
                 />
                 <div className="space-y-2">
                   <Label>Total Count</Label>
                   {/* Internal + External - not entered directly. */}
-                  <Input value={(item.beneficiaryInternalCount ?? 0) + (item.beneficiaryExternalCount ?? 0)} readOnly disabled className="bg-muted" />
+                  <Input value={(item.internalCount ?? 0) + (item.externalCount ?? 0)} readOnly disabled className="bg-muted" />
                 </div>
               </div>
             )}
         </div>
         )}
 
-        {item.role === "CONDUCTED" && (
+        {item.participatedOrConducted === "CONDUCTED" && (
           <CoConductorFields
             item={item} update={update} ownerFacultyId={ownerFacultyId} ownerFacultyName={ownerFacultyName}
             departments={departments} readOnly={readOnly}
           />
         )}
-        {item.role === "PARTICIPATED" && (
+        {item.participatedOrConducted === "PARTICIPATED" && (
           <div className="sm:col-span-2 space-y-2">
             <Label>Remark</Label>
             <Textarea value={item.remark ?? ""} onChange={(e) => update({ remark: e.target.value })} />
@@ -633,6 +640,7 @@ export function TrainingEntryFields({ item, update, ownerFacultyId, ownerFaculty
               value={item.certificateUrl}
               onUploaded={(url) => update({ certificateUrl: url })}
               onRemoved={() => update({ certificateUrl: "" })}
+              label="Certificate"
               buttonText="Upload Certificate"
             />
             <CertificateUploadField
