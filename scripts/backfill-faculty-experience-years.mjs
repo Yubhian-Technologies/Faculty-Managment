@@ -1,5 +1,8 @@
 /**
- * Corrects `FacultyMember.experienceYears` on every faculty record.
+ * Corrects `FacultyMember.totalYearsOfExperience` on every faculty record.
+ * (Its legacy name, `experienceYears`, is read as a fallback and removed from any
+ * doc this script writes - it must never be re-created here; see
+ * src/lib/faculty/fieldRenames.ts.)
  *
  * That field is labeled "Total Years of Experience" everywhere it's shown
  * (Add Faculty form, CSV export, resume PDF, public profile) but was, until
@@ -33,7 +36,7 @@
 
 import "dotenv/config";
 import { initializeApp, cert, getApps } from "firebase-admin/app";
-import { getFirestore } from "firebase-admin/firestore";
+import { getFirestore, FieldValue } from "firebase-admin/firestore";
 
 const APPLY = process.argv.includes("--apply");
 const collegeArgIdx = process.argv.indexOf("--college");
@@ -120,18 +123,27 @@ async function run() {
       totalChecked++;
       const x = doc.data();
       const correctTotal = experienceTotalYears(x.academicProfile, x.joiningDate, asOf);
-      const storedTotal = typeof x.experienceYears === "number" ? x.experienceYears : 0;
-      if (correctTotal === storedTotal) continue;
+      // New key wins; the legacy twin is only a read fallback for un-migrated docs.
+      const stored = x.totalYearsOfExperience ?? x.experienceYears;
+      const storedTotal = typeof stored === "number" ? stored : 0;
+      // A doc already at the right value is skipped, unless it still carries the
+      // legacy key - then only that key is cleaned up (value is already correct).
+      const hasLegacy = "experienceYears" in x;
+      if (correctTotal === storedTotal && !hasLegacy) continue;
 
       if (!collegeHeaderPrinted) {
         console.log(`\n=== College ${collegeDoc.id} (${collegeName}) ===`);
         collegeHeaderPrinted = true;
       }
-      console.log(`  ${APPLY ? "WRITE" : "PLAN "} ${x.employeeId ?? doc.id}: experienceYears ${storedTotal} -> ${correctTotal}`);
+      console.log(`  ${APPLY ? "WRITE" : "PLAN "} ${x.employeeId ?? doc.id}: totalYearsOfExperience ${storedTotal} -> ${correctTotal}${hasLegacy ? " (removing legacy experienceYears)" : ""}`);
       totalCorrected++;
 
       if (APPLY) {
-        batch.update(doc.ref, { experienceYears: correctTotal, updatedAt: asOf });
+        batch.update(doc.ref, {
+          totalYearsOfExperience: correctTotal,
+          ...(hasLegacy ? { experienceYears: FieldValue.delete() } : {}),
+          updatedAt: asOf,
+        });
         batchHasWrites = true;
       }
     }

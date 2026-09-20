@@ -34,7 +34,7 @@ function useManagementStaff(collegeId: string, role: Props["role"], department?:
     queryFn: () => {
       const qs = new URLSearchParams({ role, ...(department ? { department } : {}) });
       return fetch(`/api/management/colleges/${collegeId}/staff?${qs}`)
-        .then((r) => r.json() as Promise<{ profile: Partial<FacultyMember> | null; publications?: ResearchPublication[] }>);
+        .then((r) => r.json() as Promise<{ profile: (Partial<FacultyMember> & { name?: string }) | null; publications?: ResearchPublication[] }>);
     },
   });
 }

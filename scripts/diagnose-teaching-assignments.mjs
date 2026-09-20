@@ -48,7 +48,7 @@ async function run() {
     for (const f of facultySnap.docs) {
       const d = f.data();
       const linked = d.userUid ? (validUids.has(d.userUid) ? "OK" : "userUid set but NOT a valid users/{uid} doc!") : "NO LOGIN LINKED";
-      console.log(`  ${f.id}  name=${d.name}  role=${d.role ?? "?"}  userUid=${d.userUid ?? "-"}  [${linked}]`);
+      console.log(`  ${f.id}  name=${d.legalName ?? d.name}  role=${d.role ?? "?"}  userUid=${d.userUid ?? "-"}  [${linked}]`);
     }
 
     console.log(`-- teachingAssignments (${assignmentsSnap.size}) --`);

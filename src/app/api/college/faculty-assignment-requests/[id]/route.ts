@@ -93,7 +93,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
     const facultySnap = await collegeRef.collection("facultyMembers").doc(body.facultyId).get();
     if (!facultySnap.exists) return NextResponse.json({ error: "Faculty not found" }, { status: 404 });
-    const faculty = facultySnap.data() as { name?: string; legalName?: string; department?: string };
+    const faculty = facultySnap.data() as { legalName?: string; department?: string };
     const allocatedName = facultyDisplayName(faculty);
     // An Incharge (no HOD scope tree) may only offer up faculty from the
     // exact department the request targeted - an HOD may also reach into a

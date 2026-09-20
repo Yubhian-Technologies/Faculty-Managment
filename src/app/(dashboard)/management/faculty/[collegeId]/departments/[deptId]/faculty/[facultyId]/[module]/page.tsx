@@ -7,6 +7,7 @@ import { ArrowLeft } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { FacultyProfileModuleContent } from "@/components/faculty/FacultyProfileModuleContent";
+import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { PROFILE_MODULES, type ProfileModuleKey } from "@/lib/faculty/profileModules";
 import type { FacultyMember, TeachingAssignment, College, ResearchPublication } from "@/types";
 
@@ -43,7 +44,7 @@ export default function ManagementFacultyModulePage() {
     <div className="space-y-6">
       <PageHeader
         title={moduleDef.label}
-        description={faculty?.name}
+        description={facultyDisplayName(faculty)}
         actions={
           <Button variant="outline" asChild>
             <Link href={`/management/faculty/${collegeId}/departments/${deptId}/faculty/${facultyId}`}>
@@ -63,6 +64,7 @@ export default function ManagementFacultyModulePage() {
           collegeType={collegeType}
           publications={publications}
           hideLegalName
+          showNameAsPerPan
         />
       ) : (
         <p className="text-sm text-muted-foreground">Faculty record not found.</p>

@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { createFirebaseUser } from "@/lib/firebase/authRest";
+import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 
 export async function POST(
   request: Request,
@@ -35,7 +36,7 @@ export async function POST(
       return NextResponse.json({ error: "Faculty not found" }, { status: 404 });
     }
 
-    const data = snap.data() as { userUid?: string; name?: string; department?: string; profilePhotoUrl?: string };
+    const data = snap.data() as { userUid?: string; legalName?: string; department?: string; profilePhotoUrl?: string };
 
     if (data.userUid) {
       return NextResponse.json(
@@ -44,7 +45,8 @@ export async function POST(
       );
     }
 
-    const name = data.name ?? "";
+    // The login's display name is the faculty member's legalName (see facultyDisplayName()).
+    const name = facultyDisplayName(data);
     const department = data.department ?? "";
     const profilePhotoUrl = data.profilePhotoUrl;
 

@@ -7,14 +7,14 @@ import {
   MentorshipFields, FinancialFields, OthersFields,
 } from "@/components/faculty/AcademicProfileModuleFields";
 import type { ProfileModuleKey } from "@/lib/faculty/profileModules";
+import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import type { FacultyProfileFields, CollegeType } from "@/types";
 
-// The record shape every per-module edit page holds in local state - name +
+// The record shape every per-module edit page holds in local state -
 // PersonalDetailsFields' fields live at the top level (matching the host doc,
 // FacultyMember or FMSUser), academicProfile is nested exactly as the PATCH
 // routes expect it.
 export interface FacultyEditRecord extends PersonalDetailsValue {
-  name?: string;
   academicProfile?: Partial<FacultyProfileFields>;
   joiningLetterUrl?: string;
   appointmentLetterUrl?: string;
@@ -77,6 +77,7 @@ export function FacultyProfileModuleEditor({
           onChange={(v) => onChange(v)}
           requiredFields={requiredPersonalFields}
           hiddenFields={hideLegalName ? ["legalName", "esiNumber"] : ["esiNumber"]}
+          showNameAsPerPan
         />
       );
     case "qualification":
@@ -97,7 +98,7 @@ export function FacultyProfileModuleEditor({
           value={academicProfile}
           onChange={(ap) => onChange({ academicProfile: ap })}
           ownerFacultyId={facultyId}
-          ownerFacultyName={record.legalName?.trim() || record.name?.trim()}
+          ownerFacultyName={facultyDisplayName(record)}
         />
       );
     case "financial":

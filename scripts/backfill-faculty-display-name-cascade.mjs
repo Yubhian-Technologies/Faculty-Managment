@@ -56,10 +56,11 @@ if (!getApps().length) {
 
 const db = getFirestore();
 
-// Same precedence as facultyDisplayName() - Full Name (as per SSC) preferred,
-// Name (as per PAN) only as a fallback.
+// Same as facultyDisplayName() (src/lib/faculty/facultyDisplayName.ts) - Full
+// Name (as per SSC), legalName, is the ONLY display name; the legacy `name`
+// key and nameAsPerPan are never used as a fallback.
 function facultyDisplayName(f) {
-  return (f?.legalName ?? "").trim() || (f?.name ?? "").trim() || "";
+  return (f?.legalName ?? "").trim();
 }
 
 // Applies `updates` to every doc in `snap` whose current value at `field`

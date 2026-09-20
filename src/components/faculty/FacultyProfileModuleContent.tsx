@@ -21,9 +21,6 @@ import type { FacultyProfileFields, TeachingAssignment, CollegeType, ResearchPub
 export interface FacultyProfileSource extends PersonalDetailsSource {
   academicProfile?: FacultyProfileFields;
   department?: string;
-  // Name (as per PAN) - facultyDisplayName() prefers legalName (already part
-  // of PersonalDetailsSource) but falls back to this when a record has none.
-  name?: string;
   joiningLetterUrl?: string;
   appointmentLetterUrl?: string;
   uid?: string;      // FMSUser (HOD/Principal self-profile) login uid
@@ -57,6 +54,9 @@ interface Props {
   // other caller (self-profile pages for non-Faculty logins) leaves this
   // false/default, unchanged from before.
   hideLegalName?: boolean;
+  // True only for a genuine FacultyMember record (Name (as per PAN) is a
+  // Faculty personal detail; login-only FMSUser profiles don't have it).
+  showNameAsPerPan?: boolean;
   // True only when the viewer IS this profile's owner (MyProfileModulePage,
   // principal/profile) - lets the Research tile offer "Add Publication" for
   // self-submission. Everyone viewing someone ELSE's profile (HOD/Principal/
@@ -69,11 +69,11 @@ interface Props {
 // pieces as the old single-scroll views (ProfileFieldsView's per-module
 // exports, PersonalDetailsView, TeachingLoadTable) so nothing here
 // duplicates field-rendering logic.
-export function FacultyProfileModuleContent({ moduleKey, faculty, teachingAssignments = [], includeTeachingAssignment = true, collegeType, publications, hideLegalName, isOwnProfile }: Props) {
+export function FacultyProfileModuleContent({ moduleKey, faculty, teachingAssignments = [], includeTeachingAssignment = true, collegeType, publications, hideLegalName, showNameAsPerPan, isOwnProfile }: Props) {
   return (
     <Card>
       <CardContent className="pt-6">
-        {moduleKey === "personal" && <PersonalDetailsView value={faculty} hideLegalName={hideLegalName} hiddenFields={["esiNumber"]} />}
+        {moduleKey === "personal" && <PersonalDetailsView value={faculty} hideLegalName={hideLegalName} showNameAsPerPan={showNameAsPerPan} hiddenFields={["esiNumber"]} />}
         {moduleKey === "qualification" && <QualificationModule profile={faculty.academicProfile} collegeType={collegeType} />}
         {moduleKey === "experience" && (
           <ExperienceModule profile={faculty.academicProfile} includeTeachingAssignment={includeTeachingAssignment} joiningDate={faculty.joiningDate} />

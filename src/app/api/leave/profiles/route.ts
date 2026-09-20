@@ -72,11 +72,9 @@ export async function GET() {
     ]);
 
     const facultyMembers = facultyMembersSnap.docs
-      .map((d) => d.data() as { userUid?: string; name?: string; legalName?: string; department?: string; designation: string })
+      .map((d) => d.data() as { userUid?: string; legalName?: string; department?: string; designation: string })
       .filter((f) => !!f.userUid)
-      // Full Name (as per SSC) takes precedence over Name (as per PAN) - same
-      // precedence used everywhere else this record is displayed
-      // (facultyDisplayName()/supportingStaffDisplayName()).
+      // Full Name (as per SSC) is the only faculty display name (facultyDisplayName()).
       .map((f) => ({ ...f, displayName: facultyDisplayName(f) }));
     const facultyList = facultyMembers
       .filter((f) => !LEGACY_TECHNICAL_DESIGNATIONS.includes(f.designation))

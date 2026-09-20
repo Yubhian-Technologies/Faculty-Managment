@@ -345,11 +345,10 @@ export async function POST(request: Request) {
       const subject = subjectSnap.data() as { name: string; code: string; hoursPerWeek: number };
 
       // Server-computed, never trusting whatever `facultyName` the client sent -
-      // Full Name (as per SSC) preferred, Name (as per PAN) only as a fallback,
-      // same precedence facultyDisplayName() uses everywhere else.
+      // legalName only (facultyDisplayName()).
       const facultyMemberSnap = await collegeRef.collection("facultyMembers").doc(facultyId).get();
       if (!facultyMemberSnap.exists) return NextResponse.json({ error: "Faculty not found" }, { status: 404 });
-      const resolvedFacultyName = facultyDisplayName(facultyMemberSnap.data() as { name?: string; legalName?: string });
+      const resolvedFacultyName = facultyDisplayName(facultyMemberSnap.data() as { legalName?: string });
 
       // A parent department's HOD has full control over their own department and
       // every sub-department beneath it, so both the section and the faculty may
@@ -557,7 +556,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "Subject not found" }, { status: 400 });
       }
 
-      const faculty = facultySnap.data() as { name?: string; legalName?: string; department?: string };
+      const faculty = facultySnap.data() as { legalName?: string; department?: string };
       const subject = subjectSnap.data() as { name?: string; code?: string; department?: string; hoursPerWeek?: number };
 
       // HOD may assign within their own department and any sub-department beneath

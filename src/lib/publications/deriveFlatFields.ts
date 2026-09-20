@@ -1,5 +1,6 @@
 import type { Firestore } from "firebase-admin/firestore";
 import type { PublicationDetails, PublicationAuthor } from "@/types";
+import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 
 // Server-side finalization of a submitted PublicationDetails: for each
 // Internal author, re-verifies their Employee ID against a real
@@ -32,13 +33,12 @@ export async function finalizePublicationDetails(
     if (a.isInternal && a.authorType === "FACULTY" && a.facultyId?.trim()) {
       const snap = await db.collection("colleges").doc(ownCollegeId).collection("facultyMembers")
         .where("employeeId", "==", a.facultyId.trim()).limit(1).get();
-      const f = snap.docs[0]?.data() as { name?: string; legalName?: string; userUid?: string } | undefined;
+      const f = snap.docs[0]?.data() as { legalName?: string; userUid?: string } | undefined;
       if (f) {
         if (f.userUid) internalAuthorUids.push(f.userUid);
         authors.push({
-          // Full Name (as per SSC) preferred, Name (as per PAN) only as a fallback -
-          // same precedence facultyDisplayName() uses everywhere else.
-          ...a, isInternal: true, name: f.legalName?.trim() || f.name?.trim() || a.name,
+          // legalName only (facultyDisplayName()); the entered name stays if a record has none.
+          ...a, isInternal: true, name: facultyDisplayName(f) || a.name,
           affiliationCollegeId: ownCollegeId, affiliationCollegeName: await ownCollege(), affiliationCountry: undefined,
         });
         continue;

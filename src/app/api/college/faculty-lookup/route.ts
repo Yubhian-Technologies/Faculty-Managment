@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { PUBLICATION_ELIGIBLE_ROLES } from "@/lib/publications/eligibleRoles";
+import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 
 // Looks up an internal author's name by Employee ID, within the caller's own
 // college only - used when recording a publication's Internal author (see
@@ -20,10 +21,8 @@ export async function GET(request: Request) {
       .where("employeeId", "==", employeeId).limit(1).get();
     if (snap.empty) return NextResponse.json({ error: "No faculty member found with that Employee ID" }, { status: 404 });
 
-    const f = snap.docs[0].data() as { name?: string; legalName?: string };
-    // Full Name (as per SSC) preferred, Name (as per PAN) only as a fallback -
-    // same precedence facultyDisplayName() uses everywhere else.
-    return NextResponse.json({ name: f.legalName?.trim() || f.name?.trim() || "" });
+    const f = snap.docs[0].data() as { legalName?: string };
+    return NextResponse.json({ name: facultyDisplayName(f) });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

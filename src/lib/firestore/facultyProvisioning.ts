@@ -140,10 +140,13 @@ export async function provisionFacultyFromOffer(
     candidateId: letter.candidateId,
     offerId,
     employeeId,
-    name,
+    // The candidate's name is the faculty member's identity/display name, NOT
+    // verified PAN data - it goes to legalName. nameAsPerPan is left unset (it
+    // is only ever filled from a real PAN entry); `name` is a retired key.
+    legalName: name,
     collegeEmail,
     ...(candidate.email ? { email: candidate.email } : {}),
-    phone: candidate.phone ?? "",
+    mobileNo: candidate.phone ?? "",
     department,
     designation: letter.designation ?? "Assistant Professor",
     highestQualification: normalizeHighestQualification(profileFields?.highestQualification),
@@ -266,10 +269,13 @@ export async function linkFacultyToExistingAccount(
     candidateId: letter.candidateId,
     offerId,
     employeeId,
-    name,
+    // The candidate's name is the faculty member's identity/display name, NOT
+    // verified PAN data - it goes to legalName. nameAsPerPan is left unset (it
+    // is only ever filled from a real PAN entry); `name` is a retired key.
+    legalName: name,
     collegeEmail,
     ...(candidate.email ? { email: candidate.email } : {}),
-    phone: candidate.phone ?? "",
+    mobileNo: candidate.phone ?? "",
     department,
     designation: letter.designation ?? "Assistant Professor",
     highestQualification: "",

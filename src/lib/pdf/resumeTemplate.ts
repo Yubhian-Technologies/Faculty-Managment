@@ -1,5 +1,6 @@
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { normalizeAcademicProfile } from "@/lib/faculty/academicProfileCompat";
+import { facultyMobileNo } from "@/lib/faculty/mobileNo";
 import { migratePersonalFlat } from "@/lib/faculty/fieldRenames";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { DESIGNATION_LABELS, FACULTY_STATUS_LABELS, ROLE_LABELS, RELIGION_LABELS, CASTE_LABELS } from "@/types";
@@ -115,9 +116,8 @@ interface FacultyProfileFieldsLike {
 }
 
 export interface ResumeData {
-  // Name (as per PAN) - optional; legalName below is the primary display
-  // name. See facultyDisplayName() usage in the header rendering.
-  name?: string;
+  // legalName (below) is the only display name - see facultyDisplayName()
+  // usage in the header rendering.
   role?: string;
   designation?: string;
   /** R&D-managed publication records (see /api/college/publications) - the
@@ -129,6 +129,8 @@ export interface ResumeData {
   employeeId?: string;
   email?: string;
   collegeEmail?: string;
+  /** facultyMembers docs carry `mobileNo`; a users doc (Super Admin list) carries `phone`. */
+  mobileNo?: string;
   phone?: string;
   profilePhotoUrl?: string;
   collegeName?: string;
@@ -336,7 +338,7 @@ export function getResumeHTML(rawData: ResumeData): string {
   const contactLines = [
     data.email ? `Email: ${esc(data.email)}` : "",
     data.collegeName ? `College: ${esc(data.collegeName)}` : "",
-    data.phone ? `Mobile: ${esc(data.phone)}` : "",
+    facultyMobileNo(data) ? `Mobile: ${esc(facultyMobileNo(data))}` : "",
     data.employeeId ? `Employee ID: ${esc(data.employeeId)}` : "",
     data.resumeUrl ? `<a href="${esc(data.resumeUrl)}" target="_blank" style="color:#1d4ed8;text-decoration:none;">View Uploaded Resume ↗</a>` : "",
   ].filter(Boolean);
