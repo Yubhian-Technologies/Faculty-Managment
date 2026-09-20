@@ -369,6 +369,14 @@ export interface FMSUser {
   // anything other than that kind of narrow exclusion - `role` remains the
   // one source of truth for permissions.
   realRole?: UserRole;
+  // Every role this login can act as: `role` (the primary one) plus the role of
+  // each seat they hold (see types/roleSeats.ts). Set by /api/auth/session; the
+  // sidebar and page access are the union of all of them.
+  roles?: UserRole[];
+  // Denormalized from the seats this person holds (maintained by
+  // lib/roles/seats.ts) - `seatRoles` is what guards and role lookups read.
+  seatIds?: string[];
+  seatRoles?: UserRole[];
   // for HOD / LOCATION_DEPT_HEAD - kept as the first entry of `departments`
   // (the HOD's "primary" department) for every screen that hasn't been
   // updated to the multi-department list below; always write both together.
@@ -835,6 +843,10 @@ export interface FacultyNorms {
   // must complete before converting into their vacation/non-vacation leave
   // category - see src/lib/leave/categoryEngine.ts.
   newJoiningYears: number;
+  // Which approval tier each requester role's leave request goes to first
+  // (see src/lib/leave/approvalRouting.ts). A role with no entry here uses the
+  // built-in default for that role.
+  leaveApprovalRouting?: Partial<Record<UserRole, "HOD" | "PRINCIPAL" | "MANAGEMENT">>;
   updatedAt?: Timestamp;
   updatedByName?: string;
 }
@@ -1068,9 +1080,14 @@ export interface FacultyMember {
 // ...). Legacy records (degree, universityOrInstitute, location,
 // percentageOrDivision, yearOfCompletion, guideOrSupervisorName,
 // certificateNumber) are lifted at read time - see src/lib/faculty/fieldRenames.ts.
+export type DegreeType = "B.Tech" | "BE" | "M.Tech" | "ME";
+
 export interface DegreeDetail {
   domain?: string; // Management / Engineering / Arts & Science / Medicine / Law / Others - not applicable to School/Intermediate
   course: string; // UI label "Course" at every level (blank for Doctoral, which uses specialization instead)
+  // UG/PG only, and only when course is "B.Tech/BE" (B.Tech | BE) or "M.Tech/ME" (M.Tech | ME) -
+  // which of the two the qualification actually is. Required then (see lib/faculty/degreeType.ts); absent for every other course.
+  degreeType?: DegreeType;
   branch: string;
   specialization?: string; // Doctoral only - replaces the Course/Branch fields for PhD entries
   board?: string; // School/Intermediate only - the examining board (e.g. "State Board", "CBSE")
@@ -1163,6 +1180,10 @@ export interface PreviousInstitution {
   leavingSalary?: number;
   reasonForLeaving?: string;
   nocObtained?: "YES" | "NO";
+  // This entry's own Roles/Responsibilities - the label is per tab (Academic/Industry/Research
+  // Roles/Responsibilities) but the stored key is the same on every experience entry. Replaces
+  // the three shared root-level fields on FacultyProfileFields (see below).
+  rolesResponsibilities?: string;
 }
 
 // Employment Details — Promotion History (NBA/AICTE).
@@ -2028,12 +2049,6 @@ export interface LabEstablished {
   outcomes: string;
 }
 
-export interface AuthoredBook {
-  title: string;
-  publisher: string;
-  year?: number;
-}
-
 // Shared structured "training/FDP" entry — used by Teaching Faculty Module 5 AND both
 // Supporting Staff categories' Training sections (their category-specific types apply).
 export type TrainingEntryType =
@@ -2323,8 +2338,12 @@ export interface FacultyProfileFields {
 
   // Previous Institutions Worked / Current Teaching Assignment
   teachingAssignment?: TeachingAssignmentSummary; // omitted for PRINCIPAL / VICE_PRINCIPAL - courses only; its role box is teachingRolesResponsibilities below
-  // The three Experience tabs' "Roles/Responsibilities" boxes - separate
-  // top-level fields so filling one tab's box never overwrites another's.
+  // DEPRECATED - Roles/Responsibilities now live on each experience entry
+  // (PreviousInstitution.rolesResponsibilities). These three root fields only exist on
+  // records not yet through scripts/migrate-experience-roles-into-entries.mjs, and
+  // normalizeAcademicProfile lifts them onto the entry on read. A value that could not be
+  // lifted (no entries to hold it, or the latest entry already has different text) stays
+  // here rather than being dropped.
   teachingRolesResponsibilities?: string; // legacy home: teachingAssignment.primaryTeachingRole
   industryRolesResponsibilities?: string;
   researchRolesResponsibilities?: string;
@@ -2367,7 +2386,6 @@ export interface FacultyProfileFields {
 
   // Module 5 — Mentorship & Institutional Value
   newLabsEstablished: LabEstablished[];
-  authoredBooks: AuthoredBook[];
   // Structured NBA/AICTE replacements for the 4 legacy free-text fields this module used to carry.
   fdpsWorkshopsMoocsCertifications: TrainingEntry[];
   professionalMemberships: ProfessionalMembership[];
@@ -2856,7 +2874,42 @@ export type AuditAction =
   // Student promotion module
   | "STUDENT_PROMOTED"
   | "STUDENT_GRADUATED"
-  | "STUDENT_SECTION_DISTRIBUTED";
+  | "STUDENT_SECTION_DISTRIBUTED"
+  // Research & Development module - publications/patents/projects/etc. None of
+  // these had any audit trail before; added so every R&D-module write (create,
+  // edit, verify decision, delete) is traceable the same way every other
+  // module already is.
+  | "RD_PUBLICATION_CREATED"
+  | "RD_PUBLICATION_UPDATED"
+  | "RD_PUBLICATION_DELETED"
+  | "RD_SPONSORED_PROJECT_CREATED"
+  | "RD_SPONSORED_PROJECT_UPDATED"
+  | "RD_SPONSORED_PROJECT_DELETED"
+  | "RD_SEED_FUNDING_CREATED"
+  | "RD_SEED_FUNDING_UPDATED"
+  | "RD_SEED_FUNDING_DELETED"
+  | "RD_CITATION_METRICS_CREATED"
+  | "RD_CITATION_METRICS_UPDATED"
+  | "RD_DISCOVERY_INNOVATION_CREATED"
+  | "RD_DISCOVERY_INNOVATION_UPDATED"
+  | "RD_DISCOVERY_INNOVATION_DELETED"
+  | "RD_INNOVATION_CREATED"
+  | "RD_INNOVATION_UPDATED"
+  | "RD_INNOVATION_DELETED"
+  | "RD_HACKATHON_CREATED"
+  | "RD_HACKATHON_UPDATED"
+  | "RD_HACKATHON_DELETED"
+  | "RD_RESEARCH_SERVICE_CREATED"
+  | "RD_RESEARCH_SERVICE_UPDATED"
+  | "RD_RESEARCH_SERVICE_DELETED"
+  | "RD_PHD_SUPERVISION_CREATED"
+  | "RD_PHD_SUPERVISION_UPDATED"
+  | "RD_PHD_SUPERVISION_DELETED"
+  | "RD_CONSULTANCY_PROJECT_CREATED"
+  | "RD_CONSULTANCY_PROJECT_UPDATED"
+  | "RD_CONSULTANCY_PROJECT_DELETED"
+  | "RD_RESEARCH_PROFILE_CREATED"
+  | "RD_RESEARCH_PROFILE_UPDATED";
 
 export interface AuditLog {
   id: string;

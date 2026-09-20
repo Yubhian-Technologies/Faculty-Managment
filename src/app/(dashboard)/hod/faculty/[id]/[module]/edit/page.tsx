@@ -17,6 +17,7 @@ import { toast } from "@/hooks/useToast";
 import { migrateFacultyDoc } from "@/lib/faculty/fieldRenames";
 import { personalRecordFromDoc, personalPatchBody } from "@/lib/faculty/personalRecord";
 import { diffAcademicProfile, isEmptyChanges } from "@/lib/faculty/academicProfileChanges";
+import { degreeTypeError } from "@/lib/faculty/degreeType";
 
 export default function HodFacultyModuleEditPage() {
   const router = useRouter();
@@ -94,6 +95,13 @@ export default function HodFacultyModuleEditPage() {
       const missing = getMissingRequiredPersonalFields(record, FACULTY_REQUIRED_PERSONAL_FIELDS);
       if (missing.length > 0) {
         toast({ variant: "destructive", title: "Some required fields are missing", description: missing.join(", ") });
+        return;
+      }
+    }
+    if (moduleKey === "qualification") {
+      const degreeErr = degreeTypeError(record.academicProfile);
+      if (degreeErr) {
+        toast({ variant: "destructive", title: "Some required fields are missing", description: degreeErr });
         return;
       }
     }

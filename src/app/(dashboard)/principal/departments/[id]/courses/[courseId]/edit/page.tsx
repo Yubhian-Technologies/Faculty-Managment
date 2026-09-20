@@ -152,7 +152,7 @@ export default function EditCoursePage() {
           {catalog.length === 0 ? (
             <div className="space-y-4 text-center py-4">
               <p className="text-sm text-muted-foreground">
-                No courses are set up yet. Add your college&apos;s courses in Settings first.
+                No courses are set up yet. Add your college&apos;s courses in the Courses module first.
               </p>
               <Button asChild variant="outline">
                 <Link href="/principal/settings">Go to Settings</Link>

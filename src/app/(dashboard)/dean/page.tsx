@@ -22,10 +22,10 @@ export default function DeanDashboard() {
         </CardContent>
       </Card>
 
-      {/* Course Catalog is the Dean's own module - added/edited directly here,
-          including each course's curriculum regulations and their intake
-          batches (see CourseCatalogSettingsCard/RegulationBatchesEditor). */}
-      <CourseCatalogSettingsCard />
+      {/* Courses are created by the Principal / VP / College Admin; the Dean
+          maintains each course's curriculum regulations and their intake
+          batches here (see CourseCatalogSettingsCard/RegulationBatchesEditor). */}
+      <CourseCatalogSettingsCard regulationsOnly />
     </div>
   );
 }

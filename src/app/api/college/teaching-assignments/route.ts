@@ -13,6 +13,7 @@ import { resolveSectionCurrentSemester, resolveRequestedSemester, matchesCurrent
 import { resolveTimetableAcademicYear, matchesCurrentAcademicYear } from "@/lib/college/academicSession";
 import { isTimetableIncharge } from "@/lib/departments/timetableIncharge";
 import type { Department, TeachingAssignment, TimetableSlot } from "@/types";
+import { loadDepartmentIndex, stampDepartmentIds } from "@/lib/departments/stampIds";
 
 export async function GET(request: Request) {
   try {
@@ -305,7 +306,7 @@ export async function POST(request: Request) {
       // subjects/faculty sharing one section+day+period). Only set by a
       // deliberate "add another subject to this period" action; omitted
       // (the default) keeps today's section-conflict rejection below.
-      slots?: { day: string; periodNumber: number; classroom?: string; allowSplit?: boolean }[];
+      slots?: { day: string; periodNumber: number; classroom?: string; allowSplit?: boolean; labBatch?: string }[];
       // Course/section-scoped only - which of the course-year's configured
       // semesters (see lib/college/semester.ts) this assignment and its
       // slots are for. Omitted when the course-year has none configured, or
@@ -430,7 +431,8 @@ export async function POST(request: Request) {
       const now = new Date();
       const ref = collegeRef.collection("teachingAssignments").doc();
 
-      await ref.set({
+      const deptIndex = await loadDepartmentIndex(db, session.collegeId);
+      await ref.set(stampDepartmentIds({
         collegeId: session.collegeId,
         facultyId,
         facultyName: resolvedFacultyName,
@@ -457,7 +459,7 @@ export async function POST(request: Request) {
           ...(body.passPercentage != null ? { passPercentage: Number(body.passPercentage) } : {}),
           ...(body.studentFeedback != null ? { studentFeedback: Number(body.studentFeedback) } : {}),
         } : {}),
-      });
+      }, deptIndex));
 
       // Create any staged timetable slots (day + period) for this assignment -
       // past rows never have any (no live schedule to book).
@@ -523,6 +525,7 @@ export async function POST(request: Request) {
             day: slot.day,
             periodNumber: slot.periodNumber,
             classroom: slot.classroom ?? null,
+            ...(slot.labBatch ? { labBatch: slot.labBatch } : {}),
             ...(timetableSemester != null ? { semester: timetableSemester } : {}),
             academicYear: currentAcademicYear,
             createdAt: now,
@@ -573,7 +576,8 @@ export async function POST(request: Request) {
       }
 
       const now = new Date();
-      const ref = await collegeRef.collection("teachingAssignments").add({
+      const deptIndex = await loadDepartmentIndex(db, session.collegeId);
+      const ref = await collegeRef.collection("teachingAssignments").add(stampDepartmentIds({
         collegeId: session.collegeId,
         facultyId: body.facultyId,
         facultyName: facultyDisplayName(faculty),
@@ -590,7 +594,7 @@ export async function POST(request: Request) {
         assignedByName: session.role,
         createdAt: now,
         updatedAt: now,
-      });
+      }, deptIndex));
 
       // Non-blocking ratio reference: surface whether this department is now
       // staffed at/beyond the 1:15 hiring-pipeline ratio, without preventing the

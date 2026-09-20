@@ -21,7 +21,6 @@ import {
 import { EmptyState } from "@/components/shared/EmptyState";
 import { CardSkeleton } from "@/components/shared/SkeletonLoader";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
-import { CreateHodDialog } from "@/components/college/CreateHodDialog";
 import { DepartmentChipList } from "@/components/shared/DepartmentChipList";
 import { useMyDepartments } from "@/hooks/useMyDepartments";
 import { toast } from "@/hooks/useToast";
@@ -89,7 +88,8 @@ export default function SubDepartmentsSettingsPage() {
         fetch("/api/college/departments").then((r) => r.json() as Promise<{ departments: Department[] }>),
         fetch("/api/college/sections").then((r) => r.json() as Promise<{ sections: (Section & { id: string })[] }>),
         fetch("/api/college/students").then((r) => r.json() as Promise<{ students: StudentListItem[] }>),
-        fetch("/api/college/users?role=HOD&allDepts=true").then((r) => r.json() as Promise<{ users: FMSUser[] }>),
+        // A Sub-HOD is a seat held by one of the department's own faculty - not a separate login.
+        fetch("/api/college/users?role=PANEL_MEMBER").then((r) => r.json() as Promise<{ users: FMSUser[] }>),
       ]);
 
       const departments = deptsRes.departments ?? [];
@@ -155,13 +155,6 @@ export default function SubDepartmentsSettingsPage() {
     setManagedDepartments((prev) => (checked ? [...prev, deptName] : prev.filter((n) => n !== deptName)));
   }
 
-  async function handleHodCreated(uid: string) {
-    const res = await fetch("/api/college/users?role=HOD&allDepts=true");
-    const data = await res.json() as { users: FMSUser[] };
-    setHods(data.users ?? []);
-    setHodUid(uid);
-  }
-
   async function handleAddSubDepartment() {
     if (!ownDept) return;
     if (!name.trim() || !code.trim()) {
@@ -170,21 +163,32 @@ export default function SubDepartmentsSettingsPage() {
     }
     setIsSubmitting(true);
     try {
-      const selectedHod = hods.find((h) => h.uid === hodUid);
       const res = await fetch("/api/college/departments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: name.trim(),
           code: code.toUpperCase().trim(),
-          hodUid: hodUid || "",
-          hodName: selectedHod?.name ?? "",
           parentDepartmentId: ownDept.id,
           managedDepartments: managedDepartments.length > 0 ? managedDepartments : undefined,
         }),
       });
-      const json = await res.json() as { error?: string };
+      const json = await res.json() as { error?: string; deptId?: string };
       if (!res.ok) throw new Error(json.error ?? "Failed to add sub-department");
+
+      // The sub-department comes with its own HOD seat; put the chosen faculty
+      // member in it.
+      if (hodUid && json.deptId) {
+        const seatRes = await fetch("/api/college/departments", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ deptId: json.deptId, hodUid }),
+        });
+        if (!seatRes.ok) {
+          const seatJson = await seatRes.json() as { error?: string };
+          toast({ variant: "destructive", title: "Sub-department added, but the Sub-HOD wasn't appointed", description: seatJson.error });
+        }
+      }
 
       toast({ variant: "success", title: "Sub-department added" });
       setDialogOpen(false);
@@ -214,25 +218,16 @@ export default function SubDepartmentsSettingsPage() {
     setEditManagedDepartments((prev) => (checked ? [...prev, deptName] : prev.filter((n) => n !== deptName)));
   }
 
-  async function handleEditHodCreated(uid: string) {
-    const res = await fetch("/api/college/users?role=HOD&allDepts=true");
-    const data = await res.json() as { users: FMSUser[] };
-    setHods(data.users ?? []);
-    setEditHodUid(uid);
-  }
-
   async function handleSaveEdit() {
     if (!editTarget) return;
     setIsEditSubmitting(true);
     try {
-      const selectedHod = hods.find((h) => h.uid === editHodUid);
       const res = await fetch("/api/college/departments", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           deptId: editTarget.id,
           hodUid: editHodUid || "",
-          hodName: editHodUid ? (selectedHod?.name ?? "") : "",
           managedDepartments: editManagedDepartments,
         }),
       });
@@ -402,10 +397,7 @@ export default function SubDepartmentsSettingsPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label>Assign Sub-HOD</Label>
-                    <CreateHodDialog department={name || undefined} onCreated={handleHodCreated} />
-                  </div>
+                  <Label>Sub-HOD</Label>
                   {hods.length > 0 ? (
                     <Select value={hodUid || "none"} onValueChange={(v) => setHodUid(v === "none" ? "" : v)}>
                       <SelectTrigger>
@@ -422,7 +414,7 @@ export default function SubDepartmentsSettingsPage() {
                     </Select>
                   ) : (
                     <p className="text-sm text-muted-foreground border rounded-md px-3 py-2">
-                      No HODs yet - create one above
+                      No faculty in your department yet - add faculty first, then appoint one as Sub-HOD
                     </p>
                   )}
                 </div>
@@ -555,10 +547,7 @@ export default function SubDepartmentsSettingsPage() {
               branches this sub-department manages here.
             </p>
             <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label>Assign Sub-HOD</Label>
-                <CreateHodDialog department={editTarget?.name} onCreated={handleEditHodCreated} />
-              </div>
+              <Label>Sub-HOD</Label>
               {hods.length > 0 ? (
                 <Select value={editHodUid || "none"} onValueChange={(v) => setEditHodUid(v === "none" ? "" : v)}>
                   <SelectTrigger>
@@ -575,7 +564,7 @@ export default function SubDepartmentsSettingsPage() {
                 </Select>
               ) : (
                 <p className="text-sm text-muted-foreground border rounded-md px-3 py-2">
-                  No HODs yet - create one above
+                  No faculty in your department yet - add faculty first, then appoint one as Sub-HOD
                 </p>
               )}
             </div>

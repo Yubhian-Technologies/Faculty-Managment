@@ -190,6 +190,17 @@ export async function DELETE(
     // Delete from Firestore first (always succeeds)
     if (collegeId) {
       await db.collection("colleges").doc(collegeId).collection("users").doc(uid).delete();
+
+      // Clean up this uid's own notifications too - left behind otherwise as
+      // dead data. Harmless on its own (a deleted uid is never reissued by
+      // Firebase Auth to a new signup), but worth not leaving orphaned.
+      const notifSnap = await db.collection("colleges").doc(collegeId).collection("notifications")
+        .where("toUid", "==", uid).get();
+      if (!notifSnap.empty) {
+        const batch = db.batch();
+        notifSnap.docs.forEach((d) => batch.delete(d.ref));
+        await batch.commit();
+      }
     }
     await db.collection("systemUsers").doc(uid).delete();
 

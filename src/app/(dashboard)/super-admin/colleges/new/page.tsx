@@ -32,7 +32,7 @@ export default function NewCollegePage() {
       .catch(() => {});
   }, []);
 
-  const isValid = name.trim().length >= 2 && !!locationId && !!type;
+  const isValid = name.trim().length >= 2 && !!locationId;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -104,10 +104,10 @@ export default function NewCollegePage() {
             </div>
 
             <div className="space-y-2">
-              <Label>College Type <span className="text-destructive">*</span></Label>
+              <Label>College Type</Label>
               <Select value={type} onValueChange={(v) => setType(v as CollegeType)}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select type..." />
+                  <SelectValue placeholder="Select type (optional)..." />
                 </SelectTrigger>
                 <SelectContent>
                   {COLLEGE_TYPES.map((t) => (
@@ -133,7 +133,7 @@ export default function NewCollegePage() {
                   type="email"
                   value={contactEmail}
                   onChange={(e) => setContactEmail(e.target.value)}
-                  placeholder="principal@vishnu.edu.in"
+                  placeholder="principal@college.edu"
                 />
               </div>
               <div className="space-y-2">

@@ -170,6 +170,16 @@ export async function POST(request: Request) {
       updatedAt: now,
     });
 
+    await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
+      collegeId: session.collegeId,
+      action: "RD_PUBLICATION_CREATED",
+      performedBy: session.uid,
+      performedByName: addedByName,
+      targetId: docRef.id,
+      details: { title, uid },
+      timestamp: now,
+    });
+
     if (!isRnD) {
       await notifyRole(
         db, session.collegeId, "R_AND_D",

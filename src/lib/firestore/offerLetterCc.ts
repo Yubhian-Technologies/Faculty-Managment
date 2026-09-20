@@ -1,3 +1,4 @@
+import { findUsersSnapshot } from "@/lib/roles/findUsersByRoles";
 import type { Firestore } from "firebase-admin/firestore";
 
 // CC list for an offer letter email: Principal, Vice Principal, College Admin
@@ -18,7 +19,7 @@ export async function resolveOfferLetterCcEmails(
   const [collegeSnap, batchSnap, principalVpSnap] = await Promise.all([
     db.collection("colleges").doc(collegeId).get(),
     batchId ? db.collection("colleges").doc(collegeId).collection("hiringBatches").doc(batchId).get() : Promise.resolve(null),
-    usersColl.where("role", "in", ["PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_ADMIN"]).get(),
+    findUsersSnapshot(db, collegeId, ["PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_ADMIN"]),
   ]);
   for (const d of principalVpSnap.docs) {
     const email = (d.data() as { email?: string }).email;

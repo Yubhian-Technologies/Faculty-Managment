@@ -8,7 +8,7 @@ import { fillMissingDays } from "@/lib/attendance/fillMissingDays";
 import { istMonthBounds, getISTParts } from "@/lib/attendance/istTime";
 import { resolveFaceRegisteredAt } from "@/lib/attendance/registration";
 import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
-import { unitLabelForHeadRole, isCollegeStaffUnitHead, COLLEGE_STAFF_UNIT_HEAD_ROLES } from "@/lib/attendance/collegeStaffUnits";
+import { unitLabelForHeadRole, isCollegeStaffUnitHead, isHodOrUnitHead, COLLEGE_STAFF_UNIT_HEAD_ROLES } from "@/lib/attendance/collegeStaffUnits";
 import { getWorkingDayWeightsForRole } from "@/lib/attendance/workingDays";
 import type { AttendanceRecord, AttendanceSummary, UserRole } from "@/types";
 
@@ -73,7 +73,7 @@ export async function GET(request: Request) {
         if (target.role !== "COLLEGE_STAFF" || target.department !== unitLabelForHeadRole(session.role)) {
           return NextResponse.json({ error: "You can only view attendance for staff in your unit" }, { status: 403 });
         }
-      } else if (target.role !== "HOD" && !isCollegeStaffUnitHead(target.role ?? "")) {
+      } else if (!isHodOrUnitHead(target)) {
         return NextResponse.json({ error: "You can only view attendance for an HOD or unit head" }, { status: 403 });
       }
       facultyId = requestedFacultyId;

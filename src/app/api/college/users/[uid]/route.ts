@@ -8,8 +8,10 @@ import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/fir
 import { syncDepartmentHod, getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
 import { MANAGEABLE_STAFF_ROLES } from "@/types";
 import { normalizeAcademicProfile } from "@/lib/faculty/academicProfileCompat";
+import { degreeTypeError } from "@/lib/faculty/degreeType";
 import { migrateUserDoc } from "@/lib/faculty/fieldRenames";
 import { withLegacyPersonalKeysDeleted } from "@/lib/faculty/legacyKeyDeletes";
+import { assignSeat } from "@/lib/roles/seats";
 import type { UserRole } from "@/types";
 
 async function loadTargetInScope(
@@ -228,6 +230,10 @@ export async function PATCH(
     }
     if (roleChanged) updates.role = body.role;
     if (body.phone !== undefined) updates.phone = body.phone;
+    if (body.academicProfile !== undefined) {
+      const degreeErr = degreeTypeError(body.academicProfile);
+      if (degreeErr) return NextResponse.json({ error: degreeErr }, { status: 400 });
+    }
     if (body.academicProfile !== undefined) updates.academicProfile = normalizeAcademicProfile(body.academicProfile);
     if (body.profilePhotoUrl !== undefined) updates.profilePhotoUrl = body.profilePhotoUrl;
 
@@ -293,6 +299,20 @@ export async function PATCH(
         .collection("sections")
         .doc(target.sectionId)
         .update({ classLeaderUid: FieldValue.delete(), classLeaderName: FieldValue.delete(), updatedAt: now });
+    }
+
+    // A deactivated person can't keep a seat: the seat would still list them as
+    // its holder while every route skips them. Vacate each one (kept in its
+    // history) so it shows as open and can be re-assigned.
+    if (body.isActive === false) {
+      const heldSeatIds = (target as { seatIds?: string[] }).seatIds ?? [];
+      for (const seatId of heldSeatIds) {
+        try {
+          await assignSeat(db, session.collegeId, seatId, { uid: null, outgoing: { action: "DEACTIVATE" }, note: "Holder deactivated" }, { uid: session.uid, name: "Staff deactivation" });
+        } catch (e) {
+          console.error("[users/[uid] PATCH] couldn't vacate seat", seatId, e);
+        }
+      }
     }
 
     const action = roleChanged ? "STAFF_ROLE_CHANGED"

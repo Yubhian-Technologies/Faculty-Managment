@@ -35,9 +35,14 @@ export async function GET(request: Request) {
       .doc(locationId)
       .collection("locationUsers")
       .get();
+    // Administration viewing their OWN team shouldn't see themselves listed
+    // among HR_ADMIN/ADMIN_OFFICE/LOCATION_DEPT_HEAD/ACCOUNTS - but Super
+    // Admin querying a location (e.g. its Users list) must still see the
+    // Administration account itself. Excluding every ADMINISTRATION-role doc
+    // unconditionally (the previous behavior) hid it from Super Admin too.
     const users = snap.docs
       .map((d) => ({ uid: d.id, ...d.data() }))
-      .filter((u) => (u as { role?: UserRole }).role !== "ADMINISTRATION");
+      .filter((u) => !(session.role === "ADMINISTRATION" && (u as { uid?: string }).uid === session.uid));
     return NextResponse.json({ users });
   } catch (err) {
     console.error("[location/users GET]", err);

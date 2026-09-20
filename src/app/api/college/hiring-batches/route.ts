@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { findUsersSnapshot } from "@/lib/roles/findUsersByRoles";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -166,12 +167,7 @@ export async function POST(request: Request) {
     const ref = batchRef;
 
     // Notify Principal (and College Admin, who mirrors Principal's authority)
-    const principalsSnap = await db
-      .collection("colleges")
-      .doc(session.collegeId)
-      .collection("users")
-      .where("role", "in", ["PRINCIPAL", "COLLEGE_ADMIN"])
-      .get();
+    const principalsSnap = await findUsersSnapshot(db, session.collegeId, ["PRINCIPAL", "COLLEGE_ADMIN"]);
 
     const notifBatch = db.batch();
     for (const p of principalsSnap.docs) {

@@ -104,11 +104,6 @@ export default function EditCollegePage() {
       toast({ variant: "destructive", title: "College name is required" });
       return;
     }
-    if (!form.type) {
-      toast({ variant: "destructive", title: "College type is required" });
-      return;
-    }
-
     let campusLocation: College["campusLocation"] | null = null;
     if (shape === "circle") {
       const latitude = Number(form.latitude);
@@ -180,7 +175,7 @@ export default function EditCollegePage() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="edit-type">College Type *</Label>
+              <Label htmlFor="edit-type">College Type</Label>
               <Select value={form.type} onValueChange={(v) => set({ type: v as CollegeType })}>
                 <SelectTrigger id="edit-type">
                   <SelectValue placeholder="Select type..." />

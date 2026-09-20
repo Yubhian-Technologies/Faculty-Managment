@@ -72,10 +72,6 @@ const DEMO_PROFILE: FacultyPublicProfile = {
     googleScholarId: "AbC123DemoID",
     scopusAuthorId: "57200000000",
     orcidId: "0000-0002-1234-5678",
-    authoredBooks: [
-      { title: "Foundations of Distributed Machine Learning", publisher: "Springer", year: 2021 },
-      { title: "Edge AI: Systems and Applications (Chapter 4)", publisher: "CRC Press", year: 2019 },
-    ],
   },
   recognition: {
     awardsRecognition: [

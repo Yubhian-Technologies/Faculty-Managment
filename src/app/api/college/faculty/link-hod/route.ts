@@ -5,6 +5,7 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
 import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
+import { forgetHeldRoles } from "@/lib/auth/liveRoles";
 import { experienceBreakdown, allPreviousExperienceEntries } from "@/lib/faculty/experienceCalc";
 import { normalizeAcademicProfile } from "@/lib/faculty/academicProfileCompat";
 import { normalizeHighestQualification } from "@/lib/faculty/highestQualification";
@@ -84,8 +85,14 @@ export async function POST(request: Request) {
     }
     const targetUser = targetUserSnap.data() as { role?: string; department?: string; departments?: string[]; email?: string; name?: string };
     const targetDepartments = targetUser.departments && targetUser.departments.length > 0 ? targetUser.departments : (targetUser.department ? [targetUser.department] : []);
-    if (targetUser.role !== "HOD" || !targetDepartments.includes(department)) {
-      return NextResponse.json({ error: "That login is not this department's HOD" }, { status: 400 });
+    const isThisDepartmentsHod = targetUser.role === "HOD" && targetDepartments.includes(department);
+    // The Principal / VP / College Admin can also put any teaching-capable
+    // login on a department's roster: faculty who have no profile yet, and
+    // office logins (e.g. a College Admin who also teaches) - see below.
+    const isCollegeLevel = session.role !== "HOD";
+    const isAdoptable = isCollegeLevel && (targetUser.role === "PANEL_MEMBER" || targetUser.role === "COLLEGE_OFFICE");
+    if (!isThisDepartmentsHod && !isAdoptable) {
+      return NextResponse.json({ error: "That login can't be added to the faculty roster" }, { status: 400 });
     }
 
     // Idempotent - a second attempt (e.g. a page double-submit, or someone
@@ -146,6 +153,17 @@ export async function POST(request: Request) {
       createdAt: now,
       updatedAt: now,
     });
+
+    // Someone adopted onto the roster teaches, so their primary role becomes
+    // faculty (any seats they hold stay as they are) and they are filed under
+    // this department. They pick the new role up at next sign-in.
+    if (!isThisDepartmentsHod) {
+      await db.collection("colleges").doc(collegeId).collection("users").doc(linkUid).update({
+        role: "PANEL_MEMBER", department, updatedAt: now,
+      });
+      await db.collection("systemUsers").doc(linkUid).set({ role: "PANEL_MEMBER" }, { merge: true });
+      forgetHeldRoles(collegeId, linkUid);
+    }
 
     return NextResponse.json({ id: docRef.id }, { status: 201 });
   } catch (err) {

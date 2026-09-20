@@ -27,6 +27,7 @@ import { StatusBadge } from "@/components/shared/StatusBadge";
 import { formatDate } from "@/lib/utils";
 import { CardSkeleton } from "@/components/shared/SkeletonLoader";
 import { EmptyState } from "@/components/shared/EmptyState";
+import { MyDashboardOverview } from "@/components/dashboard/MyDashboardOverview";
 import type { HiringBatch } from "@/types";
 
 const STATIC_MODULES = [
@@ -120,6 +121,8 @@ export default function FacultyDashboard() {
         title={`Hello, ${user?.name ?? "Faculty"}`}
         description={user?.department ? `${user.department} Department` : "Faculty Portal"}
       />
+
+      <MyDashboardOverview />
 
       {/* Quick Stats */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3">

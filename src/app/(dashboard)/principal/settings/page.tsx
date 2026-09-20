@@ -12,6 +12,7 @@ import { Info } from "lucide-react";
 import { HiringTermsSettingsCard } from "@/components/hiring/HiringTermsSettingsCard";
 import { AcademicYearSettingsCard } from "@/components/academics/AcademicYearSettingsCard";
 import { DesignationCatalogCard } from "@/components/academics/DesignationCatalogCard";
+import { LeaveApprovalRoutingCard } from "@/components/leave/LeaveApprovalRoutingCard";
 import type { FacultyNorms } from "@/types/core";
 
 interface CollegeInfo {
@@ -205,6 +206,8 @@ export default function PrincipalSettingsPage() {
           </div>
         </CardContent>
       </Card>
+
+      <LeaveApprovalRoutingCard />
 
       <DesignationCatalogCard category="FACULTY" />
       <DesignationCatalogCard category="NON_TECHNICAL" />

@@ -8,6 +8,7 @@ import { syncTrainingEntryCoConductors } from "@/lib/faculty/syncTrainingEntryCo
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
 import { experienceBreakdown, allPreviousExperienceEntries } from "@/lib/faculty/experienceCalc";
 import { normalizeAcademicProfile } from "@/lib/faculty/academicProfileCompat";
+import { degreeTypeError } from "@/lib/faculty/degreeType";
 import {
   academicProfileFirestoreUpdates, applyAcademicProfileChanges, parseAcademicProfileChanges, touchesTrainingEntries,
   type AcademicProfileChanges,
@@ -213,9 +214,13 @@ export async function PATCH(
       }
       const parsed = parseAcademicProfileChanges(body.academicProfileChanges);
       if (!parsed) return NextResponse.json({ error: "Invalid academicProfileChanges" }, { status: 400 });
+      const degreeErr = degreeTypeError(parsed.set);
+      if (degreeErr) return NextResponse.json({ error: degreeErr }, { status: 400 });
       academicChanges = parsed;
       Object.assign(updates, academicProfileFirestoreUpdates((snap.data() as { academicProfile?: unknown }).academicProfile, academicChanges, FieldValue.delete()));
     } else if (body.academicProfile !== undefined) {
+      const degreeErr = degreeTypeError(body.academicProfile);
+      if (degreeErr) return NextResponse.json({ error: degreeErr }, { status: 400 });
       updates.academicProfile = normalizeAcademicProfile(body.academicProfile);
     }
     if (body.technicalProfile !== undefined) updates.technicalProfile = body.technicalProfile;
@@ -349,6 +354,22 @@ export async function PATCH(
         console.error("[college/faculty/[id] PATCH] co-conductor sync failed:", syncErr);
       }
     }
+
+    let actorName = "Unknown";
+    try {
+      const actorSnap = await db.collection("colleges").doc(session.collegeId).collection("users").doc(session.uid).get();
+      actorName = (actorSnap.data() as { name?: string } | undefined)?.name ?? "Unknown";
+    } catch { /* best-effort */ }
+
+    await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
+      collegeId: session.collegeId,
+      action: "FACULTY_UPDATED",
+      performedBy: session.uid,
+      performedByName: actorName,
+      targetId: id,
+      details: { name: newDisplayName || oldDisplayName, fields: Object.keys(updates).filter((k) => k !== "updatedAt") },
+      timestamp: new Date(),
+    });
 
     return NextResponse.json({ success: true });
   } catch (err) {

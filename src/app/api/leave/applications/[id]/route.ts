@@ -1,16 +1,17 @@
 export const dynamic = "force-dynamic";
 
+import { findUsersSnapshot } from "@/lib/roles/findUsersByRoles";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { canAccessLeaveProfile } from "@/lib/leave/access";
-import { resolveUserDepartment } from "@/lib/budget/departmentScope";
+import { resolveHodDepartments } from "@/lib/budget/departmentScope";
 import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 import { REQUESTS_COL, commitApproval, releasePending, releaseApproval, splitLeaveDays } from "@/lib/leave/balanceEngine";
 import { decideFinalStageLeave } from "@/lib/leave/decideFinalStage";
 import { getHolidayDateKeys } from "@/lib/leave/holidaysCount";
 import { resolveStaffGender, resolveEmployeeIdentity } from "@/lib/leave/identity";
-import { yearsOfService } from "@/lib/leave/dayCounter";
+import { isoDateKey, yearsOfService } from "@/lib/leave/dayCounter";
 import { OTHER_CATEGORIES_COL } from "@/lib/leave/otherCategories";
 import { LEAVE_TYPE_SEED } from "@/lib/leave/seedData";
 import { evaluateODProof } from "@/lib/leave/odProof";
@@ -20,6 +21,9 @@ import { emitWorkflowNotification } from "@/lib/notifications/workflowNotificati
 import { validatePeriodSubstitutions, notifySubstitutes, type PeriodSubstitutionInput } from "@/lib/leave/periodCoverage";
 import { notifyAdjustmentAssignees, mergeSubstituteEntry, withdrawSupersededPeriods } from "@/lib/leave/adjustmentRequests";
 import { resolveLoginUidForFacultyMember } from "@/lib/faculty/resolveFacultyMemberId";
+import { loadCollegeSettings } from "@/lib/firestore/collegeSettings";
+import { resolveApproverStage } from "@/lib/leave/approvalRouting";
+import { listHandoverCandidates } from "@/lib/leave/handoverPool";
 import { OTHER_LEAVE_CATEGORY_ORDER } from "@/types/leave";
 import type { AdjustmentRequest, LeaveRequest, LeaveActionRecord, OtherLeaveCategory } from "@/types/leave";
 
@@ -146,22 +150,22 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         performedByName: req.employeeName, targetId: id, details: { wasApproved, cancelReason }, timestamp: now,
       });
 
-      // Tell whoever sits above this requester in the approval chain - same
-      // routing rule applications/route.ts POST uses to decide where a fresh
-      // request lands (PANEL_MEMBER/departmental COLLEGE_STAFF -> their HOD,
-      // PRINCIPAL -> MANAGEMENT (no one else within the college), everyone
-      // else -> Principal/VP tier) - so the reason is visible to them even if
-      // they never re-open this person's history.
+      // Tell whoever sits above this requester in the approval chain - the same
+      // college-configured routing applications/route.ts POST uses to decide
+      // where a fresh request lands (Settings > Leave Approval Routing) - so
+      // the reason is visible to them even if they never re-open this
+      // person's history.
       const message = `${req.employeeName} cancelled their ${wasApproved ? "approved" : "pending"} leave request (${req.totalDays} day(s)). Reason: ${cancelReason}`;
-      const reportsToHod = session.role === "PANEL_MEMBER" || (session.role === "COLLEGE_STAFF" && !!req.department);
-      if (reportsToHod && req.department) {
+      const cancelSettings = await loadCollegeSettings(db, session.collegeId);
+      const approverStage = resolveApproverStage(cancelSettings.leaveApprovalRouting, session.role, !!req.department);
+      if (approverStage === "HOD" && req.department) {
         const deptSnap = await db.collection("colleges").doc(session.collegeId).collection("departments")
           .where("name", "==", req.department).limit(1).get();
         const hodUid = (deptSnap.docs[0]?.data() as { hodUid?: string } | undefined)?.hodUid;
         if (hodUid) {
           await notify(db, session.collegeId, hodUid, "LEAVE_CANCELLED", "Leave Request Cancelled", message, `/hod/leave-history/${req.uid}`);
         }
-      } else if (session.role === "PRINCIPAL") {
+      } else if (approverStage === "MANAGEMENT") {
         await notifyRole(db, session.collegeId, "MANAGEMENT", "LEAVE_CANCELLED", "Leave Request Cancelled", message);
       } else {
         await notifyRole(db, session.collegeId, "PRINCIPAL", "LEAVE_CANCELLED", "Leave Request Cancelled", message, "/principal/leave-approvals");
@@ -225,6 +229,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
           fromDate: reqFromDate, toDate: reqToDate, holidayDates,
           submitted: declinedPeriods.map((p) => ({ date: p.date, timetableSlotId: p.timetableSlotId, substituteFacultyId: body.newSubstituteFacultyId! })),
           mode: "PARTIAL",
+          coverageOptions: { excludeRequestId: id },
         });
         if (!result.ok) {
           return NextResponse.json({ error: result.error }, { status: 400 });
@@ -259,14 +264,23 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         if (body.newHandoverUid === req.uid) {
           return NextResponse.json({ error: "You can't hand over to yourself" }, { status: 400 });
         }
-        const handoverSnap = await db.collection("colleges").doc(session.collegeId)
-          .collection("users").doc(body.newHandoverUid).get();
-        const handoverData = handoverSnap.data() as { name?: string; department?: string } | undefined;
-        if (!handoverSnap.exists || !req.department || handoverData?.department !== req.department) {
-          return NextResponse.json({ error: "Pick a handover contact from your own department" }, { status: 400 });
+        const pool = await listHandoverCandidates(
+          db, session.collegeId,
+          { uid: session.uid, role: session.role, department: req.department ?? "" },
+          {
+            fromISO: isoDateKey((req.fromDate as unknown as { toDate(): Date }).toDate()),
+            toISO: isoDateKey((req.toDate as unknown as { toDate(): Date }).toDate()),
+          }
+        );
+        const chosen = pool.find((c) => c.uid === body.newHandoverUid);
+        if (!chosen) {
+          return NextResponse.json(
+            { error: "Pick a handover contact from the list offered for your role who is available on these dates" },
+            { status: 400 }
+          );
         }
-        handoverToUid = body.newHandoverUid;
-        handoverToName = handoverData?.name ?? "Unknown";
+        handoverToUid = chosen.uid;
+        handoverToName = chosen.name;
         newEntry = { kind: "HANDOVER", assigneeUid: handoverToUid, assigneeName: handoverToName, status: "PENDING" };
       }
 
@@ -301,8 +315,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         return NextResponse.json({ error: "Coverage can only be proposed while pending HOD decision or already approved" }, { status: 400 });
       }
       if (session.role === "HOD") {
-        const hodDept = await resolveUserDepartment(db, session.collegeId, session.uid);
-        if (!hodDept || req.department !== hodDept) {
+        const hodDepts = await resolveHodDepartments(db, session.collegeId, session.uid);
+        if (!req.department || !hodDepts.includes(req.department)) {
           return NextResponse.json({ error: "Forbidden" }, { status: 403 });
         }
       } else if (session.role !== "PRINCIPAL" && session.role !== "VICE_PRINCIPAL") {
@@ -323,6 +337,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         db, collegeId: session.collegeId, facultyMemberId, department: req.department,
         fromDate: reqFromDate, toDate: reqToDate, holidayDates,
         submitted: body.periodSubstitutions, mode: "PARTIAL",
+        coverageOptions: { excludeRequestId: id },
       });
       if (!result.ok) {
         return NextResponse.json({ error: result.error }, { status: 400 });
@@ -449,8 +464,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       // PROPOSE_COVERAGE makes), so a department with no sitting HOD isn't stuck.
       if (req.hodAction) {
         if (session.role === "HOD") {
-          const hodDept = await resolveUserDepartment(db, session.collegeId, session.uid);
-          if (!hodDept || req.department !== hodDept) {
+          const hodDepts = await resolveHodDepartments(db, session.collegeId, session.uid);
+          if (!req.department || !hodDepts.includes(req.department)) {
             return NextResponse.json({ error: "Forbidden" }, { status: 403 });
           }
         } else if (session.role !== "PRINCIPAL" && session.role !== "VICE_PRINCIPAL") {
@@ -491,8 +506,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       if (session.role !== "HOD") {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       }
-      const hodDept = await resolveUserDepartment(db, session.collegeId, session.uid);
-      if (!hodDept || req.department !== hodDept) {
+      const hodDepts = await resolveHodDepartments(db, session.collegeId, session.uid);
+      if (!req.department || !hodDepts.includes(req.department)) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       }
 
@@ -545,9 +560,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
           performedByName: session.email || "HOD", targetId: id, details: { isPaidLeave: body.isPaidLeave }, timestamp: now,
         });
 
-        const principalsSnap = await db
-          .collection("colleges").doc(session.collegeId)
-          .collection("users").where("role", "in", ["PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_ADMIN"]).get();
+        const principalsSnap = await findUsersSnapshot(db, session.collegeId, ["PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_ADMIN"]);
         for (const p of principalsSnap.docs) {
           await emitWorkflowNotification({
             db, collegeId: session.collegeId, toUid: p.id,

@@ -12,6 +12,12 @@ import {
 } from "@/lib/departments/managedBranches";
 import { validateAssignedYears, validateSecondaryDepartmentNames, ensureAssignedYearsOpen } from "@/lib/departments/courseScopeValidation";
 import { cascadeDepartmentRename } from "@/lib/departments/renameCascade";
+import { canonicalDepartmentCode, canonicalDepartmentName, findDepartmentConflict } from "@/lib/departments/resolve";
+import { claimDepartmentKeys, departmentKeyConflictMessage, releaseDepartmentKeys } from "@/lib/departments/departmentKeys";
+import { assignSeat, ensureHodSeatForDepartment, hodSeatHoldersByDepartment, renameDepartmentSeat, retireDepartmentSeat, SeatError, seatsCol } from "@/lib/roles/seats";
+import { canAssignSeat } from "@/lib/roles/seatRoles";
+import { forgetHeldRoles } from "@/lib/auth/liveRoles";
+import { resolveDepartmentCourseSelections, type DepartmentCourseSelection, type ResolvedDepartmentCourse } from "@/lib/departments/courseSelections";
 
 // yyyy-mm-dd, the same shape StudentRecord.dateOfBirth already uses.
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -22,27 +28,18 @@ export async function GET() {
 
     const db = getAdminDb();
     const collegeRef = db.collection("colleges").doc(session.collegeId);
-    const [snap, hodSnap] = await Promise.all([
+    const [snap, hodSnap, seatHolders] = await Promise.all([
       collegeRef.collection("departments").orderBy("name").get(),
       collegeRef.collection("users").where("role", "==", "HOD").get(),
+      hodSeatHoldersByDepartment(db, session.collegeId),
     ]);
 
-    // Self-heal hodUid/hodName drift: these fields only update when
-    // explicitly written (Assign HOD save, syncDepartmentHod on account
-    // create/edit - see src/lib/departments/scope.ts). If a department's
-    // recorded HOD disagrees with who actually has this department on their
-    // own login (the field that drives their real dashboard access), fix the
-    // department doc here - so "No HOD assigned" can't linger while that HOD
-    // is actively working, and anything else keyed off hodUid (budget/
-    // recruitment/indent routing) sees the correct person too. Departments
-    // with more than one HOD login claiming them are left untouched rather
-    // than guessed.
-    //
-    // An HOD's `departments` array can legitimately list more than one
-    // department (see college/departments PATCH below) - the SAME uid
-    // appearing against several department names here is expected, not a
-    // drift signal. Only two *different* HOD logins both claiming the same
-    // department name is a real conflict.
+    // The HOD of a department is whoever sits in its HOD seat (see
+    // types/roleSeats.ts) - that is authoritative, and the department's own
+    // hodUid/hodName is just kept in step with it here. Only a department with
+    // no seat yet (one that predates seats) falls back to the old rule of
+    // matching HOD-role logins by department name; with more than one HOD login
+    // claiming a department that is left untouched rather than guessed.
     const hodByDepartment = new Map<string, { uid: string; name: string }>();
     const ambiguousDepartments = new Set<string>();
     for (const doc of hodSnap.docs) {
@@ -61,14 +58,21 @@ export async function GET() {
       snap.docs.map(async (d) => {
         const data = d.data() as { name?: string; hodUid?: string; hodName?: string };
         const name = data.name?.trim() ?? "";
-        const actualHod = ambiguousDepartments.has(name) ? undefined : hodByDepartment.get(name);
 
+        const seat = seatHolders.get(d.id);
+        if (seat) {
+          if (seat.uid !== (data.hodUid ?? "") || seat.name !== (data.hodName ?? "")) {
+            await d.ref.update({ hodUid: seat.uid, hodName: seat.name, updatedAt: new Date() }).catch(() => {});
+          }
+          return { id: d.id, ...data, hodUid: seat.uid, hodName: seat.name };
+        }
+
+        const actualHod = ambiguousDepartments.has(name) ? undefined : hodByDepartment.get(name);
         if (actualHod && actualHod.uid !== data.hodUid) {
           await d.ref.update({ hodUid: actualHod.uid, hodName: actualHod.name, updatedAt: new Date() }).catch(() => {});
           return { id: d.id, ...data, hodUid: actualHod.uid, hodName: actualHod.name };
         }
         if (!actualHod && data.hodUid && !ambiguousDepartments.has(name)) {
-          // Recorded HOD no longer actually has this department on their own login.
           await d.ref.update({ hodUid: "", hodName: "", updatedAt: new Date() }).catch(() => {});
           return { id: d.id, ...data, hodUid: "", hodName: "" };
         }
@@ -103,9 +107,14 @@ export async function POST(request: Request) {
       assignedYears?: number[];
       commonYearStart?: string;
       commonYearEnd?: string;
+      // Required (at least one) when a Principal/VP/Super Admin creates a
+      // top-level department - each entry becomes this department's own Course
+      // doc, so it shows up under that course in the Courses module. Ignored
+      // for an HOD's sub-department, which inherits its parent's courses.
+      courses?: DepartmentCourseSelection[];
     };
 
-    const { name, code, hodUid, hodName } = body;
+    const { name, code } = body;
 
     if (!name || !code) {
       return NextResponse.json({ error: "Name and code are required" }, { status: 400 });
@@ -151,18 +160,21 @@ export async function POST(request: Request) {
     // (the import route already enforces this; the manual add didn't). Match is
     // case-insensitive. This is the single read the secondary/managed blocks
     // below reuse instead of re-fetching the collection.
-    const trimmedName = name.trim();
-    const upperCode = code.toUpperCase().trim();
-    const existingDeptsSnap = await db.collection("colleges").doc(collegeId).collection("departments").get();
-    for (const d of existingDeptsSnap.docs) {
-      const data = d.data() as { name?: string; code?: string };
-      if ((data.name ?? "").trim().toLowerCase() === trimmedName.toLowerCase()) {
-        return NextResponse.json({ error: `A department named "${trimmedName}" already exists` }, { status: 409 });
-      }
-      if ((data.code ?? "").toUpperCase().trim() === upperCode) {
-        return NextResponse.json({ error: `Short code "${upperCode}" is already used by another department` }, { status: 409 });
-      }
+    // Unique per college on the NORMALISED name/code (case, spacing, NBSP
+    // insensitive; a name may not equal another department's code either) - see
+    // resolve.ts. This early read gives a clean 409; the authoritative,
+    // race-free check is the lock-doc claim inside the write transaction below.
+    const trimmedName = canonicalDepartmentName(name);
+    const upperCode = canonicalDepartmentCode(code);
+    if (!trimmedName || !upperCode) {
+      return NextResponse.json({ error: "Name and code are required" }, { status: 400 });
     }
+    const existingDeptsSnap = await db.collection("colleges").doc(collegeId).collection("departments").get();
+    const createConflict = findDepartmentConflict(
+      existingDeptsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as { name?: string; code?: string }) })),
+      { name: trimmedName, code: upperCode }
+    );
+    if (createConflict) return NextResponse.json({ error: createConflict.message }, { status: 409 });
     const deptByName = new Map(
       existingDeptsSnap.docs.map((d) => [(d.data() as { name?: string }).name ?? "", d.data() as { parentDepartmentId?: string }])
     );
@@ -178,7 +190,7 @@ export async function POST(request: Request) {
     let secondaryDepartments: string[] = [];
     if (body.secondaryDepartments && body.secondaryDepartments.length > 0) {
       const names = Array.from(new Set(body.secondaryDepartments.map((s) => s.trim()).filter(Boolean)));
-      const secError = validateSecondaryDepartmentNames(names, name.trim(), deptByName);
+      const secError = validateSecondaryDepartmentNames(names, trimmedName, deptByName);
       if (secError) return NextResponse.json({ error: secError }, { status: 400 });
       secondaryDepartments = names;
     }
@@ -201,7 +213,7 @@ export async function POST(request: Request) {
     let managedDepartments: string[] = [];
     if (body.managedDepartments && body.managedDepartments.length > 0) {
       const names = Array.from(new Set(body.managedDepartments.map((s) => s.trim()).filter(Boolean)));
-      if (names.includes(name.trim())) {
+      if (names.includes(trimmedName)) {
         return NextResponse.json({ error: "Managed department must be different from this department" }, { status: 400 });
       }
       const byName = deptByName;
@@ -241,13 +253,24 @@ export async function POST(request: Request) {
       parentDepartmentId = body.parentDepartmentId;
     }
 
+    // A top-level department can't exist without a course - resolved (and
+    // fully validated) before anything is written.
+    let newCourses: ResolvedDepartmentCourse[] = [];
+    if (session.role !== "HOD") {
+      const resolved = await resolveDepartmentCourseSelections(db, collegeId, body.courses);
+      if ("error" in resolved) return NextResponse.json({ error: resolved.error }, { status: 400 });
+      newCourses = resolved.courses;
+    }
+
     const deptsColl = db.collection("colleges").doc(collegeId).collection("departments");
     const docData = {
       collegeId,
-      name: name.trim(),
-      code: code.toUpperCase().trim(),
-      hodUid: hodUid ?? "",
-      hodName: hodName ?? "",
+      name: trimmedName,
+      code: upperCode,
+      // The HOD is appointed afterwards from Role Assignments (every department
+      // gets an empty HOD seat below) - never set at creation.
+      hodUid: "",
+      hodName: "",
       isActive: true,
       ...(parentDepartmentId ? { parentDepartmentId } : {}),
       ...(session.role !== "HOD" && body.hasSubDepartments ? { hasSubDepartments: true } : {}),
@@ -267,41 +290,68 @@ export async function POST(request: Request) {
       ...(session.role !== "HOD" && commonYearEnd !== undefined ? { commonYearEnd } : {}),
       ...(secondaryDepartments.length > 0 ? { secondaryDepartments } : {}),
       ...(managedDepartments.length > 0 ? { managedDepartments } : {}),
+      // Same per-catalog shape college/courses POST writes: this department's
+      // own Years Taught + cross-listing for each course it was created with.
+      ...(newCourses.length > 0
+        ? {
+            courseScopes: Object.fromEntries(
+              newCourses.map((c) => [c.catalogId, { assignedYears: c.assignedYears, secondaryDepartments }])
+            ),
+          }
+        : {}),
       createdAt: now,
       updatedAt: now,
     };
 
-    let ref: FirebaseFirestore.DocumentReference;
-    if (managedDepartments.length > 0) {
-      // Grouping branches is the one constraint here that must hold under
-      // concurrency: without a re-read inside the transaction, two sub-departments
-      // created at nearly the same time could both pass the check above and both
-      // claim the same branch. Mirrors the no-double-booking transaction in
-      // college/hiring-batches/route.ts. (Name/code uniqueness above remains a
-      // plain read-and-loop, as it has always been.)
-      ref = deptsColl.doc();
-      await db.runTransaction(async (tx) => {
-        const fresh = await tx.get(deptsColl);
+    const coursesColl = db.collection("colleges").doc(collegeId).collection("courses");
+    const writeNewCourses = (
+      write: (courseRef: FirebaseFirestore.DocumentReference, data: Record<string, unknown>) => void,
+      departmentId: string
+    ) => {
+      for (const c of newCourses) {
+        write(coursesColl.doc(), {
+          collegeId,
+          departmentId,
+          catalogId: c.catalogId,
+          name: c.name,
+          code: c.code,
+          durationYears: c.durationYears,
+          isActive: true,
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
+    };
+
+    // The department, its courses and its name/code lock docs are written in one
+    // transaction: a department is never left behind without the course(s) it was
+    // required to have, and two concurrent creates of the same name/code can't
+    // both succeed (the second finds the first's lock doc and aborts). The
+    // branch-claim re-check (a branch may be grouped under only ONE sub-department)
+    // rides in the same transaction, as before.
+    const keysColl = db.collection("colleges").doc(collegeId).collection("departmentKeys");
+    const ref = deptsColl.doc();
+    await db.runTransaction(async (tx) => {
+      const fresh = await tx.get(deptsColl);
+      const freshRows = fresh.docs.map((d) => ({ id: d.id, ...(d.data() as { name?: string; code?: string }) }));
+      const txConflict = findDepartmentConflict(freshRows, { name: trimmedName, code: upperCode });
+      if (txConflict) throw new Error(`DEPARTMENT_KEY_TAKEN:${txConflict.field}:${txConflict.message}`);
+      if (managedDepartments.length > 0) {
         const conflicts = findBranchClaimConflicts(
           fresh.docs.map((d) => ({ ...(d.data() as DepartmentClaimRow), id: d.id })),
           managedDepartments
         );
         if (conflicts.length > 0) throw new Error(`BRANCH_CLAIMED:${branchClaimConflictMessage(conflicts)}`);
-        tx.set(ref, docData);
-      });
-    } else {
-      ref = await deptsColl.add(docData);
-    }
+      }
+      await claimDepartmentKeys(tx, keysColl, deptsColl, ref.id, { name: trimmedName, code: upperCode });
+      tx.set(ref, docData);
+      writeNewCourses((r, d) => tx.set(r, d), ref.id);
+    });
 
-    // Keep the HOD's own profile department in sync - faculty-requirement
-    // and other HOD-scoped routes resolve department from their user doc,
-    // not from the department's hodUid pointer. Additive: this HOD may
-    // already head other departments, which stay untouched.
-    if (hodUid) {
-      await db.collection("colleges").doc(collegeId).collection("users").doc(hodUid)
-        .update({ department: name.trim(), departments: FieldValue.arrayUnion(name.trim()), updatedAt: now })
-        .catch(() => {});
-    }
+    // Every department has an HOD seat from the start, empty until someone is
+    // appointed to it in Role Assignments.
+    await ensureHodSeatForDepartment(db, collegeId, { id: ref.id, name: trimmedName }, { uid: session.uid, name: session.role === "HOD" ? "HOD" : "Principal" })
+      .catch((e) => console.error("[college/departments POST] HOD seat creation failed:", e));
 
     await db
       .collection("colleges")
@@ -313,7 +363,12 @@ export async function POST(request: Request) {
         performedBy: session.uid,
         performedByName: session.role === "HOD" ? "HOD" : "Principal",
         targetId: ref.id,
-        details: { name, code, ...(parentDepartmentId ? { parentDepartmentId } : {}) },
+        details: {
+          name,
+          code,
+          ...(parentDepartmentId ? { parentDepartmentId } : {}),
+          ...(newCourses.length > 0 ? { courses: newCourses.map((c) => c.name) } : {}),
+        },
         timestamp: now,
       });
 
@@ -325,6 +380,8 @@ export async function POST(request: Request) {
     if (err instanceof Error && err.message.startsWith("BRANCH_CLAIMED:")) {
       return NextResponse.json({ error: err.message.slice("BRANCH_CLAIMED:".length) }, { status: 409 });
     }
+    const keyConflict = departmentKeyConflictMessage(err);
+    if (keyConflict) return NextResponse.json({ error: keyConflict }, { status: 409 });
     console.error("[college/departments POST]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
@@ -346,7 +403,7 @@ export async function DELETE(request: Request) {
     if (!deptSnap.exists) {
       return NextResponse.json({ error: "Department not found" }, { status: 404 });
     }
-    const dept = deptSnap.data() as { name: string; hodUid?: string; parentDepartmentId?: string; managedDepartments?: string[] };
+    const dept = deptSnap.data() as { name: string; code?: string; hodUid?: string; parentDepartmentId?: string; managedDepartments?: string[] };
 
     // An HOD may only delete a sub-department under their own department -
     // this is the "sub-HOD" management surface, not general department admin.
@@ -420,19 +477,10 @@ export async function DELETE(request: Request) {
 
     const batch = db.batch();
 
-    // Keep the (sub-)HOD's own profile in sync - otherwise their account is
-    // left pointing at a department that no longer exists. Only THIS
-    // department leaves their portfolio; any other department they head
-    // (see college/departments PATCH) stays untouched.
-    if (dept.hodUid) {
-      const hodRef = db.collection("colleges").doc(collegeId).collection("users").doc(dept.hodUid);
-      const hodSnap = await hodRef.get();
-      const hodData = hodSnap.data() as { department?: string; departments?: string[] } | undefined;
-      const currentDepts = (hodData?.departments && hodData.departments.length > 0 ? hodData.departments : [hodData?.department ?? ""])
-        .filter(Boolean);
-      const remaining = currentDepts.filter((d) => d !== dept.name);
-      batch.update(hodRef, { department: remaining[0] ?? "", departments: remaining, updatedAt: new Date() });
-    }
+    // The department's HOD seat goes with it (holder released, history kept) -
+    // see retireDepartmentSeat. Any other department the holder heads stays
+    // theirs.
+    await retireDepartmentSeat(db, collegeId, deptId).catch((e) => console.error("[college/departments DELETE] seat retire failed:", e));
 
     // Strip this department's name from any OTHER department's
     // managedDepartments/secondaryDepartments arrays. Without this, a stale
@@ -502,6 +550,9 @@ export async function DELETE(request: Request) {
     }
 
     batch.delete(deptRef);
+    // Free this department's name/code so a NEW department may reuse them (it gets
+    // a new id and reattaches nothing).
+    releaseDepartmentKeys(batch as unknown as { delete(ref: never): unknown }, db.collection("colleges").doc(collegeId).collection("departmentKeys"), { name: dept.name, code: dept.code });
     await batch.commit();
 
     return NextResponse.json({ ok: true });
@@ -576,7 +627,7 @@ export async function PATCH(request: Request) {
     };
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars -- destructured only to exclude it from rawUpdates/updates below
-    const { deptId, resyncNameCascade: _resyncNameCascade, ...rawUpdates } = body;
+    const { deptId, resyncNameCascade: _resyncNameCascade, hodUid: requestedHodUid, hodName: _hodName, ...rawUpdates } = body;
     if (!deptId) {
       return NextResponse.json({ error: "deptId required" }, { status: 400 });
     }
@@ -594,7 +645,7 @@ export async function PATCH(request: Request) {
       if (!data.cascadeOldName || !data.name || data.cascadeOldName === data.name) {
         return NextResponse.json({ ok: true, cascade: { status: "DONE" as const } });
       }
-      const result = await cascadeDepartmentRename(db, session.collegeId, data.cascadeOldName, data.name);
+      const result = await cascadeDepartmentRename(db, session.collegeId, data.cascadeOldName, data.name, deptId);
       const cascade = result.failedStep
         ? { status: "FAILED" as const, failedStep: result.failedStep, error: result.error }
         : { status: "DONE" as const };
@@ -624,18 +675,54 @@ export async function PATCH(request: Request) {
       // authority is the exception: appointing or removing a Sub-HOD stays with
       // the actual HOD, otherwise an appointee could dismantle the leadership
       // of the department they were appointed into.
-      if (isDepartmentOffice(session) && ("hodUid" in rawUpdates || "hodName" in rawUpdates)) {
+      if (isDepartmentOffice(session) && requestedHodUid !== undefined) {
         return NextResponse.json(
           { error: "Only the Head of Department can assign or remove a Sub-HOD" },
           { status: 403 }
         );
       }
       const restricted: typeof rawUpdates = {};
-      if ("hodUid" in rawUpdates) restricted.hodUid = rawUpdates.hodUid;
-      if ("hodName" in rawUpdates) restricted.hodName = rawUpdates.hodName;
       if ("secondaryDepartments" in rawUpdates) restricted.secondaryDepartments = rawUpdates.secondaryDepartments;
       if ("managedDepartments" in rawUpdates) restricted.managedDepartments = rawUpdates.managedDepartments;
       updates = restricted;
+    }
+
+    // Appointing / removing a department's HOD goes through its HOD SEAT (see
+    // types/roleSeats.ts) - hodUid here is only the shortcut the Sub-Departments
+    // and faculty pages use for it: a person to sit in the seat, or "" to
+    // vacate it. Principal / VP / College Admin for any department; an HOD only
+    // for their own sub-departments (checked above).
+    if (requestedHodUid !== undefined) {
+      const deptForSeat = await deptRef.get();
+      if (!deptForSeat.exists) return NextResponse.json({ error: "Department not found" }, { status: 404 });
+      if (session.role !== "HOD" && !canAssignSeat(session, "HOD")) {
+        return NextResponse.json({ error: "You can't assign this seat" }, { status: 403 });
+      }
+      const seatName = (deptForSeat.data() as { name?: string }).name ?? "";
+      const actorSnap = await db.collection("colleges").doc(session.collegeId).collection("users").doc(session.uid).get();
+      const actor = { uid: session.uid, name: (actorSnap.data() as { name?: string } | undefined)?.name ?? session.email ?? "Unknown" };
+      try {
+        await ensureHodSeatForDepartment(db, session.collegeId, { id: deptId, name: seatName });
+        const seatSnap = await seatsCol(db, session.collegeId).where("role", "==", "HOD").where("departmentId", "==", deptId).limit(1).get();
+        const seatDoc = seatSnap.docs[0];
+        if (seatDoc) {
+          const currentHolder = (seatDoc.data() as { holderUid?: string | null }).holderUid ?? null;
+          const nextHolder = requestedHodUid || null;
+          if (currentHolder !== nextHolder) {
+            await assignSeat(db, session.collegeId, seatDoc.id, { uid: nextHolder }, actor);
+            if (currentHolder) forgetHeldRoles(session.collegeId, currentHolder);
+            if (nextHolder) forgetHeldRoles(session.collegeId, nextHolder);
+          }
+        }
+      } catch (e) {
+        if (e instanceof SeatError) {
+          return NextResponse.json(
+            { error: e.message === "OUTGOING_ACTION_REQUIRED" ? "This is an old role account - use Role Assignments to change it" : e.message },
+            { status: e.status }
+          );
+        }
+        throw e;
+      }
     }
 
     // parentRunsOwnSections is only meaningful alongside hasSubDepartments
@@ -702,24 +789,33 @@ export async function PATCH(request: Request) {
     // write commits to cascade the rename into every collection that stores a
     // copy of the department name (see renameCascade.ts).
     let departmentRename: { oldName: string; newName: string } | null = null;
+    let keyChange: { next: { name?: string; code?: string }; prev: { name?: string; code?: string } } | null = null;
     if (updates.name !== undefined || updates.code !== undefined) {
+      // Store the canonical forms (whitespace collapsed / code uppercased, no
+      // spaces) so the stored value is exactly what the uniqueness key hashes.
+      if (updates.name !== undefined) updates.name = canonicalDepartmentName(updates.name);
+      if (updates.code !== undefined) updates.code = canonicalDepartmentCode(updates.code);
+      if ((updates.name !== undefined && !updates.name) || (updates.code !== undefined && !updates.code)) {
+        return NextResponse.json({ error: "Name and code cannot be blank" }, { status: 400 });
+      }
       const [allSnap, currentSnap] = await Promise.all([
         db.collection("colleges").doc(session.collegeId).collection("departments").get(),
         deptRef.get(),
       ]);
       const cur = currentSnap.data() as { name?: string; code?: string } | undefined;
-      const finalName = (updates.name ?? cur?.name ?? "").trim();
-      const finalCode = (updates.code ?? cur?.code ?? "").toUpperCase().trim();
-      for (const d of allSnap.docs) {
-        if (d.id === deptId) continue;
-        const data = d.data() as { name?: string; code?: string };
-        if (updates.name !== undefined && (data.name ?? "").trim().toLowerCase() === finalName.toLowerCase()) {
-          return NextResponse.json({ error: `A department named "${finalName}" already exists` }, { status: 409 });
-        }
-        if (updates.code !== undefined && (data.code ?? "").toUpperCase().trim() === finalCode) {
-          return NextResponse.json({ error: `Short code "${finalCode}" is already used by another department` }, { status: 409 });
-        }
-      }
+      // Own value / case-only change is fine (self excluded); another
+      // department's name/code - any case/spacing - is a 409. The race-free
+      // check is the lock-doc claim in the write transaction below.
+      const renameConflict = findDepartmentConflict(
+        allSnap.docs.map((d) => ({ id: d.id, ...(d.data() as { name?: string; code?: string }) })),
+        { name: updates.name, code: updates.code },
+        deptId
+      );
+      if (renameConflict) return NextResponse.json({ error: renameConflict.message }, { status: 409 });
+      keyChange = {
+        next: { ...(updates.name !== undefined ? { name: updates.name } : {}), ...(updates.code !== undefined ? { code: updates.code } : {}) },
+        prev: { name: cur?.name, code: cur?.code },
+      };
       if (updates.name !== undefined && cur?.name && cur.name !== updates.name) {
         departmentRename = { oldName: cur.name, newName: updates.name };
       }
@@ -937,65 +1033,43 @@ export async function PATCH(request: Request) {
 
     const now = new Date();
 
-    // Keep the outgoing/incoming HOD's own profile department in sync with
-    // the assignment - faculty-requirement and other HOD-scoped routes
-    // resolve department from their user doc, not from hodUid. Additive: an
-    // HOD can now head more than one department at once (see
-    // src/lib/departments/scope.ts), so reassigning this ONE department only
-    // ever adds/removes that one name from each side's `departments` array -
-    // it must never touch any other department either of them heads.
-    if (updates.hodUid !== undefined) {
-      const deptSnap = await deptRef.get();
-      const prev = deptSnap.data() as { hodUid?: string; name?: string } | undefined;
-      const finalName = updates.name?.trim() ?? prev?.name ?? "";
-      const usersColl = db.collection("colleges").doc(session.collegeId).collection("users");
-
-      if (prev?.hodUid && prev.hodUid !== updates.hodUid && finalName) {
-        const outgoingRef = usersColl.doc(prev.hodUid);
-        const outgoingSnap = await outgoingRef.get();
-        const outgoingData = outgoingSnap.data() as { department?: string; departments?: string[] } | undefined;
-        const remaining = (outgoingData?.departments && outgoingData.departments.length > 0 ? outgoingData.departments : [outgoingData?.department ?? ""])
-          .filter((d) => d && d !== finalName);
-        await outgoingRef.update({ department: remaining[0] ?? "", departments: remaining, updatedAt: now }).catch(() => {});
-      }
-      if (updates.hodUid && finalName) {
-        await usersColl.doc(updates.hodUid).update({
-          department: finalName,
-          departments: FieldValue.arrayUnion(finalName),
-          updatedAt: now,
-        }).catch(() => {});
-      }
-    }
-
-    if (updates.managedDepartments !== undefined && updates.managedDepartments.length > 0) {
-      // Same re-check under a transaction as the create path - two Sub-HOD edits
-      // landing together must not both claim the same branch.
+    const fullUpdate = {
+      ...updates,
+      ...courseScopePatch,
+      ...clearParentRunsOwnSections,
+      ...(clearParentDepartmentId ? { parentDepartmentId: FieldValue.delete() } : {}),
+      updatedAt: now,
+    };
+    const claimedBranches = updates.managedDepartments !== undefined && updates.managedDepartments.length > 0 ? updates.managedDepartments : null;
+    if (claimedBranches || keyChange) {
+      // Transactional path: re-checks branch claims (two Sub-HOD edits landing
+      // together must not both claim the same branch) and/or swaps the
+      // name/code lock docs atomically with the department update.
       const deptsColl = db.collection("colleges").doc(session.collegeId).collection("departments");
-      const claimed = updates.managedDepartments;
+      const keysColl = db.collection("colleges").doc(session.collegeId).collection("departmentKeys");
       await db.runTransaction(async (tx) => {
         const fresh = await tx.get(deptsColl);
-        const conflicts = findBranchClaimConflicts(
-          fresh.docs.map((d) => ({ ...(d.data() as DepartmentClaimRow), id: d.id })),
-          claimed,
-          deptId
-        );
-        if (conflicts.length > 0) throw new Error(`BRANCH_CLAIMED:${branchClaimConflictMessage(conflicts)}`);
-        tx.update(deptRef, {
-          ...updates,
-          ...courseScopePatch,
-          ...clearParentRunsOwnSections,
-          ...(clearParentDepartmentId ? { parentDepartmentId: FieldValue.delete() } : {}),
-          updatedAt: now,
-        });
+        if (claimedBranches) {
+          const conflicts = findBranchClaimConflicts(
+            fresh.docs.map((d) => ({ ...(d.data() as DepartmentClaimRow), id: d.id })),
+            claimedBranches,
+            deptId
+          );
+          if (conflicts.length > 0) throw new Error(`BRANCH_CLAIMED:${branchClaimConflictMessage(conflicts)}`);
+        }
+        if (keyChange) {
+          const txConflict = findDepartmentConflict(
+            fresh.docs.map((d) => ({ id: d.id, ...(d.data() as { name?: string; code?: string }) })),
+            keyChange.next,
+            deptId
+          );
+          if (txConflict) throw new Error(`DEPARTMENT_KEY_TAKEN:${txConflict.field}:${txConflict.message}`);
+          await claimDepartmentKeys(tx, keysColl, deptsColl, deptId, keyChange.next, keyChange.prev);
+        }
+        tx.update(deptRef, fullUpdate);
       });
     } else {
-      await deptRef.update({
-        ...updates,
-        ...courseScopePatch,
-        ...clearParentRunsOwnSections,
-        ...(clearParentDepartmentId ? { parentDepartmentId: FieldValue.delete() } : {}),
-        updatedAt: now,
-      });
+      await deptRef.update(fullUpdate);
     }
 
     // The rename itself has committed - every other collection holding a copy
@@ -1013,7 +1087,9 @@ export async function PATCH(request: Request) {
     // record is confirmed in sync yet.
     let cascade: { status: "DONE" | "FAILED"; failedStep?: string; error?: string } | undefined;
     if (departmentRename) {
-      const result = await cascadeDepartmentRename(db, session.collegeId, departmentRename.oldName, departmentRename.newName);
+      await renameDepartmentSeat(db, session.collegeId, deptId, departmentRename.newName)
+        .catch((e) => console.error("[college/departments PATCH] seat rename failed:", e));
+      const result = await cascadeDepartmentRename(db, session.collegeId, departmentRename.oldName, departmentRename.newName, deptId);
       cascade = result.failedStep
         ? { status: "FAILED", failedStep: result.failedStep, error: result.error }
         : { status: "DONE" };
@@ -1036,6 +1112,8 @@ export async function PATCH(request: Request) {
     if (err instanceof Error && err.message.startsWith("BRANCH_CLAIMED:")) {
       return NextResponse.json({ error: err.message.slice("BRANCH_CLAIMED:".length) }, { status: 409 });
     }
+    const keyConflict = departmentKeyConflictMessage(err);
+    if (keyConflict) return NextResponse.json({ error: keyConflict }, { status: 409 });
     console.error("[college/departments PATCH]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }

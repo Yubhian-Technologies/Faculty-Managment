@@ -12,6 +12,7 @@ import { resolveDepartmentCourseScope, regulationsForCourseYearByBatch, regulati
 import { parseBatchStartYear, deriveBatch, parseAcademicYearStart, currentAcademicStartYear } from "@/lib/college/academicSession";
 import { isNameOrChildAmong } from "@/lib/departments/codeOrNameResolver";
 import type { DepartmentCourseScope } from "@/types";
+import { loadDepartmentIndex, stampDepartmentIds } from "@/lib/departments/stampIds";
 
 // A parent department's HOD has full (not just view-only) access to their own
 // sub-departments' sections, and a sub-HOD has the same over every branch
@@ -428,7 +429,15 @@ export async function PATCH(
     }
 
     const batch = new ChunkedBatch(db);
-    batch.update(ref, updates);
+    // Dual-write (department-id migration Phase 1): ids next to the names being
+    // written. An emptied cross-list also clears its id array so the two never
+    // disagree.
+    const deptIndex = await loadDepartmentIndex(db, session.collegeId);
+    const stampedUpdates: Record<string, unknown> = stampDepartmentIds(updates, deptIndex);
+    if (Array.isArray(updates.secondaryDepartments) && updates.secondaryDepartments.length === 0) {
+      stampedUpdates.secondaryDepartmentIds = [];
+    }
+    batch.update(ref, stampedUpdates);
 
     // Students are keyed by (department, section name, year, courseId), not
     // by this section's document id - so reassigning the section's
@@ -486,7 +495,7 @@ export async function PATCH(
         const studentUpdate = isSecondaryMatch
           ? { secondaryDepartment: newDepartment, section: newName, year: newYear, courseId: newCourseId, updatedAt: now }
           : { department: newDepartment, section: newName, year: newYear, courseId: newCourseId, updatedAt: now };
-        batch.update(studentDoc.ref, studentUpdate);
+        batch.update(studentDoc.ref, stampDepartmentIds(studentUpdate, deptIndex));
         const historyDept = isSecondaryMatch
           ? ((studentDoc.data() as { department?: string }).department ?? "")
           : newDepartment;

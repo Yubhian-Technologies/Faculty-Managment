@@ -25,7 +25,26 @@ export const useAuthStore = create<AuthState>()(
       firebaseToken: null,
       isLoading: true,
       selectedCollegeId: null,
-      setUser: (user) => set({ user }),
+      // selectedCollegeId is persisted to localStorage so a GLOBAL role
+      // (FINANCE/PURCHASE_DEPT) remembers its chosen college across page
+      // reloads - but that persistence was keyed only to the browser, not to
+      // WHICH account is signed in. If the same device signs in as a
+      // different account without an explicit logout() in between (logout()
+      // already clears it), the new session silently inherited whatever
+      // college the previous one had picked, and every /api/college/* call
+      // that falls back to it (see collegeFetch's withCollegeId) - including
+      // the notification bell - would show that unrelated, possibly
+      // long-stale college's data instead of nothing. Reset it whenever the
+      // incoming user is a different uid than whoever was signed in before;
+      // keep it when it's the same uid (an ordinary reload/token refresh).
+      setUser: (user) =>
+        set((state) => ({
+          user,
+          selectedCollegeId:
+            user && state.user && user.uid === state.user.uid
+              ? state.selectedCollegeId
+              : null,
+        })),
       setFirebaseToken: (firebaseToken) => set({ firebaseToken }),
       setLoading: (isLoading) => set({ isLoading }),
       setSelectedCollegeId: (selectedCollegeId) => set({ selectedCollegeId }),

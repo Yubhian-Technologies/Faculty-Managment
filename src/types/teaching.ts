@@ -218,6 +218,16 @@ export interface TimetableSlot {
   day: DayOfWeek;
   periodNumber: number;         // resolved against that course-year's CourseYearTiming for clock time
   classroom?: string;
+  // Free-text lab sub-group label (e.g. "Batch 1") for a PRACTICAL subject
+  // split across parallel sessions - set only at creation time, via the
+  // per-row "Lab Batch" field in TeachingAssignmentsEditor (see
+  // teaching-assignments/route.ts POST and timetable-slots/route.ts POST).
+  // Two rows sharing the same section+day+period with different labBatch
+  // values are a deliberate split period (see StagedSlot.allowSplit) - there
+  // is no dedicated batch-scheduling logic, this is purely a display label
+  // MANUAL slots carry through untouched. Never set by the generator/publish
+  // flow, which has no concept of batches.
+  labBatch?: string;
   source?: TimetableSlotSource; // absent on rows written before this field existed - treat as MANUAL
   isPinned?: boolean;
   // Which of the course-year's configured semesters (CourseYearTiming.

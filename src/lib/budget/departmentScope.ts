@@ -24,6 +24,24 @@ export async function resolveUserDepartment(db: Firestore, collegeId: string, ui
   return (await resolveUserProfile(db, collegeId, uid)).department;
 }
 
+// Every department this person runs AS HOD - their HOD seats (see
+// types/roleSeats.ts), which keep `departments` on their record in step - or,
+// for a plain single-department HOD, just their own `department`. This is what
+// HOD-role screens (approvals, department lists, budgets) must scope to: a
+// person's own `department` is where they teach, and can differ from a
+// department they head (or be only one of two). Personal screens (their own
+// leave, teaching load, ...) keep using resolveUserDepartment.
+export async function resolveHodDepartments(db: Firestore, collegeId: string, uid: string): Promise<string[]> {
+  try {
+    const snap = await db.collection("colleges").doc(collegeId).collection("users").doc(uid).get();
+    const data = snap.data() as { department?: string; departments?: string[] } | undefined;
+    const names = data?.departments && data.departments.length > 0 ? data.departments : [data?.department ?? ""];
+    return Array.from(new Set(names.map((n) => n.trim()).filter(Boolean)));
+  } catch {
+    return [];
+  }
+}
+
 export async function resolveUserName(db: Firestore, collegeId: string, uid: string): Promise<string> {
   return (await resolveUserProfile(db, collegeId, uid)).name;
 }
@@ -39,6 +57,9 @@ export async function scopeBudgetQueryByDepartment(
   session: DeptScopeSession
 ): Promise<FirebaseFirestore.Query> {
   if (session.role !== "HOD") return baseQuery;
-  const dept = await resolveUserDepartment(db, session.collegeId, session.uid);
-  return baseQuery.where("department", "==", dept || "__NO_DEPARTMENT__");
+  const depts = await resolveHodDepartments(db, session.collegeId, session.uid);
+  if (depts.length === 0) return baseQuery.where("department", "==", "__NO_DEPARTMENT__");
+  return depts.length === 1
+    ? baseQuery.where("department", "==", depts[0])
+    : baseQuery.where("department", "in", depts.slice(0, 30));
 }

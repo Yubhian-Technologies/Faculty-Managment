@@ -1,11 +1,17 @@
 // A department rename (college/departments PATCH changing `name`) used to
 // write only the department doc itself - every other collection that stores
-// a copy of the department name as free text (see
-// scripts/diagnose-department-rename-revert.mjs's DEPT_STRING_COLLECTIONS,
-// the canonical list this mirrors) kept the OLD name forever, silently
-// breaking every exact-string scope/query built on top of it. This module is
-// the real fix: called synchronously from departments/route.ts PATCH right
-// after the rename itself commits.
+// a copy of the department name as free text kept the OLD name forever,
+// silently breaking every exact-string scope/query built on top of it. This
+// module refreshes those copies, called synchronously from departments/route.ts
+// PATCH right after the rename itself commits.
+//
+// ROLE AFTER THE departmentId MIGRATION: `departmentId` is the join key, so a
+// rename no longer breaks scope/queries - this cascade only refreshes the
+// DISPLAY-NAME copy stored beside each id. It now (1) covers every collection in
+// refFields.ts (the old hand-kept list missed ~20), (2) matches by id as well as
+// by old name (so a doc the name pass would miss - e.g. one whose stored name
+// had drifted - is still refreshed), and (3) stamps the id on any doc it finds
+// by old name. Failure is cosmetic, never corrupting, and a retry is idempotent.
 //
 // This project has no cron/scheduled-job infrastructure (see
 // src/lib/attendance/closeMissedCheckouts.ts's own doc-comment for the same
@@ -13,17 +19,16 @@
 // this codebase (Subject.hoursPerWeek's cascade in subjects/[id]/route.ts,
 // the HOD hodUid/hodName self-heal in departments/route.ts GET), this runs
 // inline, chunked, synchronously in the request rather than as a background
-// job. Every write is idempotent (`field == oldName -> field = newName`), so
-// a doc already fixed by an earlier attempt simply drops out of a retry's
-// query - safe to call again after a timeout/partial failure without
-// double-writing or duplicating anything.
+// job. Every write is idempotent, so a doc already fixed by an earlier
+// attempt simply drops out of a retry's queries - safe to call again after a
+// timeout/partial failure without double-writing or duplicating anything.
 //
-// department renames specifically are a Tier-1 concern (unlike a faculty/
-// subject rename, which deliberately does NOT touch historical snapshots -
-// see the cascades in faculty/[id]/route.ts and subjects/[id]/route.ts): a
-// department's identity gates authorization/scope everywhere, and the user
-// requirement here is explicit - nowhere may keep pointing at the old name,
+// Department renames specifically are a Tier-1 concern (unlike a faculty/
+// subject rename, which deliberately does NOT touch historical snapshots): the
+// requirement is explicit - nowhere may keep displaying the old name,
 // including historical reporting collections.
+
+import { DEPARTMENT_REF_FIELDS, type DepartmentRefField } from "./refFields";
 
 export interface DepartmentRenameCascadeResult {
   completedSteps: string[];
@@ -32,102 +37,128 @@ export interface DepartmentRenameCascadeResult {
 }
 
 type Db = FirebaseFirestore.Firestore;
+type PendingUpdate = { ref: FirebaseFirestore.DocumentReference; patch: Record<string, unknown> };
 
-async function updateScalarField(
-  db: Db,
-  collectionRef: FirebaseFirestore.CollectionReference,
-  field: string,
-  oldName: string,
-  newName: string
-): Promise<number> {
-  const snap = await collectionRef.where(field, "==", oldName).get();
-  const now = new Date();
-  for (let i = 0; i < snap.docs.length; i += 400) {
-    const chunk = snap.docs.slice(i, i + 400);
+async function commitInChunks(db: Db, updates: PendingUpdate[]): Promise<void> {
+  for (let i = 0; i < updates.length; i += 400) {
     const batch = db.batch();
-    for (const doc of chunk) batch.update(doc.ref, { [field]: newName, updatedAt: now });
+    for (const u of updates.slice(i, i + 400)) batch.update(u.ref, u.patch);
     await batch.commit();
   }
-  return snap.docs.length;
 }
 
-async function updateArrayField(
+// `field == oldName -> newName` (and stamp the id), plus `idField == id` docs
+// whose stored name differs from newName. A doc reached by both is updated once.
+async function refreshScalar(
   db: Db,
-  collectionRef: FirebaseFirestore.CollectionReference,
-  field: string,
+  coll: FirebaseFirestore.CollectionReference,
+  ref: DepartmentRefField,
   oldName: string,
-  newName: string
-): Promise<number> {
-  const snap = await collectionRef.where(field, "array-contains", oldName).get();
+  newName: string,
+  departmentId?: string
+): Promise<void> {
   const now = new Date();
-  for (let i = 0; i < snap.docs.length; i += 400) {
-    const chunk = snap.docs.slice(i, i + 400);
-    const batch = db.batch();
-    for (const doc of chunk) {
-      const current = (doc.data()[field] as string[] | undefined) ?? [];
-      const updated = current.map((v) => (v === oldName ? newName : v));
-      batch.update(doc.ref, { [field]: updated, updatedAt: now });
+  const updates = new Map<string, PendingUpdate>();
+  const byName = await coll.where(ref.field, "==", oldName).get();
+  for (const d of byName.docs) {
+    updates.set(d.id, {
+      ref: d.ref,
+      patch: { [ref.field]: newName, ...(departmentId ? { [ref.idField]: departmentId } : {}), updatedAt: now },
+    });
+  }
+  if (departmentId) {
+    const byId = await coll.where(ref.idField, "==", departmentId).get();
+    for (const d of byId.docs) {
+      if (updates.has(d.id)) continue;
+      if ((d.data() as Record<string, unknown>)[ref.field] !== newName) {
+        updates.set(d.id, { ref: d.ref, patch: { [ref.field]: newName, updatedAt: now } });
+      }
     }
-    await batch.commit();
   }
-  return snap.docs.length;
+  await commitInChunks(db, [...updates.values()]);
 }
 
-// Scalar `department`-style fields shared across most collections - queried
-// and rewritten identically, so declared as a plain list rather than a
-// repeated function call per collection. Tier 2 (historical/reporting)
-// collections are included deliberately - see this file's own doc-comment.
-const SCALAR_DEPARTMENT_FIELDS: { collection: string; field: string }[] = [
-  { collection: "sections", field: "department" },
-  { collection: "subjects", field: "department" },
-  { collection: "facultyMembers", field: "department" },
-  { collection: "students", field: "department" },
-  { collection: "students", field: "secondaryDepartment" },
-  { collection: "teachingAssignments", field: "department" },
-  { collection: "timetableSlots", field: "department" },
-  { collection: "users", field: "department" },
-  { collection: "attendanceRecords", field: "department" },
-  { collection: "permissionRequests", field: "department" },
-  { collection: "onDutyRequests", field: "department" },
-  { collection: "leaveRequests", field: "department" },
-  { collection: "salaryRecords", field: "department" },
-  { collection: "appraisals", field: "department" },
-];
+// String[] name field with an index-aligned id array. An old-name match rewrites
+// that element; an id match rewrites the element at the id's position.
+async function refreshArray(
+  db: Db,
+  coll: FirebaseFirestore.CollectionReference,
+  ref: DepartmentRefField,
+  oldName: string,
+  newName: string,
+  departmentId?: string
+): Promise<void> {
+  const now = new Date();
+  const updates = new Map<string, PendingUpdate>();
+  const byName = await coll.where(ref.field, "array-contains", oldName).get();
+  for (const d of byName.docs) {
+    const current = ((d.data() as Record<string, unknown>)[ref.field] as string[] | undefined) ?? [];
+    updates.set(d.id, { ref: d.ref, patch: { [ref.field]: current.map((v) => (v === oldName ? newName : v)), updatedAt: now } });
+  }
+  if (departmentId) {
+    const byId = await coll.where(ref.idField, "array-contains", departmentId).get();
+    for (const d of byId.docs) {
+      if (updates.has(d.id)) continue;
+      const data = d.data() as Record<string, unknown>;
+      const names = [...((data[ref.field] as string[] | undefined) ?? [])];
+      const ids = (data[ref.idField] as string[] | undefined) ?? [];
+      let changed = false;
+      ids.forEach((id, i) => {
+        if (id === departmentId && names[i] !== undefined && names[i] !== newName) {
+          names[i] = newName;
+          changed = true;
+        }
+      });
+      if (changed) updates.set(d.id, { ref: d.ref, patch: { [ref.field]: names, updatedAt: now } });
+    }
+  }
+  await commitInChunks(db, [...updates.values()]);
+}
 
 export async function cascadeDepartmentRename(
   db: Db,
   collegeId: string,
   oldName: string,
-  newName: string
+  newName: string,
+  departmentId?: string
 ): Promise<DepartmentRenameCascadeResult> {
   const collegeRef = db.collection("colleges").doc(collegeId);
 
-  // Other departments' own secondaryDepartments[]/managedDepartments[]
-  // arrays and courseScopes[*].secondaryDepartments[] - a nested map, not a
-  // directly queryable array field, so fetched and patched in code (the
-  // departments collection is small - a handful to a few dozen docs per
-  // college, never a scale concern).
+  // Other departments' own arrays + courseScopes[*] (a nested map, not directly
+  // queryable): fetched and patched in code (a handful to a few dozen docs per
+  // college). Matches by old name and, when known, by id.
   const patchOtherDepartments = async () => {
     const deptsSnap = await collegeRef.collection("departments").get();
     const now = new Date();
     for (const doc of deptsSnap.docs) {
       const data = doc.data() as {
         secondaryDepartments?: string[];
+        secondaryDepartmentIds?: string[];
         managedDepartments?: string[];
-        courseScopes?: Record<string, { secondaryDepartments?: string[]; assignedYears?: number[] }>;
+        managedDepartmentIds?: string[];
+        courseScopes?: Record<string, { secondaryDepartments?: string[]; secondaryDepartmentIds?: string[]; assignedYears?: number[] }>;
+      };
+      const rewrite = (names: string[] | undefined, ids: string[] | undefined): string[] | null => {
+        if (!Array.isArray(names)) return null;
+        let changed = false;
+        const out = names.map((v, i) => {
+          const hit = v === oldName || (departmentId !== undefined && ids?.[i] === departmentId);
+          if (hit && v !== newName) {
+            changed = true;
+            return newName;
+          }
+          return v;
+        });
+        return changed ? out : null;
       };
       const patch: Record<string, unknown> = {};
-      for (const field of ["secondaryDepartments", "managedDepartments"] as const) {
-        const arr = data[field];
-        if (Array.isArray(arr) && arr.includes(oldName)) {
-          patch[field] = arr.map((v) => (v === oldName ? newName : v));
-        }
-      }
+      const sec = rewrite(data.secondaryDepartments, data.secondaryDepartmentIds);
+      if (sec) patch.secondaryDepartments = sec;
+      const mgd = rewrite(data.managedDepartments, data.managedDepartmentIds);
+      if (mgd) patch.managedDepartments = mgd;
       for (const [catalogId, courseScope] of Object.entries(data.courseScopes ?? {})) {
-        const arr = courseScope.secondaryDepartments;
-        if (Array.isArray(arr) && arr.includes(oldName)) {
-          patch[`courseScopes.${catalogId}.secondaryDepartments`] = arr.map((v) => (v === oldName ? newName : v));
-        }
+        const r = rewrite(courseScope.secondaryDepartments, courseScope.secondaryDepartmentIds);
+        if (r) patch[`courseScopes.${catalogId}.secondaryDepartments`] = r;
       }
       if (Object.keys(patch).length > 0) {
         await doc.ref.update({ ...patch, updatedAt: now });
@@ -136,18 +167,13 @@ export async function cascadeDepartmentRename(
   };
 
   const steps: { label: string; run: () => Promise<unknown> }[] = [
-    // users.departments[] (array) - the scalar users.department is covered by
-    // the generic loop below.
-    { label: "users.departments[]", run: () => updateArrayField(db, collegeRef.collection("users"), "departments", oldName, newName) },
-    // sections.secondaryDepartments[] (array) - sections.department (scalar)
-    // is covered by the generic loop below.
-    { label: "sections.secondaryDepartments[]", run: () => updateArrayField(db, collegeRef.collection("sections"), "secondaryDepartments", oldName, newName) },
     { label: "departments[secondaryDepartments,managedDepartments,courseScopes]", run: patchOtherDepartments },
-    // Every remaining plain `department`-string field, one collection/field
-    // pair at a time.
-    ...SCALAR_DEPARTMENT_FIELDS.map(({ collection, field }) => ({
-      label: `${collection}.${field}`,
-      run: () => updateScalarField(db, collegeRef.collection(collection), field, oldName, newName),
+    ...DEPARTMENT_REF_FIELDS.filter((r) => r.kind !== "nestedScopes" && r.collection !== "departments").map((r) => ({
+      label: `${r.collection}.${r.field}`,
+      run: () =>
+        r.kind === "array"
+          ? refreshArray(db, collegeRef.collection(r.collection), r, oldName, newName, departmentId)
+          : refreshScalar(db, collegeRef.collection(r.collection), r, oldName, newName, departmentId),
     })),
   ];
 

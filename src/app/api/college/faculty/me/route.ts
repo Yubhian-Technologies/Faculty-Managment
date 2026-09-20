@@ -6,6 +6,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
 import { syncTrainingEntryCoConductors } from "@/lib/faculty/syncTrainingEntryCoConductors";
 import { normalizeAcademicProfile } from "@/lib/faculty/academicProfileCompat";
+import { degreeTypeError } from "@/lib/faculty/degreeType";
 import {
   academicProfileFirestoreUpdates, applyAcademicProfileChanges, normalizeAcademicProfileChanges, parseAcademicProfileChanges,
   touchesTrainingEntries, withoutAcademicProfileKeys, type AcademicProfileChanges,
@@ -172,9 +173,13 @@ export async function PATCH(request: Request) {
       }
       const parsed = parseAcademicProfileChanges(body.academicProfileChanges);
       if (!parsed) return NextResponse.json({ error: "Invalid academicProfileChanges" }, { status: 400 });
+      const degreeErr = degreeTypeError(parsed.set);
+      if (degreeErr) return NextResponse.json({ error: degreeErr }, { status: 400 });
       academicChanges = withoutAcademicProfileKeys(normalizeAcademicProfileChanges(parsed), [...FINANCIAL_ACADEMIC_KEYS, ...RESEARCH_PROFILE_KEYS]);
       Object.assign(facultyUpdates, academicProfileFirestoreUpdates(storedProfile, academicChanges, FieldValue.delete()));
     } else if (body.academicProfile !== undefined) {
+      const degreeErr = degreeTypeError(body.academicProfile);
+      if (degreeErr) return NextResponse.json({ error: degreeErr }, { status: 400 });
       const ap = { ...normalizeAcademicProfile(body.academicProfile) };
       for (const k of FINANCIAL_ACADEMIC_KEYS) delete ap[k];
       for (const k of RESEARCH_PROFILE_KEYS) delete ap[k];

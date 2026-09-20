@@ -1,0 +1,97 @@
+import { ROLE_LEVEL } from "@/types/core";
+import type { UserRole } from "@/types/core";
+
+// Roles that are SEATS (positions a person is appointed to) rather than a
+// person's own employment type. Everything else a login can be - teaching
+// faculty (PANEL_MEMBER), supporting staff (COLLEGE_STAFF), College Office,
+// College Admin - is a primary role.
+export const SEAT_ROLES: UserRole[] = [
+  "PRINCIPAL", "COLLEGE_ADMIN", "VICE_PRINCIPAL", "DEAN", "HOD",
+  "IQAC_COORDINATOR", "T_AND_P", "R_AND_D", "PLACEMENT_DEPT", "EXAM_CELL", "LIBRARY",
+];
+
+// What someone's primary role can be set to when they step out of a legacy
+// role-account seat and carry on as an ordinary employee.
+export const PRIMARY_ROLE_CHOICES: UserRole[] = ["PANEL_MEMBER", "COLLEGE_STAFF", "COLLEGE_OFFICE"];
+
+export function isSeatRole(role: string): role is UserRole {
+  return (SEAT_ROLES as string[]).includes(role);
+}
+
+// A college has one Principal; every other seat role either belongs to a
+// department (HOD, one seat each) or is a named position.
+export function isSingletonSeatRole(role: string): boolean {
+  return role !== "VICE_PRINCIPAL" && role !== "COLLEGE_ADMIN" && role !== "DEAN" && role !== "HOD";
+}
+
+// Does a users doc's STORED role make that account the very role a seat
+// stands for (an old role-login)? College Admin has to be compared raw - it
+// normalizes to PRINCIPAL everywhere else, which would make a College Admin
+// account look like the Principal's.
+export function roleMatchesSeat(storedRole: string, seatRole: string): boolean {
+  if (storedRole === seatRole) return true;
+  // A Department Office head is an HOD look-alike; a College Admin is NOT a
+  // Principal's account, whatever they normalize to.
+  return seatRole === "HOD" && storedRole === "DEPARTMENT_OFFICE";
+}
+
+export function seatNeedsDepartment(role: string): boolean {
+  return role === "HOD";
+}
+
+// The roles stored on a users doc can still be the un-normalized forms.
+export function normalizeStoredRole(role: string): string {
+  if (role === "COLLEGE_ADMIN") return "PRINCIPAL";
+  if (role === "DEPARTMENT_OFFICE") return "HOD";
+  return role;
+}
+
+// Who may put someone in a seat. The Principal seat itself is appointed from
+// above (Super Admin, Management, the location's Administration) or by the
+// College Admin who runs the whole college; every other seat can also be
+// assigned by the Principal and Vice Principal.
+export function canAssignSeat(actor: { role: string; realRole?: string }, seatRole: string): boolean {
+  const isCollegeAdmin = actor.realRole === "COLLEGE_ADMIN";
+  if (seatRole === "PRINCIPAL") {
+    return ["SUPER_ADMIN", "MANAGEMENT", "ADMINISTRATION"].includes(actor.role) || isCollegeAdmin;
+  }
+  return ["SUPER_ADMIN", "MANAGEMENT", "ADMINISTRATION", "PRINCIPAL", "VICE_PRINCIPAL"].includes(actor.role) || isCollegeAdmin;
+}
+
+// Of the roles a person holds, the one a request should be evaluated as: the
+// most senior (lowest ROLE_LEVEL number) among those the endpoint allows - so a
+// faculty member who is also an HOD is treated as an HOD wherever the endpoint
+// accepts both. On a tie the earlier entry wins, and `held` lists seat roles
+// before the primary role.
+export function pickEffectiveRole(held: string[], allowed: string[]): string | null {
+  let best: string | null = null;
+  let bestLevel = Infinity;
+  for (const role of held) {
+    if (!allowed.includes(role)) continue;
+    const level = ROLE_LEVEL[role as UserRole] ?? 99;
+    if (level < bestLevel) { best = role; bestLevel = level; }
+  }
+  return best;
+}
+
+// `held` ordering used everywhere: seat roles (most senior first), then the
+// primary role, without duplicates.
+export function orderHeldRoles(primary: string, seatRoles: string[]): string[] {
+  const seats = Array.from(new Set(seatRoles.map(normalizeStoredRole)))
+    .sort((a, b) => (ROLE_LEVEL[a as UserRole] ?? 99) - (ROLE_LEVEL[b as UserRole] ?? 99));
+  return Array.from(new Set([...seats, normalizeStoredRole(primary)]));
+}
+
+// Seats that only teaching faculty can hold - the academic leadership line
+// (department heads, deans, IQAC and R&D heads). Supporting staff and College
+// Office never become an HOD. Every other seat (Principal, Vice Principal,
+// T&P, Placement, Exam Cell, Library) can go to anyone. An old role account
+// (whose own role IS a seat role) is always eligible: it's the seat's current
+// or former holder, not a new appointment.
+export const FACULTY_ONLY_SEAT_ROLES: UserRole[] = ["HOD", "DEAN", "IQAC_COORDINATOR", "R_AND_D"];
+
+export function canHoldSeat(personPrimaryRole: string, seatRole: string): boolean {
+  if (!(FACULTY_ONLY_SEAT_ROLES as string[]).includes(seatRole)) return true;
+  const primary = normalizeStoredRole(personPrimaryRole);
+  return primary === "PANEL_MEMBER" || isSeatRole(primary);
+}

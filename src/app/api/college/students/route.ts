@@ -14,6 +14,7 @@ import { fetchStudentsPage, fetchMatchingStudentIds, fetchStudentsForExport } fr
 import { isLikelySameUnassignedStudent } from "@/lib/students/duplicateDetection";
 import { validateYearForCourseDuration, validateYearSemesterConsistency } from "@/lib/students/rosterValidation";
 import type { Course, Section, StudentRecord, StudentStatus, DepartmentCourseScope } from "@/types";
+import { loadDepartmentIndex, stampDepartmentIds } from "@/lib/departments/stampIds";
 
 const PAGE_SIZES = [10, 20, 30, 50];
 
@@ -652,7 +653,8 @@ export async function POST(request: Request) {
     );
 
     const batch = db.batch();
-    batch.set(studentRef, {
+    const deptIndex = await loadDepartmentIndex(db, session.collegeId);
+    batch.set(studentRef, stampDepartmentIds({
       collegeId: session.collegeId,
       department: dept,
       section: sectionName,
@@ -668,7 +670,7 @@ export async function POST(request: Request) {
       ...normalizeRosterDetails(body),
       createdAt: now,
       updatedAt: now,
-    });
+    }, deptIndex));
     batch.set(history.ref, history.data);
     await batch.commit();
 

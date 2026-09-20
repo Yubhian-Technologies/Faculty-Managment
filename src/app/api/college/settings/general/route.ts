@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { collegeSettingsRef, loadCollegeSettings } from "@/lib/firestore/collegeSettings";
+import { sanitizeLeaveApprovalRouting } from "@/lib/leave/approvalRouting";
 import type { FacultyNorms } from "@/types/core";
 
 // colleges/{collegeId}/settings/general - basic college info a Principal
@@ -66,14 +67,31 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: "newJoiningYears must be 0 or more" }, { status: 400 });
     }
 
+    // Sent whole (one entry per role) by the Leave Approval Routing card, so a
+    // plain replace is right - merge:true below would otherwise deep-merge the
+    // map and never let an entry be removed.
+    let leaveApprovalRouting: FacultyNorms["leaveApprovalRouting"];
+    if (body.leaveApprovalRouting !== undefined) {
+      const checked = sanitizeLeaveApprovalRouting(body.leaveApprovalRouting);
+      if (!checked.ok) return NextResponse.json({ error: checked.error }, { status: 400 });
+      leaveApprovalRouting = checked.routing;
+    }
+
     await collegeSettingsRef(db, collegeId).set(settings, { merge: true });
+    if (leaveApprovalRouting) {
+      await collegeSettingsRef(db, collegeId).update({ leaveApprovalRouting });
+    }
 
     await db.collection("colleges").doc(collegeId).collection("auditLogs").add({
       collegeId,
       action: "COLLEGE_SETTINGS_UPDATED",
       performedBy: session.uid,
       performedByName: settings.updatedByName,
-      details: { newJoiningYears: settings.newJoiningYears, studentFacultyRatio: settings.studentFacultyRatio },
+      details: {
+        newJoiningYears: settings.newJoiningYears,
+        studentFacultyRatio: settings.studentFacultyRatio,
+        ...(leaveApprovalRouting ? { leaveApprovalRouting } : {}),
+      },
       timestamp: new Date(),
     });
 

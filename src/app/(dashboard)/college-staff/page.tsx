@@ -1,7 +1,7 @@
 "use client";
 
 import { PageHeader } from "@/components/shared/PageHeader";
-import { Card, CardContent } from "@/components/ui/card";
+import { MyDashboardOverview } from "@/components/dashboard/MyDashboardOverview";
 import { useAuthStore } from "@/store/authStore";
 
 export default function CollegeStaffDashboard() {
@@ -14,12 +14,7 @@ export default function CollegeStaffDashboard() {
         title={`Hello, ${user?.name ?? "there"}`}
         description={title ?? "College Staff"}
       />
-      <Card>
-        <CardContent className="p-6 text-sm text-muted-foreground">
-          Your account was created by the Principal{title ? ` with the title "${title}"` : ""}. Access to
-          specific modules is granted by your college&apos;s administration as needed.
-        </CardContent>
-      </Card>
+      <MyDashboardOverview />
     </div>
   );
 }

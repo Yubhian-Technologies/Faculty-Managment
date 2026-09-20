@@ -14,10 +14,12 @@ import { countWorkingDays, todayISODate, yearsOfService } from "@/lib/leave/dayC
 import { getHolidayDateKeys } from "@/lib/leave/holidaysCount";
 import { getWorkingDayWeightsForRole } from "@/lib/attendance/workingDays";
 import { LEAVE_TYPE_SEED, HALF_DAY_ELIGIBLE_TYPES } from "@/lib/leave/seedData";
-import { resolveUserDepartment } from "@/lib/budget/departmentScope";
+import { resolveHodDepartments } from "@/lib/budget/departmentScope";
 import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 import { validatePeriodSubstitutions, type PeriodSubstitutionInput } from "@/lib/leave/periodCoverage";
-import { buildAdjustmentRequests, notifyAdjustmentAssignees, resolvePostAcceptanceStatus } from "@/lib/leave/adjustmentRequests";
+import { buildAdjustmentRequests, notifyAdjustmentAssignees } from "@/lib/leave/adjustmentRequests";
+import { approverStageToStatus, resolveApproverStage } from "@/lib/leave/approvalRouting";
+import { listHandoverCandidates } from "@/lib/leave/handoverPool";
 import type { AdjustmentRequest, LeaveRequest, LeaveTypeCode, PeriodSubstitution } from "@/types/leave";
 import type { UserRole } from "@/types/core";
 
@@ -86,13 +88,13 @@ export async function GET(request: Request) {
     // Approval queue: pending requests awaiting this caller's action.
     if (url.searchParams.get("scope") === "approvals") {
       if (session.role === "HOD") {
-        const dept = await resolveUserDepartment(db, session.collegeId, session.uid);
+        const depts = await resolveHodDepartments(db, session.collegeId, session.uid);
         const snap = await REQUESTS_COL(session.collegeId, db)
           .where("status", "==", "PENDING_HOD")
           .get();
         const requests = snap.docs
           .map((d) => ({ id: d.id, ...d.data() }) as LeaveRequest)
-          .filter((r) => r.department === (dept || "__NO_DEPARTMENT__"));
+          .filter((r) => !!r.department && depts.includes(r.department));
         return NextResponse.json({ requests: sortByCreatedAtDesc(await attachRequesterContext(db, session.collegeId, requests)) });
       }
       if (session.role === "PRINCIPAL" || session.role === "VICE_PRINCIPAL") {
@@ -129,10 +131,10 @@ export async function GET(request: Request) {
         .filter((r) => r.uid !== session.uid);
 
       if (session.role === "HOD") {
-        const dept = await resolveUserDepartment(db, session.collegeId, session.uid);
+        const depts = await resolveHodDepartments(db, session.collegeId, session.uid);
         return NextResponse.json({
           requests: sortByCreatedAtDesc(
-            all.filter((r) => !!r.hodAction && r.department === (dept || "__NO_DEPARTMENT__"))
+            all.filter((r) => !!r.hodAction && !!r.department && depts.includes(r.department))
           ),
         });
       }
@@ -348,19 +350,28 @@ export async function POST(request: Request) {
     }
 
     // Optional handover/point-of-contact pick - any requester, teaching or
-    // not, same-department only (mirrors how substitutes are restricted).
+    // not, drawn from the pool for their own role.
     let handover: { uid: string; name: string } | null = null;
     if (body.handoverToUid) {
       if (body.handoverToUid === session.uid) {
         return NextResponse.json({ error: "You can't hand over to yourself" }, { status: 400 });
       }
-      const handoverSnap = await db.collection("colleges").doc(session.collegeId)
-        .collection("users").doc(body.handoverToUid).get();
-      const handoverData = handoverSnap.data() as { name?: string; department?: string } | undefined;
-      if (!handoverSnap.exists || !identity.department || handoverData?.department !== identity.department) {
-        return NextResponse.json({ error: "Pick a handover contact from your own department" }, { status: 400 });
+      // Same role-based pool the picker was filled from (lib/leave/handoverPool.ts),
+      // re-checked against these exact dates: someone may have gone on leave
+      // between the form loading and this submission.
+      const pool = await listHandoverCandidates(
+        db, session.collegeId,
+        { uid: session.uid, role: session.role, department: identity.department ?? "" },
+        { fromISO: body.fromDate, toISO: body.toDate }
+      );
+      const chosen = pool.find((c) => c.uid === body.handoverToUid);
+      if (!chosen) {
+        return NextResponse.json(
+          { error: "Pick a handover contact from the list offered for your role who is available on these dates" },
+          { status: 400 }
+        );
       }
-      handover = { uid: body.handoverToUid, name: handoverData?.name ?? "Unknown" };
+      handover = { uid: chosen.uid, name: chosen.name };
     }
 
     const now = new Date();
@@ -374,8 +385,12 @@ export async function POST(request: Request) {
     // A PRINCIPAL's own leave skips PENDING_PRINCIPAL too - there's no one
     // else within the college to decide it, so it goes straight to the
     // global MANAGEMENT role instead (see /api/management/leave-approvals).
-    const reportsToHod = session.role === "PANEL_MEMBER" || (session.role === "COLLEGE_STAFF" && !!identity.department);
-    const postAcceptanceStatus = resolvePostAcceptanceStatus(session.role, reportsToHod);
+    // Which tier a request goes to first is now the college's own setting
+    // (Settings > Leave Approval Routing) - the defaults are exactly the rule
+    // described above. See lib/leave/approvalRouting.ts.
+    const postAcceptanceStatus = approverStageToStatus(
+      resolveApproverStage(settings.leaveApprovalRouting, session.role, !!identity.department)
+    );
 
     // Every named substitute/handover person must accept before this can
     // reach postAcceptanceStatus's actual approver - see types/leave.ts's

@@ -48,7 +48,7 @@ export async function syncTeachingAssignments(
           sectionId: row.sectionId,
           subjectId: row.subjectId,
           hoursPerWeek: row.hoursPerWeek,
-          slots: row.slots.map((s) => ({ day: s.day, periodNumber: s.periodNumber, ...(s.allowSplit ? { allowSplit: true } : {}) })),
+          slots: row.slots.map((s) => ({ day: s.day, periodNumber: s.periodNumber, ...(s.allowSplit ? { allowSplit: true } : {}), ...(row.labBatch ? { labBatch: row.labBatch } : {}) })),
           assignmentAcademicYear: row.assignmentAcademicYear ?? "",
           assignmentSemester: row.assignmentSemester ?? "",
           ...(row.isPast ? {
@@ -119,6 +119,7 @@ export async function syncTeachingAssignments(
         body: JSON.stringify({
           assignmentId: row.id, day: slot.day, periodNumber: slot.periodNumber,
           ...(slot.allowSplit ? { allowSplit: true } : {}),
+          ...(row.labBatch ? { labBatch: row.labBatch } : {}),
         }),
       });
       if (!res.ok) errors.push(`Scheduling ${row.subjectName} on ${slot.day} period ${slot.periodNumber}: ${await parseError(res)}`);
