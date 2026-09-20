@@ -17,6 +17,7 @@ const MOTHER_TONGUE_OPTIONS = ["Telugu", "Hindi", "English", "Tamil", "Malayalam
 
 export interface PersonalDetailsValue {
   nameAsPerAadhar?: string;
+  nameAsPerPan?: string;       // Faculty only - see showNameAsPerPan
   dateOfBirth?: string;        // yyyy-mm-dd, for <input type="date">
   gender?: string;
   legalName?: string;
@@ -70,6 +71,10 @@ interface Props {
   // shown a second time on this "personal" step. Supporting/Non-Technical
   // Staff don't pass this, so legalName stays exactly where it always was.
   hiddenFields?: (keyof PersonalDetailsValue)[];
+  // Name (as per PAN) is a Faculty-only field (independent of legalName, like
+  // nameAsPerAadhar). Opt-in so Supporting Staff / user-record callers, whose
+  // own `name` field is a different thing, keep exactly the form they have.
+  showNameAsPerPan?: boolean;
 }
 
 // The mandatory set shared by every consumer - Name (as per Aadhar) is
@@ -85,6 +90,7 @@ const PERSONAL_FIELD_LABELS: Record<string, string> = {
   gender: "Gender",
   dateOfBirth: "Date of Birth",
   nameAsPerAadhar: "Name (as per Aadhar)",
+  nameAsPerPan: "Name (as per PAN)",
   aadharNo: "Aadhar No",
   panNo: "PAN No",
   ratificationStatus: "Ratification Status",
@@ -99,7 +105,7 @@ export function getMissingRequiredPersonalFields(
     .map((key) => PERSONAL_FIELD_LABELS[key] ?? key);
 }
 
-export function PersonalDetailsFields({ value: rawValue, onChange, requiredFields = STAFF_REQUIRED_PERSONAL_FIELDS, hiddenFields = [] }: Props) {
+export function PersonalDetailsFields({ value: rawValue, onChange, requiredFields = STAFF_REQUIRED_PERSONAL_FIELDS, hiddenFields = [], showNameAsPerPan = false }: Props) {
   // Lift a record still carrying the legacy key names (passportNumber, bankAccountNo, ...)
   // so this form only ever reads - and emits, via set()/onChange - the current key names.
   const value = migratePersonalFlat(rawValue as Record<string, unknown>) as PersonalDetailsValue;
@@ -126,6 +132,16 @@ export function PersonalDetailsFields({ value: rawValue, onChange, requiredField
             placeholder="Name exactly as on Aadhar card"
           />
         </div>
+        {showNameAsPerPan && (
+          <div className="space-y-2">
+            <Label>Name (as per PAN){mark("nameAsPerPan")}</Label>
+            <Input
+              value={value.nameAsPerPan ?? ""}
+              onChange={(e) => set("nameAsPerPan", e.target.value)}
+              placeholder="Name exactly as on PAN card"
+            />
+          </div>
+        )}
         <div className="space-y-2">
           <Label>Date of Birth{mark("dateOfBirth")}</Label>
           <Input type="date" value={value.dateOfBirth ?? ""} onChange={(e) => set("dateOfBirth", e.target.value)} />

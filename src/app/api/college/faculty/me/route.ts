@@ -14,8 +14,10 @@ import {
 import { experienceBreakdown, allPreviousExperienceEntries } from "@/lib/faculty/experienceCalc";
 import { migrateFacultyDoc, migrateUserDoc } from "@/lib/faculty/fieldRenames";
 import { withLegacyFacultyKeysDeleted } from "@/lib/faculty/legacyKeyDeletes";
+import { mobileNoFromBody } from "@/lib/faculty/mobileNo";
 import { FieldValue } from "firebase-admin/firestore";
 import { normalizeHighestQualification } from "@/lib/faculty/highestQualification";
+import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import type { TrainingEntry } from "@/types";
 
 const FINANCIAL_ACADEMIC_KEYS = ["monthlySalary", "grossAnnualCTC", "incrementsAwarded", "fundingConsultancyRevenueGeneration"];
@@ -103,9 +105,9 @@ export async function PATCH(request: Request) {
     const session = await requireCollegeMember("PANEL_MEMBER");
 
     const body = (await request.json()) as Partial<{
-      name: string;
       email: string;
-      phone: string;
+      mobileNo: string;
+      phone: string; // legacy alias of mobileNo, accepted for one release (see mobileNoFromBody)
       // Identity & Employment fields a Faculty member may edit about
       // themselves - deliberately excludes employeeId, collegeEmail,
       // designation, department, joiningDate and employeeCategory, which stay
@@ -148,12 +150,11 @@ export async function PATCH(request: Request) {
     const now = new Date();
 
     const facultyUpdates: Record<string, unknown> = { updatedAt: now, ...buildPersonalDetailsUpdate(body) };
-    // Name (as per PAN) is optional - an explicit empty string must actually clear it
-    // (and stay cleared), so this checks `!== undefined`, not truthiness, same as every
-    // other optional field buildPersonalDetailsUpdate handles.
-    if (body.name !== undefined) facultyUpdates.name = body.name.trim();
+    // Name (as per PAN) (nameAsPerPan) is optional and is written by
+    // buildPersonalDetailsUpdate above like nameAsPerAadhar - an explicit empty
+    // string clears it (it checks `!== undefined`, not truthiness).
     if (body.email?.trim()) facultyUpdates.email = body.email.trim();
-    if (body.phone !== undefined) facultyUpdates.phone = body.phone;
+    if (mobileNoFromBody(body) !== undefined) facultyUpdates.mobileNo = mobileNoFromBody(body);
     if (body.apaarFacultyId !== undefined) facultyUpdates.apaarFacultyId = body.apaarFacultyId;
     if (body.aicteFacultyId !== undefined) facultyUpdates.aicteFacultyId = body.aicteFacultyId.trim();
     if (body.highestQualification?.trim()) facultyUpdates.highestQualification = normalizeHighestQualification(body.highestQualification);
@@ -199,15 +200,12 @@ export async function PATCH(request: Request) {
       ).total;
     }
 
-    const previousFacultyData = facultyDoc.data() as { legalName?: string; name?: string; academicProfile?: { fdpsWorkshopsMoocsCertifications?: TrainingEntry[] } };
+    const previousFacultyData = facultyDoc.data() as { legalName?: string; academicProfile?: { fdpsWorkshopsMoocsCertifications?: TrainingEntry[] } };
 
-    // Full Name (as per SSC) preferred, Name (as per PAN) only as a fallback -
-    // same precedence facultyDisplayName() uses everywhere else.
-    const effectiveLegalName = body.legalName !== undefined ? body.legalName : previousFacultyData.legalName;
-    const effectiveName = body.name !== undefined ? body.name : previousFacultyData.name;
-    const newDisplayName = effectiveLegalName?.trim() || effectiveName?.trim() || "";
-    const oldDisplayName = previousFacultyData.legalName?.trim() || previousFacultyData.name?.trim() || "";
-    const displayNameChanged = (body.legalName !== undefined || body.name !== undefined) && newDisplayName !== oldDisplayName;
+    // The display name is legalName only (facultyDisplayName()).
+    const newDisplayName = facultyDisplayName({ legalName: body.legalName !== undefined ? body.legalName : previousFacultyData.legalName });
+    const oldDisplayName = facultyDisplayName(previousFacultyData);
+    const displayNameChanged = body.legalName !== undefined && newDisplayName !== oldDisplayName;
 
     // Drop the old-named twin of any key written above on a not-yet-migrated doc.
     await facultyDoc.ref.update(withLegacyFacultyKeysDeleted(facultyUpdates, FieldValue.delete()));
@@ -251,7 +249,7 @@ export async function PATCH(request: Request) {
 
     if (body.academicProfile !== undefined || (academicChanges && touchesTrainingEntries(academicChanges))) {
       try {
-        const ownerName = previousFacultyData.legalName?.trim() || previousFacultyData.name?.trim() || "";
+        const ownerName = facultyDisplayName(previousFacultyData);
         const nextEntries = academicChanges
           ? (applyAcademicProfileChanges(storedProfile, academicChanges) as { fdpsWorkshopsMoocsCertifications?: TrainingEntry[] }).fdpsWorkshopsMoocsCertifications
           : (facultyUpdates.academicProfile as { fdpsWorkshopsMoocsCertifications?: TrainingEntry[] } | undefined)?.fdpsWorkshopsMoocsCertifications;
@@ -265,14 +263,14 @@ export async function PATCH(request: Request) {
     }
 
     // Keep the thin users/{uid} doc in sync so auth store reflects latest name/photo -
-    // `name` follows the same Full Name (as per SSC) preferred / Name (as per PAN)
-    // fallback precedence as the record itself (newDisplayName above), never the raw
-    // PAN field, and only changes when displayNameChanged - so editing something else
-    // (or clearing the PAN name while legalName covers it) doesn't touch it.
+    // `name` follows the record's display name (legalName, newDisplayName above) and only
+    // changes when displayNameChanged - so editing something else (including the PAN
+    // name) doesn't touch it.
     const userUpdates: Record<string, unknown> = { updatedAt: now };
     if (displayNameChanged) userUpdates.name = newDisplayName;
     if (body.email?.trim()) userUpdates.email = body.email.trim();
-    if (body.phone !== undefined) userUpdates.phone = body.phone;
+    // The login's own contact field (users.phone) is a different entity and keeps its name.
+    if (mobileNoFromBody(body) !== undefined) userUpdates.phone = mobileNoFromBody(body);
     if (body.profilePhotoUrl !== undefined) userUpdates.profilePhotoUrl = body.profilePhotoUrl;
     await collegeRef.collection("users").doc(session.uid).update(userUpdates);
 

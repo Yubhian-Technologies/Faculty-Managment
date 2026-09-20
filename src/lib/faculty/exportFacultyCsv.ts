@@ -246,7 +246,7 @@ function buildRow(rawFaculty: FacultyMember, teachingSummary: string): Record<st
     // ─── Identity & Employment ───────────────────────────────────────────
     employeeId: s(faculty.employeeId),
     legalName: s(faculty.legalName),
-    name: s(faculty.name),
+    nameAsPerPan: s(faculty.nameAsPerPan),
     apaarFacultyId: s(faculty.apaarFacultyId),
     collegeEmail: s(faculty.collegeEmail),
     designation: s(faculty.designation),
@@ -258,7 +258,7 @@ function buildRow(rawFaculty: FacultyMember, teachingSummary: string): Record<st
     joiningDate: toDateInputValue(faculty.joiningDate),
     aicteFacultyId: s(faculty.aicteFacultyId),
     email: s(faculty.email),
-    phone: s(faculty.phone),
+    mobileNo: s(faculty.mobileNo),
     additionalPhones: combineGroup("additionalPhones", (faculty.additionalPhoneNumbers ?? []).map((n) => [n.label ?? "", n.number ?? ""])),
     status: s(faculty.status),
     employeeCategory: faculty.employeeCategory ? (EMPLOYEE_CATEGORY_LABELS[faculty.employeeCategory] ?? s(faculty.employeeCategory)) : "",

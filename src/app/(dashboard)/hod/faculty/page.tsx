@@ -535,7 +535,7 @@ export default function HODFacultyPage() {
         keyExtractor={(r) => r.id as string}
         onRowClick={(row) => router.push(`/hod/faculty/${row.id}`)}
         searchPlaceholder="Search by name, email, employee ID..."
-        searchKeys={["name", "legalName", "email", "employeeId", "specialization"] as (keyof FacultyRow)[]}
+        searchKeys={["legalName", "nameAsPerPan", "email", "employeeId", "specialization"] as (keyof FacultyRow)[]}
         emptyTitle="No teaching faculty records yet"
         emptyDescription="Add faculty members to build your department's staff register"
         emptyAction={<Button onClick={() => router.push("/hod/faculty/new")}><UserPlus className="h-4 w-4 mr-2" />Add Faculty</Button>}

@@ -109,6 +109,8 @@ export const PERSONAL_KEY_RENAMES: Record<string, string> = {
 export const FACULTY_DOC_KEY_RENAMES: Record<string, string> = {
   qualification: "highestQualification",
   experienceYears: "totalYearsOfExperience",
+  // Mobile No. facultyMembers only - users/supportingStaff docs keep `phone`.
+  phone: "mobileNo",
 };
 
 // academicProfile containers holding a DegreeDetail (or a list of them), and

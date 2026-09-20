@@ -5,6 +5,7 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { notifyRole } from "@/lib/notify";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
+import { facultyMobileNo } from "@/lib/faculty/mobileNo";
 
 const REQUESTER_ROLES = ["COLLEGE_OFFICE", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN"];
 // WEBMASTER can view (to fulfill requests) but not raise its own — creation stays
@@ -59,7 +60,8 @@ export async function POST(request: Request) {
       department?: string;
       joiningDate?: unknown;
       email?: string;
-      phone?: string;
+      mobileNo?: string;
+      phone?: string; // legacy key on a faculty doc not yet migrated
       officialEmail?: string;
     };
     const candidateName = facultyDisplayName(faculty);
@@ -94,7 +96,8 @@ export async function POST(request: Request) {
       department: faculty.department ?? "",
       joiningDate: faculty.joiningDate ?? now,
       personalEmail: faculty.email ?? "",
-      phone: faculty.phone ?? "",
+      // Snapshot key stays `phone` (emailRequests is its own record); the source is the faculty Mobile No.
+      phone: facultyMobileNo(faculty) ?? "",
       preferredEmail1: body.preferredEmail1?.trim() || null,
       preferredEmail2: body.preferredEmail2?.trim() || null,
       status: "PENDING",

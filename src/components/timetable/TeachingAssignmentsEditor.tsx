@@ -55,7 +55,8 @@ export function TeachingAssignmentsEditor({ courseId, year, backHref }: Teaching
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [timings, setTimings] = useState<CourseYearTiming[]>([]);
   const [assignments, setAssignments] = useState<TeachingAssignment[]>([]);
-  const [faculty, setFaculty] = useState<FacultyMember[]>([]);
+  // `name` is the derived display name (facultyDisplayName), not a stored field.
+  const [faculty, setFaculty] = useState<(FacultyMember & { name: string })[]>([]);
   const [assignmentRequests, setAssignmentRequests] = useState<FacultyAssignmentRequest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 

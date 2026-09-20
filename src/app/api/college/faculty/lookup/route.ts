@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 
 // Minimal, broadly-readable faculty-by-department lookup - purely for
 // populating a picker (e.g. the FDP/Workshop "co-conducting faculty" picker
@@ -40,10 +41,10 @@ export async function GET(request: Request) {
 
     const faculty = facultySnap.docs
       .map((d) => {
-        const data = d.data() as { name?: string; legalName?: string; department?: string; designation?: string; status?: string };
+        const data = d.data() as { legalName?: string; department?: string; designation?: string; status?: string };
         return {
           id: d.id,
-          name: data.legalName?.trim() || data.name?.trim() || "",
+          name: facultyDisplayName(data),
           department: data.department ?? departmentName,
           designation: data.designation ?? "",
           status: data.status ?? "",

@@ -130,7 +130,7 @@ export default function PrincipalDepartmentFacultyPage() {
       render: (row) => (
         <div className="space-y-0.5">
           <p className="text-xs">{row.collegeEmail || row.email}</p>
-          {row.phone && <p className="text-xs text-muted-foreground">{row.phone}</p>}
+          {row.mobileNo && <p className="text-xs text-muted-foreground">{row.mobileNo}</p>}
         </div>
       ),
     },
@@ -214,7 +214,7 @@ export default function PrincipalDepartmentFacultyPage() {
         isLoading={isLoading}
         keyExtractor={(f) => f.id}
         searchPlaceholder="Search by name, employee ID, or email..."
-        searchKeys={["name", "employeeId", "email"] as (keyof FacultyRow)[]}
+        searchKeys={["legalName", "nameAsPerPan", "employeeId", "email"] as (keyof FacultyRow)[]}
         emptyTitle="No faculty in this department"
         emptyDescription="Faculty added by the HOD for this department will appear here."
         onRowClick={(f) => router.push(`/principal/faculty/${deptId}/${f.id}`)}

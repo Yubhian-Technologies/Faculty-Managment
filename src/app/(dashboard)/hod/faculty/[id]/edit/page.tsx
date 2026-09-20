@@ -28,7 +28,6 @@ const OTHER_QUALIFICATION = "__OTHER__";
 
 interface IdentityForm {
   legalName: string;
-  name: string;
   apaarFacultyId: string;
   designation: Designation | "";
   employeeCategory: EmployeeCategory | "";
@@ -37,13 +36,13 @@ interface IdentityForm {
   joiningDate: string;
   aicteFacultyId: string;
   email: string;
-  phone: string;
+  mobileNo: string;
 }
 
 const EMPTY_FORM: IdentityForm = {
-  legalName: "", name: "", apaarFacultyId: "", designation: "", employeeCategory: "",
+  legalName: "", apaarFacultyId: "", designation: "", employeeCategory: "",
   highestQualification: "", specialization: "", joiningDate: "", aicteFacultyId: "",
-  email: "", phone: "",
+  email: "", mobileNo: "",
 };
 
 // Identity & Employment editor for an EXISTING faculty member - the Add
@@ -87,7 +86,6 @@ export default function EditHodFacultyIdentityPage() {
         setQualIsOther(!!highestQualification && !(HIGHEST_QUALIFICATION_OPTIONS as readonly string[]).includes(highestQualification));
         setForm({
           legalName: (m.legalName as string) ?? "",
-          name: (m.name as string) ?? "",
           apaarFacultyId: (m.apaarFacultyId as string) ?? "",
           designation: (m.designation as Designation) ?? "",
           employeeCategory: (m.employeeCategory as EmployeeCategory) ?? "",
@@ -96,7 +94,7 @@ export default function EditHodFacultyIdentityPage() {
           joiningDate: toDateInputValue(m.joiningDate as never),
           aicteFacultyId: (m.aicteFacultyId as string) ?? "",
           email: (m.email as string) ?? "",
-          phone: (m.phone as string) ?? "",
+          mobileNo: (m.mobileNo as string) ?? "",
         });
         setExtraPhones((m.additionalPhoneNumbers as { label?: string; number: string }[]) ?? []);
         setPhotoUrl((m.profilePhotoUrl as string) || undefined);
@@ -144,7 +142,7 @@ export default function EditHodFacultyIdentityPage() {
       toast({ variant: "destructive", title: "Date of Joining is required" });
       return;
     }
-    if (!form.phone.trim() || !PHONE_REGEX.test(form.phone)) {
+    if (!form.mobileNo.trim() || !PHONE_REGEX.test(form.mobileNo)) {
       toast({ variant: "destructive", title: "Mobile No is required and must be a valid phone number" });
       return;
     }
@@ -156,7 +154,6 @@ export default function EditHodFacultyIdentityPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           legalName: form.legalName.trim().toUpperCase(),
-          name: form.name.trim(),
           apaarFacultyId: form.apaarFacultyId.trim(),
           designation: form.designation,
           employeeCategory: form.employeeCategory,
@@ -165,7 +162,7 @@ export default function EditHodFacultyIdentityPage() {
           joiningDate: form.joiningDate,
           aicteFacultyId: form.aicteFacultyId.trim(),
           email: form.email.trim(),
-          phone: form.phone.trim(),
+          mobileNo: form.mobileNo.trim(),
           additionalPhoneNumbers: extraPhones.filter((p) => p.number.trim()),
           ...(photoUrl !== undefined ? { profilePhotoUrl: photoUrl } : {}),
         }),
@@ -208,7 +205,7 @@ export default function EditHodFacultyIdentityPage() {
             <div className="flex flex-col gap-5 pb-5 border-b sm:flex-row sm:items-start">
               <div className="flex shrink-0 flex-col items-center gap-2 sm:pt-6">
                 <Label>Profile Photo</Label>
-                <AvatarUploadField name={form.legalName || form.name || "?"} photoUrl={photoUrl} targetId={facultyId} onUploaded={setPhotoUrl} onDeleted={() => setPhotoUrl("")} />
+                <AvatarUploadField name={form.legalName || "?"} photoUrl={photoUrl} targetId={facultyId} onUploaded={setPhotoUrl} onDeleted={() => setPhotoUrl("")} />
               </div>
               <div className="grid flex-1 grid-cols-1 gap-4">
                 <div className="space-y-2">
@@ -223,10 +220,6 @@ export default function EditHodFacultyIdentityPage() {
                     placeholder="FULL NAME IN CAPITALS"
                     className="uppercase"
                   />
-                </div>
-                <div className="space-y-2">
-                  <Label>Name (as per PAN)</Label>
-                  <Input value={form.name} onChange={(e) => set({ name: e.target.value })} placeholder="Dr. Priya Nair" />
                 </div>
                 <div className="space-y-2">
                   <Label>APAAR Faculty ID</Label>
@@ -338,7 +331,7 @@ export default function EditHodFacultyIdentityPage() {
                     + Add Number
                   </Button>
                 </div>
-                <Input type="tel" autoComplete="off" value={form.phone} onChange={(e) => set({ phone: e.target.value })} placeholder="+91 98765 43210" />
+                <Input type="tel" autoComplete="off" value={form.mobileNo} onChange={(e) => set({ mobileNo: e.target.value })} placeholder="+91 98765 43210" />
               </div>
             </div>
 

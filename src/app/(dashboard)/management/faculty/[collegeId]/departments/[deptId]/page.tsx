@@ -140,7 +140,7 @@ export default function ManagementDepartmentFacultyPage() {
         isLoading={isLoading}
         keyExtractor={(f) => f.id}
         searchPlaceholder="Search faculty..."
-        searchKeys={["name"] as (keyof FacultyMember)[]}
+        searchKeys={["legalName", "nameAsPerPan"] as (keyof FacultyMember)[]}
         emptyTitle="No faculty in this department"
         onRowClick={(f) => router.push(`/management/faculty/${collegeId}/departments/${deptId}/faculty/${f.id}`)}
       />

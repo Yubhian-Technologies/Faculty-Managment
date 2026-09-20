@@ -7,6 +7,7 @@ import { ArrowLeft, Pencil } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { FacultyProfileModuleContent } from "@/components/faculty/FacultyProfileModuleContent";
+import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { PROFILE_MODULES, type ProfileModuleKey } from "@/lib/faculty/profileModules";
 import { useCollegeType } from "@/hooks/useCollegeType";
 import { toast } from "@/hooks/useToast";
@@ -58,7 +59,7 @@ export default function HodFacultyModulePage() {
     <div className="space-y-6">
       <PageHeader
         title={moduleDef.label}
-        description={faculty?.name}
+        description={facultyDisplayName(faculty)}
         actions={
           <div className="flex gap-2">
             <Button variant="outline" asChild>
@@ -76,7 +77,7 @@ export default function HodFacultyModulePage() {
       {isLoading ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
       ) : faculty ? (
-        <FacultyProfileModuleContent moduleKey={moduleKey} faculty={faculty} teachingAssignments={teachingAssignments} collegeType={collegeType} hideLegalName />
+        <FacultyProfileModuleContent moduleKey={moduleKey} faculty={faculty} teachingAssignments={teachingAssignments} collegeType={collegeType} hideLegalName showNameAsPerPan />
       ) : null}
     </div>
   );

@@ -15,8 +15,10 @@ import {
 } from "@/lib/faculty/academicProfileChanges";
 import { migrateFacultyDoc } from "@/lib/faculty/fieldRenames";
 import { withLegacyFacultyKeysDeleted } from "@/lib/faculty/legacyKeyDeletes";
+import { mobileNoFromBody } from "@/lib/faculty/mobileNo";
 import { normalizeHighestQualification } from "@/lib/faculty/highestQualification";
 import { FieldValue } from "firebase-admin/firestore";
+import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import type { Designation, EmployeeCategory, FacultyStatus, TrainingEntry } from "@/types";
 import { EMPLOYEE_CATEGORY_VALUES, EMPLOYEE_CATEGORY_ERROR_MESSAGE } from "@/types";
 
@@ -70,11 +72,11 @@ export async function PATCH(
     const { id } = await params;
 
     const body = (await request.json()) as Partial<{
-      name: string;
       employeeId: string;
       apaarFacultyId: string;
       email: string;
-      phone: string;
+      mobileNo: string;
+      phone: string; // legacy alias of mobileNo, accepted for one release (see mobileNoFromBody)
       additionalPhoneNumbers: { label?: string; number: string }[];
       collegeEmail: string;
       designation: Designation;
@@ -96,6 +98,9 @@ export async function PATCH(
       resumeUrl: string;
     }> &
       PersonalDetailsInput;
+
+    const legacyMobileNo = mobileNoFromBody(body);
+    if (legacyMobileNo !== undefined) body.mobileNo = legacyMobileNo;
 
     const db = getAdminDb();
     const ref = db
@@ -130,11 +135,11 @@ export async function PATCH(
     // These fields are mandatory on both the import template and Add Faculty
     // wizard - Edit must not be able to blank one out via a partial PATCH
     // that explicitly sends an empty string for it (a field simply left out
-    // of the body is untouched, which is fine). `name` (Name as per PAN) is
-    // deliberately NOT in this list - it's optional; legalName (Full Name as
-    // per SSC) is the required primary identity name.
+    // of the body is untouched, which is fine). `nameAsPerPan` (Name as per
+    // PAN) is deliberately NOT in this list - it's optional; legalName (Full
+    // Name as per SSC) is the required, only identity/display name.
     const REQUIRED_IF_PRESENT = [
-      "collegeEmail", "phone", "designation", "highestQualification",
+      "collegeEmail", "mobileNo", "designation", "highestQualification",
       "gender", "legalName", "aadharNo", "panNo", "ratificationStatus",
     ] as const;
     for (const key of REQUIRED_IF_PRESENT) {
@@ -182,7 +187,7 @@ export async function PATCH(
 
     // Non-personal string fields
     const stringFields = [
-      "name", "email", "phone", "collegeEmail", "apaarFacultyId", "aicteFacultyId", "designation", "highestQualification",
+      "email", "mobileNo", "collegeEmail", "apaarFacultyId", "aicteFacultyId", "designation", "highestQualification",
       "specialization", "employeeCategory", "status", "userUid",
     ] as const;
 
@@ -264,19 +269,14 @@ export async function PATCH(
     // the doc never carries both.
     await ref.update(withLegacyFacultyKeysDeleted(updates, FieldValue.delete()));
 
-    // The record's display name (facultyDisplayName() logic, inlined here
-    // since this route works with plain Firestore data, not a typed
-    // FacultyMember) - Full Name (as per SSC) preferred, Name (as per PAN)
-    // only as a fallback. Recomputed from the POST-update values (whichever
-    // of legalName/name this PATCH actually changed, falling back to what
-    // was already on the doc for the other) so a rename via either field is
-    // detected and propagated correctly.
-    const before = snap.data() as { name?: string; legalName?: string; userUid?: string };
-    const effectiveLegalName = body.legalName !== undefined ? body.legalName : before.legalName;
-    const effectiveName = body.name !== undefined ? body.name : before.name;
-    const newDisplayName = effectiveLegalName?.trim() || effectiveName?.trim() || "";
-    const oldDisplayName = before.legalName?.trim() || before.name?.trim() || "";
-    const displayNameChanged = (body.legalName !== undefined || body.name !== undefined) && newDisplayName !== oldDisplayName;
+    // The record's display name is legalName only (facultyDisplayName()) -
+    // Name (as per PAN) never feeds it. Recomputed from the POST-update value
+    // (this PATCH's legalName, falling back to what was already on the doc) so
+    // a rename is detected and propagated correctly.
+    const before = snap.data() as { legalName?: string; userUid?: string };
+    const newDisplayName = facultyDisplayName({ legalName: body.legalName !== undefined ? body.legalName : before.legalName });
+    const oldDisplayName = facultyDisplayName(before);
+    const displayNameChanged = body.legalName !== undefined && newDisplayName !== oldDisplayName;
 
     // Best-effort: if this faculty record has a linked system login, keep their
     // name/photo in sync there too - the login doc (colleges/{id}/users) is what
@@ -400,7 +400,7 @@ export async function DELETE(
     if (!snap.exists) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
-    const facultyData = snap.data() as { name?: string; legalName?: string; userUid?: string; department?: string };
+    const facultyData = snap.data() as { legalName?: string; userUid?: string; department?: string };
 
     if (session.role === "HOD") {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
@@ -462,9 +462,7 @@ export async function DELETE(
       performedBy: session.uid,
       performedByName: actorName,
       targetId: id,
-      // Full Name (as per SSC) preferred, Name (as per PAN) only as a fallback -
-      // same precedence facultyDisplayName() uses everywhere else.
-      details: { name: facultyData.legalName?.trim() || facultyData.name?.trim() || "" },
+      details: { name: facultyDisplayName(facultyData) },
       timestamp: new Date(),
     });
 

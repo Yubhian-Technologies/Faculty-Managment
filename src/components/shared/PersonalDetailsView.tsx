@@ -9,6 +9,7 @@ export interface PersonalDetailsSource {
   dateOfBirth?: Timestamp | Date | { _seconds: number; _nanoseconds?: number } | { seconds: number; nanoseconds?: number };
   legalName?: string;
   nameAsPerAadhar?: string;
+  nameAsPerPan?: string;
   fatherName?: string;
   motherName?: string;
   religion?: Religion | string; // string fallback - legacy free-text values pre-dating the dropdown
@@ -60,6 +61,8 @@ interface Props {
   // whose edit form hides a field (Faculty hides ESI Number) doesn't show it
   // here either.
   hiddenFields?: (keyof PersonalDetailsSource)[];
+  // Faculty only - see PersonalDetailsFields' showNameAsPerPan.
+  showNameAsPerPan?: boolean;
 }
 
 function Field({ label, value }: { label: string; value: string | undefined | null }) {
@@ -71,7 +74,7 @@ function Field({ label, value }: { label: string; value: string | undefined | nu
   );
 }
 
-export function PersonalDetailsView({ value, hideLegalName = false, hiddenFields = [] }: Props) {
+export function PersonalDetailsView({ value, hideLegalName = false, hiddenFields = [], showNameAsPerPan = false }: Props) {
   // Lift a record still carrying the legacy key names (passportNumber, bankAccountNo, ...).
   const p = (value ? migratePersonalFlat(value as Record<string, unknown>) : {}) as PersonalDetailsSource;
 
@@ -79,6 +82,7 @@ export function PersonalDetailsView({ value, hideLegalName = false, hiddenFields
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <Field label="Name (as per Aadhar)" value={p.nameAsPerAadhar} />
+        {showNameAsPerPan && <Field label="Name (as per PAN)" value={p.nameAsPerPan} />}
         <Field label="Date of Birth" value={p.dateOfBirth ? formatDate(p.dateOfBirth) : undefined} />
         <Field label="Gender" value={p.gender} />
         {!hideLegalName && <Field label="Full Name (as per SSC)" value={p.legalName} />}

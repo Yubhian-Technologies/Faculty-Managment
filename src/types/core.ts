@@ -967,14 +967,8 @@ export interface FacultyMember {
   department: string;
   employeeId: string;
   apaarFacultyId?: string; // NBA/AICTE — APAAR Faculty ID
-  // Name (as per PAN) — optional statutory-matching detail, NOT the record's
-  // display name. legalName (below, in the personal/statutory block) is the
-  // primary/required identity name; use facultyDisplayName()
-  // (src/lib/faculty/facultyDisplayName.ts) wherever a faculty member's name
-  // is shown, rather than reading this field directly.
-  name?: string;
   email?: string; // personal email — optional, contact only
-  phone?: string;
+  mobileNo?: string; // "Mobile No" (legacy key: phone - see fieldRenames.ts / facultyMobileNo())
   // Extra contact numbers beyond the primary Mobile No above - each with an
   // optional freeform label the HOD chooses (e.g. "Personal", "WhatsApp", or
   // just whoever's number it is), not a fixed category.
@@ -1016,6 +1010,10 @@ export interface FacultyMember {
   // See facultyDisplayName() (src/lib/faculty/facultyDisplayName.ts).
   legalName?: string;
   nameAsPerAadhar?: string; // name exactly as printed on the Aadhar card
+  // Name (as per PAN) - optional statutory-matching detail, independent of legalName
+  // (like nameAsPerAadhar); never a display name. legalName is the ONLY identity/display
+  // name - use facultyDisplayName() (src/lib/faculty/facultyDisplayName.ts) to show it.
+  nameAsPerPan?: string;
   fatherName?: string;
   motherName?: string;
   religion?: Religion;
