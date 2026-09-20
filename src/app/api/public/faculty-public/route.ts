@@ -29,6 +29,7 @@ function publicDegree(d: DegreeDetail | undefined, doctoral: boolean) {
   if (!d) return undefined;
   return {
     course: d.course,
+    degreeType: d.degreeType,
     branch: d.branch,
     specialization: d.specialization,
     institutionName: d.institutionName,
@@ -131,7 +132,6 @@ export async function GET(request: Request) {
               googleScholarId: ap.googleScholarId,
               scopusAuthorId: ap.scopusAuthorId,
               orcidId: ap.orcidId,
-              authoredBooks: ap.authoredBooks ?? [],
             }
           : undefined,
 

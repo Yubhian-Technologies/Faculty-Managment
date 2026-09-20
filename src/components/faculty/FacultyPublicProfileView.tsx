@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { VISHNU_LOGO_URL } from "@/lib/pdf/logo";
 import {
   Mail, ExternalLink, UserRound, GraduationCap, Microscope, Briefcase,
-  FlaskConical, BookOpen, Award,
+  FlaskConical, Award,
   Users, Info,
 } from "lucide-react";
 import { DESIGNATION_LABELS } from "@/types";
@@ -20,6 +20,7 @@ import {
 
 export interface DegreeSummary {
   course: string;
+  degreeType?: string;
   branch: string;
   specialization?: string;
   institutionName: string;
@@ -66,7 +67,6 @@ export interface FacultyPublicProfile {
     googleScholarId?: string;
     scopusAuthorId?: string;
     orcidId?: string;
-    authoredBooks: { title: string; publisher: string; year?: number }[];
   };
   recognition?: {
     awardsRecognition: { titleOfAward: string; awardingAgencyBody: string; dateOfAward?: string; year?: number }[];
@@ -80,7 +80,8 @@ export interface FacultyPublicProfile {
 
 function degreeLine(d?: DegreeSummary) {
   if (!d) return null;
-  const parts = [d.course, d.specialization || d.branch, d.institutionName].filter(Boolean);
+  const course = d.course && d.degreeType ? `${d.course} (${d.degreeType})` : d.course;
+  const parts = [course, d.specialization || d.branch, d.institutionName].filter(Boolean);
   const year = d.yearOfAward ?? d.yearOfPassing;
   return `${parts.join(", ")}${year ? ` (${year})` : ""}`;
 }
@@ -122,7 +123,6 @@ const SECTION_ICONS = {
   postdoc: Microscope,
   experience: Briefcase,
   research: FlaskConical,
-  books: BookOpen,
   awards: Award,
   engagement: Users,
   other: Info,
@@ -168,7 +168,6 @@ export function FacultyPublicProfileView({ profile }: { profile: FacultyPublicPr
   const showPostdoc = !!p.education?.postdoctoralFellowshipDetails;
   const showExperience = p.academicExperience.length > 0;
   const showResearch = !!hasResearchStats || (p.research?.publications.length ?? 0) > 0 || scholarLinks.length > 0;
-  const showBooks = (p.research?.authoredBooks.length ?? 0) > 0;
   const showAwards = (p.recognition?.awardsRecognition.length ?? 0) > 0;
   const showEngagement = !!p.recognition && (
     p.recognition.professionalMemberships.length > 0 ||
@@ -184,7 +183,6 @@ export function FacultyPublicProfileView({ profile }: { profile: FacultyPublicPr
     { key: "postdoc", label: "Post-Doctoral Experience", show: showPostdoc },
     { key: "experience", label: "Academic Experience", show: showExperience },
     { key: "research", label: "Research Details", show: showResearch },
-    { key: "books", label: "Authored Books", show: showBooks },
     { key: "awards", label: "Awards & Recognition", show: showAwards },
     { key: "engagement", label: "Professional Engagement", show: showEngagement },
     { key: "other", label: "Other Information", show: showOther },
@@ -426,17 +424,6 @@ export function FacultyPublicProfileView({ profile }: { profile: FacultyPublicPr
                     ))}
                   </EntryList>
                 )}
-              </SectionBlock>
-            )}
-
-            {showBooks && p.research && (
-              <SectionBlock id="books" refCb={registerSectionRef}>
-                <SectionHeading icon={SECTION_ICONS.books}>Authored Books</SectionHeading>
-                <EntryList>
-                  {p.research.authoredBooks.map((b, i) => (
-                    <EntryCard key={i}><span className="font-medium">{b.title}</span> — {b.publisher}{b.year ? ` (${b.year})` : ""}</EntryCard>
-                  ))}
-                </EntryList>
               </SectionBlock>
             )}
 

@@ -10,8 +10,9 @@ import { CertificateUploadField } from "@/components/shared/CertificateUploadFie
 import { Trash2, ExternalLink, X } from "lucide-react";
 import { splitDegreeAndBranch } from "@/lib/faculty/legacyProfileFallbacks";
 import { migrateDegree, migrateStaffQualifications } from "@/lib/faculty/fieldRenames";
+import { degreeTypeOptions, isValidDegreeType } from "@/lib/faculty/degreeType";
 import { degreeYear } from "@/types";
-import type { DegreeDetail, StaffQualification, PhdStatus, PhdMode } from "@/types";
+import type { DegreeDetail, DegreeType, StaffQualification, PhdStatus, PhdMode } from "@/types";
 
 const PHD_STATUS_OPTIONS: { value: PhdStatus; label: string }[] = [
   { value: "AWARDED", label: "Awarded" },
@@ -174,6 +175,14 @@ export function TextInput({ label, value, onChange, placeholder, required }: { l
   );
 }
 
+// Changing Course drops the Degree unless it is still valid for the new Course, so a
+// stale Degree never lingers on an entry whose Course no longer asks for one. The key is
+// removed rather than set to undefined - Firestore rejects undefined field values.
+function withCourse(v: DegreeDetail, course: string): DegreeDetail {
+  const { degreeType, ...rest } = v;
+  return { ...rest, course, ...(isValidDegreeType(course, degreeType) ? { degreeType } : {}) };
+}
+
 export function DegreeFields({
   label, level, value, onChange,
 }: {
@@ -244,7 +253,7 @@ export function DegreeFields({
             <Label>Domain</Label>
             <Select
               value={domainIsOther ? "OTHERS" : (domain ?? "")}
-              onValueChange={(x) => onChange({ ...v, domain: x, course: "" })}
+              onValueChange={(x) => onChange({ ...withCourse(v, ""), domain: x })}
             >
               <SelectTrigger><SelectValue placeholder="Select domain" /></SelectTrigger>
               <SelectContent>
@@ -287,7 +296,7 @@ export function DegreeFields({
             <Label>Course</Label>
             <Select
               value={courseIsOther ? "Other" : v.course}
-              onValueChange={(x) => onChange({ ...v, course: x })}
+              onValueChange={(x) => onChange(withCourse(v, x))}
               disabled={hasDomain && !domain}
             >
               <SelectTrigger><SelectValue placeholder={hasDomain && !domain ? "Select domain first" : "Select course"} /></SelectTrigger>
@@ -299,10 +308,21 @@ export function DegreeFields({
             {courseIsOther && (
               <Input
                 value={v.course === "Other" ? "" : v.course}
-                onChange={(e) => onChange({ ...v, course: e.target.value || "Other" })}
+                onChange={(e) => onChange(withCourse(v, e.target.value || "Other"))}
                 placeholder="Please specify"
               />
             )}
+          </div>
+        )}
+        {isUgOrPg && degreeTypeOptions(v.course).length > 0 && (
+          <div className="space-y-2">
+            <Label>Degree<RequiredMark required /></Label>
+            <Select value={v.degreeType ?? ""} onValueChange={(x) => onChange({ ...v, degreeType: x as DegreeType })}>
+              <SelectTrigger><SelectValue placeholder="Select degree" /></SelectTrigger>
+              <SelectContent>
+                {degreeTypeOptions(v.course).map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+              </SelectContent>
+            </Select>
           </div>
         )}
         {/* Board sits second, right after Course - School/Intermediate
@@ -749,6 +769,7 @@ export function DegreeView({
       {degree?.domain && <Field label="Domain" value={EDUCATION_DOMAIN_LABELS[degree.domain as EducationDomain] ?? degree.domain} />}
       {/* Doctoral has no Course input - only render the row when a value exists. */}
       {degree?.course && <Field label="Course" value={degree.course} />}
+      {isUgOrPg && degreeTypeOptions(degree?.course).length > 0 && <Field label="Degree" value={degree.degreeType} />}
       {isDoctoral ? (
         <Field label="Specialization" value={doctoralSpecialization} />
       ) : !isSchoolLevel ? (

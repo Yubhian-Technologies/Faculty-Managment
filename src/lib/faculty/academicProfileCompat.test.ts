@@ -49,10 +49,10 @@ describe("normalizeAcademicProfile", () => {
 
   it("lifts the experience, professional development and financial keys too", () => {
     const out = normalizeAcademicProfile(legacy) as Record<string, any>;
-    expect(out.academicExperience).toEqual([{ institutionName: "A" }]);
-    expect(out.industryExperience).toEqual([{ institutionName: "B" }]);
-    expect(out.industryRolesResponsibilities).toBe("Engineer");
-    expect(out.teachingRolesResponsibilities).toBe("Lecturer");
+    expect(out.academicExperience).toEqual([{ institutionName: "A", rolesResponsibilities: "Lecturer" }]);
+    expect(out.industryExperience).toEqual([{ institutionName: "B", rolesResponsibilities: "Engineer" }]);
+    expect(out).not.toHaveProperty("industryRolesResponsibilities");
+    expect(out).not.toHaveProperty("teachingRolesResponsibilities");
     expect(out.teachingAssignment).toEqual({ courses: [] });
     expect(out.fdpsWorkshopsMoocsCertifications).toEqual([
       { type: "FDP", titleOfTheProgram: "T", participatedOrConducted: "CONDUCTED", nameOfTheFacultyCoordinator: "Me", coConductingFaculty: [] },

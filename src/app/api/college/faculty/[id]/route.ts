@@ -8,6 +8,7 @@ import { syncTrainingEntryCoConductors } from "@/lib/faculty/syncTrainingEntryCo
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
 import { experienceBreakdown, allPreviousExperienceEntries } from "@/lib/faculty/experienceCalc";
 import { normalizeAcademicProfile } from "@/lib/faculty/academicProfileCompat";
+import { degreeTypeError } from "@/lib/faculty/degreeType";
 import {
   academicProfileFirestoreUpdates, applyAcademicProfileChanges, parseAcademicProfileChanges, touchesTrainingEntries,
   type AcademicProfileChanges,
@@ -213,9 +214,13 @@ export async function PATCH(
       }
       const parsed = parseAcademicProfileChanges(body.academicProfileChanges);
       if (!parsed) return NextResponse.json({ error: "Invalid academicProfileChanges" }, { status: 400 });
+      const degreeErr = degreeTypeError(parsed.set);
+      if (degreeErr) return NextResponse.json({ error: degreeErr }, { status: 400 });
       academicChanges = parsed;
       Object.assign(updates, academicProfileFirestoreUpdates((snap.data() as { academicProfile?: unknown }).academicProfile, academicChanges, FieldValue.delete()));
     } else if (body.academicProfile !== undefined) {
+      const degreeErr = degreeTypeError(body.academicProfile);
+      if (degreeErr) return NextResponse.json({ error: degreeErr }, { status: 400 });
       updates.academicProfile = normalizeAcademicProfile(body.academicProfile);
     }
     if (body.technicalProfile !== undefined) updates.technicalProfile = body.technicalProfile;

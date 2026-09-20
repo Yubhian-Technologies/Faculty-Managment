@@ -92,11 +92,20 @@ describe("academicProfileFirestoreUpdates", () => {
     expect("academicProfile.trainingEntries" in updates).toBe(false);
   });
 
-  it("moves teachingAssignment.primaryTeachingRole without a parent/child path conflict", () => {
+  it("deletes a legacy shared role field only once an entry being written carries its text", () => {
+    const stored = { teachingRolesResponsibilities: "old", teachingAssignment: { primaryTeachingRole: "old", courses: [] } };
+    const carried = academicProfileFirestoreUpdates(stored, { set: { academicExperience: [{ institutionName: "A", rolesResponsibilities: "old" }] }, remove: [] }, DELETE);
+    expect(carried["academicProfile.teachingRolesResponsibilities"]).toBe(DELETE);
+    expect(carried["academicProfile.teachingAssignment.primaryTeachingRole"]).toBe(DELETE);
+    // A write that dropped the text (stale client) must not delete the only copy.
+    const dropped = academicProfileFirestoreUpdates(stored, { set: { academicExperience: [{ institutionName: "A" }] }, remove: [] }, DELETE);
+    expect("academicProfile.teachingRolesResponsibilities" in dropped).toBe(false);
+    expect("academicProfile.teachingAssignment.primaryTeachingRole" in dropped).toBe(false);
+  });
+
+  it("skips the nested legacy path when teachingAssignment itself is rewritten (parent/child conflict)", () => {
     const stored = { teachingAssignment: { primaryTeachingRole: "old", courses: [] } };
-    const a = academicProfileFirestoreUpdates(stored, { set: { teachingRolesResponsibilities: "new" }, remove: [] }, DELETE);
-    expect(a["academicProfile.teachingAssignment.primaryTeachingRole"]).toBe(DELETE);
-    const b = academicProfileFirestoreUpdates(stored, { set: { teachingRolesResponsibilities: "new", teachingAssignment: { courses: [] } }, remove: [] }, DELETE);
+    const b = academicProfileFirestoreUpdates(stored, { set: { academicExperience: [{ rolesResponsibilities: "old" }], teachingAssignment: { courses: [] } }, remove: [] }, DELETE);
     expect("academicProfile.teachingAssignment.primaryTeachingRole" in b).toBe(false);
   });
 });

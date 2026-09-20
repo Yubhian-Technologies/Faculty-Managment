@@ -9,11 +9,13 @@ import { getHodDepartmentScope, getDepartmentTreeNames, canHodEditDepartment, fa
 import { LEGACY_TECHNICAL_DESIGNATIONS } from "@/lib/designations/config";
 import { experienceBreakdown, allPreviousExperienceEntries } from "@/lib/faculty/experienceCalc";
 import { normalizeAcademicProfile } from "@/lib/faculty/academicProfileCompat";
+import { degreeTypeError } from "@/lib/faculty/degreeType";
 import { migrateFacultyDoc } from "@/lib/faculty/fieldRenames";
 import { normalizeHighestQualification } from "@/lib/faculty/highestQualification";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import type { Designation, FacultyStatus, EmployeeCategory } from "@/types";
 import { EMPLOYEE_CATEGORY_VALUES, EMPLOYEE_CATEGORY_ERROR_MESSAGE } from "@/types";
+import { loadDepartmentIndex, stampDepartmentIds } from "@/lib/departments/stampIds";
 
 export async function GET(request: Request) {
   try {
@@ -180,6 +182,8 @@ export async function POST(request: Request) {
     if (!EMPLOYEE_CATEGORY_VALUES.includes(employeeCategory)) {
       return NextResponse.json({ error: EMPLOYEE_CATEGORY_ERROR_MESSAGE }, { status: 400 });
     }
+    const degreeErr = degreeTypeError(body.academicProfile);
+    if (degreeErr) return NextResponse.json({ error: degreeErr }, { status: 400 });
     // Matches the mandatory field set the bulk-import template and Add
     // Faculty wizard's Personal Details step now both enforce. Name (as per
     // PAN) is deliberately NOT required here - Full Name (as per SSC)
@@ -284,7 +288,8 @@ export async function POST(request: Request) {
       .collection("facultyMembers")
       .doc();
 
-    await docRef.set({
+    const deptIndex = await loadDepartmentIndex(db, collegeId);
+    await docRef.set(stampDepartmentIds({
       collegeId,
       department,
       employeeId,
@@ -330,7 +335,7 @@ export async function POST(request: Request) {
       ...buildPersonalDetailsUpdate(body),
       createdAt: now,
       updatedAt: now,
-    });
+    }, deptIndex));
 
     // Role mapping for Firestore-based session resolution
     await db.collection("systemUsers").doc(uid).set({

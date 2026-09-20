@@ -9,6 +9,7 @@ import { resolveSectionCurrentSemester, resolveRequestedSemester, matchesCurrent
 import { resolveTimetableAcademicYear, matchesCurrentAcademicYear } from "@/lib/college/academicSession";
 import { isTimetableIncharge } from "@/lib/departments/timetableIncharge";
 import type { DayOfWeek, TimetableSlot } from "@/types";
+import { loadDepartmentIndex, stampDepartmentIds } from "@/lib/departments/stampIds";
 
 export async function GET(request: Request) {
   try {
@@ -209,7 +210,8 @@ export async function POST(request: Request) {
     }
 
     const now = new Date();
-    const ref = await collegeRef.collection("timetableSlots").add({
+    const deptIndex = await loadDepartmentIndex(db, session.collegeId);
+    const ref = await collegeRef.collection("timetableSlots").add(stampDepartmentIds({
       collegeId: session.collegeId,
       department: assignment.department,
       assignmentId,
@@ -234,7 +236,7 @@ export async function POST(request: Request) {
       academicYear: currentAcademicYear,
       createdAt: now,
       updatedAt: now,
-    });
+    }, deptIndex));
 
     return NextResponse.json({ id: ref.id }, { status: 201 });
   } catch (err) {

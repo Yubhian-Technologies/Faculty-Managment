@@ -5,6 +5,7 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
 import { normalizeAcademicProfile } from "@/lib/faculty/academicProfileCompat";
+import { degreeTypeError } from "@/lib/faculty/degreeType";
 import { withLegacyPersonalKeysDeleted } from "@/lib/faculty/legacyKeyDeletes";
 import { FieldValue } from "firebase-admin/firestore";
 
@@ -64,6 +65,8 @@ export async function PATCH(request: Request) {
     }
     if (body.phone !== undefined) updates.phone = body.phone;
     if (body.academicProfile !== undefined) {
+      const degreeErr = degreeTypeError(body.academicProfile);
+      if (degreeErr) return NextResponse.json({ error: degreeErr }, { status: 400 });
       const academicProfile = { ...normalizeAcademicProfile(body.academicProfile) };
       for (const key of FINANCIAL_ACADEMIC_KEYS) delete academicProfile[key];
       for (const key of RESEARCH_PROFILE_KEYS) delete academicProfile[key];

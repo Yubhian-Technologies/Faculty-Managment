@@ -8,6 +8,7 @@ import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/fir
 import { syncDepartmentHod, getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
 import { MANAGEABLE_STAFF_ROLES } from "@/types";
 import { normalizeAcademicProfile } from "@/lib/faculty/academicProfileCompat";
+import { degreeTypeError } from "@/lib/faculty/degreeType";
 import { migrateUserDoc } from "@/lib/faculty/fieldRenames";
 import { withLegacyPersonalKeysDeleted } from "@/lib/faculty/legacyKeyDeletes";
 import { assignSeat } from "@/lib/roles/seats";
@@ -229,6 +230,10 @@ export async function PATCH(
     }
     if (roleChanged) updates.role = body.role;
     if (body.phone !== undefined) updates.phone = body.phone;
+    if (body.academicProfile !== undefined) {
+      const degreeErr = degreeTypeError(body.academicProfile);
+      if (degreeErr) return NextResponse.json({ error: degreeErr }, { status: 400 });
+    }
     if (body.academicProfile !== undefined) updates.academicProfile = normalizeAcademicProfile(body.academicProfile);
     if (body.profilePhotoUrl !== undefined) updates.profilePhotoUrl = body.profilePhotoUrl;
 

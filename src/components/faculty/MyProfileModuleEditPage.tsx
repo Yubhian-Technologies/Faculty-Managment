@@ -18,6 +18,7 @@ import { toast } from "@/hooks/useToast";
 import { migrateFacultyDoc } from "@/lib/faculty/fieldRenames";
 import { personalRecordFromDoc, personalPatchBody } from "@/lib/faculty/personalRecord";
 import { diffAcademicProfile, isEmptyChanges } from "@/lib/faculty/academicProfileChanges";
+import { degreeTypeError } from "@/lib/faculty/degreeType";
 
 interface Props {
   basePath: string;       // e.g. "/hod/profile"
@@ -98,6 +99,13 @@ export function MyProfileModuleEditPage({ basePath, patchEndpoint, sectionScoped
       const missing = getMissingRequiredPersonalFields(record, requiredPersonalFields);
       if (missing.length > 0) {
         toast({ variant: "destructive", title: "Some required fields are missing", description: missing.join(", ") });
+        return;
+      }
+    }
+    if (moduleKey === "qualification") {
+      const degreeErr = degreeTypeError(record.academicProfile);
+      if (degreeErr) {
+        toast({ variant: "destructive", title: "Some required fields are missing", description: degreeErr });
         return;
       }
     }

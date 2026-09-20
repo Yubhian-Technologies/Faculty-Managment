@@ -76,7 +76,7 @@ function group(module: ExportModuleKey, key: string, label: string, subFieldLabe
 // those two boxes gets silently left out of export. Sub-field wording is
 // exactly the Faculty Details UI label (== the stored key: course,
 // institutionName, percentageCgpa, yearOfPassing, ...).
-const DEGREE_SUBFIELDS = ["Course", "Branch", "Institution Name", "Affiliated University", "Percentage / CGPA", "Year of Passing", "Place", "Hall Ticket Number"];
+const DEGREE_SUBFIELDS = ["Course", "Degree", "Branch", "Institution Name", "Affiliated University", "Percentage / CGPA", "Year of Passing", "Place", "Hall Ticket Number"];
 const SCHOOL_DEGREE_SUBFIELDS = ["Course", "Board", "Institution Name", "Percentage / CGPA", "Year of Passing", "Place", "Hall Ticket Number"];
 // Doctoral/Post-Doctoral entries (Ph.D. Details, Postdoctoral Fellowship
 // Details) - Specialization instead of Course/Branch/Percentage-CGPA, plus this
@@ -85,7 +85,9 @@ const SCHOOL_DEGREE_SUBFIELDS = ["Course", "Board", "Institution Name", "Percent
 // ProfileFieldPrimitives.tsx) and Year of Registration/Name of the
 // Guide-Supervisor (shown while Pursuing, instead of Year of Award).
 const DOCTORAL_SUBFIELDS = ["Specialization", "Institution Name", "Status", "Mode", "Year of Registration", "Name of the Guide / Supervisor", "Year of Award", "Place", "Hall Ticket Number"];
-const EXPERIENCE_SUBFIELDS = ["Institution Name", "Designation", "From Date", "To Date", "Joining Salary", "Leaving Salary", "Reason for Leaving", "NOC Obtained"];
+// Roles/Responsibilities is a per-entry field, labelled per experience type.
+const experienceSubfields = (kind: "Academic" | "Industry" | "Research") =>
+  ["Institution Name", "Designation", "From Date", "To Date", "Joining Salary", "Leaving Salary", `${kind} Roles/Responsibilities`, "Reason for Leaving", "NOC Obtained"];
 
 // Professional Experience / Professional Development / Financial sub-field
 // wording is exactly the Faculty Details UI label (== the stored key: e.g.
@@ -186,14 +188,9 @@ export const EXPORT_FIELDS: ExportField[] = [
   group("qualification", "educationalQualifications", "Educational Qualifications", ["Level", "Course", "Institution Name", "Place", "Percentage / CGPA", "Year of Passing", "Hall Ticket Number"]),
 
   // ─── Professional Experience ──────────────────────────────────────────────
-  // Each role box is kept right next to its own Experience group, matching
-  // how the Add/Edit form shows it (nested inside that same tab's card).
-  group("experience", "academicExperienceGroup", "Academic Experience", EXPERIENCE_SUBFIELDS),
-  scalar("experience", "teachingRolesResponsibilities", "Teaching Roles/Responsibilities"),
-  group("experience", "industryExperienceGroup", "Industry Experience", EXPERIENCE_SUBFIELDS),
-  scalar("experience", "industryRolesResponsibilities", "Industry Roles/Responsibilities"),
-  group("experience", "researchExperienceGroup", "Research Experience", EXPERIENCE_SUBFIELDS),
-  scalar("experience", "researchRolesResponsibilities", "Research Roles/Responsibilities"),
+  group("experience", "academicExperienceGroup", "Academic Experience", experienceSubfields("Academic")),
+  group("experience", "industryExperienceGroup", "Industry Experience", experienceSubfields("Industry")),
+  group("experience", "researchExperienceGroup", "Research Experience", experienceSubfields("Research")),
   group("experience", "promotionHistoryGroup", "Promotion History", ["Designation", "From Date", "To Date"]),
   group("experience", "coursesGroup", "Courses Taught", ["Code", "Name", "Weekly Credit Hours"]),
 
@@ -215,7 +212,6 @@ export const EXPORT_FIELDS: ExportField[] = [
   scalar("research", "googleScholarId", "Google Scholar ID"),
   scalar("research", "irinsProfile", "IRINS Profile"),
   group("research", "publicationsGroup", "Publications", ["Title", "Co-Authors", "Journal/Conference", "Year", "Indexing"]),
-  group("research", "authoredBooksGroup", "Authored Books", ["Title", "Publisher", "Year"]),
 
   // ─── Professional Development ──────────────────────────────────────────────
   group("mentorship", "newLabsEstablishedGroup", "New Labs Established", ["Facility Details", "Outcomes"]),
