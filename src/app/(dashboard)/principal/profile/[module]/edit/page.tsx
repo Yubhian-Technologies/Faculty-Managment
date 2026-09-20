@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { useAuthStore } from "@/store/authStore";
 import { getUserById } from "@/lib/firestore/users";
+import { migrateUserDoc } from "@/lib/faculty/fieldRenames";
 import { FacultyProfileModuleEditor, type FacultyEditRecord } from "@/components/faculty/FacultyProfileModuleEditor";
 import { PROFILE_MODULES, SELF_EDIT_DISABLED_MODULES, type ProfileModuleKey } from "@/lib/faculty/profileModules";
 import { useCollegeType } from "@/hooks/useCollegeType";
@@ -31,37 +32,39 @@ export default function PrincipalProfileModuleEditPage() {
 
   useEffect(() => {
     if (!user) return;
+    // Lift legacy personal key names (an auth profile from an un-migrated doc) to the current ones.
+    const u = migrateUserDoc(user as unknown as Record<string, unknown>) as unknown as NonNullable<typeof user>;
     setRecord({
-      gender: user.gender ?? "",
-      dateOfBirth: user.dateOfBirth as never,
-      legalName: user.legalName ?? "",
-      fatherName: user.fatherName ?? "",
-      motherName: user.motherName ?? "",
-      religion: user.religion,
-      caste: user.caste,
-      subCaste: user.subCaste ?? "",
-      aadharNo: user.aadharNo ?? "",
-      panNo: user.panNo ?? "",
-      passportNumber: user.passportNumber ?? "",
-      bankAccountNo: user.bankAccountNo ?? "",
-      ifscCode: user.ifscCode ?? "",
-      bankName: user.bankName ?? "",
-      bankBranch: user.bankBranch ?? "",
-      bankOtherDetails: user.bankOtherDetails ?? "",
-      emergencyContactName: user.emergencyContactName ?? "",
-      emergencyContactRelation: user.emergencyContactRelation ?? "",
-      emergencyContactPhone: user.emergencyContactPhone ?? "",
-      ratificationStatus: user.ratificationStatus ?? "",
-      ratificationProceedingsNumber: user.ratificationProceedingsNumber ?? "",
-      ratificationDate: user.ratificationDate as never,
-      maritalStatus: user.maritalStatus ?? "",
-      spouseName: user.spouseName ?? "",
-      numberOfChildren: user.numberOfChildren,
-      temporaryAddress: user.temporaryAddress ?? "",
-      permanentSameAsTemporary: user.permanentSameAsTemporary ?? false,
-      permanentAddress: user.permanentAddress ?? "",
-      bloodGroup: user.bloodGroup ?? "",
-      academicProfile: user.academicProfile ?? {},
+      gender: u.gender ?? "",
+      dateOfBirth: u.dateOfBirth as never,
+      legalName: u.legalName ?? "",
+      fatherName: u.fatherName ?? "",
+      motherName: u.motherName ?? "",
+      religion: u.religion,
+      caste: u.caste,
+      subCaste: u.subCaste ?? "",
+      aadharNo: u.aadharNo ?? "",
+      panNo: u.panNo ?? "",
+      passportNo: u.passportNo ?? "",
+      bankAccountNumber: u.bankAccountNumber ?? "",
+      ifscCode: u.ifscCode ?? "",
+      bankName: u.bankName ?? "",
+      bankBranch: u.bankBranch ?? "",
+      bankOtherDetails: u.bankOtherDetails ?? "",
+      emergencyContactName: u.emergencyContactName ?? "",
+      emergencyContactRelation: u.emergencyContactRelation ?? "",
+      emergencyContactMobileNo: u.emergencyContactMobileNo ?? "",
+      ratificationStatus: u.ratificationStatus ?? "",
+      ratificationProceedingsNumber: u.ratificationProceedingsNumber ?? "",
+      ratificationDate: u.ratificationDate as never,
+      maritalStatus: u.maritalStatus ?? "",
+      spouseName: u.spouseName ?? "",
+      numberOfChildren: u.numberOfChildren,
+      temporaryAddress: u.temporaryAddress ?? "",
+      permanentAddressSameAsTemporary: u.permanentAddressSameAsTemporary ?? false,
+      permanentAddress: u.permanentAddress ?? "",
+      bloodGroup: u.bloodGroup ?? "",
+      academicProfile: u.academicProfile ?? {},
     });
   }, [user]);
 
@@ -78,15 +81,15 @@ export default function PrincipalProfileModuleEditPage() {
               gender: record.gender, dateOfBirth: record.dateOfBirth, legalName: record.legalName,
               fatherName: record.fatherName, motherName: record.motherName, religion: record.religion,
               caste: record.caste, subCaste: record.subCaste, aadharNo: record.aadharNo, panNo: record.panNo,
-              passportNumber: record.passportNumber,
-              bankAccountNo: record.bankAccountNo, ifscCode: record.ifscCode,
+              passportNo: record.passportNo,
+              bankAccountNumber: record.bankAccountNumber, ifscCode: record.ifscCode,
               bankName: record.bankName, bankBranch: record.bankBranch, bankOtherDetails: record.bankOtherDetails,
               emergencyContactName: record.emergencyContactName, emergencyContactRelation: record.emergencyContactRelation,
-              emergencyContactPhone: record.emergencyContactPhone, ratificationStatus: record.ratificationStatus,
+              emergencyContactMobileNo: record.emergencyContactMobileNo, ratificationStatus: record.ratificationStatus,
               ratificationProceedingsNumber: record.ratificationProceedingsNumber,
               ratificationDate: record.ratificationDate, maritalStatus: record.maritalStatus, spouseName: record.spouseName,
               numberOfChildren: record.numberOfChildren,
-              temporaryAddress: record.temporaryAddress, permanentSameAsTemporary: record.permanentSameAsTemporary,
+              temporaryAddress: record.temporaryAddress, permanentAddressSameAsTemporary: record.permanentAddressSameAsTemporary,
               permanentAddress: record.permanentAddress, bloodGroup: record.bloodGroup,
             }
           : { academicProfile: record.academicProfile };

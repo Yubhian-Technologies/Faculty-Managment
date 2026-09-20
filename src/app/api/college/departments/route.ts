@@ -189,11 +189,21 @@ export async function POST(request: Request) {
       secondaryDepartments = names;
     }
 
-    // Grouped/managed branches: the top-level departments this (sub-)department's
-    // HOD gets FULL control of. Same validation as secondaryDepartments - the
-    // target must be an existing top-level department, never a sub-department -
-    // but a different field with different meaning (full management vs view-only
-    // cross-listing), so it's resolved into the sub-HOD's editable scope.
+    // Grouped/managed branches: the departments this (sub-)department's HOD gets
+    // FULL control of. Same validation as secondaryDepartments - the target must
+    // be an existing department - but a different field with different meaning
+    // (full management vs view-only cross-listing), so it's resolved into the
+    // sub-HOD's editable scope.
+    //
+    // A sub-department is a legitimate target, exactly as it already is for
+    // secondaryDepartments (which never rejected one - e.g. cross-listing to
+    // "ECE - VLSI" specifically). These two fields describe the same branches
+    // from two sides: the Principal cross-lists the parent's branches, then its
+    // HOD divides those same branches among its sub-departments. Rejecting a
+    // sub-department here made that impossible whenever the Principal had
+    // cross-listed one, which is now the norm - a department that organises its
+    // own sub-departments and runs no sections is represented by those children
+    // everywhere it is offered (replaceNoOwnSectionsParents).
     let managedDepartments: string[] = [];
     if (body.managedDepartments && body.managedDepartments.length > 0) {
       const names = Array.from(new Set(body.managedDepartments.map((s) => s.trim()).filter(Boolean)));
@@ -205,9 +215,6 @@ export async function POST(request: Request) {
         const mDept = byName.get(mName);
         if (!mDept) {
           return NextResponse.json({ error: `Managed department "${mName}" not found` }, { status: 400 });
-        }
-        if (mDept.parentDepartmentId) {
-          return NextResponse.json({ error: `"${mName}" is a sub-department and can't be used as a managed department` }, { status: 400 });
         }
       }
       // A branch may be grouped under only ONE sub-department - see
@@ -938,9 +945,6 @@ export async function PATCH(request: Request) {
           const mDept = byName.get(mName);
           if (!mDept) {
             return NextResponse.json({ error: `Managed department "${mName}" not found` }, { status: 400 });
-          }
-          if (mDept.parentDepartmentId) {
-            return NextResponse.json({ error: `"${mName}" is a sub-department and can't be used as a managed department` }, { status: 400 });
           }
         }
         // A branch may be grouped under only ONE sub-department. This department's

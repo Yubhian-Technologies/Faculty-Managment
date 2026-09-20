@@ -36,6 +36,12 @@ export default function NewDepartmentPage() {
   const [catalog, setCatalog] = useState<CourseCatalogItem[]>([]);
   const [catalogLoaded, setCatalogLoaded] = useState(false);
   const [courseSelections, setCourseSelections] = useState<CourseSelection[]>([]);
+  // Plain state rather than a react-hook-form field: nothing ever registers
+  // `hodUid` (a Radix Select isn't an input), and an unregistered field is not
+  // reliably re-read after setValue - which is what left the newly created HOD
+  // unselected here. Same shape as the other CreateHodDialog callers
+  // (principal/departments/[id]/edit, hod/settings/sub-departments).
+  const [hodUid, setHodUid] = useState("");
 
   useEffect(() => {
     fetch("/api/college/course-catalog")
@@ -58,16 +64,19 @@ export default function NewDepartmentPage() {
   const {
     register,
     handleSubmit,
-    setValue,
     watch,
     formState: { errors },
   } = useForm<DepartmentFormData>({
     resolver: zodResolver(departmentSchema),
-    defaultValues: { name: "", code: "", hodUid: "" },
+    defaultValues: { name: "", code: "" },
   });
 
-  const hodUid = watch("hodUid");
   const nameValue = watch("name");
+  // The department being created, as typed. CreateHodDialog stamps this exact
+  // name onto the new HOD's own profile the moment the account is made, so it
+  // is also what has to be discounted when reporting which OTHER departments
+  // that HOD already heads.
+  const pendingName = (nameValue ?? "").trim();
 
   async function handleHodCreated(uid: string) {
     try {
@@ -77,7 +86,22 @@ export default function NewDepartmentPage() {
     } catch {
       toast({ variant: "destructive", title: "Created, but failed to refresh HOD list" });
     }
-    setValue("hodUid", uid);
+    setHodUid(uid);
+  }
+
+  /**
+   * The departments this HOD already heads, EXCLUDING the one being created.
+   * CreateHodDialog writes the typed department name straight onto the new
+   * account, so a freshly created HOD always comes back already "heading"
+   * this department - reporting that back as an existing commitment read as
+   * a conflict ("mahesh is already HOD of BASIC SCIENCE") for what is in fact
+   * the very same department, and made assigning them look unsafe.
+   */
+  function otherDepartmentsOf(hod: FMSUser | undefined): string[] {
+    const all = hod?.departments && hod.departments.length > 0
+      ? hod.departments
+      : (hod?.department ? [hod.department] : []);
+    return all.filter((n) => n.trim().toLowerCase() !== pendingName.toLowerCase());
   }
 
   function toggleSecondaryDepartment(name: string, checked: boolean) {
@@ -95,11 +119,11 @@ export default function NewDepartmentPage() {
     }
     setIsSubmitting(true);
     try {
-      const selectedHod = hods.find((h) => h.uid === data.hodUid);
+      const selectedHod = hods.find((h) => h.uid === hodUid);
       const payload = {
         name: data.name,
         code: data.code.toUpperCase(),
-        hodUid: data.hodUid ?? "",
+        hodUid,
         hodName: selectedHod?.name ?? "",
         courses: courseSelections,
         hasSubDepartments,
@@ -183,7 +207,7 @@ export default function NewDepartmentPage() {
               {hods.length > 0 ? (
                 <Select
                   value={hodUid || "none"}
-                  onValueChange={(v) => setValue("hodUid", v === "none" ? "" : v)}
+                  onValueChange={(v) => setHodUid(v === "none" ? "" : v)}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select HOD (optional)" />
@@ -191,7 +215,7 @@ export default function NewDepartmentPage() {
                   <SelectContent>
                     <SelectItem value="none">- No HOD -</SelectItem>
                     {hods.map((h) => {
-                      const hDepts = h.departments && h.departments.length > 0 ? h.departments : (h.department ? [h.department] : []);
+                      const hDepts = otherDepartmentsOf(h);
                       return (
                         <SelectItem key={h.uid} value={h.uid}>
                           {h.name} {hDepts.length > 0 ? `(${hDepts.join(", ")})` : ""}
@@ -211,9 +235,7 @@ export default function NewDepartmentPage() {
               {(() => {
                 if (!hodUid) return null;
                 const selectedHod = hods.find((h) => h.uid === hodUid);
-                const hDepts = selectedHod?.departments && selectedHod.departments.length > 0
-                  ? selectedHod.departments
-                  : (selectedHod?.department ? [selectedHod.department] : []);
+                const hDepts = otherDepartmentsOf(selectedHod);
                 if (!selectedHod || hDepts.length === 0) return null;
                 return (
                   <p className="text-xs text-muted-foreground rounded-md border p-2.5">
@@ -248,9 +270,8 @@ export default function NewDepartmentPage() {
                 <div className="space-y-1">
                   <Label htmlFor="dept-has-subdepts" className="font-normal">Has sub-departments</Label>
                   <p className="text-xs text-muted-foreground">
-                    Enable if this department splits into sub-branches (e.g. a Freshman&apos;s Department like Basic
-                    Science → BS-Maths, BS-English). The HOD will get a &quot;Sub-Departments&quot; page to add
-                    sub-departments and assign sub-HODs.
+                    Tick this if the department is divided into smaller departments. Its HOD then gets a
+                    &quot;Sub-Departments&quot; page where they can add each one and give it a head.
                   </p>
                 </div>
               </div>
@@ -267,12 +288,9 @@ export default function NewDepartmentPage() {
                       This department also has its own sections/students, separate from its sub-departments
                     </Label>
                     <p className="text-xs text-muted-foreground">
-                      Turn this OFF if this department exists only to organize its sub-departments and never
-                      enrolls students directly on its own - e.g. a &quot;Basic Science&quot; department whose
-                      sub-departments (Maths, Physics, Chemistry, English) are the only place 1st-year students
-                      actually sit. Leave it ON if this department itself also runs real sections in addition
-                      to its sub-departments - e.g. an &quot;ECE&quot; department that has its own ECE sections
-                      AND a further specialized &quot;ECE-VLSI&quot; sub-department with sections of its own.
+                      Leave this ON if the department teaches its own classes as well as having
+                      sub-departments. Turn it OFF if it only organises its sub-departments and never has
+                      students of its own - the students belong to the sub-departments instead.
                     </p>
                   </div>
                 </div>

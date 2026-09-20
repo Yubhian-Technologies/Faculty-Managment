@@ -6,6 +6,10 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
 import { SUPPORTING_STAFF_ROLE_CATEGORY, canRolePostCategory } from "@/lib/supportingStaff/roleCategory";
 import { supportingStaffDisplayName } from "@/lib/supportingStaff/supportingStaffDisplayName";
+import { normalizeSupportingStaffProfile } from "@/lib/faculty/academicProfileCompat";
+import { migrateSupportingStaffDoc } from "@/lib/faculty/fieldRenames";
+import { withLegacyPersonalKeysDeleted } from "@/lib/faculty/legacyKeyDeletes";
+import { FieldValue } from "firebase-admin/firestore";
 import type { SupportingStaffCategory, SupportingStaffDesignation, EmploymentType, FacultyStatus } from "@/types";
 
 // HOD may only reach Technical-staff records within their own (or owned
@@ -43,7 +47,7 @@ export async function GET(
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
-    return NextResponse.json({ staff: { id: snap.id, ...snap.data() } });
+    return NextResponse.json({ staff: { id: snap.id, ...migrateSupportingStaffDoc(snap.data() ?? {}) } });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -87,15 +91,15 @@ export async function PATCH(
       subCaste: string;
       aadharNo: string;
       panNo: string;
-      passportNumber: string;
-      bankAccountNo: string;
+      passportNo: string;
+      bankAccountNumber: string;
       ifscCode: string;
       bankName: string;
       bankBranch: string;
       bankOtherDetails: string;
       emergencyContactName: string;
       emergencyContactRelation: string;
-      emergencyContactPhone: string;
+      emergencyContactMobileNo: string;
       ratificationStatus: string;
       ratificationProceedingsNumber: string;
       ratificationDate: string;
@@ -103,7 +107,7 @@ export async function PATCH(
       spouseName: string;
       numberOfChildren: number;
       temporaryAddress: string;
-      permanentSameAsTemporary: boolean;
+      permanentAddressSameAsTemporary: boolean;
       permanentAddress: string;
       bloodGroup: string;
       userUid: string;
@@ -174,9 +178,9 @@ export async function PATCH(
     const stringFields = [
       "name", "email", "phone", "collegeEmail", "staffCategory", "designation", "otherDesignationTitle",
       "department", "qualification", "employmentType", "status", "gender", "legalName", "nameAsPerAadhar",
-      "fatherName", "motherName", "religion", "caste", "subCaste", "aadharNo", "passportNumber",
-      "bankAccountNo", "bankName", "bankBranch", "bankOtherDetails",
-      "emergencyContactName", "emergencyContactRelation", "emergencyContactPhone", "ratificationStatus",
+      "fatherName", "motherName", "religion", "caste", "subCaste", "aadharNo", "passportNo",
+      "bankAccountNumber", "bankName", "bankBranch", "bankOtherDetails",
+      "emergencyContactName", "emergencyContactRelation", "emergencyContactMobileNo", "ratificationStatus",
       "ratificationProceedingsNumber", "userUid",
       "maritalStatus", "spouseName", "temporaryAddress", "permanentAddress", "bloodGroup",
     ] as const;
@@ -204,9 +208,9 @@ export async function PATCH(
 
     if (body.experienceYears !== undefined) updates.experienceYears = Number(body.experienceYears);
     if (body.numberOfChildren !== undefined) updates.numberOfChildren = Number(body.numberOfChildren);
-    if (body.permanentSameAsTemporary !== undefined) updates.permanentSameAsTemporary = body.permanentSameAsTemporary;
+    if (body.permanentAddressSameAsTemporary !== undefined) updates.permanentAddressSameAsTemporary = body.permanentAddressSameAsTemporary;
 
-    if (body.supportingStaffProfile !== undefined) updates.supportingStaffProfile = body.supportingStaffProfile;
+    if (body.supportingStaffProfile !== undefined) updates.supportingStaffProfile = normalizeSupportingStaffProfile(body.supportingStaffProfile);
 
     if (body.joiningDate) updates.joiningDate = new Date(body.joiningDate);
     if (body.dateOfBirth) updates.dateOfBirth = new Date(body.dateOfBirth);
@@ -223,7 +227,8 @@ export async function PATCH(
       }
     }
 
-    await ref.update(updates);
+    // Drop the old-named twin of any personal key written above on a not-yet-migrated doc.
+    await ref.update(withLegacyPersonalKeysDeleted(updates, FieldValue.delete()));
 
     if (body.profilePhotoUrl !== undefined || body.name !== undefined || body.legalName !== undefined) {
       const linkedUid = (snap.data() as { userUid?: string }).userUid;

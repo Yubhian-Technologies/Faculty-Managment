@@ -27,6 +27,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { DOCUMENT_TYPE_GROUPS } from "@/lib/documentTypes";
 import { DESIGNATION_LABELS, ROLE_LABELS, MEETING_PLATFORM_LABELS } from "@/types";
+import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import type { HiringBatch, Candidate, CandidateApplication, CandidateBioData, MeetingPlatform, FacultyMember, FMSUser } from "@/types";
 import { useAuthStore } from "@/store/authStore";
 import { useMyDepartments } from "@/hooks/useMyDepartments";
@@ -721,7 +722,7 @@ ${institution}`;
                         ) : (
                           facultyList.map((f) => (
                             <SelectItem key={f.id} value={f.id}>
-                              {f.name} · {DESIGNATION_LABELS[f.designation] ?? f.designation}
+                              {facultyDisplayName(f)} · {DESIGNATION_LABELS[f.designation] ?? f.designation}
                             </SelectItem>
                           ))
                         )}

@@ -1,5 +1,6 @@
 import { randomBytes } from "crypto";
 import { createFirebaseUser } from "@/lib/firebase/authRest";
+import { normalizeHighestQualification } from "@/lib/faculty/highestQualification";
 import type { EmployeeCategory } from "@/types";
 
 export type ProvisionResult =
@@ -37,10 +38,10 @@ export async function provisionFacultyFromOffer(
   credentials?: { collegeEmail: string; password: string },
   // Office-supplied extras from a faculty-account request (see
   // facultyAccountRequests) — fill in exactly the fields this function used
-  // to always leave blank/wrong (qualification/specialization were always
+  // to always leave blank/wrong (highestQualification/specialization were always
   // "", employeeCategory was never actually threaded through until this
   // rename, so it always fell back to REGULAR below).
-  profileFields?: { employeeCategory?: EmployeeCategory; qualification?: string; specialization?: string }
+  profileFields?: { employeeCategory?: EmployeeCategory; highestQualification?: string; specialization?: string }
 ): Promise<ProvisionResult> {
   const letterSnap = await db.collection("colleges").doc(collegeId).collection("offerLetters").doc(offerId).get();
   if (!letterSnap.exists) return { status: "not_found" };
@@ -145,9 +146,9 @@ export async function provisionFacultyFromOffer(
     phone: candidate.phone ?? "",
     department,
     designation: letter.designation ?? "Assistant Professor",
-    qualification: profileFields?.qualification ?? "",
+    highestQualification: normalizeHighestQualification(profileFields?.highestQualification),
     specialization: profileFields?.specialization ?? "",
-    experienceYears: 0,
+    totalYearsOfExperience: 0,
     joiningDate,
     employeeCategory: profileFields?.employeeCategory ?? "REGULAR",
     // Account creation is normally deferred until after the candidate accepts
@@ -271,9 +272,9 @@ export async function linkFacultyToExistingAccount(
     phone: candidate.phone ?? "",
     department,
     designation: letter.designation ?? "Assistant Professor",
-    qualification: "",
+    highestQualification: "",
     specialization: "",
-    experienceYears: 0,
+    totalYearsOfExperience: 0,
     joiningDate,
     employeeCategory: "REGULAR",
     status: letter.status === "ACCEPTED" ? "ACTIVE" : "INTERVIEW_DONE",

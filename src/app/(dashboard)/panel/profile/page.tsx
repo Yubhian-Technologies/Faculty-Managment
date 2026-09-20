@@ -19,11 +19,16 @@ export default function FacultyProfilePage() {
   // GET /api/college/faculty/me. Drives the same fields grid the HOD sees on
   // this faculty member's detail page (hod/faculty/[id]).
   const [faculty, setFaculty] = useState<Partial<FacultyMember> | null>(null);
+  // Set when this login has no linked faculty record (see GET /api/college/faculty/me).
+  const [noRecordMessage, setNoRecordMessage] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/college/faculty/me")
-      .then((r) => r.json() as Promise<{ faculty: Partial<FacultyMember> | null }>)
-      .then((d) => setFaculty(d.faculty ?? null))
+      .then((r) => r.json() as Promise<{ faculty: Partial<FacultyMember> | null; message?: string }>)
+      .then((d) => {
+        setFaculty(d.faculty ?? null);
+        setNoRecordMessage(d.faculty ? null : (d.message ?? null));
+      })
       .catch(() => {});
   }, []);
 
@@ -62,6 +67,7 @@ export default function FacultyProfilePage() {
           {/* Same fields grid the HOD sees on this faculty member's own
               detail page (hod/faculty/[id]) - so "My Profile" never lags
               behind what the HOD can already see about them. */}
+          {noRecordMessage && <p className="text-sm text-muted-foreground rounded-md border bg-muted/20 p-3">{noRecordMessage}</p>}
           <FacultyIdentityFacts faculty={faculty ?? {}} />
           {faculty && (
             <div className="flex justify-end pt-4 border-t">

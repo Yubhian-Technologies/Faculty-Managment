@@ -21,13 +21,14 @@ import {
 } from "@/components/faculty/AcademicProfileModuleFields";
 import { TextInput } from "@/components/shared/ProfileFieldPrimitives";
 import { syncTeachingAssignments } from "@/lib/teaching/syncTeachingAssignments";
-import { totalPreviousExperienceYears, totalYearsOfExperience, formatDuration, allPreviousExperienceEntries } from "@/lib/faculty/experienceCalc";
+import { experienceBreakdown, totalYearsOfExperience, formatDuration, allPreviousExperienceEntries } from "@/lib/faculty/experienceCalc";
 import { PHONE_REGEX } from "@/lib/validations";
 import { AvatarUploadField } from "@/components/shared/AvatarUploadField";
 import { PROFILE_MODULES } from "@/lib/faculty/profileModules";
 import { EMPLOYEE_CATEGORY_LABELS } from "@/types";
 import type { DesignationCatalogItem, EmployeeCategory } from "@/types";
 import { useCollegeType } from "@/hooks/useCollegeType";
+import { designationLabel } from "@/lib/designations/config";
 import { useAuthStore } from "@/store/authStore";
 import { toast } from "@/hooks/useToast";
 import type { FacultyProfileFields } from "@/types";
@@ -55,10 +56,10 @@ const schema = z.object({
   phone: z.string().min(1, "Mobile No is required").regex(PHONE_REGEX, "Doesn't look like a valid phone number"),
   designation: z.string().min(1, "Designation is required"),
   employeeCategory: z.string().min(1, "Employee Category is required"),
-  qualification: z.string().min(1, "Qualification is required"),
+  highestQualification: z.string().min(1, "Highest Qualification is required"),
   specialization: z.string().optional(),
-  experienceYears: z.number().min(0, "Cannot be negative").optional(),
-  joiningDate: z.string().min(1, "Joining date is required"),
+  totalYearsOfExperience: z.number().min(0, "Cannot be negative").optional(),
+  joiningDate: z.string().min(1, "Date of Joining is required"),
   aicteFacultyId: z.string().optional(),
 });
 
@@ -148,7 +149,7 @@ export default function NewFacultyPage() {
   } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: {
-      experienceYears: 0, designation: "", password: "",
+      totalYearsOfExperience: 0, designation: "", password: "",
       ...(isLinkMode ? { name: linkName } : {}),
     },
   });
@@ -156,38 +157,39 @@ export default function NewFacultyPage() {
 
   const designation = watch("designation");
   const employeeCategory = watch("employeeCategory");
-  const qualification = watch("qualification");
+  const highestQualification = watch("highestQualification");
   // "Others" is a mode, not a stored value - it reveals a free-text box whose
-  // contents become `qualification`. Needs its own state because once the user
+  // contents become `highestQualification`. Needs its own state because once the user
   // types "MBA" the field no longer matches any option, which is
   // indistinguishable from a pre-filled value that simply isn't on the list.
   const [qualIsOther, setQualIsOther] = useState(false);
   const name = watch("name");
   const joiningDateValue = watch("joiningDate");
 
-  // FacultyMember.experienceYears is calculated from Academic/Industry/Research
-  // Experience's From/To dates alone, combined (see experienceCalc.ts), not
-  // typed manually - kept in sync with the form's own experienceYears field
-  // so submit sends the computed total as-is.
+  // FacultyMember.totalYearsOfExperience (Total Years of Experience = Internal
+  // since Date of Joining + External from Academic/Industry/Research
+  // Experience's From/To dates) is actually recomputed server-side on
+  // submit (see POST /api/college/faculty), from the same academicProfile/
+  // joiningDate this form sends - this mirrors that so the "core" step's
+  // read-only preview below always matches what gets saved.
   const allExperienceEntries = useMemo(
     () => allPreviousExperienceEntries(academicProfile),
     // The 3 specific arrays read are the real deps; academicProfile itself is
     // a new object every render and would defeat the memoization if listed.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [academicProfile.previousInstitutions, academicProfile.industryExperienceEntries, academicProfile.researchExperienceEntries]
+    [academicProfile.academicExperience, academicProfile.industryExperience, academicProfile.researchExperience]
   );
   const totalExperience = useMemo(
-    () => totalPreviousExperienceYears(allExperienceEntries),
-    [allExperienceEntries]
+    () => experienceBreakdown(allExperienceEntries, joiningDateValue).total,
+    [allExperienceEntries, joiningDateValue]
   );
   useEffect(() => {
-    setValue("experienceYears", totalExperience);
+    setValue("totalYearsOfExperience", totalExperience);
   }, [totalExperience, setValue]);
 
-  // The "core" step's read-only preview goes further than the stored number
-  // above - it also adds time served since Date of Joining (if filled in
-  // yet), live, the same "Total Years of Experience" figure the profile will
-  // show once this faculty member is added.
+  // The "core" step's read-only preview - live Total Years of Experience
+  // (Internal + External), the same figure the profile will show once this
+  // faculty member is added.
   const previewTotalExperience = useMemo(
     () => totalYearsOfExperience(allExperienceEntries, joiningDateValue),
     [allExperienceEntries, joiningDateValue]
@@ -216,8 +218,8 @@ export default function NewFacultyPage() {
     employeeId: "Employee ID", name: "Name (as per PAN)", collegeEmail: "College Email",
     password: "Login Password", phone: "Mobile No", designation: "Designation",
     employeeCategory: "Employee Category",
-    qualification: "Highest Qualification", experienceYears: "Total Years of Experience",
-    joiningDate: "Date of Joining Institution",
+    highestQualification: "Highest Qualification", totalYearsOfExperience: "Total Years of Experience",
+    joiningDate: "Date of Joining",
     legalName: "Full Name (as per SSC)",
   };
 
@@ -284,7 +286,7 @@ export default function NewFacultyPage() {
     }
     // Research Areas/Interests isn't zod-validated (academicProfile is plain
     // React state) - checked here instead, same pattern as Personal Details above.
-    if (!academicProfile.researchAreas || academicProfile.researchAreas.length === 0) {
+    if (!academicProfile.researchAreasInterests || academicProfile.researchAreasInterests.length === 0) {
       setErroredSteps(new Set<WizardStepKey>(["qualification"]));
       setStepIndex(steps.findIndex((s) => s.key === "qualification"));
       toast({ variant: "destructive", title: "Some required fields are missing", description: "Academic Qualification: Research Areas/Interests" });
@@ -474,7 +476,7 @@ export default function NewFacultyPage() {
                     >
                       <SelectTrigger><SelectValue placeholder="Select designation" /></SelectTrigger>
                       <SelectContent>
-                        {designationOptions.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                        {designationOptions.map((d) => <SelectItem key={d} value={d}>{designationLabel(d)}</SelectItem>)}
                       </SelectContent>
                     </Select>
                     {errors.designation && <p className="text-sm text-destructive">{errors.designation.message}</p>}
@@ -497,16 +499,16 @@ export default function NewFacultyPage() {
                   <div className="space-y-2">
                     <Label>Highest Qualification *</Label>
                     <Select
-                      value={qualIsOther ? OTHER_QUALIFICATION : (HIGHEST_QUALIFICATION_OPTIONS as readonly string[]).includes(qualification) ? qualification : ""}
+                      value={qualIsOther ? OTHER_QUALIFICATION : (HIGHEST_QUALIFICATION_OPTIONS as readonly string[]).includes(highestQualification) ? highestQualification : ""}
                       onValueChange={(v) => {
                         const other = v === OTHER_QUALIFICATION;
                         setQualIsOther(other);
                         // Picking "Others" clears the field so the text box
                         // below starts empty and its value lands in this same
-                        // `qualification` string - there's no separate "other"
+                        // `highestQualification` string - there's no separate "other"
                         // column on FacultyMember, and the whole app (import,
                         // export, resume PDF, profile views) reads just this one.
-                        setValue("qualification", other ? "" : v);
+                        setValue("highestQualification", other ? "" : v);
                       }}
                     >
                       <SelectTrigger><SelectValue placeholder="Select qualification" /></SelectTrigger>
@@ -518,9 +520,9 @@ export default function NewFacultyPage() {
                       </SelectContent>
                     </Select>
                     {qualIsOther && (
-                      <Input {...register("qualification")} placeholder="e.g. MBA, M.Phil, M.A" />
+                      <Input {...register("highestQualification")} placeholder="e.g. B.Ed, MCA" />
                     )}
-                    {errors.qualification && <p className="text-sm text-destructive">{errors.qualification.message}</p>}
+                    {errors.highestQualification && <p className="text-sm text-destructive">{errors.highestQualification.message}</p>}
                   </div>
                 </div>
 
@@ -530,8 +532,8 @@ export default function NewFacultyPage() {
                     <Input id="specialization" {...register("specialization")} placeholder="e.g. Machine Learning, VLSI" />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="experienceYears">Total Years of Experience</Label>
-                    <Input id="experienceYears" value={formatDuration(previewTotalExperience)} readOnly disabled className="bg-muted" />
+                    <Label htmlFor="totalYearsOfExperience">Total Years of Experience</Label>
+                    <Input id="totalYearsOfExperience" value={formatDuration(previewTotalExperience)} readOnly disabled className="bg-muted" />
                     <p className="text-xs text-muted-foreground">
                       Calculated automatically from the From/To dates added under Professional Experience, plus time served since Date of Joining.
                     </p>
@@ -544,7 +546,7 @@ export default function NewFacultyPage() {
 
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
-                    <Label htmlFor="joiningDate">Date of Joining Institution *</Label>
+                    <Label htmlFor="joiningDate">Date of Joining *</Label>
                     <Input id="joiningDate" type="date" {...register("joiningDate")} />
                     {errors.joiningDate && <p className="text-sm text-destructive">{errors.joiningDate.message}</p>}
                   </div>

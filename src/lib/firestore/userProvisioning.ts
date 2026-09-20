@@ -6,6 +6,7 @@
 
 import { createFirebaseUser } from "@/lib/firebase/authRest";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
+import { normalizeAcademicProfile } from "@/lib/faculty/academicProfileCompat";
 import type { UserRole } from "@/types";
 
 export interface NewUserInput extends PersonalDetailsInput {
@@ -34,7 +35,7 @@ export async function provisionLocationUser(
   await db.collection("locations").doc(locationId).collection("locationUsers").doc(uid).set({
     uid, locationId, name: input.name, email: input.email, role,
     phone: input.phone ?? "",
-    ...(input.academicProfile ? { academicProfile: input.academicProfile } : {}),
+    ...(input.academicProfile ? { academicProfile: normalizeAcademicProfile(input.academicProfile) } : {}),
     ...(input.profilePhotoUrl ? { profilePhotoUrl: input.profilePhotoUrl } : {}),
     isActive: true, createdAt: now, updatedAt: now,
   });
@@ -66,7 +67,7 @@ export async function provisionCollegeUser(
     ...(input.employeeId ? { employeeId: input.employeeId } : {}),
     department: input.department ?? "",
     phone: input.phone ?? "",
-    ...(input.academicProfile ? { academicProfile: input.academicProfile } : {}),
+    ...(input.academicProfile ? { academicProfile: normalizeAcademicProfile(input.academicProfile) } : {}),
     ...(input.profilePhotoUrl ? { profilePhotoUrl: input.profilePhotoUrl } : {}),
     ...buildPersonalDetailsUpdate(input),
     isActive: true, createdAt: now, updatedAt: now,

@@ -8,6 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { RELIGION_LABELS, CASTE_LABELS, SUB_CASTES_BY_CASTE } from "@/types";
 import { PHONE_REGEX } from "@/lib/validations";
 import { StringListInput } from "@/components/shared/ProfileFieldPrimitives";
+import { migratePersonalFlat } from "@/lib/faculty/fieldRenames";
 import type { Religion, Caste } from "@/types";
 
 const BLOOD_GROUPS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"] as const;
@@ -26,17 +27,17 @@ export interface PersonalDetailsValue {
   subCaste?: string;
   aadharNo?: string;
   panNo?: string;
-  passportNumber?: string;
+  passportNo?: string;
   differentlyAbled?: boolean;
   differentlyAbledDetails?: string;
-  bankAccountNo?: string;
+  bankAccountNumber?: string;
   ifscCode?: string;
   bankName?: string;
   bankBranch?: string;
   bankOtherDetails?: string;
   emergencyContactName?: string;
   emergencyContactRelation?: string;
-  emergencyContactPhone?: string;
+  emergencyContactMobileNo?: string;
   ratificationStatus?: string;
   ratificationProceedingsNumber?: string;
   ratificationDate?: string;   // yyyy-mm-dd
@@ -44,7 +45,7 @@ export interface PersonalDetailsValue {
   spouseName?: string;
   numberOfChildren?: number;
   temporaryAddress?: string;
-  permanentSameAsTemporary?: boolean;
+  permanentAddressSameAsTemporary?: boolean;
   permanentAddress?: string;
   bloodGroup?: string;
   motherTongue?: string;
@@ -53,6 +54,7 @@ export interface PersonalDetailsValue {
   heightInches?: number;
   weightKg?: number;
   pfNumber?: string; // Provident Fund number - shown for every caller
+  uanNumber?: string; // Universal Account Number (EPFO) - shown for every caller, right after PF Number
   esiNumber?: string; // ESI number - Supporting/Non-Technical Staff only, see hiddenFields
 }
 
@@ -97,7 +99,10 @@ export function getMissingRequiredPersonalFields(
     .map((key) => PERSONAL_FIELD_LABELS[key] ?? key);
 }
 
-export function PersonalDetailsFields({ value, onChange, requiredFields = STAFF_REQUIRED_PERSONAL_FIELDS, hiddenFields = [] }: Props) {
+export function PersonalDetailsFields({ value: rawValue, onChange, requiredFields = STAFF_REQUIRED_PERSONAL_FIELDS, hiddenFields = [] }: Props) {
+  // Lift a record still carrying the legacy key names (passportNumber, bankAccountNo, ...)
+  // so this form only ever reads - and emits, via set()/onChange - the current key names.
+  const value = migratePersonalFlat(rawValue as Record<string, unknown>) as PersonalDetailsValue;
   function set<K extends keyof PersonalDetailsValue>(key: K, v: PersonalDetailsValue[K]) {
     onChange({ ...value, [key]: v });
   }
@@ -260,8 +265,8 @@ export function PersonalDetailsFields({ value, onChange, requiredFields = STAFF_
         <div className="space-y-2">
           <Label>Passport No</Label>
           <Input
-            value={value.passportNumber ?? ""}
-            onChange={(e) => set("passportNumber", e.target.value.toUpperCase())}
+            value={value.passportNo ?? ""}
+            onChange={(e) => set("passportNo", e.target.value.toUpperCase())}
             placeholder="N1234567"
             className="uppercase"
           />
@@ -280,14 +285,17 @@ export function PersonalDetailsFields({ value, onChange, requiredFields = STAFF_
             <SelectItem value="No">No</SelectItem>
           </SelectContent>
         </Select>
-        {value.differentlyAbled && (
+      </div>
+      {value.differentlyAbled && (
+        <div className="space-y-2">
+          <Label>Differently Abled Details</Label>
           <Input
             value={value.differentlyAbledDetails ?? ""}
             onChange={(e) => set("differentlyAbledDetails", e.target.value)}
             placeholder="Nature of disability"
           />
-        )}
-      </div>
+        </div>
+      )}
 
       <div className="pt-2 pb-1 border-t">
         <p className="text-sm font-medium text-muted-foreground">Personal Attributes</p>
@@ -375,7 +383,7 @@ export function PersonalDetailsFields({ value, onChange, requiredFields = STAFF_
         {value.maritalStatus === "Married" && (
           <>
             <div className="space-y-2">
-              <Label>{value.gender === "Female" ? "Husband Name" : "Spouse Name"}</Label>
+              <Label>Spouse Name</Label>
               <Input value={value.spouseName ?? ""} onChange={(e) => set("spouseName", e.target.value)} />
             </div>
             <div className="space-y-2">
@@ -397,15 +405,15 @@ export function PersonalDetailsFields({ value, onChange, requiredFields = STAFF_
       </div>
       <div className="flex items-center gap-2">
         <Checkbox
-          id="permanentSameAsTemporary"
-          checked={value.permanentSameAsTemporary ?? false}
-          onCheckedChange={(checked) => set("permanentSameAsTemporary", checked === true)}
+          id="permanentAddressSameAsTemporary"
+          checked={value.permanentAddressSameAsTemporary ?? false}
+          onCheckedChange={(checked) => set("permanentAddressSameAsTemporary", checked === true)}
         />
-        <Label htmlFor="permanentSameAsTemporary" className="cursor-pointer font-normal">
-          Permanent address same as temporary
+        <Label htmlFor="permanentAddressSameAsTemporary" className="cursor-pointer font-normal">
+          Permanent Address Same as Temporary
         </Label>
       </div>
-      {value.permanentSameAsTemporary ? (
+      {value.permanentAddressSameAsTemporary ? (
         <p className="text-xs text-muted-foreground">Permanent Address will be saved as the Temporary Address above - no need to enter it separately.</p>
       ) : (
         <div className="space-y-2">
@@ -419,8 +427,8 @@ export function PersonalDetailsFields({ value, onChange, requiredFields = STAFF_
       </div>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="space-y-2">
-          <Label>A/C Number</Label>
-          <Input value={value.bankAccountNo ?? ""} onChange={(e) => set("bankAccountNo", e.target.value)} placeholder="Bank account number" />
+          <Label>Bank Account Number</Label>
+          <Input value={value.bankAccountNumber ?? ""} onChange={(e) => set("bankAccountNumber", e.target.value)} placeholder="Bank account number" />
         </div>
         <div className="space-y-2">
           <Label>IFSC Code</Label>
@@ -440,12 +448,16 @@ export function PersonalDetailsFields({ value, onChange, requiredFields = STAFF_
           <Input value={value.bankName ?? ""} onChange={(e) => set("bankName", e.target.value)} placeholder="e.g. State Bank of India" />
         </div>
         <div className="space-y-2">
-          <Label>Branch</Label>
+          <Label>Bank Branch</Label>
           <Input value={value.bankBranch ?? ""} onChange={(e) => set("bankBranch", e.target.value)} placeholder="Branch name" />
         </div>
         <div className="space-y-2">
           <Label>PF Number</Label>
           <Input value={value.pfNumber ?? ""} onChange={(e) => set("pfNumber", e.target.value)} placeholder="Provident Fund number" />
+        </div>
+        <div className="space-y-2">
+          <Label>UAN Number</Label>
+          <Input value={value.uanNumber ?? ""} onChange={(e) => set("uanNumber", e.target.value)} placeholder="Universal Account Number" />
         </div>
         {!hidden("esiNumber") && (
           <div className="space-y-2">
@@ -454,7 +466,7 @@ export function PersonalDetailsFields({ value, onChange, requiredFields = STAFF_
           </div>
         )}
         <div className="space-y-2 sm:col-span-2">
-          <Label>Other Details</Label>
+          <Label>Bank Other Details</Label>
           <Textarea value={value.bankOtherDetails ?? ""} onChange={(e) => set("bankOtherDetails", e.target.value)} />
         </div>
       </div>
@@ -464,17 +476,17 @@ export function PersonalDetailsFields({ value, onChange, requiredFields = STAFF_
       </div>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="space-y-2">
-          <Label>Emergency Contact Person Name</Label>
+          <Label>Emergency Contact Name</Label>
           <Input value={value.emergencyContactName ?? ""} onChange={(e) => set("emergencyContactName", e.target.value)} placeholder="Name of contact person" />
         </div>
         <div className="space-y-2">
-          <Label>Relation (with Emergency Contact)</Label>
+          <Label>Emergency Contact Relation</Label>
           <Input value={value.emergencyContactRelation ?? ""} onChange={(e) => set("emergencyContactRelation", e.target.value)} placeholder="e.g. Spouse, Father, Brother" />
         </div>
         <div className="space-y-2">
           <Label>Emergency Contact Mobile No</Label>
-          <Input value={value.emergencyContactPhone ?? ""} onChange={(e) => set("emergencyContactPhone", e.target.value)} placeholder="+91 98765 43210" />
-          {!!value.emergencyContactPhone && !PHONE_REGEX.test(value.emergencyContactPhone) && (
+          <Input value={value.emergencyContactMobileNo ?? ""} onChange={(e) => set("emergencyContactMobileNo", e.target.value)} placeholder="+91 98765 43210" />
+          {!!value.emergencyContactMobileNo && !PHONE_REGEX.test(value.emergencyContactMobileNo) && (
             <p className="text-xs text-destructive">Doesn&rsquo;t look like a valid phone number</p>
           )}
         </div>
@@ -486,7 +498,19 @@ export function PersonalDetailsFields({ value, onChange, requiredFields = STAFF_
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="space-y-2">
           <Label>Ratification Status{mark("ratificationStatus")}</Label>
-          <Select value={value.ratificationStatus ?? ""} onValueChange={(v) => set("ratificationStatus", v)}>
+          <Select
+            value={value.ratificationStatus ?? ""}
+            onValueChange={(v) => {
+              // Proceedings Number/Date only make sense once Ratified - cleared
+              // the moment status moves away from it, so a later Save can never
+              // resend (and re-persist) a stale value from before this switch.
+              if (v !== "Ratified") {
+                onChange({ ...value, ratificationStatus: v, ratificationProceedingsNumber: "", ratificationDate: "" });
+              } else {
+                set("ratificationStatus", v);
+              }
+            }}
+          >
             <SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="Ratified">Ratified</SelectItem>
@@ -494,14 +518,18 @@ export function PersonalDetailsFields({ value, onChange, requiredFields = STAFF_
             </SelectContent>
           </Select>
         </div>
-        <div className="space-y-2">
-          <Label>Proceedings Number</Label>
-          <Input value={value.ratificationProceedingsNumber ?? ""} onChange={(e) => set("ratificationProceedingsNumber", e.target.value)} placeholder="Proceedings number" />
-        </div>
-        <div className="space-y-2">
-          <Label>Ratification Proceedings Date</Label>
-          <Input type="date" value={value.ratificationDate ?? ""} onChange={(e) => set("ratificationDate", e.target.value)} />
-        </div>
+        {value.ratificationStatus === "Ratified" && (
+          <>
+            <div className="space-y-2">
+              <Label>Ratification Proceedings Number</Label>
+              <Input value={value.ratificationProceedingsNumber ?? ""} onChange={(e) => set("ratificationProceedingsNumber", e.target.value)} placeholder="Proceedings number" />
+            </div>
+            <div className="space-y-2">
+              <Label>Ratification Date</Label>
+              <Input type="date" value={value.ratificationDate ?? ""} onChange={(e) => set("ratificationDate", e.target.value)} />
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

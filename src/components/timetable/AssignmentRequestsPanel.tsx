@@ -12,6 +12,7 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/useToast";
 import { useAuth } from "@/hooks/useAuth";
+import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import type { FacultyAssignmentRequest, FacultyMember } from "@/types";
 
 function ordinalYear(year: number) {
@@ -208,7 +209,7 @@ export function AssignmentRequestsPanel({ timetableHrefFor }: AssignmentRequests
                     >
                       <SelectTrigger className="w-64"><SelectValue placeholder={faculty.length ? "Select faculty" : "No faculty in your department"} /></SelectTrigger>
                       <SelectContent>
-                        {faculty.map((f) => <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>)}
+                        {faculty.map((f) => <SelectItem key={f.id} value={f.id}>{facultyDisplayName(f)}</SelectItem>)}
                       </SelectContent>
                     </Select>
                     <Button size="sm" loading={busyId === r.id} onClick={() => void handleAllocate(r.id)}>

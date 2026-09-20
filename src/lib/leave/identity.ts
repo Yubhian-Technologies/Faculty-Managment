@@ -69,7 +69,8 @@ export async function resolveEmployeeIdentity(
 
   if (!facultySnap.empty) {
     const f = facultySnap.docs[0].data() as {
-      name: string;
+      name?: string;
+      legalName?: string;
       department?: string;
       designation: string;
       joiningDate?: { toDate(): Date };
@@ -81,7 +82,9 @@ export async function resolveEmployeeIdentity(
     // supporting-staff.mjs), which is non-vacation like all other supporting
     // staff.
     return {
-      name: f.name,
+      // Full Name (as per SSC) preferred, Name (as per PAN) only as a fallback -
+      // same precedence facultyDisplayName() uses everywhere else.
+      name: f.legalName?.trim() || f.name?.trim() || "",
       department: f.department,
       isTeachingStaff: !LEGACY_TECHNICAL_DESIGNATIONS.includes(f.designation),
       dateOfJoining: f.joiningDate?.toDate?.() ?? new Date(),

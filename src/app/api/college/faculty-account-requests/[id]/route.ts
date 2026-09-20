@@ -38,7 +38,7 @@ async function provisionWithFallback(
   offerId: string,
   emails: string[],
   password: string,
-  profileFields?: { employeeCategory?: EmployeeCategory; qualification?: string; specialization?: string }
+  profileFields?: { employeeCategory?: EmployeeCategory; highestQualification?: string; specialization?: string }
 ): Promise<{ result: ProvisionResult; assignedEmail?: string }> {
   let lastResult: ProvisionResult = { status: "no_email" };
   for (const email of emails) {
@@ -157,7 +157,8 @@ export async function PATCH(
         reqData.offerId,
         candidateEmails,
         password,
-        { employeeCategory: reqData.employeeCategory, qualification: reqData.qualification, specialization: reqData.specialization }
+        // The request record's own `qualification` is what the office typed into "Highest Qualification".
+        { employeeCategory: reqData.employeeCategory, highestQualification: reqData.qualification, specialization: reqData.specialization }
       );
       if (result.status === "not_found") {
         return NextResponse.json({ error: "Offer letter or candidate not found" }, { status: 404 });

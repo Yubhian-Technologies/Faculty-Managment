@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/useToast";
+import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import type { EmailCreationRequest, FacultyMember } from "@/types";
 
 export default function NewEmailRequestPage() {
@@ -108,7 +109,7 @@ export default function NewEmailRequestPage() {
                 ) : (
                   eligibleFaculty.map((f) => (
                     <SelectItem key={f.id} value={f.id}>
-                      {f.name} — {f.designation} · {f.department}
+                      {facultyDisplayName(f)} — {f.designation} · {f.department}
                     </SelectItem>
                   ))
                 )}

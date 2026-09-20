@@ -12,28 +12,31 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TextInput } from "@/components/shared/ProfileFieldPrimitives";
 import { HIGHEST_QUALIFICATION_OPTIONS } from "@/lib/import/fieldConstraints";
+import { normalizeHighestQualification } from "@/lib/faculty/highestQualification";
 import { PHONE_REGEX } from "@/lib/validations";
 import { toast } from "@/hooks/useToast";
+import { migrateFacultyDoc } from "@/lib/faculty/fieldRenames";
 import { formatDate } from "@/lib/utils";
 import { DESIGNATION_LABELS, EMPLOYEE_CATEGORY_LABELS } from "@/types";
 import type { FacultyMember } from "@/types";
 
 // Sentinel for the "Others" row - matches hod/faculty/new/page.tsx's own
-// qualification picker.
+// highest-qualification picker.
 const OTHER_QUALIFICATION = "__OTHER__";
 
 interface IdentityForm {
   legalName: string;
   name: string;
   apaarFacultyId: string;
-  qualification: string;
+  aicteFacultyId: string;
+  highestQualification: string;
   specialization: string;
   email: string;
   phone: string;
 }
 
 const EMPTY_FORM: IdentityForm = {
-  legalName: "", name: "", apaarFacultyId: "", qualification: "", specialization: "", email: "", phone: "",
+  legalName: "", name: "", apaarFacultyId: "", aicteFacultyId: "", highestQualification: "", specialization: "", email: "", phone: "",
 };
 
 // Self-service Identity & Employment editor for the "My Profile" page - the
@@ -54,18 +57,17 @@ export default function EditMyProfileIdentityPage() {
   const [designationLabel, setDesignationLabel] = useState("");
   const [employeeCategoryLabel, setEmployeeCategoryLabel] = useState("");
   const [joiningDateLabel, setJoiningDateLabel] = useState("");
-  const [aicteFacultyId, setAicteFacultyId] = useState("");
   const [form, setForm] = useState<IdentityForm>(EMPTY_FORM);
   const [qualIsOther, setQualIsOther] = useState(false);
   const [extraPhones, setExtraPhones] = useState<{ label?: string; number: string }[]>([]);
 
   useEffect(() => {
     fetch("/api/college/faculty/me")
-      .then((r) => r.json() as Promise<{ faculty: Partial<FacultyMember> | null }>)
+      .then((r) => r.json() as Promise<{ faculty: Partial<FacultyMember> | null; message?: string }>)
       .then((d) => {
-        const m = d.faculty;
+        const m = d.faculty ? (migrateFacultyDoc(d.faculty as Record<string, unknown>) as Partial<FacultyMember>) : null;
         if (!m) {
-          toast({ variant: "destructive", title: "Profile record not found" });
+          toast({ variant: "destructive", title: d.message ?? "Profile record not found" });
           router.push("/panel/profile");
           return;
         }
@@ -75,14 +77,14 @@ export default function EditMyProfileIdentityPage() {
         setDesignationLabel(m.designation ? (DESIGNATION_LABELS[m.designation] ?? m.designation) : "-");
         setEmployeeCategoryLabel(m.employeeCategory ? (EMPLOYEE_CATEGORY_LABELS[m.employeeCategory] ?? m.employeeCategory) : "-");
         setJoiningDateLabel(m.joiningDate ? formatDate(m.joiningDate) : "-");
-        setAicteFacultyId(m.aicteFacultyId ?? "-");
-        const qualification = m.qualification ?? "";
-        setQualIsOther(!!qualification && !(HIGHEST_QUALIFICATION_OPTIONS as readonly string[]).includes(qualification));
+        const highestQualification = normalizeHighestQualification(m.highestQualification);
+        setQualIsOther(!!highestQualification && !(HIGHEST_QUALIFICATION_OPTIONS as readonly string[]).includes(highestQualification));
         setForm({
           legalName: m.legalName ?? "",
           name: m.name ?? "",
           apaarFacultyId: m.apaarFacultyId ?? "",
-          qualification,
+          aicteFacultyId: m.aicteFacultyId ?? "",
+          highestQualification,
           specialization: m.specialization ?? "",
           email: m.email ?? "",
           phone: m.phone ?? "",
@@ -104,7 +106,7 @@ export default function EditMyProfileIdentityPage() {
       toast({ variant: "destructive", title: "Full Name (as per SSC) is required" });
       return;
     }
-    if (!form.qualification.trim()) {
+    if (!form.highestQualification.trim()) {
       toast({ variant: "destructive", title: "Highest Qualification is required" });
       return;
     }
@@ -122,7 +124,8 @@ export default function EditMyProfileIdentityPage() {
           legalName: form.legalName.trim().toUpperCase(),
           name: form.name.trim(),
           apaarFacultyId: form.apaarFacultyId.trim(),
-          qualification: form.qualification.trim(),
+          aicteFacultyId: form.aicteFacultyId.trim(),
+          highestQualification: form.highestQualification.trim(),
           specialization: form.specialization.trim(),
           email: form.email.trim(),
           phone: form.phone.trim(),
@@ -161,7 +164,7 @@ export default function EditMyProfileIdentityPage() {
           <CardHeader><CardTitle className="text-base">Identity & Employment</CardTitle></CardHeader>
           <CardContent className="space-y-5">
             <p className="text-xs text-muted-foreground -mt-2">
-              Employee ID, College Email, Department, Designation, Employee Category, Date of Joining and AICTE Faculty ID are set by your HOD/Principal and can&apos;t be changed here.
+              Employee ID, College Email, Department, Designation, Employee Category, and Date of Joining are set by your HOD/Principal and can&apos;t be changed here.
             </p>
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -212,11 +215,11 @@ export default function EditMyProfileIdentityPage() {
               <div className="space-y-2">
                 <Label>Highest Qualification *</Label>
                 <Select
-                  value={qualIsOther ? OTHER_QUALIFICATION : (HIGHEST_QUALIFICATION_OPTIONS as readonly string[]).includes(form.qualification) ? form.qualification : ""}
+                  value={qualIsOther ? OTHER_QUALIFICATION : (HIGHEST_QUALIFICATION_OPTIONS as readonly string[]).includes(form.highestQualification) ? form.highestQualification : ""}
                   onValueChange={(v) => {
                     const other = v === OTHER_QUALIFICATION;
                     setQualIsOther(other);
-                    set({ qualification: other ? "" : v });
+                    set({ highestQualification: other ? "" : v });
                   }}
                 >
                   <SelectTrigger><SelectValue placeholder="Select qualification" /></SelectTrigger>
@@ -226,7 +229,7 @@ export default function EditMyProfileIdentityPage() {
                   </SelectContent>
                 </Select>
                 {qualIsOther && (
-                  <Input value={form.qualification} onChange={(e) => set({ qualification: e.target.value })} placeholder="e.g. MBA, M.Phil, M.A" />
+                  <Input value={form.highestQualification} onChange={(e) => set({ highestQualification: e.target.value })} placeholder="e.g. B.Ed, MCA" />
                 )}
               </div>
               <div className="space-y-2">
@@ -240,12 +243,12 @@ export default function EditMyProfileIdentityPage() {
             </div>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label>Date of Joining Institution</Label>
+                <Label>Date of Joining</Label>
                 <Input value={joiningDateLabel} disabled />
               </div>
               <div className="space-y-2">
                 <Label>AICTE Faculty ID</Label>
-                <Input value={aicteFacultyId} disabled />
+                <Input value={form.aicteFacultyId} onChange={(e) => set({ aicteFacultyId: e.target.value })} placeholder="AICTE Faculty ID" />
               </div>
             </div>
 

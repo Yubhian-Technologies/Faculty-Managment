@@ -25,7 +25,7 @@ import { CreateHodDialog } from "@/components/college/CreateHodDialog";
 import { DepartmentChipList } from "@/components/shared/DepartmentChipList";
 import { useMyDepartments } from "@/hooks/useMyDepartments";
 import { toast } from "@/hooks/useToast";
-import { buildManagedBranchOwner, type DepartmentWithId } from "@/lib/college/academicStructure";
+import { buildManagedBranchOwner, replaceNoOwnSectionsParents, departmentRunsOwnSections, type DepartmentWithId } from "@/lib/college/academicStructure";
 import type { Department, FMSUser, Section, StudentListItem } from "@/types";
 
 interface SubDeptSummary {
@@ -113,7 +113,12 @@ export default function SubDepartmentsSettingsPage() {
             // secondaryDepartment naming their real branch (see
             // students/[id] PATCH) - so a student counts here when EITHER
             // field is one of this sub-department's managed branches.
-            const branchNames = new Set(dept.managedDepartments ?? []);
+            // Narrowed first: a grouped department that runs no sections of
+            // its own never appears on a section or a student - its children
+            // do - so counting by the stored name alone reported 0.
+            const branchNames = new Set(
+              replaceNoOwnSectionsParents(departments as DepartmentWithId[], dept.managedDepartments ?? [])
+            );
             return {
               dept,
               studentCount: students.filter((s) => branchNames.has(s.department) || branchNames.has(s.secondaryDepartment ?? "")).length,
@@ -195,7 +200,14 @@ export default function SubDepartmentsSettingsPage() {
   function openEditDialog(dept: Department) {
     setEditTarget(dept);
     setEditHodUid(dept.hodUid ?? "");
-    setEditManagedDepartments(dept.managedDepartments ?? []);
+    // Narrowed for the same reason the chips are: a grouped department that
+    // runs no sections of its own is no longer offered in the picker below, so
+    // carrying it in state unseen would silently re-save it (and bring the
+    // chip back) the next time this dialog is saved. Its children stand in for
+    // it, which is what every reader already resolves it to.
+    setEditManagedDepartments(
+      replaceNoOwnSectionsParents(allDepartments as DepartmentWithId[], dept.managedDepartments ?? [])
+    );
   }
 
   function toggleEditManagedDepartment(deptName: string, checked: boolean) {
@@ -255,6 +267,34 @@ export default function SubDepartmentsSettingsPage() {
     }
   }
 
+  // What a sub-department may be given to manage: the branches the PRINCIPAL
+  // cross-listed on this parent department (its Core Departments), which is
+  // exactly what this page is for - dividing the parent's own branches among
+  // its sub-departments. Previously this was an independently-derived list of
+  // every top-level department in the college, so it disagreed with the
+  // Principal's Core Departments in both directions: it offered branches this
+  // department doesn't feed, and it hid the sub-department branches (e.g.
+  // AIML, AIDS, ECE - VLSI) that the Core Departments list does offer.
+  //
+  // Falls back to the old list when the Principal has set no Core Departments
+  // at all, so a college that never configured cross-listing can still group
+  // branches exactly as before. Either way a department that runs no sections
+  // of its own is excluded - it can hold neither sections nor students, so
+  // managing it is meaningless (its children are listed in its place).
+  const manageableBranches = useMemo(() => {
+    if (!ownDept) return [];
+    const configured = replaceNoOwnSectionsParents(
+      allDepartments as DepartmentWithId[],
+      ownDept.secondaryDepartments ?? []
+    );
+    const pool = configured.length > 0
+      ? configured
+          .map((n) => allDepartments.find((d) => d.name === n))
+          .filter((d): d is Department => Boolean(d))
+      : allDepartments.filter((d) => !d.parentDepartmentId);
+    return pool.filter((d) => d.name !== ownDept.name && departmentRunsOwnSections(d));
+  }, [allDepartments, ownDept]);
+
   if (isLoading) {
     return (
       <div className="space-y-6">
@@ -263,6 +303,7 @@ export default function SubDepartmentsSettingsPage() {
       </div>
     );
   }
+
 
   // Sub-departments are one level deep only - a sub-department can never
   // have sub-departments of its own, so a Sub-HOD landing here (e.g. a stale
@@ -393,9 +434,7 @@ export default function SubDepartmentsSettingsPage() {
                 <div className="space-y-2">
                   <Label>Core Departments</Label>
                   {(() => {
-                    const options = allDepartments.filter(
-                      (d) => !d.parentDepartmentId && d.name !== ownDept.name && d.name !== name
-                    );
+                    const options = manageableBranches.filter((d) => d.name !== name);
                     return options.length > 0 ? (
                       <div className="flex flex-wrap gap-3 border rounded-md px-3 py-2">
                         {options.map((d) => {
@@ -419,7 +458,7 @@ export default function SubDepartmentsSettingsPage() {
                       </div>
                     ) : (
                       <p className="text-sm text-muted-foreground border rounded-md px-3 py-2">
-                        No other top-level departments yet
+                        No branches available - ask your Principal to set this department&apos;s Core Departments.
                       </p>
                     );
                   })()}
@@ -493,7 +532,10 @@ export default function SubDepartmentsSettingsPage() {
                 {dept.managedDepartments && dept.managedDepartments.length > 0 && (
                   <div>
                     <p className="text-xs text-muted-foreground">Core Departments</p>
-                    <DepartmentChipList names={dept.managedDepartments} className="mt-1" />
+                    <DepartmentChipList
+                      names={replaceNoOwnSectionsParents(allDepartments as DepartmentWithId[], dept.managedDepartments)}
+                      className="mt-1"
+                    />
                   </div>
                 )}
               </CardContent>
@@ -540,9 +582,7 @@ export default function SubDepartmentsSettingsPage() {
             <div className="space-y-2">
               <Label>Managed Departments</Label>
               {(() => {
-                const options = allDepartments.filter(
-                  (d) => !d.parentDepartmentId && d.name !== ownDept?.name && d.name !== editTarget?.name
-                );
+                const options = manageableBranches.filter((d) => d.name !== editTarget?.name);
                 return options.length > 0 ? (
                   <div className="flex flex-wrap gap-3 border rounded-md px-3 py-2">
                     {options.map((d) => {
@@ -569,7 +609,7 @@ export default function SubDepartmentsSettingsPage() {
                   </div>
                 ) : (
                   <p className="text-sm text-muted-foreground border rounded-md px-3 py-2">
-                    No other top-level departments yet
+                    No branches available - ask your Principal to set this department&apos;s Core Departments.
                   </p>
                 );
               })()}

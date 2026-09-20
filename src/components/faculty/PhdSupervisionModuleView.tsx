@@ -109,6 +109,26 @@ interface RecordFormState {
   awardDetails: string;
 }
 
+// "No. of Years Completed" is derived, never typed: from the allocation year
+// up to the award year once the degree is awarded, or to the current year
+// while it isn't.
+//
+// Module scope so BOTH the live form (setAndCount) and initialFormState use
+// it. That matters for an ongoing scholarship: its stored count was correct
+// whenever it was last saved and is stale by a year or more now, so an editor
+// opening the record has to recompute rather than show what was persisted.
+function computeYearsCompleted(next: RecordFormState): string {
+  const start = Number(String(next.yearOfAllocation).trim());
+  if (!Number.isFinite(start) || start <= 0) return "";
+  const endYear = next.degreeAwarded === "YES"
+    ? (next.dateOfAward ? new Date(next.dateOfAward).getFullYear() : NaN)
+    : new Date().getFullYear();
+  if (!Number.isFinite(endYear)) return "";
+  // Never negative - an award date before the allocation year is the
+  // submitter's typo to fix, not something to show as "-2 years".
+  return String(Math.max(0, endYear - start));
+}
+
 function initialFormState(editing: PhdSupervisionRequest | null): RecordFormState {
   const n = (v: number | undefined) => (v !== undefined ? String(v) : "");
   if (!editing) {
@@ -120,12 +140,12 @@ function initialFormState(editing: PhdSupervisionRequest | null): RecordFormStat
       awardsReceived: "", awardName: "", awardType: "", awardNature: "", awardDetails: "",
     };
   }
-  return {
+  const base: RecordFormState = {
     recognizedSupervisor: editing.recognizedSupervisor, otherUniversityName: editing.otherUniversityName ?? "",
     guideStatus: editing.guideStatus, scholarName: editing.scholarName, scholarDepartment: editing.scholarDepartment ?? "",
     scholarAffiliation: editing.scholarAffiliation ?? "", scholarPhone: editing.scholarPhone ?? "",
     yearOfAllocation: editing.yearOfAllocation ?? "", allotmentOrderUrl: editing.allotmentOrderUrl ?? "",
-    yearsCompleted: n(editing.yearsCompleted), degreeAwarded: editing.degreeAwarded ?? "",
+    yearsCompleted: "", degreeAwarded: editing.degreeAwarded ?? "",
     dateOfAward: editing.dateOfAward ?? "", awardedDegreeProofUrl: editing.awardedDegreeProofUrl ?? "",
     papersPublished: editing.papersPublished ?? [], patents: editing.patents ?? [],
     fellowshipReceived: editing.fellowshipReceived ?? "", fellowshipType: editing.fellowshipType ?? "",
@@ -133,6 +153,7 @@ function initialFormState(editing: PhdSupervisionRequest | null): RecordFormStat
     awardsReceived: editing.awardsReceived ?? "", awardName: editing.awardName ?? "",
     awardType: editing.awardType ?? "", awardNature: editing.awardNature ?? "", awardDetails: editing.awardDetails ?? "",
   };
+  return { ...base, yearsCompleted: computeYearsCompleted(base) };
 }
 
 function RecordFormFields({
@@ -148,6 +169,15 @@ function RecordFormFields({
 
   function set<K extends keyof RecordFormState>(key: K, value: RecordFormState[K]) {
     setForm((f) => ({ ...f, [key]: value }));
+  }
+
+
+  /** Sets a field that feeds the years count, and recounts in the same update. */
+  function setAndCount<K extends keyof RecordFormState>(key: K, value: RecordFormState[K]) {
+    setForm((f) => {
+      const next = { ...f, [key]: value };
+      return { ...next, yearsCompleted: computeYearsCompleted(next) };
+    });
   }
 
   const isValid = !!form.recognizedSupervisor && !!form.guideStatus && form.scholarName.trim().length > 1;
@@ -256,9 +286,48 @@ function RecordFormFields({
             <TextInput label="Phone Number of Scholar" value={form.scholarPhone} onChange={(v) => set("scholarPhone", v)} />
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <TextInput label="Year of Scholar Allocation" value={form.yearOfAllocation} onChange={(v) => set("yearOfAllocation", v)} placeholder="e.g. 2022" />
-            <NumInput label="No. of Years Completed" value={toNumberOrUndefined(form.yearsCompleted)} onChange={(v) => set("yearsCompleted", String(v))} />
+            <TextInput label="Year of Scholar Allocation" value={form.yearOfAllocation} onChange={(v) => setAndCount("yearOfAllocation", v)} placeholder="e.g. 2022" />
+            {/* Derived, so it's shown read-only rather than as an input a
+                submitter could put a conflicting number into. */}
+            <div className="space-y-2">
+              <Label>No. of Years Completed</Label>
+              <Input value={form.yearsCompleted} readOnly tabIndex={-1} className="bg-muted/50" placeholder="—" />
+              <p className="text-xs text-muted-foreground">
+                {form.degreeAwarded === "YES"
+                  ? "Counted from the allocation year to the year of award."
+                  : "Counted from the allocation year to the current year."}
+              </p>
+            </div>
           </div>
+
+          {/* Degree status sits here, next to the allocation year, because it
+              decides what the years count above is measured to. */}
+          <div className="space-y-4">
+            <div className="space-y-2 max-w-[200px]">
+              <Label>Is the Degree Awarded</Label>
+              <Select value={form.degreeAwarded} onValueChange={(v) => setAndCount("degreeAwarded", v as "YES" | "NO")}>
+                <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="YES">Yes</SelectItem>
+                  <SelectItem value="NO">No</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {form.degreeAwarded === "YES" && (
+              <div className="space-y-4 rounded-lg border p-3">
+                <DateInput label="Date of Awarded" value={form.dateOfAward} onChange={(v) => setAndCount("dateOfAward", v)} />
+                <DocumentUploadField
+                  label="Awarded Degree"
+                  value={form.awardedDegreeProofUrl}
+                  uploadEndpoint="/api/upload/phd-doc"
+                  extraFields={{ kind: "awarded-degree" }}
+                  onUploaded={(url) => set("awardedDegreeProofUrl", url)}
+                  onRemoved={() => set("awardedDegreeProofUrl", "")}
+                />
+              </div>
+            )}
+          </div>
+
           <DocumentUploadField
             label="Allotment Order"
             value={form.allotmentOrderUrl}
@@ -269,32 +338,6 @@ function RecordFormFields({
           />
         </div>
 
-        <div className="space-y-4">
-          <SubLabel>Degree Status</SubLabel>
-          <div className="space-y-2 max-w-[200px]">
-            <Label>Is the Degree Awarded</Label>
-            <Select value={form.degreeAwarded} onValueChange={(v) => set("degreeAwarded", v as "YES" | "NO")}>
-              <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="YES">Yes</SelectItem>
-                <SelectItem value="NO">No</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          {form.degreeAwarded === "YES" && (
-            <div className="space-y-4 rounded-lg border p-3">
-              <DateInput label="Date of Awarded" value={form.dateOfAward} onChange={(v) => set("dateOfAward", v)} />
-              <DocumentUploadField
-                label="Awarded Degree"
-                value={form.awardedDegreeProofUrl}
-                uploadEndpoint="/api/upload/phd-doc"
-                extraFields={{ kind: "awarded-degree" }}
-                onUploaded={(url) => set("awardedDegreeProofUrl", url)}
-                onRemoved={() => set("awardedDegreeProofUrl", "")}
-              />
-            </div>
-          )}
-        </div>
       </div>
 
       <div className="space-y-5">

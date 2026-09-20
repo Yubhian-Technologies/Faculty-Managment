@@ -18,7 +18,7 @@ type MyFaculty = Partial<FacultyMember> & { id: string; isActive?: boolean };
 // same way MyProfileDetails used to. Principal/VP's own profile sources from
 // the authStore user directly instead (no FacultyMember record - see
 // principal/profile/page.tsx), so it doesn't use this.
-export function MyProfileModulePage({ basePath }: { basePath: string }) {
+export function MyProfileModulePage({ basePath, hideLegalName = false }: { basePath: string; hideLegalName?: boolean }) {
   const params = useParams<{ module: string }>();
   const moduleKey = params.module as ProfileModuleKey;
   const moduleDef = PROFILE_MODULES[moduleKey];
@@ -27,13 +27,16 @@ export function MyProfileModulePage({ basePath }: { basePath: string }) {
   const [faculty, setFaculty] = useState<MyFaculty | null>(null);
   const [teachingAssignments, setTeachingAssignments] = useState<TeachingAssignment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  // Why there is no record, when the server says so (a Faculty login with no linked faculty record).
+  const [noRecordMessage, setNoRecordMessage] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/college/faculty/me")
-      .then((r) => r.json() as Promise<{ faculty: MyFaculty | null; teachingAssignments?: TeachingAssignment[] }>)
+      .then((r) => r.json() as Promise<{ faculty: MyFaculty | null; teachingAssignments?: TeachingAssignment[]; message?: string }>)
       .then((d) => {
         setFaculty(d.faculty);
         setTeachingAssignments(d.teachingAssignments ?? []);
+        setNoRecordMessage(d.message ?? null);
       })
       .catch(() => setFaculty(null))
       .finally(() => setIsLoading(false));
@@ -62,9 +65,9 @@ export function MyProfileModulePage({ basePath }: { basePath: string }) {
       {isLoading ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
       ) : faculty ? (
-        <FacultyProfileModuleContent moduleKey={moduleKey} faculty={faculty} teachingAssignments={teachingAssignments} collegeType={collegeType} isOwnProfile />
+        <FacultyProfileModuleContent moduleKey={moduleKey} faculty={faculty} teachingAssignments={teachingAssignments} collegeType={collegeType} isOwnProfile hideLegalName={hideLegalName} />
       ) : (
-        <p className="text-sm text-muted-foreground">No profile record found.</p>
+        <p className="text-sm text-muted-foreground">{noRecordMessage ?? "No profile record found."}</p>
       )}
     </div>
   );

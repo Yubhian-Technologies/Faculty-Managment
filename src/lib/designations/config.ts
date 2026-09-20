@@ -74,6 +74,17 @@ export function designationLabel(value: string | undefined | null): string {
   return DESIGNATION_LABELS[value] ?? NON_TECHNICAL_STAFF_DESIGNATION_LABELS[value] ?? value;
 }
 
+// Identity key for "is this the same designation?" - compares the DISPLAY label,
+// case/punctuation-insensitive, so the legacy code "ASSISTANT_PROFESSOR" and a
+// hand-typed "Assistant Professor" count as the same entry. Used by the
+// Designation Catalog's duplicate check: without it an admin could add
+// "Assistant Professor" beside the existing "ASSISTANT_PROFESSOR" entry and new
+// faculty would be saved under a different stored value than existing ones.
+export function designationKey(value: string | undefined | null): string {
+  const label = value?.trim() ? designationLabel(value.trim()) : "";
+  return label.toLowerCase().replace(/[^a-z0-9+]+/g, " ").trim();
+}
+
 // Whether this college type has a real Technical (HOD-owned) / Non-Technical
 // (Principal/College Office-owned) Supporting Staff split at all - School
 // deliberately doesn't (its supporting staff is centrally managed,

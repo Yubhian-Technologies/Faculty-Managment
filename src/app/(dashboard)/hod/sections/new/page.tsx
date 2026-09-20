@@ -13,8 +13,9 @@ import { toast } from "@/hooks/useToast";
 import { useMyDepartments } from "@/hooks/useMyDepartments";
 import { findBranchManager } from "@/lib/departments/managedBranches";
 import { buildCourseGroups, managerEffectiveYears } from "@/lib/departments/hodScope";
-import { resolveDepartmentCourseScope, regulationsForBatchStartYear } from "@/lib/college/academicStructure";
+import { resolveDepartmentCourseScope, regulationsForBatchStartYear, replaceNoOwnSectionsParents, type DepartmentWithId } from "@/lib/college/academicStructure";
 import { currentAcademicStartYear, admissionStartYearForCourseYear, deriveBatch, sectionBatchIntakeYears, parseBatchStartYear } from "@/lib/college/academicSession";
+import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import type { Course, CourseCatalogItem, Department } from "@/types";
 
 // `id` is the facultyMembers doc id — used only as the React/Select key.
@@ -41,6 +42,10 @@ export default function NewSectionPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const prefilledCourseId = searchParams.get("courseId") ?? "";
+  // Which department the Sections list was filtered by when Add Section was
+  // pressed - see DepartmentScopeSelect's own `preferredDepartmentId`, which
+  // resolves it (and quietly ignores a stale one).
+  const prefilledDepartmentId = searchParams.get("departmentId") ?? "";
   const myDepartments = useMyDepartments();
 
   const [courses, setCourses] = useState<Course[]>([]);
@@ -94,8 +99,8 @@ export default function NewSectionPage() {
   useEffect(() => {
     fetch("/api/college/faculty?status=ACTIVE")
       .then((r) => r.json())
-      .then((d: { faculty?: { id: string; name: string; designation: string; userUid?: string }[] }) => {
-        setFacultyList((d.faculty ?? []).map((f) => ({ id: f.id, name: f.name, designation: f.designation, userUid: f.userUid })));
+      .then((d: { faculty?: { id: string; name?: string; legalName?: string; designation: string; userUid?: string }[] }) => {
+        setFacultyList((d.faculty ?? []).map((f) => ({ id: f.id, name: facultyDisplayName(f), designation: f.designation, userUid: f.userUid })));
       })
       .catch(() => { /* non-critical */ });
 
@@ -330,18 +335,35 @@ export default function NewSectionPage() {
   // B.Tech does). When it does, the section feeds a branch instead of using a
   // free-typed name. Only relevant when managed-branch mode above doesn't
   // already apply.
+  // A configured branch that is itself split into sub-departments and does NOT
+  // run its own sections (Department.parentRunsOwnSections - the "This
+  // department also has its own sections/students" toggle on Edit Department)
+  // is not a real destination: its students live in its sub-departments. Such a
+  // branch is replaced here by those sub-departments, so "AI" gives way to
+  // "AI & Machine Learning" / "AI & Data Science" rather than being offered
+  // alongside them as a third, unusable choice.
+  //
+  // Deliberately NOT applied when the branch runs its own sections too (the
+  // toggle on) - then parent and children are all legitimate destinations - nor
+  // when it has no sub-departments yet, which would otherwise remove the only
+  // option and make the section impossible to create.
+  const expandBranches = useCallback(
+    (names: string[]) => replaceNoOwnSectionsParents(departments as DepartmentWithId[], names),
+    [departments]
+  );
+
   const branchOptions = useMemo(() => {
     if (isManagedBranchMode || !activeDept) return [];
     const ownBranches = resolveDepartmentCourseScope(activeDept, formCourse?.catalogId).secondaryDepartments;
-    if (ownBranches.length) return ownBranches;
+    if (ownBranches.length) return expandBranches(ownBranches);
     // A sub-department inherits its parent's configured branches, so a sub-HOD
     // can create the shared first-year branch sections too.
     if (activeDept.parentDepartmentId) {
       const parent = departments.find((d) => d.id === activeDept.parentDepartmentId);
-      return parent ? resolveDepartmentCourseScope(parent, formCourse?.catalogId).secondaryDepartments : [];
+      return parent ? expandBranches(resolveDepartmentCourseScope(parent, formCourse?.catalogId).secondaryDepartments) : [];
     }
     return [];
-  }, [isManagedBranchMode, activeDept, departments, formCourse]);
+  }, [isManagedBranchMode, activeDept, departments, formCourse, expandBranches]);
   const isBranchMode = branchOptions.length > 0;
   const branchCodeOf = (name: string) =>
     departments.find((d) => d.name === name)?.code?.trim() || name;
@@ -480,6 +502,7 @@ export default function NewSectionPage() {
                 setF({ year: "", courseId: "" }); setBranch(""); setLetter("");
               }}
               hint="Create this section in your own department or one of its sub-departments."
+              preferredDepartmentId={prefilledDepartmentId}
             />
 
             <div className="space-y-2">

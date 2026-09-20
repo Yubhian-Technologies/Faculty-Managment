@@ -91,7 +91,7 @@ export interface SupportingStaffMember {
   designation: SupportingStaffDesignation;
   otherDesignationTitle?: string; // when designation === "OTHER"
   // Flat mandatory field, distinct from supportingStaffProfile.qualifications
-  // (the deeper qualifications-list module) - mirrors FacultyMember.qualification.
+  // (the deeper qualifications-list module) - mirrors FacultyMember.highestQualification.
   qualification?: string;
   experienceYears: number;
   joiningDate: Timestamp;
@@ -116,15 +116,15 @@ export interface SupportingStaffMember {
   subCaste?: string;
   aadharNo?: string;
   panNo?: string;
-  passportNumber?: string;
-  bankAccountNo?: string;
+  passportNo?: string;
+  bankAccountNumber?: string;
   ifscCode?: string;
   bankName?: string;
   bankBranch?: string;
   bankOtherDetails?: string;
   emergencyContactName?: string;
   emergencyContactRelation?: string; // relation of the emergency contact to this person
-  emergencyContactPhone?: string;
+  emergencyContactMobileNo?: string;
   ratificationStatus?: "Ratified" | "Not Ratified";
   ratificationProceedingsNumber?: string;
   ratificationDate?: Timestamp; // Ratification Proceedings Date
@@ -132,7 +132,7 @@ export interface SupportingStaffMember {
   spouseName?: string;
   numberOfChildren?: number;
   temporaryAddress?: string;
-  permanentSameAsTemporary?: boolean;
+  permanentAddressSameAsTemporary?: boolean;
   permanentAddress?: string;
   bloodGroup?: string;
   motherTongue?: string;
@@ -141,6 +141,7 @@ export interface SupportingStaffMember {
   heightInches?: number;
   weightKg?: number;
   pfNumber?: string; // Provident Fund number
+  uanNumber?: string; // Universal Account Number (EPFO) - shown right after PF Number
   esiNumber?: string; // ESI number
 
   supportingStaffProfile?: SupportingStaffProfileFields;

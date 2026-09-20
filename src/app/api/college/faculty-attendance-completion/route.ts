@@ -121,7 +121,7 @@ export async function GET(request: Request) {
         };
       });
 
-      return NextResponse.json({ facultyId, facultyName: faculty.name, date, periods });
+      return NextResponse.json({ facultyId, facultyName: facultyDisplayName(faculty), date, periods });
     }
 
     if (!department || !courseId) {
