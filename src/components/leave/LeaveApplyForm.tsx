@@ -67,6 +67,11 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
   const [periods, setPeriods] = useState<PeriodCoverageEntry[]>([]);
   const [isLoadingPeriods, setIsLoadingPeriods] = useState(false);
   const [substituteByPeriod, setSubstituteByPeriod] = useState<Record<string, string>>({});
+  // "" = every department (today's default, own department already sorts
+  // first within that). Narrows every period's own candidate list at once -
+  // the API already returns candidates from every department (busy/on-leave
+  // people already excluded server-side), this just scopes what's shown.
+  const [substituteDeptFilter, setSubstituteDeptFilter] = useState("");
   // Optional handover/point-of-contact - any requester, teaching or not, can
   // name a same-department colleague to handle other responsibilities while
   // they're out. Separate from and in addition to period substitutes above -
@@ -244,6 +249,7 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
     if (!leaveTypeCode || leaveTypeCode === "OTHER" || leaveTypeCode === "SH" || !fromDate || !toDate || toDate < fromDate) {
       setPeriods([]);
       setSubstituteByPeriod({});
+      setSubstituteDeptFilter("");
       return;
     }
     let cancelled = false;
@@ -254,6 +260,7 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
         if (cancelled) return;
         setPeriods(data.periods ?? []);
         setSubstituteByPeriod({});
+        setSubstituteDeptFilter("");
       })
       .catch(() => {
         if (!cancelled) setPeriods([]);
@@ -263,6 +270,33 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
       });
     return () => { cancelled = true; };
   }, [leaveTypeCode, fromDate, toDate]);
+
+  // Every department any period's candidates actually belong to - not a
+  // fetched department list, so "All Departments" never offers a choice that
+  // would just show "None available" everywhere.
+  const substituteDepartments = Array.from(
+    new Set(periods.flatMap((p) => p.candidates.map((c) => c.facultyDepartment).filter((d): d is string => !!d)))
+  ).sort((a, b) => a.localeCompare(b));
+
+  // Narrowing the department filter can hide someone already picked for a
+  // period - clear just that pick rather than leave a Select showing a value
+  // that's no longer one of its rendered options.
+  useEffect(() => {
+    if (!substituteDeptFilter) return;
+    setSubstituteByPeriod((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const p of periods) {
+        const key = `${p.date}|${p.timetableSlotId}`;
+        const pickedId = next[key];
+        if (!pickedId) continue;
+        const stillVisible = p.candidates.some((c) => c.facultyId === pickedId && c.facultyDepartment === substituteDeptFilter);
+        if (!stillVisible) { delete next[key]; changed = true; }
+      }
+      return changed ? next : prev;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [substituteDeptFilter]);
 
   // Re-fetched whenever the dates change: the list is role-specific (see
   // lib/leave/handoverPool.ts) and, once a range is picked, leaves out anyone
@@ -521,9 +555,24 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
               <p className="text-xs text-muted-foreground">
                 Pick a substitute for each period you&rsquo;d otherwise teach on this leave. Anyone free that period is listed, across departments - your own department comes first.
               </p>
+              {substituteDepartments.length > 1 && (
+                <div className="flex items-center gap-2">
+                  <Label className="text-xs text-muted-foreground shrink-0">Department</Label>
+                  <Select value={substituteDeptFilter || "ALL"} onValueChange={(v) => setSubstituteDeptFilter(v === "ALL" ? "" : v)}>
+                    <SelectTrigger className="w-56"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ALL">All Departments</SelectItem>
+                      {substituteDepartments.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               <div className="space-y-2 rounded-lg border p-3">
                 {periods.map((p) => {
                   const key = `${p.date}|${p.timetableSlotId}`;
+                  const candidates = substituteDeptFilter
+                    ? p.candidates.filter((c) => c.facultyDepartment === substituteDeptFilter)
+                    : p.candidates;
                   return (
                     <div key={key} className="flex items-center justify-between gap-3 flex-wrap">
                       <div className="text-sm min-w-0">
@@ -536,10 +585,10 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
                         onValueChange={(v) => setSubstituteByPeriod((prev) => ({ ...prev, [key]: v }))}
                       >
                         <SelectTrigger className="w-48">
-                          <SelectValue placeholder={p.candidates.length === 0 ? "None available" : "Select faculty"} />
+                          <SelectValue placeholder={candidates.length === 0 ? "None available" : "Select faculty"} />
                         </SelectTrigger>
                         <SelectContent>
-                          {p.candidates.map((c) => (
+                          {candidates.map((c) => (
                             <SelectItem key={c.facultyId} value={c.facultyId}>
                           {c.facultyName}
                           {c.facultyDepartment && (
