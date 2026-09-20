@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { UserPlus, ChevronDown, ChevronUp, Plus, Pencil } from "lucide-react";
+import { UserPlus, UserCog, ChevronDown, ChevronUp, Plus, Pencil } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -142,6 +142,25 @@ export default function AdministrationCollegesPage() {
                   >
                     <Pencil className="h-3.5 w-3.5 mr-1.5" />
                     Edit
+                  </Button>
+                  {/* A college starts with no people at all: add the first ones here,
+                      then appoint them to seats (College Admin, Principal, ...) in
+                      Role Assignments - the seat holders take it from there. */}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => router.push(`/administration/colleges/${college.id}/people/new`)}
+                  >
+                    <UserPlus className="h-3.5 w-3.5 mr-1.5" />
+                    Add College Admin
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => router.push(`/administration/role-assignments?collegeId=${college.id}`)}
+                  >
+                    <UserCog className="h-3.5 w-3.5 mr-1.5" />
+                    Role Assignments
                   </Button>
                   {showAddBtn && (
                     <Button

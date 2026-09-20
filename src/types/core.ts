@@ -383,6 +383,14 @@ export interface FMSUser {
   // anything other than that kind of narrow exclusion - `role` remains the
   // one source of truth for permissions.
   realRole?: UserRole;
+  // Every role this login can act as: `role` (the primary one) plus the role of
+  // each seat they hold (see types/roleSeats.ts). Set by /api/auth/session; the
+  // sidebar and page access are the union of all of them.
+  roles?: UserRole[];
+  // Denormalized from the seats this person holds (maintained by
+  // lib/roles/seats.ts) - `seatRoles` is what guards and role lookups read.
+  seatIds?: string[];
+  seatRoles?: UserRole[];
   // for HOD / LOCATION_DEPT_HEAD - kept as the first entry of `departments`
   // (the HOD's "primary" department) for every screen that hasn't been
   // updated to the multi-department list below; always write both together.

@@ -12,8 +12,10 @@ import { useAssignedInterviews } from "@/hooks/useAssignedInterviews";
 import { useAssignedCoordinator } from "@/hooks/useAssignedCoordinator";
 import { useIsSubDepartmentHod } from "@/hooks/useIsSubDepartmentHod";
 import { usePrincipalPendingHiring } from "@/hooks/usePrincipalPendingHiring";
-import { getNavItemsForRole, isNavItemActive, filterVisibleNavItems, ROLES_WITH_EMBEDDED_PANEL_ACCESS, type NavItem } from "./navConfig";
+import { isNavItemActive, filterVisibleNavItems, ROLES_WITH_EMBEDDED_PANEL_ACCESS, type NavItem } from "./navConfig";
 import { NavIcon } from "./NavIcon";
+import { WorkContextSwitcher } from "./WorkContextSwitcher";
+import { useWorkContext } from "@/hooks/useWorkContext";
 import { ROLE_LABELS } from "@/types";
 
 const INTERVIEW_NAV_ITEM: NavItem = {
@@ -40,6 +42,7 @@ export function MobileDrawer({ hiddenModules, hiddenItems }: MobileDrawerProps) 
   const { coordinatorBatchId } = useAssignedCoordinator();
   const { hideSubDepartmentsLink } = useIsSubDepartmentHod();
   const { pendingCount: pendingHiringCount } = usePrincipalPendingHiring();
+  const { items: contextItems, contexts } = useWorkContext();
 
   useEffect(() => {
     setSidebarOpen(false);
@@ -47,7 +50,7 @@ export function MobileDrawer({ hiddenModules, hiddenItems }: MobileDrawerProps) 
 
   if (!user) return null;
 
-  const baseNavItems = filterVisibleNavItems(getNavItemsForRole(user.role), hiddenModules, hiddenItems, user.realRole)
+  const baseNavItems = filterVisibleNavItems(contextItems, hiddenModules, hiddenItems, user.realRole)
     .filter((item) => !hideSubDepartmentsLink || item.href !== "/hod/settings/sub-departments");
   let navItems = baseNavItems;
   {
@@ -104,7 +107,9 @@ export function MobileDrawer({ hiddenModules, hiddenItems }: MobileDrawerProps) 
           </button>
         </div>
 
-        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto h-[calc(100vh-8rem)]">
+        <WorkContextSwitcher />
+
+        <nav className={cn("flex-1 px-3 py-4 space-y-1 overflow-y-auto", contexts.length > 0 ? "h-[calc(100vh-13rem)]" : "h-[calc(100vh-8rem)]")}>
           {navItems.map((item) => {
             const isActive = isNavItemActive(item, pathname, navItems);
             return (

@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { findUsersSnapshot } from "@/lib/roles/findUsersByRoles";
 import { NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { applyOfferDecision } from "@/lib/firestore/offerLetterDecision";
@@ -95,7 +96,7 @@ export async function POST(
 
     // Notify the office + HOD so the response is visible without them having
     // to poll the offers list.
-    const officeSnap = await collegeRef.collection("users").where("role", "in", ["COLLEGE_OFFICE", "PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_ADMIN", "DIRECTOR"]).get();
+    const officeSnap = await findUsersSnapshot(db, collegeId, ["COLLEGE_OFFICE", "PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_ADMIN"]);
     const batch = db.batch();
     for (const d of officeSnap.docs) {
       const notifRef = collegeRef.collection("notifications").doc();

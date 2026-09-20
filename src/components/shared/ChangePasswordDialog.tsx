@@ -77,7 +77,7 @@ export function ChangePasswordDialog() {
           <DialogTitle>Change Password</DialogTitle>
         </DialogHeader>
         <form
-          // See CreateHodDialog.tsx - DialogContent renders through a Portal,
+          // DialogContent renders through a Portal,
           // but React's synthetic "submit" event still bubbles through the
           // component tree, so without this it would also submit any
           // page-level <form> this dialog happens to be rendered inside.

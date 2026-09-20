@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { findUsersSnapshot } from "@/lib/roles/findUsersByRoles";
 import { NextResponse } from "next/server";
 import { requireManagement } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -28,7 +29,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ coll
     const db = getAdminDb();
     const collegeRef = db.collection("colleges").doc(collegeId);
 
-    const principalSnap = await collegeRef.collection("users").where("role", "==", "PRINCIPAL").limit(1).get();
+    const principalSnap = await findUsersSnapshot(db, collegeId, ["PRINCIPAL"], { exact: true });
     if (principalSnap.empty) {
       return NextResponse.json({ principalName: null, registered: false, summary: null, records: [] });
     }

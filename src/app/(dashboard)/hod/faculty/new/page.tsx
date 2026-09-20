@@ -101,7 +101,23 @@ export default function NewFacultyPage() {
   // recover from the UI otherwise (it 400s "You manage more than one
   // department - specify which" once departments.length > 1) - this picker
   // is what actually satisfies that requirement.
-  const myDepartments = user?.departments && user.departments.length > 0 ? user.departments : (user?.department ? [user.department] : []);
+  const ownDepartments = user?.departments && user.departments.length > 0 ? user.departments : (user?.department ? [user.department] : []);
+  // The Principal / Vice Principal (incl. a College Admin) add faculty too -
+  // it is how a new college gets its first teaching staff before any HOD
+  // exists. They belong to no department, so they always pick one from the
+  // college's active departments; an HOD keeps their own list.
+  const isCollegeLevel = user?.role === "PRINCIPAL" || user?.role === "VICE_PRINCIPAL";
+  const [collegeDepartments, setCollegeDepartments] = useState<string[]>([]);
+  useEffect(() => {
+    if (!isCollegeLevel) return;
+    fetch("/api/college/departments")
+      .then((r) => r.json() as Promise<{ departments?: { name: string; isActive?: boolean }[] }>)
+      .then((d) => setCollegeDepartments((d.departments ?? []).filter((dep) => dep.isActive !== false).map((dep) => dep.name)))
+      .catch(() => { /* picker stays empty */ });
+  }, [isCollegeLevel]);
+  const myDepartments = isCollegeLevel ? collegeDepartments : ownDepartments;
+  const mustPickDepartment = isCollegeLevel || ownDepartments.length > 1;
+  const listPath = isCollegeLevel ? "/principal/faculty" : "/hod/faculty";
 
   // Reached from the Faculty Register's "Sub-Department HODs" card when that
   // sub-department's HOD login has no facultyMembers record yet (see
@@ -247,7 +263,7 @@ export default function NewFacultyPage() {
     // College Email/Password below. Only actually required once this HOD
     // heads more than one department; a single-department HOD never sees
     // the picker and the server falls back to their one department itself.
-    if (!isLinkMode && myDepartments.length > 1 && !department) {
+    if (!isLinkMode && mustPickDepartment && !department) {
       setErroredSteps(new Set<WizardStepKey>(["core"]));
       setStepIndex(steps.findIndex((s) => s.key === "core"));
       toast({ variant: "destructive", title: "Some required fields are missing", description: "Identity & Employment: Department" });
@@ -337,7 +353,7 @@ export default function NewFacultyPage() {
           ? `${displayName}'s faculty profile is now complete.`
           : `${displayName} has been added to the register.`,
       });
-      router.push("/hod/faculty");
+      router.push(listPath);
     } catch {
       toast({ variant: "destructive", title: "Network error", description: "Please try again." });
     } finally {
@@ -350,7 +366,7 @@ export default function NewFacultyPage() {
       <PageHeader
         title={isLinkMode ? "Complete Faculty Profile" : "Add Faculty Member"}
         description={isLinkMode
-          ? `Add the employment & profile details for ${linkName || "this Sub-HOD"}, already registered as ${linkDepartment}'s HOD`
+          ? `Add the employment & profile details for ${linkName || "this person"}, who already has a login - filed under ${linkDepartment}`
           : "Add a new entry to your department's faculty register"}
       />
 
@@ -419,7 +435,7 @@ export default function NewFacultyPage() {
                     <span className="text-muted-foreground">Department: </span>
                     <span className="font-medium">{linkDepartment}</span>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      This profile links to {linkName || "their"} existing HOD login - no new account or password is created.
+                      This profile links to {linkName || "their"} existing login - no new account or password is created.
                     </p>
                   </div>
                 )}
@@ -431,7 +447,7 @@ export default function NewFacultyPage() {
                     department's register this faculty member is filed under -
                     the same slot the read-only version above shows for a
                     Sub-HOD link. */}
-                {!isLinkMode && myDepartments.length > 1 && (
+                {!isLinkMode && mustPickDepartment && (
                   <div className="space-y-2">
                     <Label>Department *</Label>
                     <Select value={department} onValueChange={setDepartment}>
@@ -440,7 +456,7 @@ export default function NewFacultyPage() {
                         {myDepartments.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
                       </SelectContent>
                     </Select>
-                    <p className="text-xs text-muted-foreground">You manage more than one department - choose which one this faculty member belongs to.</p>
+                    <p className="text-xs text-muted-foreground">{isCollegeLevel ? "Choose the department this faculty member belongs to." : "You manage more than one department - choose which one this faculty member belongs to."}</p>
                   </div>
                 )}
 

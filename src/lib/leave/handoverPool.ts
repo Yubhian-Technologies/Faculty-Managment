@@ -1,6 +1,7 @@
 import type { Firestore } from "firebase-admin/firestore";
 import type { UserRole } from "@/types/core";
 import { loadUnavailability } from "@/lib/leave/availability";
+import { findUsersWithMatchedRole } from "@/lib/roles/findUsersByRoles";
 
 // Who a person may name as a handover / point-of-contact - or, for a manager,
 // who they may adjust and who may cover for them (see the Adjustments module) -
@@ -62,16 +63,16 @@ export async function listPoolMembers(
   opts: { department: string; excludeUid: string }
 ): Promise<PoolMember[]> {
   if (rule.departmentOnly && !opts.department) return [];
-  const snap = await db.collection("colleges").doc(collegeId).collection("users")
-    .where("role", "in", expandStoredRoles(rule.roles).slice(0, 30)).get();
+  // Found by primary role AND by seat, so e.g. the current HOD (a faculty
+  // member who holds the seat) is offered under "HOD" - see lib/roles/findUsersByRoles.
+  const matches = await findUsersWithMatchedRole(db, collegeId, rule.roles);
 
-  return snap.docs
-    .filter((d) => d.id !== opts.excludeUid)
-    .map((d) => {
-      const u = d.data() as { name?: string; role?: string; department?: string; departments?: string[]; isActive?: boolean };
-      return { uid: d.id, name: u.name ?? "Unknown", role: u.role ?? "", department: u.department ?? "", departments: u.departments ?? [], isActive: u.isActive };
+  return matches
+    .filter((m) => m.doc.id !== opts.excludeUid)
+    .map((m) => {
+      const u = m.doc.data() as { name?: string; department?: string; departments?: string[] };
+      return { uid: m.doc.id, name: u.name ?? "Unknown", role: m.matchedRole, department: u.department ?? "", departments: u.departments ?? [] };
     })
-    .filter((u) => u.isActive !== false)
     .filter((u) => !rule.departmentOnly || u.department === opts.department || u.departments.includes(opts.department))
     .map(({ uid, name, role, department }) => ({ uid, name, role, department }))
     .sort((a, b) => a.name.localeCompare(b.name));

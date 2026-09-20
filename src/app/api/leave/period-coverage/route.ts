@@ -5,7 +5,7 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { resolveEmployeeIdentity } from "@/lib/leave/identity";
 import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
-import { resolveUserDepartment } from "@/lib/budget/departmentScope";
+import { resolveHodDepartments } from "@/lib/budget/departmentScope";
 import { getHolidayDateKeys } from "@/lib/leave/holidaysCount";
 import { buildPeriodCoverage } from "@/lib/leave/periodCoverage";
 import { REQUESTS_COL } from "@/lib/leave/balanceEngine";
@@ -51,8 +51,8 @@ export async function GET(request: Request) {
         if (session.role !== "HOD") {
           return NextResponse.json({ error: "Forbidden" }, { status: 403 });
         }
-        const hodDept = await resolveUserDepartment(db, session.collegeId, session.uid);
-        if (!hodDept || req.department !== hodDept) {
+        const hodDepts = await resolveHodDepartments(db, session.collegeId, session.uid);
+        if (!req.department || !hodDepts.includes(req.department)) {
           return NextResponse.json({ error: "Forbidden" }, { status: 403 });
         }
       }

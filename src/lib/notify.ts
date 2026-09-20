@@ -1,6 +1,7 @@
 import type { Firestore } from "firebase-admin/firestore";
 import type { UserRole } from "@/types";
 import { ROLE_SCOPE } from "@/types";
+import { findUsersByRoles } from "@/lib/roles/findUsersByRoles";
 
 // Shared notification helpers for the budget/indent/purchase-clearance
 // flows (college/budget-requests, college/indent-requests,
@@ -56,13 +57,13 @@ export async function notifyRole(
   // Same reasoning for a Department Office head, whose authority mirrors their
   // HOD end-to-end: a notifyRole(..., "HOD", ...) must reach them too, or they
   // would silently miss every role-broadcast their HOD acts on.
-  const roles = role === "PRINCIPAL"
-    ? ["PRINCIPAL", "COLLEGE_ADMIN", "DIRECTOR"]
-    : role === "HOD" ? ["HOD", "DEPARTMENT_OFFICE"] : [role];
-  const snap = isGlobal
-    ? await db.collection("systemUsers").where("role", "==", role).get()
-    : await db.collection("colleges").doc(collegeId).collection("users").where("role", "in", roles).get();
-  for (const u of snap.docs) {
+  // findUsersByRoles also reaches whoever holds a SEAT of this role (see
+  // types/roleSeats.ts) - e.g. a faculty member who is the current HOD - not
+  // just accounts whose own primary role matches.
+  const docs = isGlobal
+    ? (await db.collection("systemUsers").where("role", "==", role).get()).docs
+    : await findUsersByRoles(db, collegeId, [role]);
+  for (const u of docs) {
     await notify(db, collegeId, u.id, type, title, message, link);
   }
 }

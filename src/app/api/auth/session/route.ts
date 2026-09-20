@@ -4,6 +4,8 @@ import { NextResponse } from "next/server";
 import { verifyFirebaseToken } from "@/lib/auth/verifyFirebaseToken";
 import { getAdminDb, getAdminAuth } from "@/lib/firebase/admin";
 import { LOCATION_SCOPED_ROLES } from "@/types";
+import { signSession } from "@/lib/auth/sessionToken";
+import { orderHeldRoles } from "@/lib/roles/seatRoles";
 import { migrateUserDoc } from "@/lib/faculty/fieldRenames";
 
 export async function POST(request: Request) {
@@ -137,20 +139,31 @@ export async function POST(request: Request) {
       } catch { /* non-fatal */ }
     }
 
+    // Every role this login can act as: its primary role plus the role of each
+    // seat it holds (see types/roleSeats.ts). The sidebar and page access are
+    // built from this list; API guards re-check it live, so a seat handed to
+    // someone else takes effect immediately, not when this cookie expires.
+    const seatRoles = Array.isArray(profile?.seatRoles) ? (profile.seatRoles as string[]) : [];
+    // Holding the College Admin seat makes someone a College Admin for the few
+    // things that tell it apart from a Principal (see SessionPayload.realRole),
+    // exactly as a dedicated College Admin login always was.
+    if (seatRoles.includes("COLLEGE_ADMIN")) realRole = "COLLEGE_ADMIN";
+    const roles = role === "UNKNOWN" ? [role] : orderHeldRoles(role, seatRoles);
+
     const sessionData = {
       uid: decoded.uid,
       email,
       role,
       realRole,
+      roles,
       collegeId,
       locationId,
       exp: decoded.exp,
     };
 
-    const sessionPayload = Buffer.from(JSON.stringify(sessionData)).toString("base64");
-    const sessionCookie = `header.${sessionPayload}.signature`;
+    const sessionCookie = await signSession(sessionData);
 
-    const response = NextResponse.json({ ok: true, role, realRole, collegeId, locationId, name, email, profile, refreshToken: !claimsWereSet });
+    const response = NextResponse.json({ ok: true, role, realRole, roles, collegeId, locationId, name, email, profile, refreshToken: !claimsWereSet });
     response.cookies.set("fms-session", sessionCookie, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",

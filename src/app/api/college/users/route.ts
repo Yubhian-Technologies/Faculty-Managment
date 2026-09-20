@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { convertLegacyAccounts } from "@/lib/roles/seats";
 import { NextResponse } from "next/server";
 import { requireCollegeMember, isDepartmentOffice } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -7,6 +8,7 @@ import { createFirebaseUser } from "@/lib/firebase/authRest";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
 import { syncDepartmentHod, getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
 import { getCreatableOfficeRoles } from "@/lib/roles/officeRoles";
+import { isSeatRole } from "@/lib/roles/seatRoles";
 import { normalizeAcademicProfile } from "@/lib/faculty/academicProfileCompat";
 import { migrateUserDoc } from "@/lib/faculty/fieldRenames";
 import type { CollegeType, UserRole } from "@/types";
@@ -18,7 +20,9 @@ import type { CollegeType, UserRole } from "@/types";
 // COLLEGE_STAFF is intentionally omitted - non-teaching staff are created via
 // the Supporting Staff module (which makes both a login and a profile record),
 // not as a bare login here. See principal/staff/new/page.tsx for the rationale.
-const PRINCIPAL_BASE_ROLES: UserRole[] = ["HOD", "COLLEGE_OFFICE", "COLLEGE_ADMIN", "VICE_PRINCIPAL", "COLLEGE_ACCOUNTS"];
+// HOD and Vice Principal are seats, not accounts: create the person (faculty / staff)
+// and appoint them in Role Assignments - see types/roleSeats.ts.
+const PRINCIPAL_BASE_ROLES: UserRole[] = ["COLLEGE_OFFICE", "COLLEGE_ADMIN", "COLLEGE_ACCOUNTS"];
 // HOD is included so a main HOD can create a Sub-HOD login (see
 // hod/settings/sub-departments/page.tsx's "Create Sub-HOD" dialog, which
 // posts role: "HOD" with the not-yet-created sub-department's name as
@@ -32,7 +36,7 @@ const PRINCIPAL_BASE_ROLES: UserRole[] = ["HOD", "COLLEGE_OFFICE", "COLLEGE_ADMI
 // DEPARTMENT_OFFICE is the HOD's own office head for their department - see
 // UserRole. Only a real HOD may create one (an office head is fenced out of it
 // below), and only one per department.
-const HOD_ROLES: UserRole[] = ["PANEL_MEMBER", "HOD", "CLASS_LEADER", "DEPARTMENT_OFFICE"];
+const HOD_ROLES: UserRole[] = ["PANEL_MEMBER", "CLASS_LEADER", "DEPARTMENT_OFFICE"];
 // College Office may only create Class Leader logins - one per Section, bound
 // via `sectionId` below. (The College Office section pages that used to call
 // this were removed; sections are managed from the HOD and Principal views.)
@@ -60,7 +64,16 @@ export async function GET(request: Request) {
     const includeAll = searchParams.get("includeAll") === "true";
 
     const snap = await q.get();
-    let users = snap.docs
+    // A role filter also returns whoever holds a SEAT of that role (e.g. a
+    // faculty member who is the current HOD - see types/roleSeats.ts), not just
+    // accounts whose own primary role matches.
+    let docs = snap.docs;
+    if (roleFilter && isSeatRole(roleFilter)) {
+      const seatHolders = await coll.where("seatRoles", "array-contains", roleFilter).get();
+      const seen = new Set(docs.map((d) => d.id));
+      docs = [...docs, ...seatHolders.docs.filter((d) => !seen.has(d.id))];
+    }
+    let users = docs
       .map((d) => ({ uid: d.id, ...migrateUserDoc(d.data()) }))
       .filter((u) => includeAll || (u as unknown as { role: string }).role !== "PRINCIPAL")
       .sort((a, b) => {
@@ -376,6 +389,12 @@ export async function POST(request: Request) {
     } catch (auditErr) {
       console.error("[college/users POST] audit log write failed", auditErr);
     }
+
+    // A new login with a seat role (Dean, IQAC, ...) also gets its seat, so the
+    // seat list never lags behind the accounts (see lib/roles/seats.ts). Safe
+    // to repeat - accounts that already hold a seat are skipped.
+    await convertLegacyAccounts(db, session.collegeId, { uid: session.uid, name: session.email || "Unknown" })
+      .catch((e) => console.error("[college/users POST] seat conversion failed:", e));
 
     return NextResponse.json({ uid }, { status: 201 });
   } catch (err) {

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { readSession } from "@/lib/auth/sessionToken";
 import type { NextRequest } from "next/server";
 import { ROLE_DASHBOARD_PATHS, rolesInheritedBy } from "@/types/core";
 import type { UserRole } from "@/types/core";
@@ -117,9 +118,8 @@ export async function proxy(request: NextRequest) {
   }
 
   try {
-    const payload = JSON.parse(
-      Buffer.from(sessionCookie.split(".")[1], "base64").toString()
-    ) as { role?: string; exp?: number };
+    const payload = await readSession<{ role?: string; roles?: string[]; exp?: number }>(sessionCookie);
+    if (!payload) throw new Error("invalid session");
 
     if (payload.exp && Date.now() / 1000 > payload.exp) {
       const loginUrl = new URL("/login", request.url);
@@ -131,7 +131,11 @@ export async function proxy(request: NextRequest) {
 
     const role = payload.role as string | undefined;
     if (role) {
-      const allowedPaths = allowedPathsForRole(role);
+      // A login can hold several roles at once (its own plus any seats - see
+      // types/roleSeats.ts): page access is the union of each role's paths.
+      // The API guards do the real, live check; this is coarse gating only.
+      const heldRoles = Array.from(new Set([role, ...(payload.roles ?? [])]));
+      const allowedPaths = Array.from(new Set(heldRoles.flatMap((r) => allowedPathsForRole(r))));
       const hasAccess = allowedPaths.some((p) => pathname.startsWith(p));
       if (!hasAccess && pathname !== "/") {
         const defaultPath =
@@ -142,8 +146,10 @@ export async function proxy(request: NextRequest) {
 
     return NextResponse.next();
   } catch {
-    const loginUrl = new URL("/login", request.url);
-    return NextResponse.redirect(loginUrl);
+    // Unsigned / tampered / pre-signing cookie: drop it and sign in again.
+    const response = NextResponse.redirect(new URL("/login", request.url));
+    response.cookies.delete("fms-session");
+    return response;
   }
 }
 

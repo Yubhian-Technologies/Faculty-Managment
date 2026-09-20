@@ -1,10 +1,11 @@
 export const dynamic = "force-dynamic";
 
+import { findUsersSnapshot } from "@/lib/roles/findUsersByRoles";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { canAccessLeaveProfile } from "@/lib/leave/access";
-import { resolveUserDepartment } from "@/lib/budget/departmentScope";
+import { resolveHodDepartments } from "@/lib/budget/departmentScope";
 import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 import { REQUESTS_COL, commitApproval, releasePending, releaseApproval, splitLeaveDays } from "@/lib/leave/balanceEngine";
 import { decideFinalStageLeave } from "@/lib/leave/decideFinalStage";
@@ -314,8 +315,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         return NextResponse.json({ error: "Coverage can only be proposed while pending HOD decision or already approved" }, { status: 400 });
       }
       if (session.role === "HOD") {
-        const hodDept = await resolveUserDepartment(db, session.collegeId, session.uid);
-        if (!hodDept || req.department !== hodDept) {
+        const hodDepts = await resolveHodDepartments(db, session.collegeId, session.uid);
+        if (!req.department || !hodDepts.includes(req.department)) {
           return NextResponse.json({ error: "Forbidden" }, { status: 403 });
         }
       } else if (session.role !== "PRINCIPAL" && session.role !== "VICE_PRINCIPAL") {
@@ -463,8 +464,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       // PROPOSE_COVERAGE makes), so a department with no sitting HOD isn't stuck.
       if (req.hodAction) {
         if (session.role === "HOD") {
-          const hodDept = await resolveUserDepartment(db, session.collegeId, session.uid);
-          if (!hodDept || req.department !== hodDept) {
+          const hodDepts = await resolveHodDepartments(db, session.collegeId, session.uid);
+          if (!req.department || !hodDepts.includes(req.department)) {
             return NextResponse.json({ error: "Forbidden" }, { status: 403 });
           }
         } else if (session.role !== "PRINCIPAL" && session.role !== "VICE_PRINCIPAL") {
@@ -505,8 +506,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       if (session.role !== "HOD") {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       }
-      const hodDept = await resolveUserDepartment(db, session.collegeId, session.uid);
-      if (!hodDept || req.department !== hodDept) {
+      const hodDepts = await resolveHodDepartments(db, session.collegeId, session.uid);
+      if (!req.department || !hodDepts.includes(req.department)) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       }
 
@@ -559,9 +560,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
           performedByName: session.email || "HOD", targetId: id, details: { isPaidLeave: body.isPaidLeave }, timestamp: now,
         });
 
-        const principalsSnap = await db
-          .collection("colleges").doc(session.collegeId)
-          .collection("users").where("role", "in", ["PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_ADMIN", "DIRECTOR"]).get();
+        const principalsSnap = await findUsersSnapshot(db, session.collegeId, ["PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_ADMIN"]);
         for (const p of principalsSnap.docs) {
           await emitWorkflowNotification({
             db, collegeId: session.collegeId, toUid: p.id,

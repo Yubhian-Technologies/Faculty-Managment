@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { findUsersSnapshot } from "@/lib/roles/findUsersByRoles";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -365,12 +366,7 @@ export async function PATCH(
     // If transitioning to PRINCIPAL_FINAL_REVIEW, notify all Principals (and
     // College Admins, who mirror Principal's authority)
     if (body.currentPhase === "PRINCIPAL_FINAL_REVIEW") {
-      const principalSnap = await db
-        .collection("colleges")
-        .doc(session.collegeId)
-        .collection("users")
-        .where("role", "in", ["PRINCIPAL", "COLLEGE_ADMIN", "DIRECTOR"])
-        .get();
+      const principalSnap = await findUsersSnapshot(db, session.collegeId, ["PRINCIPAL", "COLLEGE_ADMIN"]);
       for (const d of principalSnap.docs) {
         const ref = db.collection("colleges").doc(session.collegeId).collection("notifications").doc();
         notifBatch.set(ref, {

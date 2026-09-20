@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -10,14 +11,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
-import { CreateHodDialog } from "@/components/college/CreateHodDialog";
 import { YearsTaughtAndSecondaryFields } from "@/components/college/YearsTaughtAndSecondaryFields";
 import { replaceNoOwnSectionsParents, type DepartmentWithId } from "@/lib/college/academicStructure";
 import { departmentSchema, type DepartmentFormData } from "@/lib/validations";
 import { toast } from "@/hooks/useToast";
-import type { Department, FMSUser } from "@/types";
+import type { Department } from "@/types";
 
 export default function EditDepartmentPage() {
   const router = useRouter();
@@ -25,7 +24,6 @@ export default function EditDepartmentPage() {
 
   const [department, setDepartment] = useState<Department | null>(null);
   const [allDepartments, setAllDepartments] = useState<Department[]>([]);
-  const [hods, setHods] = useState<FMSUser[]>([]);
   const [hasSubDepartments, setHasSubDepartments] = useState(false);
   // Only meaningful when hasSubDepartments is true - see
   // Department.parentRunsOwnSections's own doc-comment (src/types/core.ts).
@@ -48,24 +46,17 @@ export default function EditDepartmentPage() {
   const {
     register,
     handleSubmit,
-    setValue,
-    watch,
     reset,
     formState: { errors },
   } = useForm<DepartmentFormData>({
     resolver: zodResolver(departmentSchema),
   });
 
-  const hodUid = watch("hodUid");
-
   useEffect(() => {
     async function load() {
       setLoading(true);
       try {
-        const [deptRes, hodRes] = await Promise.all([
-          fetch("/api/college/departments").then((r) => r.json() as Promise<{ departments: Department[] }>),
-          fetch("/api/college/users?role=HOD").then((r) => r.json() as Promise<{ users: FMSUser[] }>),
-        ]);
+        const deptRes = await fetch("/api/college/departments").then((r) => r.json() as Promise<{ departments: Department[] }>);
         const dept = (deptRes.departments ?? []).find((d) => d.id === id) ?? null;
         if (!dept) {
           toast({ variant: "destructive", title: "Department not found" });
@@ -74,7 +65,6 @@ export default function EditDepartmentPage() {
         }
         setDepartment(dept);
         setAllDepartments(deptRes.departments ?? []);
-        setHods(hodRes.users ?? []);
         setHasSubDepartments(dept.hasSubDepartments ?? false);
         setParentRunsOwnSections(dept.parentRunsOwnSections ?? true);
         // A cross-listing saved against a department that organises its
@@ -90,7 +80,7 @@ export default function EditDepartmentPage() {
             dept.secondaryDepartments ?? []
           )
         );
-        reset({ name: dept.name, code: dept.code, hodUid: dept.hodUid ?? "" });
+        reset({ name: dept.name, code: dept.code });
       } catch {
         toast({ variant: "destructive", title: "Failed to load department" });
       } finally {
@@ -102,40 +92,6 @@ export default function EditDepartmentPage() {
 
   function toggleSecondaryDepartment(name: string, checked: boolean) {
     setSecondaryDepartments((prev) => (checked ? [...prev, name] : prev.filter((n) => n !== name)));
-  }
-
-  async function handleHodCreated(uid: string) {
-    if (!department) return;
-    try {
-      const res = await fetch("/api/college/users?role=HOD");
-      const data = await res.json() as { users: FMSUser[] };
-      const freshHods = data.users ?? [];
-      setHods(freshHods);
-      const newHod = freshHods.find((h) => h.uid === uid);
-
-      const patchRes = await fetch("/api/college/departments", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          deptId: department.id,
-          name: department.name,
-          code: department.code,
-          hodUid: uid,
-          hodName: newHod?.name ?? "",
-          hasSubDepartments,
-        }),
-      });
-      if (!patchRes.ok) {
-        const json = await patchRes.json() as { error?: string };
-        throw new Error(json.error ?? "Failed to assign HOD");
-      }
-
-      setValue("hodUid", uid);
-      setDepartment({ ...department, hodUid: uid, hodName: newHod?.name ?? "" });
-      toast({ variant: "success", title: "HOD created and assigned" });
-    } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to assign HOD" });
-    }
   }
 
   // Shared by the normal submit and the warning dialog's "confirm and save
@@ -162,13 +118,10 @@ export default function EditDepartmentPage() {
     if (!department) return;
     setIsSubmitting(true);
     try {
-      const selectedHod = hods.find((h) => h.uid === data.hodUid);
       const payload = {
         deptId: department.id,
         name: data.name,
         code: data.code.toUpperCase(),
-        hodUid: data.hodUid ?? "",
-        hodName: selectedHod?.name ?? "",
         hasSubDepartments,
         ...(hasSubDepartments ? { parentRunsOwnSections } : {}),
         secondaryDepartments,
@@ -243,56 +196,15 @@ export default function EditDepartmentPage() {
               {errors.code && <p className="text-sm text-destructive">{errors.code.message}</p>}
             </div>
 
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label>Assign HOD</Label>
-                <CreateHodDialog department={department?.name} onCreated={handleHodCreated} />
-              </div>
-              {hods.length > 0 ? (
-                <Select
-                  value={hodUid || "none"}
-                  onValueChange={(v) => setValue("hodUid", v === "none" ? "" : v)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select HOD (optional)" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">- No HOD -</SelectItem>
-                    {hods.map((h) => {
-                      const hDepts = h.departments && h.departments.length > 0 ? h.departments : (h.department ? [h.department] : []);
-                      return (
-                        <SelectItem key={h.uid} value={h.uid}>
-                          {h.name} {hDepts.length > 0 ? `(${hDepts.join(", ")})` : ""}
-                        </SelectItem>
-                      );
-                    })}
-                  </SelectContent>
-                </Select>
-              ) : (
-                <p className="text-sm text-muted-foreground border rounded-md px-3 py-2">
-                  No HODs yet - create one above
-                </p>
-              )}
-              {/* An HOD can now head more than one department at once - if the
-                  one selected already runs others, say so up front: picking
-                  them here ADDS this department to their portfolio, it never
-                  evicts them from the rest. */}
-              {(() => {
-                if (!hodUid) return null;
-                const selectedHod = hods.find((h) => h.uid === hodUid);
-                if (!selectedHod) return null;
-                const hDepts = selectedHod.departments && selectedHod.departments.length > 0
-                  ? selectedHod.departments
-                  : (selectedHod.department ? [selectedHod.department] : []);
-                const otherDepts = hDepts.filter((n) => n !== department?.name);
-                if (otherDepts.length === 0) return null;
-                return (
-                  <p className="text-xs text-muted-foreground rounded-md border p-2.5">
-                    {selectedHod.name} is also HOD of <strong className="text-foreground">{otherDepts.join(", ")}</strong> -
-                    saving here adds {department?.name ?? "this department"} to their portfolio without removing the rest.
-                  </p>
-                );
-              })()}
+            <div className="space-y-1 rounded-md border p-3">
+              <Label>Head of Department</Label>
+              <p className="text-sm">
+                {department?.hodName ? department.hodName : <span className="text-amber-600">Vacant</span>}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                The HOD is a seat a person holds on top of their own faculty login - appoint or change them in{" "}
+                <Link href="/principal/role-assignments" className="text-primary underline underline-offset-2">Role Assignments</Link>.
+              </p>
             </div>
 
             <YearsTaughtAndSecondaryFields

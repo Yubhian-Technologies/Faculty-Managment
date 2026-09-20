@@ -491,7 +491,7 @@ ${institution}`;
     const panelEmails = batch.panelMemberUids.map((uid) => userMap[uid]?.email).filter(Boolean) as string[];
     const ccEmails = Array.from(new Set([
       ...allUsers
-        .filter((u) => u.role === "PRINCIPAL" || u.role === "VICE_PRINCIPAL" || u.role === "COLLEGE_ADMIN" || u.role === "DIRECTOR" || u.role === "COLLEGE_OFFICE")
+        .filter((u) => [u.role, ...(u.seatRoles ?? [])].some((r) => r === "PRINCIPAL" || r === "VICE_PRINCIPAL" || r === "COLLEGE_ADMIN" || r === "DIRECTOR" || r === "COLLEGE_OFFICE"))
         .map((u) => u.email)
         .filter(Boolean),
       ...panelEmails,

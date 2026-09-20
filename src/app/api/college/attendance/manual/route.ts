@@ -5,7 +5,7 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
 import { isManualEditWindowOpen, MANUAL_EDIT_WINDOW_CLOSED_MESSAGE } from "@/lib/attendance/attendanceWindow";
-import { unitLabelForHeadRole, isCollegeStaffUnitHead, COLLEGE_STAFF_UNIT_HEAD_ROLES } from "@/lib/attendance/collegeStaffUnits";
+import { unitLabelForHeadRole, isCollegeStaffUnitHead, isHodOrUnitHead, COLLEGE_STAFF_UNIT_HEAD_ROLES } from "@/lib/attendance/collegeStaffUnits";
 import { isLateCheckIn } from "@/lib/attendance/lateStatus";
 import { recordLateCheckIn } from "@/lib/leave/lateAttendancePenalty";
 import { isOnApprovedLeaveToday } from "@/lib/leave/leaveStatusToday";
@@ -138,7 +138,7 @@ export async function POST(request: Request) {
       }
     } else {
       // PRINCIPAL / VICE_PRINCIPAL - one tier up, marks an HOD or a unit head in the same college.
-      if (target.role !== "HOD" && !isCollegeStaffUnitHead(target.role ?? "")) {
+      if (!isHodOrUnitHead(target)) {
         return NextResponse.json({ error: "You can only mark attendance for an HOD or unit head" }, { status: 403 });
       }
     }

@@ -1,5 +1,7 @@
 export const dynamic = "force-dynamic";
 
+import { findUsersByRoles } from "@/lib/roles/findUsersByRoles";
+import { isSeatRole } from "@/lib/roles/seatRoles";
 import { NextResponse } from "next/server";
 import { requireManagement } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -21,13 +23,22 @@ export async function GET(request: Request, { params }: { params: Promise<{ coll
     }
 
     const db = getAdminDb();
-    let q = db.collection("colleges").doc(collegeId).collection("users").where("role", "==", role) as FirebaseFirestore.Query;
-    if (department) {
-      q = q.where("department", "==", department);
+    // The person in a seat (Principal, a department's HOD, ...) may be a faculty
+    // member whose own role is something else - see lib/roles/findUsersByRoles.
+    let matched: FirebaseFirestore.QueryDocumentSnapshot | undefined;
+    if (isSeatRole(role)) {
+      const docs = await findUsersByRoles(db, collegeId, [role], { exact: true });
+      matched = docs.find((d) => {
+        if (!department) return true;
+        const u = d.data() as { department?: string; departments?: string[] };
+        return u.department === department || (u.departments ?? []).includes(department);
+      });
+    } else {
+      let q = db.collection("colleges").doc(collegeId).collection("users").where("role", "==", role) as FirebaseFirestore.Query;
+      if (department) q = q.where("department", "==", department);
+      matched = (await q.limit(1).get()).docs[0];
     }
-
-    const snap = await q.limit(1).get();
-    const profile = snap.empty ? null : { uid: snap.docs[0].id, ...snap.docs[0].data() };
+    const profile = matched ? { uid: matched.id, ...matched.data() } : null;
     const publications = profile ? await getPublicationsForUid(db, collegeId, profile.uid) : [];
 
     return NextResponse.json({ profile, publications });

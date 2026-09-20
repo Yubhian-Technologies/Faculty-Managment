@@ -14,7 +14,7 @@ import { countWorkingDays, todayISODate, yearsOfService } from "@/lib/leave/dayC
 import { getHolidayDateKeys } from "@/lib/leave/holidaysCount";
 import { getWorkingDayWeightsForRole } from "@/lib/attendance/workingDays";
 import { LEAVE_TYPE_SEED, HALF_DAY_ELIGIBLE_TYPES } from "@/lib/leave/seedData";
-import { resolveUserDepartment } from "@/lib/budget/departmentScope";
+import { resolveHodDepartments } from "@/lib/budget/departmentScope";
 import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 import { validatePeriodSubstitutions, type PeriodSubstitutionInput } from "@/lib/leave/periodCoverage";
 import { buildAdjustmentRequests, notifyAdjustmentAssignees } from "@/lib/leave/adjustmentRequests";
@@ -88,13 +88,13 @@ export async function GET(request: Request) {
     // Approval queue: pending requests awaiting this caller's action.
     if (url.searchParams.get("scope") === "approvals") {
       if (session.role === "HOD") {
-        const dept = await resolveUserDepartment(db, session.collegeId, session.uid);
+        const depts = await resolveHodDepartments(db, session.collegeId, session.uid);
         const snap = await REQUESTS_COL(session.collegeId, db)
           .where("status", "==", "PENDING_HOD")
           .get();
         const requests = snap.docs
           .map((d) => ({ id: d.id, ...d.data() }) as LeaveRequest)
-          .filter((r) => r.department === (dept || "__NO_DEPARTMENT__"));
+          .filter((r) => !!r.department && depts.includes(r.department));
         return NextResponse.json({ requests: sortByCreatedAtDesc(await attachRequesterContext(db, session.collegeId, requests)) });
       }
       if (session.role === "PRINCIPAL" || session.role === "VICE_PRINCIPAL") {
@@ -131,10 +131,10 @@ export async function GET(request: Request) {
         .filter((r) => r.uid !== session.uid);
 
       if (session.role === "HOD") {
-        const dept = await resolveUserDepartment(db, session.collegeId, session.uid);
+        const depts = await resolveHodDepartments(db, session.collegeId, session.uid);
         return NextResponse.json({
           requests: sortByCreatedAtDesc(
-            all.filter((r) => !!r.hodAction && r.department === (dept || "__NO_DEPARTMENT__"))
+            all.filter((r) => !!r.hodAction && !!r.department && depts.includes(r.department))
           ),
         });
       }

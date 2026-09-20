@@ -39,6 +39,10 @@ export function useAuth() {
         // ever differs from `role` for COLLEGE_ADMIN or DIRECTOR) - see
         // FMSUser.realRole.
         let serverRealRole: string | undefined;
+        // Every role this login can act as (its own + any seats held) - see
+        // FMSUser.roles. Always comes from /api/auth/session so a seat handed
+        // over since the last visit shows up on the next page load.
+        let serverRoles: UserRole[] | undefined;
 
         // Users created via REST API have no JWT custom claims.
         // Call session API (uses Admin SDK, bypasses Firestore rules) to resolve role.
@@ -51,7 +55,7 @@ export function useAuth() {
             });
             if (res.ok) {
               const data = await res.json() as {
-                role?: string; realRole?: string; collegeId?: string; locationId?: string;
+                role?: string; realRole?: string; roles?: string[]; collegeId?: string; locationId?: string;
                 name?: string; email?: string; profile?: FMSUser;
               };
               role = data.role && data.role !== "UNKNOWN" ? data.role : undefined;
@@ -61,6 +65,7 @@ export function useAuth() {
               serverEmail = data.email;
               serverProfile = data.profile ?? null;
               serverRealRole = data.realRole;
+              serverRoles = data.roles as UserRole[] | undefined;
             }
           } catch { /* non-fatal */ }
         } else {
@@ -71,12 +76,19 @@ export function useAuth() {
           // fixed 24h one. Without this, the cookie goes stale ~1h after
           // login and every server route starts 401ing while the client
           // still looks signed in. Fire-and-forget: just refreshes the
-          // cookie, doesn't affect local state.
-          fetch("/api/auth/session", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ token }),
-          }).catch(() => {});
+          // cookie - and returns the roles this login can act as right now.
+          try {
+            const res = await fetch("/api/auth/session", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ token }),
+            });
+            if (res.ok) {
+              const data = await res.json() as { roles?: string[]; realRole?: string };
+              serverRoles = data.roles as UserRole[] | undefined;
+              serverRealRole = data.realRole;
+            }
+          } catch { /* non-fatal - falls back to the primary role only */ }
         }
 
         if (role === "SUPER_ADMIN") {
@@ -152,7 +164,7 @@ export function useAuth() {
           }
           setUser(
             profile
-              ? { ...profile, realRole: (realRole as UserRole | undefined) ?? profile.role }
+              ? { ...profile, realRole: (realRole as UserRole | undefined) ?? profile.role, roles: serverRoles }
               : {
                   uid: firebaseUser.uid,
                   collegeId,
@@ -160,6 +172,7 @@ export function useAuth() {
                   email: serverEmail ?? firebaseUser.email ?? "",
                   role: role as UserRole,
                   realRole: (realRole as UserRole | undefined) ?? (role as UserRole),
+                  roles: serverRoles,
                   isActive: true,
                   createdAt: {} as never,
                 }

@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { convertLegacyAccounts } from "@/lib/roles/seats";
 import { NextResponse } from "next/server";
 import { requireLocationMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -135,6 +136,9 @@ export async function POST(request: Request) {
       performedBy: session.uid, performedByName: "Administration",
       targetId: uid, details: { email, role, name }, timestamp: now,
     });
+
+    await convertLegacyAccounts(getAdminDb(), collegeId, { uid: session.uid, name: session.email || "Administration" })
+      .catch((e) => console.error("[administration/college-staff POST] seat conversion failed:", e));
 
     return NextResponse.json({ uid }, { status: 201 });
   } catch (err) {

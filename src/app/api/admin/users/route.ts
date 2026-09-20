@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { convertLegacyAccounts } from "@/lib/roles/seats";
 import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -177,6 +178,11 @@ export async function POST(request: Request) {
       );
     } else {
       return NextResponse.json({ error: "Invalid role scope" }, { status: 400 });
+    }
+
+    if (collegeId) {
+      await convertLegacyAccounts(db, collegeId, { uid: session.uid, name: "Super Admin" })
+        .catch((e) => console.error("[admin/users POST] seat conversion failed:", e));
     }
 
     return NextResponse.json({ uid }, { status: 201 });

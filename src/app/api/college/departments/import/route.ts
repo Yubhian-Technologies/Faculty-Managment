@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { assignSeat } from "@/lib/roles/seats";
 import { resolveDepartmentCourseSelections, type DepartmentCourseSelection } from "@/lib/departments/courseSelections";
 
 type ImportRow = { name: string; code: string; hodEmail?: string };
@@ -31,10 +32,11 @@ export async function POST(request: Request) {
     const deptsColl = db.collection("colleges").doc(collegeId).collection("departments");
     const coursesColl = db.collection("colleges").doc(collegeId).collection("courses");
     const usersColl = db.collection("colleges").doc(collegeId).collection("users");
+    const seatsColl = db.collection("colleges").doc(collegeId).collection("roleSeats");
 
     const [existingDeptsSnap, hodUsersSnap] = await Promise.all([
       deptsColl.select("name", "code").get(),
-      usersColl.where("role", "==", "HOD").get(),
+      usersColl.get(),
     ]);
 
     const existingCodes = new Set(
@@ -45,12 +47,17 @@ export async function POST(request: Request) {
     const existingNames = new Set(
       existingDeptsSnap.docs.map((d) => ((d.data() as { name?: string }).name ?? "").trim().toLowerCase())
     );
-    const hodByEmail = new Map(
-      hodUsersSnap.docs.map((d) => {
-        const u = d.data() as { email?: string; name?: string };
-        return [(u.email ?? "").toLowerCase(), { uid: d.id, name: u.name ?? "" }];
-      })
-    );
+    // Anyone in the college can be named - the HOD is a seat a person holds
+    // on top of their own role, not a separate kind of account. Matched on
+    // either their login (college) email or personal email.
+    const hodByEmail = new Map<string, { uid: string; name: string }>();
+    for (const d of hodUsersSnap.docs) {
+      const u = d.data() as { email?: string; collegeEmail?: string; name?: string };
+      for (const e of [u.email, u.collegeEmail]) {
+        if (e) hodByEmail.set(e.toLowerCase(), { uid: d.id, name: u.name ?? "" });
+      }
+    }
+    const seatAssignments: { seatId: string; uid: string; name: string }[] = [];
 
     const now = new Date();
     const created: string[] = [];
@@ -86,7 +93,7 @@ export async function POST(request: Request) {
       }
 
       // Firestore batch limit is 500 writes - department + its courses (+ HOD sync).
-      const rowWrites = 1 + newCourses.length + (hodUid ? 1 : 0);
+      const rowWrites = 2 + newCourses.length;
       if (batchWrites + rowWrites > 500) {
         failed.push({ row: rowNum, name, error: "Import batch limit reached - import the remaining rows in a second file" });
         continue;
@@ -97,8 +104,9 @@ export async function POST(request: Request) {
         collegeId,
         name,
         code,
-        hodUid,
-        hodName,
+        // Appointed through the department's HOD seat below, not written here.
+        hodUid: "",
+        hodName: "",
         isActive: true,
         courseScopes: Object.fromEntries(
           newCourses.map((c) => [c.catalogId, { assignedYears: c.assignedYears, secondaryDepartments: [] }])
@@ -120,10 +128,14 @@ export async function POST(request: Request) {
         });
       }
 
-      // Keep the HOD's own profile department in sync, same as the single-add route.
-      if (hodUid) {
-        batch.update(usersColl.doc(hodUid), { department: name, updatedAt: now });
-      }
+      // Every department gets its own (empty) HOD seat; a matched HOD email is
+      // appointed to it right after the batch commits.
+      const seatRef = seatsColl.doc();
+      batch.set(seatRef, {
+        collegeId, role: "HOD", label: `Head of Department - ${name}`, departmentId: deptRef.id, departmentName: name,
+        holderUid: null, holderName: "", isActive: true, createdAt: now, updatedAt: now,
+      });
+      if (hodUid) seatAssignments.push({ seatId: seatRef.id, uid: hodUid, name });
 
       existingCodes.add(code); // prevent duplicate codes within the same batch
       existingNames.add(name.toLowerCase()); // ...and duplicate names
@@ -132,6 +144,19 @@ export async function POST(request: Request) {
     }
 
     await batch.commit();
+
+    // Appoint the HOD each row named, through the seat (which also records the
+    // history and links the person's dashboard). Someone who can't hold an HOD
+    // seat (e.g. supporting staff) is reported instead of silently skipped.
+    const actorSnap = await usersColl.doc(session.uid).get();
+    const actor = { uid: session.uid, name: (actorSnap.data() as { name?: string } | undefined)?.name ?? "Principal" };
+    for (const a of seatAssignments) {
+      try {
+        await assignSeat(db, collegeId, a.seatId, { uid: a.uid }, actor);
+      } catch (e) {
+        warnings.push({ row: 0, name: a.name, message: `HOD not appointed - ${e instanceof Error ? e.message : "failed"} (appoint them in Role Assignments)` });
+      }
+    }
 
     return NextResponse.json({ created: created.length, failed, warnings }, { status: 201 });
   } catch (err) {

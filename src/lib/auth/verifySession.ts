@@ -1,6 +1,9 @@
 import { cookies } from "next/headers";
+import { readSession } from "@/lib/auth/sessionToken";
 import { canRoleAccessRole } from "@/types";
 import type { UserRole } from "@/types";
+import { resolveHeldRoles } from "@/lib/auth/liveRoles";
+import { pickEffectiveRole } from "@/lib/roles/seatRoles";
 
 export interface SessionPayload {
   uid: string;
@@ -12,6 +15,10 @@ export interface SessionPayload {
   // cookies issued before this field existed; treat missing as "same as
   // role" (see isCollegeAdmin).
   realRole?: string;
+  // Every role this login can act as at sign-in: `role` plus the role of each
+  // seat held (see types/roleSeats.ts). A snapshot - guards re-check it live
+  // (lib/auth/liveRoles.ts). Absent on cookies issued before seats existed.
+  roles?: string[];
   collegeId: string;
   locationId: string;   // set for location-scoped roles; may also be set for college roles
   exp: number;
@@ -46,16 +53,10 @@ export async function verifySession(): Promise<SessionPayload | null> {
   const sessionCookie = cookieStore.get("fms-session")?.value;
   if (!sessionCookie) return null;
 
-  try {
-    const payload = JSON.parse(
-      Buffer.from(sessionCookie.split(".")[1], "base64").toString()
-    ) as SessionPayload;
-
-    if (payload.exp && Date.now() / 1000 > payload.exp) return null;
-    return payload;
-  } catch {
-    return null;
-  }
+  const payload = await readSession<SessionPayload>(sessionCookie);
+  if (!payload) return null;
+  if (payload.exp && Date.now() / 1000 > payload.exp) return null;
+  return payload;
 }
 
 export async function requireSuperAdmin(): Promise<SessionPayload> {
@@ -73,8 +74,10 @@ export async function requireSuperAdmin(): Promise<SessionPayload> {
 // approve it); and src/app/api/management/colleges/[collegeId]/principal-attendance/reset/route.ts's
 // POST (reset a Principal's face registration - nobody within the college outranks a Principal to
 // do it, mirroring HOD/Principal/VP resetting each other one tier down via
-// /api/college/attendance/face-registration/reset). Don't add more write routes under this role
-// without the same justification.
+// /api/college/attendance/face-registration/reset); and the college role-seat routes
+// (src/app/api/college/role-seats, via requireRole rather than this guard), where Management -
+// like Super Admin and the location Administration - may appoint the college's Principal seat.
+// Don't add more write routes under this role without the same justification.
 export async function requireManagement(): Promise<SessionPayload> {
   const session = await verifySession();
   if (!session || session.role !== "MANAGEMENT") {
@@ -83,12 +86,20 @@ export async function requireManagement(): Promise<SessionPayload> {
   return session;
 }
 
+// Passes if the caller can act as ANY of `roles` - their primary role or the
+// role of a seat they hold (Principal, a department's HOD, ...). The returned
+// session's `role` is the one the request is evaluated as: the most senior
+// held role the endpoint accepts, so a faculty member who is also an HOD is
+// treated as an HOD wherever an endpoint lists both, exactly as a dedicated HOD
+// login always was. Every existing `session.role === "HOD"` check therefore
+// keeps working unchanged.
 export async function requireRole(...roles: string[]): Promise<SessionPayload> {
   const session = await verifySession();
-  if (!session || !roles.includes(session.role)) {
-    throw new Error("UNAUTHORIZED");
-  }
-  return session;
+  if (!session) throw new Error("UNAUTHORIZED");
+  const held = await resolveHeldRoles(session);
+  const match = pickEffectiveRole(held, roles);
+  if (!match) throw new Error("UNAUTHORIZED");
+  return match === session.role ? { ...session, roles: held } : { ...session, role: match, roles: held };
 }
 
 // Passes if the caller's role IS one of `targetRoles` OR inherits it via the
@@ -103,8 +114,8 @@ export async function requireRoleOrHigher(
   if (!session) {
     throw new Error("UNAUTHORIZED");
   }
-  const actor = session.role as UserRole;
-  const ok = targetRoles.some((t) => canRoleAccessRole(actor, t as UserRole));
+  const held = await resolveHeldRoles(session);
+  const ok = held.some((actor) => targetRoles.some((t) => canRoleAccessRole(actor as UserRole, t as UserRole)));
   if (!ok) {
     throw new Error("UNAUTHORIZED");
   }
