@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/useToast";
+import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 
 export default function FacultyCredentialsPage() {
   const router = useRouter();
@@ -32,7 +33,7 @@ export default function FacultyCredentialsPage() {
           return;
         }
         const m = data.faculty;
-        setFacultyName((m.name as string) ?? "");
+        setFacultyName(facultyDisplayName(m as { legalName?: string }));
         setEmail(((m.collegeEmail as string) || (m.email as string)) ?? "");
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load faculty record" }))

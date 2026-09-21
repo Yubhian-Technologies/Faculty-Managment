@@ -12,6 +12,7 @@ import { AvatarUploadField } from "@/components/shared/AvatarUploadField";
 import { getFacultyProfileModules, type ProfileModuleKey } from "@/lib/faculty/profileModules";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { migrateFacultyDoc } from "@/lib/faculty/fieldRenames";
+import { facultyMobileNo } from "@/lib/faculty/mobileNo";
 import { totalYearsOfExperience, formatDuration, allPreviousExperienceEntries } from "@/lib/faculty/experienceCalc";
 import { formatDate } from "@/lib/utils";
 import { toast } from "@/hooks/useToast";
@@ -82,7 +83,6 @@ export function FacultyIdentityFacts({
     <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
       <Fact label="Employee ID" value={faculty.employeeId} />
       <Fact label="Full Name (as per SSC)" value={faculty.legalName} />
-      <Fact label="Name (as per PAN)" value={faculty.name} />
       <Fact label="APAAR Faculty ID" value={faculty.apaarFacultyId} />
       <Fact
         label="Department"
@@ -110,7 +110,7 @@ export function FacultyIdentityFacts({
       />
       <Fact label="AICTE Faculty ID" value={faculty.aicteFacultyId} />
       <Fact label="Personal Email" value={faculty.email} />
-      <Fact label="Mobile No" value={faculty.phone} />
+      <Fact label="Mobile No" value={facultyMobileNo(faculty as { mobileNo?: string; phone?: string })} />
       {(faculty.additionalPhoneNumbers ?? []).length > 0 && (
         <Fact
           label="Additional Mobile Numbers"

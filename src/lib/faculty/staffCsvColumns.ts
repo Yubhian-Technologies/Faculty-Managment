@@ -123,15 +123,6 @@ export const STAFF_COLUMNS: StaffCsvColumn[] = [
   { key: "lab2_outcomes",          label: "New Lab 2 - Outcomes" },
   { key: "lab3_details",           label: "New Lab 3 - Facility Details" },
   { key: "lab3_outcomes",          label: "New Lab 3 - Outcomes" },
-  { key: "book1_title",            label: "Authored Book 1 - Title" },
-  { key: "book1_publisher",        label: "Authored Book 1 - Publisher" },
-  { key: "book1_year",             label: "Authored Book 1 - Year" },
-  { key: "book2_title",            label: "Authored Book 2 - Title" },
-  { key: "book2_publisher",        label: "Authored Book 2 - Publisher" },
-  { key: "book2_year",             label: "Authored Book 2 - Year" },
-  { key: "book3_title",            label: "Authored Book 3 - Title" },
-  { key: "book3_publisher",        label: "Authored Book 3 - Publisher" },
-  { key: "book3_year",             label: "Authored Book 3 - Year" },
 
   // ─── Financial Standing & Budgetary Impact (Module 6) ───────────────────
   { key: "monthlySalary",          label: "Monthly Salary (₹)" },

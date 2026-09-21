@@ -54,7 +54,7 @@ const KNOWN_KEYS = new Set([
   "reviewPublicationsCount", "totalPublications", "totalCitations", "hIndex", "i10Index",
   "orcidId", "scopusAuthorId", "researcherId", "googleScholarId", "irinsProfile",
   "citationsTotal", "citationsHIndex", "citationsExcludingSelf", "citationsHIndexExcludingSelf",
-  "newLabsEstablished", "authoredBooks", "fdpsWorkshopsMoocsCertifications", "professionalMemberships",
+  "newLabsEstablished", "fdpsWorkshopsMoocsCertifications", "professionalMemberships",
   "academicResponsibilities", "awardsRecognition",
   "monthlySalary", "grossAnnualCTC", "incrementsAwarded", "fundingConsultancyRevenueGeneration",
   "otherInformation",

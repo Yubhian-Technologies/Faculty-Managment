@@ -8,7 +8,7 @@ import { STAFF_COLUMNS } from "@/lib/faculty/staffCsvColumns";
 import { normalizeAcademicProfile } from "@/lib/faculty/academicProfileCompat";
 import { migrateUserDoc } from "@/lib/faculty/fieldRenames";
 import { ROLE_LABELS, RELIGION_LABELS, CASTE_LABELS, degreeYear } from "@/types";
-import type { FMSUser, FacultyProfileFields, DegreeDetail, CourseAssignment, Publication, PreviousInstitution, LabEstablished, AuthoredBook, Religion, Caste } from "@/types";
+import type { FMSUser, FacultyProfileFields, DegreeDetail, CourseAssignment, Publication, PreviousInstitution, LabEstablished, Religion, Caste } from "@/types";
 
 function s(v: unknown): string {
   return v === null || v === undefined ? "" : String(v);
@@ -20,7 +20,8 @@ function yesNo(v: boolean | undefined): string {
 
 function degreeCells(d: DegreeDetail | undefined): [string, string, string, string] {
   if (!d) return ["", "", "", ""];
-  const courseAndBranch = [d.course, d.branch].filter(Boolean).join(" ");
+  const course = d.course && d.degreeType ? `${d.course} (${d.degreeType})` : d.course;
+  const courseAndBranch = [course, d.branch].filter(Boolean).join(" ");
   const year = degreeYear(d, false);
   return [courseAndBranch, d.institutionName ?? "", d.percentageCgpa ?? "", year ? String(year) : ""];
 }
@@ -60,9 +61,14 @@ function labCells(labs: LabEstablished[] | undefined, i: number): [string, strin
   return l ? [l.facilityDetails ?? "", l.outcomes ?? ""] : ["", ""];
 }
 
-function bookCells(books: AuthoredBook[] | undefined, i: number): [string, string, string] {
-  const b = books?.[i];
-  return b ? [b.title ?? "", b.publisher ?? "", b.year ? String(b.year) : ""] : ["", "", ""];
+// Roles/Responsibilities now live on each experience entry; the staff export keeps one
+// column per type, so join the entries' texts (prefixed with the institution when there is
+// more than one). `unplaced` is legacy shared text no entry could hold - appended, not dropped.
+function rolesText(entries: PreviousInstitution[] | undefined, unplaced: string | undefined): string {
+  const withRoles = (entries ?? []).filter((e) => e.rolesResponsibilities?.trim());
+  const parts = withRoles.map((e) => (withRoles.length > 1 && e.institutionName ? `${e.institutionName}: ${e.rolesResponsibilities}` : e.rolesResponsibilities!));
+  if (unplaced?.trim()) parts.push(unplaced);
+  return parts.join(" | ");
 }
 
 function buildRow(rawUser: FMSUser): Record<string, string> {
@@ -122,9 +128,9 @@ function buildRow(rawUser: FMSUser): Record<string, string> {
     qualifiedExam: s(p.qualifiedExam),
     examScore: s(p.examScore),
     qualifiedYear: s(p.qualifiedYear),
-    teachingRolesResponsibilities: s(p.teachingRolesResponsibilities),
-    industryRolesResponsibilities: s(p.industryRolesResponsibilities),
-    researchRolesResponsibilities: s(p.researchRolesResponsibilities),
+    teachingRolesResponsibilities: rolesText(p.academicExperience, p.teachingRolesResponsibilities),
+    industryRolesResponsibilities: rolesText(p.industryExperience, p.industryRolesResponsibilities),
+    researchRolesResponsibilities: rolesText(p.researchExperience, p.researchRolesResponsibilities),
 
     publicationsFirstOrCorrespondingAuthor: s(p.publicationsFirstOrCorrespondingAuthor),
     publicationsQ1OrHighImpact: s(p.publicationsQ1OrHighImpact),
@@ -154,9 +160,6 @@ function buildRow(rawUser: FMSUser): Record<string, string> {
 
     const [labDetails, labOutcomes] = labCells(p.newLabsEstablished, n - 1);
     row[`lab${n}_details`] = labDetails; row[`lab${n}_outcomes`] = labOutcomes;
-
-    const [bookTitle, bookPublisher, bookYear] = bookCells(p.authoredBooks, n - 1);
-    row[`book${n}_title`] = bookTitle; row[`book${n}_publisher`] = bookPublisher; row[`book${n}_year`] = bookYear;
   });
 
   return row;

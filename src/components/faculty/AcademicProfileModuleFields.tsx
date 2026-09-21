@@ -28,7 +28,6 @@ import type {
   AwardEntry,
   AwardCategory,
   AwardLevel,
-  AuthoredBook,
 } from "@/types";
 import {
   PROFESSIONAL_BODY_LABELS, MEMBERSHIP_VALIDITY_LABELS,
@@ -57,7 +56,6 @@ const EMPTY_TRAINING: TrainingEntry = { type: "FDP", titleOfTheProgram: "", name
 const EMPTY_MEMBERSHIP: ProfessionalMembership = { body: "IEEE" };
 const EMPTY_ADMIN_RESPONSIBILITY: AdminResponsibilityEntry = { category: "COMMITTEE_MEMBER", description: "" };
 const EMPTY_AWARD: AwardEntry = { category: "BEST_TEACHER", titleOfAward: "", awardingAgencyBody: "" };
-const EMPTY_BOOK: AuthoredBook = { title: "", publisher: "" };
 
 export function QualificationFields({ value: rawValue, onChange, collegeType }: ModuleFieldsProps & { collegeType?: CollegeType }) {
   // Un-migrated Firestore docs still carry the legacy key names - lift them so
@@ -71,7 +69,7 @@ export function QualificationFields({ value: rawValue, onChange, collegeType }: 
     return (
       <div className="space-y-5">
         <TextInput label="Highest Qualification" value={value.highestQualification} onChange={(v) => set("highestQualification", v)} placeholder="e.g. B.Ed, M.A." />
-        <StringListInput label="Research Areas/Interests *" values={value.researchAreasInterests} onChange={(v) => set("researchAreasInterests", v)} placeholder="e.g. Machine Learning - press Enter or Add" />
+        <StringListInput label="Research Areas/Interests" values={value.researchAreasInterests} onChange={(v) => set("researchAreasInterests", v)} placeholder="e.g. Machine Learning - press Enter or Add" />
         <QualificationsFields
           items={value.educationalQualifications}
           levelOptions={SCHOOL_TEACHING_QUALIFICATION_LEVELS}
@@ -84,7 +82,7 @@ export function QualificationFields({ value: rawValue, onChange, collegeType }: 
   return (
     <div className="space-y-5">
       <TextInput label="Highest Qualification" value={value.highestQualification} onChange={(v) => set("highestQualification", v)} placeholder="e.g. Ph.D" />
-      <StringListInput label="Research Areas/Interests *" values={value.researchAreasInterests} onChange={(v) => set("researchAreasInterests", v)} placeholder="e.g. Machine Learning - press Enter or Add" />
+      <StringListInput label="Research Areas/Interests" values={value.researchAreasInterests} onChange={(v) => set("researchAreasInterests", v)} placeholder="e.g. Machine Learning - press Enter or Add" />
       <div className="space-y-3 rounded-lg border p-3">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="space-y-2">
@@ -131,22 +129,19 @@ export function QualificationFields({ value: rawValue, onChange, collegeType }: 
 }
 
 // Academic/Industry/Research Experience are 3 tabs sharing this exact row
-// shape (PreviousInstitution) and layout - only which FacultyProfileFields
-// array/role box they read/write (and the tab/role headings) differ, so one tab
+// shape (PreviousInstitution, including its own Roles/Responsibilities) and layout - only
+// which FacultyProfileFields array they read/write (and the tab/role headings) differ, so one tab
 // config drives all three instead of tripling the JSX. Every tab labels its
 // institution "Institution Name" (the stored key's own name).
 const EXPERIENCE_TABS = [
   {
-    key: "academic", label: "Academic Experience", field: "academicExperience", roleField: "teachingRolesResponsibilities",
-    roleSectionLabel: "Teaching Role", roleFieldLabel: "Teaching Roles/Responsibilities",
+    key: "academic", label: "Academic Experience", field: "academicExperience", roleFieldLabel: "Academic Roles/Responsibilities",
   },
   {
-    key: "industry", label: "Industry Experience", field: "industryExperience", roleField: "industryRolesResponsibilities",
-    roleSectionLabel: "Industry Roles", roleFieldLabel: "Industry Roles/Responsibilities",
+    key: "industry", label: "Industry Experience", field: "industryExperience", roleFieldLabel: "Industry Roles/Responsibilities",
   },
   {
-    key: "research", label: "Research Experience", field: "researchExperience", roleField: "researchRolesResponsibilities",
-    roleSectionLabel: "Research Role", roleFieldLabel: "Research Roles/Responsibilities",
+    key: "research", label: "Research Experience", field: "researchExperience", roleFieldLabel: "Research Roles/Responsibilities",
   },
 ] as const;
 
@@ -160,11 +155,6 @@ export function ExperienceFields({ value: rawValue, onChange, includeTeachingAss
   const [activeTabKey, setActiveTabKey] = useState<(typeof EXPERIENCE_TABS)[number]["key"]>("academic");
   const activeTab = EXPERIENCE_TABS.find((t) => t.key === activeTabKey) ?? EXPERIENCE_TABS[0];
   const items = value[activeTab.field];
-  // Each tab's "Roles/Responsibilities" box writes its own root field.
-  const activeRoleValue = value[activeTab.roleField];
-  function setActiveRole(v: string) {
-    set(activeTab.roleField, v);
-  }
   // All 3 tabs combined - no Date of Joining here, so this is deliberately
   // not the same figure as the "Total Years of Experience" fact shown on the
   // profile (FacultyProfileHub), which also adds time served since joining
@@ -197,6 +187,11 @@ export function ExperienceFields({ value: rawValue, onChange, includeTeachingAss
           </button>
         ))}
       </div>
+      {includeTeachingAssignment && activeTab.key === "academic" && (
+        <p className="text-xs text-muted-foreground">
+          Subject-level teaching assignments (course, section, subject, weekly schedule) are managed from the &ldquo;Teaching Load&rdquo; module.
+        </p>
+      )}
       <RepeatingGroup
         title={activeTab.label}
         items={items}
@@ -254,19 +249,10 @@ export function ExperienceFields({ value: rawValue, onChange, includeTeachingAss
               )}
               <NumInput label="Joining Salary" value={item.joiningSalary} onChange={(v) => update({ joiningSalary: v })} />
               <NumInput label="Leaving Salary" value={item.leavingSalary} onChange={(v) => update({ leavingSalary: v })} />
-              {includeTeachingAssignment && (
-                <div className="sm:col-span-2 space-y-3 rounded-lg border p-3">
-                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{activeTab.roleSectionLabel}</p>
-                  <TextInput
-                    label={activeTab.roleFieldLabel}
-                    value={activeRoleValue}
-                    onChange={setActiveRole}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Subject-level teaching assignments (course, section, subject, weekly schedule) are managed from the &ldquo;Teaching Load&rdquo; module.
-                  </p>
-                </div>
-              )}
+              <div className="sm:col-span-2 space-y-2">
+                <Label>{activeTab.roleFieldLabel}</Label>
+                <Textarea value={item.rolesResponsibilities ?? ""} onChange={(e) => update({ rolesResponsibilities: e.target.value })} />
+              </div>
               <div className="sm:col-span-2 space-y-2">
                 <Label>Reason for Leaving</Label>
                 <Textarea value={item.reasonForLeaving ?? ""} onChange={(e) => update({ reasonForLeaving: e.target.value })} />
@@ -593,19 +579,6 @@ export function MentorshipFields({
                 onRemoved={() => update({ certificateUrl: "" })}
               />
             </div>
-          </>
-        )}
-      />
-      <RepeatingGroup
-        title="Authored Books"
-        items={value.authoredBooks}
-        empty={EMPTY_BOOK}
-        onChange={(v) => set("authoredBooks", v)}
-        renderRow={(item, update) => (
-          <>
-            <TextInput label="Title" value={item.title} onChange={(v) => update({ title: v })} />
-            <TextInput label="Publisher" value={item.publisher} onChange={(v) => update({ publisher: v })} />
-            <NumInput label="Year" value={item.year} onChange={(v) => update({ year: v })} />
           </>
         )}
       />

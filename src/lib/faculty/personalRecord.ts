@@ -24,6 +24,7 @@ export function personalRecordFromDoc(m: Doc): Partial<FacultyEditRecord> {
     dateOfBirth: toDateInputValue(m.dateOfBirth as never) || undefined,
     legalName: str(m.legalName),
     nameAsPerAadhar: str(m.nameAsPerAadhar),
+    nameAsPerPan: str(m.nameAsPerPan),
     fatherName: str(m.fatherName),
     motherName: str(m.motherName),
     religion: m.religion as never,
@@ -66,7 +67,7 @@ export function personalRecordFromDoc(m: Doc): Partial<FacultyEditRecord> {
 export function personalPatchBody(record: FacultyEditRecord): Record<string, unknown> {
   return {
     gender: record.gender, dateOfBirth: record.dateOfBirth, legalName: record.legalName,
-    nameAsPerAadhar: record.nameAsPerAadhar,
+    nameAsPerAadhar: record.nameAsPerAadhar, nameAsPerPan: record.nameAsPerPan,
     fatherName: record.fatherName, motherName: record.motherName, religion: record.religion,
     caste: record.caste, subCaste: record.subCaste, aadharNo: record.aadharNo, panNo: record.panNo,
     passportNo: record.passportNo,

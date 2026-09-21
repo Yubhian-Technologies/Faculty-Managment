@@ -9,6 +9,7 @@ import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/fir
 import { syncDepartmentHod, getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
 import { isSeatRole } from "@/lib/roles/seatRoles";
 import { normalizeAcademicProfile } from "@/lib/faculty/academicProfileCompat";
+import { degreeTypeError } from "@/lib/faculty/degreeType";
 import { migrateUserDoc } from "@/lib/faculty/fieldRenames";
 import type { UserRole } from "@/types";
 
@@ -136,6 +137,8 @@ export async function POST(request: Request) {
     if (!password || !role) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
+    const degreeErr = degreeTypeError(academicProfile);
+    if (degreeErr) return NextResponse.json({ error: degreeErr }, { status: 400 });
     // College email is the login username for every real staff hire (not a
     // Class Leader - a rotating student-rep login, which still requires its
     // own `email` instead) - same rule /api/college/faculty and

@@ -73,12 +73,11 @@ describe("migrateAcademicProfile", () => {
       awardEntries: [{ category: "BEST_TEACHER", title: "T", awardingBody: "B", dateAwarded: "2020-05-01", level: "STATE", year: 2020 }],
       presentSalary: 50000, fundingConsultancyRevenue: 10,
     }) as Record<string, any>;
-    expect(out.academicExperience).toEqual([{ institutionName: "A", fromDate: "2000-01-01" }]);
-    expect(out.industryExperience).toEqual([{ institutionName: "B" }]);
-    expect(out.researchExperience).toEqual([{ institutionName: "C" }]);
-    expect(out.industryRolesResponsibilities).toBe("lead");
-    expect(out.researchRolesResponsibilities).toBe("pi");
-    expect(out.teachingRolesResponsibilities).toBe("teach");
+    // Each legacy shared role text lands on its own list's (only) entry; the root fields go.
+    expect(out.academicExperience).toEqual([{ institutionName: "A", fromDate: "2000-01-01", rolesResponsibilities: "teach" }]);
+    expect(out.industryExperience).toEqual([{ institutionName: "B", rolesResponsibilities: "lead" }]);
+    expect(out.researchExperience).toEqual([{ institutionName: "C", rolesResponsibilities: "pi" }]);
+    for (const k of ["industryRolesResponsibilities", "researchRolesResponsibilities", "teachingRolesResponsibilities"]) expect(out).not.toHaveProperty(k);
     expect(out.teachingAssignment).toEqual({ courses: [] });
     expect(out.promotionHistory).toEqual([{ designation: "AP", promotionOrderUrl: "u" }]);
     expect(out.newLabsEstablished).toEqual([{ facilityDetails: "f", outcomes: "o" }]);
@@ -150,5 +149,37 @@ describe("whole-document migrations", () => {
     expect(out.supportingStaffProfile.qualifications).toEqual([{ level: "Degree", course: "B.Com", yearOfPassing: 2001 }]);
     expect(out.supportingStaffProfile.nonTechnicalProfile.training).toEqual([{ titleOfTheProgram: "t", nameOfTheFacultyCoordinator: "o" }]);
     expect(out.supportingStaffProfile.nonTechnicalProfile.achievements).toEqual([{ titleOfAward: "a", dateOfAward: "2020-01-01" }]);
+  });
+});
+
+describe("Roles/Responsibilities lift onto experience entries", () => {
+  const older = { institutionName: "Old", fromDate: "2000-01-01", toDate: "2004-01-01" };
+  const newer = { institutionName: "New", fromDate: "2005-01-01", toDate: "2010-01-01" };
+  const ongoing = { institutionName: "Now", fromDate: "2011-01-01" };
+
+  it("puts a single legacy text on the most recent entry, whatever the list order", () => {
+    const out = migrateAcademicProfile({ academicExperience: [newer, older], teachingRolesResponsibilities: "T" }) as Record<string, any>;
+    expect(out.academicExperience.map((e: any) => e.rolesResponsibilities)).toEqual(["T", undefined]);
+    expect(out).not.toHaveProperty("teachingRolesResponsibilities");
+  });
+  it("treats an entry with no end date as the latest", () => {
+    const out = migrateAcademicProfile({ industryExperience: [ongoing, newer], industryRolesResponsibilities: "I" }) as Record<string, any>;
+    expect(out.industryExperience[0].rolesResponsibilities).toBe("I");
+    expect(out.industryExperience[1].rolesResponsibilities).toBeUndefined();
+  });
+  it("keeps the root text when there is no entry to hold it", () => {
+    const out = migrateAcademicProfile({ researchExperience: [], researchRolesResponsibilities: "R" }) as Record<string, any>;
+    expect(out.researchRolesResponsibilities).toBe("R");
+    const out2 = migrateAcademicProfile({ researchRolesResponsibilities: "R" }) as Record<string, any>;
+    expect(out2.researchRolesResponsibilities).toBe("R");
+  });
+  it("never overwrites an entry's own text with a different legacy value", () => {
+    const out = migrateAcademicProfile({ academicExperience: [{ ...newer, rolesResponsibilities: "own" }], teachingRolesResponsibilities: "legacy" }) as Record<string, any>;
+    expect(out.academicExperience[0].rolesResponsibilities).toBe("own");
+    expect(out.teachingRolesResponsibilities).toBe("legacy");
+  });
+  it("is idempotent", () => {
+    const once = migrateAcademicProfile({ academicExperience: [older, newer], teachingRolesResponsibilities: "T" });
+    expect(migrateAcademicProfile(once)).toEqual(once);
   });
 });

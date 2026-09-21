@@ -12,6 +12,7 @@ import { deriveHodScope } from "@/lib/departments/hodScope";
 import { isNameOrChildAmong } from "@/lib/departments/codeOrNameResolver";
 import { isTimetableIncharge } from "@/lib/departments/timetableIncharge";
 import type { Department, DepartmentCourseScope } from "@/types";
+import { loadDepartmentIndex, stampDepartmentIds } from "@/lib/departments/stampIds";
 
 export async function GET(request: Request) {
   try {
@@ -665,7 +666,8 @@ export async function POST(request: Request) {
     const now = new Date();
     const ref = db.collection("colleges").doc(session.collegeId).collection("sections").doc();
 
-    await ref.set({
+    const deptIndex = await loadDepartmentIndex(db, session.collegeId);
+    await ref.set(stampDepartmentIds({
       collegeId: session.collegeId,
       department: dept,
       ...(secondaryDepartments.length > 0 ? { secondaryDepartments } : {}),
@@ -680,7 +682,7 @@ export async function POST(request: Request) {
       studentCount: body.studentCount != null ? Math.max(0, Number(body.studentCount)) : 0,
       createdAt: now,
       updatedAt: now,
-    });
+    }, deptIndex));
 
     return NextResponse.json({ id: ref.id }, { status: 201 });
   } catch (err) {

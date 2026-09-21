@@ -13,16 +13,18 @@ import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/fir
 import { getHodDepartmentScope } from "@/lib/departments/scope";
 import { normalizeHighestQualification } from "@/lib/faculty/highestQualification";
 import type { Designation } from "@/types";
+import { EMPLOYEE_CATEGORY_LABELS, EMPLOYEE_CATEGORY_VALUES, EMPLOYEE_CATEGORY_ERROR_MESSAGE } from "@/types";
 
 type ImportRow = {
   employeeId: string;
   legalName: string;
-  name?: string;
+  nameAsPerPan?: string;
   collegeEmail: string;
   password: string;
-  phone: string;
+  mobileNo: string;
   designation: string;
   highestQualification: string;
+  employeeCategory: string;
   joiningDate: string;
   gender: string;
   dateOfBirth: string;
@@ -210,14 +212,15 @@ export async function POST(request: Request) {
       // (src/lib/faculty/csvColumns.ts getFacultyImportColumns) is mandatory.
       if (!row.employeeId?.trim()) { failed.push({ row: rowNum, employeeId: "-", error: "Employee ID is required" }); continue; }
       if (!row.legalName?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Full Name (as per SSC) is required" }); continue; }
-      // Name (as per PAN) is optional - Full Name (as per SSC) is the primary
-      // identity name; see finalName below, which falls back to legalName
-      // whenever this column is left blank.
+      // Name (as per PAN) is optional and independent of Full Name (as per SSC),
+      // which is the only identity/display name (see finalName below) - a blank
+      // PAN column is simply left unset, never filled in from legalName.
       if (!row.collegeEmail?.trim() || !row.collegeEmail.includes("@")) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Valid College Email is required" }); continue; }
       if (!row.password?.trim() || row.password.trim().length < 8) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Login Password is required and must be at least 8 characters" }); continue; }
-      if (!row.phone?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Mobile No is required" }); continue; }
+      if (!row.mobileNo?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Mobile No is required" }); continue; }
       if (!row.designation?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Designation is required" }); continue; }
       if (!row.highestQualification?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Highest Qualification is required" }); continue; }
+      if (!row.employeeCategory?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: `Employee Category is required - ${EMPLOYEE_CATEGORY_ERROR_MESSAGE}` }); continue; }
       if (!row.joiningDate?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Date of Joining Institution is required" }); continue; }
       if (!row.gender?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Gender is required" }); continue; }
       if (!row.dateOfBirth?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Date of Birth is required" }); continue; }
@@ -248,6 +251,20 @@ export async function POST(request: Request) {
         failed.push({
           row: rowNum, employeeId: empId,
           error: `Designation "${designationRaw}" is not one of the titles your college allows (${allowedTeachingDesignations.join(" / ")})`,
+        });
+        continue;
+      }
+
+      // Employee Category - the same closed set the Add/Edit form and PATCH
+      // enforce (EMPLOYEE_CATEGORY_LABELS). The cell may hold the label
+      // ("Part Time") or the stored key ("PART_TIME"); matchOption's
+      // case/punctuation-insensitive compare resolves both to the label.
+      const categoryLabel = matchOption(row.employeeCategory, Object.values(EMPLOYEE_CATEGORY_LABELS));
+      const employeeCategory = EMPLOYEE_CATEGORY_VALUES.find((k) => EMPLOYEE_CATEGORY_LABELS[k] === categoryLabel);
+      if (!employeeCategory) {
+        failed.push({
+          row: rowNum, employeeId: empId,
+          error: `Employee Category "${row.employeeCategory.trim()}" is not valid - ${EMPLOYEE_CATEGORY_ERROR_MESSAGE}`,
         });
         continue;
       }
@@ -292,6 +309,7 @@ export async function POST(request: Request) {
         gender: checkOption(row.gender, GENDER_OPTIONS, "Gender"),
         legalName: row.legalName.trim(),
         nameAsPerAadhar: row.nameAsPerAadhar?.trim() || undefined,
+        nameAsPerPan: row.nameAsPerPan?.trim() || undefined,
         aadharNo: normalizeDigits(row.aadharNo),
         panNo: row.panNo.trim(),
         ratificationStatus: checkOption(row.ratificationStatus, RATIFICATION_STATUS_OPTIONS, "Ratification Status"),
@@ -307,9 +325,8 @@ export async function POST(request: Request) {
 
       // The name used everywhere this record is displayed/copied from (login
       // account, teaching assignments, sections, etc.) - Full Name (as per
-      // SSC) is the primary identity name now, so it takes precedence; Name
-      // (as per PAN) is only a fallback for the rare case legalName is blank.
-      const finalName = row.legalName.trim() || row.name?.trim() || "";
+      // SSC) is the only identity/display name (required above).
+      const finalName = row.legalName.trim();
 
       // Login creation - mandatory now that Login Password is a required
       // column, so every imported row gets a login account (role: Panel
@@ -336,14 +353,13 @@ export async function POST(request: Request) {
         collegeId,
         department: hodDept,
         employeeId: empId,
-        // Stores Name (as per PAN) verbatim - genuinely optional, left out
-        // entirely rather than written as undefined when not given. Anything
-        // that needs "the" display name reads legalName first - see
-        // finalName above and facultyDisplayName().
-        ...(row.name?.trim() ? { name: row.name.trim() } : {}),
+        // Name (as per PAN) is stored by buildPersonalDetailsUpdate below
+        // (nameAsPerPan), verbatim and only when given. The display name is
+        // always legalName - see finalName above and facultyDisplayName().
         collegeEmail: loginEmail,
-        phone: checkPhone(row.phone, "Phone") ?? "",
+        mobileNo: checkPhone(row.mobileNo, "Mobile No") ?? "",
         designation,
+        employeeCategory,
         highestQualification: normalizeHighestQualification(row.highestQualification),
         joiningDate,
         status: "ACTIVE",

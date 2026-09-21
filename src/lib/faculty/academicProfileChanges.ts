@@ -17,7 +17,7 @@
 // current key names, and the old-named twin of any key being written is deleted
 // so a doc never holds both (see academicProfileFirestoreUpdates).
 
-import { ACADEMIC_PROFILE_ROOT_RENAMES } from "./fieldRenames";
+import { ACADEMIC_PROFILE_ROOT_RENAMES, ROLE_FIELD_TO_LIST } from "./fieldRenames";
 import { normalizeAcademicProfile } from "./academicProfileCompat";
 
 type Obj = Record<string, unknown>;
@@ -121,14 +121,29 @@ export function academicProfileFirestoreUpdates(existingRaw: unknown, changes: A
       updates[`academicProfile.${oldKey}`] = deleteSentinel;
     }
   }
-  // Teaching Roles/Responsibilities used to live at teachingAssignment.primaryTeachingRole.
-  // (Skipped when teachingAssignment itself is being rewritten - a parent path and a
-  // child path cannot be updated in the same call, and the rewrite already drops it.)
-  if (
-    touched.has("teachingRolesResponsibilities") && !touched.has("teachingAssignment") &&
-    isObj(raw.teachingAssignment) && "primaryTeachingRole" in raw.teachingAssignment
-  ) {
-    updates["academicProfile.teachingAssignment.primaryTeachingRole"] = deleteSentinel;
+  // Roles/Responsibilities now live on each experience entry. Once an entry list being
+  // written carries a legacy shared root field's text, that root field (and its older
+  // twins) is deleted alongside it - but only then, so text that no entry holds (an
+  // orphan, or a stale client's write that dropped it) is never removed.
+  for (const { role, list } of ROLE_FIELD_TO_LIST) {
+    const written = c.set[list];
+    if (!touched.has(list) || !Array.isArray(written)) continue;
+    const carried = new Set(written.map((e) => (isObj(e) && typeof e.rolesResponsibilities === "string" ? e.rolesResponsibilities.trim() : "")).filter(Boolean));
+    const twins: { path: string; text: unknown }[] = [{ path: role, text: raw[role] }];
+    if (role === "teachingRolesResponsibilities") {
+      // Skipped when teachingAssignment itself is being rewritten - a parent path and a
+      // child path cannot be updated in the same call, and the rewrite already drops it.
+      if (!touched.has("teachingAssignment") && isObj(raw.teachingAssignment)) {
+        twins.push({ path: "teachingAssignment.primaryTeachingRole", text: raw.teachingAssignment.primaryTeachingRole });
+      }
+    } else {
+      twins.push({ path: role === "industryRolesResponsibilities" ? "primaryIndustryRole" : "primaryResearchRole", text: raw[role === "industryRolesResponsibilities" ? "primaryIndustryRole" : "primaryResearchRole"] });
+    }
+    for (const { path, text } of twins) {
+      if (typeof text === "string" && text.trim() !== "" && carried.has(text.trim()) && !touched.has(path) && !(`academicProfile.${path}` in updates)) {
+        updates[`academicProfile.${path}`] = deleteSentinel;
+      }
+    }
   }
   return updates;
 }

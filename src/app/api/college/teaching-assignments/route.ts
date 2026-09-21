@@ -13,6 +13,7 @@ import { resolveSectionCurrentSemester, resolveRequestedSemester, matchesCurrent
 import { resolveTimetableAcademicYear, matchesCurrentAcademicYear } from "@/lib/college/academicSession";
 import { isTimetableIncharge } from "@/lib/departments/timetableIncharge";
 import type { Department, TeachingAssignment, TimetableSlot } from "@/types";
+import { loadDepartmentIndex, stampDepartmentIds } from "@/lib/departments/stampIds";
 
 export async function GET(request: Request) {
   try {
@@ -344,11 +345,10 @@ export async function POST(request: Request) {
       const subject = subjectSnap.data() as { name: string; code: string; hoursPerWeek: number };
 
       // Server-computed, never trusting whatever `facultyName` the client sent -
-      // Full Name (as per SSC) preferred, Name (as per PAN) only as a fallback,
-      // same precedence facultyDisplayName() uses everywhere else.
+      // legalName only (facultyDisplayName()).
       const facultyMemberSnap = await collegeRef.collection("facultyMembers").doc(facultyId).get();
       if (!facultyMemberSnap.exists) return NextResponse.json({ error: "Faculty not found" }, { status: 404 });
-      const resolvedFacultyName = facultyDisplayName(facultyMemberSnap.data() as { name?: string; legalName?: string });
+      const resolvedFacultyName = facultyDisplayName(facultyMemberSnap.data() as { legalName?: string });
 
       // A parent department's HOD has full control over their own department and
       // every sub-department beneath it, so both the section and the faculty may
@@ -430,7 +430,8 @@ export async function POST(request: Request) {
       const now = new Date();
       const ref = collegeRef.collection("teachingAssignments").doc();
 
-      await ref.set({
+      const deptIndex = await loadDepartmentIndex(db, session.collegeId);
+      await ref.set(stampDepartmentIds({
         collegeId: session.collegeId,
         facultyId,
         facultyName: resolvedFacultyName,
@@ -457,7 +458,7 @@ export async function POST(request: Request) {
           ...(body.passPercentage != null ? { passPercentage: Number(body.passPercentage) } : {}),
           ...(body.studentFeedback != null ? { studentFeedback: Number(body.studentFeedback) } : {}),
         } : {}),
-      });
+      }, deptIndex));
 
       // Create any staged timetable slots (day + period) for this assignment -
       // past rows never have any (no live schedule to book).
@@ -555,7 +556,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "Subject not found" }, { status: 400 });
       }
 
-      const faculty = facultySnap.data() as { name?: string; legalName?: string; department?: string };
+      const faculty = facultySnap.data() as { legalName?: string; department?: string };
       const subject = subjectSnap.data() as { name?: string; code?: string; department?: string; hoursPerWeek?: number };
 
       // HOD may assign within their own department and any sub-department beneath
@@ -574,7 +575,8 @@ export async function POST(request: Request) {
       }
 
       const now = new Date();
-      const ref = await collegeRef.collection("teachingAssignments").add({
+      const deptIndex = await loadDepartmentIndex(db, session.collegeId);
+      const ref = await collegeRef.collection("teachingAssignments").add(stampDepartmentIds({
         collegeId: session.collegeId,
         facultyId: body.facultyId,
         facultyName: facultyDisplayName(faculty),
@@ -591,7 +593,7 @@ export async function POST(request: Request) {
         assignedByName: session.role,
         createdAt: now,
         updatedAt: now,
-      });
+      }, deptIndex));
 
       // Non-blocking ratio reference: surface whether this department is now
       // staffed at/beyond the 1:15 hiring-pipeline ratio, without preventing the
