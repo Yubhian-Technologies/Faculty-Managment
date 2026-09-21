@@ -12,8 +12,8 @@ import { findUsersWithMatchedRole } from "@/lib/roles/findUsersByRoles";
 //
 //   Faculty        -> other faculty in their department
 //   HOD            -> faculty + supporting staff in their department
-//   Principal      -> Vice Principal, Dean
-//   Vice Principal -> HODs, Dean
+//   Principal      -> Vice Principal, Academics
+//   Vice Principal -> HODs, Academics
 //   Supporting staff (with a department)  -> supporting staff in that department
 //   Supporting staff (no department) / College Office / every other
 //   non-teaching role -> non-teaching staff (their own role, supporting staff,
@@ -28,8 +28,8 @@ export function handoverPoolRule(role: string, hasDepartment: boolean): PoolRule
   switch (role) {
     case "PANEL_MEMBER": return { roles: ["PANEL_MEMBER"], departmentOnly: true };
     case "HOD": return { roles: ["PANEL_MEMBER", "COLLEGE_STAFF"], departmentOnly: true };
-    case "PRINCIPAL": return { roles: ["VICE_PRINCIPAL", "DEAN"], departmentOnly: false };
-    case "VICE_PRINCIPAL": return { roles: ["HOD", "DEAN"], departmentOnly: false };
+    case "PRINCIPAL": return { roles: ["VICE_PRINCIPAL", "ACADEMICS"], departmentOnly: false };
+    case "VICE_PRINCIPAL": return { roles: ["HOD", "ACADEMICS"], departmentOnly: false };
     case "COLLEGE_STAFF":
       return hasDepartment
         ? { roles: ["COLLEGE_STAFF"], departmentOnly: true }

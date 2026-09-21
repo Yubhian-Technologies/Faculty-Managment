@@ -306,7 +306,7 @@ export async function deactivateSeat(db: Firestore, collegeId: string, seatId: s
   await auditSeat(db, collegeId, "ROLE_SEAT_REMOVED", actor, seatId, { seat: seat.label });
 }
 
-// Existing HOD / Principal / VP / Dean / ... logins are role-based accounts:
+// Existing HOD / Principal / VP / Academics / ... logins are role-based accounts:
 // the account itself IS the role. This turns each into a seat held by that
 // account (its login email becomes the seat's role email), so from then on a
 // real person can be appointed and the old account retired - without touching

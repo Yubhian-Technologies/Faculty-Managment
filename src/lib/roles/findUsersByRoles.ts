@@ -6,7 +6,7 @@ import { normalizeStoredRole, orderHeldRoles } from "@/lib/roles/seatRoles";
 // types/roleSeats.ts). A plain `where("role", "in", ...)` scan only sees the
 // first, so it would miss a faculty member who is the current Principal and
 // their notifications / approvals / letters would silently go nowhere. Every
-// lookup of a SEAT role (Principal, Vice Principal, HOD, Dean, IQAC, T&P, R&D,
+// lookup of a SEAT role (Principal, Vice Principal, HOD, Academics, IQAC, T&P, R&D,
 // Placement, Exam Cell, Library) goes through here; roles that are never seats
 // (College Office, Accounts, Finance, ...) keep their own simple queries.
 //

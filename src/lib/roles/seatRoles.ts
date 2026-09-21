@@ -6,7 +6,7 @@ import type { UserRole } from "@/types/core";
 // faculty (PANEL_MEMBER), supporting staff (COLLEGE_STAFF), College Office,
 // College Admin - is a primary role.
 export const SEAT_ROLES: UserRole[] = [
-  "PRINCIPAL", "COLLEGE_ADMIN", "VICE_PRINCIPAL", "DEAN", "HOD",
+  "PRINCIPAL", "COLLEGE_ADMIN", "VICE_PRINCIPAL", "ACADEMICS", "HOD",
   "IQAC_COORDINATOR", "T_AND_P", "R_AND_D", "PLACEMENT_DEPT", "EXAM_CELL", "LIBRARY",
 ];
 
@@ -18,10 +18,11 @@ export function isSeatRole(role: string): role is UserRole {
   return (SEAT_ROLES as string[]).includes(role);
 }
 
-// A college has one Principal; every other seat role either belongs to a
-// department (HOD, one seat each) or is a named position.
+// A college has exactly one Principal, one Vice Principal, and one College
+// Admin; HOD is one seat per department; Academics is the only named position that
+// can exist more than once.
 export function isSingletonSeatRole(role: string): boolean {
-  return role !== "VICE_PRINCIPAL" && role !== "COLLEGE_ADMIN" && role !== "DEAN" && role !== "HOD";
+  return role !== "ACADEMICS" && role !== "HOD";
 }
 
 // Does a users doc's STORED role make that account the very role a seat
@@ -83,12 +84,12 @@ export function orderHeldRoles(primary: string, seatRoles: string[]): string[] {
 }
 
 // Seats that only teaching faculty can hold - the academic leadership line
-// (department heads, deans, IQAC and R&D heads). Supporting staff and College
+// (department heads, academics heads, IQAC and R&D heads). Supporting staff and College
 // Office never become an HOD. Every other seat (Principal, Vice Principal,
 // T&P, Placement, Exam Cell, Library) can go to anyone. An old role account
 // (whose own role IS a seat role) is always eligible: it's the seat's current
 // or former holder, not a new appointment.
-export const FACULTY_ONLY_SEAT_ROLES: UserRole[] = ["HOD", "DEAN", "IQAC_COORDINATOR", "R_AND_D"];
+export const FACULTY_ONLY_SEAT_ROLES: UserRole[] = ["HOD", "ACADEMICS", "IQAC_COORDINATOR", "R_AND_D"];
 
 export function canHoldSeat(personPrimaryRole: string, seatRole: string): boolean {
   if (!(FACULTY_ONLY_SEAT_ROLES as string[]).includes(seatRole)) return true;

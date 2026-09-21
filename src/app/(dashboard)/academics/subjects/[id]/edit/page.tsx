@@ -1,19 +1,18 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/useToast";
 import { stripLeadingZeros } from "@/lib/utils";
-import type { CourseCatalogItem, SubjectCategory, SubjectType } from "@/types";
+import type { Subject, SubjectCategory, SubjectType } from "@/types";
 import { SUBJECT_CATEGORY_LABELS, SUBJECT_TYPE_LABELS } from "@/types";
-import { regulationsForCourseYearByBatch } from "@/lib/college/academicStructure";
-import { parseAcademicYearStart } from "@/lib/college/academicSession";
 
 type SubjectForm = {
   serialNumber: string;
@@ -28,60 +27,68 @@ type SubjectForm = {
   hoursPerWeek: string;
   totalHoursPerSemester: string;
   credits: string;
-  regulation: string;
 };
 
 const EMPTY_SUBJECT_FORM: SubjectForm = {
   serialNumber: "", category: "", customCategory: "", name: "", code: "", type: "THEORY",
   lectureHours: "", tutorialHours: "", practicalHours: "",
-  hoursPerWeek: "", totalHoursPerSemester: "", credits: "", regulation: "",
+  hoursPerWeek: "", totalHoursPerSemester: "", credits: "",
 };
 
-export default function NewDeanSubjectPage() {
+export default function EditAcademicsSubjectPage() {
   const router = useRouter();
+  const params = useParams<{ id: string }>();
+  const subjectId = params.id;
   const searchParams = useSearchParams();
   const departmentId = searchParams.get("departmentId") ?? "";
   const courseId = searchParams.get("courseId") ?? "";
   const year = searchParams.get("year") ?? "";
-  const department = searchParams.get("department") ?? "";
   const academicYear = searchParams.get("academicYear") ?? "";
   const regulationFromList = searchParams.get("regulation") ?? "";
-  const nextSerialNumber = searchParams.get("nextSerialNumber") ?? "";
-  const catalogId = searchParams.get("catalogId") ?? "";
-  // Carried through to the success redirect so the Subjects list lands back
-  // on this same department/course/year/session/regulation instead of the
-  // blank pickers.
-  const backHref = `/dean/subjects?departmentId=${encodeURIComponent(departmentId)}&courseId=${encodeURIComponent(courseId)}&year=${encodeURIComponent(year)}&academicYear=${encodeURIComponent(academicYear)}&regulation=${encodeURIComponent(regulationFromList)}`;
+  // Carried through to Cancel/Save so the Subjects list lands back on this
+  // same department/course/year/session/regulation instead of the blank pickers.
+  const backHref = `/academics/subjects?departmentId=${encodeURIComponent(departmentId)}&courseId=${encodeURIComponent(courseId)}&year=${encodeURIComponent(year)}&academicYear=${encodeURIComponent(academicYear)}&regulation=${encodeURIComponent(regulationFromList)}`;
 
-  const [form, setForm] = useState<SubjectForm>({
-    ...EMPTY_SUBJECT_FORM, regulation: regulationFromList, serialNumber: nextSerialNumber,
-  });
+  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  // Whichever of this course's own regulations (Course Catalog, see
-  // CourseCatalogSettingsCard) currently cover the picked year, resolved
-  // from their batch coverage - offered as an optional tag, not required
-  // (subjects are scoped by Academic Year session, not regulation; see
-  // dean/subjects/page.tsx).
-  const [regulations, setRegulations] = useState<string[]>([]);
+  const [form, setForm] = useState<SubjectForm>(EMPTY_SUBJECT_FORM);
+  // Set at creation, immutable here (like courseId/year) - shown for context only.
+  const [regulation, setRegulation] = useState("");
 
   useEffect(() => {
     if (!courseId || !year) {
-      toast({ variant: "destructive", title: "Select a course, department and year first" });
-      router.push("/dean/subjects");
+      toast({ variant: "destructive", title: "Select a course and year first" });
+      router.push(backHref);
+      return;
     }
-  }, [courseId, year, router]);
-
-  useEffect(() => {
-    fetch("/api/college/course-catalog")
-      .then((r) => r.json() as Promise<{ items: CourseCatalogItem[] }>)
+    fetch(`/api/college/subjects?courseId=${encodeURIComponent(courseId)}&year=${encodeURIComponent(year)}`)
+      .then((r) => r.json() as Promise<{ subjects: Subject[] }>)
       .then((d) => {
-        const catalogItem = (d.items ?? []).find((c) => c.id === catalogId);
-        setRegulations(regulationsForCourseYearByBatch(catalogItem?.regulationBatches ?? {}, Number(year), parseAcademicYearStart(academicYear) ?? undefined, catalogItem?.regulations));
+        const s = (d.subjects ?? []).find((x) => x.id === subjectId);
+        if (!s) {
+          toast({ variant: "destructive", title: "Subject not found" });
+          router.push(backHref);
+          return;
+        }
+        setForm({
+          serialNumber: s.serialNumber != null ? String(s.serialNumber) : "",
+          category: s.category ?? "",
+          customCategory: s.customCategory ?? "",
+          name: s.name,
+          code: s.code,
+          type: s.type,
+          lectureHours: s.lectureHours != null ? String(s.lectureHours) : "",
+          tutorialHours: s.tutorialHours != null ? String(s.tutorialHours) : "",
+          practicalHours: s.practicalHours != null ? String(s.practicalHours) : "",
+          hoursPerWeek: String(s.hoursPerWeek ?? ""),
+          totalHoursPerSemester: s.totalHoursPerSemester != null ? String(s.totalHoursPerSemester) : "",
+          credits: String(s.credits ?? ""),
+        });
+        setRegulation(s.regulation ?? "");
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load regulations" }));
-  }, [catalogId, year, academicYear]);
-
-  if (!courseId || !year) return null;
+      .catch(() => toast({ variant: "destructive", title: "Failed to load subject" }))
+      .finally(() => setLoading(false));
+  }, [courseId, year, subjectId, router, backHref]);
 
   function setF(patch: Partial<SubjectForm>) {
     setForm((f) => ({ ...f, ...patch }));
@@ -111,15 +118,10 @@ export default function NewDeanSubjectPage() {
     }
     setSaving(true);
     try {
-      const res = await fetch("/api/college/subjects", {
-        method: "POST",
+      const res = await fetch(`/api/college/subjects/${subjectId}`, {
+        method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          courseId,
-          year: Number(year),
-          department: department || undefined,
-          academicYear: academicYear || undefined,
-          regulation: form.regulation,
           serialNumber: Number(form.serialNumber),
           category: form.category,
           customCategory: form.category === "OTHER" ? form.customCategory.trim() : undefined,
@@ -138,7 +140,7 @@ export default function NewDeanSubjectPage() {
         const json = await res.json() as { error?: string };
         throw new Error(json.error ?? "Failed to save subject");
       }
-      toast({ variant: "success", title: "Subject added" });
+      toast({ variant: "success", title: "Subject updated" });
       router.push(backHref);
     } catch (err) {
       toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to save subject" });
@@ -147,15 +149,19 @@ export default function NewDeanSubjectPage() {
     }
   }
 
+  if (loading) {
+    return (
+      <div className="max-w-xl">
+        <PageHeader title="Edit Subject" description="Loading…" />
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-xl">
       <PageHeader
-        title="Add Subject"
-        description={
-          academicYear
-            ? `Add a subject offered for this year of the course, for academic year ${academicYear}`
-            : "Add a subject offered for this year of the course"
-        }
+        title="Edit Subject"
+        description="Update this subject's details"
       />
 
       <Card>
@@ -199,20 +205,15 @@ export default function NewDeanSubjectPage() {
               <Input value={form.name} onChange={(e) => setF({ name: e.target.value })} placeholder="e.g. Data Structures" />
             </div>
 
-            <div className="space-y-2">
-              <Label>Regulation</Label>
-              <Select value={form.regulation} onValueChange={(v) => setF({ regulation: v })} disabled={regulations.length === 0}>
-                <SelectTrigger><SelectValue placeholder={regulations.length ? "Select regulation (optional)" : "None resolved for this year"} /></SelectTrigger>
-                <SelectContent>
-                  {regulations.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
-                </SelectContent>
-              </Select>
-              {regulations.length === 0 && (
-                <p className="text-xs text-muted-foreground">
-                  No regulation&rsquo;s batch currently covers this year - the subject will be added without one.
-                </p>
-              )}
-            </div>
+            {regulation && (
+              <div className="space-y-1.5">
+                <Label>Regulation</Label>
+                <div>
+                  <Badge variant="secondary">{regulation}</Badge>
+                  <span className="ml-2 text-xs text-muted-foreground">Fixed at creation, not editable</span>
+                </div>
+              </div>
+            )}
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
@@ -302,7 +303,7 @@ export default function NewDeanSubjectPage() {
 
             <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end pt-4 border-t">
               <Button type="button" variant="outline" onClick={() => router.push(backHref)}>Cancel</Button>
-              <Button type="submit" loading={saving}>Add Subject</Button>
+              <Button type="submit" loading={saving}>Save Changes</Button>
             </div>
           </form>
         </CardContent>

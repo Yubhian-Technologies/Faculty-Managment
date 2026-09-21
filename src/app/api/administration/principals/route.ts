@@ -1,11 +1,9 @@
 export const dynamic = "force-dynamic";
 
-import { convertLegacyAccounts } from "@/lib/roles/seats";
-import { findUsersByRoles, findUsersWithMatchedRole } from "@/lib/roles/findUsersByRoles";
+import { findUsersWithMatchedRole } from "@/lib/roles/findUsersByRoles";
 import { NextResponse } from "next/server";
 import { requireLocationMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import { createFirebaseUser } from "@/lib/firebase/authRest";
 
 async function fetchCollegePrincipals(db: FirebaseFirestore.Firestore, collegeId: string) {
   // Includes whoever holds the Principal / Vice Principal SEAT (see
@@ -72,86 +70,10 @@ export async function GET(request: Request) {
   }
 }
 
-export async function POST(request: Request) {
-  try {
-    const session = await requireLocationMember("ADMINISTRATION");
-
-    const body = (await request.json()) as {
-      name: string;
-      email: string;
-      password: string;
-      role: string;
-      collegeId: string;
-    };
-
-    const { name, email, password, role, collegeId } = body;
-
-    if (!name || !email || !password || !collegeId || !role) {
-      return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
-    }
-
-    if (!["PRINCIPAL", "VICE_PRINCIPAL"].includes(role)) {
-      return NextResponse.json({ error: "Only PRINCIPAL or VICE_PRINCIPAL allowed" }, { status: 400 });
-    }
-
-    const db = getAdminDb();
-
-    // Verify college belongs to this location
-    const collegeSnap = await db.collection("colleges").doc(collegeId).get();
-    if (!collegeSnap.exists) {
-      return NextResponse.json({ error: "College not found" }, { status: 404 });
-    }
-    const collegeData = collegeSnap.data() as { locationId?: string };
-    if (collegeData.locationId !== session.locationId) {
-      return NextResponse.json({ error: "College does not belong to your location" }, { status: 403 });
-    }
-
-    // Enforce one Principal per college - a deactivated holder doesn't count,
-    // same as the GET listing above, so a replacement can be appointed.
-    if (role === "PRINCIPAL") {
-      const existing = await findUsersByRoles(db, collegeId, ["PRINCIPAL"], { exact: true });
-      if (existing.length > 0) {
-        return NextResponse.json({ error: "A Principal account already exists for this college" }, { status: 409 });
-      }
-    }
-
-    const uid = await createFirebaseUser(email, password, name);
-
-    const db2 = getAdminDb();
-    const now = new Date();
-
-    await db2.collection("colleges").doc(collegeId).collection("users").doc(uid).set({
-      uid, collegeId, name, email, role,
-      department: "",
-      isActive: true, createdAt: now, updatedAt: now,
-    });
-
-    await db2.collection("systemUsers").doc(uid).set({
-      uid, role, collegeId, email, name,
-    });
-
-    await db2.collection("colleges").doc(collegeId).collection("auditLogs").add({
-      collegeId, action: "USER_CREATED",
-      performedBy: session.uid, performedByName: "Administration",
-      targetId: uid, details: { email, role, name }, timestamp: now,
-    });
-
-    await convertLegacyAccounts(db2, collegeId, { uid: session.uid, name: session.email || "Administration" })
-      .catch((e) => console.error("[administration/principals POST] seat conversion failed:", e));
-
-    return NextResponse.json({ uid }, { status: 201 });
-  } catch (err) {
-    if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_LOCATION_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    if (
-      err && typeof err === "object" && "code" in err &&
-      (err as { code: string }).code === "auth/email-already-exists"
-    ) {
-      return NextResponse.json({ error: "An account with this email already exists" }, { status: 409 });
-    }
-    const msg = err instanceof Error ? err.message : String(err);
-    console.error("[administration/principals POST]", msg);
-    return NextResponse.json({ error: msg || "Internal error" }, { status: 500 });
-  }
-}
+// No POST here any more - Location Admin no longer creates a Principal or
+// Vice Principal account directly. That bypassed the seat model entirely
+// (a fresh account whose own role WAS "PRINCIPAL"/"VICE_PRINCIPAL", only
+// wrapped into a seat afterward by convertLegacyAccounts). The College Admin
+// - itself the one seat Location Admin does bootstrap, from
+// administration/college-people - appoints the Principal and every other
+// seat from within the college, via Role Assignments.

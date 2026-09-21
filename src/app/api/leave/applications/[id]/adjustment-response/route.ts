@@ -25,7 +25,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const session = await requireCollegeMember(
       "PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL",
       "COLLEGE_OFFICE", "ACCOUNTS", "FINANCE", "COLLEGE_STAFF",
-      "DEAN", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D",
+      "ACADEMICS", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D",
       "LIBRARY", "EXAM_CELL", "WEBMASTER", "PLACEMENT_DEPT", "PURCHASE_DEPT"
     );
     const body = (await request.json()) as {

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { UserPlus, UserCog, ChevronDown, ChevronUp, Plus, Pencil } from "lucide-react";
+import { UserPlus, ChevronDown, ChevronUp, Plus, Pencil } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -17,12 +17,11 @@ export default function AdministrationCollegesPage() {
   const [colleges, setColleges] = useState<College[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  // undefined = not loaded yet (only true briefly, while the bulk fetch below
-  // is in flight) - loaded eagerly for every college on mount so the Add
-  // Principal/VP button's visibility is never a guess. Previously this was
-  // fetched lazily per row only when expanded, defaulting to "show the
-  // button" for every collapsed row until it was, which is what made the
-  // button flash/linger incorrectly for colleges that already had one.
+  // Read-only: who currently holds the Principal/VP seat, shown in each row's
+  // expanded detail. There's no "Add Principal" action on this page any more
+  // - Principal (and every other seat) is appointed from within the college,
+  // by its College Admin, via Role Assignments - never handed out directly by
+  // Location Admin (see api/administration/college-people's comment).
   const [principalMap, setPrincipalMap] = useState<Record<string, PrincipalRow[]>>({});
   const [principalsLoaded, setPrincipalsLoaded] = useState(false);
 
@@ -45,9 +44,9 @@ export default function AdministrationCollegesPage() {
   useEffect(() => {
     loadAll();
     // Re-fetch whenever the tab regains focus (e.g. coming back from the "Add
-    // Principal/VP" page via the browser's back button, which can restore
+    // College Admin" page via the browser's back button, which can restore
     // this page's previous in-memory state via Next's router cache instead
-    // of remounting it) so a newly-added Principal/VP is reflected without
+    // of remounting it) so a newly-added person is reflected without
     // needing a manual hard reload.
     function onFocus() { loadAll(); }
     window.addEventListener("focus", onFocus);
@@ -89,14 +88,6 @@ export default function AdministrationCollegesPage() {
         {colleges.map((college) => {
           const isExpanded = expandedId === college.id;
           const principalList = principalMap[college.id];
-          const hasPrincipal = principalList?.some((p) => p.role === "PRINCIPAL") ?? false;
-          const hasVP = principalList?.some((p) => p.role === "VICE_PRINCIPAL") ?? false;
-          // Before the bulk fetch resolves, don't show the button at all
-          // (rather than defaulting to "show") - it appears as soon as we
-          // actually know whether a slot is open, never as a guess.
-          const showAddBtn = principalsLoaded && (!hasPrincipal || !hasVP);
-          const addBtnLabel = hasPrincipal && !hasVP ? "Add Vice Principal" : "Add Principal";
-          const addBtnDefaultRole = hasPrincipal && !hasVP ? "VICE_PRINCIPAL" : "PRINCIPAL";
 
           return (
             <div key={college.id} className="rounded-lg border bg-card overflow-hidden">
@@ -136,24 +127,6 @@ export default function AdministrationCollegesPage() {
                     <UserPlus className="h-3.5 w-3.5 mr-1.5" />
                     Add College Admin
                   </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => router.push(`/administration/role-assignments?collegeId=${college.id}`)}
-                  >
-                    <UserCog className="h-3.5 w-3.5 mr-1.5" />
-                    Role Assignments
-                  </Button>
-                  {showAddBtn && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => router.push(`/administration/colleges/${college.id}/principal/new?role=${addBtnDefaultRole}`)}
-                    >
-                      <UserPlus className="h-3.5 w-3.5 mr-1.5" />
-                      {addBtnLabel}
-                    </Button>
-                  )}
                   <Button
                     size="sm"
                     variant="ghost"

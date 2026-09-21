@@ -10,6 +10,6 @@ import type { UserRole } from "@/types";
 // department/college leadership, then the internal-office roles.
 export const PUBLICATION_ELIGIBLE_ROLES: UserRole[] = [
   "PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL", "R_AND_D",
-  "DEAN", "IQAC_COORDINATOR", "T_AND_P", "PLACEMENT_DEPT",
+  "ACADEMICS", "IQAC_COORDINATOR", "T_AND_P", "PLACEMENT_DEPT",
   "LIBRARY", "EXAM_CELL", "WEBMASTER", "COLLEGE_OFFICE", "COLLEGE_STAFF",
 ];

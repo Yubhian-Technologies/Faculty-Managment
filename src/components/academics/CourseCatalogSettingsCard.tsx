@@ -125,8 +125,8 @@ interface CourseCatalogSettingsCardProps {
   // Hides the add form and every per-item edit/delete/activate control and
   // shows courses + their assigned regulations only.
   readOnly?: boolean;
-  // The Dean's view: courses themselves are created/renamed/deleted by the
-  // Principal / VP / College Admin, but the Dean still maintains each
+  // The Academics' view: courses themselves are created/renamed/deleted by the
+  // Principal / VP / College Admin, but the Academics still maintains each
   // course's curriculum regulations - so only that part stays editable.
   regulationsOnly?: boolean;
   // Lists, under each course, the departments that offer it (a department

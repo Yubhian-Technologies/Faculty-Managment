@@ -30,7 +30,12 @@ export function PeopleNotOnRoster({ departments }: { departments: Department[] }
       const rostered = new Set((f.faculty ?? []).map((m) => m.userUid).filter(Boolean));
       return (u.users ?? []).filter((p) =>
         p.isActive !== false && !rostered.has(p.uid) &&
-        (p.role === "PANEL_MEMBER" || (p.role === "COLLEGE_OFFICE" && (p.seatRoles?.length ?? 0) > 0)),
+        (p.role === "PANEL_MEMBER" ||
+          // A College Admin login (see api/administration/college-people) is a
+          // role-login, not a person with teaching duties - never offered here,
+          // even though it's a COLLEGE_OFFICE account with a seat like the
+          // office-staff-who-also-teaches case below is meant to catch.
+          (p.role === "COLLEGE_OFFICE" && (p.seatRoles ?? []).some((r) => r !== "COLLEGE_ADMIN"))),
       );
     },
   });

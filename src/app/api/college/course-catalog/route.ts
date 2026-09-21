@@ -13,7 +13,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 export async function GET() {
   try {
     const session = await requireCollegeMember(
-      "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "HOD", "COLLEGE_OFFICE", "DEAN"
+      "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "HOD", "COLLEGE_OFFICE", "ACADEMICS"
     );
 
     const db = getAdminDb();

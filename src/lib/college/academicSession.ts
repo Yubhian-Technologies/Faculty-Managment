@@ -114,7 +114,7 @@ export function regulationsForBatchStartYear(
 // returns every regulation whose batch computes to exactly `courseYear` for
 // that session - normally exactly one, since each admission year has its own
 // regulation, but callers should treat more than one as "ambiguous, ask the
-// Dean to fix the batches" rather than silently picking the first.
+// Academics to fix the batches" rather than silently picking the first.
 // `asOfStartYear` defaults to the real current session.
 //
 // Only for a consumer that has no actual batch to resolve against yet (e.g.
@@ -129,7 +129,7 @@ export function regulationsForBatchStartYear(
 // was "a regulation with no year restriction is offered for every year", so
 // when `regulationBatches` is empty we return the passed-in regulation list
 // unchanged rather than resolving to nothing - otherwise every downstream
-// picker silently shows "None assigned" for a course whose Dean has clearly
+// picker silently shows "None assigned" for a course whose Academics has clearly
 // assigned R23. Once that course is re-saved from the Course Catalog card
 // (or scripts/backfill-regulation-batches.mjs runs), real batch coverage
 // exists and takes over.

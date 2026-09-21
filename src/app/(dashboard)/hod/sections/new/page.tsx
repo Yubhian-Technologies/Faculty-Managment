@@ -61,7 +61,7 @@ export default function NewSectionPage() {
   });
   // This course's own assigned regulations (Course Catalog > Regulations),
   // narrowed to whichever are actually offered for the picked year - same
-  // set the Dean's Add Subject page offers. Empty until a year is picked.
+  // set the Academics' Add Subject page offers. Empty until a year is picked.
   const [catalogItems, setCatalogItems] = useState<CourseCatalogItem[]>([]);
   const [saving, setSaving] = useState(false);
   // Which of this HOD's own departments the section is being created under -
