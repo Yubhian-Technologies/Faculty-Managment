@@ -97,6 +97,10 @@ export async function GET(request: Request) {
       hodScopeForYearGate = scope;
       if (scope.ownDepartmentNames.length > 0) {
         assignmentQuery = assignmentQuery.where("department", "in", scope.ownDepartmentNames.slice(0, 30));
+      } else {
+      // An HOD with no department on file must see nothing - not the whole
+      // college, which is what leaving the query unfiltered would return.
+        assignmentQuery = assignmentQuery.where("department", "==", "__none__");
       }
       // Sub-departments AND grouped/managed branches (a Sub-HOD manages their
       // branches' assignments; a main HOD rolls up its sub-HODs' branches).
