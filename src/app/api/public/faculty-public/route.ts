@@ -5,8 +5,8 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { experienceBreakdown, allPreviousExperienceEntries } from "@/lib/faculty/experienceCalc";
 import { normalizeAcademicProfile } from "@/lib/faculty/academicProfileCompat";
-import { migrateFacultyDoc } from "@/lib/faculty/fieldRenames";
-import type { FacultyMember, DegreeDetail } from "@/types";
+import { migrateFacultyDoc, migrateUserDoc } from "@/lib/faculty/fieldRenames";
+import type { FacultyMember, FMSUser, DegreeDetail } from "@/types";
 
 // Public "meet the faculty" page — no auth, reached via a short, human-
 // readable link keyed on employeeId alone (?employeeId=EMP0001), not the
@@ -15,6 +15,12 @@ import type { FacultyMember, DegreeDetail } from "@/types";
 // POST/PATCH /api/college/faculty and its import route) — if two records
 // still share an id (pre-existing data from before that check landed), this
 // fails closed with 409 rather than guessing which one to show.
+//
+// HOD/PRINCIPAL/VICE_PRINCIPAL have no facultyMembers record of their own —
+// their employeeId (FMSUser.employeeId) lives directly on their users/{uid}
+// doc instead (see /api/college/faculty/me's own doc-comment) — so a
+// facultyMembers miss falls back to a users collectionGroup lookup before
+// giving up. Same ambiguity/uniqueness handling either way.
 //
 // Same field-allowlist security model as candidate-form/offer-acceptance:
 // hand-picked response fields, not a raw doc dump. Everything HR/financial/
@@ -46,11 +52,16 @@ export async function GET(request: Request) {
     }
 
     const db = getAdminDb();
-    const matches = await db
+    let matches = await db
       .collectionGroup("facultyMembers")
       .where("employeeId", "==", employeeId)
       .limit(2)
       .get();
+    let isUserDoc = false;
+    if (matches.empty) {
+      matches = await db.collectionGroup("users").where("employeeId", "==", employeeId).limit(2).get();
+      isUserDoc = true;
+    }
 
     if (matches.empty) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -65,9 +76,15 @@ export async function GET(request: Request) {
     const collegeSnap = await collegeRef?.get();
 
     // Lift legacy key names on un-migrated docs (qualification/experienceYears, personal keys).
-    const faculty = migrateFacultyDoc(facultyDoc.data()) as unknown as FacultyMember;
+    // HOD/Principal/VP records (isUserDoc) don't carry FacultyMember's top-level
+    // highestQualification/specialization/officialEmail/joiningDate — fall back to
+    // the academicProfile's own highestQualification and to dateOfJoining/collegeEmail.
+    const faculty = isUserDoc
+      ? (migrateUserDoc(facultyDoc.data()) as unknown as FMSUser)
+      : (migrateFacultyDoc(facultyDoc.data()) as unknown as FacultyMember);
     const collegeName = (collegeSnap?.data() as { name?: string } | undefined)?.name ?? "";
     const ap = normalizeAcademicProfile(faculty.academicProfile);
+    const joiningDate = isUserDoc ? (faculty as FMSUser).dateOfJoining : (faculty as FacultyMember).joiningDate;
 
     return NextResponse.json({
       profile: {
@@ -76,15 +93,15 @@ export async function GET(request: Request) {
         designation: faculty.designation,
         department: faculty.department,
         profilePhotoUrl: faculty.profilePhotoUrl || undefined,
-        highestQualification: faculty.highestQualification,
-        specialization: faculty.specialization,
+        highestQualification: isUserDoc ? ap?.highestQualification : (faculty as FacultyMember).highestQualification,
+        specialization: isUserDoc ? undefined : (faculty as FacultyMember).specialization,
         // Total Years of Experience - computed live from Date of Joining +
         // the Academic/Industry/Research Experience entries, same canonical
         // calc as Faculty Details, not the stored (and only periodically
         // re-saved) totalYearsOfExperience field.
-        totalYearsOfExperience: experienceBreakdown(allPreviousExperienceEntries(ap), faculty.joiningDate).total,
-        officialEmail: faculty.officialEmail || undefined,
-        joiningYear: faculty.joiningDate ? faculty.joiningDate.toDate().getFullYear() : undefined,
+        totalYearsOfExperience: experienceBreakdown(allPreviousExperienceEntries(ap), joiningDate).total,
+        officialEmail: (isUserDoc ? (faculty as FMSUser).collegeEmail : (faculty as FacultyMember).officialEmail) || undefined,
+        joiningYear: joiningDate ? joiningDate.toDate().getFullYear() : undefined,
 
         education: ap
           ? {
@@ -168,6 +185,10 @@ export async function GET(request: Request) {
                 fromDate: t.fromDate,
                 toDate: t.toDate,
                 year: t.year, // legacy fallback
+                duration: t.duration, // days - FDP/Workshop only
+                numberOfWeeks: t.numberOfWeeks, // MOOC/Certification only
+                place: t.place,
+                modeOfTheProgram: t.modeOfTheProgram,
               })),
             }
           : undefined,

@@ -2,15 +2,15 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Pencil, Share2 } from "lucide-react";
+import { Pencil } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { ProfilePhotoUpload } from "@/components/shared/ProfilePhotoUpload";
 import { ChangePasswordDialog } from "@/components/shared/ChangePasswordDialog";
+import { PublicProfileLinkButton } from "@/components/shared/PublicProfileLinkButton";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { MyProfileModuleTiles, FacultyIdentityFacts, FacultyStatusBadge } from "@/components/faculty/FacultyProfileHub";
 import { useAuth } from "@/hooks/useAuth";
-import { toast } from "@/hooks/useToast";
 import type { FacultyMember } from "@/types";
 
 export default function FacultyProfilePage() {
@@ -34,14 +34,6 @@ export default function FacultyProfilePage() {
 
   if (!user) return null;
 
-  const employeeId = faculty?.employeeId ?? null;
-
-  function copyPublicProfileLink() {
-    if (!employeeId) return;
-    void navigator.clipboard.writeText(`${window.location.origin}/faculty-public/facultyid=${encodeURIComponent(employeeId)}`);
-    toast({ variant: "success", title: "Public profile link copied" });
-  }
-
   return (
     <div className="space-y-6">
       <PageHeader
@@ -50,11 +42,7 @@ export default function FacultyProfilePage() {
         actions={
           <div className="flex gap-2">
             <ChangePasswordDialog />
-            {employeeId && (
-              <Button variant="outline" onClick={copyPublicProfileLink}>
-                <Share2 className="h-4 w-4 mr-2" />Copy Public Profile Link
-              </Button>
-            )}
+            <PublicProfileLinkButton />
           </div>
         }
       />
