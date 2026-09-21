@@ -15,7 +15,7 @@ export async function PATCH(request: Request) {
       "PANEL_MEMBER",
       "COLLEGE_OFFICE",
       "COLLEGE_STAFF",
-      "DEAN",
+      "ACADEMICS",
       "IQAC_COORDINATOR",
       "T_AND_P",
       "R_AND_D",

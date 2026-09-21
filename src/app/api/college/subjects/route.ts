@@ -13,7 +13,7 @@ import { parseAcademicYearStart } from "@/lib/college/academicSession";
 
 export async function GET(request: Request) {
   try {
-    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "COLLEGE_OFFICE", "PANEL_MEMBER", "COLLEGE_STAFF", "EXAM_CELL", "DEAN");
+    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "COLLEGE_OFFICE", "PANEL_MEMBER", "COLLEGE_STAFF", "EXAM_CELL", "ACADEMICS");
     const { searchParams } = new URL(request.url);
     const courseId = searchParams.get("courseId");
     const year = searchParams.get("year");
@@ -46,7 +46,7 @@ export async function GET(request: Request) {
         query = query.where("department", "in", names.slice(0, 30));
       }
     } else if (deptFilter) {
-      // Same bidirectional visibility as the HOD branch above, for Dean/
+      // Same bidirectional visibility as the HOD branch above, for Academics/
       // Principal/VP: browsing a fed department (e.g. IT) also shows its
       // feeder's subjects (e.g. Basic Science's shared 1st-year catalog) -
       // the `year` filter below keeps a feeder's subjects from leaking into
@@ -65,7 +65,7 @@ export async function GET(request: Request) {
       .map((d) => ({ id: d.id, ...d.data() }))
       .sort((a, b) => ((a as { name?: string }).name ?? "").localeCompare((b as { name?: string }).name ?? ""));
 
-    // Dean-only filter (see dean/subjects/page.tsx) - a subject with no
+    // Academics-only filter (see academics/subjects/page.tsx) - a subject with no
     // academicYear at all (created before this field existed, or via the
     // HOD's own Subjects page, which doesn't set it) still matches any
     // session rather than silently disappearing.
@@ -102,7 +102,7 @@ export async function GET(request: Request) {
 // no course link). Branch on which fields the caller sent.
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "DEAN");
+    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "ACADEMICS");
     const body = (await request.json()) as {
       courseId?: string;
       year?: number;
@@ -145,9 +145,9 @@ export async function POST(request: Request) {
       }
 
       // Optional - a subject can be added for a course-year even when no
-      // regulation (or more than one) currently resolves for it; the Dean's
+      // regulation (or more than one) currently resolves for it; the Academics'
       // subject list is scoped by Academic Year session, not regulation (see
-      // dean/subjects/page.tsx). When one IS provided, it must still belong
+      // academics/subjects/page.tsx). When one IS provided, it must still belong
       // to this course's own Course Catalog entry - a Pharmacy-only code
       // should never be accepted for a B.Tech subject.
       const regulation = body.regulation?.trim();
@@ -162,7 +162,7 @@ export async function POST(request: Request) {
         // Must match what THIS year/academic-session actually resolves to
         // under Course Catalog's batch assignments (same resolution the
         // form's own Regulation dropdown pre-filters against, see
-        // dean/subjects/new/page.tsx) - not merely be some regulation the
+        // academics/subjects/new/page.tsx) - not merely be some regulation the
         // course has ever been assigned. A course can carry two regulations
         // (e.g. R23 covering intakes 2023-2025, R26 covering 2026-2028);
         // accepting either regardless of which one this specific Year+
@@ -236,7 +236,7 @@ export async function POST(request: Request) {
           return NextResponse.json({ error: "Course does not belong to your department" }, { status: 403 });
         }
       } else {
-        // Non-HOD callers (Principal/VP/Super Admin/Dean) aren't scoped to one
+        // Non-HOD callers (Principal/VP/Super Admin/Academics) aren't scoped to one
         // department, so the client may name which one it's targeting - but
         // only the course's own department or one of the departments it feeds
         // (Department.secondaryDepartments) is accepted, so it can never drift

@@ -16,7 +16,7 @@ const SEAT_BLURB: Partial<Record<UserRole, string>> = {
   VICE_PRINCIPAL: "College-wide approvals, hiring, budget, staff and reports",
   COLLEGE_ADMIN: "Runs the whole college: people, departments, role assignments and reports",
   HOD: "Your department's faculty, sections, timetable, approvals and budget",
-  DEAN: "Subjects and academic administration",
+  ACADEMICS: "Subjects and academic administration",
   IQAC_COORDINATOR: "IQAC coordination",
   T_AND_P: "Training & placement, staff attendance",
   R_AND_D: "Research records across the college",

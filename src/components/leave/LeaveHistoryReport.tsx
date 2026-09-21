@@ -156,7 +156,7 @@ interface LeaveHistoryReportProps {
   emptyTitle?: string;
   // New Joining/Vacation/Non-Vacation only helps when a roster mixes staff
   // types (a department's teaching + technical staff). A single college-wide
-  // role's own register (Dean, College Office, ...) is already filtered to
+  // role's own register (Academics, College Office, ...) is already filtered to
   // just that role, so the split only hides the one or two people in it
   // behind an extra click - default true, the role-based registers pass false.
   showCategoryFilter?: boolean;

@@ -6,7 +6,7 @@ import { convertLegacyAccounts, SeatError } from "@/lib/roles/seats";
 import { requireSeatManager } from "@/lib/roles/seatContext";
 
 // One-time (and safe to repeat) migration: every existing HOD / Vice Principal
-// / Dean / ... login becomes a seat held by that account, so a real person can
+// / Academics / ... login becomes a seat held by that account, so a real person can
 // be appointed to it afterwards. See convertLegacyAccounts.
 export async function POST(request: Request) {
   try {

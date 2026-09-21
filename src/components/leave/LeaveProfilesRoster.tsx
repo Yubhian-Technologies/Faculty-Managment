@@ -38,7 +38,7 @@ const BASE_STAFF_TYPE_TABS: { key: StaffType; label: string }[] = [
   { key: "faculty", label: "Faculty" },
   { key: "supportingStaff", label: "Supporting Staff" },
 ];
-// Vice Principal, College Office, Dean, IQAC Coordinator, T&P, R&D, Library,
+// Vice Principal, College Office, Academics, IQAC Coordinator, T&P, R&D, Library,
 // Exam Cell, Webmaster - college-wide roles with no department, so they'd
 // never appear on the two tabs above. Principal/VP-only, mirroring the Leave
 // History page's own per-role registers (see nonDepartmentalStaffRoles.ts).

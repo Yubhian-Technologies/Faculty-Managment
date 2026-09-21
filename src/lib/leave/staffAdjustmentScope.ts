@@ -7,13 +7,13 @@ import { findUsersWithMatchedRole } from "@/lib/roles/findUsersByRoles";
 // The Adjustments module: who may adjust whom. A manager arranges cover for
 // someone BELOW them who has other work on a date/range:
 //
-//   Principal      -> Vice Principal, Dean, HODs
-//   Vice Principal -> HODs, Dean
+//   Principal      -> Vice Principal, Academics, HODs
+//   Vice Principal -> HODs, Academics
 //   HOD            -> faculty and supporting staff of their own department(s)
 //   College Office -> supporting staff
 //
 // Cover always comes from the subject's own tier (a Vice Principal's duties go
-// to another Vice Principal / the Dean, a supporting-staff member's to another
+// to another Vice Principal / the Academics, a supporting-staff member's to another
 // supporting-staff member) - never across the teaching / non-teaching line.
 export const ADJUSTMENT_MANAGER_ROLES = ["PRINCIPAL", "VICE_PRINCIPAL", "HOD", "COLLEGE_OFFICE"] as const;
 export type AdjustmentManagerRole = (typeof ADJUSTMENT_MANAGER_ROLES)[number];
@@ -24,8 +24,8 @@ export function isAdjustmentManager(role: string): role is AdjustmentManagerRole
 
 export function adjustableRoles(managerRole: AdjustmentManagerRole): UserRole[] {
   switch (managerRole) {
-    case "PRINCIPAL": return ["VICE_PRINCIPAL", "DEAN", "HOD"];
-    case "VICE_PRINCIPAL": return ["HOD", "DEAN"];
+    case "PRINCIPAL": return ["VICE_PRINCIPAL", "ACADEMICS", "HOD"];
+    case "VICE_PRINCIPAL": return ["HOD", "ACADEMICS"];
     case "HOD": return ["PANEL_MEMBER", "COLLEGE_STAFF"];
     case "COLLEGE_OFFICE": return ["COLLEGE_STAFF"];
   }
@@ -42,7 +42,7 @@ function normalizeStoredRole(role: string): string {
 export function coverRoles(subjectRole: string): UserRole[] {
   switch (normalizeStoredRole(subjectRole)) {
     case "VICE_PRINCIPAL":
-    case "DEAN": return ["VICE_PRINCIPAL", "DEAN"];
+    case "ACADEMICS": return ["VICE_PRINCIPAL", "ACADEMICS"];
     case "HOD": return ["HOD"];
     case "PANEL_MEMBER": return ["PANEL_MEMBER"];
     default: return ["COLLEGE_STAFF"];

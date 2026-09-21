@@ -9,7 +9,7 @@ export type LeaveApprovalRouting = Partial<Record<UserRole, LeaveApproverStage>>
 // both are normalized to PRINCIPAL / HOD before a session role is read.
 export const ROUTABLE_REQUESTER_ROLES: UserRole[] = [
   "PANEL_MEMBER", "HOD", "VICE_PRINCIPAL", "PRINCIPAL",
-  "COLLEGE_OFFICE", "COLLEGE_STAFF", "ACCOUNTS", "FINANCE", "DEAN", "IQAC_COORDINATOR",
+  "COLLEGE_OFFICE", "COLLEGE_STAFF", "ACCOUNTS", "FINANCE", "ACADEMICS", "IQAC_COORDINATOR",
   "T_AND_P", "R_AND_D", "LIBRARY", "EXAM_CELL", "WEBMASTER", "PLACEMENT_DEPT", "PURCHASE_DEPT",
 ];
 

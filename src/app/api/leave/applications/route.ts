@@ -79,7 +79,7 @@ export async function GET(request: Request) {
     const session = await requireCollegeMember(
       "PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL",
       "COLLEGE_OFFICE", "ACCOUNTS", "FINANCE", "COLLEGE_STAFF",
-      "DEAN", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D",
+      "ACADEMICS", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D",
       "LIBRARY", "EXAM_CELL", "WEBMASTER", "PLACEMENT_DEPT", "PURCHASE_DEPT"
     );
     const url = new URL(request.url);
@@ -171,7 +171,7 @@ export async function POST(request: Request) {
     const session = await requireCollegeMember(
       "PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL",
       "COLLEGE_OFFICE", "ACCOUNTS", "FINANCE", "COLLEGE_STAFF",
-      "DEAN", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D",
+      "ACADEMICS", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D",
       "LIBRARY", "EXAM_CELL", "WEBMASTER", "PLACEMENT_DEPT", "PURCHASE_DEPT"
     );
     const body = (await request.json()) as {
@@ -378,7 +378,7 @@ export async function POST(request: Request) {
     // Faculty (PANEL_MEMBER - covers both Teaching and Technical designations)
     // always report to their department's HOD. Supporting Staff (COLLEGE_STAFF,
     // Non-Technical only) report to an HOD only if assigned to a department;
-    // DEAN/IQAC_COORDINATOR/T_AND_P/R_AND_D and any remaining label-only
+    // ACADEMICS/IQAC_COORDINATOR/T_AND_P/R_AND_D and any remaining label-only
     // COLLEGE_STAFF logins (Librarian, etc.) have no department and no HOD
     // above them - those correctly skip straight to PENDING_PRINCIPAL, same
     // as Vice Principal/office-leadership roles applying for their own leave.
