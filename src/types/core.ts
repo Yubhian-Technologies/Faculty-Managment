@@ -2305,7 +2305,7 @@ export interface FacultyProfileFields {
   // UG/PG/PhD and the PhD-specific fields below don't apply to school teachers
   // (see College.type and src/lib/designations/config.ts).
   highestQualification: string;
-  researchAreasInterests?: string[]; // mandatory (at least one) in the Add/Edit form - see QualificationFields
+  researchAreasInterests?: string[]; // optional - see QualificationFields
   secondaryEducation?: DegreeDetail; // 10th
   intermediateDiplomaIti?: DegreeDetail; // 12th / Diploma / ITI
   ugDetails?: DegreeDetail;
