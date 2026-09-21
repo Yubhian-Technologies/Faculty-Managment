@@ -47,16 +47,31 @@ export function normalizeStoredRole(role: string): string {
   return role;
 }
 
-// Who may put someone in a seat. The Principal seat itself is appointed from
-// above (Super Admin, Management, the location's Administration) or by the
-// College Admin who runs the whole college; every other seat can also be
-// assigned by the Principal and Vice Principal.
-export function canAssignSeat(actor: { role: string; realRole?: string }, seatRole: string): boolean {
+// Who may put someone in a seat. College leadership - the College Admin, the
+// Principal and the Vice Principal - all hold the same authority here, as do
+// the tiers above (Super Admin, Management, the location's Administration).
+// The Principal seat used to be reserved for the tiers above plus the College
+// Admin; college leadership now appoints it too, so every seat answers to one
+// list and there is no per-seat exception left.
+//
+// Judged on EVERY role this login can act as, not just its primary one. A seat
+// is normally held by an ordinary person whose own account role stays
+// PANEL_MEMBER - so a Principal-by-seat reads as `role: "PANEL_MEMBER"` with
+// "PRINCIPAL" among `roles`. Matching on `role` alone showed them a Role
+// Assignments page with no Change or Vacate on any seat, even though the
+// server (requireRole -> resolveHeldRoles) had already accepted them as
+// Principal. `roles` is exactly what api/auth/session sends the client
+// (orderHeldRoles) and what requireRole puts on the session server-side, so
+// both sides now answer identically.
+export function canAssignSeat(actor: { role: string; realRole?: string; roles?: string[] }): boolean {
   const isCollegeAdmin = actor.realRole === "COLLEGE_ADMIN";
-  if (seatRole === "PRINCIPAL") {
-    return ["SUPER_ADMIN", "MANAGEMENT", "ADMINISTRATION"].includes(actor.role) || isCollegeAdmin;
-  }
-  return ["SUPER_ADMIN", "MANAGEMENT", "ADMINISTRATION", "PRINCIPAL", "VICE_PRINCIPAL"].includes(actor.role) || isCollegeAdmin;
+  const held = actor.roles && actor.roles.length > 0 ? actor.roles : [actor.role];
+  const holds = (...allowed: string[]) =>
+    held.some((r) => allowed.includes(normalizeStoredRole(r)));
+  return (
+    holds("SUPER_ADMIN", "MANAGEMENT", "ADMINISTRATION", "PRINCIPAL", "VICE_PRINCIPAL") ||
+    isCollegeAdmin
+  );
 }
 
 // Of the roles a person holds, the one a request should be evaluated as: the

@@ -25,19 +25,33 @@ describe("seat rules", () => {
     expect(canHoldSeat("COLLEGE_STAFF", "LIBRARY")).toBe(true);
     expect(canHoldSeat("COLLEGE_OFFICE", "VICE_PRINCIPAL")).toBe(true);
   });
-  it("lets the College Admin, Super Admin, Management and Administration appoint the Principal - not Principal/VP", () => {
-    expect(canAssignSeat({ role: "PRINCIPAL", realRole: "COLLEGE_ADMIN" }, "PRINCIPAL")).toBe(true);
-    expect(canAssignSeat({ role: "SUPER_ADMIN" }, "PRINCIPAL")).toBe(true);
-    expect(canAssignSeat({ role: "MANAGEMENT" }, "PRINCIPAL")).toBe(true);
-    expect(canAssignSeat({ role: "ADMINISTRATION" }, "PRINCIPAL")).toBe(true);
-    expect(canAssignSeat({ role: "PRINCIPAL", realRole: "PRINCIPAL" }, "PRINCIPAL")).toBe(false);
-    expect(canAssignSeat({ role: "VICE_PRINCIPAL" }, "PRINCIPAL")).toBe(false);
+  it("lets all college leadership and the tiers above assign any seat, including the Principal seat", () => {
+    // Every seat answers to one list now - the Principal seat carries no
+    // special case, so college leadership appoints it like any other.
+    expect(canAssignSeat({ role: "PRINCIPAL", realRole: "COLLEGE_ADMIN" })).toBe(true);
+    expect(canAssignSeat({ role: "PRINCIPAL", realRole: "PRINCIPAL" })).toBe(true);
+    expect(canAssignSeat({ role: "VICE_PRINCIPAL" })).toBe(true);
+    expect(canAssignSeat({ role: "SUPER_ADMIN" })).toBe(true);
+    expect(canAssignSeat({ role: "MANAGEMENT" })).toBe(true);
+    expect(canAssignSeat({ role: "ADMINISTRATION" })).toBe(true);
   });
-  it("lets Principal and VP assign every other seat, but not faculty or HODs", () => {
-    expect(canAssignSeat({ role: "PRINCIPAL" }, "HOD")).toBe(true);
-    expect(canAssignSeat({ role: "VICE_PRINCIPAL" }, "HOD")).toBe(true);
-    expect(canAssignSeat({ role: "HOD" }, "HOD")).toBe(false);
-    expect(canAssignSeat({ role: "PANEL_MEMBER" }, "ACADEMICS")).toBe(false);
+  it("judges a seat holder on the roles they hold, not just their account role", () => {
+    // The usual shape: an ordinary faculty member holding a leadership seat.
+    // Their account role stays PANEL_MEMBER, which on its own assigns nothing.
+    expect(canAssignSeat({ role: "PANEL_MEMBER" })).toBe(false);
+    expect(canAssignSeat({ role: "PANEL_MEMBER", roles: ["PRINCIPAL", "PANEL_MEMBER"] })).toBe(true);
+    expect(canAssignSeat({ role: "PANEL_MEMBER", roles: ["VICE_PRINCIPAL", "PANEL_MEMBER"] })).toBe(true);
+    // A seat that grants no authority over others leaves them where they were.
+    expect(canAssignSeat({ role: "PANEL_MEMBER", roles: ["LIBRARY", "PANEL_MEMBER"] })).toBe(false);
+    expect(canAssignSeat({ role: "PANEL_MEMBER", roles: ["HOD", "PANEL_MEMBER"] })).toBe(false);
+    // An un-normalized stored role among the held list still resolves.
+    expect(canAssignSeat({ role: "PANEL_MEMBER", roles: ["COLLEGE_ADMIN", "PANEL_MEMBER"] })).toBe(true);
+  });
+  it("refuses everyone below college leadership", () => {
+    expect(canAssignSeat({ role: "HOD" })).toBe(false);
+    expect(canAssignSeat({ role: "PANEL_MEMBER" })).toBe(false);
+    expect(canAssignSeat({ role: "COLLEGE_OFFICE" })).toBe(false);
+    expect(canAssignSeat({ role: "ACADEMICS" })).toBe(false);
   });
 });
 

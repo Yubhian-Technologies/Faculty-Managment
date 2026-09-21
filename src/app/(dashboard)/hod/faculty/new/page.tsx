@@ -102,7 +102,17 @@ export default function NewFacultyPage() {
   // it is how a new college gets its first teaching staff before any HOD
   // exists. They belong to no department, so they always pick one from the
   // college's active departments; an HOD keeps their own list.
-  const isCollegeLevel = user?.role === "PRINCIPAL" || user?.role === "VICE_PRINCIPAL";
+  //
+  // "Owns no department" is the test rather than a list of role names: a
+  // College Admin reaches this page too, and their login does not always
+  // carry the literal PRINCIPAL role (a multi-seat account working as
+  // Principal keeps its own underlying role on the user doc). Matching on
+  // role alone skipped this whole block for them - no department fetch, no
+  // picker, and nothing to fall back on, so the new faculty member was filed
+  // under an empty department. Anyone with a department of their own (every
+  // HOD) is unaffected.
+  const isCollegeLevel =
+    user?.role === "PRINCIPAL" || user?.role === "VICE_PRINCIPAL" || ownDepartments.length === 0;
   const [collegeDepartments, setCollegeDepartments] = useState<string[]>([]);
   useEffect(() => {
     if (!isCollegeLevel) return;
@@ -293,12 +303,24 @@ export default function NewFacultyPage() {
       toast({ variant: "destructive", title: "Some required fields are missing", description: `Personal Details: ${missingPersonal.join(", ")}` });
       return;
     }
-    // Research Areas/Interests isn't zod-validated (academicProfile is plain
-    // React state) - checked here instead, same pattern as Personal Details above.
-    if (!academicProfile.researchAreasInterests || academicProfile.researchAreasInterests.length === 0) {
-      setErroredSteps(new Set<WizardStepKey>(["qualification"]));
-      setStepIndex(steps.findIndex((s) => s.key === "qualification"));
-      toast({ variant: "destructive", title: "Some required fields are missing", description: "Academic Qualification: Research Areas/Interests" });
+    // Date of Birth must come before Date of Joining - nobody joins on or
+    // before the day they were born. The two live on different steps (DOB in
+    // Personal Details, joining date on Identity & Employment) and in
+    // different state, so neither field can catch this on its own; compared
+    // here, once both are known to be filled in. Plain string compare is
+    // enough - both inputs are type="date", so both are YYYY-MM-DD.
+    if (
+      personalDetails.dateOfBirth &&
+      data.joiningDate &&
+      personalDetails.dateOfBirth >= data.joiningDate
+    ) {
+      setErroredSteps(new Set<WizardStepKey>(["personal"]));
+      setStepIndex(steps.findIndex((s) => s.key === "personal"));
+      toast({
+        variant: "destructive",
+        title: "Date of Birth must be before Date of Joining",
+        description: "Check the Date of Birth on Personal Details and the Date of Joining on Identity & Employment.",
+      });
       return;
     }
     // Full Name (as per SSC) is the only display name - used everywhere this
