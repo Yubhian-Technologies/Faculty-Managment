@@ -61,11 +61,36 @@ export default function FacultyImportPage() {
   const [templateError, setTemplateError] = useState("");
   const [failedRows, setFailedRows] = useState<FailedRow[]>([]);
   const user = useAuthStore((s) => s.user);
+  const isHod = user?.role === "HOD";
   const myDepartments = user?.departments && user.departments.length > 0 ? user.departments : (user?.department ? [user.department] : []);
   // The template has no per-row Department column - every row in one import
   // lands in the same department - so an HOD running more than one must say
   // which one up front, same rule the API enforces.
   const [importDepartment, setImportDepartment] = useState("");
+  // Principal / Vice Principal / College Admin have no department of their
+  // own to fall back on (unlike an HOD), so they choose from the college's
+  // full department list instead - same rule the API enforces. Every
+  // existing faculty/user doc stores the department's short `code` ("CSE"),
+  // not its full `name` ("Computer Science and Engineering"), so the code is
+  // what's actually submitted - the full name is shown only as the label.
+  const [collegeDepartments, setCollegeDepartments] = useState<{ code: string; name: string }[]>([]);
+  useEffect(() => {
+    if (isHod) return;
+    void (async () => {
+      try {
+        const res = await fetch("/api/college/departments");
+        const data = await res.json() as { departments?: { name?: string; code?: string }[] };
+        setCollegeDepartments(
+          (data.departments ?? [])
+            .filter((d): d is { name: string; code: string } => !!d.name && !!d.code)
+        );
+      } catch {
+        // Non-fatal - the picker just stays empty and the API rejects on submit.
+      }
+    })();
+  }, [isHod]);
+  const departmentOptions = isHod ? myDepartments.map((d) => ({ code: d, name: d })) : collegeDepartments;
+  const needsDepartmentPicker = isHod ? myDepartments.length > 1 : true;
 
   // A two-sheet .xlsx rather than a flat CSV, matching the Supporting Staff
   // importer: sheet one is the template to fill in (headers + the per-column
@@ -184,7 +209,7 @@ export default function FacultyImportPage() {
 
   async function handleImport() {
     if (rows.length === 0) return;
-    if (myDepartments.length > 1 && !importDepartment) {
+    if (needsDepartmentPicker && !importDepartment) {
       toast({ variant: "destructive", title: "Choose which department this import belongs to" });
       return;
     }
@@ -286,14 +311,14 @@ export default function FacultyImportPage() {
         }
       />
 
-      {myDepartments.length > 1 && (
+      {needsDepartmentPicker && (
         <Card>
           <CardContent className="pt-6 space-y-2">
             <Label>Importing into which department? <span className="text-destructive">*</span></Label>
             <Select value={importDepartment} onValueChange={setImportDepartment}>
               <SelectTrigger className="max-w-xs"><SelectValue placeholder="Select department" /></SelectTrigger>
               <SelectContent>
-                {myDepartments.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                {departmentOptions.map((d) => <SelectItem key={d.code} value={d.code}>{d.name}</SelectItem>)}
               </SelectContent>
             </Select>
           </CardContent>

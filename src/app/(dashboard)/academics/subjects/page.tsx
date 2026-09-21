@@ -21,10 +21,10 @@ function ordinalYear(year: number) {
   return `${year}${suffix} Year`;
 }
 
-// Dean's version of the HOD Subjects page - same subject list/add/edit/delete,
+// Academics' version of the HOD Subjects page - same subject list/add/edit/delete,
 // but drilled down Department -> Course -> Year instead of just Course -> Year,
-// since a Dean isn't scoped to one department the way an HOD is.
-export default function DeanSubjectsPage() {
+// since a Academics isn't scoped to one department the way an HOD is.
+export default function AcademicsSubjectsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -42,9 +42,9 @@ export default function DeanSubjectsPage() {
   const [selectedCourseId, setSelectedCourseId] = useState("");
   const [selectedYear, setSelectedYear] = useState("");
   // Calendar academic session (e.g. "2026-27") a subject is tagged with when
-  // the Dean adds it, AND what "now" means for resolving which regulation
+  // the Academics adds it, AND what "now" means for resolving which regulation
   // covers a year below (regulationsForCourseYearByBatch) - defaults to the
-  // real current session, but picking a different one here lets the Dean
+  // real current session, but picking a different one here lets the Academics
   // browse which regulation covered a year in a past/future session too.
   const [selectedAcademicYear, setSelectedAcademicYear] = useState(academicSessionLabel(currentAcademicStartYear()));
   // The college's own configured current session (Settings > Academic Year),
@@ -88,7 +88,7 @@ export default function DeanSubjectsPage() {
 
   // Apply the college's configured current session over the clock-only
   // default, once it loads - but never fight a URL-restored session (see
-  // hasRestoredRef below), and never override a session the Dean has since
+  // hasRestoredRef below), and never override a session the Academics has since
   // picked by hand.
   const hasAppliedSessionRef = useRef(false);
   useEffect(() => {
@@ -176,7 +176,7 @@ export default function DeanSubjectsPage() {
       // Collapsed to one entry per catalog course (falling back to the
       // normalized name for legacy courses created before the catalog), keeping
       // THIS department's own doc when both exist so subjects file against the
-      // department the Dean actually picked. A feeder's copy is still kept when
+      // department the Academics actually picked. A feeder's copy is still kept when
       // the department owns none, which is the case that merge exists for - see
       // yearOptions below, which resolves scope against the SURVIVING course's
       // own owning department (not necessarily the one picked above) so the
@@ -204,7 +204,7 @@ export default function DeanSubjectsPage() {
 
   // Scoped by Academic Year session, not regulation - each session (e.g.
   // "2026-27") gets its own independent, persisted subject list per
-  // course-year, filled in fresh by the Dean every year rather than carried
+  // course-year, filled in fresh by the Academics every year rather than carried
   // over or auto-reset when a different regulation happens to resolve.
   const loadSubjects = useCallback(async (departmentName: string, courseId: string, year: string, academicYear: string) => {
     if (!departmentName || !courseId || !year) { setSubjects([]); return; }
@@ -216,7 +216,7 @@ export default function DeanSubjectsPage() {
       const data = await res.json() as { subjects: Subject[] };
       // The API also returns a feeder's shared subjects for a fed department
       // (e.g. Basic Science's 1st-year subjects under CSE/ECE/IT/CIVIL) so an
-      // HOD can staff them - the Dean browses departments one at a time
+      // HOD can staff them - the Academics browses departments one at a time
       // instead, so a fed department's own page shows only its own subjects;
       // Basic Science's are seen by selecting Basic Science itself above.
       setSubjects((data.subjects ?? []).filter((s) => s.department === departmentName));
@@ -302,7 +302,7 @@ export default function DeanSubjectsPage() {
         title="Subjects"
         description="Manage subjects offered for each year of every department's courses"
         actions={
-          <Button variant="outline" onClick={() => router.push("/dean/subjects/import")}>
+          <Button variant="outline" onClick={() => router.push("/academics/subjects/import")}>
             <Upload className="h-4 w-4 mr-2" />Import Subjects
           </Button>
         }
@@ -385,13 +385,13 @@ export default function DeanSubjectsPage() {
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => router.push(`/dean/subjects/import?departmentId=${selectedDepartmentId}&courseId=${selectedCourseId}&year=${selectedYear}&academicYear=${encodeURIComponent(selectedAcademicYear)}&department=${encodeURIComponent(selectedDepartment.name)}&courseName=${encodeURIComponent(selectedCourse.name)}`)}
+                      onClick={() => router.push(`/academics/subjects/import?departmentId=${selectedDepartmentId}&courseId=${selectedCourseId}&year=${selectedYear}&academicYear=${encodeURIComponent(selectedAcademicYear)}&department=${encodeURIComponent(selectedDepartment.name)}&courseName=${encodeURIComponent(selectedCourse.name)}`)}
                     >
                       <Upload className="h-4 w-4 mr-2" />Import Subjects
                     </Button>
                     <Button
                       size="sm"
-                      onClick={() => router.push(`/dean/subjects/new?departmentId=${selectedDepartmentId}&courseId=${selectedCourseId}&year=${selectedYear}&academicYear=${encodeURIComponent(selectedAcademicYear)}&department=${encodeURIComponent(selectedDepartment.name)}&regulation=${encodeURIComponent(singleRegulation)}&nextSerialNumber=${nextSerialNumber}&catalogId=${encodeURIComponent(selectedCourse.catalogId ?? "")}`)}
+                      onClick={() => router.push(`/academics/subjects/new?departmentId=${selectedDepartmentId}&courseId=${selectedCourseId}&year=${selectedYear}&academicYear=${encodeURIComponent(selectedAcademicYear)}&department=${encodeURIComponent(selectedDepartment.name)}&regulation=${encodeURIComponent(singleRegulation)}&nextSerialNumber=${nextSerialNumber}&catalogId=${encodeURIComponent(selectedCourse.catalogId ?? "")}`)}
                     >
                       <Plus className="h-4 w-4 mr-2" />Add Subject
                     </Button>
@@ -449,7 +449,7 @@ export default function DeanSubjectsPage() {
                                     variant="ghost"
                                     size="icon"
                                     className="h-8 w-8"
-                                    onClick={() => router.push(`/dean/subjects/${s.id}/edit?departmentId=${selectedDepartmentId}&courseId=${selectedCourseId}&year=${selectedYear}&academicYear=${encodeURIComponent(selectedAcademicYear)}&regulation=${encodeURIComponent(singleRegulation)}`)}
+                                    onClick={() => router.push(`/academics/subjects/${s.id}/edit?departmentId=${selectedDepartmentId}&courseId=${selectedCourseId}&year=${selectedYear}&academicYear=${encodeURIComponent(selectedAcademicYear)}&regulation=${encodeURIComponent(singleRegulation)}`)}
                                   >
                                     <Pencil className="h-3.5 w-3.5" />
                                   </Button>

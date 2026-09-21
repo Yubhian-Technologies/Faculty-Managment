@@ -33,7 +33,7 @@ describe("regulationsForCourseYearByBatch", () => {
 
   it("falls back to the plain regulations list when regulationBatches is empty entirely", () => {
     // The pre-migration Course Catalog model (Principal-owned, before the
-    // Dean-owned regulationBatches field existed) had no per-year narrowing -
+    // Academics-owned regulationBatches field existed) had no per-year narrowing -
     // a catalog entry that predates the migration and was never backfilled
     // must still resolve to its assigned regulations, not to nothing (this is
     // exactly the "R23 isn't offered for Year 1" false negative).
@@ -49,7 +49,7 @@ describe("regulationsForCourseYearByBatch", () => {
 });
 
 describe("regulationsForBatchStartYear", () => {
-  // The Dean's actual VISHNU INSTITUTE OF TECHNOLOGY configuration: R23
+  // The Academics' actual VISHNU INSTITUTE OF TECHNOLOGY configuration: R23
   // covers the 2023/2024/2025 intakes, R26 covers 2026/2027/2028.
   const VIT_BTECH_BATCHES = {
     R23: "2023-2027,2024-2028,2025-2029",

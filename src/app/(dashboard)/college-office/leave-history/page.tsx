@@ -58,7 +58,7 @@ export default function CollegeOfficeLeaveHistoryDepartmentsPage() {
 
       <ActiveLeaveNowCard />
 
-      {/* College-wide roles (Vice Principal, College Office, Dean, IQAC, T&P,
+      {/* College-wide roles (Vice Principal, College Office, Academics, IQAC, T&P,
           R&D, Library, Exam Cell, Webmaster) never belong to a department -
           each gets its own card/register instead of one combined list. */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">

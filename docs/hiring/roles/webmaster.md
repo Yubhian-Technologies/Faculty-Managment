@@ -2,7 +2,7 @@
 
 See [../college-pipeline.md](../college-pipeline.md) for the full sequence this fits into, and [../README.md](../README.md) for the flow notation.
 
-`WEBMASTER` is a college-scoped "internal office role" (like `DEAN`/`IQAC_COORDINATOR`/`T_AND_P`/etc. — see `src/lib/roles/officeRoles.ts`), not a location or global role. In the hiring pipeline it plays one, late, high-consequence part: turning an accepted offer into an actual login.
+`WEBMASTER` is a college-scoped "internal office role" (like `ACADEMICS`/`IQAC_COORDINATOR`/`T_AND_P`/etc. — see `src/lib/roles/officeRoles.ts`), not a location or global role. In the hiring pipeline it plays one, late, high-consequence part: turning an accepted offer into an actual login.
 
 ## Scope & pipeline position
 

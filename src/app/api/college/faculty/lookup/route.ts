@@ -17,7 +17,7 @@ import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 export async function GET(request: Request) {
   try {
     const session = await requireCollegeMember(
-      "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "HOD", "COLLEGE_OFFICE", "PANEL_MEMBER", "COLLEGE_STAFF", "DEAN"
+      "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "HOD", "COLLEGE_OFFICE", "PANEL_MEMBER", "COLLEGE_STAFF", "ACADEMICS"
     );
     const { searchParams } = new URL(request.url);
     const departmentId = searchParams.get("departmentId");

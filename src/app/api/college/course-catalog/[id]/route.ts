@@ -10,8 +10,8 @@ export async function PATCH(
 ) {
   try {
     // Courses themselves belong to the Principal / VP / College Admin; the
-    // Dean keeps only the curriculum regulations attached to each course.
-    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "DEAN");
+    // Academics keeps only the curriculum regulations attached to each course.
+    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "ACADEMICS");
     const { id } = await params;
     const body = (await request.json()) as {
       name?: string;
@@ -23,11 +23,11 @@ export async function PATCH(
     };
 
     if (
-      session.role === "DEAN" &&
+      session.role === "ACADEMICS" &&
       (body.name != null || body.code != null || body.durationYears != null || body.isActive != null)
     ) {
       return NextResponse.json(
-        { error: "Only the Principal, Vice Principal or College Admin can change a course's details. The Dean can edit its regulations." },
+        { error: "Only the Principal, Vice Principal or College Admin can change a course's details. Academics can edit its regulations." },
         { status: 403 }
       );
     }

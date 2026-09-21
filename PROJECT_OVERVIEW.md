@@ -29,7 +29,7 @@ By level (L0 highest) and scope:
 - **L1 global:** `MANAGEMENT`, `FINANCE`, `PURCHASE_DEPT`
 - **L2 location:** `ADMINISTRATION`, `HR_ADMIN`, `ADMIN_OFFICE`, `LOCATION_DEPT_HEAD`, `ACCOUNTS`
 - **L3 college:** `PRINCIPAL`, `VICE_PRINCIPAL`, `COLLEGE_ADMIN`
-- **L4 college (dept/office):** `HOD`, `DEPARTMENT_OFFICE`, `COLLEGE_OFFICE`, `COLLEGE_STAFF`, `DEAN`, `IQAC_COORDINATOR`, `T_AND_P`, `R_AND_D`, `PLACEMENT_DEPT`, `LIBRARY`, `EXAM_CELL`, `WEBMASTER`, `COLLEGE_ACCOUNTS`
+- **L4 college (dept/office):** `HOD`, `DEPARTMENT_OFFICE`, `COLLEGE_OFFICE`, `COLLEGE_STAFF`, `ACADEMICS`, `IQAC_COORDINATOR`, `T_AND_P`, `R_AND_D`, `PLACEMENT_DEPT`, `LIBRARY`, `EXAM_CELL`, `WEBMASTER`, `COLLEGE_ACCOUNTS`
 - **L5 college:** `PANEL_MEMBER` (UI label **"Faculty"** — there is no separate FACULTY role)
 - **L6 college:** `STUDENT`, `CLASS_LEADER`
 
@@ -37,7 +37,7 @@ A role inherits every strictly-lower-level role at the same-or-narrower scope (`
 
 ## Dashboard map (`src/app/(dashboard)/`)
 
-One folder per role's own view: `accounts`, `admin-office`, `administration`, `candidate-profile` (shared read-only dossier), `class-leader`, `college-accounts`, `college-office`, `college-staff`, `coordinator`, `dean`, `evaluation` (shared), `exam-cell`, `finance`, `hod`, `hr-admin`, `iqac-coordinator`, `leave` (shared adjustment/handover pages), `library`, `location-dept-head`, `management`, `panel` (shared interview pages — any role can be a hiring panelist), `placement-dept`, `principal`, `purchase`, `r-and-d`, `super-admin`, `t-and-p`, `vice-principal`, `webmaster`.
+One folder per role's own view: `accounts`, `admin-office`, `administration`, `candidate-profile` (shared read-only dossier), `class-leader`, `college-accounts`, `college-office`, `college-staff`, `coordinator`, `academics`, `evaluation` (shared), `exam-cell`, `finance`, `hod`, `hr-admin`, `iqac-coordinator`, `leave` (shared adjustment/handover pages), `library`, `location-dept-head`, `management`, `panel` (shared interview pages — any role can be a hiring panelist), `placement-dept`, `principal`, `purchase`, `r-and-d`, `super-admin`, `t-and-p`, `vice-principal`, `webmaster`.
 
 ## Major functional modules (`src/app/api/college/`, ~68 route groups)
 

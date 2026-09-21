@@ -12,7 +12,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await requireCollegeMember("HOD", "PRINCIPAL", "SUPER_ADMIN", "DEAN");
+    const session = await requireCollegeMember("HOD", "PRINCIPAL", "SUPER_ADMIN", "ACADEMICS");
     const { id } = await params;
     const body = (await request.json()) as {
       name?: string;
@@ -42,8 +42,8 @@ export async function PATCH(
     const snap = await ref.get();
     if (!snap.exists) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-    // Dean/Principal/Super Admin manage subjects across every department by
-    // design (see dean/subjects/page.tsx - no per-row ownership guard there);
+    // Academics/Principal/Super Admin manage subjects across every department by
+    // design (see academics/subjects/page.tsx - no per-row ownership guard there);
     // only an HOD is restricted to their own department/sub-departments. This
     // was previously unchecked entirely - any authenticated HOD could edit
     // any other department's subject via a direct request, the UI's own
@@ -149,7 +149,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await requireCollegeMember("HOD", "PRINCIPAL", "SUPER_ADMIN", "DEAN");
+    const session = await requireCollegeMember("HOD", "PRINCIPAL", "SUPER_ADMIN", "ACADEMICS");
     const { id } = await params;
 
     const db = getAdminDb();

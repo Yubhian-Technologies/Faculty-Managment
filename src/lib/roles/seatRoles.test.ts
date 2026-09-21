@@ -37,14 +37,14 @@ describe("seat rules", () => {
     expect(canAssignSeat({ role: "PRINCIPAL" }, "HOD")).toBe(true);
     expect(canAssignSeat({ role: "VICE_PRINCIPAL" }, "HOD")).toBe(true);
     expect(canAssignSeat({ role: "HOD" }, "HOD")).toBe(false);
-    expect(canAssignSeat({ role: "PANEL_MEMBER" }, "DEAN")).toBe(false);
+    expect(canAssignSeat({ role: "PANEL_MEMBER" }, "ACADEMICS")).toBe(false);
   });
 });
 
 describe("College Admin seat", () => {
-  it("is a seat role, allowed several holders, and anyone can hold it", () => {
+  it("is a seat role, one per college, and anyone can hold it", () => {
     expect(SEAT_ROLES).toContain("COLLEGE_ADMIN");
-    expect(isSingletonSeatRole("COLLEGE_ADMIN")).toBe(false);
+    expect(isSingletonSeatRole("COLLEGE_ADMIN")).toBe(true);
     expect(isSingletonSeatRole("PRINCIPAL")).toBe(true);
     expect(canHoldSeat("COLLEGE_OFFICE", "COLLEGE_ADMIN")).toBe(true);
   });
