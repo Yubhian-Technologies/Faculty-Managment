@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/useToast";
+import { PermissionApprovalQueue } from "@/components/leave/PermissionApprovalQueue";
 import { cn, formatDate } from "@/lib/utils";
 import { CalendarClock, Check, X, ChevronDown, ChevronUp, FileCheck } from "lucide-react";
 import { EFFECTIVE_CATEGORY_LABELS, EFFECTIVE_CATEGORY_ORDER, LEAVE_TYPE_LABELS, OTHER_LEAVE_CATEGORY_DESCRIPTIONS, OTHER_LEAVE_CATEGORY_LABELS, OTHER_LEAVE_CATEGORY_ORDER } from "@/types/leave";
@@ -671,6 +672,11 @@ export function LeaveApprovalQueue() {
           ))}
         </div>
       )}
+
+      {/* Late-attendance permissions routed to this approver. Renders nothing
+          when there are none, so the page is unchanged for anyone with an
+          empty queue. */}
+      <PermissionApprovalQueue />
     </div>
   );
 }
