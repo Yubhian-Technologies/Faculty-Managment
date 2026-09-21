@@ -1,22 +1,29 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Manrope } from "next/font/google";
 import { Avatar } from "@/components/shared/Avatar";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { toast } from "@/hooks/useToast";
 import { VISHNU_LOGO_URL } from "@/lib/pdf/logo";
 import {
-  Mail, ExternalLink, UserRound, GraduationCap, Microscope, Briefcase,
-  FlaskConical, Award,
-  Users, Info,
+  Mail, MapPin, Share2, ExternalLink, GraduationCap, Microscope, Briefcase,
+  FlaskConical, Award, Users, Info,
 } from "lucide-react";
 import { DESIGNATION_LABELS } from "@/types";
 import { publicPeriod, publicYear } from "@/lib/faculty/publicProfileDates";
 import type {
-  Designation, TrainingEntryType, ProfessionalBody, AdminResponsibilityCategory,
+  Designation, TrainingEntryType, ProfessionalBody, AdminResponsibilityCategory, TrainingProgramMode,
 } from "@/types";
 import {
-  TRAINING_ENTRY_TYPE_LABELS, PROFESSIONAL_BODY_LABELS, ADMIN_RESPONSIBILITY_CATEGORY_LABELS,
+  TRAINING_ENTRY_TYPE_LABELS, PROFESSIONAL_BODY_LABELS, ADMIN_RESPONSIBILITY_CATEGORY_LABELS, TRAINING_PROGRAM_MODE_LABELS,
 } from "@/types";
+
+// Deliberately distinct from the app's own Inter (see app/layout.tsx) - this
+// no-auth public page is a standalone "directory profile" surface, not a
+// dashboard screen, so it earns its own type identity rather than
+// inheriting the app's.
+const bodyFont = Manrope({ subsets: ["latin"], weight: ["400", "500", "600", "700", "800"] });
 
 export interface DegreeSummary {
   course: string;
@@ -73,42 +80,79 @@ export interface FacultyPublicProfile {
     professionalMemberships: { body: ProfessionalBody; bodyName?: string; memberSince?: string; sinceMonthYear?: string; sinceYear?: number }[];
     academicResponsibilities: { category: AdminResponsibilityCategory; otherCategory?: string; description: string; fromDate?: string; toDate?: string; fromYear?: number; toYear?: number }[];
     newLabsEstablished: { facilityDetails: string; outcomes: string }[];
-    fdpsWorkshopsMoocsCertifications: { type: TrainingEntryType; pleaseSpecifyType?: string; titleOfTheProgram: string; nameOfTheFacultyCoordinator?: string; fromDate?: string; toDate?: string; year?: number }[];
+    fdpsWorkshopsMoocsCertifications: {
+      type: TrainingEntryType; pleaseSpecifyType?: string; titleOfTheProgram: string; nameOfTheFacultyCoordinator?: string;
+      fromDate?: string; toDate?: string; year?: number; duration?: number; numberOfWeeks?: number; place?: string; modeOfTheProgram?: TrainingProgramMode;
+    }[];
   };
   otherInformation?: string;
 }
 
-function degreeLine(d?: DegreeSummary) {
+// Bold "what": course/degree + field. Secondary "where/when": institution + year.
+function degreeTitle(d?: DegreeSummary) {
   if (!d) return null;
   const course = d.course && d.degreeType ? `${d.course} (${d.degreeType})` : d.course;
-  const parts = [course, d.specialization || d.branch, d.institutionName].filter(Boolean);
+  return [course, d.specialization || d.branch].filter(Boolean).join(", ");
+}
+function degreeMeta(d?: DegreeSummary) {
+  if (!d) return null;
   const year = d.yearOfAward ?? d.yearOfPassing;
-  return `${parts.join(", ")}${year ? ` (${year})` : ""}`;
+  return [d.institutionName, year].filter(Boolean).join(" · ");
 }
 
-function InfoRow({ label, value }: { label: string; value?: React.ReactNode }) {
-  if (value === undefined || value === null || value === "") return null;
+function Card({ title, icon: Icon, badge, children }: { title: string; icon: React.ComponentType<{ className?: string }>; badge?: React.ReactNode; children: React.ReactNode }) {
   return (
-    <div className="flex items-center justify-between gap-4 py-3 border-b last:border-b-0">
-      <span className="text-base text-muted-foreground">{label}</span>
-      <span className="text-base font-medium text-right">{value}</span>
+    <div className="rounded-lg border bg-background p-6">
+      <div className="flex items-center justify-between gap-3 mb-4">
+        <div className="flex items-center gap-2.5">
+          <Icon className="h-5 w-5 text-primary shrink-0" />
+          <h2 className="text-lg font-bold text-foreground">{title}</h2>
+        </div>
+        {badge}
+      </div>
+      {children}
     </div>
   );
 }
 
-function SectionHeading({ icon: Icon, children }: { icon: React.ComponentType<{ className?: string }>; children: React.ReactNode }) {
-  return (
-    <div className="flex items-center gap-2.5 mb-5">
-      <Icon className="h-5 w-5 text-primary shrink-0" />
-      <h2 className="text-xl font-bold text-foreground">{children}</h2>
-    </div>
-  );
-}
-
-function EntryCard({ children }: { children: React.ReactNode }) {
+// title = the one or two facts that matter most for this entry type (bold);
+// meta = everything else, shown as a lighter secondary line underneath.
+function EntryCard({ title, meta, children }: { title?: React.ReactNode; meta?: React.ReactNode; children?: React.ReactNode }) {
   return (
     <div className="rounded-lg border bg-muted/30 px-4 py-3.5 text-base transition-colors hover:bg-muted/50">
-      {children}
+      {title !== undefined ? (
+        <>
+          <p className="font-semibold text-foreground">{title}</p>
+          {meta !== undefined && meta !== "" && <p className="text-sm text-muted-foreground mt-1">{meta}</p>}
+        </>
+      ) : (
+        children
+      )}
+    </div>
+  );
+}
+
+// Small circular "logo" badge for a research-profile service - a plain
+// colored monogram rather than a hotlinked brand asset, but instantly
+// recognizable by its color/glyph (Scholar's cap, ORCID's green "iD", Scopus's "S").
+function ResearchProfileBadge({ service }: { service: "scholar" | "orcid" | "scopus" }) {
+  if (service === "scholar") {
+    return (
+      <div className="h-9 w-9 rounded-full bg-[#4285F4] flex items-center justify-center shrink-0">
+        <GraduationCap className="h-4 w-4 text-white" />
+      </div>
+    );
+  }
+  if (service === "orcid") {
+    return (
+      <div className="h-9 w-9 rounded-full bg-[#A6CE39] flex items-center justify-center text-white text-xs font-bold shrink-0">
+        iD
+      </div>
+    );
+  }
+  return (
+    <div className="h-9 w-9 rounded-full bg-[#E9711C] flex items-center justify-center text-white text-sm font-bold shrink-0">
+      S
     </div>
   );
 }
@@ -117,24 +161,18 @@ function EntryList({ children }: { children: React.ReactNode }) {
   return <div className="space-y-2.5">{children}</div>;
 }
 
-const SECTION_ICONS = {
-  about: UserRound,
-  education: GraduationCap,
-  postdoc: Microscope,
-  experience: Briefcase,
-  research: FlaskConical,
-  awards: Award,
-  engagement: Users,
-  other: Info,
-} as const;
-
-// Section wrapper that registers itself with the parent's scrollspy observer
-// (via id + the refCb callback) and gives smooth-scroll a landing target.
-function SectionBlock({ id, refCb, children }: { id: string; refCb: (id: string, el: HTMLElement | null) => void; children: React.ReactNode }) {
+// Circular icon tile in the Awards & Recognition strip - the directory
+// template's "badges" row, repurposed for real award entries instead of
+// decorative achievement icons.
+function BadgeTile({ title, subtitle }: { title: string; subtitle?: string }) {
   return (
-    <section id={id} ref={(el) => refCb(id, el)} className="scroll-mt-6 py-8 first:pt-0 border-b last:border-b-0">
-      {children}
-    </section>
+    <div className="flex flex-col items-center text-center w-32">
+      <div className="h-14 w-14 rounded-full bg-primary/10 flex items-center justify-center">
+        <Award className="h-6 w-6 text-primary" />
+      </div>
+      <p className="mt-2 text-sm font-medium leading-tight line-clamp-2">{title}</p>
+      {subtitle && <p className="text-xs text-muted-foreground line-clamp-1">{subtitle}</p>}
+    </div>
   );
 }
 
@@ -159,15 +197,17 @@ export function FacultyPublicProfileView({ profile }: { profile: FacultyPublicPr
 
   const hasResearchStats = p.research && (p.research.totalPublications || p.research.totalCitations || p.research.hIndex || p.research.i10Index);
   const scholarLinks = [
-    p.research?.googleScholarId && { label: "Google Scholar", href: `https://scholar.google.com/citations?user=${p.research.googleScholarId}` },
-    p.research?.scopusAuthorId && { label: "Scopus", href: `https://www.scopus.com/authid/detail.uri?authorId=${p.research.scopusAuthorId}` },
-    p.research?.orcidId && { label: "ORCID", href: `https://orcid.org/${p.research.orcidId}` },
-  ].filter((x): x is { label: string; href: string } => !!x);
+    p.research?.googleScholarId && { service: "scholar" as const, label: "Google Scholar", href: `https://scholar.google.com/citations?user=${p.research.googleScholarId}` },
+    p.research?.scopusAuthorId && { service: "scopus" as const, label: "Scopus", href: `https://www.scopus.com/authid/detail.uri?authorId=${p.research.scopusAuthorId}` },
+    p.research?.orcidId && { service: "orcid" as const, label: "ORCID", href: `https://orcid.org/${p.research.orcidId}` },
+  ].filter((x): x is { service: "scholar" | "scopus" | "orcid"; label: string; href: string } => !!x);
 
-  const showEducation = degreeEntries.length > 0 || qualBadges.length > 0;
+  const showHighlights = !!p.highestQualification || !!p.specialization || qualBadges.length > 0;
+  const showBio = !!p.otherInformation;
+  const showEducation = degreeEntries.length > 0;
   const showPostdoc = !!p.education?.postdoctoralFellowshipDetails;
   const showExperience = p.academicExperience.length > 0;
-  const showResearch = !!hasResearchStats || (p.research?.publications.length ?? 0) > 0 || scholarLinks.length > 0;
+  const showResearch = !!hasResearchStats || (p.research?.publications.length ?? 0) > 0;
   const showAwards = (p.recognition?.awardsRecognition.length ?? 0) > 0;
   const showEngagement = !!p.recognition && (
     p.recognition.professionalMemberships.length > 0 ||
@@ -175,350 +215,290 @@ export function FacultyPublicProfileView({ profile }: { profile: FacultyPublicPr
     p.recognition.newLabsEstablished.length > 0 ||
     p.recognition.fdpsWorkshopsMoocsCertifications.length > 0
   );
-  const showOther = !!p.otherInformation;
 
-  const sections = [
-    { key: "about", label: "About", show: true },
-    { key: "education", label: "Educational Details", show: showEducation },
-    { key: "postdoc", label: "Post-Doctoral Experience", show: showPostdoc },
-    { key: "experience", label: "Academic Experience", show: showExperience },
-    { key: "research", label: "Research Details", show: showResearch },
-    { key: "awards", label: "Awards & Recognition", show: showAwards },
-    { key: "engagement", label: "Professional Engagement", show: showEngagement },
-    { key: "other", label: "Other Information", show: showOther },
-  ].filter((s) => s.show);
-
-  const [activeKey, setActiveKey] = useState(sections[0]?.key ?? "about");
-  const sectionEls = useRef(new Map<string, HTMLElement>());
-  const mobileNavBtnEls = useRef(new Map<string, HTMLElement>());
-
-  function registerSectionRef(id: string, el: HTMLElement | null) {
-    if (el) sectionEls.current.set(id, el);
-    else sectionEls.current.delete(id);
+  function copyProfileLink() {
+    void navigator.clipboard.writeText(window.location.href);
+    toast({ variant: "success", title: "Public profile link copied" });
   }
 
-  function registerMobileNavRef(id: string, el: HTMLElement | null) {
-    if (el) mobileNavBtnEls.current.set(id, el);
-    else mobileNavBtnEls.current.delete(id);
-  }
-
-  // The mobile pill nav scrolls horizontally and has more items than fit on
-  // screen, so keep the active pill scrolled into view as it changes —
-  // otherwise the highlighted item can silently scroll off to the right.
-  useEffect(() => {
-    mobileNavBtnEls.current.get(activeKey)?.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
-  }, [activeKey]);
-
-  // Scrollspy: highlight whichever section's top edge is nearest the top of
-  // the viewport as the page scrolls, using a thin trigger band near the top
-  // rather than "fully visible" so long sections still register correctly.
-  useEffect(() => {
-    const els = Array.from(sectionEls.current.entries());
-    if (els.length === 0) return;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const visible = entries.filter((e) => e.isIntersecting);
-        if (visible.length === 0) return;
-        const topMost = visible.reduce((a, b) => (a.boundingClientRect.top < b.boundingClientRect.top ? a : b));
-        const id = topMost.target.id;
-        if (id) setActiveKey(id);
-      },
-      { rootMargin: "-15% 0px -70% 0px", threshold: 0 }
-    );
-    for (const [, el] of els) observer.observe(el);
-    return () => observer.disconnect();
-  }, [sections.map((s) => s.key).join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  function handleNavClick(key: string) {
-    setActiveKey(key);
-    sectionEls.current.get(key)?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }
+  const statCells: ({ value: React.ReactNode; label: string } | null)[] = [
+    p.totalYearsOfExperience > 0 ? { value: `${p.totalYearsOfExperience}+`, label: "Years Experience" } : null,
+    p.research && p.research.totalPublications > 0 ? { value: p.research.totalPublications, label: "Publications" } : null,
+    p.research && p.research.totalCitations > 0 ? { value: p.research.totalCitations, label: "Citations" } : null,
+    p.joiningYear ? { value: p.joiningYear, label: "Joined In" } : null,
+  ];
+  const visibleStatCells = statCells.filter((c): c is { value: React.ReactNode; label: string } => c !== null);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary/10 via-muted/30 to-primary/15 py-8 px-4 sm:px-8 animate-in fade-in duration-500">
-      <div className="w-full space-y-4">
-        <div className="flex items-center justify-center gap-4 rounded-2xl border-2 border-primary/20 bg-white/50 backdrop-blur-xl shadow-lg shadow-primary/5 py-5 px-6">
-          <img
-            src={VISHNU_LOGO_URL}
-            alt="Vishnu Logo"
-            className="h-12 w-12 sm:h-14 sm:w-14 object-contain shrink-0 drop-shadow-sm"
+    <div className={`${bodyFont.className} min-h-screen bg-background`}>
+      {/* Hero: single-column, no sidebar - photo + identity on a soft band,
+          topped by the college letterhead and closed off by a stats strip. */}
+      <div className="bg-primary/5">
+        <div className="max-w-5xl mx-auto px-5 sm:px-10 pt-6">
+          <div className="flex items-center justify-center gap-3 pb-6">
+            <img src={VISHNU_LOGO_URL} alt="Vishnu Logo" className="h-8 w-8 object-contain shrink-0" />
+            <p className="font-semibold tracking-wide text-primary text-sm text-center">SHRI VISHNU EDUCATIONAL SOCIETY</p>
+          </div>
+        </div>
+        <div className="max-w-5xl mx-auto px-5 sm:px-10 pb-8 lg:pb-12 flex flex-col sm:flex-row sm:items-start gap-6 lg:gap-8">
+          <Avatar
+            name={p.name}
+            photoUrl={p.profilePhotoUrl}
+            size="xl"
+            className="ring-4 ring-background shadow-lg shrink-0 lg:h-40 lg:w-40 lg:text-5xl"
           />
-          <div className="h-8 w-px bg-primary/15 hidden sm:block" />
-          <p className="font-bold tracking-wide text-primary text-[clamp(1.125rem,3vw,1.75rem)] text-center">
-            SHRI VISHNU EDUCATIONAL SOCIETY
-          </p>
+          <div className="flex-1 min-w-0 flex flex-col sm:flex-row sm:items-start justify-between gap-6">
+            <div>
+              <h1 className="text-3xl sm:text-4xl lg:text-6xl font-extrabold text-foreground">{p.name}</h1>
+              <p className="text-base lg:text-xl text-muted-foreground mt-1.5 lg:mt-3">
+                {designationLabel} at <span className="font-semibold text-foreground">{p.department}</span>
+              </p>
+              {p.collegeName && (
+                <p className="flex items-center gap-1.5 text-sm lg:text-base text-muted-foreground mt-1">
+                  <MapPin className="h-3.5 w-3.5" />{p.collegeName}
+                </p>
+              )}
+            </div>
+            <div className="flex items-center gap-2.5 shrink-0">
+              <button
+                type="button"
+                onClick={copyProfileLink}
+                aria-label="Copy public profile link"
+                title="Copy public profile link"
+                className="inline-flex items-center justify-center rounded-full border bg-background h-9 w-9 hover:bg-muted transition-colors"
+              >
+                <Share2 className="h-4 w-4" />
+              </button>
+              {p.officialEmail && (
+                <Button asChild variant="outline" size="sm">
+                  <a href={`mailto:${p.officialEmail}`}><Mail className="h-3.5 w-3.5 mr-1.5" />Send Email</a>
+                </Button>
+              )}
+            </div>
+          </div>
         </div>
 
-        <div className="flex flex-col md:flex-row rounded-2xl border border-white/40 shadow-xl shadow-primary/5">
-          <aside className="md:w-72 shrink-0 bg-gradient-to-b from-primary to-primary/90 text-primary-foreground rounded-t-2xl md:rounded-t-none md:rounded-l-2xl">
-            <div className="flex flex-col items-center py-8 px-4 md:sticky md:top-4">
-              <Avatar name={p.name} photoUrl={p.profilePhotoUrl} size="xl" className="ring-4 ring-white/30 shadow-xl bg-white text-primary" />
-              <p className="mt-4 font-semibold text-center leading-tight px-2">{p.name}</p>
-              <p className="text-sm text-primary-foreground/70 text-center mt-1">{designationLabel}</p>
-
-              {/* Desktop: full vertical nav lives in the sticky sidebar itself */}
-              <nav className="hidden md:flex md:flex-col gap-1 w-full mt-7">
-                {sections.map((s) => {
-                  const Icon = SECTION_ICONS[s.key as keyof typeof SECTION_ICONS];
-                  const isActive = activeKey === s.key;
-                  return (
-                    <button
-                      key={s.key}
-                      onClick={() => handleNavClick(s.key)}
-                      className={`group flex items-center gap-2.5 text-left text-sm px-3.5 py-2.5 rounded-lg transition-all duration-200 ${
-                        isActive
-                          ? "bg-white text-primary font-semibold shadow-md"
-                          : "text-primary-foreground/75 hover:bg-white/10 hover:text-primary-foreground"
-                      }`}
-                    >
-                      <Icon className={`h-4 w-4 shrink-0 transition-colors ${isActive ? "text-primary" : "text-primary-foreground/60 group-hover:text-primary-foreground"}`} />
-                      {s.label}
-                    </button>
-                  );
-                })}
-              </nav>
-            </div>
-          </aside>
-
-          {/* Mobile: a separate sticky pill bar so it stays pinned under the
-              header while scrolling, instead of the whole avatar block. */}
-          <nav className="md:hidden sticky top-0 z-10 flex flex-row gap-1 overflow-x-auto bg-primary/95 backdrop-blur-md px-3 py-2.5 border-b border-white/10">
-            {sections.map((s) => {
-              const Icon = SECTION_ICONS[s.key as keyof typeof SECTION_ICONS];
-              const isActive = activeKey === s.key;
-              return (
-                <button
-                  key={s.key}
-                  ref={(el) => registerMobileNavRef(s.key, el)}
-                  onClick={() => handleNavClick(s.key)}
-                  className={`group flex items-center gap-1.5 shrink-0 text-left text-sm px-3 py-2 rounded-lg transition-all duration-200 whitespace-nowrap ${
-                    isActive
-                      ? "bg-white text-primary font-semibold shadow-md"
-                      : "text-primary-foreground/75 hover:bg-white/10 hover:text-primary-foreground"
-                  }`}
-                >
-                  <Icon className={`h-4 w-4 shrink-0 transition-colors ${isActive ? "text-primary" : "text-primary-foreground/60 group-hover:text-primary-foreground"}`} />
-                  {s.label}
-                </button>
-              );
-            })}
-          </nav>
-
-          <div className="flex-1 bg-background rounded-b-2xl md:rounded-b-none md:rounded-r-2xl p-6 sm:p-10 min-w-0">
-            <SectionBlock id="about" refCb={registerSectionRef}>
-              <SectionHeading icon={SECTION_ICONS.about}>Profile Overview</SectionHeading>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-10 max-w-2xl">
-                <InfoRow label="Designation" value={designationLabel} />
-                <InfoRow label="Department" value={p.department} />
-                <InfoRow label="Highest Qualification" value={p.highestQualification} />
-                <InfoRow label="Specialization" value={p.specialization} />
-                <InfoRow label="Total Years of Experience" value={p.totalYearsOfExperience ? `${p.totalYearsOfExperience}+ years` : undefined} />
-                <InfoRow label="At the Institution Since" value={p.joiningYear} />
-              </div>
-              {qualBadges.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 pt-4">
-                  {qualBadges.map((b) => <Badge key={b} variant="outline">{b}</Badge>)}
+        {visibleStatCells.length > 0 && (
+          <div className="border-t bg-background">
+            <div className="max-w-5xl mx-auto px-5 sm:px-10 flex flex-wrap">
+              {visibleStatCells.map((c, i) => (
+                <div key={i} className="flex-1 min-w-[7rem] flex flex-col items-center justify-center py-5 border-r last:border-r-0 border-border">
+                  <p className="text-2xl font-bold text-foreground">{c.value}</p>
+                  <p className="text-sm text-muted-foreground">{c.label}</p>
                 </div>
-              )}
-              {p.officialEmail && (
-                <a href={`mailto:${p.officialEmail}`} className="inline-flex items-center gap-1.5 text-base text-primary hover:underline pt-4">
-                  <Mail className="h-4 w-4" />{p.officialEmail}
-                </a>
-              )}
-            </SectionBlock>
+              ))}
+              <button
+                type="button"
+                onClick={copyProfileLink}
+                className="flex-1 min-w-[9rem] flex items-center justify-center gap-2 py-5 bg-primary text-primary-foreground font-semibold hover:bg-primary/90 transition-colors"
+              >
+                <Share2 className="h-4 w-4" />Share Profile
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
 
-            {showEducation && (
-              <SectionBlock id="education" refCb={registerSectionRef}>
-                <SectionHeading icon={SECTION_ICONS.education}>Educational Details</SectionHeading>
-                <EntryList>
-                  {degreeEntries.map((e, i) => (
-                    <EntryCard key={i}>
-                      <span className="font-medium">{e.label}:</span> {degreeLine(e.d)}
-                    </EntryCard>
-                  ))}
-                </EntryList>
-                {qualBadges.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 pt-3">
-                    {qualBadges.map((b) => <Badge key={b} variant="outline">{b}</Badge>)}
-                  </div>
-                )}
-              </SectionBlock>
+      <div className="max-w-5xl mx-auto px-5 sm:px-10 py-8 space-y-6">
+        {showHighlights && (
+          <div className="flex flex-wrap items-center gap-2.5">
+            <span className="text-sm font-semibold text-muted-foreground">Highlights:</span>
+            {p.highestQualification && <Badge>{p.highestQualification}</Badge>}
+            {p.specialization && <Badge variant="outline">{p.specialization}</Badge>}
+            {qualBadges.map((b) => <Badge key={b} variant="outline">{b}</Badge>)}
+          </div>
+        )}
+
+        {(showBio || scholarLinks.length > 0) && (
+          <div className="flex flex-col lg:flex-row gap-6">
+            {showBio && (
+              <div className="lg:basis-2/3">
+                <Card
+                  title="Professional Bio"
+                  icon={Info}
+                  badge={p.totalYearsOfExperience > 0 ? <Badge variant="outline">{p.totalYearsOfExperience}+ years experience</Badge> : undefined}
+                >
+                  <p className="text-base leading-relaxed whitespace-pre-wrap">{p.otherInformation}</p>
+                </Card>
+              </div>
             )}
-
-            {showPostdoc && p.education?.postdoctoralFellowshipDetails && (
-              <SectionBlock id="postdoc" refCb={registerSectionRef}>
-                <SectionHeading icon={SECTION_ICONS.postdoc}>Post-Doctoral Experience</SectionHeading>
-                <EntryCard>{degreeLine(p.education.postdoctoralFellowshipDetails)}</EntryCard>
-              </SectionBlock>
-            )}
-
-            {showExperience && (
-              <SectionBlock id="experience" refCb={registerSectionRef}>
-                <SectionHeading icon={SECTION_ICONS.experience}>Academic Experience</SectionHeading>
-                <EntryList>
-                  {p.academicExperience.map((inst, i) => {
-                    const period = publicPeriod(inst.fromDate, inst.toDate, inst.fromYear, inst.toYear);
-                    return (
-                      <EntryCard key={i}>
-                        <span className="font-medium">{inst.institutionName}</span>
-                        {inst.designation ? ` — ${inst.designation}` : ""}
-                        {period && <span className="text-muted-foreground"> &middot; {period}</span>}
-                      </EntryCard>
-                    );
-                  })}
-                </EntryList>
-              </SectionBlock>
-            )}
-
-            {showResearch && p.research && (
-              <SectionBlock id="research" refCb={registerSectionRef}>
-                <SectionHeading icon={SECTION_ICONS.research}>Research Details</SectionHeading>
-                {hasResearchStats && (
-                  <div className="flex flex-wrap gap-3 pb-5">
-                    {p.research.totalPublications > 0 && (
-                      <div className="rounded-lg border bg-muted/30 px-5 py-3 text-center min-w-[7rem]">
-                        <p className="text-2xl font-bold text-primary">{p.research.totalPublications}</p>
-                        <p className="text-sm text-muted-foreground">Publications</p>
-                      </div>
-                    )}
-                    {p.research.totalCitations > 0 && (
-                      <div className="rounded-lg border bg-muted/30 px-5 py-3 text-center min-w-[7rem]">
-                        <p className="text-2xl font-bold text-primary">{p.research.totalCitations}</p>
-                        <p className="text-sm text-muted-foreground">Citations</p>
-                      </div>
-                    )}
-                    {p.research.hIndex > 0 && (
-                      <div className="rounded-lg border bg-muted/30 px-5 py-3 text-center min-w-[7rem]">
-                        <p className="text-2xl font-bold text-primary">{p.research.hIndex}</p>
-                        <p className="text-sm text-muted-foreground">h-index</p>
-                      </div>
-                    )}
-                    {p.research.i10Index > 0 && (
-                      <div className="rounded-lg border bg-muted/30 px-5 py-3 text-center min-w-[7rem]">
-                        <p className="text-2xl font-bold text-primary">{p.research.i10Index}</p>
-                        <p className="text-sm text-muted-foreground">i10-index</p>
-                      </div>
-                    )}
-                  </div>
-                )}
-                {scholarLinks.length > 0 && (
-                  <div className="flex flex-wrap gap-4 pb-5">
+            {scholarLinks.length > 0 && (
+              <div className="lg:basis-1/3">
+                <Card title="Research Profiles" icon={FlaskConical}>
+                  <div className="space-y-3">
                     {scholarLinks.map((l) => (
-                      <a key={l.label} href={l.href} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-base text-primary hover:underline">
-                        {l.label}<ExternalLink className="h-3.5 w-3.5" />
+                      <a
+                        key={l.label}
+                        href={l.href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-3 rounded-lg border bg-muted/30 px-3 py-2.5 hover:bg-muted/50 transition-colors"
+                      >
+                        <ResearchProfileBadge service={l.service} />
+                        <span className="flex-1 min-w-0 text-sm font-medium truncate">{l.label}</span>
+                        <ExternalLink className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                       </a>
                     ))}
                   </div>
-                )}
-                {p.research.publications.length > 0 && (
-                  <EntryList>
-                    {p.research.publications.map((pub, i) => (
-                      <EntryCard key={i}>
-                        <p className="font-medium">{pub.title}</p>
-                        <p className="text-muted-foreground text-sm mt-1">
-                          {pub.coAuthors && `${pub.coAuthors} — `}{pub.journalOrConference} ({pub.publicationYear})
-                          {pub.indexing && <Badge variant="outline" className="ml-1.5 text-xs">{pub.indexing}</Badge>}
-                        </p>
-                      </EntryCard>
-                    ))}
-                  </EntryList>
-                )}
-              </SectionBlock>
-            )}
-
-            {showAwards && p.recognition && (
-              <SectionBlock id="awards" refCb={registerSectionRef}>
-                <SectionHeading icon={SECTION_ICONS.awards}>Awards & Recognition</SectionHeading>
-                <EntryList>
-                  {p.recognition.awardsRecognition.map((a, i) => {
-                    const year = publicYear(a.dateOfAward, a.year);
-                    return (
-                      <EntryCard key={i}><span className="font-medium">{a.titleOfAward}</span> — {a.awardingAgencyBody}{year ? ` (${year})` : ""}</EntryCard>
-                    );
-                  })}
-                </EntryList>
-              </SectionBlock>
-            )}
-
-            {showEngagement && p.recognition && (
-              <SectionBlock id="engagement" refCb={registerSectionRef}>
-                <SectionHeading icon={SECTION_ICONS.engagement}>Professional Engagement</SectionHeading>
-                <div className="space-y-6">
-                  {p.recognition.academicResponsibilities.length > 0 && (
-                    <div>
-                      <p className="text-sm font-semibold text-muted-foreground mb-2 uppercase tracking-wide">Academic Responsibilities</p>
-                      <EntryList>
-                        {p.recognition.academicResponsibilities.map((r, i) => {
-                          const period = publicPeriod(r.fromDate, r.toDate, r.fromYear, r.toYear);
-                          return (
-                            <EntryCard key={i}>
-                              <span className="font-medium">{r.category === "OTHER" ? (r.otherCategory || "Other") : ADMIN_RESPONSIBILITY_CATEGORY_LABELS[r.category]}</span>
-                              {r.description ? ` — ${r.description}` : ""}
-                              {period && <span className="text-muted-foreground"> &middot; {period}</span>}
-                            </EntryCard>
-                          );
-                        })}
-                      </EntryList>
-                    </div>
-                  )}
-                  {p.recognition.professionalMemberships.length > 0 && (
-                    <div>
-                      <p className="text-sm font-semibold text-muted-foreground mb-2 uppercase tracking-wide">Professional Memberships</p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {p.recognition.professionalMemberships.map((m, i) => {
-                          const since = publicYear(m.memberSince ?? m.sinceMonthYear, m.sinceYear);
-                          return (
-                            <Badge key={i} variant="outline">
-                              {m.body === "OTHER" ? m.bodyName : PROFESSIONAL_BODY_LABELS[m.body]}
-                              {since ? ` (since ${since})` : ""}
-                            </Badge>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-                  {p.recognition.fdpsWorkshopsMoocsCertifications.length > 0 && (
-                    <div>
-                      <p className="text-sm font-semibold text-muted-foreground mb-2 uppercase tracking-wide">FDPs, Workshops, MOOCs &amp; Certifications</p>
-                      <EntryList>
-                        {p.recognition.fdpsWorkshopsMoocsCertifications.map((t, i) => {
-                          const year = publicYear(t.fromDate, t.year);
-                          const detail = [
-                            t.type === "OTHER" ? (t.pleaseSpecifyType || "Other") : TRAINING_ENTRY_TYPE_LABELS[t.type],
-                            t.nameOfTheFacultyCoordinator,
-                          ].filter(Boolean).join(", ");
-                          return (
-                            <EntryCard key={i}>
-                              <span className="font-medium">{t.titleOfTheProgram}</span> — {detail}{year ? ` (${year})` : ""}
-                            </EntryCard>
-                          );
-                        })}
-                      </EntryList>
-                    </div>
-                  )}
-                  {p.recognition.newLabsEstablished.length > 0 && (
-                    <div>
-                      <p className="text-sm font-semibold text-muted-foreground mb-2 uppercase tracking-wide">New Labs Established</p>
-                      <EntryList>
-                        {p.recognition.newLabsEstablished.map((l, i) => (
-                          <EntryCard key={i}><span className="font-medium">{l.facilityDetails}</span>{l.outcomes ? ` — ${l.outcomes}` : ""}</EntryCard>
-                        ))}
-                      </EntryList>
-                    </div>
-                  )}
-                </div>
-              </SectionBlock>
-            )}
-
-            {showOther && (
-              <SectionBlock id="other" refCb={registerSectionRef}>
-                <SectionHeading icon={SECTION_ICONS.other}>Other Information</SectionHeading>
-                <p className="text-base leading-relaxed whitespace-pre-wrap">{p.otherInformation}</p>
-              </SectionBlock>
+                </Card>
+              </div>
             )}
           </div>
-        </div>
+        )}
+
+        {showEducation && (
+          <Card title="Educational Details" icon={GraduationCap}>
+            <EntryList>
+              {degreeEntries.map((e, i) => (
+                <EntryCard key={i} title={`${e.label}: ${degreeTitle(e.d)}`} meta={degreeMeta(e.d)} />
+              ))}
+            </EntryList>
+          </Card>
+        )}
+
+        {showPostdoc && p.education?.postdoctoralFellowshipDetails && (
+          <Card title="Post-Doctoral Experience" icon={Microscope}>
+            <EntryCard title={degreeTitle(p.education.postdoctoralFellowshipDetails)} meta={degreeMeta(p.education.postdoctoralFellowshipDetails)} />
+          </Card>
+        )}
+
+        {showExperience && (
+          <Card title="Academic Experience" icon={Briefcase}>
+            <EntryList>
+              {p.academicExperience.map((inst, i) => {
+                const period = publicPeriod(inst.fromDate, inst.toDate, inst.fromYear, inst.toYear);
+                return (
+                  <EntryCard key={i} title={inst.institutionName} meta={[inst.designation, period].filter(Boolean).join(" · ")} />
+                );
+              })}
+            </EntryList>
+          </Card>
+        )}
+
+        {showResearch && p.research && (
+          <Card title="Research Details" icon={FlaskConical}>
+            {(p.research.hIndex > 0 || p.research.i10Index > 0) && (
+              <div className="flex flex-wrap gap-3 pb-5">
+                {p.research.hIndex > 0 && (
+                  <div className="rounded-lg border bg-muted/30 px-5 py-3 text-center min-w-28">
+                    <p className="text-2xl font-bold text-primary">{p.research.hIndex}</p>
+                    <p className="text-sm text-muted-foreground">h-index</p>
+                  </div>
+                )}
+                {p.research.i10Index > 0 && (
+                  <div className="rounded-lg border bg-muted/30 px-5 py-3 text-center min-w-28">
+                    <p className="text-2xl font-bold text-primary">{p.research.i10Index}</p>
+                    <p className="text-sm text-muted-foreground">i10-index</p>
+                  </div>
+                )}
+              </div>
+            )}
+            {p.research.publications.length > 0 && (
+              <EntryList>
+                {p.research.publications.map((pub, i) => (
+                  <EntryCard key={i}>
+                    <p className="font-medium">{pub.title}</p>
+                    <p className="text-muted-foreground text-sm mt-1">
+                      {pub.coAuthors && `${pub.coAuthors} — `}{pub.journalOrConference} ({pub.publicationYear})
+                      {pub.indexing && <Badge variant="outline" className="ml-1.5 text-xs">{pub.indexing}</Badge>}
+                    </p>
+                  </EntryCard>
+                ))}
+              </EntryList>
+            )}
+          </Card>
+        )}
+
+        {showAwards && p.recognition && (
+          <div className="rounded-lg border bg-background p-6">
+            <div className="flex items-center justify-center gap-2.5 mb-6">
+              <Award className="h-5 w-5 text-primary shrink-0" />
+              <h2 className="text-lg font-bold text-foreground">Awards &amp; Recognition ({p.recognition.awardsRecognition.length})</h2>
+            </div>
+            <div className="flex flex-wrap justify-center gap-6">
+              {p.recognition.awardsRecognition.map((a, i) => (
+                <BadgeTile key={i} title={a.titleOfAward} subtitle={[a.awardingAgencyBody, publicYear(a.dateOfAward, a.year)].filter(Boolean).join(" · ")} />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {showEngagement && p.recognition && (
+          <Card title="Professional Engagement" icon={Users}>
+            <div className="space-y-6">
+              {p.recognition.academicResponsibilities.length > 0 && (
+                <div>
+                  <p className="text-sm font-semibold text-muted-foreground mb-2 uppercase tracking-wide">Academic Responsibilities</p>
+                  <EntryList>
+                    {p.recognition.academicResponsibilities.map((r, i) => {
+                      const period = publicPeriod(r.fromDate, r.toDate, r.fromYear, r.toYear);
+                      const label = r.category === "OTHER" ? (r.otherCategory || "Other") : (ADMIN_RESPONSIBILITY_CATEGORY_LABELS[r.category] ?? r.category);
+                      return (
+                        <EntryCard key={i} title={label} meta={[r.description, period].filter(Boolean).join(" · ")} />
+                      );
+                    })}
+                  </EntryList>
+                </div>
+              )}
+              {p.recognition.professionalMemberships.length > 0 && (
+                <div>
+                  <p className="text-sm font-semibold text-muted-foreground mb-2 uppercase tracking-wide">Professional Memberships</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {p.recognition.professionalMemberships.map((m, i) => {
+                      const since = publicYear(m.memberSince ?? m.sinceMonthYear, m.sinceYear);
+                      return (
+                        <Badge key={i} variant="outline">
+                          {m.body === "OTHER" ? m.bodyName : PROFESSIONAL_BODY_LABELS[m.body]}
+                          {since ? ` (since ${since})` : ""}
+                        </Badge>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+              {p.recognition.fdpsWorkshopsMoocsCertifications.length > 0 && (
+                <div>
+                  <p className="text-sm font-semibold text-muted-foreground mb-2 uppercase tracking-wide">FDPs, Workshops, MOOCs &amp; Certifications</p>
+                  <EntryList>
+                    {p.recognition.fdpsWorkshopsMoocsCertifications.map((t, i) => {
+                      const year = publicYear(t.fromDate, t.year);
+                      const duration = t.duration ? `${t.duration} day${t.duration === 1 ? "" : "s"}` : t.numberOfWeeks ? `${t.numberOfWeeks} week${t.numberOfWeeks === 1 ? "" : "s"}` : undefined;
+                      const meta = [
+                        t.type === "OTHER" ? (t.pleaseSpecifyType || "Other") : TRAINING_ENTRY_TYPE_LABELS[t.type],
+                        t.nameOfTheFacultyCoordinator,
+                        t.place,
+                        t.modeOfTheProgram && TRAINING_PROGRAM_MODE_LABELS[t.modeOfTheProgram],
+                        year,
+                      ].filter(Boolean).join(" · ");
+                      return (
+                        <EntryCard
+                          key={i}
+                          title={
+                            <span className="flex flex-wrap items-baseline gap-x-2">
+                              {t.titleOfTheProgram}
+                              {duration && <span className="text-primary font-bold">{duration}</span>}
+                            </span>
+                          }
+                          meta={meta}
+                        />
+                      );
+                    })}
+                  </EntryList>
+                </div>
+              )}
+              {p.recognition.newLabsEstablished.length > 0 && (
+                <div>
+                  <p className="text-sm font-semibold text-muted-foreground mb-2 uppercase tracking-wide">New Labs Established</p>
+                  <EntryList>
+                    {p.recognition.newLabsEstablished.map((l, i) => (
+                      <EntryCard key={i} title={l.facilityDetails} meta={l.outcomes} />
+                    ))}
+                  </EntryList>
+                </div>
+              )}
+            </div>
+          </Card>
+        )}
       </div>
     </div>
   );
