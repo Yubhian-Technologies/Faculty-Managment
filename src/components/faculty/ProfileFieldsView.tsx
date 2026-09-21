@@ -116,10 +116,13 @@ export function ExperienceModule({
   const teaching = p.teachingAssignment;
   const allExperienceEntries = allPreviousExperienceEntries(p);
   const hasExperienceData = !!(joiningDate || allExperienceEntries.length > 0);
-  const experienceGroups: { label: string; entries: PreviousInstitution[]; roleLabel: string; role: string | undefined }[] = [
-    { label: "Academic Experience", entries: p.academicExperience ?? [], roleLabel: "Teaching Roles/Responsibilities", role: p.teachingRolesResponsibilities },
-    { label: "Industry Experience", entries: p.industryExperience ?? [], roleLabel: "Industry Roles/Responsibilities", role: p.industryRolesResponsibilities },
-    { label: "Research Experience", entries: p.researchExperience ?? [], roleLabel: "Research Roles/Responsibilities", role: p.researchRolesResponsibilities },
+  // `unplacedRole` is legacy shared text normalizeAcademicProfile could not move onto an
+  // entry (nothing to hold it, or the latest entry already has different text) - shown
+  // read-only so it never silently disappears.
+  const experienceGroups: { label: string; entries: PreviousInstitution[]; roleLabel: string; unplacedRole: string | undefined }[] = [
+    { label: "Academic Experience", entries: p.academicExperience ?? [], roleLabel: "Academic Roles/Responsibilities", unplacedRole: p.teachingRolesResponsibilities },
+    { label: "Industry Experience", entries: p.industryExperience ?? [], roleLabel: "Industry Roles/Responsibilities", unplacedRole: p.industryRolesResponsibilities },
+    { label: "Research Experience", entries: p.researchExperience ?? [], roleLabel: "Research Roles/Responsibilities", unplacedRole: p.researchRolesResponsibilities },
   ];
   return (
     <Section number={2} title="Previous Experience">
@@ -129,7 +132,7 @@ export function ExperienceModule({
       {experienceGroups.map((group) => (
         <div className="space-y-2" key={group.label}>
           <SubLabel>{group.label}</SubLabel>
-          {includeTeachingAssignment && group.role && <Field label={group.roleLabel} value={group.role} />}
+          {group.unplacedRole && <Field label={`${group.roleLabel} (legacy, not tied to an entry)`} value={group.unplacedRole} />}
           {group.entries.length === 0 ? <p className="text-xs text-muted-foreground">None recorded.</p> : (
             <div className="space-y-2">
               {group.entries.map((inst, i) => (
@@ -140,6 +143,7 @@ export function ExperienceModule({
                   <Field label="To Date" value={formatInstitutionDate(inst.toDate, inst.toYear)} />
                   <Field label="Joining Salary" value={inst.joiningSalary} />
                   <Field label="Leaving Salary" value={inst.leavingSalary} />
+                  <Field label={group.roleLabel} value={inst.rolesResponsibilities} />
                   <Field label="Reason for Leaving" value={inst.reasonForLeaving} />
                   <Field label="NOC Obtained" value={inst.nocObtained === "YES" ? "Yes" : inst.nocObtained === "NO" ? "No" : undefined} />
                   <DocField label="Experience Certificate" url={inst.experienceCertificateUrl} />
@@ -346,19 +350,6 @@ export function MentorshipModule({
               <Field label="State / National / International" value={a.stateNationalInternational ? AWARD_LEVEL_LABELS[a.stateNationalInternational] : undefined} />
               <Field label="Other Details" value={a.otherDetails} />
               <DocField label="Certificate" url={a.certificateUrl} />
-            </div>
-          ))
-        )}
-      </div>
-
-      <div className="space-y-2">
-        <SubLabel>Authored Books</SubLabel>
-        {(p.authoredBooks ?? []).length === 0 ? <p className="text-xs text-muted-foreground">None recorded.</p> : (
-          p.authoredBooks?.map((b, i) => (
-            <div key={i} className="rounded-md border bg-muted/20 shadow-sm p-2 grid grid-cols-1 sm:grid-cols-3 gap-2">
-              <Field label="Title" value={b.title} />
-              <Field label="Publisher" value={b.publisher} />
-              <Field label="Year" value={b.year} />
             </div>
           ))
         )}

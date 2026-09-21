@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import type { Firestore } from "firebase-admin/firestore";
+import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 
 async function getUserName(db: Firestore, collegeId: string, uid: string): Promise<string> {
   if (!collegeId || !uid) return "Unknown";
@@ -254,9 +255,9 @@ export async function PATCH(
         .collection("facultyMembers")
         .doc(body.coordinatorFacultyId)
         .get();
-      const faculty = facultySnap.data() as { name?: string; userUid?: string } | undefined;
+      const faculty = facultySnap.data() as { legalName?: string; userUid?: string } | undefined;
       updates.coordinatorFacultyId = body.coordinatorFacultyId;
-      updates.coordinatorName = faculty?.name ?? "Unknown";
+      updates.coordinatorName = facultyDisplayName(faculty) || "Unknown";
       updates.coordinatorUid = faculty?.userUid ?? null;
     }
     if (body.panelMemberUids !== undefined) updates.panelMemberUids = body.panelMemberUids;

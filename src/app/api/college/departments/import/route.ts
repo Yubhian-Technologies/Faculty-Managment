@@ -1,5 +1,7 @@
 export const dynamic = "force-dynamic";
 
+import { canonicalDepartmentCode, canonicalDepartmentName, findDepartmentConflict } from "@/lib/departments/resolve";
+import { departmentKeyDocId } from "@/lib/departments/departmentKeys";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -39,14 +41,17 @@ export async function POST(request: Request) {
       usersColl.get(),
     ]);
 
-    const existingCodes = new Set(
-      existingDeptsSnap.docs.map((d) => ((d.data() as { code?: string }).code ?? "").toUpperCase())
-    );
-    // Names are the scope model's join key (see college/departments POST), so a
-    // duplicate name is as unsafe as a duplicate code - guard both, case-insensitively.
-    const existingNames = new Set(
-      existingDeptsSnap.docs.map((d) => ((d.data() as { name?: string }).name ?? "").trim().toLowerCase())
-    );
+    // Name/code uniqueness uses the same normalised comparison as the manual
+    // create/rename (resolve.ts) - case, spacing and NBSP insensitive, and a name
+    // may not equal another department's code. `known` also grows as rows are
+    // accepted so duplicates WITHIN the file are caught. The lock docs written
+    // below with batch.create() make the commit itself reject a concurrent
+    // duplicate (the whole batch then fails and can simply be re-imported).
+    const known: { id: string; name?: string; code?: string }[] = existingDeptsSnap.docs.map((d) => ({
+      id: d.id,
+      ...(d.data() as { name?: string; code?: string }),
+    }));
+    const keysColl = db.collection("colleges").doc(collegeId).collection("departmentKeys");
     // Anyone in the college can be named - the HOD is a seat a person holds
     // on top of their own role, not a separate kind of account. Matched on
     // either their login (college) email or personal email.
@@ -71,13 +76,13 @@ export async function POST(request: Request) {
       const row = body.records[i];
       const rowNum = i + 2; // 1-indexed + header row
 
-      const name = row.name?.trim();
-      const code = row.code?.trim().toUpperCase();
+      const name = canonicalDepartmentName(row.name) || undefined;
+      const code = canonicalDepartmentCode(row.code) || undefined;
       if (!name) { failed.push({ row: rowNum, name: "-", error: "Department name is required" }); continue; }
       if (!code) { failed.push({ row: rowNum, name, error: "Short code is required" }); continue; }
       if (code.length > 10) { failed.push({ row: rowNum, name, error: "Short code must be 10 characters or fewer" }); continue; }
-      if (existingNames.has(name.toLowerCase())) { failed.push({ row: rowNum, name, error: `Department "${name}" already exists` }); continue; }
-      if (existingCodes.has(code)) { failed.push({ row: rowNum, name, error: `Code "${code}" already exists` }); continue; }
+      const dup = findDepartmentConflict(known, { name, code });
+      if (dup) { failed.push({ row: rowNum, name, error: dup.message }); continue; }
 
       let hodUid = "";
       let hodName = "";
@@ -93,13 +98,15 @@ export async function POST(request: Request) {
       }
 
       // Firestore batch limit is 500 writes - department + its courses (+ HOD sync).
-      const rowWrites = 2 + newCourses.length;
+      const rowWrites = 4 + newCourses.length; // department + seat + name/code locks (+ courses)
       if (batchWrites + rowWrites > 500) {
         failed.push({ row: rowNum, name, error: "Import batch limit reached - import the remaining rows in a second file" });
         continue;
       }
 
       const deptRef = deptsColl.doc();
+      batch.create(keysColl.doc(departmentKeyDocId("name", name)), { departmentId: deptRef.id, field: "name", updatedAt: now });
+      batch.create(keysColl.doc(departmentKeyDocId("code", code)), { departmentId: deptRef.id, field: "code", updatedAt: now });
       batch.set(deptRef, {
         collegeId,
         name,
@@ -137,13 +144,22 @@ export async function POST(request: Request) {
       });
       if (hodUid) seatAssignments.push({ seatId: seatRef.id, uid: hodUid, name });
 
-      existingCodes.add(code); // prevent duplicate codes within the same batch
-      existingNames.add(name.toLowerCase()); // ...and duplicate names
+      known.push({ id: deptRef.id, name, code }); // catches duplicates later in the same file
       created.push(name);
       batchWrites += rowWrites;
     }
 
-    await batch.commit();
+    try {
+      await batch.commit();
+    } catch (e) {
+      // batch.create() on an existing lock doc = a concurrent create claimed the
+      // same name/code between our read and this commit. Nothing was written.
+      console.error("[college/departments/import] batch commit failed:", e);
+      return NextResponse.json(
+        { error: "A department with the same name or short code was created at the same time. Nothing was imported - please retry." },
+        { status: 409 }
+      );
+    }
 
     // Appoint the HOD each row named, through the seat (which also records the
     // history and links the person's dashboard). Someone who can't hold an HOD

@@ -17,6 +17,7 @@
 import "dotenv/config";
 import { initializeApp, cert, getApps } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
+import { migrateFacultyDoc } from "../src/lib/faculty/fieldRenames.ts";
 
 function getAdminApp() {
   if (getApps().length > 0) return getApps()[0];
@@ -40,7 +41,7 @@ const ONLY_COLLEGE = collegeArg ? collegeArg.split("=")[1] : null;
 // Fields that share the exact same name/shape on both SupportingStaffMember
 // and FacultyMember (see AGENTS.md data-mapping notes) - copied verbatim.
 const DIRECT_FIELDS = [
-  "name", "phone", "department", "employeeId", "joiningDate", "employmentType", "status",
+  "name", "department", "employeeId", "joiningDate", "employmentType", "status",
   "gender", "dateOfBirth", "legalName", "fatherName", "motherName", "religion", "caste",
   "aadharNo", "panNo", "passportNumber", "emergencyContactName", "emergencyContactPhone",
   "ratificationStatus", "ratificationDate", "maritalStatus", "spouseName", "numberOfChildren",
@@ -53,6 +54,8 @@ function buildFacultyPayload(staff, now) {
   for (const key of DIRECT_FIELDS) {
     if (staff[key] !== undefined) payload[key] = staff[key];
   }
+  // FacultyMember stores Mobile No as `mobileNo` (SupportingStaff keeps `phone`).
+  if (staff.phone !== undefined) payload.mobileNo = staff.phone;
 
   payload.designation = staff.designation;
   payload.collegeEmail = staff.collegeEmail || staff.email || "";
@@ -73,12 +76,34 @@ function buildFacultyPayload(staff, now) {
   }
 
   payload.experienceYears = payload.experienceYears ?? 0;
+  // SupportingStaff.name is its "Name (as per PAN)" field; SupportingStaff.legalName its
+  // Full Name (as per SSC). FacultyMember's model: legalName is the ONLY display name and
+  // nameAsPerPan is independent (the retired `name` key is never written). A staff record
+  // with no legalName has only `name` as its identity/display name, so that value becomes
+  // the faculty legalName - it is not treated as PAN data in that case.
+  const staffLegal = typeof staff.legalName === "string" ? staff.legalName.trim() : "";
+  if (staffLegal) {
+    payload.legalName = staffLegal;
+    if (typeof staff.name === "string" && staff.name.trim()) payload.nameAsPerPan = staff.name.trim();
+  } else {
+    payload.legalName = String(staff.name ?? "").trim();
+  }
+  delete payload.name;
   payload.status = payload.status ?? "ACTIVE";
-  payload.employmentType = payload.employmentType ?? "PERMANENT";
   payload.createdAt = staff.createdAt ?? now;
   payload.updatedAt = now;
 
-  return payload;
+  // SupportingStaff still uses the old flat key names; FacultyMember must only
+  // ever hold the current ones (passportNo, bankAccountNumber, ...,
+  // highestQualification, totalYearsOfExperience). migrateFacultyDoc is the same
+  // rename the app's read path and migrate-faculty-field-names.mjs use.
+  const faculty = migrateFacultyDoc(payload);
+  // employmentType was retired in favor of employeeCategory (PERMANENT -> REGULAR;
+  // CONTRACT/VISITING/PART_TIME are spelled the same). Never write the old field.
+  const type = String(faculty.employmentType ?? "PERMANENT").toUpperCase();
+  delete faculty.employmentType;
+  faculty.employeeCategory = type === "PERMANENT" ? "REGULAR" : type;
+  return faculty;
 }
 
 async function migrateCollege(collegeId) {

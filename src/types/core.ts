@@ -981,14 +981,8 @@ export interface FacultyMember {
   department: string;
   employeeId: string;
   apaarFacultyId?: string; // NBA/AICTE — APAAR Faculty ID
-  // Name (as per PAN) — optional statutory-matching detail, NOT the record's
-  // display name. legalName (below, in the personal/statutory block) is the
-  // primary/required identity name; use facultyDisplayName()
-  // (src/lib/faculty/facultyDisplayName.ts) wherever a faculty member's name
-  // is shown, rather than reading this field directly.
-  name?: string;
   email?: string; // personal email — optional, contact only
-  phone?: string;
+  mobileNo?: string; // "Mobile No" (legacy key: phone - see fieldRenames.ts / facultyMobileNo())
   // Extra contact numbers beyond the primary Mobile No above - each with an
   // optional freeform label the HOD chooses (e.g. "Personal", "WhatsApp", or
   // just whoever's number it is), not a fixed category.
@@ -1030,6 +1024,10 @@ export interface FacultyMember {
   // See facultyDisplayName() (src/lib/faculty/facultyDisplayName.ts).
   legalName?: string;
   nameAsPerAadhar?: string; // name exactly as printed on the Aadhar card
+  // Name (as per PAN) - optional statutory-matching detail, independent of legalName
+  // (like nameAsPerAadhar); never a display name. legalName is the ONLY identity/display
+  // name - use facultyDisplayName() (src/lib/faculty/facultyDisplayName.ts) to show it.
+  nameAsPerPan?: string;
   fatherName?: string;
   motherName?: string;
   religion?: Religion;
@@ -1094,9 +1092,14 @@ export interface FacultyMember {
 // ...). Legacy records (degree, universityOrInstitute, location,
 // percentageOrDivision, yearOfCompletion, guideOrSupervisorName,
 // certificateNumber) are lifted at read time - see src/lib/faculty/fieldRenames.ts.
+export type DegreeType = "B.Tech" | "BE" | "M.Tech" | "ME";
+
 export interface DegreeDetail {
   domain?: string; // Management / Engineering / Arts & Science / Medicine / Law / Others - not applicable to School/Intermediate
   course: string; // UI label "Course" at every level (blank for Doctoral, which uses specialization instead)
+  // UG/PG only, and only when course is "B.Tech/BE" (B.Tech | BE) or "M.Tech/ME" (M.Tech | ME) -
+  // which of the two the qualification actually is. Required then (see lib/faculty/degreeType.ts); absent for every other course.
+  degreeType?: DegreeType;
   branch: string;
   specialization?: string; // Doctoral only - replaces the Course/Branch fields for PhD entries
   board?: string; // School/Intermediate only - the examining board (e.g. "State Board", "CBSE")
@@ -1189,6 +1192,10 @@ export interface PreviousInstitution {
   leavingSalary?: number;
   reasonForLeaving?: string;
   nocObtained?: "YES" | "NO";
+  // This entry's own Roles/Responsibilities - the label is per tab (Academic/Industry/Research
+  // Roles/Responsibilities) but the stored key is the same on every experience entry. Replaces
+  // the three shared root-level fields on FacultyProfileFields (see below).
+  rolesResponsibilities?: string;
 }
 
 // Employment Details — Promotion History (NBA/AICTE).
@@ -2054,12 +2061,6 @@ export interface LabEstablished {
   outcomes: string;
 }
 
-export interface AuthoredBook {
-  title: string;
-  publisher: string;
-  year?: number;
-}
-
 // Shared structured "training/FDP" entry — used by Teaching Faculty Module 5 AND both
 // Supporting Staff categories' Training sections (their category-specific types apply).
 export type TrainingEntryType =
@@ -2349,8 +2350,12 @@ export interface FacultyProfileFields {
 
   // Previous Institutions Worked / Current Teaching Assignment
   teachingAssignment?: TeachingAssignmentSummary; // omitted for PRINCIPAL / VICE_PRINCIPAL - courses only; its role box is teachingRolesResponsibilities below
-  // The three Experience tabs' "Roles/Responsibilities" boxes - separate
-  // top-level fields so filling one tab's box never overwrites another's.
+  // DEPRECATED - Roles/Responsibilities now live on each experience entry
+  // (PreviousInstitution.rolesResponsibilities). These three root fields only exist on
+  // records not yet through scripts/migrate-experience-roles-into-entries.mjs, and
+  // normalizeAcademicProfile lifts them onto the entry on read. A value that could not be
+  // lifted (no entries to hold it, or the latest entry already has different text) stays
+  // here rather than being dropped.
   teachingRolesResponsibilities?: string; // legacy home: teachingAssignment.primaryTeachingRole
   industryRolesResponsibilities?: string;
   researchRolesResponsibilities?: string;
@@ -2393,7 +2398,6 @@ export interface FacultyProfileFields {
 
   // Module 5 — Mentorship & Institutional Value
   newLabsEstablished: LabEstablished[];
-  authoredBooks: AuthoredBook[];
   // Structured NBA/AICTE replacements for the 4 legacy free-text fields this module used to carry.
   fdpsWorkshopsMoocsCertifications: TrainingEntry[];
   professionalMemberships: ProfessionalMembership[];

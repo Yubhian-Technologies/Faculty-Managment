@@ -1,5 +1,6 @@
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { normalizeAcademicProfile } from "@/lib/faculty/academicProfileCompat";
+import { facultyMobileNo } from "@/lib/faculty/mobileNo";
 import { migratePersonalFlat } from "@/lib/faculty/fieldRenames";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { DESIGNATION_LABELS, FACULTY_STATUS_LABELS, ROLE_LABELS, RELIGION_LABELS, CASTE_LABELS } from "@/types";
@@ -11,6 +12,7 @@ type TimestampLike = { toDate?: () => Date; seconds?: number; _seconds?: number 
 
 interface DegreeDetail {
   course?: string;
+  degreeType?: string; // B.Tech / BE / M.Tech / ME - only when course is "B.Tech/BE" or "M.Tech/ME"
   branch?: string;
   specialization?: string; // Doctoral only - shown instead of Branch
   degreeAndBranch?: string; // legacy - pre-split records that haven't been re-saved yet
@@ -29,7 +31,8 @@ function degreeAndBranchLabel(d: DegreeDetail, useSpecialization = false): strin
   // resume the moment this field was added (same idea as the degreeAndBranch
   // fallback below, for the pre-split legacy shape).
   const secondary = useSpecialization ? (d.specialization || d.branch) : d.branch;
-  const combined = [d.course, secondary].filter(Boolean).join(" ");
+  const course = d.course && d.degreeType ? `${d.course} (${d.degreeType})` : d.course;
+  const combined = [course, secondary].filter(Boolean).join(" ");
   return combined || d.degreeAndBranch || "";
 }
 
@@ -50,6 +53,7 @@ interface PreviousInstitution {
   toDate?: string;
   fromYear?: number;
   toYear?: number;
+  rolesResponsibilities?: string;
 }
 
 interface Publication {
@@ -64,12 +68,6 @@ interface Publication {
 interface LabEstablished {
   facilityDetails?: string;
   outcomes?: string;
-}
-
-interface AuthoredBook {
-  title?: string;
-  publisher?: string;
-  year?: number;
 }
 
 interface FacultyProfileFieldsLike {
@@ -108,7 +106,6 @@ interface FacultyProfileFieldsLike {
   i10Index?: number;
 
   newLabsEstablished?: LabEstablished[];
-  authoredBooks?: AuthoredBook[];
 
   monthlySalary?: number;
   grossAnnualCTC?: number;
@@ -119,9 +116,8 @@ interface FacultyProfileFieldsLike {
 }
 
 export interface ResumeData {
-  // Name (as per PAN) - optional; legalName below is the primary display
-  // name. See facultyDisplayName() usage in the header rendering.
-  name?: string;
+  // legalName (below) is the only display name - see facultyDisplayName()
+  // usage in the header rendering.
   role?: string;
   designation?: string;
   /** R&D-managed publication records (see /api/college/publications) - the
@@ -133,6 +129,8 @@ export interface ResumeData {
   employeeId?: string;
   email?: string;
   collegeEmail?: string;
+  /** facultyMembers docs carry `mobileNo`; a users doc (Super Admin list) carries `phone`. */
+  mobileNo?: string;
   phone?: string;
   profilePhotoUrl?: string;
   collegeName?: string;
@@ -340,7 +338,7 @@ export function getResumeHTML(rawData: ResumeData): string {
   const contactLines = [
     data.email ? `Email: ${esc(data.email)}` : "",
     data.collegeName ? `College: ${esc(data.collegeName)}` : "",
-    data.phone ? `Mobile: ${esc(data.phone)}` : "",
+    facultyMobileNo(data) ? `Mobile: ${esc(facultyMobileNo(data))}` : "",
     data.employeeId ? `Employee ID: ${esc(data.employeeId)}` : "",
     data.resumeUrl ? `<a href="${esc(data.resumeUrl)}" target="_blank" style="color:#1d4ed8;text-decoration:none;">View Uploaded Resume ↗</a>` : "",
   ].filter(Boolean);
@@ -407,10 +405,18 @@ export function getResumeHTML(rawData: ResumeData): string {
   // Current and past assignments, kept as two separate tables - current
   // course/section assignments + the Module 2 course summary vs. structured
   // past assignments (past rows carry a pass %, current ones never do).
+  // Each experience entry's own Roles/Responsibilities, plus any legacy shared text no entry
+  // could hold (see FacultyProfileFields.teachingRolesResponsibilities).
+  const roleBullets = (label: string, entries: PreviousInstitution[] | undefined, unplaced: string | undefined) => [
+    ...(entries ?? [])
+      .filter((e) => e.rolesResponsibilities?.trim())
+      .map((e) => `${label} Roles/Responsibilities${e.institutionName ? ` (${esc(e.institutionName)})` : ""}: ${esc(e.rolesResponsibilities)}`),
+    unplaced?.trim() && `${label} Roles/Responsibilities: ${esc(unplaced)}`,
+  ];
   const teachingLoadBullets = bullets([
-    ap?.teachingRolesResponsibilities && `Teaching Roles/Responsibilities: ${esc(ap.teachingRolesResponsibilities)}`,
-    ap?.industryRolesResponsibilities && `Industry Roles/Responsibilities: ${esc(ap.industryRolesResponsibilities)}`,
-    ap?.researchRolesResponsibilities && `Research Roles/Responsibilities: ${esc(ap.researchRolesResponsibilities)}`,
+    ...roleBullets("Academic", ap?.academicExperience, ap?.teachingRolesResponsibilities),
+    ...roleBullets("Industry", ap?.industryExperience, ap?.industryRolesResponsibilities),
+    ...roleBullets("Research", ap?.researchExperience, ap?.researchRolesResponsibilities),
   ]);
   const teachingLoadGroups = buildTeachingLoadRows({
     currentAssignments: data.teachingAssignments,
@@ -448,10 +454,7 @@ export function getResumeHTML(rawData: ResumeData): string {
         })
         .join("")
     : "";
-  const booksEntries = ap?.authoredBooks?.length
-    ? ap.authoredBooks.map((b) => entry(b.title || "Authored Book", b.year ? String(b.year) : "", b.publisher || "")).join("")
-    : "";
-  const publicationsBody = publicationEntries + publicationStatsBullets + booksEntries;
+  const publicationsBody = publicationEntries + publicationStatsBullets;
 
   // ── Mentorship & institutional contribution ─────────────────────────────
   const labEntries = ap?.newLabsEstablished?.length

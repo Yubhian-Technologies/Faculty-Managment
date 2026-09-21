@@ -19,7 +19,8 @@ import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import type { Course, CourseYearTiming, Department, SectionListItem, Subject, TeachingAssignment, FacultyMember, FacultyAssignmentRequest } from "@/types";
 
 type AssignmentRow = TeachingAssignment & { accessLevel?: "primary" | "secondary" };
-type FacultyRow = FacultyMember;
+// `name` here is the derived display name (facultyDisplayName), not a stored field.
+type FacultyRow = FacultyMember & { name: string };
 
 function ordinalYear(year: number) {
   const suffix = year === 1 ? "st" : year === 2 ? "nd" : year === 3 ? "rd" : "th";

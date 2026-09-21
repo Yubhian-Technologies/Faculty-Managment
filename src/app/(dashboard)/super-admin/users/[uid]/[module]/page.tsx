@@ -18,14 +18,14 @@ export default function SuperAdminUserModulePage() {
   const moduleKey = params.module as ProfileModuleKey;
   const moduleDef = PROFILE_MODULES[moduleKey];
 
-  const [staff, setStaff] = useState<Partial<FacultyMember> | null>(null);
+  const [staff, setStaff] = useState<Partial<FacultyMember> & { name?: string } | null>(null);
   const [collegeType, setCollegeType] = useState<CollegeType | undefined>(undefined);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     if (!moduleDef) return;
     fetch(`/api/admin/users/${uid}`)
-      .then((r) => r.json() as Promise<{ user?: Partial<FacultyMember>; error?: string }>)
+      .then((r) => r.json() as Promise<{ user?: Partial<FacultyMember> & { name?: string }; error?: string }>)
       .then((d) => {
         if (!d.user) {
           toast({ variant: "destructive", title: d.error ?? "User not found" });

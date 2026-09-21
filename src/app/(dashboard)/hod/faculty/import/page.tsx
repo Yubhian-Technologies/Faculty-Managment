@@ -16,6 +16,8 @@ import { toast } from "@/hooks/useToast";
 import { useAuthStore } from "@/store/authStore";
 import { parseCSV, matchHeaders, getUnmatchedHeaders, parseExcelFile, readFileAsText } from "@/lib/utils/csv";
 import type { DesignationCatalogItem } from "@/types";
+import { EMPLOYEE_CATEGORY_LABELS } from "@/types";
+import { matchOption } from "@/lib/import/fieldConstraints";
 import { getFacultyImportColumns, getFacultyImportHints, getFacultyImportSampleRows } from "@/lib/faculty/csvColumns";
 import { Download, Upload, CheckCircle2, XCircle, FileSpreadsheet, ArrowLeft, AlertTriangle, Pencil } from "lucide-react";
 
@@ -146,8 +148,8 @@ export default function FacultyImportPage() {
         setParseError("None of the columns in this file matched the template. Make sure the header row is the first row, and its wording is close to the template (e.g. \"Employee ID\", \"DOJ\").");
         return;
       }
-      if (!Object.values(keyMap).includes("employeeId") && !Object.values(keyMap).includes("name")) {
-        setParseError("Couldn't find an \"Employee ID\" or \"Name\" column. Check your file's header row against the template.");
+      if (!Object.values(keyMap).includes("employeeId") && !Object.values(keyMap).includes("legalName")) {
+        setParseError("Couldn't find an \"Employee ID\" or \"Full Name (as per SSC)\" column. Check your file's header row against the template.");
         return;
       }
       // Every header must map to a known template column - a column that
@@ -247,7 +249,7 @@ export default function FacultyImportPage() {
       const json = await res.json() as ImportResult & { error?: string };
       if (!res.ok) { setFixError(json.error ?? "Failed to save"); return; }
       if (json.created >= 1) {
-        toast({ variant: "success", title: `${fixTarget.form.name || "Faculty member"} imported` });
+        toast({ variant: "success", title: `${fixTarget.form.legalName || "Faculty member"} imported` });
         setFailedRows((prev) => prev.map((r) => (r.row === fixTarget.row ? { ...r, status: "fixed" as const } : r)));
         setFixTarget(null);
         return;
@@ -263,9 +265,14 @@ export default function FacultyImportPage() {
   }
 
   const requiredKeys = COLUMNS.filter((c) => c.required).map((c) => c.key);
+  // A filled Employee Category cell that names none of the allowed values -
+  // flagged in the preview so it's visible before the import rejects the row.
+  const categoryOptions = Object.values(EMPLOYEE_CATEGORY_LABELS);
+  const invalidCategory = (r: ParsedRow) => !!r.employeeCategory?.trim() && !matchOption(r.employeeCategory, categoryOptions);
   const missingRequired = rows.length > 0
     ? rows.some((r) => requiredKeys.some((k) => !r[k]?.trim()))
     : false;
+  const invalidCategoryCount = rows.filter(invalidCategory).length;
 
   return (
     <div className="max-w-5xl space-y-6">
@@ -369,12 +376,12 @@ export default function FacultyImportPage() {
                 </thead>
                 <tbody>
                   {rows.slice(0, 20).map((row, i) => {
-                    const missing = requiredKeys.some((k) => !row[k]?.trim());
+                    const missing = requiredKeys.some((k) => !row[k]?.trim()) || invalidCategory(row);
                     return (
                       <tr key={i} className={`border-b ${missing ? "bg-red-50" : i % 2 === 0 ? "" : "bg-muted/20"}`}>
                         <td className="p-2 text-muted-foreground">{i + 2}</td>
                         {COLUMNS.filter((c) => rows.some((r) => r[c.key])).map((c) => (
-                          <td key={c.key} className={`p-2 whitespace-nowrap ${c.required && !row[c.key]?.trim() ? "text-red-600 font-medium" : ""}`}>
+                          <td key={c.key} title={c.key === "employeeCategory" && invalidCategory(row) ? `Must be one of ${categoryOptions.join(", ")}` : undefined} className={`p-2 whitespace-nowrap ${(c.required && !row[c.key]?.trim()) || (c.key === "employeeCategory" && invalidCategory(row)) ? "text-red-600 font-medium" : ""}`}>
                             {row[c.key]
                               ? (c.key === "password" ? "•".repeat(Math.min(row[c.key].length, 10)) : row[c.key])
                               : <span className="text-muted-foreground/40">-</span>}
@@ -400,6 +407,12 @@ export default function FacultyImportPage() {
         <Card>
           <CardHeader><CardTitle className="text-base flex items-center gap-2"><span className="h-6 w-6 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center font-bold">4</span>Import</CardTitle></CardHeader>
           <CardContent className="space-y-4">
+            {invalidCategoryCount > 0 && (
+              <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-sm">
+                <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                {invalidCategoryCount} row{invalidCategoryCount !== 1 ? "s have" : " has"} an Employee Category that isn&apos;t one of {categoryOptions.join(", ")} (shown in red above). Those rows will be skipped during import.
+              </div>
+            )}
             {missingRequired && (
               <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-sm">
                 <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
@@ -454,7 +467,7 @@ export default function FacultyImportPage() {
                     {failedRows.map((f) => (
                       <div key={f.row} className={`flex items-center justify-between gap-2 px-3 py-2 text-sm ${f.status === "fixed" ? "opacity-50" : ""}`}>
                         <div className="min-w-0">
-                          <span className="text-muted-foreground">Row {f.row} · {f.data.name || f.employeeId}</span>
+                          <span className="text-muted-foreground">Row {f.row} · {f.data.legalName || f.employeeId}</span>
                           {f.status === "fixed" ? (
                             <span className="ml-2 text-green-600 text-xs">Fixed and imported</span>
                           ) : (

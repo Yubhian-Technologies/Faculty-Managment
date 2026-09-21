@@ -7,6 +7,7 @@ import { ArrowLeft } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { FacultyProfileModuleContent } from "@/components/faculty/FacultyProfileModuleContent";
+import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { PROFILE_MODULES, type ProfileModuleKey } from "@/lib/faculty/profileModules";
 import { useCollegeType } from "@/hooks/useCollegeType";
 import type { FacultyMember, TeachingAssignment } from "@/types";
@@ -40,7 +41,7 @@ export default function PrincipalFacultyModulePage() {
     <div className="space-y-6">
       <PageHeader
         title={moduleDef.label}
-        description={faculty?.name}
+        description={facultyDisplayName(faculty)}
         actions={
           <Button variant="outline" asChild>
             <Link href={`/principal/faculty/${deptId}/${facultyId}`}><ArrowLeft className="h-4 w-4 mr-2" />Back</Link>
@@ -51,7 +52,7 @@ export default function PrincipalFacultyModulePage() {
       {isLoading ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
       ) : faculty ? (
-        <FacultyProfileModuleContent moduleKey={moduleKey} faculty={faculty} teachingAssignments={teachingAssignments} collegeType={collegeType} hideLegalName />
+        <FacultyProfileModuleContent moduleKey={moduleKey} faculty={faculty} teachingAssignments={teachingAssignments} collegeType={collegeType} hideLegalName showNameAsPerPan />
       ) : null}
     </div>
   );

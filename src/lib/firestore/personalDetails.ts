@@ -8,6 +8,7 @@ export interface PersonalDetailsInput {
   dateOfBirth?: string;        // yyyy-mm-dd
   legalName?: string;
   nameAsPerAadhar?: string;
+  nameAsPerPan?: string;       // Faculty only - independent of legalName, like nameAsPerAadhar
   fatherName?: string;
   motherName?: string;
   religion?: string;
@@ -51,7 +52,7 @@ export interface PersonalDetailsInput {
 // temporaryAddress whenever permanentAddressSameAsTemporary is true rather than
 // passing through whatever (if anything) the caller sent for it.
 const STRING_FIELDS = [
-  "gender", "legalName", "nameAsPerAadhar", "fatherName", "motherName", "religion", "caste", "subCaste", "aadharNo", "ratificationStatus",
+  "gender", "legalName", "nameAsPerAadhar", "nameAsPerPan", "fatherName", "motherName", "religion", "caste", "subCaste", "aadharNo", "ratificationStatus",
   "ratificationProceedingsNumber",
   "passportNo", "differentlyAbledDetails", "bankAccountNumber", "bankName", "bankBranch", "bankOtherDetails",
   "emergencyContactName", "emergencyContactRelation", "emergencyContactMobileNo", "maritalStatus", "spouseName", "temporaryAddress", "bloodGroup",

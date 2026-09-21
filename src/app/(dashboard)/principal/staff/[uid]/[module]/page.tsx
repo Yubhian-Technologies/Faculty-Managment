@@ -20,13 +20,13 @@ export default function PrincipalStaffModulePage() {
   const moduleDef = PROFILE_MODULES[moduleKey];
   const { collegeType } = useCollegeType();
 
-  const [staff, setStaff] = useState<Partial<FacultyMember> | null>(null);
+  const [staff, setStaff] = useState<Partial<FacultyMember> & { name?: string } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     if (!moduleDef) return;
     fetch(`/api/college/users/${uid}`)
-      .then((r) => r.json() as Promise<{ user?: Partial<FacultyMember> }>)
+      .then((r) => r.json() as Promise<{ user?: Partial<FacultyMember> & { name?: string } }>)
       .then((d) => {
         if (!d.user) {
           toast({ variant: "destructive", title: "Staff account not found" });

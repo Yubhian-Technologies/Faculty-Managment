@@ -109,6 +109,8 @@ export const PERSONAL_KEY_RENAMES: Record<string, string> = {
 export const FACULTY_DOC_KEY_RENAMES: Record<string, string> = {
   qualification: "highestQualification",
   experienceYears: "totalYearsOfExperience",
+  // Mobile No. facultyMembers only - users/supportingStaff docs keep `phone`.
+  phone: "mobileNo",
 };
 
 // academicProfile containers holding a DegreeDetail (or a list of them), and
@@ -176,6 +178,61 @@ export function migrateMemberships(list: unknown): unknown {
   return mapList(list, (m) => renameKeys(m, MEMBERSHIP_KEY_RENAMES));
 }
 
+// ─── Experience Roles/Responsibilities -> per-entry ────────────────────────
+
+// Which entry list each legacy shared root-level Roles/Responsibilities field belongs to.
+export const ROLE_FIELD_TO_LIST = [
+  { role: "teachingRolesResponsibilities", list: "academicExperience" },
+  { role: "industryRolesResponsibilities", list: "industryExperience" },
+  { role: "researchRolesResponsibilities", list: "researchExperience" },
+] as const;
+
+function nonEmptyText(v: unknown): v is string {
+  return typeof v === "string" && v.trim() !== "";
+}
+
+// Sort key for "most recent": an entry with no end date is ongoing (latest), otherwise the
+// end date, then the start date. Years-only legacy values count as Jan 1.
+function endKey(e: Obj): string {
+  const to = nonEmptyText(e.toDate) ? e.toDate : e.toYear ? `${e.toYear}-01-01` : "";
+  return to || "9999-12-31";
+}
+function startKey(e: Obj): string {
+  return (nonEmptyText(e.fromDate) ? e.fromDate : e.fromYear ? `${e.fromYear}-01-01` : "") as string;
+}
+
+// Index of the most recent entry (ties -> the later one in the list); -1 for an empty list.
+export function latestEntryIndex(entries: unknown[]): number {
+  let best = -1;
+  entries.forEach((raw, i) => {
+    const e = isObj(raw) ? raw : {};
+    if (best === -1) { best = i; return; }
+    const b = entries[best] as Obj;
+    const [ek, bk, es, bs] = [endKey(e), endKey(b), startKey(e), startKey(b)];
+    if (ek > bk || (ek === bk && es >= bs)) best = i;
+  });
+  return best;
+}
+
+// Moves each shared root-level Roles/Responsibilities text onto the most recent entry of its
+// own list, then drops the root field. Never loses text: when there is no entry to hold it, or
+// the latest entry already carries different text, the root field is left in place.
+function liftRolesIntoEntries(out: Obj): void {
+  for (const { role, list } of ROLE_FIELD_TO_LIST) {
+    const text = out[role];
+    if (!nonEmptyText(text)) { if (role in out && (text === undefined || text === "")) delete out[role]; continue; }
+    const entries = out[list];
+    if (!Array.isArray(entries) || entries.length === 0) continue;
+    const i = latestEntryIndex(entries);
+    const target = entries[i];
+    if (!isObj(target)) continue;
+    const existing = target.rolesResponsibilities;
+    if (nonEmptyText(existing) && existing.trim() !== text.trim()) continue;
+    if (!nonEmptyText(existing)) out[list] = entries.map((e, idx) => (idx === i ? { ...target, rolesResponsibilities: text } : e));
+    delete out[role];
+  }
+}
+
 // ─── Whole-record migrations ───────────────────────────────────────────────
 
 // Lifts a FacultyProfileFields object (facultyMembers.academicProfile or
@@ -202,6 +259,7 @@ export function migrateAcademicProfile(ap: unknown): unknown {
     if (!("teachingRolesResponsibilities" in out)) out.teachingRolesResponsibilities = primaryTeachingRole;
     out.teachingAssignment = restTa;
   }
+  liftRolesIntoEntries(out);
 
   // Only touch entry lists that are actually present - Firestore rejects an
   // explicit `undefined`, so an absent key has to stay absent.

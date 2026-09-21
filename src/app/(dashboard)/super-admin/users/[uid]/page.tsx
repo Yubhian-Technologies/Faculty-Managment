@@ -21,7 +21,7 @@ export default function SuperAdminUserViewPage() {
   const collegeId = searchParams.get("collegeId") ?? "";
   const roleParam = (searchParams.get("role") ?? "") as UserRole | "";
 
-  const [staff, setStaff] = useState<Partial<FacultyMember> | null>(null);
+  const [staff, setStaff] = useState<Partial<FacultyMember> & { name?: string } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -30,7 +30,7 @@ export default function SuperAdminUserViewPage() {
       return;
     }
     fetch(`/api/admin/users/${uid}${collegeId ? `?collegeId=${collegeId}` : ""}`)
-      .then((r) => r.json() as Promise<{ user?: Partial<FacultyMember>; error?: string }>)
+      .then((r) => r.json() as Promise<{ user?: Partial<FacultyMember> & { name?: string }; error?: string }>)
       .then((d) => {
         if (!d.user) {
           toast({ variant: "destructive", title: d.error ?? "User not found" });

@@ -1,5 +1,6 @@
 import type { Firestore } from "firebase-admin/firestore";
 import { LEGACY_TECHNICAL_DESIGNATIONS } from "@/lib/designations/config";
+import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 
 export interface ResolvedIdentity {
   name: string;
@@ -69,7 +70,6 @@ export async function resolveEmployeeIdentity(
 
   if (!facultySnap.empty) {
     const f = facultySnap.docs[0].data() as {
-      name?: string;
       legalName?: string;
       department?: string;
       designation: string;
@@ -82,9 +82,7 @@ export async function resolveEmployeeIdentity(
     // supporting-staff.mjs), which is non-vacation like all other supporting
     // staff.
     return {
-      // Full Name (as per SSC) preferred, Name (as per PAN) only as a fallback -
-      // same precedence facultyDisplayName() uses everywhere else.
-      name: f.legalName?.trim() || f.name?.trim() || "",
+      name: facultyDisplayName(f),
       department: f.department,
       isTeachingStaff: !LEGACY_TECHNICAL_DESIGNATIONS.includes(f.designation),
       dateOfJoining: f.joiningDate?.toDate?.() ?? new Date(),

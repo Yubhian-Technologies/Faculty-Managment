@@ -15,7 +15,7 @@ import {
 } from "@/types";
 import type {
   FacultyMember, FacultyProfileFields, DegreeDetail, StaffQualification, CourseAssignment, Publication,
-  PreviousInstitution, LabEstablished, AuthoredBook, PromotionRecord,
+  PreviousInstitution, LabEstablished, PromotionRecord,
   AdminResponsibilityEntry, TrainingEntry, ProfessionalMembership, AwardEntry, Religion, Caste,
 } from "@/types";
 import { normalizeAcademicProfile } from "@/lib/faculty/academicProfileCompat";
@@ -46,7 +46,7 @@ function yearCell(d: DegreeDetail, doctoral: boolean): string {
 
 function degreeCells(d: DegreeDetail): string[] {
   return [
-    d.course ?? "", d.branch ?? "", d.institutionName ?? "", d.affiliatedUniversity ?? "",
+    d.course ?? "", d.degreeType ?? "", d.branch ?? "", d.institutionName ?? "", d.affiliatedUniversity ?? "",
     d.percentageCgpa ?? "", yearCell(d, false),
     d.place ?? "", d.hallTicketNumber ?? "",
   ];
@@ -98,6 +98,7 @@ function experienceCells(p: PreviousInstitution): string[] {
     p.institutionName ?? "", p.designation ?? "", fromDate, toDate,
     p.joiningSalary !== undefined ? String(p.joiningSalary) : "",
     p.leavingSalary !== undefined ? String(p.leavingSalary) : "",
+    p.rolesResponsibilities ?? "",
     p.reasonForLeaving ?? "",
     p.nocObtained === "YES" ? "Yes" : p.nocObtained === "NO" ? "No" : "",
   ];
@@ -113,10 +114,6 @@ function courseCells(c: CourseAssignment): string[] {
 
 function publicationCells(p: Publication): string[] {
   return [p.title ?? "", p.coAuthors ?? "", p.journalOrConference ?? "", p.publicationYear ? String(p.publicationYear) : "", p.indexing ?? ""];
-}
-
-function bookCells(b: AuthoredBook): string[] {
-  return [b.title ?? "", b.publisher ?? "", b.year ? String(b.year) : ""];
 }
 
 function labCells(l: LabEstablished): string[] {
@@ -249,7 +246,7 @@ function buildRow(rawFaculty: FacultyMember, teachingSummary: string): Record<st
     // ─── Identity & Employment ───────────────────────────────────────────
     employeeId: s(faculty.employeeId),
     legalName: s(faculty.legalName),
-    name: s(faculty.name),
+    nameAsPerPan: s(faculty.nameAsPerPan),
     apaarFacultyId: s(faculty.apaarFacultyId),
     collegeEmail: s(faculty.collegeEmail),
     designation: s(faculty.designation),
@@ -261,7 +258,7 @@ function buildRow(rawFaculty: FacultyMember, teachingSummary: string): Record<st
     joiningDate: toDateInputValue(faculty.joiningDate),
     aicteFacultyId: s(faculty.aicteFacultyId),
     email: s(faculty.email),
-    phone: s(faculty.phone),
+    mobileNo: s(faculty.mobileNo),
     additionalPhones: combineGroup("additionalPhones", (faculty.additionalPhoneNumbers ?? []).map((n) => [n.label ?? "", n.number ?? ""])),
     status: s(faculty.status),
     employeeCategory: faculty.employeeCategory ? (EMPLOYEE_CATEGORY_LABELS[faculty.employeeCategory] ?? s(faculty.employeeCategory)) : "",
@@ -324,9 +321,6 @@ function buildRow(rawFaculty: FacultyMember, teachingSummary: string): Record<st
     educationalQualifications: combineGroup("educationalQualifications", (p.educationalQualifications ?? []).map(staffQualificationCells)),
 
     // ─── Professional Experience ────────────────────────────────────────────
-    teachingRolesResponsibilities: s(p.teachingRolesResponsibilities),
-    industryRolesResponsibilities: s(p.industryRolesResponsibilities),
-    researchRolesResponsibilities: s(p.researchRolesResponsibilities),
     academicExperienceGroup: combineGroup("academicExperienceGroup", (p.academicExperience ?? []).map(experienceCells)),
     industryExperienceGroup: combineGroup("industryExperienceGroup", (p.industryExperience ?? []).map(experienceCells)),
     researchExperienceGroup: combineGroup("researchExperienceGroup", (p.researchExperience ?? []).map(experienceCells)),
@@ -351,7 +345,6 @@ function buildRow(rawFaculty: FacultyMember, teachingSummary: string): Record<st
     googleScholarId: s(p.googleScholarId),
     irinsProfile: s(p.irinsProfile),
     publicationsGroup: combineGroup("publicationsGroup", (p.publications ?? []).map(publicationCells)),
-    authoredBooksGroup: combineGroup("authoredBooksGroup", (p.authoredBooks ?? []).map(bookCells)),
 
     // ─── Professional Development ───────────────────────────────────────────
     newLabsEstablishedGroup: combineGroup("newLabsEstablishedGroup", (p.newLabsEstablished ?? []).map(labCells)),

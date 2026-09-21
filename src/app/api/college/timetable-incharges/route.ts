@@ -6,6 +6,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodEditDepartmentId } from "@/lib/departments/scope";
 import { timetableInchargeDocId } from "@/lib/departments/timetableIncharge";
 import type { TimetableIncharge } from "@/types";
+import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 
 // One person - PANEL_MEMBER (teaching faculty) or COLLEGE_STAFF (technical
 // supporting staff) - the HOD delegates a specific course-year's Timetable
@@ -104,7 +105,7 @@ export async function POST(request: Request) {
 
     const course = courseSnap.data() as { name: string; departmentId: string };
     const person = personSnap.data() as {
-      name: string; department?: string; userUid?: string; staffCategory?: string;
+      name?: string; legalName?: string; department?: string; userUid?: string; staffCategory?: string;
     };
 
     if (personType === "SUPPORTING_STAFF" && person.staffCategory !== "TECHNICAL") {
@@ -146,7 +147,8 @@ export async function POST(request: Request) {
       courseName: course.name,
       year: Number(year),
       uid: person.userUid,
-      facultyName: person.name,
+      // Faculty: legalName (facultyDisplayName); Supporting Staff keep their own `name`.
+      facultyName: personType === "FACULTY" ? facultyDisplayName(person) : (person.name ?? ""),
       assignedBy: session.uid,
       assignedByName: assignerName,
       updatedAt: now,

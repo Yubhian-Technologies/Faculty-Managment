@@ -7,7 +7,8 @@ import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
 import type { FacultyMember, UserRole } from "@/types";
 
-type StaffAccount = Partial<FacultyMember> & { role?: UserRole };
+// A login account (users doc): `name` is users.name, its login display name.
+type StaffAccount = Partial<FacultyMember> & { role?: UserRole; name?: string };
 
 export default function PrincipalStaffViewPage() {
   const router = useRouter();

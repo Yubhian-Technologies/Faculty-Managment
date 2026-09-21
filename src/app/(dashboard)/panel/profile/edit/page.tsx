@@ -26,17 +26,16 @@ const OTHER_QUALIFICATION = "__OTHER__";
 
 interface IdentityForm {
   legalName: string;
-  name: string;
   apaarFacultyId: string;
   aicteFacultyId: string;
   highestQualification: string;
   specialization: string;
   email: string;
-  phone: string;
+  mobileNo: string;
 }
 
 const EMPTY_FORM: IdentityForm = {
-  legalName: "", name: "", apaarFacultyId: "", aicteFacultyId: "", highestQualification: "", specialization: "", email: "", phone: "",
+  legalName: "", apaarFacultyId: "", aicteFacultyId: "", highestQualification: "", specialization: "", email: "", mobileNo: "",
 };
 
 // Self-service Identity & Employment editor for the "My Profile" page - the
@@ -81,13 +80,12 @@ export default function EditMyProfileIdentityPage() {
         setQualIsOther(!!highestQualification && !(HIGHEST_QUALIFICATION_OPTIONS as readonly string[]).includes(highestQualification));
         setForm({
           legalName: m.legalName ?? "",
-          name: m.name ?? "",
           apaarFacultyId: m.apaarFacultyId ?? "",
           aicteFacultyId: m.aicteFacultyId ?? "",
           highestQualification,
           specialization: m.specialization ?? "",
           email: m.email ?? "",
-          phone: m.phone ?? "",
+          mobileNo: m.mobileNo ?? "",
         });
         setExtraPhones(m.additionalPhoneNumbers ?? []);
       })
@@ -110,7 +108,7 @@ export default function EditMyProfileIdentityPage() {
       toast({ variant: "destructive", title: "Highest Qualification is required" });
       return;
     }
-    if (!form.phone.trim() || !PHONE_REGEX.test(form.phone)) {
+    if (!form.mobileNo.trim() || !PHONE_REGEX.test(form.mobileNo)) {
       toast({ variant: "destructive", title: "Mobile No is required and must be a valid phone number" });
       return;
     }
@@ -122,13 +120,12 @@ export default function EditMyProfileIdentityPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           legalName: form.legalName.trim().toUpperCase(),
-          name: form.name.trim(),
           apaarFacultyId: form.apaarFacultyId.trim(),
           aicteFacultyId: form.aicteFacultyId.trim(),
           highestQualification: form.highestQualification.trim(),
           specialization: form.specialization.trim(),
           email: form.email.trim(),
-          phone: form.phone.trim(),
+          mobileNo: form.mobileNo.trim(),
           additionalPhoneNumbers: extraPhones.filter((p) => p.number.trim()),
         }),
       });
@@ -186,10 +183,6 @@ export default function EditMyProfileIdentityPage() {
                 placeholder="FULL NAME IN CAPITALS"
                 className="uppercase"
               />
-            </div>
-            <div className="space-y-2">
-              <Label>Name (as per PAN)</Label>
-              <Input value={form.name} onChange={(e) => set({ name: e.target.value })} placeholder="Dr. Priya Nair" />
             </div>
             <div className="space-y-2">
               <Label>APAAR Faculty ID</Label>
@@ -273,7 +266,7 @@ export default function EditMyProfileIdentityPage() {
                     + Add Number
                   </Button>
                 </div>
-                <Input type="tel" autoComplete="off" value={form.phone} onChange={(e) => set({ phone: e.target.value })} placeholder="+91 98765 43210" />
+                <Input type="tel" autoComplete="off" value={form.mobileNo} onChange={(e) => set({ mobileNo: e.target.value })} placeholder="+91 98765 43210" />
               </div>
             </div>
 

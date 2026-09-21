@@ -7,7 +7,7 @@ import {
   matchOption,
   GENDER_OPTIONS, MARITAL_STATUS_OPTIONS, RATIFICATION_STATUS_OPTIONS, RELIGION_OPTIONS, CASTE_OPTIONS, BLOOD_GROUP_OPTIONS,
 } from "@/lib/import/fieldConstraints";
-import { FACULTY_STATUS_LABELS } from "@/types";
+import { FACULTY_STATUS_LABELS, EMPLOYEE_CATEGORY_LABELS } from "@/types";
 
 const STATUS_KEYS = ["ACTIVE", "ON_LEAVE", "RESIGNED", "RETIRED"] as const;
 // Columns whose template guidance states a plain Yes/No answer.
@@ -29,6 +29,8 @@ function fixFieldOptions(
   switch (fieldKey) {
     case "designation":
       return designationOptions ?? [];
+    case "employeeCategory":
+      return Object.values(EMPLOYEE_CATEGORY_LABELS);
     case "status":
       return STATUS_KEYS.map((s) => FACULTY_STATUS_LABELS[s]);
     case "gender":

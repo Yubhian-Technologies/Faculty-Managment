@@ -154,6 +154,10 @@ export function AcademicProfileFields({ value: rawValue, onChange, includeTeachi
             <NumInput label="Joining Salary" value={item.joiningSalary} onChange={(v) => update({ joiningSalary: v })} />
             <NumInput label="Leaving Salary" value={item.leavingSalary} onChange={(v) => update({ leavingSalary: v })} />
             <div className="sm:col-span-2 space-y-2">
+              <Label>Academic Roles/Responsibilities</Label>
+              <Textarea value={item.rolesResponsibilities ?? ""} onChange={(e) => update({ rolesResponsibilities: e.target.value })} />
+            </div>
+            <div className="sm:col-span-2 space-y-2">
               <Label>Reason for Leaving</Label>
               <Textarea value={item.reasonForLeaving ?? ""} onChange={(e) => update({ reasonForLeaving: e.target.value })} />
             </div>
@@ -225,17 +229,9 @@ export function AcademicProfileFields({ value: rawValue, onChange, includeTeachi
       )}
 
       {includeTeachingAssignment && (
-        <div className="space-y-3 rounded-lg border p-3">
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Teaching Role</p>
-          <TextInput
-            label="Teaching Roles/Responsibilities"
-            value={value.teachingRolesResponsibilities}
-            onChange={(v) => set("teachingRolesResponsibilities", v)}
-          />
-          <p className="text-xs text-muted-foreground">
-            Subject-level teaching assignments (course, section, subject, weekly schedule) are managed below in &ldquo;Current Teaching Assignments&rdquo;.
-          </p>
-        </div>
+        <p className="text-xs text-muted-foreground">
+          Subject-level teaching assignments (course, section, subject, weekly schedule) are managed below in &ldquo;Current Teaching Assignments&rdquo;.
+        </p>
       )}
 
       {/* Module 3 */}
