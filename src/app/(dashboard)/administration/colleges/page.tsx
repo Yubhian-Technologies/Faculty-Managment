@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { UserPlus, ChevronDown, ChevronUp, Plus, Pencil, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Badge } from "@/components/ui/badge";
@@ -18,9 +18,13 @@ const ROLE_NAMES: Record<string, string> = { COLLEGE_ADMIN: "College Admin", PRI
 
 export default function AdministrationCollegesPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [colleges, setColleges] = useState<College[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  // Seeded from the dashboard's college picker (?collegeId=) so arriving here
+  // via "Colleges" with one already selected lands pre-expanded on it,
+  // instead of a flat unexpanded list.
+  const [expandedId, setExpandedId] = useState<string | null>(() => searchParams.get("collegeId"));
   // Read-only: who currently holds the Principal/VP seat, shown in each row's
   // expanded detail. There's no "Add Principal" action on this page any more
   // - Principal (and every other seat) is appointed from within the college,
@@ -104,6 +108,16 @@ export default function AdministrationCollegesPage() {
   }
 
   useEffect(() => {
+    // Runs once, after the picked college's row exists in the DOM - scrolls
+    // it into view so arriving from the dashboard doesn't leave it hidden
+    // below the fold in a long college list.
+    if (!isLoading && expandedId) {
+      document.getElementById(`college-${expandedId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoading]);
+
+  useEffect(() => {
     loadAll();
     // Re-fetch whenever the tab regains focus (e.g. coming back from the "Add
     // College Admin" page via the browser's back button, which can restore
@@ -152,7 +166,11 @@ export default function AdministrationCollegesPage() {
           const principalList = principalMap[college.id];
 
           return (
-            <div key={college.id} className="rounded-lg border bg-card overflow-hidden">
+            <div
+              key={college.id}
+              id={`college-${college.id}`}
+              className={`rounded-lg border bg-card overflow-hidden ${college.id === searchParams.get("collegeId") ? "ring-2 ring-primary/40" : ""}`}
+            >
               {/* College row */}
               <div className="flex items-center justify-between p-4">
                 <div className="flex items-center gap-3 min-w-0">

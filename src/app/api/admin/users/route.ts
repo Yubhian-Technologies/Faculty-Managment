@@ -1,11 +1,12 @@
 export const dynamic = "force-dynamic";
 
+import { convertLegacyAccounts } from "@/lib/roles/seats";
 import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { createFirebaseUser } from "@/lib/firebase/authRest";
 import { type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
-import { provisionLocationUser } from "@/lib/firestore/userProvisioning";
+import { provisionCollegeUser, provisionLocationUser } from "@/lib/firestore/userProvisioning";
 import { normalizeAcademicProfile } from "@/lib/faculty/academicProfileCompat";
 import { migrateUserDoc, migrateFacultyDoc, migrateSupportingStaffDoc } from "@/lib/faculty/fieldRenames";
 import type { UserRole } from "@/types";
@@ -75,14 +76,17 @@ export async function GET(request: Request) {
   }
 }
 
-// Roles a Super Admin can create - the level L1–L2 set. Each role's write target
-// (systemUsers / locationUsers) is derived from ROLE_SCOPE, so the single source
-// of truth stays in core.ts. Principal (L3) and below are all seats now - a
-// college's own College Admin appoints them via Role Assignments, never Super
-// Admin directly (same reasoning as removing it from Location Admin).
+// Roles a Super Admin can create - the level L1–L2 set plus DIRECTOR (L3). Each
+// role's write target (systemUsers / locationUsers / college users) is derived
+// from ROLE_SCOPE, so the single source of truth stays in core.ts. Principal and
+// the rest of L3 and below are seats - a college's own College Admin appoints
+// them via Role Assignments, never Super Admin directly (same reasoning as
+// removing it from Location Admin). DIRECTOR is the one college-scoped role
+// Super Admin still provisions directly.
 const SUPER_ADMIN_CREATABLE: UserRole[] = [
   "MANAGEMENT", "FINANCE", "PURCHASE_DEPT",   // L1 · GLOBAL
   "ADMINISTRATION", "ACCOUNTS",               // L2 · LOCATION
+  "DIRECTOR",                                 // L3 · COLLEGE
 ];
 // Global-scoped subset - used by the GET ?scope=global (System-Wide) listing.
 const GLOBAL_ROLES: UserRole[] = SUPER_ADMIN_CREATABLE.filter((r) => ROLE_SCOPE[r] === "GLOBAL");
@@ -101,13 +105,15 @@ export async function POST(request: Request) {
       email: string;
       password: string;
       role: UserRole;
+      collegeId?: string;
       locationId?: string;
+      department?: string;
       phone?: string;
       academicProfile?: Record<string, unknown>;
       profilePhotoUrl?: string;
     } & PersonalDetailsInput;
 
-    const { name, email, password, role, locationId, phone, academicProfile, profilePhotoUrl } = body;
+    const { name, email, password, role, collegeId, locationId, department, phone, academicProfile, profilePhotoUrl } = body;
 
     if (!name || !email || !password || !role) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
@@ -125,12 +131,32 @@ export async function POST(request: Request) {
       );
     }
 
-    const scope = ROLE_SCOPE[role]; // GLOBAL | LOCATION
+    const scope = ROLE_SCOPE[role]; // GLOBAL | LOCATION | COLLEGE
+    if (scope === "COLLEGE" && !collegeId) {
+      return NextResponse.json({ error: "collegeId required for this role" }, { status: 400 });
+    }
     if (scope === "LOCATION" && !locationId) {
       return NextResponse.json({ error: "locationId required for this role" }, { status: 400 });
     }
 
     const db = getAdminDb();
+
+    // For college roles, validate the college exists and belongs to the selected
+    // location (the wizard cascades location → college; keep them consistent).
+    let collegeLocationId = "";
+    if (scope === "COLLEGE" && collegeId) {
+      const collegeSnap = await db.collection("colleges").doc(collegeId).get();
+      if (!collegeSnap.exists) {
+        return NextResponse.json({ error: "Selected college not found" }, { status: 400 });
+      }
+      collegeLocationId = (collegeSnap.data() as { locationId?: string })?.locationId ?? "";
+      if (locationId && collegeLocationId && collegeLocationId !== locationId) {
+        return NextResponse.json(
+          { error: "Selected college does not belong to the selected location" },
+          { status: 400 }
+        );
+      }
+    }
 
     let uid: string;
 
@@ -146,8 +172,20 @@ export async function POST(request: Request) {
     } else if (scope === "LOCATION" && locationId) {
       // ADMINISTRATION / ACCOUNTS: location subcollection.
       uid = await provisionLocationUser(db, locationId, role, { name, email, password, phone, academicProfile, profilePhotoUrl });
+    } else if (scope === "COLLEGE" && collegeId) {
+      // DIRECTOR: college subcollection.
+      uid = await provisionCollegeUser(
+        db, collegeId, role,
+        { ...body, name, email, password, phone, department, academicProfile, profilePhotoUrl },
+        { locationId: collegeLocationId, performedBy: session.uid, performedByRole: session.role }
+      );
     } else {
       return NextResponse.json({ error: "Invalid role scope" }, { status: 400 });
+    }
+
+    if (collegeId) {
+      await convertLegacyAccounts(db, collegeId, { uid: session.uid, name: "Super Admin" })
+        .catch((e) => console.error("[admin/users POST] seat conversion failed:", e));
     }
 
     return NextResponse.json({ uid }, { status: 201 });

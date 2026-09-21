@@ -9,10 +9,11 @@ export interface SessionPayload {
   uid: string;
   email: string;
   role: string;
-  // True underlying role, before the COLLEGE_ADMIN→PRINCIPAL normalization
-  // api/auth/session applies to `role` everywhere - only ever differs from
-  // `role` for a COLLEGE_ADMIN login. Absent on cookies issued before this
-  // field existed; treat missing as "same as role" (see isCollegeAdmin).
+  // True underlying role, before the COLLEGE_ADMIN/DIRECTOR→PRINCIPAL
+  // normalization api/auth/session applies to `role` everywhere - only ever
+  // differs from `role` for a COLLEGE_ADMIN or DIRECTOR login. Absent on
+  // cookies issued before this field existed; treat missing as "same as
+  // role" (see isCollegeAdmin).
   realRole?: string;
   // Every role this login can act as at sign-in: `role` plus the role of each
   // seat held (see types/roleSeats.ts). A snapshot - guards re-check it live

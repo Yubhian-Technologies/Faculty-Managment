@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
+import { X } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable } from "@/components/shared/DataTable";
 import { StatusBadge } from "@/components/shared/StatusBadge";
@@ -24,11 +26,15 @@ interface LocationOffer {
   createdByName: string;
   remarks?: string;
   createdAt: unknown;
+  collegeName?: string;
 }
 
 export default function AdminOffersPage() {
   const router = useRouter();
   const isMobile = useMobile();
+  const searchParams = useSearchParams();
+  const collegeId = searchParams.get("collegeId");
+  const collegeName = searchParams.get("collegeName");
   const [offers, setOffers] = useState<LocationOffer[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selected, setSelected] = useState<LocationOffer | null>(null);
@@ -37,14 +43,15 @@ export default function AdminOffersPage() {
 
   function load() {
     setIsLoading(true);
-    fetch("/api/location/offers")
+    const url = collegeId ? `/api/location/offers?collegeId=${collegeId}` : "/api/location/offers";
+    fetch(url)
       .then((r) => r.json() as Promise<{ offers: LocationOffer[] }>)
       .then((d) => setOffers(d.offers ?? []))
       .catch(() => toast({ variant: "destructive", title: "Failed to load" }))
       .finally(() => setIsLoading(false));
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [collegeId]);
 
   async function handleAction(action: "APPROVE") {
     if (!selected) return;
@@ -78,6 +85,17 @@ export default function AdminOffersPage() {
         description="Review and approve offer letters prepared by HR Admin"
       />
 
+      {collegeId && (
+        <div className="flex items-center justify-between rounded-lg border bg-muted/40 px-3 py-2 text-sm">
+          <span>
+            Filtered to <strong>{collegeName || "this college"}</strong>
+          </span>
+          <Button asChild size="sm" variant="ghost" className="h-7 gap-1 text-xs">
+            <Link href="/administration/offers"><X className="h-3 w-3" /> Clear filter</Link>
+          </Button>
+        </div>
+      )}
+
       {isMobile ? (
         <div className="space-y-3">
           {offers.map((o) => (
@@ -87,6 +105,7 @@ export default function AdminOffersPage() {
               subtitle={`${o.department} · ${o.position}`}
               badge={<StatusBadge status={o.status} />}
               fields={[
+                { label: "College", value: o.collegeName || "-" },
                 { label: "Email", value: o.candidateEmail },
                 { label: "Joining Date", value: formatDate(o.joiningDate as Parameters<typeof formatDate>[0]) },
                 { label: "Salary", value: `₹${o.salary.toLocaleString()}/month` },
@@ -114,6 +133,7 @@ export default function AdminOffersPage() {
           csvFilename="admin-offers"
           columns={[
             { key: "candidateName", header: "Candidate" },
+            { key: "collegeName", header: "College", render: (r) => (r as unknown as LocationOffer).collegeName || "-" },
             { key: "department", header: "Department" },
             { key: "position", header: "Position" },
             { key: "joiningDate", header: "Joining Date", render: (r) => formatDate((r as unknown as LocationOffer).joiningDate as Parameters<typeof formatDate>[0]) },
