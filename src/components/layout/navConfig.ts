@@ -78,7 +78,6 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Location Staff", href: "/administration/users", iconName: "Users", roles: ["ADMINISTRATION"], section: "Management" },
   { label: "Departments", href: "/administration/departments", iconName: "Settings2", roles: ["ADMINISTRATION"] },
   { label: "Colleges", href: "/administration/colleges", iconName: "Building2", roles: ["ADMINISTRATION"] },
-  { label: "Role Assignments", href: "/administration/role-assignments", iconName: "UserCog", roles: ["ADMINISTRATION"] },
   { label: "Hiring Requests", href: "/administration/vacancies", iconName: "ClipboardList", roles: ["ADMINISTRATION"], section: "Hiring" },
   { label: "Interview Plans", href: "/administration/interviews", iconName: "CalendarCheck", roles: ["ADMINISTRATION"] },
   { label: "Offer Letters", href: "/administration/offers", iconName: "FileText", roles: ["ADMINISTRATION"] },
@@ -164,7 +163,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Staff", href: "/principal/staff", iconName: "UsersRound", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Staff & HR Management" },
   { label: "Leave Approvals", href: "/principal/leave-approvals", iconName: "CalendarClock", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Leave History", href: "/principal/leave-history", iconName: "History", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
-  // Arrange cover for someone below them (Vice Principal / Dean / HODs) who has
+  // Arrange cover for someone below them (Vice Principal / Academics / HODs) who has
   // other work on a date or range - see StaffAdjustmentsPage.
   { label: "Adjustments", href: "/principal/adjustments", iconName: "UserCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Attendance Report", href: "/principal/attendance-report", iconName: "ClipboardCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
@@ -178,15 +177,21 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Budget Report", href: "/principal/budget/report", iconName: "FileText", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Purchase Clearance", href: "/principal/purchase-clearance", iconName: "Receipt", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Budget History", href: "/principal/indents", iconName: "ClipboardList", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
-  { label: "My Profile", href: "/principal/profile", iconName: "UserCircle", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Personal" },
-  { label: "My Attendance", href: "/principal/attendance", iconName: "ClipboardCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
-  { label: "My Leave", href: "/principal/leave", iconName: "CalendarClock", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
+  // College Admin is a role-login, not one continuous employee (see
+  // administration/college-people): no personal HR profile, attendance, or
+  // leave to track, unlike every other seat here (a real Principal/VP is
+  // always an actual appointed person). Its Name/Phone/password live in
+  // CollegeAdminAccountMenu off the sidebar's account row instead. See
+  // NavItem.hideForRealRoles.
+  { label: "My Profile", href: "/principal/profile", iconName: "UserCircle", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Personal", hideForRealRoles: ["COLLEGE_ADMIN"] },
+  { label: "My Attendance", href: "/principal/attendance", iconName: "ClipboardCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], hideForRealRoles: ["COLLEGE_ADMIN"] },
+  { label: "My Leave", href: "/principal/leave", iconName: "CalendarClock", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], hideForRealRoles: ["COLLEGE_ADMIN"] },
   // The Principal is never named as anyone's substitute/handover, so only the
   // Vice Principal has requests to accept or decline here.
   { label: "Adjustment Requests", href: "/leave/adjustments", iconName: "UserCheck", roles: ["VICE_PRINCIPAL"] },
   { label: "Settings", href: "/principal/settings", iconName: "Settings2", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Audit Logs", href: "/principal/audit-logs", iconName: "History", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Administration" },
-  // Appoint people to seats (Principal, each HOD, Vice Principal, Dean, ...) -
+  // Appoint people to seats (Principal, each HOD, Vice Principal, Academics, ...) -
   // see types/roleSeats.ts.
   { label: "Role Assignments", href: "/principal/role-assignments", iconName: "UserCog", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Reset Member Password", href: "/principal/reset-password", iconName: "KeyRound", roles: ["PRINCIPAL"], showOnlyForRealRoles: ["COLLEGE_ADMIN"] },
@@ -260,10 +265,18 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Holidays", href: "/college-office/holidays", iconName: "CalendarDays", roles: ["COLLEGE_OFFICE"] },
   { label: "Staff Attendance", href: "/college-office/staff-attendance", iconName: "ClipboardCheck", roles: ["COLLEGE_OFFICE"] },
   { label: "Import Attendance", href: "/college-office/attendance-import", iconName: "Upload", roles: ["COLLEGE_OFFICE"] },
-  { label: "My Profile", href: "/college-office/profile", iconName: "UserCircle", roles: ["COLLEGE_OFFICE"], section: "Personal" },
-  { label: "My Leave", href: "/college-office/leave", iconName: "CalendarClock", roles: ["COLLEGE_OFFICE"] },
-  { label: "Adjustment Requests", href: "/leave/adjustments", iconName: "UserCheck", roles: ["COLLEGE_OFFICE"] },
-  { label: "My Attendance", href: "/college-office/attendance", iconName: "ClipboardCheck", roles: ["COLLEGE_OFFICE"], section: "My Work" },
+  // College Admin's login has COLLEGE_OFFICE as its primary role (the seat is
+  // layered on top - see api/administration/college-people), so it inherits
+  // this whole section too, including these personal items - same reasoning
+  // as the Principal-side My Profile/Leave/Attendance. See NavItem.hideForRealRoles.
+  { label: "My Profile", href: "/college-office/profile", iconName: "UserCircle", roles: ["COLLEGE_OFFICE"], section: "Personal", hideForRealRoles: ["COLLEGE_ADMIN"] },
+  { label: "My Leave", href: "/college-office/leave", iconName: "CalendarClock", roles: ["COLLEGE_OFFICE"], hideForRealRoles: ["COLLEGE_ADMIN"] },
+  // Same reasoning as the Principal-side omission of this item ("The
+  // Principal is never named as anyone's substitute/handover" - see the
+  // comment near PRINCIPAL's own nav block): College Admin normalizes to
+  // Principal, so it isn't named as anyone's substitute either.
+  { label: "Adjustment Requests", href: "/leave/adjustments", iconName: "UserCheck", roles: ["COLLEGE_OFFICE"], hideForRealRoles: ["COLLEGE_ADMIN"] },
+  { label: "My Attendance", href: "/college-office/attendance", iconName: "ClipboardCheck", roles: ["COLLEGE_OFFICE"], section: "My Work", hideForRealRoles: ["COLLEGE_ADMIN"] },
 
   // College Staff (generic fallback for titles that don't warrant their own role)
   { label: "Dashboard", href: "/college-staff", iconName: "LayoutDashboard", roles: ["COLLEGE_STAFF"] },
@@ -279,12 +292,12 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Adjustment Requests", href: "/leave/adjustments", iconName: "UserCheck", roles: ["COLLEGE_STAFF"] },
   { label: "My Attendance", href: "/college-staff/attendance", iconName: "ClipboardCheck", roles: ["COLLEGE_STAFF"], section: "My Work" },
 
-  // Dean
-  { label: "Dashboard", href: "/dean", iconName: "LayoutDashboard", roles: ["DEAN"] },
-  { label: "Subjects", href: "/dean/subjects", iconName: "Library", roles: ["DEAN"], section: "Academics" },
-  { label: "My Profile", href: "/dean/profile", iconName: "UserCircle", roles: ["DEAN"], section: "Personal" },
-  { label: "My Leave", href: "/dean/leave", iconName: "CalendarClock", roles: ["DEAN"] },
-  { label: "Adjustment Requests", href: "/leave/adjustments", iconName: "UserCheck", roles: ["DEAN"] },
+  // Academics
+  { label: "Dashboard", href: "/academics", iconName: "LayoutDashboard", roles: ["ACADEMICS"] },
+  { label: "Subjects", href: "/academics/subjects", iconName: "Library", roles: ["ACADEMICS"], section: "Academics" },
+  { label: "My Profile", href: "/academics/profile", iconName: "UserCircle", roles: ["ACADEMICS"], section: "Personal" },
+  { label: "My Leave", href: "/academics/leave", iconName: "CalendarClock", roles: ["ACADEMICS"] },
+  { label: "Adjustment Requests", href: "/leave/adjustments", iconName: "UserCheck", roles: ["ACADEMICS"] },
 
   // IQAC Coordinator
   { label: "Dashboard", href: "/iqac-coordinator", iconName: "LayoutDashboard", roles: ["IQAC_COORDINATOR"] },
@@ -716,6 +729,15 @@ export const BOTTOM_NAV_ITEMS: Record<UserRole, NavItem[]> = {
     { label: "Faculty", href: "/principal/faculty", iconName: "UsersRound", roles: ["COLLEGE_ADMIN"] },
     { label: "Profile", href: "/principal/profile", iconName: "UserCircle", roles: ["COLLEGE_ADMIN"] },
   ],
+  // Same reasoning as COLLEGE_ADMIN just above - Director's session role is
+  // also normalized to PRINCIPAL, so this is dead at runtime too. Kept only
+  // to satisfy Record<UserRole, ...>.
+  DIRECTOR: [
+    { label: "Home", href: "/principal", iconName: "LayoutDashboard", roles: ["DIRECTOR"] },
+    { label: "Vacancies", href: "/principal/vacancies", iconName: "ClipboardList", roles: ["DIRECTOR"] },
+    { label: "Faculty", href: "/principal/faculty", iconName: "UsersRound", roles: ["DIRECTOR"] },
+    { label: "Profile", href: "/principal/profile", iconName: "UserCircle", roles: ["DIRECTOR"] },
+  ],
   HOD: [
     { label: "Home", href: "/hod", iconName: "LayoutDashboard", roles: ["HOD"] },
     { label: "Pipeline", href: "/hod/pipeline", iconName: "GitBranch", roles: ["HOD"] },
@@ -753,10 +775,10 @@ export const BOTTOM_NAV_ITEMS: Record<UserRole, NavItem[]> = {
     { label: "Attendance", href: "/college-staff/attendance", iconName: "ClipboardCheck", roles: ["COLLEGE_STAFF"] },
     { label: "Profile", href: "/college-staff/profile", iconName: "UserCircle", roles: ["COLLEGE_STAFF"] },
   ],
-  DEAN: [
-    { label: "Home", href: "/dean", iconName: "LayoutDashboard", roles: ["DEAN"] },
-    { label: "Subjects", href: "/dean/subjects", iconName: "Library", roles: ["DEAN"] },
-    { label: "Profile", href: "/dean/profile", iconName: "UserCircle", roles: ["DEAN"] },
+  ACADEMICS: [
+    { label: "Home", href: "/academics", iconName: "LayoutDashboard", roles: ["ACADEMICS"] },
+    { label: "Subjects", href: "/academics/subjects", iconName: "Library", roles: ["ACADEMICS"] },
+    { label: "Profile", href: "/academics/profile", iconName: "UserCircle", roles: ["ACADEMICS"] },
   ],
   IQAC_COORDINATOR: [
     { label: "Home", href: "/iqac-coordinator", iconName: "LayoutDashboard", roles: ["IQAC_COORDINATOR"] },

@@ -96,9 +96,13 @@ export default function NewInterviewPlanPage() {
     }
   }
 
+  // Empty (not "every candidate") until a vacancy is picked - the interview's
+  // collegeId is resolved server-side from its vacancyId (see
+  // POST /api/location/interviews), so a vacancy is now a real requirement,
+  // not just a department-narrowing convenience.
   const filteredCandidates = selectedVacancy
     ? allCandidates.filter((c) => c.department === selectedVacancy.department)
-    : allCandidates;
+    : [];
 
   function toggleCandidate(id: string) {
     setSelectedCandidates((prev) => {
@@ -118,7 +122,7 @@ export default function NewInterviewPlanPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!title || !interviewDate || !venue || selectedCandidates.size === 0 || selectedPanel.size === 0) return;
+    if (!selectedVacancyId || !title || !interviewDate || !venue || selectedCandidates.size === 0 || selectedPanel.size === 0) return;
 
     const panelMembers = locationUsers
       .filter((u) => selectedPanel.has(u.uid))
@@ -133,7 +137,7 @@ export default function NewInterviewPlanPage() {
           title, interviewDate, venue, notes,
           panelMembers,
           shortlistedCandidateIds: Array.from(selectedCandidates),
-          vacancyId: selectedVacancyId || undefined,
+          vacancyId: selectedVacancyId,
         }),
       });
       const json = await res.json() as { id?: string; error?: string };
@@ -150,7 +154,7 @@ export default function NewInterviewPlanPage() {
     }
   }
 
-  const isValid = title && interviewDate && venue && selectedCandidates.size > 0 && selectedPanel.size > 0;
+  const isValid = !!selectedVacancyId && title && interviewDate && venue && selectedCandidates.size > 0 && selectedPanel.size > 0;
 
   return (
     <div className="max-w-2xl space-y-5">

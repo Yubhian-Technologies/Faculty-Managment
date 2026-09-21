@@ -36,10 +36,11 @@ export async function notify(
 // users subcollection. The notification is still stored under this college so
 // the recipient sees it when acting on this college.
 //
-// College Admin mirrors Principal's authority end-to-end (see UserRole's own
-// doc-comment) but keeps its real "COLLEGE_ADMIN" role in Firestore, so a
-// caller asking to notify "PRINCIPAL" here also reaches every College Admin -
-// otherwise every notifyRole(..., "PRINCIPAL", ...) call site across the
+// College Admin and Director both mirror Principal's authority end-to-end
+// (see UserRole's own doc-comment) but keep their real "COLLEGE_ADMIN"/
+// "DIRECTOR" role in Firestore, so a caller asking to notify "PRINCIPAL" here
+// also reaches every College Admin and Director - otherwise every
+// notifyRole(..., "PRINCIPAL", ...) call site across the
 // budget/indent/purchase-clearance/leave/hiring flows would need its own
 // duplicate call to cover them, and silently drift out of sync as new ones
 // are added.

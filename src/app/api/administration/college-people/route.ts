@@ -6,15 +6,22 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { createFirebaseUser } from "@/lib/firebase/authRest";
 import { assignSeat, createSeat, listSeats, SeatError } from "@/lib/roles/seats";
 
-// The first people in a brand-new college. A college starts empty, and every
+// The first person in a brand-new college. A college starts empty, and every
 // role that runs it (College Admin, Principal, Vice Principal, HODs) is a SEAT
 // a person holds (see types/roleSeats.ts) - so before any seat can be filled
 // there has to be a person. The location's Administration creates them here
-// as College Office staff (their primary role - the seat comes on top) and, in the
-// same step, appointing them College Admin (or Principal); the College
-// Admin they appoint adds departments and faculty from there. A teaching
-// person has no department yet: the College Admin files them under one (and
-// completes their faculty profile) from the Faculty page.
+// as College Office staff (their primary role - the seat comes on top) and, in
+// the same step, appoints them College Admin - that's the only seat head
+// office ever hands out directly. The College Admin takes it from there:
+// appointing the Principal, adding departments, faculty and office staff. A
+// teaching person has no department yet: the College Admin files them under
+// one (and completes their faculty profile) from the Faculty page.
+//
+// Just a login, nothing more: name/phone/dateOfJoining are optional and
+// default below rather than being collected up front - whoever actually
+// holds this login can change over time (handed over by sharing the
+// credentials, not by a formal seat reassignment), so there's no one fixed
+// person's details to ask for at creation time.
 export async function POST(request: Request) {
   try {
     const session = await requireLocationMember("ADMINISTRATION");
@@ -24,20 +31,22 @@ export async function POST(request: Request) {
       collegeEmail?: string;
       password?: string;
       phone?: string;
-      designation?: string;
       dateOfJoining?: string;
-      // Seat to put them in straight away - the usual case is the college's
-      // first College Admin. Omit to just create the person.
-      seatRole?: "COLLEGE_ADMIN" | "PRINCIPAL";
+      // Seat to put them in straight away. Head office only ever appoints the
+      // College Admin directly - everyone else is appointed by the College
+      // Admin from Role Assignments. Omit to just create the person.
+      seatRole?: "COLLEGE_ADMIN";
     };
-    const { collegeId, name, collegeEmail, password, phone, designation, dateOfJoining } = body;
+    const { collegeId, collegeEmail, password, phone } = body;
+    const name = body.name?.trim() || "College Admin";
+    const dateOfJoining = body.dateOfJoining?.trim() || new Date().toISOString().slice(0, 10);
     const primaryRole = "COLLEGE_OFFICE";
-    if (body.seatRole && body.seatRole !== "COLLEGE_ADMIN" && body.seatRole !== "PRINCIPAL") {
-      return NextResponse.json({ error: "Invalid seat" }, { status: 400 });
+    if (body.seatRole && body.seatRole !== "COLLEGE_ADMIN") {
+      return NextResponse.json({ error: "Location Administration can only appoint the College Admin - other seats are appointed from within the college" }, { status: 400 });
     }
 
-    if (!collegeId || !name?.trim() || !collegeEmail?.trim() || !password || !dateOfJoining) {
-      return NextResponse.json({ error: "Name, college email, password and date of joining are required" }, { status: 400 });
+    if (!collegeId || !collegeEmail?.trim() || !password) {
+      return NextResponse.json({ error: "College email and password are required" }, { status: 400 });
     }
     if (Number.isNaN(new Date(dateOfJoining).getTime())) {
       return NextResponse.json({ error: "Invalid dateOfJoining" }, { status: 400 });
@@ -50,24 +59,39 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "College does not belong to your location" }, { status: 403 });
     }
 
+    // College Admin is a singleton seat (see isSingletonSeatRole) - a college
+    // only ever has one. Checked before creating anything, so a college that
+    // already has an active College Admin doesn't end up with an orphaned
+    // login nobody can appoint (createSeat would refuse the seat anyway, but
+    // only after the Firebase Auth account already exists).
+    if (body.seatRole === "COLLEGE_ADMIN") {
+      const seats = await listSeats(db, collegeId);
+      const existing = seats.find((s) => s.isActive !== false && s.role === "COLLEGE_ADMIN" && s.holderUid);
+      if (existing) {
+        return NextResponse.json(
+          { error: `This college already has a College Admin (${existing.holderName}). Hand the seat to someone else from Role Assignments instead.` },
+          { status: 409 }
+        );
+      }
+    }
+
     const email = collegeEmail.trim().toLowerCase();
-    const uid = await createFirebaseUser(email, password, name.trim());
+    const uid = await createFirebaseUser(email, password, name);
     const now = new Date();
 
     await db.collection("colleges").doc(collegeId).collection("users").doc(uid).set({
-      uid, collegeId, name: name.trim(), email, collegeEmail: email,
+      uid, collegeId, name, email, collegeEmail: email,
       ...(phone?.trim() ? { phone: phone.trim() } : {}),
-      ...(designation?.trim() ? { designation: designation.trim() } : {}),
       role: primaryRole, department: "",
       dateOfJoining: new Date(dateOfJoining),
       isActive: true, createdAt: now, updatedAt: now,
     });
-    await db.collection("systemUsers").doc(uid).set({ uid, role: primaryRole, collegeId, email, name: name.trim() });
+    await db.collection("systemUsers").doc(uid).set({ uid, role: primaryRole, collegeId, email, name });
 
     await db.collection("colleges").doc(collegeId).collection("auditLogs").add({
       collegeId, action: "USER_CREATED",
       performedBy: session.uid, performedByName: "Administration",
-      targetId: uid, details: { email, role: primaryRole, name: name.trim() }, timestamp: now,
+      targetId: uid, details: { email, role: primaryRole, name }, timestamp: now,
     });
 
     // Appoint them: reuse the college's open seat of that kind if there is one

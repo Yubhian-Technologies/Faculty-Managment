@@ -16,13 +16,17 @@ import { ROLE_LABELS, ROLE_LEVEL, ROLE_SCOPE, LEVEL_LABELS } from "@/types";
 import { toast } from "@/hooks/useToast";
 import type { College, Location, FacultyProfileFields, UserRole } from "@/types";
 
-// Roles a Super Admin creates - the level L1–L3 set. Scope (GLOBAL/LOCATION/COLLEGE)
-// is read from ROLE_SCOPE, which drives which tenant picker is shown and what the
-// provisioning route (api/admin/users) writes. Must match SUPER_ADMIN_CREATABLE there.
+// Roles a Super Admin creates - the level L1–L2 set plus DIRECTOR (L3). Scope
+// (GLOBAL/LOCATION/COLLEGE) is read from ROLE_SCOPE, which drives which tenant
+// picker is shown and what the provisioning route (api/admin/users) writes.
+// Principal is deliberately not here any more: it's a SEAT, appointed by a
+// college's own College Admin via Role Assignments, not handed out directly -
+// same reasoning as removing it from Location Admin. Must match
+// SUPER_ADMIN_CREATABLE in api/admin/users/route.ts.
 const CREATABLE_ROLES: UserRole[] = [
   "MANAGEMENT", "FINANCE", "PURCHASE_DEPT",   // L1 · GLOBAL
   "ADMINISTRATION", "ACCOUNTS",               // L2 · LOCATION
-  "PRINCIPAL",                                // L3 · COLLEGE
+  "DIRECTOR",                                 // L3 · COLLEGE
 ];
 
 // Creatable roles grouped by their L0–L6 level, so the role picker is level-scoped.
@@ -41,7 +45,7 @@ export default function NewUserPage() {
   const [employeeId, setEmployeeId] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("12345678");
-  const [role, setRole] = useState<UserRole>("PRINCIPAL");
+  const [role, setRole] = useState<UserRole>("MANAGEMENT");
   const [collegeId, setCollegeId] = useState("");
   const [locationId, setLocationId] = useState("");
   const [academicProfile, setAcademicProfile] = useState<Partial<FacultyProfileFields>>({});
@@ -81,7 +85,7 @@ export default function NewUserPage() {
         body: JSON.stringify({
           name, email, password, role, collegeId, locationId, phone,
           academicProfile,
-          ...(role === "PRINCIPAL" ? { ...personalDetails, collegeEmail, employeeId } : {}),
+          ...(role === "DIRECTOR" ? { ...personalDetails, collegeEmail, employeeId } : {}),
           ...(photoUrl ? { profilePhotoUrl: photoUrl } : {}),
         }),
       });
@@ -121,10 +125,10 @@ export default function NewUserPage() {
                   <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Full name" />
                 </div>
                 <div className="space-y-2">
-                  <Label>Email <span className="text-destructive">*</span></Label>
+                  <Label>Personal Email <span className="text-destructive">*</span></Label>
                   <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="user@example.com" />
                 </div>
-                {role === "PRINCIPAL" && (
+                {role === "DIRECTOR" && (
                   <>
                     <div className="space-y-2">
                       <Label>College Email</Label>
@@ -225,7 +229,7 @@ export default function NewUserPage() {
         </CardContent>
       </Card>
 
-      {role === "PRINCIPAL" ? (
+      {role === "DIRECTOR" ? (
         <>
           <Card className="mt-6">
             <CardHeader><CardTitle className="text-base">Personal Details</CardTitle></CardHeader>

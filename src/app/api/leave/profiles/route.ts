@@ -17,7 +17,7 @@ import { ROLE_LABELS } from "@/types";
 // staff, split into the three tabs the UI shows: "Faculty" (Teaching
 // designations only), "Supporting Staff" (everything else with a
 // FacultyMember/SupportingStaff record) and "Institutional Staff"
-// (non-HOD callers only - Vice Principal, College Office, Dean, IQAC
+// (non-HOD callers only - Vice Principal, College Office, Academics, IQAC
 // Coordinator, T&P, R&D, Library, Exam Cell, Webmaster; see
 // NON_DEPARTMENTAL_STAFF_ROLES). Technical designations (Lab
 // Assistant/Programmer/System Administrator/Network Engineer,
@@ -90,7 +90,7 @@ export async function GET() {
       .filter((f) => !!f.userUid)
       .map((f) => ({ ...f, staffType: "supportingStaff" as const, displayName: supportingStaffDisplayName(f) }));
     // No department (these roles are college-wide) and no designation of
-    // their own to show - the role itself (e.g. "R&D", "Dean") is the
+    // their own to show - the role itself (e.g. "R&D", "Academics") is the
     // closest thing, same as reportRoster.ts's own-role registers. Excludes
     // the viewer's own login (relevant when a Vice Principal, itself one of
     // NON_DEPARTMENTAL_STAFF_ROLES, is browsing) - nobody edits their own

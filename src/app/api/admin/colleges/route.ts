@@ -31,10 +31,12 @@ export async function GET(request: Request) {
   try {
     // Super Admin sees all; Administration sees only their location's colleges;
     // FINANCE/PURCHASE_DEPT (GLOBAL roles, no college of their own) also see all -
-    // this is how their CollegeSwitcher populates its options.
+    // this is how their CollegeSwitcher populates its options. LOCATION_DEPT_HEAD
+    // is here so it can populate the college picker on its own Vacancy Request
+    // form (see LocationCollegeSelect) - also auto-scoped to session.locationId below.
     const { verifySession } = await import("@/lib/auth/verifySession");
     const session = await verifySession();
-    if (!session || !["SUPER_ADMIN", "ADMINISTRATION", "HR_ADMIN", "ADMIN_OFFICE", "FINANCE", "PURCHASE_DEPT"].includes(session.role)) {
+    if (!session || !["SUPER_ADMIN", "ADMINISTRATION", "HR_ADMIN", "ADMIN_OFFICE", "LOCATION_DEPT_HEAD", "FINANCE", "PURCHASE_DEPT"].includes(session.role)) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 

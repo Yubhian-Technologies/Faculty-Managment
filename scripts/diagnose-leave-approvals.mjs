@@ -1,6 +1,6 @@
 /**
  * Read-only diagnostic: for every college, print every leaveRequest whose
- * requester role is one of the "non-departmental" roles (Dean, R&D, T&P,
+ * requester role is one of the "non-departmental" roles (Academics, R&D, T&P,
  * IQAC, Vice Principal, College Office, Accounts, Finance, Library, Exam
  * Cell, Webmaster, Placement Dept, Purchase Dept) - status, department field
  * (should be absent), and requester uid/role - to explain why a submitted
@@ -30,7 +30,7 @@ if (!getApps().length) {
 const db = getFirestore();
 
 const NON_DEPT_ROLES = new Set([
-  "VICE_PRINCIPAL", "COLLEGE_OFFICE", "COLLEGE_STAFF", "DEAN",
+  "VICE_PRINCIPAL", "COLLEGE_OFFICE", "COLLEGE_STAFF", "ACADEMICS",
   "IQAC_COORDINATOR", "T_AND_P", "R_AND_D", "LIBRARY", "EXAM_CELL",
   "WEBMASTER", "PLACEMENT_DEPT", "PURCHASE_DEPT",
 ]);

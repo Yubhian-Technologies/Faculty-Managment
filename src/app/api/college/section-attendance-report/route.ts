@@ -12,9 +12,9 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 // The section's CURRENT teaching-assignment subject list (every subject an
 // HOD has actually assigned a faculty to teach this section, any faculty) -
 // shared by every mode below. A Subject only reaches teachingAssignments
-// once it's part of the Dean Academics-defined curriculum for that
+// once it's part of the Academics-defined curriculum for that
 // Course+Year (subjects.courseId/year), so this is already exactly "the
-// subjects assigned to that Section/Year by Dean Academics", not a separate
+// subjects assigned to that Section/Year by Academics", not a separate
 // query - and it's the stable, date-independent column set for every
 // report mode (Monthly, Period, Till Now alike).
 async function currentSectionSubjects(

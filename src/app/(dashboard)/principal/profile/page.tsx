@@ -9,6 +9,10 @@ import { ProfileModuleTiles } from "@/components/faculty/FacultyProfileHub";
 import { ProfileIdentitySummary } from "@/components/shared/ProfileIdentitySummary";
 import { useAuth } from "@/hooks/useAuth";
 
+// College Admin has no nav entry into this page at all (see navConfig.ts's
+// My Profile item) - it's a role-login, not one continuous employee, so its
+// Name/Phone/password live in CollegeAdminAccountMenu off the sidebar's
+// account row instead. This page is Principal/VP only.
 export default function PrincipalProfilePage() {
   const { user } = useAuth();
   if (!user) return null;

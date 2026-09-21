@@ -8,7 +8,7 @@ import { MyProfileModuleTiles } from "@/components/faculty/FacultyProfileHub";
 import { ProfileIdentitySummary } from "@/components/shared/ProfileIdentitySummary";
 import { useAuth } from "@/hooks/useAuth";
 
-export default function DeanProfilePage() {
+export default function AcademicsProfilePage() {
   const { user } = useAuth();
   if (!user) return null;
 
@@ -26,7 +26,7 @@ export default function DeanProfilePage() {
         </CardContent>
       </Card>
 
-      <MyProfileModuleTiles basePath="/dean/profile" />
+      <MyProfileModuleTiles basePath="/academics/profile" />
     </div>
   );
 }

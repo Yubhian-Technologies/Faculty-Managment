@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { verifySession } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const session = await verifySession();
     const allowed = ["SUPER_ADMIN", "ADMINISTRATION", "HR_ADMIN"];
@@ -12,6 +12,9 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     if (!session.locationId) return NextResponse.json({ error: "No location context" }, { status: 400 });
+
+    const { searchParams } = new URL(request.url);
+    const collegeIdFilter = searchParams.get("collegeId");
 
     const db = getAdminDb();
     const snap = await db
@@ -22,7 +25,12 @@ export async function GET() {
       .get();
 
     type OfferDoc = { id: string; status: string; [key: string]: unknown };
-    const offers = snap.docs.map((d) => ({ id: d.id, ...d.data() } as OfferDoc));
+    let offers = snap.docs.map((d) => ({ id: d.id, ...d.data() } as OfferDoc));
+
+    // Optional college filter - see vacancy-requests/route.ts's identical comment.
+    if (collegeIdFilter) {
+      offers = offers.filter((o) => o.collegeId === collegeIdFilter);
+    }
 
     // Administration sees only offers pending their approval
     if (session.role === "ADMINISTRATION") {
@@ -64,6 +72,22 @@ export async function POST(request: Request) {
     const db = getAdminDb();
     const now = new Date();
 
+    // Which college this offer is for - inherited from the candidate it's
+    // built from (every offer-creation form is candidate-first, unlike
+    // interviews there's no separate vacancy step to hang this off of).
+    const candidateSnap = await db
+      .collection("locations")
+      .doc(session.locationId)
+      .collection("locationCandidates")
+      .doc(candidateId)
+      .get();
+    if (!candidateSnap.exists) {
+      return NextResponse.json({ error: "Candidate not found" }, { status: 400 });
+    }
+    const candidateData = candidateSnap.data() as { collegeId?: string; collegeName?: string };
+    const collegeId = candidateData.collegeId ?? "";
+    const collegeName = candidateData.collegeName ?? "";
+
     const creatorSnap = await db.collection("locations").doc(session.locationId).collection("locationUsers").doc(session.uid).get();
     const creatorName = (creatorSnap.data() as { name?: string })?.name ?? session.email;
 
@@ -78,6 +102,8 @@ export async function POST(request: Request) {
         candidateEmail: candidateEmail.trim().toLowerCase(),
         department: department.trim(),
         position: "Faculty",
+        collegeId,
+        collegeName,
         interviewId: body.interviewId ?? "",
         vacancyId: body.vacancyId ?? "",
         joiningDate: new Date(joiningDate),

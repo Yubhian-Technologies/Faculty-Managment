@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { LocationCollegeSelect } from "@/components/shared/LocationCollegeSelect";
 import { toast } from "@/hooks/useToast";
 import { useAuthStore } from "@/store/authStore";
 
@@ -15,6 +16,7 @@ export default function NewDeptVacancyPage() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
   const [department, setDepartment] = useState("");
+  const [collegeId, setCollegeId] = useState("");
   const [qualification, setQualification] = useState("");
   const [requiredCount, setRequiredCount] = useState(1);
   const [availableCount, setAvailableCount] = useState(0);
@@ -26,7 +28,7 @@ export default function NewDeptVacancyPage() {
     if (user?.department) setDepartment(user.department);
   }, [user?.department]);
 
-  const isValid = !!department && !!qualification && requiredCount >= 1 && justification.trim().length >= 10;
+  const isValid = !!department && !!collegeId && !!qualification && requiredCount >= 1 && justification.trim().length >= 10;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -36,7 +38,7 @@ export default function NewDeptVacancyPage() {
       const res = await fetch("/api/location/vacancy-requests", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ department, qualification, requiredCount, availableCount, justification }),
+        body: JSON.stringify({ department, qualification, requiredCount, availableCount, justification, collegeId }),
       });
       const json = await res.json() as { id?: string; error?: string };
       if (!res.ok) {
@@ -71,6 +73,12 @@ export default function NewDeptVacancyPage() {
               <Label>Department</Label>
               <Input value={department || "-"} disabled className="bg-muted text-muted-foreground" />
               <p className="text-xs text-muted-foreground">Vacancy requests are for your own department only.</p>
+            </div>
+
+            <div className="space-y-2">
+              <Label>College <span className="text-destructive">*</span></Label>
+              <LocationCollegeSelect value={collegeId} onChange={setCollegeId} className="h-9 w-full text-sm" />
+              <p className="text-xs text-muted-foreground">Which college this vacancy is for.</p>
             </div>
 
             <div className="space-y-2">

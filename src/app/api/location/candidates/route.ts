@@ -46,14 +46,28 @@ export async function POST(request: Request) {
       qualification?: string;
       vacancyId?: string;
       notes?: string;
+      collegeId: string;
     };
 
-    const { name, email, phone, department, qualification, vacancyId, notes } = body;
+    const { name, email, phone, department, qualification, vacancyId, notes, collegeId } = body;
     if (!name || !email || !phone || !department) {
       return NextResponse.json({ error: "name, email, phone and department are required" }, { status: 400 });
     }
+    if (!collegeId) {
+      return NextResponse.json({ error: "College is required" }, { status: 400 });
+    }
 
     const db = getAdminDb();
+
+    // Which college this candidate is being sourced for - carried forward
+    // onto the offer letter this candidate eventually generates (see
+    // POST /api/location/offers), same as vacancy-requests/route.ts.
+    const collegeSnap = await db.collection("colleges").doc(collegeId).get();
+    if (!collegeSnap.exists || (collegeSnap.data() as { locationId?: string }).locationId !== session.locationId) {
+      return NextResponse.json({ error: "Invalid college" }, { status: 400 });
+    }
+    const collegeName = (collegeSnap.data() as { name?: string }).name ?? "";
+
     const now = new Date();
     const ref = await db
       .collection("locations")
@@ -61,6 +75,8 @@ export async function POST(request: Request) {
       .collection("locationCandidates")
       .add({
         locationId: session.locationId,
+        collegeId,
+        collegeName,
         name: name.trim(),
         email: email.trim().toLowerCase(),
         phone: phone.trim(),

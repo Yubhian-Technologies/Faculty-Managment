@@ -7,29 +7,22 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { createFirebaseUser } from "@/lib/firebase/authRest";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
 import { syncDepartmentHod, getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
-import { getCreatableOfficeRoles } from "@/lib/roles/officeRoles";
 import { isSeatRole } from "@/lib/roles/seatRoles";
 import { normalizeAcademicProfile } from "@/lib/faculty/academicProfileCompat";
 import { degreeTypeError } from "@/lib/faculty/degreeType";
 import { migrateUserDoc } from "@/lib/faculty/fieldRenames";
-import type { CollegeType, UserRole } from "@/types";
+import type { UserRole } from "@/types";
 
-// Base roles every college type can create; which "internal office" roles
-// (Dean/IQAC/T&P/R&D/Placement/Library/Exam Cell/Webmaster) are also allowed
-// depends on the college's type - see getCreatableOfficeRoles. Must match
-// the same gating in principal/staff/new/page.tsx's CREATABLE_ROLES.
+// The only two roles that are genuinely just accounts, not seats. Every
+// position of authority - College Admin, Academics, IQAC Coordinator, T&P, R&D,
+// Placement Dept, Exam Cell, Library, HOD, Vice Principal - is a SEAT:
+// create the person here with a plain login, then appoint them to the seat
+// from Role Assignments (see types/roleSeats.ts). Must match the same list
+// in principal/staff/new/page.tsx's CREATABLE_ROLES.
 // COLLEGE_STAFF is intentionally omitted - non-teaching staff are created via
 // the Supporting Staff module (which makes both a login and a profile record),
 // not as a bare login here. See principal/staff/new/page.tsx for the rationale.
-// HOD and Vice Principal are seats, not accounts: create the person (faculty / staff)
-// and appoint them in Role Assignments - see types/roleSeats.ts.
-const PRINCIPAL_BASE_ROLES: UserRole[] = ["COLLEGE_OFFICE", "COLLEGE_ADMIN", "COLLEGE_ACCOUNTS"];
-// HOD is included so a main HOD can create a Sub-HOD login (see
-// hod/settings/sub-departments/page.tsx's "Create Sub-HOD" dialog, which
-// posts role: "HOD" with the not-yet-created sub-department's name as
-// `department` - the sub-department itself, and this account's actual scope,
-// only becomes real once POST /api/college/departments links them via
-// hodUid, which is where the "only within your own department" check lives).
+const PRINCIPAL_BASE_ROLES: UserRole[] = ["COLLEGE_OFFICE", "COLLEGE_ACCOUNTS"];
 // CLASS_LEADER is included so an HOD can create their own sections' Class
 // Leader logins from hod/sections/[id]/edit - the College Office pages that
 // used to be the only place this happened were removed; this is where
@@ -42,8 +35,10 @@ const HOD_ROLES: UserRole[] = ["PANEL_MEMBER", "CLASS_LEADER", "DEPARTMENT_OFFIC
 // via `sectionId` below. (The College Office section pages that used to call
 // this were removed; sections are managed from the HOD and Principal views.)
 const OFFICE_ROLES: UserRole[] = ["CLASS_LEADER"];
-// One holder per role per college — same rule as administration/college-staff route.
-const COLLEGE_SINGLETON_ROLES: UserRole[] = ["LIBRARY", "EXAM_CELL", "WEBMASTER", "COLLEGE_ACCOUNTS"];
+// One holder per role per college. (Library/Exam Cell are seats now, singular
+// by construction via isSingletonSeatRole - Webmaster and College Accounts
+// are the only plain accounts left that still need this check here.)
+const COLLEGE_SINGLETON_ROLES: UserRole[] = ["WEBMASTER", "COLLEGE_ACCOUNTS"];
 
 export async function GET(request: Request) {
   try {
@@ -128,7 +123,7 @@ export async function POST(request: Request) {
       role: UserRole;
       department?: string;
       staffType?: "teaching" | "supporting";
-      designation?: string; // free-text title for COLLEGE_STAFF (e.g. "Dean - R&D")
+      designation?: string; // free-text title for COLLEGE_STAFF (e.g. "Academics - R&D")
       sectionId?: string; // required when role === "CLASS_LEADER" - the Section this login is bound to
       academicProfile?: Record<string, unknown>;
       profilePhotoUrl?: string;
@@ -175,13 +170,9 @@ export async function POST(request: Request) {
 
     // Enforce role-based creation rules - Vice Principal mirrors Principal's authority.
     if (session.role === "PRINCIPAL" || session.role === "VICE_PRINCIPAL") {
-      const collegeSnap = await db.collection("colleges").doc(collegeId).get();
-      const collegeType = (collegeSnap.data() as { type?: CollegeType } | undefined)?.type;
-      // Placement Department is Administration-provisioned, not Principal-created.
-      const principalRoles = [...PRINCIPAL_BASE_ROLES, ...getCreatableOfficeRoles(collegeType).filter((r) => r !== "PLACEMENT_DEPT")];
-      if (!principalRoles.includes(role)) {
+      if (!PRINCIPAL_BASE_ROLES.includes(role)) {
         return NextResponse.json(
-          { error: `Principal can only create: ${principalRoles.join(", ")}` },
+          { error: `Principal can only create: ${PRINCIPAL_BASE_ROLES.join(", ")}` },
           { status: 403 }
         );
       }
@@ -393,7 +384,7 @@ export async function POST(request: Request) {
       console.error("[college/users POST] audit log write failed", auditErr);
     }
 
-    // A new login with a seat role (Dean, IQAC, ...) also gets its seat, so the
+    // A new login with a seat role (Academics, IQAC, ...) also gets its seat, so the
     // seat list never lags behind the accounts (see lib/roles/seats.ts). Safe
     // to repeat - accounts that already hold a seat are skipped.
     await convertLegacyAccounts(db, session.collegeId, { uid: session.uid, name: session.email || "Unknown" })
