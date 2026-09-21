@@ -1,5 +1,7 @@
 import { useMemo } from "react";
 import { useAuthStore } from "@/store/authStore";
+import { useWorkContext } from "@/hooks/useWorkContext";
+import { departmentOfContext } from "@/lib/roles/activeHodDepartment";
 
 const EMPTY: string[] = [];
 
@@ -19,8 +21,10 @@ const EMPTY: string[] = [];
 export function useMyDepartments(): string[] {
   const departments = useAuthStore((s) => s.user?.departments);
   const department = useAuthStore((s) => s.user?.department);
+  // A head of several departments works in the one picked in "Working as".
+  const picked = departmentOfContext(useWorkContext().active);
   return useMemo(() => {
-    if (departments && departments.length > 0) return departments;
-    return department ? [department] : EMPTY;
-  }, [departments, department]);
+    const all = departments && departments.length > 0 ? departments : department ? [department] : EMPTY;
+    return picked && all.includes(picked) ? [picked] : all;
+  }, [departments, department, picked]);
 }

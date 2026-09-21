@@ -31,6 +31,7 @@ import { useCollegeType } from "@/hooks/useCollegeType";
 import { designationLabel } from "@/lib/designations/config";
 import { useAuthStore } from "@/store/authStore";
 import { toast } from "@/hooks/useToast";
+import { useMyDepartments } from "@/hooks/useMyDepartments";
 import type { FacultyProfileFields } from "@/types";
 
 // Sentinel for the "Others" row - never stored, it just switches the field to
@@ -101,7 +102,7 @@ export default function NewFacultyPage() {
   // recover from the UI otherwise (it 400s "You manage more than one
   // department - specify which" once departments.length > 1) - this picker
   // is what actually satisfies that requirement.
-  const ownDepartments = user?.departments && user.departments.length > 0 ? user.departments : (user?.department ? [user.department] : []);
+  const ownDepartments = useMyDepartments();
   // The Principal / Vice Principal (incl. a College Admin) add faculty too -
   // it is how a new college gets its first teaching staff before any HOD
   // exists. They belong to no department, so they always pick one from the

@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/useToast";
 import { useAuth } from "@/hooks/useAuth";
+import { useMyDepartments } from "@/hooks/useMyDepartments";
 import type { Department, Course } from "@/types";
 
 function todayISO(): string {
@@ -93,8 +94,9 @@ export function FacultyAttendanceCompletionView({ title, description, hodScoped 
   const [periods, setPeriods] = useState<PeriodRow[]>([]);
   const [isLoadingPeriods, setIsLoadingPeriods] = useState(false);
 
+  const myDepartments = useMyDepartments();
   const hodOwnDepartments = hodScoped
-    ? (user?.departments && user.departments.length > 0 ? user.departments : [user?.department ?? ""]).filter(Boolean)
+    ? myDepartments.filter(Boolean)
     : null;
 
   useEffect(() => {
@@ -110,7 +112,7 @@ export function FacultyAttendanceCompletionView({ title, description, hodScoped 
     // the user identity fields it's built from instead, so this doesn't
     // re-fetch on every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.department, user?.departments?.join(",")]);
+  }, [myDepartments.join(",")]);
 
   useEffect(() => {
     // Wrapped so setState calls aren't reachable synchronously from the
