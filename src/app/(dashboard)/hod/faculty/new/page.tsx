@@ -304,6 +304,26 @@ export default function NewFacultyPage() {
       toast({ variant: "destructive", title: "Some required fields are missing", description: `Personal Details: ${missingPersonal.join(", ")}` });
       return;
     }
+    // Date of Birth must come before Date of Joining - nobody joins on or
+    // before the day they were born. The two live on different steps (DOB in
+    // Personal Details, joining date on Identity & Employment) and in
+    // different state, so neither field can catch this on its own; compared
+    // here, once both are known to be filled in. Plain string compare is
+    // enough - both inputs are type="date", so both are YYYY-MM-DD.
+    if (
+      personalDetails.dateOfBirth &&
+      data.joiningDate &&
+      personalDetails.dateOfBirth >= data.joiningDate
+    ) {
+      setErroredSteps(new Set<WizardStepKey>(["personal"]));
+      setStepIndex(steps.findIndex((s) => s.key === "personal"));
+      toast({
+        variant: "destructive",
+        title: "Date of Birth must be before Date of Joining",
+        description: "Check the Date of Birth on Personal Details and the Date of Joining on Identity & Employment.",
+      });
+      return;
+    }
     // Full Name (as per SSC) is the only display name - used everywhere this
     // faculty member's name is shown (see facultyDisplayName()).
     const displayName = personalDetails.legalName?.trim() || "";

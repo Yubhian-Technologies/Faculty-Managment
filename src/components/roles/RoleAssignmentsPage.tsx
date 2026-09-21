@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Check, ChevronsUpDown, History, Mail, Plus, RefreshCw, UserCog, UserMinus } from "lucide-react";
+import { Check, ChevronsUpDown, History, Mail, Plus, RefreshCw, Trash2, UserCog, UserMinus } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { Badge } from "@/components/ui/badge";
@@ -39,7 +39,7 @@ export function RoleAssignmentsPage({ collegeId }: { collegeId?: string }) {
   const [isLoading, setIsLoading] = useState(true);
 
   const qs = collegeId ? `?collegeId=${encodeURIComponent(collegeId)}` : "";
-  const canAssign = useCallback((role: string) => !!user && canAssignSeat(user, role), [user]);
+  const canAssign = useCallback(() => !!user && canAssignSeat(user), [user]);
 
   const load = useCallback(async () => {
     try {
@@ -114,7 +114,7 @@ export function RoleAssignmentsPage({ collegeId }: { collegeId?: string }) {
             <Button variant="outline" onClick={convertLegacy} loading={isConverting}>
               <RefreshCw className="h-4 w-4 mr-2" />Convert existing role accounts
             </Button>
-            <Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4 mr-2" />Add Seat</Button>
+            <Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4 mr-2" />Add Role</Button>
           </>
         }
       />
@@ -160,12 +160,12 @@ export function RoleAssignmentsPage({ collegeId }: { collegeId?: string }) {
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-1">
-                      {canAssign(seat.role) && (
+                      {canAssign() && (
                         <Button size="sm" onClick={() => setAssignSeat(seat)}>
                           <UserCog className="h-3.5 w-3.5 mr-1" />{seat.holderUid ? "Change" : "Assign"}
                         </Button>
                       )}
-                      {canAssign(seat.role) && seat.holderUid && (
+                      {canAssign() && seat.holderUid && (
                         <Button size="sm" variant="ghost" onClick={() => setVacateSeat(seat)}>
                           <UserMinus className="h-3.5 w-3.5 mr-1" />Vacate
                         </Button>
@@ -174,8 +174,23 @@ export function RoleAssignmentsPage({ collegeId }: { collegeId?: string }) {
                       <Button size="sm" variant="ghost" onClick={() => setHistorySeat(seat)}>
                         <History className="h-3.5 w-3.5 mr-1" />History
                       </Button>
-                      {canAssign(seat.role) && !seat.holderUid && (
-                        <Button size="sm" variant="ghost" className="text-destructive" onClick={() => setRemoveSeat(seat)}>Remove</Button>
+                      {/* Offered on every seat so the action is discoverable,
+                          but an occupied seat can't be deleted - the server
+                          refuses it (deactivateSeat: "Empty the seat before
+                          removing it") because the holder would silently lose
+                          the role. Disabled with the reason rather than hidden,
+                          which is why it previously looked absent. */}
+                      {canAssign() && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-destructive"
+                          disabled={!!seat.holderUid}
+                          title={seat.holderUid ? "Vacate this role first, then delete it" : undefined}
+                          onClick={() => setRemoveSeat(seat)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5 mr-1" />Delete
+                        </Button>
                       )}
                     </div>
                   </CardContent>
@@ -201,14 +216,14 @@ export function RoleAssignmentsPage({ collegeId }: { collegeId?: string }) {
       <ConfirmDialog
         open={removeSeat !== null}
         onOpenChange={(o) => { if (!o) setRemoveSeat(null); }}
-        title="Remove this seat?"
-        description={removeSeat ? `"${removeSeat.label}" will be removed. Its history is kept.` : undefined}
-        confirmLabel="Remove" variant="destructive"
+        title="Delete this role?"
+        description={removeSeat ? `"${removeSeat.label}" will be deleted. Its history is kept.` : undefined}
+        confirmLabel="Delete" variant="destructive"
         onConfirm={async () => {
           if (!removeSeat) return;
           const r = await patchSeat(removeSeat.id, { action: "REMOVE" });
           if (!r.ok) toast({ variant: "destructive", title: r.error ?? "Failed" });
-          else { toast({ variant: "success", title: "Seat removed" }); setRemoveSeat(null); await load(); }
+          else { toast({ variant: "success", title: "Role deleted" }); setRemoveSeat(null); await load(); }
         }}
       />
     </div>
@@ -506,7 +521,7 @@ function AddSeatDialog({
   qs: string;
   departments: Dept[];
   seats: RoleSeat[];
-  canCreate: (role: string) => boolean;
+  canCreate: () => boolean;
   onDone: () => Promise<void>;
 }) {
   const [role, setRole] = useState("");
@@ -523,7 +538,7 @@ function AddSeatDialog({
   // seat, in one step, from Administration's "Add College Admin" page instead
   // (see api/administration/college-people) - this dialog would otherwise let
   // someone create an unfillable vacant seat.
-  const roleOptions = SEAT_ROLES.filter((r) => r !== "COLLEGE_ADMIN" && canCreate(r) && (!isSingletonSeatRole(r) || !seats.some((s) => s.role === r)));
+  const roleOptions = SEAT_ROLES.filter((r) => r !== "COLLEGE_ADMIN" && canCreate() && (!isSingletonSeatRole(r) || !seats.some((s) => s.role === r)));
   const freeDepartments = departments.filter((d) => !seats.some((s) => s.role === "HOD" && s.departmentId === d.id));
 
   async function submit() {
@@ -556,7 +571,7 @@ function AddSeatDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Add Seat</DialogTitle>
+          <DialogTitle>Add Role</DialogTitle>
           <DialogDescription>Create the position first, then appoint a person to it. The role email is entered once here and stays with the seat.</DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
@@ -594,7 +609,7 @@ function AddSeatDialog({
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button onClick={submit} loading={busy} disabled={!role}>Add Seat</Button>
+          <Button onClick={submit} loading={busy} disabled={!role}>Add Role</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

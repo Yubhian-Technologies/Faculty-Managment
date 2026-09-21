@@ -61,7 +61,7 @@ export async function POST(request: Request) {
     if (!body.role || !(SEAT_ROLES as string[]).includes(body.role)) {
       return NextResponse.json({ error: "Pick a valid role for the seat" }, { status: 400 });
     }
-    assertCanAssign(ctx, body.role);
+    assertCanAssign(ctx);
     const id = await createSeat(getAdminDb(), ctx.collegeId, { ...body, role: body.role }, ctx.actor);
     return NextResponse.json({ id }, { status: 201 });
   } catch (err) {
