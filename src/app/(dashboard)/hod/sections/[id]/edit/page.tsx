@@ -387,7 +387,7 @@ export default function EditSectionPage() {
   // Section.regulation's own doc-comment) immediately re-narrows Regulation
   // to whatever actually covers THAT batch, instead of staying stuck on
   // whatever the previous batch resolved to. Same resolution the Add Section
-  // form and Dean's Add Subject page use. Also called directly (not just via
+  // form and Academics' Add Subject page use. Also called directly (not just via
   // the memo below) from the Batch picker's onValueChange, to decide whether
   // the currently-picked regulation survives the change.
   const regulationsForBatch = useCallback((batchValue: string): string[] => {

@@ -25,7 +25,7 @@ function ordinalYear(year: number) {
 }
 
 // Curriculum-table order: by S.No. when set, falling back to name for legacy
-// subjects that predate the field - same sort as dean/subjects/page.tsx.
+// subjects that predate the field - same sort as academics/subjects/page.tsx.
 function sortSubjects(subjects: Subject[]) {
   return [...subjects].sort((a, b) => {
     if (a.serialNumber != null && b.serialNumber != null) return a.serialNumber - b.serialNumber;

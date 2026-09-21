@@ -76,14 +76,17 @@ export async function GET(request: Request) {
   }
 }
 
-// Roles a Super Admin can create - the level L1–L3 set. Each role's write target
-// (systemUsers / locationUsers / college users) is derived from ROLE_SCOPE, so the
-// single source of truth stays in core.ts. L4–L6 (HOD, Office, Faculty, Student) are
-// provisioned by Principals/HODs via their own routes, not here.
+// Roles a Super Admin can create - the level L1–L2 set plus DIRECTOR (L3). Each
+// role's write target (systemUsers / locationUsers / college users) is derived
+// from ROLE_SCOPE, so the single source of truth stays in core.ts. Principal and
+// the rest of L3 and below are seats - a college's own College Admin appoints
+// them via Role Assignments, never Super Admin directly (same reasoning as
+// removing it from Location Admin). DIRECTOR is the one college-scoped role
+// Super Admin still provisions directly.
 const SUPER_ADMIN_CREATABLE: UserRole[] = [
   "MANAGEMENT", "FINANCE", "PURCHASE_DEPT",   // L1 · GLOBAL
   "ADMINISTRATION", "ACCOUNTS",               // L2 · LOCATION
-  "PRINCIPAL", "DIRECTOR",                    // L3 · COLLEGE
+  "DIRECTOR",                                 // L3 · COLLEGE
 ];
 // Global-scoped subset - used by the GET ?scope=global (System-Wide) listing.
 const GLOBAL_ROLES: UserRole[] = SUPER_ADMIN_CREATABLE.filter((r) => ROLE_SCOPE[r] === "GLOBAL");
@@ -170,7 +173,7 @@ export async function POST(request: Request) {
       // ADMINISTRATION / ACCOUNTS: location subcollection.
       uid = await provisionLocationUser(db, locationId, role, { name, email, password, phone, academicProfile, profilePhotoUrl });
     } else if (scope === "COLLEGE" && collegeId) {
-      // PRINCIPAL: college subcollection.
+      // DIRECTOR: college subcollection.
       uid = await provisionCollegeUser(
         db, collegeId, role,
         { ...body, name, email, password, phone, department, academicProfile, profilePhotoUrl },

@@ -39,7 +39,7 @@ export type UserRole =
   | "DEPARTMENT_OFFICE"
   | "COLLEGE_OFFICE"
   | "COLLEGE_STAFF"
-  | "DEAN"
+  | "ACADEMICS"
   | "IQAC_COORDINATOR"
   | "T_AND_P"
   | "R_AND_D"
@@ -70,7 +70,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   DEPARTMENT_OFFICE: "Department Office",
   COLLEGE_OFFICE: "College Office",
   COLLEGE_STAFF: "College Staff",
-  DEAN: "Dean",
+  ACADEMICS: "Academics",
   IQAC_COORDINATOR: "IQAC Coordinator",
   T_AND_P: "T&P",
   R_AND_D: "R&D",
@@ -98,7 +98,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
 // the one Principal-tier role a Principal itself appoints).
 export const MANAGEABLE_STAFF_ROLES: UserRole[] = [
   "HOD", "DEPARTMENT_OFFICE", "COLLEGE_OFFICE", "VICE_PRINCIPAL", "COLLEGE_ADMIN", "COLLEGE_STAFF",
-  "DEAN", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D", "PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL",
+  "ACADEMICS", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D", "PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL",
   "PANEL_MEMBER", "WEBMASTER", "COLLEGE_ACCOUNTS",
 ];
 
@@ -117,7 +117,7 @@ export const ROLE_DASHBOARD_PATHS: Record<UserRole, string> = {
   DEPARTMENT_OFFICE: "/hod",
   COLLEGE_OFFICE: "/college-office",
   COLLEGE_STAFF: "/college-staff",
-  DEAN: "/dean",
+  ACADEMICS: "/academics",
   IQAC_COORDINATOR: "/iqac-coordinator",
   T_AND_P: "/t-and-p",
   R_AND_D: "/r-and-d",
@@ -159,7 +159,7 @@ export const ROLE_LEVEL: Record<UserRole, 0 | 1 | 2 | 3 | 4 | 5 | 6> = {
   DEPARTMENT_OFFICE: 4,
   COLLEGE_OFFICE: 4,
   COLLEGE_STAFF: 4,
-  DEAN: 4,
+  ACADEMICS: 4,
   IQAC_COORDINATOR: 4,
   T_AND_P: 4,
   R_AND_D: 4,
@@ -207,7 +207,7 @@ export const ROLE_SCOPE: Record<UserRole, RoleScope> = {
   DEPARTMENT_OFFICE: "COLLEGE",
   COLLEGE_OFFICE: "COLLEGE",
   COLLEGE_STAFF: "COLLEGE",
-  DEAN: "COLLEGE",
+  ACADEMICS: "COLLEGE",
   IQAC_COORDINATOR: "COLLEGE",
   T_AND_P: "COLLEGE",
   R_AND_D: "COLLEGE",
@@ -408,7 +408,7 @@ export interface FMSUser {
   dateOfBirth?: Timestamp; // for PRINCIPAL / VICE_PRINCIPAL / HOD profile forms
   // Collected at account-creation time (see api/college/users, api/administration/
   // college-staff) so a role with no FacultyMember/SupportingStaff record of its
-  // own (HOD/PRINCIPAL/VICE_PRINCIPAL/DEAN/COLLEGE_OFFICE/ACCOUNTS/FINANCE/IQAC/
+  // own (HOD/PRINCIPAL/VICE_PRINCIPAL/ACADEMICS/COLLEGE_OFFICE/ACCOUNTS/FINANCE/IQAC/
   // T&P/R&D/Library/Exam Cell/Webmaster/Placement Dept, ...) doesn't wrongly
   // default into the leave module's "new joining" category from its login's own
   // createdAt - see resolveEmployeeIdentity in lib/leave/identity.ts.
@@ -639,7 +639,7 @@ export interface CourseCatalogItem {
   // Curriculum regulation codes (e.g. R20, R23) this course uses - a different
   // course can have an entirely different set. Created directly here (typing a
   // new code registers it, typing an existing one reuses it - no separate
-  // college-wide "declare a regulation" step). Empty/absent until the Dean
+  // college-wide "declare a regulation" step). Empty/absent until the Academics
   // (or Principal/Super Admin) assigns at least one here, which blocks
   // adding subjects to any Course created from this catalog entry (see
   // api/college/subjects POST) until it's set.
@@ -1296,7 +1296,7 @@ export interface ResearchPublication {
   ownerName: string;
   ownerRole: UserRole;
   // Resolved academic identity (e.g. "Professor", or generically "Faculty"
-  // for Principal/VP/HOD/Dean who have no separate FacultyMember record) -
+  // for Principal/VP/HOD/Academics who have no separate FacultyMember record) -
   // see src/lib/publications/resolveOwnerDesignation.ts. When present, this
   // is what's displayed instead of ownerRole: the record belongs to the
   // person's academic career, not whichever administrative role they

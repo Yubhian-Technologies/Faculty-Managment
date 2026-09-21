@@ -3,7 +3,7 @@ import type { UserRole } from "./core";
 
 // ─── Role seats ────────────────────────────────────────────────────────────
 // A "seat" is a position in the college - Principal, a department's HOD, Vice
-// Principal, Dean, R&D head, ... - as opposed to the PERSON sitting in it. A
+// Principal, Academics, R&D head, ... - as opposed to the PERSON sitting in it. A
 // person has one login (their personal college email) and a primary role
 // (teaching faculty / supporting staff / office / administrator); any seats
 // they hold add that seat's modules to the same dashboard. Everything an HOD
@@ -15,7 +15,7 @@ import type { UserRole } from "./core";
 //
 // A seat has AT MOST ONE holder at a time (an acting holder is covered by the
 // Adjustments module, not by a second holder), but one person may hold several
-// seats (HOD of two departments, or HOD + Dean of R&D).
+// seats (HOD of two departments, or HOD + Academics of R&D).
 export interface RoleSeat {
   id: string;
   collegeId: string;

@@ -26,7 +26,7 @@ import { stripLeadingZeros } from "@/lib/utils";
 import { Download, Upload, CheckCircle2, XCircle, FileSpreadsheet, ArrowLeft, AlertTriangle, Pencil } from "lucide-react";
 
 // Department/Course/Academic Year/Year come from a specific course-year's own
-// "Import Subjects" shortcut (see dean/subjects/page.tsx) - when present,
+// "Import Subjects" shortcut (see academics/subjects/page.tsx) - when present,
 // every row in the file belongs to that one context, so those 4 columns are
 // hidden from the template/preview and force-injected into every row
 // instead, same LOCKED_KEYS convention as the student roster importer
@@ -71,7 +71,7 @@ function ordinalYear(year: number) {
   return `${year}${suffix} Year`;
 }
 
-export default function ImportDeanSubjectsPage() {
+export default function ImportAcademicsSubjectsPage() {
   const searchParams = useSearchParams();
   const lockedDepartmentId = searchParams.get("departmentId") ?? "";
   const lockedCourseId = searchParams.get("courseId") ?? "";
@@ -82,8 +82,8 @@ export default function ImportDeanSubjectsPage() {
   const isLocked = !!(lockedDepartmentId && lockedCourseId && lockedYear && lockedDepartment && lockedCourseName && lockedAcademicYear);
 
   const backHref = isLocked
-    ? `/dean/subjects?departmentId=${lockedDepartmentId}&courseId=${lockedCourseId}&year=${lockedYear}&academicYear=${encodeURIComponent(lockedAcademicYear)}`
-    : "/dean/subjects";
+    ? `/academics/subjects?departmentId=${lockedDepartmentId}&courseId=${lockedCourseId}&year=${lockedYear}&academicYear=${encodeURIComponent(lockedAcademicYear)}`
+    : "/academics/subjects";
 
   const columns = useMemo(
     () => (isLocked ? IMPORT_COLUMNS.filter((c) => !LOCKED_KEYS.includes(c.key)) : IMPORT_COLUMNS),
@@ -249,7 +249,7 @@ export default function ImportDeanSubjectsPage() {
     const courseNameRaw = isLocked ? lockedCourseName : (f.data.course ?? "");
     // Best-effort pre-resolve: a short code (or a genuinely wrong value)
     // won't match any real name, in which case the Select is simply left
-    // blank for the Dean to pick correctly - same as a fresh Add.
+    // blank for the Academics to pick correctly - same as a fresh Add.
     const resolvedDeptName = resolveDepartmentByNameOrCode(departments, deptNameRaw) ?? "";
     const departmentId = departments.find((d) => d.name === resolvedDeptName)?.id ?? "";
     const resolvedCourseName = departmentId ? (resolveCourseByNameOrCode(courses, departmentId, courseNameRaw) ?? "") : "";

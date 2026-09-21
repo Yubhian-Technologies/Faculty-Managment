@@ -19,7 +19,7 @@ export interface ReportRoster {
 }
 
 // Principal/VP-only: every login holding this one specific non-departmental
-// role (Vice Principal, College Office, Dean, ...), college-wide (no
+// role (Vice Principal, College Office, Academics, ...), college-wide (no
 // department to scope by) - each such role gets its own card/register on the
 // Leave History page rather than one combined list. The viewer's own login
 // is excluded, same as an HOD never sees themself in their own department's
@@ -58,7 +58,7 @@ export async function resolveStaffReportRoster(
 // Shared by the monthly and yearly leave-history-report routes:
 //  - PRINCIPAL/VICE_PRINCIPAL: pass ?departmentId=... (any real department
 //    id), or one of NON_DEPARTMENTAL_STAFF_ROLES's role codes (e.g.
-//    "DEAN") for that role's own college-wide register instead (see
+//    "ACADEMICS") for that role's own college-wide register instead (see
 //    resolveStaffReportRoster).
 //  - HOD: no departmentId needed - self-resolves their own department, and
 //    is excluded from their own roster (only their faculty's history).

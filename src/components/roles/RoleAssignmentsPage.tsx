@@ -1,21 +1,23 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { History, Mail, Plus, RefreshCw, UserCog, UserMinus } from "lucide-react";
+import { Check, ChevronsUpDown, History, Mail, Plus, RefreshCw, UserCog, UserMinus } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/useToast";
 import { PRIMARY_ROLE_CHOICES, SEAT_ROLES, canAssignSeat, canHoldSeat, isSingletonSeatRole, roleMatchesSeat, seatNeedsDepartment } from "@/lib/roles/seatRoles";
-import { formatDate } from "@/lib/utils";
+import { cn, formatDate } from "@/lib/utils";
 import { useAuthStore } from "@/store/authStore";
 import { LEVEL_LABELS, ROLE_LABELS, ROLE_LEVEL, type UserRole } from "@/types/core";
 import type { OutgoingHolderAction, RoleSeat, RoleSeatHistoryEntry } from "@/types/roleSeats";
@@ -24,7 +26,7 @@ interface Person { uid: string; name: string; email: string; role: string; store
 interface Dept { id: string; name: string }
 
 // Role Assignments: who sits in each seat (Principal, a department's HOD, Vice
-// Principal, Dean, R&D head, ...). Appointing someone adds that seat's modules
+// Principal, Academics, R&D head, ...). Appointing someone adds that seat's modules
 // to their own dashboard; changing the holder moves the seat - and all the
 // history that hangs off it - to the new person without deleting anything.
 // See types/roleSeats.ts. `collegeId` is only for Super Admin / Management /
@@ -106,7 +108,7 @@ export function RoleAssignmentsPage({ collegeId }: { collegeId?: string }) {
     <div className="max-w-4xl space-y-6">
       <PageHeader
         title="Role Assignments"
-        description="Appoint people to seats - Principal, each department's HOD, Vice Principal, Dean and so on. Everyone signs in with their own college email; a seat adds its modules to their dashboard and stays with the position when the person changes."
+        description="Appoint people to seats - Principal, each department's HOD, Vice Principal, Academics and so on. Everyone signs in with their own college email; a seat adds its modules to their dashboard and stays with the position when the person changes."
         actions={
           <>
             <Button variant="outline" onClick={convertLegacy} loading={isConverting}>
@@ -258,6 +260,7 @@ function AssignDialog({
   patchSeat: (id: string, body: Record<string, unknown>) => Promise<{ ok: boolean; error?: string }>;
   onDone: () => Promise<void>;
 }) {
+  const [popoverOpen, setPopoverOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [uid, setUid] = useState("");
   const [note, setNote] = useState("");
@@ -275,6 +278,7 @@ function AssignDialog({
 
   if (!seat) return null;
   const outgoingNeeded = needsOutgoing(seat, people);
+  const chosen = people.find((p) => p.uid === uid);
 
   async function submit() {
     if (!seat || !uid) { toast({ variant: "destructive", title: "Pick a person" }); return; }
@@ -301,24 +305,46 @@ function AssignDialog({
         <div className="space-y-3">
           <div className="space-y-2">
             <Label>Person</Label>
-            <Input placeholder="Search by name or email" value={search} onChange={(e) => setSearch(e.target.value)} />
-            <Select value={uid} onValueChange={setUid}>
-              <SelectTrigger><SelectValue placeholder="Select a person" /></SelectTrigger>
-              <SelectContent>
-                {list.map((p) => (
-                  <SelectItem key={p.uid} value={p.uid}>
-                    {p.name} · {ROLE_LABELS[p.role as UserRole] ?? p.role}{p.department ? ` · ${p.department}` : ""}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  type="button"
+                  variant="outline"
+                  role="combobox"
+                  aria-expanded={popoverOpen}
+                  className="w-full justify-between font-normal"
+                >
+                  <span className={cn("truncate", !chosen && "text-muted-foreground")}>
+                    {chosen
+                      ? `${chosen.name} · ${ROLE_LABELS[chosen.role as UserRole] ?? chosen.role}${chosen.department ? ` · ${chosen.department}` : ""}`
+                      : "Search by name or email"}
+                  </span>
+                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                <Command shouldFilter={false}>
+                  <CommandInput placeholder="Search by name or email" value={search} onValueChange={setSearch} />
+                  <CommandList>
+                    <CommandEmpty>No matching person.</CommandEmpty>
+                    <CommandGroup>
+                      {list.map((p) => (
+                        <CommandItem key={p.uid} value={p.uid} onSelect={() => { setUid(p.uid); setPopoverOpen(false); }}>
+                          <Check className={cn("mr-2 h-4 w-4", uid === p.uid ? "opacity-100" : "opacity-0")} />
+                          {p.name} · {ROLE_LABELS[p.role as UserRole] ?? p.role}{p.department ? ` · ${p.department}` : ""}
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
           </div>
           {(() => {
             // An HOD runs a department; the person's own teaching stays in their own
             // department. Heading a different one is allowed but worth a heads-up:
             // HOD screens follow this department, their own teaching / leave / profile
             // keep following their own.
-            const chosen = people.find((p) => p.uid === uid);
             if (!chosen || seat.role !== "HOD" || !seat.departmentName || !chosen.department || chosen.department === seat.departmentName) return null;
             return (
               <p className="text-xs rounded-md border border-amber-300 bg-amber-50 p-2.5 text-amber-800">
@@ -490,8 +516,14 @@ function AddSeatDialog({
   const [busy, setBusy] = useState(false);
 
   // Only roles you're allowed to appoint, and - for one-per-college roles - not
-  // ones that already have their seat.
-  const roleOptions = SEAT_ROLES.filter((r) => canCreate(r) && (!isSingletonSeatRole(r) || !seats.some((s) => s.role === r)));
+  // ones that already have their seat. College Admin is excluded outright: an
+  // empty seat here can only be filled by ASSIGNing an existing login, but the
+  // College Admin is usually the very first person in a brand-new college -
+  // there's no one yet to pick from. That's why it's created together with its
+  // seat, in one step, from Administration's "Add College Admin" page instead
+  // (see api/administration/college-people) - this dialog would otherwise let
+  // someone create an unfillable vacant seat.
+  const roleOptions = SEAT_ROLES.filter((r) => r !== "COLLEGE_ADMIN" && canCreate(r) && (!isSingletonSeatRole(r) || !seats.some((s) => s.role === r)));
   const freeDepartments = departments.filter((d) => !seats.some((s) => s.role === "HOD" && s.departmentId === d.id));
 
   async function submit() {

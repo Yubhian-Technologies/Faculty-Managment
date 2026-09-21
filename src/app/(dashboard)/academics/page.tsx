@@ -6,14 +6,14 @@ import { useAuthStore } from "@/store/authStore";
 import { ROLE_LABELS } from "@/types";
 import { CourseCatalogSettingsCard } from "@/components/academics/CourseCatalogSettingsCard";
 
-export default function DeanDashboard() {
+export default function AcademicsDashboard() {
   const user = useAuthStore((s) => s.user);
 
   return (
     <div className="space-y-6">
       <PageHeader
         title={`Hello, ${user?.name ?? "there"}`}
-        description={ROLE_LABELS.DEAN}
+        description={ROLE_LABELS.ACADEMICS}
       />
       <Card>
         <CardContent className="p-6 text-sm text-muted-foreground">
@@ -22,7 +22,7 @@ export default function DeanDashboard() {
         </CardContent>
       </Card>
 
-      {/* Courses are created by the Principal / VP / College Admin; the Dean
+      {/* Courses are created by the Principal / VP / College Admin; the Academics
           maintains each course's curriculum regulations and their intake
           batches here (see CourseCatalogSettingsCard/RegulationBatchesEditor). */}
       <CourseCatalogSettingsCard regulationsOnly />

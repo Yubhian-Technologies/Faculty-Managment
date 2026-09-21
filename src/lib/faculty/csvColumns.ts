@@ -414,7 +414,7 @@ export function getFacultyImportHints(designationOptions: string[]): string[] {
     ? `Designation: ${designationOptions.join(" / ")} - added under Settings > Designations. Supporting Staff (Lab Assistant, Programmer, Office Assistant, etc.) is added from the Supporting Staff module instead. Common abbreviations (e.g. Prof., Asst. Prof., Assoc. Prof.) are recognized too, case-insensitively.`
     : "Designation: add at least one under Settings > Designations before importing - a row can only use a title that's been added there.",
   "Dates must be in DD-MM-YYYY format (e.g. 15-06-2020)",
-  "Department is auto-assigned from your HOD profile",
+  "Department: the whole file lands in one department - auto-assigned from your HOD profile if you're an HOD, otherwise you'll pick it above before importing",
   "Login Password is mandatory: it creates the faculty member's login account (as a Panel Member) automatically during import, using their College Email as the login ID - must be at least 8 characters. Use a real, unique password per person - never reuse the sample column's placeholder values.",
   `Employee Category: ${Object.values(EMPLOYEE_CATEGORY_LABELS).join(" / ")} - how the person is engaged (drives salary/budget), separate from Designation.`,
   "Every column above is required except Name (as per PAN) and Name (as per Aadhar) - a row missing a required one, or with an invalid value, is rejected and reported back so it can be corrected and re-imported.",

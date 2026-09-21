@@ -22,7 +22,7 @@ export async function PATCH(request: Request) {
     // never from the request body, mirroring me/photo/route.ts.
     const session = await requireCollegeMember(
       "PRINCIPAL", "VICE_PRINCIPAL", "HOD",
-      "COLLEGE_OFFICE", "COLLEGE_STAFF", "DEAN", "IQAC_COORDINATOR",
+      "COLLEGE_OFFICE", "COLLEGE_STAFF", "ACADEMICS", "IQAC_COORDINATOR",
       "T_AND_P", "R_AND_D", "PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL", "WEBMASTER", "COLLEGE_ACCOUNTS"
     );
 

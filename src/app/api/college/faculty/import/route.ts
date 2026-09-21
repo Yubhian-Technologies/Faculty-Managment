@@ -85,32 +85,53 @@ export async function POST(request: Request) {
     const db = getAdminDb();
     const collegeId = session.collegeId;
 
-    // Resolve HOD's department. This template has no Department column at
-    // all (see HINTS: "Department is auto-assigned from your HOD profile") -
-    // there's no per-row value to fall back on, so a caller this can't be
-    // resolved for (a non-HOD role reaching this route via the L0-L6 role
-    // inheritance that lets Principal/VP browse HOD pages, or an HOD whose
-    // own profile has no department set) must be rejected up front. Silently
-    // falling back to "" previously created faculty with no department at
-    // all - invisible on every department's Faculty list (including their
-    // own), since every list there is scoped by an exact department match.
-    if (session.role !== "HOD") {
-      return NextResponse.json({ error: "Only an HOD can bulk-import faculty - sign in as the HOD of the target department" }, { status: 403 });
-    }
-    const scope = await getHodDepartmentScope(db, collegeId, session.uid);
+    // Resolve the batch's department. This template has no Department column
+    // at all (see HINTS: "Department is auto-assigned from your HOD profile")
+    // - there's no per-row value to fall back on, so it has to be resolved
+    // once for the whole file. Silently falling back to "" previously created
+    // faculty with no department at all - invisible on every department's
+    // Faculty list (including their own), since every list there is scoped
+    // by an exact department match.
     let hodDept = body.department?.trim() ?? "";
-    if (hodDept && !scope.ownDepartmentNames.includes(hodDept)) {
-      return NextResponse.json({ error: "That department is not yours" }, { status: 403 });
-    }
-    if (!hodDept && scope.ownDepartmentNames.length > 1) {
-      return NextResponse.json(
-        { error: "You manage more than one department - choose which department this import belongs to" },
-        { status: 400 }
-      );
-    }
-    if (!hodDept) hodDept = scope.ownDepartmentNames[0] ?? "";
-    if (!hodDept) {
-      return NextResponse.json({ error: "Your account has no department set - ask your Principal to assign one before importing faculty" }, { status: 400 });
+    if (session.role === "HOD") {
+      const scope = await getHodDepartmentScope(db, collegeId, session.uid);
+      if (hodDept && !scope.ownDepartmentNames.includes(hodDept)) {
+        return NextResponse.json({ error: "That department is not yours" }, { status: 403 });
+      }
+      if (!hodDept && scope.ownDepartmentNames.length > 1) {
+        return NextResponse.json(
+          { error: "You manage more than one department - choose which department this import belongs to" },
+          { status: 400 }
+        );
+      }
+      if (!hodDept) hodDept = scope.ownDepartmentNames[0] ?? "";
+      if (!hodDept) {
+        return NextResponse.json({ error: "Your account has no department set - ask your Principal to assign one before importing faculty" }, { status: 400 });
+      }
+    } else {
+      // Principal / Vice Principal / College Admin (normalized to Principal
+      // via its seat) / Super Admin have no department of their own to fall
+      // back on, so they must say which one this whole batch belongs to -
+      // validated against the college's real department list, same as
+      // choosing one in the manual Add Faculty form would require. Every
+      // existing faculty/user doc's own `department` field holds the
+      // department's short `code` ("CSE"), not its full `name`
+      // ("Computer Science and Engineering") - see getHodDepartmentScope,
+      // which just trusts whatever string is already on the user doc - so a
+      // batch stored under the full name would be invisible on every
+      // CSE-scoped list. Accept either, but only ever store the code.
+      if (!hodDept) {
+        return NextResponse.json({ error: "Choose which department this import belongs to" }, { status: 400 });
+      }
+      const deptsSnap = await db.collection("colleges").doc(collegeId).collection("departments").get();
+      const match = deptsSnap.docs.find((d) => {
+        const data = d.data() as { name?: string; code?: string };
+        return data.name === hodDept || data.code === hodDept;
+      });
+      if (!match) {
+        return NextResponse.json({ error: `"${hodDept}" is not one of this college's departments` }, { status: 400 });
+      }
+      hodDept = (match.data() as { code?: string }).code || hodDept;
     }
 
     // Load existing employeeIds/collegeEmails to detect duplicates - lowercased,

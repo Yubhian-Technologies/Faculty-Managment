@@ -162,9 +162,9 @@ export default function HODSubjectsPage() {
     () => catalogItems.find((c) => c.id === selectedCourse?.catalogId) ?? null,
     [catalogItems, selectedCourse]
   );
-  // Sourced from the Course Catalog (same resolution HOD Sections' and Dean
+  // Sourced from the Course Catalog (same resolution HOD Sections' and Academics
   // Subjects' own regulation pickers use), unioned with whatever's already
-  // on this course/year's saved subjects - so a regulation the Dean just
+  // on this course/year's saved subjects - so a regulation the Academics just
   // configured shows up even before any subject uses it (this control used
   // to be a post-hoc filter over already-loaded subjects, which meant an
   // empty subject list always meant an empty, disabled dropdown with no
@@ -191,7 +191,7 @@ export default function HODSubjectsPage() {
   const regulationEmptyReason = useMemo(() => {
     if (regulationOptions.length > 0) return null;
     if (!selectedCourse?.catalogId) return "This course isn't linked to a Course Catalog entry.";
-    return "No regulation is configured for this year yet — set one in Course Catalog (Dean).";
+    return "No regulation is configured for this year yet — set one in Course Catalog (Academics).";
   }, [regulationOptions, selectedCourse]);
   const visibleSubjects = useMemo(() => {
     const filtered = pickedRegulation ? subjects.filter((s) => !s.regulation || s.regulation === pickedRegulation) : subjects;

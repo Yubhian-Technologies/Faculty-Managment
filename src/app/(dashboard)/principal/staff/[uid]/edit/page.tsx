@@ -197,7 +197,7 @@ export default function EditStaffAccountPage() {
               {role === "COLLEGE_STAFF" && (
                 <div className="space-y-2">
                   <Label>Designation</Label>
-                  <Input value={designation} onChange={(e) => setDesignation(e.target.value)} placeholder="e.g. Dean - R&D, IQAC Coordinator" />
+                  <Input value={designation} onChange={(e) => setDesignation(e.target.value)} placeholder="e.g. Academics - R&D, IQAC Coordinator" />
                 </div>
               )}
             </div>
