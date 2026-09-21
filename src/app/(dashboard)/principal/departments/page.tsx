@@ -118,12 +118,11 @@ export default function DepartmentsPage() {
         </div>
       ) : topLevelDepartments.length === 0 ? (
         <Card>
+          {/* No second "Add Department" button here - the page header already
+              carries one, and on an empty page the two sat a few centimetres
+              apart doing the same thing. The message points at the one above. */}
           <CardContent className="py-16 text-center">
-            <p className="text-muted-foreground mb-4">No departments yet. Add your first department to get started.</p>
-            <Button onClick={() => router.push("/principal/departments/new")}>
-              <Plus className="h-4 w-4 mr-2" />
-              Add Department
-            </Button>
+            <p className="text-muted-foreground">No departments yet. Use <span className="font-medium text-foreground">Add Department</span> above to create your first one.</p>
           </CardContent>
         </Card>
       ) : (

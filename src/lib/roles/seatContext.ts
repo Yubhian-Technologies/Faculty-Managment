@@ -38,13 +38,8 @@ export async function requireSeatManager(request: Request): Promise<SeatRequestC
   return { session, collegeId, actor: { uid: session.uid, name } };
 }
 
-export function assertCanAssign(ctx: SeatRequestContext, seatRole: string): void {
-  if (!canAssignSeat(ctx.session, seatRole)) {
-    throw new SeatError(
-      seatRole === "PRINCIPAL"
-        ? "Only Super Admin, Management, the location Administration or the College Admin can appoint the Principal"
-        : "You can't assign this seat",
-      403
-    );
+export function assertCanAssign(ctx: SeatRequestContext): void {
+  if (!canAssignSeat(ctx.session)) {
+    throw new SeatError("You can't assign this seat", 403);
   }
 }

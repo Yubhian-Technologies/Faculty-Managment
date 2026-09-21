@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { narrowToActiveHodDepartment } from "@/lib/roles/activeHodDepartment";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -47,8 +48,11 @@ export async function GET(request: Request) {
       // Every department this HOD directly heads (usually one, can be more -
       // see src/lib/departments/scope.ts) - each contributes its own course
       // scope below, unioned together.
-      const ownDeptNames = (userData?.departments && userData.departments.length > 0 ? userData.departments : [userData?.department ?? ""])
-        .filter((n): n is string => !!n);
+      const ownDeptNames = await narrowToActiveHodDepartment(
+        session.uid,
+        (userData?.departments && userData.departments.length > 0 ? userData.departments : [userData?.department ?? ""])
+          .filter((n): n is string => !!n)
+      );
 
       allDepartments = ownDeptNames.length > 0
         ? (await db.collection("colleges").doc(session.collegeId).collection("departments").get())

@@ -32,7 +32,18 @@ export default function NewCollegePage() {
       .catch(() => {});
   }, []);
 
-  const isValid = name.trim().length >= 2 && !!locationId;
+  // Both contact fields stay optional - but once something is typed it has to
+  // be usable. Phone is counted in digits only, so spacing or dashes in a
+  // pasted number don't fail it; anything longer or shorter than 10 does.
+  const phoneDigits = contactPhone.replace(/\D/g, "");
+  const phoneError = contactPhone.trim() !== "" && phoneDigits.length !== 10
+    ? "Enter a 10-digit phone number"
+    : "";
+  const emailError = contactEmail.trim() !== "" && !contactEmail.includes("@")
+    ? "Enter a valid email address (must contain @)"
+    : "";
+
+  const isValid = name.trim().length >= 2 && !!locationId && !phoneError && !emailError;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -134,15 +145,20 @@ export default function NewCollegePage() {
                   value={contactEmail}
                   onChange={(e) => setContactEmail(e.target.value)}
                   placeholder="principal@college.edu"
+                  aria-invalid={!!emailError}
                 />
+                {emailError && <p className="text-sm text-destructive">{emailError}</p>}
               </div>
               <div className="space-y-2">
                 <Label>Contact Phone</Label>
                 <Input
                   value={contactPhone}
                   onChange={(e) => setContactPhone(e.target.value)}
-                  placeholder="+91 98765 43210"
+                  placeholder="9876543210"
+                  inputMode="numeric"
+                  aria-invalid={!!phoneError}
                 />
+                {phoneError && <p className="text-sm text-destructive">{phoneError}</p>}
               </div>
             </div>
 

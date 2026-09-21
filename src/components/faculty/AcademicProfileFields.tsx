@@ -69,7 +69,7 @@ export function AcademicProfileFields({ value: rawValue, onChange, includeTeachi
       {isSchool ? (
         <>
           <TextInput label="Highest Qualification" value={value.highestQualification} onChange={(v) => set("highestQualification", v)} placeholder="e.g. B.Ed, M.A." />
-          <StringListInput label="Research Areas/Interests *" values={value.researchAreasInterests} onChange={(v) => set("researchAreasInterests", v)} placeholder="e.g. Machine Learning - press Enter or Add" />
+          <StringListInput label="Research Areas/Interests" values={value.researchAreasInterests} onChange={(v) => set("researchAreasInterests", v)} placeholder="e.g. Machine Learning - press Enter or Add" />
           <QualificationsFields
             items={value.educationalQualifications}
             levelOptions={SCHOOL_TEACHING_QUALIFICATION_LEVELS}
@@ -79,7 +79,7 @@ export function AcademicProfileFields({ value: rawValue, onChange, includeTeachi
       ) : (
         <>
           <TextInput label="Highest Qualification" value={value.highestQualification} onChange={(v) => set("highestQualification", v)} placeholder="e.g. Ph.D" />
-          <StringListInput label="Research Areas/Interests *" values={value.researchAreasInterests} onChange={(v) => set("researchAreasInterests", v)} placeholder="e.g. Machine Learning - press Enter or Add" />
+          <StringListInput label="Research Areas/Interests" values={value.researchAreasInterests} onChange={(v) => set("researchAreasInterests", v)} placeholder="e.g. Machine Learning - press Enter or Add" />
           <div className="space-y-3 rounded-lg border p-3">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-2">

@@ -1,3 +1,4 @@
+import { departmentOfContext, hodContextKey } from "@/lib/roles/activeHodDepartment";
 import type { UserRole } from "@/types";
 import { ROLE_LABELS } from "@/types";
 
@@ -467,11 +468,11 @@ export function getNavItemsForRoles(primary: UserRole, roles: readonly UserRole[
 // A login that holds seats (Principal, HOD, ...) would otherwise see every
 // module of every seat in one long sidebar. Instead it works in ONE context at
 // a time: a seat ("Principal", "Head of Department") or "My Work" (its own
-// primary role). A seat's context shows that seat's position modules plus a
-// small "My Work" group (dashboard, profile, leave, attendance, teaching), so
-// personal things are always one click away. This only shapes the sidebar -
+// primary role). A seat's context shows only that seat's position modules;
+// everything personal (dashboard, profile, leave, attendance, teaching) lives
+// under "My Work" in the switcher. This only shapes the sidebar -
 // what a login may actually do is decided by its held roles on the server.
-export type WorkContextKey = "ME" | UserRole;
+export type WorkContextKey = "ME" | UserRole | `HOD:${string}`;
 export interface WorkContext { key: WorkContextKey; label: string }
 
 function seatRolesOf(primary: UserRole, roles: readonly UserRole[]): UserRole[] {
@@ -480,11 +481,16 @@ function seatRolesOf(primary: UserRole, roles: readonly UserRole[]): UserRole[] 
 
 // Empty for a login with no seats (nothing to switch between). `roles` lists
 // seat roles most senior first, so the first context is the default.
-export function getWorkContexts(primary: UserRole, roles: readonly UserRole[] = []): WorkContext[] {
+// A head of several departments gets one context per department ("HOD - CSE").
+export function getWorkContexts(primary: UserRole, roles: readonly UserRole[] = [], hodDepartments: readonly string[] = []): WorkContext[] {
   const seats = seatRolesOf(primary, roles);
   if (seats.length === 0) return [];
   return [
-    ...seats.map((r) => ({ key: r as WorkContextKey, label: ROLE_LABELS[r] })),
+    ...seats.flatMap((r): WorkContext[] =>
+      r === "HOD" && hodDepartments.length > 1
+        ? hodDepartments.map((d) => ({ key: hodContextKey(d) as WorkContextKey, label: `${ROLE_LABELS.HOD} - ${d}` }))
+        : [{ key: r as WorkContextKey, label: ROLE_LABELS[r] }]
+    ),
     { key: "ME" as WorkContextKey, label: "My Work" },
   ];
 }
@@ -492,28 +498,19 @@ export function getWorkContexts(primary: UserRole, roles: readonly UserRole[] = 
 export function getNavItemsForContext(primary: UserRole, roles: readonly UserRole[], context: WorkContextKey): NavItem[] {
   const seats = seatRolesOf(primary, roles);
   const own = getNavItemsForRole(primary);
-  if (seats.length === 0 || context === "ME" || !seats.includes(context as UserRole)) return [...own];
+  const seatRole = (departmentOfContext(context) !== null ? "HOD" : context) as UserRole;
+  if (seats.length === 0 || context === "ME" || !seats.includes(seatRole)) return [...own];
 
   const out: NavItem[] = [];
   const seen = new Set<string>();
   const push = (item: NavItem) => { if (!seen.has(item.href)) { seen.add(item.href); out.push(item); } };
 
   let first = true;
-  for (const item of getNavItemsForRole(context as UserRole)) {
+  for (const item of getNavItemsForRole(seatRole)) {
     if (isPersonalNavItem(item)) continue;
-    push({ ...item, ...(first ? { section: ROLE_LABELS[context as UserRole] } : {}) });
+    push({ ...item, ...(first ? { section: ROLE_LABELS[seatRole] } : {}) });
     first = false;
   }
-  let firstMine = true;
-  own.forEach((item, i) => {
-    if (i !== 0 && !isPersonalNavItem(item)) return;
-    push({
-      ...item,
-      ...(firstMine ? { section: "My Work" } : {}),
-      label: i === 0 ? "My Dashboard" : item.label,
-    });
-    firstMine = false;
-  });
   return out;
 }
 
@@ -522,9 +519,10 @@ export function getNavItemsForContext(primary: UserRole, roles: readonly UserRol
 // another context (a link, a notification, the back button), in which case
 // that context, so the sidebar always contains the page they're on.
 export function resolveWorkContext(
-  primary: UserRole, roles: readonly UserRole[], chosen: string | null | undefined, pathname: string
+  primary: UserRole, roles: readonly UserRole[], chosen: string | null | undefined, pathname: string,
+  hodDepartments: readonly string[] = []
 ): WorkContextKey | null {
-  const contexts = getWorkContexts(primary, roles);
+  const contexts = getWorkContexts(primary, roles, hodDepartments);
   if (contexts.length === 0) return null;
   const base = contexts.find((c) => c.key === chosen)?.key ?? contexts[0].key;
   const owns = (key: WorkContextKey) =>
