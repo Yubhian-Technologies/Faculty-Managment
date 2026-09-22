@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import type { Firestore } from "firebase-admin/firestore";
+import { getDepartmentHeadUids } from "@/lib/notify";
 
 async function getUserName(db: Firestore, collegeId: string, uid: string): Promise<string> {
   if (!collegeId || !uid) return "Unknown";
@@ -77,7 +78,9 @@ export async function PATCH(
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
-    const vacancy = vacancySnap.data() as { hodUid: string; position: string; status?: string };
+    const vacancy = vacancySnap.data() as {
+      hodUid: string; position: string; department?: string; positionCategory?: string; status?: string;
+    };
 
     // A vacancy decision is terminal - once APPROVED/REJECTED, it can't be
     // silently re-decided by a later request (e.g. two Principal tabs, or a
@@ -125,10 +128,17 @@ export async function PATCH(
         ? `Your vacancy request for ${vacancy.position} was rejected.${reason ? ` Reason: ${reason}` : ""}`
         : `Your vacancy request for ${vacancy.position} was modified.${notes ? ` Notes: ${notes}` : ""}`;
 
-    if (vacancy.hodUid) {
+    // The department's HOD and Department Office head both act on this
+    // department's hiring, so both hear the decision - not just whoever raised it.
+    // A General Admin vacancy has no department head; it goes to its submitter only.
+    const isDeptVacancy = vacancy.positionCategory !== "GENERAL_ADMIN";
+    const recipients = await getDepartmentHeadUids(
+      db, session.collegeId, isDeptVacancy ? vacancy.department : undefined, vacancy.hodUid
+    );
+    for (const toUid of recipients) {
       await db.collection("colleges").doc(session.collegeId).collection("notifications").add({
         collegeId: session.collegeId,
-        toUid: vacancy.hodUid,
+        toUid,
         type: notifType,
         title: notifTitle,
         message: notifMessage,

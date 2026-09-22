@@ -121,12 +121,14 @@ export async function POST(request: Request) {
       timestamp: now,
     });
 
-    // Notify all Principals (and College Admins, who mirror Principal's
-    // authority - see UserRole's own doc-comment) in the college
-    const principalsSnap = await findUsersSnapshot(db, session.collegeId, ["PRINCIPAL", "COLLEGE_ADMIN"]);
+    // Notify all Principals and Vice Principals (who both decide vacancy
+    // requests) plus College Admins, who mirror Principal's authority - see
+    // UserRole's own doc-comment. Skips the submitter so a VP raising a General
+    // Admin vacancy isn't notified of their own request.
+    const principalsSnap = await findUsersSnapshot(db, session.collegeId, ["PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_ADMIN"]);
 
     const batch = db.batch();
-    for (const p of principalsSnap.docs) {
+    for (const p of principalsSnap.docs.filter((d) => d.id !== session.uid)) {
       const notifRef = db.collection("colleges").doc(session.collegeId).collection("notifications").doc();
       batch.set(notifRef, {
         collegeId: session.collegeId,

@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { RELIGION_LABELS, CASTE_LABELS, SUB_CASTES_BY_CASTE } from "@/types";
-import { PHONE_REGEX } from "@/lib/validations";
+import { PHONE_REGEX, AADHAR_REGEX, PAN_REGEX } from "@/lib/validations";
 import { StringListInput } from "@/components/shared/ProfileFieldPrimitives";
 import { migratePersonalFlat } from "@/lib/faculty/fieldRenames";
 import type { Religion, Caste } from "@/types";
@@ -96,12 +96,27 @@ const PERSONAL_FIELD_LABELS: Record<string, string> = {
   ratificationStatus: "Ratification Status",
 };
 
+// A required field that's present but doesn't match its stated format (e.g.
+// an 11-digit Aadhar No) is treated the same as a blank one - both block
+// submission, and both are named in the same "missing" list so the caller's
+// existing "please fill in: ..." message covers this too, with no separate
+// error path for every consumer to add on its own.
+const PERSONAL_FIELD_FORMATS: Partial<Record<keyof PersonalDetailsValue, RegExp>> = {
+  aadharNo: AADHAR_REGEX,
+  panNo: PAN_REGEX,
+};
+
 export function getMissingRequiredPersonalFields(
   value: PersonalDetailsValue,
   requiredFields: (keyof PersonalDetailsValue)[] = STAFF_REQUIRED_PERSONAL_FIELDS
 ): string[] {
   return requiredFields
-    .filter((key) => !String(value[key] ?? "").trim())
+    .filter((key) => {
+      const v = String(value[key] ?? "").trim();
+      if (!v) return true;
+      const format = PERSONAL_FIELD_FORMATS[key];
+      return !!format && !format.test(v);
+    })
     .map((key) => PERSONAL_FIELD_LABELS[key] ?? key);
 }
 
@@ -263,20 +278,27 @@ export function PersonalDetailsFields({ value: rawValue, onChange, requiredField
           <Label>Aadhar No{mark("aadharNo")}</Label>
           <Input
             value={value.aadharNo ?? ""}
-            onChange={(e) => set("aadharNo", e.target.value)}
-            placeholder="1234 5678 9012"
-            maxLength={14}
+            onChange={(e) => set("aadharNo", e.target.value.replace(/\D/g, "").slice(0, 12))}
+            placeholder="123456789012"
+            inputMode="numeric"
+            maxLength={12}
           />
+          {!!value.aadharNo && !AADHAR_REGEX.test(value.aadharNo) && (
+            <p className="text-xs text-destructive">Aadhar number must be exactly 12 digits</p>
+          )}
         </div>
         <div className="space-y-2">
           <Label>PAN No{mark("panNo")}</Label>
           <Input
             value={value.panNo ?? ""}
-            onChange={(e) => set("panNo", e.target.value.toUpperCase())}
+            onChange={(e) => set("panNo", e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 10))}
             placeholder="ABCDE1234F"
             maxLength={10}
             className="uppercase"
           />
+          {!!value.panNo && !PAN_REGEX.test(value.panNo) && (
+            <p className="text-xs text-destructive">PAN must be 5 letters, 4 digits, then 1 letter (e.g. ABCDE1234F)</p>
+          )}
         </div>
         <div className="space-y-2">
           <Label>Passport No</Label>
@@ -501,7 +523,13 @@ export function PersonalDetailsFields({ value: rawValue, onChange, requiredField
         </div>
         <div className="space-y-2">
           <Label>Emergency Contact Mobile No</Label>
-          <Input value={value.emergencyContactMobileNo ?? ""} onChange={(e) => set("emergencyContactMobileNo", e.target.value)} placeholder="+91 98765 43210" />
+          <Input
+            value={value.emergencyContactMobileNo ?? ""}
+            onChange={(e) => set("emergencyContactMobileNo", e.target.value.replace(/\D/g, "").slice(0, 10))}
+            placeholder="9876543210"
+            inputMode="numeric"
+            maxLength={10}
+          />
           {!!value.emergencyContactMobileNo && !PHONE_REGEX.test(value.emergencyContactMobileNo) && (
             <p className="text-xs text-destructive">Doesn&rsquo;t look like a valid phone number</p>
           )}

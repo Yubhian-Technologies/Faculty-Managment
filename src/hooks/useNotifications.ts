@@ -17,7 +17,13 @@ export function useNotifications() {
   const load = useCallback(async () => {
     // College-scoped roles carry session.collegeId; GLOBAL roles (FINANCE,
     // PURCHASE_DEPT, MANAGEMENT) need a college picked via CollegeSwitcher.
-    if (!user?.uid || (!user?.collegeId && !selectedCollegeId)) { setLoading(false); return; }
+    if (!user?.uid || (!user?.collegeId && !selectedCollegeId)) {
+      // Drop the previous user's list so it never shows under a different login.
+      setNotifications([]);
+      setUnreadCount(0);
+      setLoading(false);
+      return;
+    }
     try {
       const res = await collegeFetch("/api/college/notifications");
       if (!res.ok) return;

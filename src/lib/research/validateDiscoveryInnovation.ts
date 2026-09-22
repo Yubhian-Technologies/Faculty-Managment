@@ -9,6 +9,9 @@ interface DiscoveryInnovationRequiredFields {
   inventorsCount?: number;
   inventors?: IprInventor[];
   isStudentPatent?: "YES" | "NO";
+  studentName?: string;
+  studentRegistrationNumber?: string;
+  studentDepartment?: string;
   publishedProofUrl?: string;
   grantedProofUrl?: string;
 }
@@ -25,6 +28,11 @@ export function validateDiscoveryInnovationBody(
   if (!body.datePublished) return "Date of Published is required";
   if (iprStatus === "GRANTED" && !body.dateGranted) return "Date of Granted is required";
   if (!body.isStudentPatent) return "Student Patent is required";
+  if (body.isStudentPatent === "YES") {
+    if (!body.studentName?.trim()) return "Student Name is required for a student patent";
+    if (!body.studentRegistrationNumber?.trim()) return "Student Regd. No. is required for a student patent";
+    if (!body.studentDepartment?.trim()) return "Student Department is required for a student patent";
+  }
   if (!body.sdgGoals?.length) return "At least one SDG must be mapped";
   if (!body.applicantsCount || !body.applicants?.length) return "At least one Applicant is required";
   if (body.applicants.some((a) => !a.name?.trim())) return "Every Applicant needs a name";

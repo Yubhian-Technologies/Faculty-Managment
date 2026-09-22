@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import type { Firestore } from "firebase-admin/firestore";
+import { excludeLeadershipUids, getDepartmentHeadUids } from "@/lib/notify";
 
 async function getUserName(db: Firestore, collegeId: string, uid: string): Promise<string> {
   if (!collegeId || !uid) return "Unknown";
@@ -219,7 +220,7 @@ export async function PATCH(
 
         if (batchSnap.exists) {
           const batch = batchSnap.data() as { panelMemberUids?: string[]; position?: string };
-          const uidsToNotify = [...(batch.panelMemberUids ?? [])];
+          const uidsToNotify = await excludeLeadershipUids(db, session.collegeId, batch.panelMemberUids ?? []);
 
           const officeSnap = await collegeRef
             .collection("users")
@@ -301,12 +302,14 @@ export async function PATCH(
       const batchSnap = await batchRef.get();
 
       if (batchSnap.exists) {
-        const batch = batchSnap.data() as { hodUid?: string; position?: string };
+        const batch = batchSnap.data() as { hodUid?: string; position?: string; department?: string };
 
-        if (batch.hodUid) {
+        // Both the department's HOD and its Department Office head hear the
+        // hiring decision for their department's candidate.
+        for (const toUid of await getDepartmentHeadUids(db, session.collegeId, batch.department, batch.hodUid)) {
           await collegeRef.collection("notifications").add({
             collegeId: session.collegeId,
-            toUid: batch.hodUid,
+            toUid,
             type: status === "APPROVED" ? "HIRING_APPROVED" : "HIRING_REJECTED",
             title: status === "APPROVED" ? "Candidate Approved" : "Candidate Rejected",
             message: `${candidateName ?? "A candidate"} for ${batch.position ?? "the position"} was ${status === "APPROVED" ? "approved" : "rejected"} by the Principal.`,

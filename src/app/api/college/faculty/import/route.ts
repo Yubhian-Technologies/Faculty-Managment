@@ -10,6 +10,7 @@ import {
   GENDER_OPTIONS, RATIFICATION_STATUS_OPTIONS,
 } from "@/lib/import/fieldConstraints";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
+import { PHONE_REGEX, EMAIL_REGEX, PAN_REGEX, AADHAR_REGEX } from "@/lib/validations";
 import { getHodDepartmentScope } from "@/lib/departments/scope";
 import { normalizeHighestQualification } from "@/lib/faculty/highestQualification";
 import type { Designation } from "@/types";
@@ -215,17 +216,17 @@ export async function POST(request: Request) {
       // Name (as per PAN) is optional and independent of Full Name (as per SSC),
       // which is the only identity/display name (see finalName below) - a blank
       // PAN column is simply left unset, never filled in from legalName.
-      if (!row.collegeEmail?.trim() || !row.collegeEmail.includes("@")) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Valid College Email is required" }); continue; }
+      if (!row.collegeEmail?.trim() || !EMAIL_REGEX.test(row.collegeEmail.trim())) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Valid College Email is required (e.g. name@example.com)" }); continue; }
       if (!row.password?.trim() || row.password.trim().length < 8) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Login Password is required and must be at least 8 characters" }); continue; }
-      if (!row.mobileNo?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Mobile No is required" }); continue; }
+      if (!row.mobileNo?.trim() || !PHONE_REGEX.test(normalizeDigits(row.mobileNo) ?? "")) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Mobile No must be exactly 10 digits, starting with 6, 7, 8 or 9" }); continue; }
       if (!row.designation?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Designation is required" }); continue; }
       if (!row.highestQualification?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Highest Qualification is required" }); continue; }
       if (!row.employeeCategory?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: `Employee Category is required - ${EMPLOYEE_CATEGORY_ERROR_MESSAGE}` }); continue; }
       if (!row.joiningDate?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Date of Joining Institution is required" }); continue; }
       if (!row.gender?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Gender is required" }); continue; }
       if (!row.dateOfBirth?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Date of Birth is required" }); continue; }
-      if (!row.aadharNo?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Aadhar No is required" }); continue; }
-      if (!row.panNo?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "PAN No is required" }); continue; }
+      if (!row.aadharNo?.trim() || !AADHAR_REGEX.test(normalizeDigits(row.aadharNo) ?? "")) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Aadhar No must be exactly 12 digits" }); continue; }
+      if (!row.panNo?.trim() || !PAN_REGEX.test(row.panNo.trim().toUpperCase())) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "PAN No must be 5 letters, 4 digits, then 1 letter (e.g. ABCDE1234F)" }); continue; }
       if (!row.ratificationStatus?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Ratification Status is required" }); continue; }
 
       const empId = row.employeeId.trim();
@@ -311,7 +312,7 @@ export async function POST(request: Request) {
         nameAsPerAadhar: row.nameAsPerAadhar?.trim() || undefined,
         nameAsPerPan: row.nameAsPerPan?.trim() || undefined,
         aadharNo: normalizeDigits(row.aadharNo),
-        panNo: row.panNo.trim(),
+        panNo: row.panNo.trim().toUpperCase(),
         ratificationStatus: checkOption(row.ratificationStatus, RATIFICATION_STATUS_OPTIONS, "Ratification Status"),
       };
 
