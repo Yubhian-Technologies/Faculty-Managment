@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
-import { requireCollegeContext } from "@/lib/auth/verifySession";
+import { isCollegeAdmin, requireCollegeContext } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import type { BudgetCycle } from "@/types";
 import { resolveUserName } from "@/lib/budget/departmentScope";
@@ -40,6 +40,12 @@ export async function PATCH(
 ) {
   try {
     const session = await requireCollegeContext(request, "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");
+    // College Admin's login reads as "PRINCIPAL" too (see isCollegeAdmin), but
+    // deciding a budget cycle is Principal/VP decision authority, not College
+    // Admin's - it only enters data, adds users, and manages settings.
+    if (isCollegeAdmin(session)) {
+      return NextResponse.json({ error: "Only the Principal or Vice Principal can decide a budget cycle" }, { status: 403 });
+    }
     const { id } = await params;
     const body = (await request.json()) as { action?: "APPROVE" | "REJECT" | "RETURN"; remarks?: string };
 

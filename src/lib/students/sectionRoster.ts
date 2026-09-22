@@ -12,6 +12,19 @@ export interface SectionIdentity {
   // silently mix in the other course's students. Optional only for a legacy
   // section with no courseId yet.
   courseId?: string;
+  // When set, narrows the roster to students carrying this exact lab
+  // sub-group (see StudentRecord.labBatch), matched case/whitespace-
+  // insensitively - used when taking attendance for a split lab period
+  // (TimetableSlot.labBatch). A student with no labBatch set at all is
+  // excluded, same as one assigned to the other batch - not silently
+  // included in every batch's session. Absent for every other caller
+  // (theory periods, section-wide reports), which still see the whole roster
+  // unfiltered, exactly as before this field existed.
+  labBatch?: string;
+}
+
+function normalizeLabBatch(value: string | undefined | null): string {
+  return (value ?? "").trim().toLowerCase();
 }
 
 // The one canonical filter for "students belonging to this section" - used
@@ -56,6 +69,10 @@ export async function fetchSectionStudents(
     if (seen.has(d.id)) continue;
     seen.add(d.id);
     students.push({ id: d.id, ...d.data() } as StudentRecord & { id: string });
+  }
+  if (identity.labBatch) {
+    const wanted = normalizeLabBatch(identity.labBatch);
+    return students.filter((s) => normalizeLabBatch(s.labBatch) === wanted);
   }
   return students;
 }

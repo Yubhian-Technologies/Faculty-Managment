@@ -2,7 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { findUsersSnapshot } from "@/lib/roles/findUsersByRoles";
 import { NextResponse } from "next/server";
-import { requireCollegeMember } from "@/lib/auth/verifySession";
+import { isCollegeAdmin, requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import type { Firestore } from "firebase-admin/firestore";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
@@ -150,9 +150,12 @@ export async function PATCH(
     // only while the batch is actually sitting in PRINCIPAL_REVIEW. Without
     // this, any HOD/Panel/Office account with legitimate PATCH access to this
     // route for their own fields could flip status:"APPROVED" on their own
-    // (or anyone else's) proposal and self-approve it.
+    // (or anyone else's) proposal and self-approve it. College Admin's login
+    // reads as "PRINCIPAL" too, but it only enters data/settings - deciding
+    // this proposal is Principal/VP decision authority, so it's excluded here
+    // even though isPrincipalRole would otherwise match it.
     if (body.status !== undefined) {
-      if (!isPrincipalRole) {
+      if (!isPrincipalRole || isCollegeAdmin(session)) {
         return NextResponse.json({ error: "Only the Principal can approve, reject, or modify this proposal" }, { status: 403 });
       }
       if (batchData.currentPhase !== "PRINCIPAL_REVIEW") {

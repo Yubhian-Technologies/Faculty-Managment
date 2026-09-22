@@ -151,7 +151,11 @@ export const NAV_ITEMS: NavItem[] = [
   // are folded into the Hiring Requests pipeline's own status badges/actions
   // (see PrincipalPipelineBoard.tsx) since they're just later stages of the
   // same hiring request, not independent destinations.
-  { label: "Hiring Requests", href: "/principal/vacancies", iconName: "ClipboardList", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Hiring Pipeline" },
+  // Vacancy/interview/candidate decisions live here end-to-end - College Admin
+  // enters data and settings but never decides, so the whole board is Principal/
+  // Vice Principal only (see NavItem.hideForRealRoles and the matching API
+  // guards in vacancy-requests, hiring-batches, and candidate-applications).
+  { label: "Hiring Requests", href: "/principal/vacancies", iconName: "ClipboardList", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Hiring Pipeline", hideForRealRoles: ["COLLEGE_ADMIN"] },
   { label: "Courses", href: "/principal/courses", iconName: "GraduationCap", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Academic Management" },
   { label: "Departments", href: "/principal/departments", iconName: "BookOpen", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   // College-wide, read-only view of every section. A College Admin reaches it
@@ -165,7 +169,9 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Student Attendance History", href: "/principal/attendance-history", iconName: "CalendarCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Internal Marks", href: "/principal/internal-marks", iconName: "ClipboardCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Staff", href: "/principal/staff", iconName: "UsersRound", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Staff & HR Management" },
-  { label: "Leave Approvals", href: "/principal/leave-approvals", iconName: "CalendarClock", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
+  // Deciding a leave request is Principal/VP authority, not College Admin's -
+  // see the matching guard in api/leave/applications/[id]/route.ts.
+  { label: "Leave Approvals", href: "/principal/leave-approvals", iconName: "CalendarClock", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], hideForRealRoles: ["COLLEGE_ADMIN"] },
   { label: "Leave History", href: "/principal/leave-history", iconName: "History", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   // Arrange cover for someone below them (Vice Principal / Academics / HODs) who has
   // other work on a date or range - see StaffAdjustmentsPage.
@@ -173,13 +179,19 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Attendance Report", href: "/principal/attendance-report", iconName: "ClipboardCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   // Views whether faculty submitted student attendance for their scheduled
   // periods, and whether it was on time - distinct from "Attendance Report"
-  // above (staff self check-in/out). Hidden from COLLEGE_ADMIN even though it
-  // shares every other Principal item (see NavItem.hideForRealRoles).
-  { label: "Attendance Completion", href: "/principal/attendance-completion", iconName: "ClipboardCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], hideForRealRoles: ["COLLEGE_ADMIN"] },
+  // above (staff self check-in/out). College Admin needs this to chase
+  // whoever hasn't logged it yet, so unlike the other Principal-decision
+  // items on this page it stays visible to them (see NavItem.hideForRealRoles).
+  { label: "Attendance Completion", href: "/principal/attendance-completion", iconName: "ClipboardCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Import Attendance", href: "/principal/attendance-import", iconName: "Upload", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
-  { label: "Budget", href: "/principal/budget", iconName: "PiggyBank", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Payroll & Budget" },
+  // Budget-cycle and budget-request approval is Principal/VP decision
+  // authority, not College Admin's - see the matching guards in
+  // api/college/budget-cycles/[id] and api/college/budget-requests/[id].
+  { label: "Budget", href: "/principal/budget", iconName: "PiggyBank", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Payroll & Budget", hideForRealRoles: ["COLLEGE_ADMIN"] },
   { label: "Budget Report", href: "/principal/budget/report", iconName: "FileText", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
-  { label: "Purchase Clearance", href: "/principal/purchase-clearance", iconName: "Receipt", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
+  // Only ever shows the Principal/VP's OWN emergency purchase requests - not
+  // something College Admin should be raising on the college's behalf either.
+  { label: "Purchase Clearance", href: "/principal/purchase-clearance", iconName: "Receipt", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], hideForRealRoles: ["COLLEGE_ADMIN"] },
   { label: "Budget History", href: "/principal/indents", iconName: "ClipboardList", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   // College Admin is a role-login, not one continuous employee (see
   // administration/college-people): no personal HR profile, attendance, or
@@ -358,6 +370,13 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Student Attendance", href: "/panel/mark-attendance", iconName: "CalendarCheck", roles: ["PANEL_MEMBER"] },
   { label: "Attendance Report", href: "/panel/monthly-records", iconName: "CalendarRange", roles: ["PANEL_MEMBER"] },
   { label: "Students", href: "/panel/students", iconName: "GraduationCap", roles: ["PANEL_MEMBER"] },
+  // Dividing a section's own roster into lab sub-groups (StudentRecord.
+  // labBatch) - only meaningful once this login is Faculty Incharge of at
+  // least one section (see Section.facultyInchargeUid); the page itself shows
+  // an empty state otherwise, same convention as the entries above. HOD-only
+  // by design elsewhere (hod/students' per-student Edit dialog) - this is the
+  // Faculty Incharge's own equivalent, not offered to HOD here.
+  { label: "Lab Batches", href: "/panel/students/batches", iconName: "Layers", roles: ["PANEL_MEMBER"] },
   { label: "My Feedback", href: "/panel/feedback", iconName: "MessageSquare", roles: ["PANEL_MEMBER"] },
   { label: "Leave", href: "/panel/leave", iconName: "CalendarClock", roles: ["PANEL_MEMBER"], section: "Leave & Attendance" },
   { label: "Adjustment Requests", href: "/leave/adjustments", iconName: "UserCheck", roles: ["PANEL_MEMBER"] },
@@ -717,7 +736,9 @@ export const BOTTOM_NAV_ITEMS: Record<UserRole, NavItem[]> = {
   ],
   PRINCIPAL: [
     { label: "Home", href: "/principal", iconName: "LayoutDashboard", roles: ["PRINCIPAL"] },
-    { label: "Vacancies", href: "/principal/vacancies", iconName: "ClipboardList", roles: ["PRINCIPAL"] },
+    // Deciding a hiring request is Principal/VP authority, not College
+    // Admin's - same exclusion as the sidebar's "Hiring Requests" item above.
+    { label: "Vacancies", href: "/principal/vacancies", iconName: "ClipboardList", roles: ["PRINCIPAL"], hideForRealRoles: ["COLLEGE_ADMIN"] },
     { label: "Faculty", href: "/principal/faculty", iconName: "UsersRound", roles: ["PRINCIPAL"] },
     { label: "Profile", href: "/principal/profile", iconName: "UserCircle", roles: ["PRINCIPAL"] },
     // { label: "Staff", href: "/principal/staff", iconName: "UsersRound", roles: ["PRINCIPAL"] },

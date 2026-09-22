@@ -88,6 +88,7 @@ export default function HodStudentsPage() {
   const [editTarget, setEditTarget] = useState<StudentRow | null>(null);
   const [editRoll, setEditRoll] = useState("");
   const [editStatus, setEditStatus] = useState("REGULAR");
+  const [editLabBatch, setEditLabBatch] = useState("");
   const [isSavingEdit, setIsSavingEdit] = useState(false);
 
   // Per-student section assignment - the same move the bulk Distribute dialog
@@ -450,6 +451,21 @@ export default function HodStudentsPage() {
     [assignTargetSections, departments]
   );
 
+  // Existing lab-batch labels already in use in this student's own section -
+  // offered as datalist suggestions so a second student gets typed in as
+  // exactly "Batch 1" again rather than a near-miss ("batch1", "Batch  1")
+  // that would silently exclude them from that batch's attendance roster
+  // (labBatch match is case/whitespace-insensitive, but only once it's an
+  // exact word-for-word match otherwise - see sectionRoster.ts).
+  const editLabBatchSuggestions = useMemo(() => {
+    if (!editTarget) return [];
+    const labels = students
+      .filter((s) => s.department === editTarget.department && s.section === editTarget.section && s.year === editTarget.year)
+      .map((s) => (s.labBatch as string | undefined)?.trim())
+      .filter((v): v is string => !!v);
+    return Array.from(new Set(labels)).sort();
+  }, [editTarget, students]);
+
   // The cohort action belongs to the main HOD of a shared first-year department
   // only - a core branch HOD sections their own students with the per-department
   // dialog. Derived with the same helper the API uses, so both agree.
@@ -532,6 +548,7 @@ export default function HodStudentsPage() {
     setEditTarget(student);
     setEditRoll(student.rollNumber ?? "");
     setEditStatus(student.status ?? "REGULAR");
+    setEditLabBatch((student.labBatch as string | undefined) ?? "");
   }
 
   function openAssign(student: StudentRow) {
@@ -591,7 +608,7 @@ export default function HodStudentsPage() {
       const res = await fetch(`/api/college/students/${editTarget.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rollNumber: editRoll.trim(), status: editStatus }),
+        body: JSON.stringify({ rollNumber: editRoll.trim(), status: editStatus, labBatch: editLabBatch.trim() }),
       });
       const json = await res.json() as { error?: string };
       if (!res.ok) throw new Error(json.error ?? "Failed to update student");
@@ -704,6 +721,17 @@ export default function HodStudentsPage() {
       render: (r) => <Badge variant={STATUS_VARIANTS[r.status] ?? "secondary"}>{r.status}</Badge>,
     },
     {
+      key: "labBatch",
+      header: "Lab Batch",
+      hideOnMobile: true,
+      // Which split-lab sub-group this student sits in (see
+      // StudentRecord.labBatch's own doc-comment) - blank until the HOD
+      // manually assigns one via the row's Edit action.
+      render: (r) => r.labBatch
+        ? <span className="text-sm text-muted-foreground">{r.labBatch}</span>
+        : <span className="text-sm text-muted-foreground/40">—</span>,
+    },
+    {
       key: "actions",
       header: "",
       render: (r) => (
@@ -721,7 +749,7 @@ export default function HodStudentsPage() {
           <Button variant="ghost" size="sm" onClick={() => openAssign(r)} title={r.section ? "Move to a different section" : "Assign to a section"}>
             <ArrowRightLeft className="h-3.5 w-3.5" />
           </Button>
-          <Button variant="ghost" size="sm" onClick={() => openEdit(r)} title="Set roll number / status">
+          <Button variant="ghost" size="sm" onClick={() => openEdit(r)} title="Set roll number / status / lab batch">
             <Pencil className="h-3.5 w-3.5" />
           </Button>
         </div>
@@ -1049,6 +1077,24 @@ export default function HodStudentsPage() {
                   <SelectItem value="DETAINED">Detained</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-lab-batch">Lab Batch</Label>
+              <Input
+                id="edit-lab-batch"
+                list="edit-lab-batch-suggestions"
+                value={editLabBatch}
+                onChange={(e) => setEditLabBatch(e.target.value)}
+                placeholder="e.g. Batch 1"
+                autoComplete="off"
+              />
+              <datalist id="edit-lab-batch-suggestions">
+                {editLabBatchSuggestions.map((label) => <option key={label} value={label} />)}
+              </datalist>
+              <p className="text-xs text-muted-foreground">
+                Which split-lab sub-group this student sits in for a PRACTICAL subject - must match the batch
+                label on the Timetable exactly. Leave blank if this section's labs aren&rsquo;t split.
+              </p>
             </div>
           </div>
           <DialogFooter>

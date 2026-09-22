@@ -4,7 +4,7 @@ import { cn, stripLeadingZeros } from "@/lib/utils";
 export interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {}
 
 const Input = React.forwardRef<HTMLInputElement, InputProps>(
-  ({ className, type, onChange, onFocus, ...props }, ref) => {
+  ({ className, type, onChange, onFocus, onWheel, ...props }, ref) => {
     // Numeric fields across the app initialise to 0, so the box reads "0"
     // before anything is typed and the first keystroke appends to it ("0" +
     // "5" = "05"). Two guards, because neither covers the problem alone:
@@ -48,6 +48,18 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
           if (type === "number") e.target.select();
           onFocus?.(e);
         }}
+        // Scrolling the page with the cursor over a focused number input
+        // makes the browser treat the wheel as a spinner drag and silently
+        // change the value. Blurring on wheel lets the page scroll normally
+        // instead, and only the value is ever set by typing.
+        onWheel={
+          type === "number"
+            ? (e) => {
+                e.currentTarget.blur();
+                onWheel?.(e);
+              }
+            : onWheel
+        }
         {...props}
       />
     );

@@ -50,6 +50,7 @@ export async function GET() {
       subjectName: current.slot.subjectName,
       subjectCode: assignment.subjectCode ?? "",
       classroom: current.slot.classroom ?? null,
+      labBatch: current.slot.labBatch ?? null,
     });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
