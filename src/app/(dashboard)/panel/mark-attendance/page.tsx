@@ -32,6 +32,7 @@ interface CurrentPeriodInfo {
   subjectId?: string;
   subjectName?: string;
   subjectCode?: string;
+  labBatch?: string | null;
 }
 
 function todayStr(): string {
@@ -273,7 +274,15 @@ export default function MarkAttendancePage() {
                   </div>
                   <div>
                     <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Subject</p>
-                    <p className="mt-1 text-sm font-semibold">{currentPeriod.subjectName || "—"}</p>
+                    <p className="mt-1 text-sm font-semibold">
+                      {currentPeriod.subjectName || "—"}
+                      {currentPeriod.labBatch ? ` (${currentPeriod.labBatch})` : ""}
+                    </p>
+                    {currentPeriod.labBatch && (
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        Split lab period - roster is only this batch, not the whole section.
+                      </p>
+                    )}
                   </div>
                   <div>
                     <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Course</p>

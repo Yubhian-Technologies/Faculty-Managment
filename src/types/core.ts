@@ -2615,6 +2615,17 @@ export interface StudentRecord {
   // session 2025 gives "2025-2028", not "2024-2028". See
   // lib/college/academicSession.ts's lateralEntryBatch.
   batch?: string;
+  // Which lab sub-group this student sits in for their section's split
+  // PRACTICAL periods (see TimetableSlot.labBatch), e.g. "Batch 1" - free
+  // text, manually set per student by the HOD (hod/students page), matched
+  // case/whitespace-insensitively against the period's own labBatch label
+  // when a lab period's attendance roster is filtered (sectionRoster.ts).
+  // Unrelated to `batch` above (admission cohort). Absent for a student not
+  // yet assigned, or in a section with no split lab periods at all - such a
+  // student won't appear in ANY batch-filtered attendance session until
+  // assigned, so an unassigned student is a gap the HOD needs to notice and
+  // fill in, not something the system guesses.
+  labBatch?: string;
   // ─── Admission-detail fields ────────────────────────────────────────────
   // All optional, all set only via the College Office bulk import (see
   // src/lib/students/importRow.ts) - there is no per-student edit form for

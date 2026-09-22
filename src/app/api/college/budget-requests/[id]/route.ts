@@ -2,7 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { findUsersSnapshot } from "@/lib/roles/findUsersByRoles";
 import { NextResponse } from "next/server";
-import { requireCollegeContext } from "@/lib/auth/verifySession";
+import { isCollegeAdmin, requireCollegeContext } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import type { BudgetCategoryGroup, BudgetRequest } from "@/types";
 import { budgetRequestTotal, normalizeBudgetRequest } from "@/types";
@@ -158,6 +158,7 @@ export async function PATCH(
 
     if (
       (session.role === "PRINCIPAL" || session.role === "VICE_PRINCIPAL") &&
+      !isCollegeAdmin(session) &&
       req.isEmergency &&
       req.hodUid === session.uid &&
       req.status === "RETURNED_TO_PRINCIPAL"
@@ -221,8 +222,12 @@ export async function PATCH(
     }
 
     // ── Principal verifies (L1 freeze) / rejects / returns ──────────────────
+    // College Admin's login reads as "PRINCIPAL" too (see isCollegeAdmin), but
+    // deciding a budget request is Principal/VP decision authority, not
+    // College Admin's - excluded here, falling through to the generic
+    // "Action not permitted" response below like any other wrong-role caller.
 
-    if (session.role === "PRINCIPAL" || session.role === "VICE_PRINCIPAL") {
+    if ((session.role === "PRINCIPAL" || session.role === "VICE_PRINCIPAL") && !isCollegeAdmin(session)) {
       if (req.status !== "PENDING_PRINCIPAL_VERIFICATION") {
         return NextResponse.json({ error: "Action not permitted in current state." }, { status: 409 });
       }

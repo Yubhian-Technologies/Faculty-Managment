@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
-import { requireCollegeMember } from "@/lib/auth/verifySession";
+import { isCollegeAdmin, requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import type { Firestore } from "firebase-admin/firestore";
 import { getDepartmentHeadUids } from "@/lib/notify";
@@ -51,6 +51,12 @@ export async function PATCH(
 ) {
   try {
     const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");
+    // College Admin's login reads as "PRINCIPAL" (see isCollegeAdmin), but
+    // deciding a hiring request is Principal/VP decision authority, not
+    // College Admin's - it only enters data, adds users, and manages settings.
+    if (isCollegeAdmin(session)) {
+      return NextResponse.json({ error: "Only the Principal or Vice Principal can decide a hiring request" }, { status: 403 });
+    }
     const { id } = await params;
     const body = (await request.json()) as {
       status: string;
