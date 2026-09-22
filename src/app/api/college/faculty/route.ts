@@ -54,7 +54,18 @@ export async function GET(request: Request) {
     // belong to that department (or a sub-department/managed branch it fully
     // owns).
     if (session.role === "HOD") {
-      const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
+      // A `department` param means a caller already knows exactly which
+      // department it needs (a picker - e.g. hod/timetable's Assign
+      // Timetable Incharge dialog, or TeachingAssignmentsEditor staffing a
+      // subject - both filter/trust the result down to that one department
+      // themselves). Use the HOD's FULL scope there (activeOnly: false), not
+      // just whichever department happens to be active in the Working-as
+      // switcher - otherwise the picker silently comes back empty for a
+      // department the HOD legitimately manages but isn't "working as" right
+      // now. The ambient roster (no `department` param, e.g. hod/faculty)
+      // keeps the Working-as narrowing so switching context actually
+      // isolates that view, as intended.
+      const scope = await getHodDepartmentScope(db, session.collegeId, session.uid, { activeOnly: !deptFilter });
       if (scope.ownDepartmentNames.length > 0) {
         primaryQuery = primaryQuery.where("department", "in", scope.ownDepartmentNames.slice(0, 30));
       } else {

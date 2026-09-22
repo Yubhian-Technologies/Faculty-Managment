@@ -129,7 +129,7 @@ export default function HODTimetableSectionsPage() {
         .then((d) => (d.faculty ?? [])
           .filter((f) => f.status === "ACTIVE" && f.department === departmentName)
           .map((f): InchargeCandidate => ({ id: f.id, name: facultyDisplayName(f), userUid: f.userUid, personType: "FACULTY" }))),
-      fetch("/api/college/supporting-staff?staffCategory=TECHNICAL")
+      fetch(`/api/college/supporting-staff?staffCategory=TECHNICAL&department=${encodeURIComponent(departmentName)}`)
         .then((r) => r.json() as Promise<{ staff: SupportingStaffMember[] }>)
         .then((d) => (d.staff ?? [])
           .filter((s) => s.status === "ACTIVE" && s.department === departmentName)
