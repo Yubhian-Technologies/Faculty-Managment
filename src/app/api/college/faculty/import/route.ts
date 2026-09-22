@@ -11,13 +11,14 @@ import {
 } from "@/lib/import/fieldConstraints";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
 import { PHONE_REGEX, EMAIL_REGEX, PAN_REGEX, AADHAR_REGEX } from "@/lib/validations";
-import { getHodDepartmentScope } from "@/lib/departments/scope";
+import { getHodDepartmentScope, facultyManageableDepartmentNames } from "@/lib/departments/scope";
 import { normalizeHighestQualification } from "@/lib/faculty/highestQualification";
 import type { Designation } from "@/types";
 import { EMPLOYEE_CATEGORY_LABELS, EMPLOYEE_CATEGORY_VALUES, EMPLOYEE_CATEGORY_ERROR_MESSAGE } from "@/types";
 
 type ImportRow = {
   employeeId: string;
+  departmentCode?: string;
   legalName: string;
   nameAsPerPan?: string;
   collegeEmail: string;
@@ -73,7 +74,7 @@ function parseDate(v: string | undefined): Date | undefined {
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");
-    const body = (await request.json()) as { records: ImportRow[]; department?: string };
+    const body = (await request.json()) as { records: ImportRow[] };
 
     if (!body.records || !Array.isArray(body.records) || body.records.length === 0) {
       return NextResponse.json({ error: "No records provided" }, { status: 400 });
@@ -86,53 +87,59 @@ export async function POST(request: Request) {
     const db = getAdminDb();
     const collegeId = session.collegeId;
 
-    // Resolve the batch's department. This template has no Department column
-    // at all (see HINTS: "Department is auto-assigned from your HOD profile")
-    // - there's no per-row value to fall back on, so it has to be resolved
-    // once for the whole file. Silently falling back to "" previously created
-    // faculty with no department at all - invisible on every department's
-    // Faculty list (including their own), since every list there is scoped
-    // by an exact department match.
-    let hodDept = body.department?.trim() ?? "";
+    // Every department this account may import faculty into, resolved once
+    // up front: an HOD's own department(s) plus true sub-departments
+    // (facultyManageableDepartmentNames - never a managed/grouped branch,
+    // which stays that branch's own dedicated HOD's roster); Principal/Vice
+    // Principal/Super Admin may import into any department in the college.
+    // Matched per-row below against the template's "Dept Code" column, so one
+    // file can cover more than one department instead of the whole batch
+    // landing in a single department picked up front.
+    const deptsSnap = await db.collection("colleges").doc(collegeId).collection("departments").get();
+    const allDepartments = deptsSnap.docs.map((d) => d.data() as { name?: string; code?: string });
+
+    let manageableDepartments: { name: string; code: string }[];
     if (session.role === "HOD") {
       const scope = await getHodDepartmentScope(db, collegeId, session.uid);
-      if (hodDept && !scope.ownDepartmentNames.includes(hodDept)) {
-        return NextResponse.json({ error: "That department is not yours" }, { status: 403 });
-      }
-      if (!hodDept && scope.ownDepartmentNames.length > 1) {
-        return NextResponse.json(
-          { error: "You manage more than one department - choose which department this import belongs to" },
-          { status: 400 }
-        );
-      }
-      if (!hodDept) hodDept = scope.ownDepartmentNames[0] ?? "";
-      if (!hodDept) {
+      const manageableNames = new Set(facultyManageableDepartmentNames(scope));
+      manageableDepartments = allDepartments
+        .filter((d): d is { name: string; code: string } => !!d.name && !!d.code && manageableNames.has(d.name));
+      if (manageableDepartments.length === 0) {
         return NextResponse.json({ error: "Your account has no department set - ask your Principal to assign one before importing faculty" }, { status: 400 });
       }
     } else {
-      // Principal / Vice Principal / College Admin (normalized to Principal
-      // via its seat) / Super Admin have no department of their own to fall
-      // back on, so they must say which one this whole batch belongs to -
-      // validated against the college's real department list, same as
-      // choosing one in the manual Add Faculty form would require. Every
-      // existing faculty/user doc's own `department` field holds the
-      // department's short `code` ("CSE"), not its full `name`
-      // ("Computer Science and Engineering") - see getHodDepartmentScope,
-      // which just trusts whatever string is already on the user doc - so a
-      // batch stored under the full name would be invisible on every
-      // CSE-scoped list. Accept either, but only ever store the code.
-      if (!hodDept) {
-        return NextResponse.json({ error: "Choose which department this import belongs to" }, { status: 400 });
+      manageableDepartments = allDepartments
+        .filter((d): d is { name: string; code: string } => !!d.name && !!d.code);
+    }
+    const departmentsByCode = new Map(manageableDepartments.map((d) => [d.code.toLowerCase(), d]));
+
+    // Resolves one row's Dept Code cell to the department it should be filed
+    // under. An HOD's rows are stored by department NAME (matches every
+    // existing HOD-created faculty record and the scoping queries in
+    // lib/departments/scope.ts); Principal/Vice Principal/College Admin
+    // (normalized to Principal via its seat)/Super Admin have no department
+    // of their own, so their rows are stored by the department's short CODE
+    // instead - matching how the manual Add Faculty form and every existing
+    // Principal-created faculty/user doc already store it.
+    function resolveRowDepartment(raw: string | undefined): { name: string } | { error: string } {
+      const code = raw?.trim();
+      if (!code) {
+        // A single-department HOD needs no Dept Code at all - same implicit
+        // default the manual Add Faculty form's single-department case uses.
+        if (session.role === "HOD" && manageableDepartments.length === 1) {
+          return { name: manageableDepartments[0].name };
+        }
+        return { error: `Dept Code is required - one of: ${manageableDepartments.map((d) => d.code).join(", ")}` };
       }
-      const deptsSnap = await db.collection("colleges").doc(collegeId).collection("departments").get();
-      const match = deptsSnap.docs.find((d) => {
-        const data = d.data() as { name?: string; code?: string };
-        return data.name === hodDept || data.code === hodDept;
-      });
-      if (!match) {
-        return NextResponse.json({ error: `"${hodDept}" is not one of this college's departments` }, { status: 400 });
+      const matched = departmentsByCode.get(code.toLowerCase());
+      if (!matched) {
+        return {
+          error: session.role === "HOD"
+            ? `"${code}" is not one of your departments (${manageableDepartments.map((d) => d.code).join(", ")})`
+            : `"${code}" is not one of this college's departments`,
+        };
       }
-      hodDept = (match.data() as { code?: string }).code || hodDept;
+      return { name: session.role === "HOD" ? matched.name : matched.code };
     }
 
     // Load existing employeeIds/collegeEmails to detect duplicates - lowercased,
@@ -228,6 +235,8 @@ export async function POST(request: Request) {
       if (!row.aadharNo?.trim() || !AADHAR_REGEX.test(normalizeDigits(row.aadharNo) ?? "")) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Aadhar No must be exactly 12 digits" }); continue; }
       if (!row.panNo?.trim() || !PAN_REGEX.test(row.panNo.trim().toUpperCase())) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "PAN No must be 5 letters, 4 digits, then 1 letter (e.g. ABCDE1234F)" }); continue; }
       if (!row.ratificationStatus?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Ratification Status is required" }); continue; }
+      const deptResolution = resolveRowDepartment(row.departmentCode);
+      if ("error" in deptResolution) { failed.push({ row: rowNum, employeeId: row.employeeId, error: deptResolution.error }); continue; }
 
       const empId = row.employeeId.trim();
       if (existingIds.has(empId.toLowerCase())) {
@@ -352,7 +361,7 @@ export async function POST(request: Request) {
       const payload: Record<string, unknown> = {
         userUid,
         collegeId,
-        department: hodDept,
+        department: deptResolution.name,
         employeeId: empId,
         // Name (as per PAN) is stored by buildPersonalDetailsUpdate below
         // (nameAsPerPan), verbatim and only when given. The display name is
@@ -385,7 +394,7 @@ export async function POST(request: Request) {
           name: finalName,
           email: loginEmail,
           role: "PANEL_MEMBER",
-          department: hodDept,
+          department: deptResolution.name,
           isActive: true,
           createdAt: now,
           updatedAt: now,

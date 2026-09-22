@@ -32,6 +32,7 @@ import { designationLabel } from "@/lib/designations/config";
 import { useAuthStore } from "@/store/authStore";
 import { toast } from "@/hooks/useToast";
 import { useMyDepartments } from "@/hooks/useMyDepartments";
+import { facultyDepartmentOptions } from "@/lib/departments/facultyDepartmentOptions";
 import type { FacultyProfileFields } from "@/types";
 
 // Sentinel for the "Others" row - never stored, it just switches the field to
@@ -114,16 +115,19 @@ export default function NewFacultyPage() {
   // HOD) is unaffected.
   const isCollegeLevel =
     user?.role === "PRINCIPAL" || user?.role === "VICE_PRINCIPAL" || ownDepartments.length === 0;
-  const [collegeDepartments, setCollegeDepartments] = useState<string[]>([]);
+  // Fetched for every HOD too now, not just college-level - see
+  // facultyDepartmentOptions' own doc-comment on why ownDepartments alone
+  // isn't enough to offer a parent HOD's sub-departments here.
+  const [allDepartments, setAllDepartments] = useState<{ id: string; name: string; code: string; parentDepartmentId?: string; isActive?: boolean }[]>([]);
   useEffect(() => {
-    if (!isCollegeLevel) return;
     fetch("/api/college/departments")
-      .then((r) => r.json() as Promise<{ departments?: { name: string; isActive?: boolean }[] }>)
-      .then((d) => setCollegeDepartments((d.departments ?? []).filter((dep) => dep.isActive !== false).map((dep) => dep.name)))
+      .then((r) => r.json() as Promise<{ departments?: { id: string; name: string; code: string; parentDepartmentId?: string; isActive?: boolean }[] }>)
+      .then((d) => setAllDepartments((d.departments ?? []).filter((dep) => dep.isActive !== false)))
       .catch(() => { /* picker stays empty */ });
-  }, [isCollegeLevel]);
-  const myDepartments = isCollegeLevel ? collegeDepartments : ownDepartments;
-  const mustPickDepartment = isCollegeLevel || ownDepartments.length > 1;
+  }, []);
+  const myDepartments = isCollegeLevel
+    ? allDepartments.map((d) => d.name)
+    : facultyDepartmentOptions(allDepartments, ownDepartments).map((d) => d.name);
   const listPath = isCollegeLevel ? "/principal/faculty" : "/hod/faculty";
 
   // Reached from the Faculty Register's "Sub-Department HODs" card when that
@@ -152,6 +156,13 @@ export default function NewFacultyPage() {
   // implicitly. Passed to TeachingAssignmentsEditor so its Year options are
   // scoped to THIS department's own Course Year Timings.
   const effectiveDepartment = isLinkMode ? linkDepartment : (department || myDepartments[0] || "");
+  // Pre-fills the now-always-visible Department picker once there's exactly
+  // one real choice, so a genuinely single-department HOD still sees it
+  // filled in without an extra click - only a real choice (more than one
+  // option) is left for them to actually make.
+  useEffect(() => {
+    if (!isLinkMode && !department && myDepartments.length === 1) setDepartment(myDepartments[0]);
+  }, [isLinkMode, department, myDepartments]);
   const [teachingRows, setTeachingRows] = useState<StagedTeachingRow[]>([]);
   // Extra contact numbers beyond the primary Mobile No below - each with an
   // optional freeform label (e.g. "Personal", or just whoever's number it
@@ -264,10 +275,10 @@ export default function NewFacultyPage() {
     // Which department this faculty member belongs to isn't in the zod
     // schema (link mode ignores it entirely - the department is already
     // fixed to linkDepartment) - checked here instead, same pattern as
-    // College Email/Password below. Only actually required once this HOD
-    // heads more than one department; a single-department HOD never sees
-    // the picker and the server falls back to their one department itself.
-    if (!isLinkMode && mustPickDepartment && !department) {
+    // College Email/Password below. Auto-filled above once there's exactly
+    // one real choice, so this only actually blocks submission when there's
+    // more than one department to pick from and none has been picked yet.
+    if (!isLinkMode && !department) {
       setErroredSteps(new Set<WizardStepKey>(["core"]));
       setStepIndex(steps.findIndex((s) => s.key === "core"));
       toast({ variant: "destructive", title: "Some required fields are missing", description: "Identity & Employment: Department" });
@@ -458,14 +469,16 @@ export default function NewFacultyPage() {
                   </div>
                 )}
 
-                {/* Only shown when this HOD heads more than one department at
-                    once - a single-department HOD's own department is always
-                    implicit, same as before. Placed right after identity,
-                    before Role/Employment Details, since it decides which
-                    department's register this faculty member is filed under -
-                    the same slot the read-only version above shows for a
-                    Sub-HOD link. */}
-                {!isLinkMode && mustPickDepartment && (
+                {/* Always shown (outside link mode) so there's always a real
+                    way to say which department a new faculty member belongs
+                    to - including a sub-department, which a parent HOD who
+                    owns only one top-level department still fully manages
+                    the faculty roster of (see facultyDepartmentOptions).
+                    Placed right after identity, before Role/Employment
+                    Details, since it decides which department's register
+                    this faculty member is filed under - the same slot the
+                    read-only version above shows for a Sub-HOD link. */}
+                {!isLinkMode && (
                   <div className="space-y-2">
                     <Label>Department *</Label>
                     <Select value={department} onValueChange={setDepartment}>
@@ -474,7 +487,13 @@ export default function NewFacultyPage() {
                         {myDepartments.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
                       </SelectContent>
                     </Select>
-                    <p className="text-xs text-muted-foreground">{isCollegeLevel ? "Choose the department this faculty member belongs to." : "You manage more than one department - choose which one this faculty member belongs to."}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {isCollegeLevel
+                        ? "Choose the department this faculty member belongs to."
+                        : myDepartments.length > 1
+                        ? "You manage more than one department (including sub-departments) - choose which one this faculty member belongs to."
+                        : "This faculty member's department."}
+                    </p>
                   </div>
                 )}
 

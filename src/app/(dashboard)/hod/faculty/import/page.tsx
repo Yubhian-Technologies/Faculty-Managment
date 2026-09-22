@@ -7,7 +7,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
@@ -20,6 +19,7 @@ import { EMPLOYEE_CATEGORY_LABELS } from "@/types";
 import { matchOption } from "@/lib/import/fieldConstraints";
 import { getFacultyImportColumns, getFacultyImportHints, getFacultyImportSampleRows } from "@/lib/faculty/csvColumns";
 import { useMyDepartments } from "@/hooks/useMyDepartments";
+import { facultyDepartmentOptions } from "@/lib/departments/facultyDepartmentOptions";
 import { Download, Upload, CheckCircle2, XCircle, FileSpreadsheet, ArrowLeft, AlertTriangle, Pencil } from "lucide-react";
 
 type ParsedRow = Record<string, string>;
@@ -63,35 +63,30 @@ export default function FacultyImportPage() {
   const [failedRows, setFailedRows] = useState<FailedRow[]>([]);
   const user = useAuthStore((s) => s.user);
   const isHod = user?.role === "HOD";
-  const myDepartments = useMyDepartments();
-  // The template has no per-row Department column - every row in one import
-  // lands in the same department - so an HOD running more than one must say
-  // which one up front, same rule the API enforces.
-  const [importDepartment, setImportDepartment] = useState("");
-  // Principal / Vice Principal / College Admin have no department of their
-  // own to fall back on (unlike an HOD), so they choose from the college's
-  // full department list instead - same rule the API enforces. Every
-  // existing faculty/user doc stores the department's short `code` ("CSE"),
-  // not its full `name` ("Computer Science and Engineering"), so the code is
-  // what's actually submitted - the full name is shown only as the label.
-  const [collegeDepartments, setCollegeDepartments] = useState<{ code: string; name: string }[]>([]);
+  const ownDepartments = useMyDepartments();
+  // Every department this account may import faculty into - an HOD's own
+  // department(s) plus true sub-departments (facultyDepartmentOptions), or
+  // any department in the college for Principal/Vice Principal/Super Admin.
+  // Shown so the uploader knows which codes to type into each row's own
+  // "Dept Code" column - one file can now cover more than one of these at
+  // once instead of the whole batch landing in a single department picked
+  // up front.
+  const [allDepartments, setAllDepartments] = useState<{ id: string; name: string; code: string; parentDepartmentId?: string; isActive?: boolean }[]>([]);
   useEffect(() => {
-    if (isHod) return;
     void (async () => {
       try {
         const res = await fetch("/api/college/departments");
-        const data = await res.json() as { departments?: { name?: string; code?: string }[] };
-        setCollegeDepartments(
-          (data.departments ?? [])
-            .filter((d): d is { name: string; code: string } => !!d.name && !!d.code)
-        );
+        const data = await res.json() as { departments?: typeof allDepartments };
+        setAllDepartments((data.departments ?? []).filter((d) => d.isActive !== false));
       } catch {
-        // Non-fatal - the picker just stays empty and the API rejects on submit.
+        // Non-fatal - the info panel just stays empty and the API still enforces this.
       }
     })();
-  }, [isHod]);
-  const departmentOptions = isHod ? myDepartments.map((d) => ({ code: d, name: d })) : collegeDepartments;
-  const needsDepartmentPicker = isHod ? myDepartments.length > 1 : true;
+  }, []);
+  const importableDepartments = isHod
+    ? facultyDepartmentOptions(allDepartments, ownDepartments)
+    : allDepartments.map((d) => ({ id: d.id, name: d.name, code: d.code }));
+  const departmentCodeOptions = importableDepartments.map((d) => d.code);
 
   // A two-sheet .xlsx rather than a flat CSV, matching the Supporting Staff
   // importer: sheet one is the template to fill in (headers + the per-column
@@ -210,10 +205,6 @@ export default function FacultyImportPage() {
 
   async function handleImport() {
     if (rows.length === 0) return;
-    if (needsDepartmentPicker && !importDepartment) {
-      toast({ variant: "destructive", title: "Choose which department this import belongs to" });
-      return;
-    }
     setIsImporting(true);
     setResult(null);
     setFailedRows([]);
@@ -221,7 +212,7 @@ export default function FacultyImportPage() {
       const res = await fetch("/api/college/faculty/import", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ records: rows, ...(importDepartment ? { department: importDepartment } : {}) }),
+        body: JSON.stringify({ records: rows }),
       });
       const json = await res.json() as ImportResult & { error?: string };
       if (!res.ok) { toast({ variant: "destructive", title: json.error ?? "Import failed" }); return; }
@@ -270,7 +261,7 @@ export default function FacultyImportPage() {
       const res = await fetch("/api/college/faculty/import", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ records: [fixTarget.form], ...(importDepartment ? { department: importDepartment } : {}) }),
+        body: JSON.stringify({ records: [fixTarget.form] }),
       });
       const json = await res.json() as ImportResult & { error?: string };
       if (!res.ok) { setFixError(json.error ?? "Failed to save"); return; }
@@ -312,16 +303,19 @@ export default function FacultyImportPage() {
         }
       />
 
-      {needsDepartmentPicker && (
+      {importableDepartments.length > 0 && (
         <Card>
           <CardContent className="pt-6 space-y-2">
-            <Label>Importing into which department? <span className="text-destructive">*</span></Label>
-            <Select value={importDepartment} onValueChange={setImportDepartment}>
-              <SelectTrigger className="max-w-xs"><SelectValue placeholder="Select department" /></SelectTrigger>
-              <SelectContent>
-                {departmentOptions.map((d) => <SelectItem key={d.code} value={d.code}>{d.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
+            <Label>Dept Code column - departments you can import into</Label>
+            <div className="flex flex-wrap gap-2">
+              {importableDepartments.map((d) => (
+                <Badge key={d.id} variant="secondary" className="font-mono">{d.code}</Badge>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Enter one of these codes in each row&rsquo;s Dept Code column - a single file can cover more than one department at once.
+              {isHod && importableDepartments.length === 1 && " Leave it blank to default to your own department."}
+            </p>
           </CardContent>
         </Card>
       )}
@@ -558,6 +552,7 @@ export default function FacultyImportPage() {
                   placeholder={c.sample || undefined}
                   onChange={(v) => setFixField(c.key, v)}
                   designationOptions={designationOptions}
+                  departmentCodeOptions={departmentCodeOptions}
                 />
               ))}
             </div>
