@@ -149,7 +149,12 @@ export default function LabBatchesPage() {
     setRightChecked(new Set());
   }
 
-  const leftList = sectionStudents.filter((s) => effectiveBatch(s) !== batch);
+  // Before any batch is picked ("Select batch" still showing), the left list
+  // is just everyone in the section - there's no batch to exclude yet.
+  // Filtering by `effectiveBatch(s) !== batch` even then would wrongly drop
+  // every still-unassigned student too, since their own effective batch is
+  // also "" - the same empty string `batch` itself is.
+  const leftList = batch ? sectionStudents.filter((s) => effectiveBatch(s) !== batch) : sectionStudents;
   const rightList = batch ? sectionStudents.filter((s) => effectiveBatch(s) === batch) : [];
 
   function toggle(set: Set<string>, setSet: (s: Set<string>) => void, id: string, checked: boolean) {
