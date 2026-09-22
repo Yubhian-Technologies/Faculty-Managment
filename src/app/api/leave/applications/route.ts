@@ -18,7 +18,7 @@ import { resolveHodDepartments } from "@/lib/budget/departmentScope";
 import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 import { validatePeriodSubstitutions, type PeriodSubstitutionInput } from "@/lib/leave/periodCoverage";
 import { buildAdjustmentRequests, notifyAdjustmentAssignees } from "@/lib/leave/adjustmentRequests";
-import { approverStageToStatus, resolveApproverStage } from "@/lib/leave/approvalRouting";
+import { approverStageToStatus, resolveApproverStageForHeldRoles } from "@/lib/leave/approvalRouting";
 import { listHandoverCandidates } from "@/lib/leave/handoverPool";
 import type { AdjustmentRequest, LeaveRequest, LeaveTypeCode, PeriodSubstitution } from "@/types/leave";
 import type { UserRole } from "@/types/core";
@@ -389,7 +389,7 @@ export async function POST(request: Request) {
     // (Settings > Leave Approval Routing) - the defaults are exactly the rule
     // described above. See lib/leave/approvalRouting.ts.
     const postAcceptanceStatus = approverStageToStatus(
-      resolveApproverStage(settings.leaveApprovalRouting, session.role, !!identity.department)
+      resolveApproverStageForHeldRoles(settings.leaveApprovalRouting, session.roles ?? [session.role], session.role, !!identity.department)
     );
 
     // Every named substitute/handover person must accept before this can

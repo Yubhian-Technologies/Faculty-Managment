@@ -5,6 +5,7 @@ import { requireRole } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { collegeSettingsRef, loadCollegeSettings } from "@/lib/firestore/collegeSettings";
 import { sanitizeLeaveApprovalRouting } from "@/lib/leave/approvalRouting";
+import { sanitizeLeaveVacationRoles } from "@/lib/leave/staffCategoryRouting";
 import type { FacultyNorms } from "@/types/core";
 
 // colleges/{collegeId}/settings/general - basic college info a Principal
@@ -77,9 +78,19 @@ export async function PUT(request: Request) {
       leaveApprovalRouting = checked.routing;
     }
 
+    let leaveVacationRoles: FacultyNorms["leaveVacationRoles"];
+    if (body.leaveVacationRoles !== undefined) {
+      const checked = sanitizeLeaveVacationRoles(body.leaveVacationRoles);
+      if (!checked.ok) return NextResponse.json({ error: checked.error }, { status: 400 });
+      leaveVacationRoles = checked.value;
+    }
+
     await collegeSettingsRef(db, collegeId).set(settings, { merge: true });
     if (leaveApprovalRouting) {
       await collegeSettingsRef(db, collegeId).update({ leaveApprovalRouting });
+    }
+    if (leaveVacationRoles) {
+      await collegeSettingsRef(db, collegeId).update({ leaveVacationRoles });
     }
 
     await db.collection("colleges").doc(collegeId).collection("auditLogs").add({
@@ -91,6 +102,7 @@ export async function PUT(request: Request) {
         newJoiningYears: settings.newJoiningYears,
         studentFacultyRatio: settings.studentFacultyRatio,
         ...(leaveApprovalRouting ? { leaveApprovalRouting } : {}),
+        ...(leaveVacationRoles ? { leaveVacationRoles } : {}),
       },
       timestamp: new Date(),
     });

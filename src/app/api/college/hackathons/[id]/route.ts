@@ -4,7 +4,8 @@ import { NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import { notify, notifyRole } from "@/lib/notify";
+import { notify } from "@/lib/notify";
+import { isResubmittable, notifyReviewer, resolveSubmissionRoute, routeFields } from "@/lib/research/coordinatorReview";
 import { PUBLICATION_ELIGIBLE_ROLES } from "@/lib/publications/eligibleRoles";
 import type {
   HackathonEvaluatorItem, HackathonEventType, HackathonFacultyCoordinatorItem, HackathonLevel,
@@ -153,14 +154,18 @@ export async function PATCH(
     }
 
     if (isOwner && !isRnD) {
-      if (record.status !== "REJECTED") {
-        return NextResponse.json({ error: "Only a rejected submission can be edited" }, { status: 403 });
+      if (!isResubmittable(record.status)) {
+        return NextResponse.json({ error: "Only a rejected or sent-back submission can be edited" }, { status: 403 });
       }
+      const route = await resolveSubmissionRoute(db, session.collegeId, session.uid, false);
       const now = new Date();
       const updates: Record<string, unknown> = {
+        ...routeFields(route),
+        sentBackReason: FieldValue.delete(),
+        coordinatorNote: FieldValue.delete(),
         ...pickEditableFields(body),
         updatedAt: now,
-        status: "PENDING" satisfies PublicationStatus,
+        status: route.status satisfies PublicationStatus,
         reviewedBy: FieldValue.delete(),
         reviewedByName: FieldValue.delete(),
         reviewedAt: FieldValue.delete(),
@@ -182,13 +187,11 @@ export async function PATCH(
         details: { title: body.eventTitle ?? record.eventTitle },
         timestamp: now,
       });
-      await notifyRole(
-        db, session.collegeId, "R_AND_D",
-        "HACKATHON_PENDING_VERIFICATION",
-        "Hackathon record resubmitted for verification",
-        `A previously rejected record ("${body.eventTitle ?? record.eventTitle}") was corrected and resubmitted`,
-        "/r-and-d/hackathons"
-      );
+      await notifyReviewer(db, session.collegeId, route, {
+        type: "HACKATHON_PENDING_VERIFICATION", title: "Hackathon record resubmitted for verification",
+        message: `A previously rejected record ("${body.eventTitle ?? record.eventTitle}") was corrected and resubmitted`,
+        rndLink: "/r-and-d/hackathons",
+      });
       return NextResponse.json({ ok: true });
     }
 
