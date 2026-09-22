@@ -1,11 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Pencil } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
 import type { Section, StudentRecord } from "@/types";
 
@@ -17,14 +21,22 @@ export default function StudentsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [sectionFilter, setSectionFilter] = useState(ALL_SECTIONS);
 
-  useEffect(() => {
+  const [editTarget, setEditTarget] = useState<StudentRecord | null>(null);
+  const [editLabBatch, setEditLabBatch] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+
+  const load = () => {
     setIsLoading(true);
-    Promise.all([
+    return Promise.all([
       fetch("/api/college/sections").then((r) => r.json() as Promise<{ sections: Section[] }>).then((d) => setSections(d.sections ?? [])),
       fetch("/api/college/students").then((r) => r.json() as Promise<{ students: StudentRecord[] }>).then((d) => setStudents(d.students ?? [])),
     ])
       .catch(() => toast({ variant: "destructive", title: "Failed to load students" }))
       .finally(() => setIsLoading(false));
+  };
+
+  useEffect(() => {
+    load();
   }, []);
 
   // The API already scopes `students` to exactly the faculty's in-charge
@@ -46,6 +58,45 @@ export default function StudentsPage() {
           && s.section === selectedSection.name && s.year === selectedSection.year
       )
     : authorizedStudents;
+
+  // Existing lab-batch labels already in use in this student's own section -
+  // offered as datalist suggestions so a second student gets typed in as
+  // exactly "Batch 1" again rather than a near-miss that would silently
+  // exclude them from that batch's attendance roster (see sectionRoster.ts).
+  const editLabBatchSuggestions = useMemo(() => {
+    if (!editTarget) return [];
+    const labels = authorizedStudents
+      .filter((s) => s.department === editTarget.department && s.section === editTarget.section && s.year === editTarget.year)
+      .map((s) => (s.labBatch as string | undefined)?.trim())
+      .filter((v): v is string => !!v);
+    return Array.from(new Set(labels)).sort();
+  }, [editTarget, authorizedStudents]);
+
+  function openEdit(student: StudentRecord) {
+    setEditTarget(student);
+    setEditLabBatch((student.labBatch as string | undefined) ?? "");
+  }
+
+  async function saveLabBatch() {
+    if (!editTarget) return;
+    setIsSaving(true);
+    try {
+      const res = await fetch(`/api/college/students/${editTarget.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ labBatch: editLabBatch.trim() }),
+      });
+      const json = await res.json() as { error?: string };
+      if (!res.ok) throw new Error(json.error ?? "Failed to update lab batch");
+      toast({ title: "Lab batch updated" });
+      setEditTarget(null);
+      await load();
+    } catch (err) {
+      toast({ variant: "destructive", title: "Failed to update lab batch", description: err instanceof Error ? err.message : undefined });
+    } finally {
+      setIsSaving(false);
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -90,11 +141,19 @@ export default function StudentsPage() {
                   <div key={s.id} className="flex items-center justify-between py-2.5">
                     <div>
                       <p className="text-sm font-medium">{s.name}</p>
-                      <p className="text-xs text-muted-foreground">{s.rollNumber} · Section {s.section} · Year {s.year}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {s.rollNumber} · Section {s.section} · Year {s.year}
+                        {s.labBatch ? ` · ${s.labBatch}` : ""}
+                      </p>
                     </div>
-                    <Badge variant={s.status === "REGULAR" ? "default" : s.status === "GRADUATED" ? "secondary" : "destructive"} className="text-xs">
-                      {s.status === "REGULAR" ? "Regular" : s.status === "GRADUATED" ? "Graduated" : "Detained"}
-                    </Badge>
+                    <div className="flex items-center gap-2">
+                      <Badge variant={s.status === "REGULAR" ? "default" : s.status === "GRADUATED" ? "secondary" : "destructive"} className="text-xs">
+                        {s.status === "REGULAR" ? "Regular" : s.status === "GRADUATED" ? "Graduated" : "Detained"}
+                      </Badge>
+                      <Button variant="ghost" size="sm" onClick={() => openEdit(s)} title="Set lab batch">
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -102,6 +161,36 @@ export default function StudentsPage() {
           </CardContent>
         </Card>
       )}
+
+      <Dialog open={!!editTarget} onOpenChange={(open) => !open && setEditTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Lab Batch — {editTarget?.name}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="edit-lab-batch">Lab Batch</Label>
+            <Input
+              id="edit-lab-batch"
+              list="edit-lab-batch-suggestions"
+              value={editLabBatch}
+              onChange={(e) => setEditLabBatch(e.target.value)}
+              placeholder="e.g. Batch 1"
+              autoComplete="off"
+            />
+            <datalist id="edit-lab-batch-suggestions">
+              {editLabBatchSuggestions.map((label) => <option key={label} value={label} />)}
+            </datalist>
+            <p className="text-xs text-muted-foreground">
+              Which split-lab sub-group this student sits in for a PRACTICAL subject - must match the batch
+              label on the Timetable exactly. Leave blank if this section's labs aren&rsquo;t split.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setEditTarget(null)}>Cancel</Button>
+            <Button type="button" onClick={saveLabBatch} disabled={isSaving}>{isSaving ? "Saving…" : "Save"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
