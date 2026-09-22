@@ -247,17 +247,6 @@ export default function LabBatchesPage() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>Batch</Label>
-                <Select value={batch || undefined} onValueChange={handleBatchChange} disabled={!selectedSection}>
-                  <SelectTrigger><SelectValue placeholder="Select batch" /></SelectTrigger>
-                  <SelectContent>
-                    {batchOptions.map((b) => <SelectItem key={b} value={b}>{b}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="flex items-end gap-2 sm:max-w-lg">
-              <div className="flex-1 space-y-2">
                 <Label className="text-xs text-muted-foreground">New batch name</Label>
                 <Input
                   value={newBatchName}
@@ -266,6 +255,17 @@ export default function LabBatchesPage() {
                   placeholder="e.g. Batch 1"
                   disabled={!selectedSection}
                 />
+              </div>
+            </div>
+            <div className="flex items-end gap-2 sm:max-w-lg">
+              <div className="flex-1 space-y-2">
+                <Label>Batch</Label>
+                <Select value={batch || undefined} onValueChange={handleBatchChange} disabled={!selectedSection}>
+                  <SelectTrigger><SelectValue placeholder="Select batch" /></SelectTrigger>
+                  <SelectContent>
+                    {batchOptions.map((b) => <SelectItem key={b} value={b}>{b}</SelectItem>)}
+                  </SelectContent>
+                </Select>
               </div>
               <Button type="button" variant="outline" onClick={handleCreateBatch} disabled={!selectedSection || !newBatchName.trim()}>
                 <Plus className="h-4 w-4 mr-1.5" />Add batch
