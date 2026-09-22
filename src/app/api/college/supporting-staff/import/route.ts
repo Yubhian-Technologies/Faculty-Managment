@@ -13,6 +13,7 @@ import {
   matchOption, normalizeDigits, isScientificNotation,
   GENDER_OPTIONS, RATIFICATION_STATUS_OPTIONS,
 } from "@/lib/import/fieldConstraints";
+import { PHONE_REGEX, EMAIL_REGEX, PAN_REGEX, AADHAR_REGEX } from "@/lib/validations";
 import type {
   SupportingStaffCategory, SupportingStaffDesignation, FacultyStatus, CollegeType,
   SupportingStaffProfileFields, StaffQualification, TrainingEntry, TrainingEntryType, AwardEntry, AwardCategory,
@@ -336,16 +337,16 @@ export async function POST(request: Request) {
       // except Name (as per PAN) and Name (as per Aadhar), which are optional.
       if (!row.employeeId?.trim()) { failed.push({ row: rowNum, employeeId: "-", error: "Employee ID is required" }); continue; }
       if (!row.legalName?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Full Name (as per SSC) is required" }); continue; }
-      if (!row.collegeEmail?.trim() || !row.collegeEmail.includes("@")) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Valid College Email is required" }); continue; }
+      if (!row.collegeEmail?.trim() || !EMAIL_REGEX.test(row.collegeEmail.trim())) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Valid College Email is required (e.g. name@example.com)" }); continue; }
       if (!row.password?.trim() || row.password.trim().length < 8) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Login Password is required and must be at least 8 characters" }); continue; }
-      if (!row.phone?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Mobile No is required" }); continue; }
+      if (!row.phone?.trim() || !PHONE_REGEX.test(normalizeDigits(row.phone) ?? "")) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Mobile No must be exactly 10 digits, starting with 6, 7, 8 or 9" }); continue; }
       if (!row.designation?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Designation is required" }); continue; }
       if (!row.qualification?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Highest Qualification is required" }); continue; }
       if (!row.joiningDate?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Date of Joining Institution is required" }); continue; }
       if (!row.gender?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Gender is required" }); continue; }
       if (!row.dateOfBirth?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Date of Birth is required" }); continue; }
-      if (!row.aadharNo?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Aadhar No is required" }); continue; }
-      if (!row.panNo?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "PAN No is required" }); continue; }
+      if (!row.aadharNo?.trim() || !AADHAR_REGEX.test(normalizeDigits(row.aadharNo) ?? "")) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Aadhar No must be exactly 12 digits" }); continue; }
+      if (!row.panNo?.trim() || !PAN_REGEX.test(row.panNo.trim().toUpperCase())) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "PAN No must be 5 letters, 4 digits, then 1 letter (e.g. ABCDE1234F)" }); continue; }
       if (!row.ratificationStatus?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Ratification Status is required" }); continue; }
 
       const empId = row.employeeId.trim();

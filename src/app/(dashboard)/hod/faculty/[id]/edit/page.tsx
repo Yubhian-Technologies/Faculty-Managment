@@ -14,7 +14,7 @@ import { AvatarUploadField } from "@/components/shared/AvatarUploadField";
 import { TextInput } from "@/components/shared/ProfileFieldPrimitives";
 import { HIGHEST_QUALIFICATION_OPTIONS } from "@/lib/import/fieldConstraints";
 import { normalizeHighestQualification } from "@/lib/faculty/highestQualification";
-import { PHONE_REGEX } from "@/lib/validations";
+import { PHONE_REGEX, EMAIL_REGEX, APAAR_REGEX } from "@/lib/validations";
 import { toast } from "@/hooks/useToast";
 import { migrateFacultyDoc } from "@/lib/faculty/fieldRenames";
 import { toDateInputValue } from "@/lib/utils";
@@ -148,7 +148,15 @@ export default function EditHodFacultyIdentityPage() {
       return;
     }
     if (!form.mobileNo.trim() || !PHONE_REGEX.test(form.mobileNo)) {
-      toast({ variant: "destructive", title: "Mobile No is required and must be a valid phone number" });
+      toast({ variant: "destructive", title: "Mobile No must be exactly 10 digits, starting with 6, 7, 8 or 9" });
+      return;
+    }
+    if (form.email.trim() && !EMAIL_REGEX.test(form.email.trim())) {
+      toast({ variant: "destructive", title: "Enter a valid email address" });
+      return;
+    }
+    if (form.apaarFacultyId.trim() && !APAAR_REGEX.test(form.apaarFacultyId.trim())) {
+      toast({ variant: "destructive", title: "APAAR Faculty ID must be exactly 12 digits" });
       return;
     }
 
@@ -228,7 +236,15 @@ export default function EditHodFacultyIdentityPage() {
                 </div>
                 <div className="space-y-2">
                   <Label>APAAR Faculty ID</Label>
-                  <Input value={form.apaarFacultyId} onChange={(e) => set({ apaarFacultyId: e.target.value })} placeholder="NBA/AICTE APAAR ID" />
+                  <Input
+                    inputMode="numeric" maxLength={12}
+                    value={form.apaarFacultyId}
+                    onChange={(e) => set({ apaarFacultyId: e.target.value.replace(/\D/g, "").slice(0, 12) })}
+                    placeholder="123456789012"
+                  />
+                  {!!form.apaarFacultyId && !APAAR_REGEX.test(form.apaarFacultyId) && (
+                    <p className="text-xs text-destructive">Must be exactly 12 digits</p>
+                  )}
                 </div>
               </div>
             </div>
@@ -327,6 +343,9 @@ export default function EditHodFacultyIdentityPage() {
               <div className="space-y-2">
                 <Label>Personal Email</Label>
                 <Input type="email" value={form.email} onChange={(e) => set({ email: e.target.value })} placeholder="faculty@example.com" />
+                {!!form.email.trim() && !EMAIL_REGEX.test(form.email.trim()) && (
+                  <p className="text-xs text-destructive">Doesn&rsquo;t look like a valid email address</p>
+                )}
               </div>
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
@@ -341,7 +360,15 @@ export default function EditHodFacultyIdentityPage() {
                     + Add Number
                   </Button>
                 </div>
-                <Input type="tel" autoComplete="off" value={form.mobileNo} onChange={(e) => set({ mobileNo: e.target.value })} placeholder="+91 98765 43210" />
+                <Input
+                  type="tel" inputMode="numeric" autoComplete="off" maxLength={10}
+                  value={form.mobileNo}
+                  onChange={(e) => set({ mobileNo: e.target.value.replace(/\D/g, "").slice(0, 10) })}
+                  placeholder="9876543210"
+                />
+                {!!form.mobileNo && !PHONE_REGEX.test(form.mobileNo) && (
+                  <p className="text-xs text-destructive">Must be exactly 10 digits, starting with 6, 7, 8 or 9</p>
+                )}
               </div>
             </div>
 

@@ -15,10 +15,11 @@ const MIME_TO_EXT: Record<string, string> = {
 };
 const EXT_TO_EXT: Record<string, string> = { pdf: "pdf", png: "png", jpg: "jpg", jpeg: "jpg" };
 
-// Progress Report / Utilization Certificate - uploaded while filling out the
-// self-submit form, before the seed-funding project record exists, same
-// pattern as /api/upload/consultancy-doc.
-const KINDS = ["progress-report", "utilization-certificate"] as const;
+// Progress Report / Utilization Certificate / a published paper / a patent's
+// filed-published-granted proof - uploaded while filling out the self-submit
+// form, before the seed-funding project record exists, same pattern as
+// /api/upload/consultancy-doc.
+const KINDS = ["progress-report", "utilization-certificate", "paper", "patent-proof"] as const;
 
 export async function POST(request: Request) {
   try {

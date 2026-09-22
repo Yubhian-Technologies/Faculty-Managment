@@ -6,8 +6,6 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
@@ -67,31 +65,15 @@ export default function FacultyImportPage() {
   // The template has no per-row Department column - every row in one import
   // lands in the same department - so an HOD running more than one must say
   // which one up front, same rule the API enforces.
-  const [importDepartment, setImportDepartment] = useState("");
-  // Principal / Vice Principal / College Admin have no department of their
-  // own to fall back on (unlike an HOD), so they choose from the college's
-  // full department list instead - same rule the API enforces. Every
-  // existing faculty/user doc stores the department's short `code` ("CSE"),
-  // not its full `name` ("Computer Science and Engineering"), so the code is
-  // what's actually submitted - the full name is shown only as the label.
-  const [collegeDepartments, setCollegeDepartments] = useState<{ code: string; name: string }[]>([]);
-  useEffect(() => {
-    if (isHod) return;
-    void (async () => {
-      try {
-        const res = await fetch("/api/college/departments");
-        const data = await res.json() as { departments?: { name?: string; code?: string }[] };
-        setCollegeDepartments(
-          (data.departments ?? [])
-            .filter((d): d is { name: string; code: string } => !!d.name && !!d.code)
-        );
-      } catch {
-        // Non-fatal - the picker just stays empty and the API rejects on submit.
-      }
-    })();
-  }, [isHod]);
-  const departmentOptions = isHod ? myDepartments.map((d) => ({ code: d, name: d })) : collegeDepartments;
-  const needsDepartmentPicker = isHod ? myDepartments.length > 1 : true;
+
+  // The import always lands in the department the HOD is currently acting as -
+  // there is nothing to choose. useMyDepartments() already narrows to the
+  // "Working as" pick for someone who heads several, and
+  // getHodDepartmentScope narrows the same way server-side, so switching
+  // context is what changes the target. No department UI on this page: a
+  // picker listing every department only offered the chance to file a file
+  // into the wrong one.
+  const hodDepartment = myDepartments[0] ?? "";
 
   // A two-sheet .xlsx rather than a flat CSV, matching the Supporting Staff
   // importer: sheet one is the template to fill in (headers + the per-column
@@ -210,8 +192,8 @@ export default function FacultyImportPage() {
 
   async function handleImport() {
     if (rows.length === 0) return;
-    if (needsDepartmentPicker && !importDepartment) {
-      toast({ variant: "destructive", title: "Choose which department this import belongs to" });
+    if (isHod && !hodDepartment) {
+      toast({ variant: "destructive", title: "Your account has no department set - ask your Principal to assign one" });
       return;
     }
     setIsImporting(true);
@@ -221,7 +203,7 @@ export default function FacultyImportPage() {
       const res = await fetch("/api/college/faculty/import", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ records: rows, ...(importDepartment ? { department: importDepartment } : {}) }),
+        body: JSON.stringify({ records: rows, ...(hodDepartment ? { department: hodDepartment } : {}) }),
       });
       const json = await res.json() as ImportResult & { error?: string };
       if (!res.ok) { toast({ variant: "destructive", title: json.error ?? "Import failed" }); return; }
@@ -270,7 +252,7 @@ export default function FacultyImportPage() {
       const res = await fetch("/api/college/faculty/import", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ records: [fixTarget.form], ...(importDepartment ? { department: importDepartment } : {}) }),
+        body: JSON.stringify({ records: [fixTarget.form], ...(hodDepartment ? { department: hodDepartment } : {}) }),
       });
       const json = await res.json() as ImportResult & { error?: string };
       if (!res.ok) { setFixError(json.error ?? "Failed to save"); return; }
@@ -312,19 +294,6 @@ export default function FacultyImportPage() {
         }
       />
 
-      {needsDepartmentPicker && (
-        <Card>
-          <CardContent className="pt-6 space-y-2">
-            <Label>Importing into which department? <span className="text-destructive">*</span></Label>
-            <Select value={importDepartment} onValueChange={setImportDepartment}>
-              <SelectTrigger className="max-w-xs"><SelectValue placeholder="Select department" /></SelectTrigger>
-              <SelectContent>
-                {departmentOptions.map((d) => <SelectItem key={d.code} value={d.code}>{d.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </CardContent>
-        </Card>
-      )}
 
       {/* Step 1: Download Template */}
       <Card>

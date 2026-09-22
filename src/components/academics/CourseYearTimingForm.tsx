@@ -12,6 +12,31 @@ import type { BreakConfig, CourseYearTiming } from "@/types";
 
 type SemesterRangeForm = { semester: number; startDate: string; endDate: string }; // dates are "YYYY-MM-DD"
 
+function toMinutes(hhmm: string): number {
+  const [h, m] = hhmm.split(":").map(Number);
+  return h * 60 + m;
+}
+
+function formatDuration(totalMinutes: number): string {
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
+  if (h === 0) return `${m}m`;
+  if (m === 0) return `${h}h`;
+  return `${h}h ${m}m`;
+}
+
+// Every period back-to-back plus every break's duration, wherever it falls -
+// the same shape defaultPeriodTimings (lib/timetable/buildGrid.ts) lays the
+// day out in, just summed instead of walked period-by-period, so this stays
+// correct even while a break's "After Period #" temporarily points past the
+// current period count mid-edit.
+function requiredMinutes(f: Pick<TimingForm, "numberOfPeriods" | "periodDurationMinutes" | "lunchBreak" | "shortBreaks">): number {
+  const periods = Number(f.numberOfPeriods) || 0;
+  const perPeriod = Number(f.periodDurationMinutes) || 0;
+  const breaksTotal = (f.lunchBreak?.durationMinutes || 0) + f.shortBreaks.reduce((sum, sb) => sum + (sb.durationMinutes || 0), 0);
+  return periods * perPeriod + breaksTotal;
+}
+
 type TimingForm = {
   collegeStartTime: string;
   collegeEndTime: string;
@@ -135,10 +160,31 @@ export function CourseYearTimingForm({ departmentId, courseId, year, onSaved, on
     });
   }
 
+  // Available window is only meaningful once both clock times are set and
+  // End is actually after Start - a blank/backwards window can't be judged
+  // "does it fit", so the fit check is skipped (not falsely flagged) until then.
+  const availableMinutes = timingForm.collegeStartTime && timingForm.collegeEndTime
+    ? toMinutes(timingForm.collegeEndTime) - toMinutes(timingForm.collegeStartTime)
+    : null;
+  const totalRequiredMinutes = requiredMinutes(timingForm);
+  const exceedsAvailableTime = availableMinutes !== null && availableMinutes > 0 && totalRequiredMinutes > availableMinutes;
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!timingForm.numberOfPeriods || !timingForm.periodDurationMinutes) {
       toast({ variant: "destructive", title: "Number of periods and period duration are required" });
+      return;
+    }
+    if (availableMinutes !== null && availableMinutes <= 0) {
+      toast({ variant: "destructive", title: "College End Time must be after College Start Time" });
+      return;
+    }
+    if (exceedsAvailableTime) {
+      toast({
+        variant: "destructive",
+        title: "Periods and breaks don't fit in the college day",
+        description: `They need ${formatDuration(totalRequiredMinutes)}, but only ${formatDuration(availableMinutes ?? 0)} is available between ${timingForm.collegeStartTime} and ${timingForm.collegeEndTime}.`,
+      });
       return;
     }
     if (timingForm.semesters.some((s) => !s.startDate || !s.endDate)) {
@@ -229,6 +275,29 @@ export function CourseYearTimingForm({ departmentId, courseId, year, onSaved, on
                 onChange={(e) => setTimingForm((f) => ({ ...f, periodDurationMinutes: stripLeadingZeros(e.target.value) }))}
               />
             </div>
+          </div>
+
+          <div
+            className={`rounded-md border p-3 text-sm ${
+              exceedsAvailableTime ? "border-destructive/50 bg-destructive/10 text-destructive" : "bg-muted/30 text-muted-foreground"
+            }`}
+          >
+            <p>
+              Periods + breaks need <strong>{formatDuration(totalRequiredMinutes)}</strong>
+              {availableMinutes !== null && availableMinutes > 0 && (
+                <> of the <strong>{formatDuration(availableMinutes)}</strong> available ({timingForm.collegeStartTime}–{timingForm.collegeEndTime})</>
+              )}
+              .
+            </p>
+            {exceedsAvailableTime && (
+              <p className="mt-1 font-medium">
+                That&rsquo;s {formatDuration(totalRequiredMinutes - (availableMinutes ?? 0))} more than the college day allows - shorten the
+                periods/breaks or extend the college day before saving.
+              </p>
+            )}
+            {availableMinutes !== null && availableMinutes <= 0 && (
+              <p className="mt-1 font-medium">College End Time must be after College Start Time.</p>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -348,7 +417,9 @@ export function CourseYearTimingForm({ departmentId, courseId, year, onSaved, on
 
           <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end pt-4 border-t">
             <Button type="button" variant="outline" onClick={onCancel}>Cancel</Button>
-            <Button type="submit" loading={isSaving}>Save Timings</Button>
+            <Button type="submit" loading={isSaving} disabled={exceedsAvailableTime || (availableMinutes !== null && availableMinutes <= 0)}>
+              Save Timings
+            </Button>
           </div>
         </form>
       </CardContent>

@@ -22,14 +22,18 @@ import type {
 } from "@/types";
 
 const PREVIEW_COUNT = 3;
-const COUNT_OPTIONS = Array.from({ length: 10 }, (_, i) => i + 1);
+// Guards against a typo like 1000 spawning a thousand form rows.
+const MAX_COUNT = 50;
 const OTHERS_COLLEGE_ID = "OTHERS";
 
 const EMPTY_APPLICANT: IprApplicant = { name: "", type: "INDIVIDUAL" };
 const EMPTY_INVENTOR: IprInventor = { name: "", category: "CO_AUTHOR", authorType: "FACULTY", affiliationCollegeName: "", isInternal: true };
 
-const INVENTOR_CATEGORY_LABELS: Record<AuthorCategory, string> = {
-  FIRST_AUTHOR: "First Inventor", CO_AUTHOR: "Co-Inventor", CORRESPONDING_AUTHOR: "Corresponding Inventor",
+// AuthorCategory is shared with Publications, which does have a Corresponding
+// Author - an IPR inventor only ever is a First Inventor or a Co-Inventor.
+type InventorCategory = Exclude<AuthorCategory, "CORRESPONDING_AUTHOR">;
+const INVENTOR_CATEGORY_LABELS: Record<InventorCategory, string> = {
+  FIRST_AUTHOR: "First Inventor", CO_AUTHOR: "Co-Inventor",
 };
 const INVENTOR_TYPE_LABELS: Record<AuthorRoleType, string> = { FACULTY: "Faculty", STUDENT: "Student" };
 
@@ -113,7 +117,7 @@ function toNumberOrUndefined(v: string): number | undefined {
 }
 
 // Resizes a list to exactly `count` items, trimming from the end or padding
-// with `empty` - backs the "No. of Applicants/Inventors" dropdowns, which
+// with `empty` - backs the "No. of Applicants/Inventors" number boxes, which
 // drive how many detail rows show rather than a free Add/Remove button.
 function resizeArray<T>(arr: T[], count: number, empty: T): T[] {
   if (arr.length === count) return arr;
@@ -169,7 +173,7 @@ function InventorFields({
         <Select value={inventor.category} onValueChange={(v) => update({ category: v as AuthorCategory })}>
           <SelectTrigger><SelectValue /></SelectTrigger>
           <SelectContent>
-            {(Object.keys(INVENTOR_CATEGORY_LABELS) as AuthorCategory[]).map((c) => <SelectItem key={c} value={c}>{INVENTOR_CATEGORY_LABELS[c]}</SelectItem>)}
+            {(Object.keys(INVENTOR_CATEGORY_LABELS) as InventorCategory[]).map((c) => <SelectItem key={c} value={c}>{INVENTOR_CATEGORY_LABELS[c]}</SelectItem>)}
           </SelectContent>
         </Select>
       </div>
@@ -311,6 +315,13 @@ function DiscoveryInnovationRow({
         <Field label="Application Number" value={record.applicationNumber} />
         <Field label="Date of Filing" value={record.dateOfFiling} />
         <Field label="Student Patent" value={record.isStudentPatent} />
+        {record.isStudentPatent === "YES" && (
+          <>
+            <Field label="Student Name" value={record.studentName} />
+            <Field label="Regd. No." value={record.studentRegistrationNumber} />
+            <Field label="Student Department" value={record.studentDepartment} />
+          </>
+        )}
         <Field label="Commercialized" value={record.isCommercialized} />
         <Field label="SDGs Mapped" value={record.sdgGoals.length > 0 ? record.sdgGoals.join(", ") : undefined} />
       </div>
@@ -354,6 +365,9 @@ interface RecordFormState {
   inventorsCount: string;
   inventors: IprInventor[];
   isStudentPatent: "YES" | "NO" | "";
+  studentName: string;
+  studentRegistrationNumber: string;
+  studentDepartment: string;
   publishedProofUrl: string;
   grantedProofUrl: string;
   isCommercialized: "YES" | "NO" | "";
@@ -373,7 +387,8 @@ function initialFormState(editing: DiscoveryInnovationRequest | null): RecordFor
     return {
       iprType: "", iprStatus: "", applicationNumber: "", title: "", sdgGoals: [], dateOfFiling: "",
       datePublished: "", dateGranted: "", applicantsCount: "", applicants: [], inventorsCount: "", inventors: [],
-      isStudentPatent: "", publishedProofUrl: "", grantedProofUrl: "", isCommercialized: "",
+      isStudentPatent: "", studentName: "", studentRegistrationNumber: "", studentDepartment: "",
+      publishedProofUrl: "", grantedProofUrl: "", isCommercialized: "",
       commercializationStatus: "", commercializationDate: "", licenseePartner: "", commercializationType: "",
       commercializationValue: "", revenueGenerated: "", commercializedProofUrl: "", revenueGeneratedProofUrl: "",
     };
@@ -383,8 +398,15 @@ function initialFormState(editing: DiscoveryInnovationRequest | null): RecordFor
     title: editing.title, sdgGoals: editing.sdgGoals ?? [], dateOfFiling: editing.dateOfFiling,
     datePublished: editing.datePublished ?? "", dateGranted: editing.dateGranted ?? "",
     applicantsCount: n(editing.applicantsCount), applicants: editing.applicants ?? [],
-    inventorsCount: n(editing.inventorsCount), inventors: editing.inventors ?? [],
-    isStudentPatent: editing.isStudentPatent ?? "", publishedProofUrl: editing.publishedProofUrl ?? "",
+    inventorsCount: n(editing.inventorsCount),
+    // A record saved before "Corresponding Inventor" was removed would otherwise
+    // open with a blank Inventor Position.
+    inventors: (editing.inventors ?? []).map((inv) => (
+      inv.category === "CORRESPONDING_AUTHOR" ? { ...inv, category: "CO_AUTHOR" as const } : inv
+    )),
+    isStudentPatent: editing.isStudentPatent ?? "", studentName: editing.studentName ?? "",
+    studentRegistrationNumber: editing.studentRegistrationNumber ?? "", studentDepartment: editing.studentDepartment ?? "",
+    publishedProofUrl: editing.publishedProofUrl ?? "",
     grantedProofUrl: editing.grantedProofUrl ?? "", isCommercialized: editing.isCommercialized ?? "",
     commercializationStatus: editing.commercializationStatus ?? "", commercializationDate: editing.commercializationDate ?? "",
     licenseePartner: editing.licenseePartner ?? "", commercializationType: editing.commercializationType ?? "",
@@ -410,14 +432,28 @@ function RecordFormFields({
     setForm((f) => ({ ...f, [key]: value }));
   }
 
-  function setApplicantsCount(v: string) {
-    const count = toNumberOrUndefined(v) ?? 0;
-    setForm((f) => ({ ...f, applicantsCount: v, applicants: resizeArray(f.applicants, count, EMPTY_APPLICANT) }));
+  // Digits only, clamped to MAX_COUNT. Clearing the box keeps the rows already
+  // filled in (so backspace-and-retype doesn't wipe them) - the empty count
+  // itself is what keeps the form invalid.
+  function normalizeCount(raw: string): string {
+    const digits = raw.replace(/\D/g, "").replace(/^0+/, "");
+    return digits === "" ? "" : String(Math.min(Number(digits), MAX_COUNT));
   }
 
-  function setInventorsCount(v: string) {
-    const count = toNumberOrUndefined(v) ?? 0;
-    setForm((f) => ({ ...f, inventorsCount: v, inventors: resizeArray(f.inventors, count, EMPTY_INVENTOR) }));
+  function setApplicantsCount(raw: string) {
+    const v = normalizeCount(raw);
+    setForm((f) => ({
+      ...f, applicantsCount: v,
+      applicants: v === "" ? f.applicants : resizeArray(f.applicants, Number(v), EMPTY_APPLICANT),
+    }));
+  }
+
+  function setInventorsCount(raw: string) {
+    const v = normalizeCount(raw);
+    setForm((f) => ({
+      ...f, inventorsCount: v,
+      inventors: v === "" ? f.inventors : resizeArray(f.inventors, Number(v), EMPTY_INVENTOR),
+    }));
   }
 
   function updateApplicant(i: number, patch: Partial<IprApplicant>) {
@@ -449,7 +485,11 @@ function RecordFormFields({
     !!form.iprType && !!form.iprStatus && form.applicationNumber.trim().length > 1 &&
     form.title.trim().length > 1 && !!form.dateOfFiling && !!form.datePublished &&
     (form.iprStatus !== "GRANTED" || !!form.dateGranted) &&
-    !!form.isStudentPatent && form.sdgGoals.length > 0 &&
+    !!form.isStudentPatent &&
+    (form.isStudentPatent !== "YES" || (
+      !!form.studentName.trim() && !!form.studentRegistrationNumber.trim() && !!form.studentDepartment.trim()
+    )) &&
+    form.sdgGoals.length > 0 &&
     !!form.applicantsCount && applicantsValid &&
     !!form.inventorsCount && inventorsValid &&
     !!form.publishedProofUrl && (form.iprStatus !== "GRANTED" || !!form.grantedProofUrl);
@@ -472,6 +512,10 @@ function RecordFormFields({
         inventorsCount: toNumberOrUndefined(form.inventorsCount),
         inventors: form.inventors,
         isStudentPatent: form.isStudentPatent || undefined,
+        // Empty (not undefined) when "No" so an edit that flips Yes -> No clears the old values.
+        studentName: form.isStudentPatent === "YES" ? form.studentName.trim() : "",
+        studentRegistrationNumber: form.isStudentPatent === "YES" ? form.studentRegistrationNumber.trim() : "",
+        studentDepartment: form.isStudentPatent === "YES" ? form.studentDepartment.trim() : "",
         publishedProofUrl: form.publishedProofUrl || undefined,
         grantedProofUrl: form.grantedProofUrl || undefined,
         isCommercialized: form.isCommercialized || undefined,
@@ -560,6 +604,13 @@ function RecordFormFields({
               </SelectContent>
             </Select>
           </div>
+          {form.isStudentPatent === "YES" && (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 rounded-md bg-muted/30 p-3">
+              <TextInput label="Student Name" value={form.studentName} onChange={(v) => set("studentName", v)} />
+              <TextInput label="Regd. No." value={form.studentRegistrationNumber} onChange={(v) => set("studentRegistrationNumber", v)} />
+              <TextInput label="Department" value={form.studentDepartment} onChange={(v) => set("studentDepartment", v)} />
+            </div>
+          )}
         </div>
 
         <div className="space-y-2">
@@ -571,12 +622,11 @@ function RecordFormFields({
           <SubLabel>Applicants</SubLabel>
           <div className="space-y-2 max-w-[200px]">
             <Label>No. of Applicants</Label>
-            <Select value={form.applicantsCount} onValueChange={setApplicantsCount}>
-              <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
-              <SelectContent>
-                {COUNT_OPTIONS.map((n) => <SelectItem key={n} value={String(n)}>{n}</SelectItem>)}
-              </SelectContent>
-            </Select>
+            <Input
+              type="number" inputMode="numeric" min={1} max={MAX_COUNT} step={1}
+              value={form.applicantsCount} onChange={(e) => setApplicantsCount(e.target.value)}
+              placeholder="Enter number"
+            />
           </div>
           {form.applicants.map((a, i) => (
             <div key={i} className="grid grid-cols-1 gap-3 sm:grid-cols-2 rounded-md bg-muted/30 p-3">
@@ -598,12 +648,11 @@ function RecordFormFields({
           <SubLabel>Inventors</SubLabel>
           <div className="space-y-2 max-w-[200px]">
             <Label>No. of Inventors</Label>
-            <Select value={form.inventorsCount} onValueChange={setInventorsCount}>
-              <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
-              <SelectContent>
-                {COUNT_OPTIONS.map((n) => <SelectItem key={n} value={String(n)}>{n}</SelectItem>)}
-              </SelectContent>
-            </Select>
+            <Input
+              type="number" inputMode="numeric" min={1} max={MAX_COUNT} step={1}
+              value={form.inventorsCount} onChange={(e) => setInventorsCount(e.target.value)}
+              placeholder="Enter number"
+            />
           </div>
           {form.inventors.map((inv, i) => (
             <div key={i} className="rounded-md bg-muted/30 p-3">

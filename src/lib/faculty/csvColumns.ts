@@ -101,7 +101,7 @@ export const EXPORT_FIELDS: ExportField[] = [
   // Official Email) are appended at the end rather than interleaved.
   scalar("core", "employeeId", "Employee ID", true),
   scalar("core", "legalName", "Full Name (as per SSC)", true),
-  scalar("core", "apaarFacultyId", "APAAR Faculty ID", true),
+  scalar("core", "apaarFacultyId", "APAAR Faculty ID", true), // exactly 12 digits
   scalar("core", "collegeEmail", "College Email", true),
   scalar("core", "designation", "Designation", true),
   scalar("core", "highestQualification", "Highest Qualification", true),
@@ -305,9 +305,9 @@ export function getFacultyImportColumns(designationOptions: string[]): FacultyCs
   // other name-shaped columns (Full Name as per SSC, Name as per Aadhar);
   // leave a header that vague unmatched rather than guess which one it means.
   { key: "nameAsPerPan", label: "Name (as per PAN)", required: false, sample: "Optional; full name exactly as on PAN card", aliases: ["Faculty Name", "Name", "Employee Name"] },
-  { key: "collegeEmail", label: "College Email", required: true,  sample: "Required; must contain @", aliases: ["Email", "Email ID"] },
+  { key: "collegeEmail", label: "College Email", required: true,  sample: "Required; e.g. name@example.com", aliases: ["Email", "Email ID"] },
   { key: "password",     label: "Login Password (min 8 characters)", required: true, sample: "Required; minimum 8 characters", aliases: ["Password"] },
-  { key: "mobileNo",     label: "Mobile No",     required: true, sample: "Required; phone/text", aliases: ["Phone", "Mobile", "Mobile Number", "Phone Number", "Contact Number"] },
+  { key: "mobileNo",     label: "Mobile No",     required: true, sample: "Required; exactly 10 digits, starting with 6-9", aliases: ["Phone", "Mobile", "Mobile Number", "Phone Number", "Contact Number"] },
   { key: "designation",  label: "Designation",   required: true,  sample: designationOptions.length
       ? `Required: ${designationOptions.join(" / ")} - common abbreviations (Prof., Asst. Prof., Assoc. Prof.) are accepted too`
       : "Required - add at least one Designation under Settings > Designations first" },
@@ -325,8 +325,8 @@ export function getFacultyImportColumns(designationOptions: string[]): FacultyCs
   { key: "gender",            label: "Gender",                       required: true, sample: "Required: Male / Female / Other" },
   { key: "dateOfBirth",       label: "Date of Birth (DD-MM-YYYY)",   required: true, sample: "Required; DD-MM-YYYY", aliases: ["DOB"] },
   { key: "nameAsPerAadhar",   label: "Name (as per Aadhar)",         required: false, sample: "Optional; text" },
-  { key: "aadharNo",          label: "Aadhar No",                    required: true, sample: "Required; text" },
-  { key: "panNo",             label: "PAN No",                       required: true, sample: "Required; text" },
+  { key: "aadharNo",          label: "Aadhar No",                    required: true, sample: "Required; exactly 12 digits" },
+  { key: "panNo",             label: "PAN No",                       required: true, sample: "Required; 5 letters + 4 digits + 1 letter, e.g. ABCDE1234F" },
   { key: "ratificationStatus",label: "Ratification Status",          required: true, sample: "Required: Ratified / Not Ratified" },
   ];
 }

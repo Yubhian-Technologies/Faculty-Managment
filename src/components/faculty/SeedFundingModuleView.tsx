@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { ExternalLink, Plus, Pencil } from "lucide-react";
 import {
-  Section, SubLabel, Field, TextInput, NumInput, DateInput, RepeatingGroup, TableRepeatingGroup,
+  Section, SubLabel, Field, TextInput, NumInput, DateInput, TableRepeatingGroup,
 } from "@/components/shared/ProfileFieldPrimitives";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DocumentUploadField } from "@/components/shared/DocumentUploadField";
+import { LinkOrFileInput } from "@/components/shared/LinkOrFileInput";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
@@ -22,11 +23,21 @@ import type {
 } from "@/types";
 
 const PREVIEW_COUNT = 3;
+// Guards against a typo like 1000 spawning a thousand student rows.
+const MAX_STUDENTS = 50;
 
 const EMPTY_STUDENT: SeedFundingStudentItem = { name: "", department: "", regdNumber: "", yearOfStudy: "" };
 const EMPTY_EQUIPMENT: SeedFundingEquipmentItem = { name: "", makeModel: "", softwareOrHardware: "", amount: undefined, purpose: "" };
 const EMPTY_PAPER: SeedFundingPaperItem = { title: "", journalOrConference: "" };
 const EMPTY_PATENT: SeedFundingPatentItem = { applicationNo: "", applicantName: "", patentTitle: "", inventorDetails: "", status: "" };
+
+const PATENT_STATUSES = ["Filed", "Published", "Granted"] as const;
+
+// Status used to be free text, so an older record may hold "filed" or
+// "GRANTED" - match case-insensitively, and treat anything else as unselected.
+function patentStatusKey(status: string): string {
+  return PATENT_STATUSES.find((s) => s.toLowerCase() === status.trim().toLowerCase()) ?? "";
+}
 
 function toNumberOrUndefined(v: string): number | undefined {
   if (v.trim() === "") return undefined;
@@ -150,7 +161,8 @@ function initialFormState(editing: SeedFundingProjectRequest | null): ProjectFor
     tentativeOutcomes: editing.tentativeOutcomes ?? "",
     piName: editing.piName,
     piDepartment: editing.piDepartment ?? "",
-    studentsInvolvedCount: n(editing.studentsInvolvedCount),
+    // Records added with the old "Add Student" button may have rows but no count.
+    studentsInvolvedCount: n(editing.studentsInvolvedCount ?? ((editing.students?.length ?? 0) || undefined)),
     students: editing.students ?? [],
     projectStatus: editing.projectStatus,
     dateSanctioned: editing.dateSanctioned ?? "",
@@ -187,6 +199,32 @@ function ProjectFormFields({
     setForm((f) => ({ ...f, [key]: value }));
   }
 
+  const studentCount = toNumberOrUndefined(form.studentsInvolvedCount) ?? 0;
+  const isCompleted = form.projectStatus === "COMPLETED";
+
+  // Digits only, clamped to MAX_STUDENTS. Clearing the box keeps rows already
+  // filled in, so backspace-and-retype doesn't wipe them; the submit payload
+  // drops them when the count is empty.
+  function setStudentsCount(raw: string) {
+    const digits = raw.replace(/\D/g, "").replace(/^0+/, "");
+    const v = digits === "" ? "" : String(Math.min(Number(digits), MAX_STUDENTS));
+    setForm((f) => {
+      const count = Number(v || 0);
+      const students = v === "" || f.students.length >= count
+        ? f.students
+        : [...f.students, ...Array.from({ length: count - f.students.length }, () => ({ ...EMPTY_STUDENT }))];
+      return { ...f, studentsInvolvedCount: v, students };
+    });
+  }
+
+  function updateStudent(i: number, patch: Partial<SeedFundingStudentItem>) {
+    setForm((f) => {
+      const next = [...f.students];
+      next[i] = { ...next[i], ...patch };
+      return { ...f, students: next };
+    });
+  }
+
   const isValid = form.title.trim().length > 1 && form.objectives.trim().length > 1 && form.piName.trim().length > 1 && !!form.projectStatus;
 
   async function handleSubmit() {
@@ -201,7 +239,7 @@ function ProjectFormFields({
         piName: form.piName.trim(),
         piDepartment: form.piDepartment.trim(),
         studentsInvolvedCount: toNumberOrUndefined(form.studentsInvolvedCount),
-        students: form.students,
+        students: form.students.slice(0, studentCount),
         projectStatus: form.projectStatus || undefined,
         dateSanctioned: form.dateSanctioned || undefined,
         dateOfStart: form.dateOfStart || undefined,
@@ -210,13 +248,15 @@ function ProjectFormFields({
         recurringAmount: toNumberOrUndefined(form.recurringAmount),
         nonRecurringAmount: toNumberOrUndefined(form.nonRecurringAmount),
         equipmentProcured: form.equipmentProcured,
-        papersPublished: form.papersPublished,
-        patents: form.patents,
-        studentsProjectsUG: toNumberOrUndefined(form.studentsProjectsUG),
-        studentsProjectsPG: toNumberOrUndefined(form.studentsProjectsPG),
-        studentsProjectsPhD: toNumberOrUndefined(form.studentsProjectsPhD),
-        studentsTrainedCount: toNumberOrUndefined(form.studentsTrainedCount),
-        externalFundedProposalsApplied: toNumberOrUndefined(form.externalFundedProposalsApplied),
+        // Outcomes only exist for a Completed project - anything typed before
+        // switching the status back to Sanctioned is dropped rather than saved unseen.
+        papersPublished: isCompleted ? form.papersPublished : [],
+        patents: isCompleted ? form.patents : [],
+        studentsProjectsUG: isCompleted ? toNumberOrUndefined(form.studentsProjectsUG) : undefined,
+        studentsProjectsPG: isCompleted ? toNumberOrUndefined(form.studentsProjectsPG) : undefined,
+        studentsProjectsPhD: isCompleted ? toNumberOrUndefined(form.studentsProjectsPhD) : undefined,
+        studentsTrainedCount: isCompleted ? toNumberOrUndefined(form.studentsTrainedCount) : undefined,
+        externalFundedProposalsApplied: isCompleted ? toNumberOrUndefined(form.externalFundedProposalsApplied) : undefined,
         progressReportUrl: form.progressReportUrl || undefined,
         utilizationCertificateUrl: form.utilizationCertificateUrl || undefined,
       };
@@ -270,7 +310,6 @@ function ProjectFormFields({
             <TextInput label="Name of the PI" value={form.piName} onChange={(v) => set("piName", v)} />
             <TextInput label="Dept. of PI" value={form.piDepartment} onChange={(v) => set("piDepartment", v)} />
           </div>
-          <NumInput label="No. of Students Involved" value={toNumberOrUndefined(form.studentsInvolvedCount)} onChange={(v) => set("studentsInvolvedCount", String(v))} />
         </div>
 
         <div className="space-y-4">
@@ -301,22 +340,29 @@ function ProjectFormFields({
 
       </div>
 
+      {/* Nothing shows until a status is picked; Sanctioned shows Students,
+          Equipment and Reports; Completed adds Outcomes. */}
+      {form.projectStatus && (
       <div className="space-y-5">
-        <RepeatingGroup
-          title="Students Involved"
-          items={form.students}
-          empty={EMPTY_STUDENT}
-          onChange={(v) => set("students", v)}
-          addLabel="Add Student"
-          renderRow={(item, update) => (
-            <>
-              <TextInput label="Name of Student" value={item.name} onChange={(v) => update({ name: v })} />
-              <TextInput label="Department" value={item.department} onChange={(v) => update({ department: v })} />
-              <TextInput label="Regd. Number" value={item.regdNumber} onChange={(v) => update({ regdNumber: v })} />
-              <TextInput label="Year of Study" value={item.yearOfStudy} onChange={(v) => update({ yearOfStudy: v })} />
-            </>
-          )}
-        />
+        <div className="space-y-3 rounded-lg border p-3">
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Students Involved</p>
+          <div className="space-y-2 max-w-[200px]">
+            <Label>No. of Students Involved</Label>
+            <Input
+              type="number" inputMode="numeric" min={0} max={MAX_STUDENTS} step={1}
+              value={form.studentsInvolvedCount} onChange={(e) => setStudentsCount(e.target.value)}
+              placeholder="Enter number"
+            />
+          </div>
+          {studentCount > 0 && form.students.slice(0, studentCount).map((s, i) => (
+            <div key={i} className="grid grid-cols-1 gap-3 sm:grid-cols-2 rounded-md bg-muted/30 p-3">
+              <TextInput label={`Name of Student ${i + 1}`} value={s.name} onChange={(v) => updateStudent(i, { name: v })} />
+              <TextInput label="Department" value={s.department} onChange={(v) => updateStudent(i, { department: v })} />
+              <TextInput label="Regd. Number" value={s.regdNumber} onChange={(v) => updateStudent(i, { regdNumber: v })} />
+              <TextInput label="Year of Study" value={s.yearOfStudy} onChange={(v) => updateStudent(i, { yearOfStudy: v })} />
+            </div>
+          ))}
+        </div>
 
         <TableRepeatingGroup
           title="Equipment Procured"
@@ -333,6 +379,7 @@ function ProjectFormFields({
           ]}
         />
 
+        {form.projectStatus === "COMPLETED" && (
         <div className="space-y-4">
           <SubLabel>Outcomes</SubLabel>
 
@@ -349,7 +396,16 @@ function ProjectFormFields({
               { header: "Quartile", render: (item, update) => <Input className="h-8 text-sm" value={item.quartile ?? ""} onChange={(e) => update({ quartile: e.target.value })} /> },
               { header: "IF", render: (item, update) => <Input className="h-8 text-sm" value={item.impactFactor ?? ""} onChange={(e) => update({ impactFactor: e.target.value })} /> },
               { header: "Indexed Scopus/WoS", render: (item, update) => <Input className="h-8 text-sm" value={item.indexedScopusWos ?? ""} onChange={(e) => update({ indexedScopusWos: e.target.value })} /> },
-              { header: "Cite the Paper As", render: (item, update) => <Input className="h-8 text-sm" value={item.citeAs ?? ""} onChange={(e) => update({ citeAs: e.target.value })} /> },
+              { header: "Cite the Paper in IEEE format", render: (item, update) => <Input className="h-8 text-sm" value={item.citeAs ?? ""} onChange={(e) => update({ citeAs: e.target.value })} /> },
+              { header: "Upload Paper Link/PDF", render: (item, update) => (
+                <LinkOrFileInput
+                  value={item.paperUrl}
+                  onChange={(url) => update({ paperUrl: url })}
+                  uploadEndpoint="/api/upload/seed-funding-doc"
+                  extraFields={{ kind: "paper" }}
+                  label="Paper"
+                />
+              ) },
             ]}
           />
 
@@ -364,7 +420,34 @@ function ProjectFormFields({
               { header: "Name of the Applicant", render: (item, update) => <Input className="h-8 text-sm" value={item.applicantName} onChange={(e) => update({ applicantName: e.target.value })} /> },
               { header: "Title of the Patent", render: (item, update) => <Input className="h-8 text-sm" value={item.patentTitle} onChange={(e) => update({ patentTitle: e.target.value })} /> },
               { header: "Inventor Details", render: (item, update) => <Input className="h-8 text-sm" value={item.inventorDetails} onChange={(e) => update({ inventorDetails: e.target.value })} /> },
-              { header: "Status (Filed/Published/Granted)", render: (item, update) => <Input className="h-8 text-sm" value={item.status} onChange={(e) => update({ status: e.target.value })} placeholder="Filed / Published / Granted" /> },
+              { header: "Status (Filed/Published/Granted)", render: (item, update) => (
+                <Select
+                  value={patentStatusKey(item.status)}
+                  onValueChange={(v) => update({ status: v })}
+                >
+                  <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Select" /></SelectTrigger>
+                  <SelectContent>
+                    {PATENT_STATUSES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              ) },
+              { header: "Upload Proof (Link/PDF)", render: (item, update) => {
+                const status = patentStatusKey(item.status);
+                if (!status) return <p className="text-xs text-muted-foreground pt-1.5">Select a status first</p>;
+                return (
+                  <div className="space-y-1">
+                    <p className="text-xs font-medium text-muted-foreground">{status} Proof</p>
+                    <LinkOrFileInput
+                      value={item.proofUrl}
+                      onChange={(url) => update({ proofUrl: url })}
+                      uploadEndpoint="/api/upload/seed-funding-doc"
+                      extraFields={{ kind: "patent-proof" }}
+                      label={`${status} proof`}
+                      placeholder={`Paste link or upload ${status.toLowerCase()} proof`}
+                    />
+                  </div>
+                );
+              } },
             ]}
           />
 
@@ -381,6 +464,7 @@ function ProjectFormFields({
             </div>
           </div>
         </div>
+        )}
 
         <div className="space-y-4">
           <SubLabel>Reports</SubLabel>
@@ -402,6 +486,7 @@ function ProjectFormFields({
           />
         </div>
       </div>
+      )}
       </div>
       </div>
       <DialogFooter>
