@@ -4,6 +4,7 @@ import { canRoleAccessRole } from "@/types";
 import type { UserRole } from "@/types";
 import { resolveHeldRoles } from "@/lib/auth/liveRoles";
 import { pickEffectiveRole } from "@/lib/roles/seatRoles";
+import { ACTIVE_HOD_DEPT_COOKIE, decodeActiveHodDepartment } from "@/lib/roles/activeHodDepartment";
 
 export interface SessionPayload {
   uid: string;
@@ -93,12 +94,31 @@ export async function requireManagement(): Promise<SessionPayload> {
 // treated as an HOD wherever an endpoint lists both, exactly as a dedicated HOD
 // login always was. Every existing `session.role === "HOD"` check therefore
 // keeps working unchanged.
+async function hasActiveHodPick(uid: string): Promise<boolean> {
+  try {
+    const { cookies } = await import("next/headers");
+    const jar = await cookies();
+    return decodeActiveHodDepartment(jar.get(ACTIVE_HOD_DEPT_COOKIE)?.value, uid) !== null;
+  } catch {
+    return false;
+  }
+}
+
 export async function requireRole(...roles: string[]): Promise<SessionPayload> {
   const session = await verifySession();
   if (!session) throw new Error("UNAUTHORIZED");
   const held = await resolveHeldRoles(session);
-  const match = pickEffectiveRole(held, roles);
+  let match = pickEffectiveRole(held, roles);
   if (!match) throw new Error("UNAUTHORIZED");
+  // Someone who is both an HOD and a more senior seat holder (e.g. Vice
+  // Principal) and has picked "HOD - <dept>" in the Working-as switcher must be
+  // evaluated as that HOD - otherwise every endpoint accepting both roles
+  // resolves to the senior one and returns the whole college, not the picked
+  // department. The cookie is only set while working as an HOD and can only
+  // move the caller to a role they actually hold, so it never widens access.
+  if (match !== "HOD" && held.includes("HOD") && roles.includes("HOD") && (await hasActiveHodPick(session.uid))) {
+    match = "HOD";
+  }
   return match === session.role ? { ...session, roles: held } : { ...session, role: match, roles: held };
 }
 

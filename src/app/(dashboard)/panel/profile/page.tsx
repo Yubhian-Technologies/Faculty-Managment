@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { MyProfileModuleTiles, FacultyIdentityFacts, FacultyStatusBadge } from "@/components/faculty/FacultyProfileHub";
 import { useAuth } from "@/hooks/useAuth";
 import type { FacultyMember } from "@/types";
+import { MyResumeDownloadButton } from "@/components/faculty/MyResumeDownloadButton";
 
 export default function FacultyProfilePage() {
   const { user } = useAuth();
@@ -41,6 +42,7 @@ export default function FacultyProfilePage() {
         description="Manage your profile photo and account details"
         actions={
           <div className="flex gap-2">
+            <MyResumeDownloadButton />
             <ChangePasswordDialog />
             <PublicProfileLinkButton />
           </div>

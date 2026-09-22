@@ -11,6 +11,7 @@ import { ProfileIdentitySummary } from "@/components/shared/ProfileIdentitySumma
 import { useAuth } from "@/hooks/useAuth";
 import { useMyDepartments } from "@/hooks/useMyDepartments";
 import type { Department } from "@/types";
+import { MyResumeDownloadButton } from "@/components/faculty/MyResumeDownloadButton";
 
 export default function HodProfilePage() {
   const { user } = useAuth();
@@ -40,6 +41,7 @@ export default function HodProfilePage() {
         description="Manage your profile photo and account details"
         actions={
           <div className="flex gap-2">
+            <MyResumeDownloadButton />
             <ChangePasswordDialog />
             <PublicProfileLinkButton />
           </div>

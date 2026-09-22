@@ -115,6 +115,10 @@ export async function GET(request: Request) {
       hodScope = scope;
       if (scope.ownDepartmentNames.length > 0) {
         primaryQuery = primaryQuery.where("department", "in", scope.ownDepartmentNames.slice(0, 30));
+      } else {
+      // An HOD with no department on file must see nothing - not the whole
+      // college, which is what leaving the query unfiltered would return.
+        primaryQuery = primaryQuery.where("department", "==", "__none__");
       }
       // Sub-departments (parent HOD) and grouped/managed branches (sub-HOD) are
       // both fully-owned - one `in` query covers both, tagged primary below.
