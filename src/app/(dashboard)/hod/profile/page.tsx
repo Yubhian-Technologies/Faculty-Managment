@@ -4,12 +4,14 @@ import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { ProfilePhotoUpload } from "@/components/shared/ProfilePhotoUpload";
 import { ChangePasswordDialog } from "@/components/shared/ChangePasswordDialog";
+import { PublicProfileLinkButton } from "@/components/shared/PublicProfileLinkButton";
 import { Card, CardContent } from "@/components/ui/card";
 import { MyProfileModuleTiles } from "@/components/faculty/FacultyProfileHub";
 import { ProfileIdentitySummary } from "@/components/shared/ProfileIdentitySummary";
 import { useAuth } from "@/hooks/useAuth";
 import { useMyDepartments } from "@/hooks/useMyDepartments";
 import type { Department } from "@/types";
+import { MyResumeDownloadButton } from "@/components/faculty/MyResumeDownloadButton";
 
 export default function HodProfilePage() {
   const { user } = useAuth();
@@ -37,7 +39,13 @@ export default function HodProfilePage() {
       <PageHeader
         title="My Profile"
         description="Manage your profile photo and account details"
-        actions={<ChangePasswordDialog />}
+        actions={
+          <div className="flex gap-2">
+            <MyResumeDownloadButton />
+            <ChangePasswordDialog />
+            <PublicProfileLinkButton />
+          </div>
+        }
       />
       <Card>
         <CardContent className="p-6 space-y-6">

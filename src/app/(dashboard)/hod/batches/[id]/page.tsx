@@ -486,12 +486,12 @@ ${batch.hodName}
 Head of Department – ${batch.department}
 ${institution}`;
 
-    // CC: Principal, Vice Principal, College Admin (mirrors Principal's
+    // CC: Principal, Vice Principal, College Admin/Director (mirror Principal's
     // authority), College Office, and this batch's selected panel members
     const panelEmails = batch.panelMemberUids.map((uid) => userMap[uid]?.email).filter(Boolean) as string[];
     const ccEmails = Array.from(new Set([
       ...allUsers
-        .filter((u) => [u.role, ...(u.seatRoles ?? [])].some((r) => r === "PRINCIPAL" || r === "VICE_PRINCIPAL" || r === "COLLEGE_ADMIN" || r === "COLLEGE_OFFICE"))
+        .filter((u) => [u.role, ...(u.seatRoles ?? [])].some((r) => r === "PRINCIPAL" || r === "VICE_PRINCIPAL" || r === "COLLEGE_ADMIN" || r === "DIRECTOR" || r === "COLLEGE_OFFICE"))
         .map((u) => u.email)
         .filter(Boolean),
       ...panelEmails,
@@ -968,6 +968,7 @@ ${institution}`;
                           u.role === "PRINCIPAL" ||
                           u.role === "VICE_PRINCIPAL" ||
                           u.role === "COLLEGE_ADMIN" ||
+                          u.role === "DIRECTOR" ||
                           (u.department ? myDepartments.includes(u.department) : false) ||
                           editPanel.includes(u.uid)
                       )

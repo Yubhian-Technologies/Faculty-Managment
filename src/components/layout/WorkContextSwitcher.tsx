@@ -4,8 +4,9 @@ import { useRouter } from "next/navigation";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuthStore } from "@/store/authStore";
 import { useWorkContextStore } from "@/store/workContextStore";
-import { useWorkContext } from "@/hooks/useWorkContext";
+import { syncActiveHodCookie, useWorkContext } from "@/hooks/useWorkContext";
 import { ROLE_DASHBOARD_PATHS, type UserRole } from "@/types/core";
+import { departmentOfContext } from "@/lib/roles/activeHodDepartment";
 
 // "Working as ..." - only for logins that hold seats. Picking one changes the
 // sidebar to that seat's modules (or the person's own, for "My Work") and opens
@@ -20,7 +21,9 @@ export function WorkContextSwitcher() {
   function onChange(key: string) {
     if (!user) return;
     choose(user.uid, key);
-    router.push(ROLE_DASHBOARD_PATHS[key === "ME" ? user.role : (key as UserRole)] ?? "/");
+    syncActiveHodCookie(user.uid, key);
+    const role = key === "ME" ? user.role : departmentOfContext(key) !== null ? "HOD" : (key as UserRole);
+    router.push(ROLE_DASHBOARD_PATHS[role as UserRole] ?? "/");
   }
 
   return (

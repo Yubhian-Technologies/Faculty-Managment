@@ -4,7 +4,8 @@ import { NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import { notify, notifyRole } from "@/lib/notify";
+import { notify } from "@/lib/notify";
+import { notifyReviewer, resolveSubmissionRoute, routeFields } from "@/lib/research/coordinatorReview";
 import { PUBLICATION_ELIGIBLE_ROLES } from "@/lib/publications/eligibleRoles";
 import { finalizePublicationDetails, deriveFlatFields, summarizeChanges } from "@/lib/publications/deriveFlatFields";
 import type { PublicationDetails, PublicationStatus } from "@/types";
@@ -131,10 +132,14 @@ export async function PATCH(
     // rather than silently re-approving stale info.
     if ((isOwner || isCoAuthor) && !isRnD) {
       const wasApproved = pub.status === "APPROVED";
+      const route = await resolveSubmissionRoute(db, session.collegeId, pub.uid, false);
       const now = new Date();
       const updates: Record<string, unknown> = {
         updatedAt: now,
-        status: "PENDING" satisfies PublicationStatus,
+        ...routeFields(route),
+        sentBackReason: FieldValue.delete(),
+        coordinatorNote: FieldValue.delete(),
+        status: route.status satisfies PublicationStatus,
         reviewedBy: FieldValue.delete(),
         reviewedByName: FieldValue.delete(),
         reviewedAt: FieldValue.delete(),
@@ -177,15 +182,14 @@ export async function PATCH(
         details: { title: body.title ?? pub.title },
         timestamp: now,
       });
-      await notifyRole(
-        db, session.collegeId, "R_AND_D",
-        "PUBLICATION_PENDING_VERIFICATION",
-        wasApproved ? "Approved publication edited - re-verification needed" : "Publication resubmitted for verification",
-        wasApproved
+      await notifyReviewer(db, session.collegeId, route, {
+        type: "PUBLICATION_PENDING_VERIFICATION",
+        title: wasApproved ? "Approved publication edited - re-verification needed" : "Publication resubmitted for verification",
+        message: wasApproved
           ? `${editorName} edited "${body.title ?? pub.title}" after approval: ${(changes.length > 0 ? changes : ["Details updated"]).join(", ")}`
           : `${editorName} submitted/corrected "${body.title ?? pub.title}" for verification`,
-        "/r-and-d/publications"
-      );
+        rndLink: "/r-and-d/publications",
+      });
       return NextResponse.json({ ok: true });
     }
 

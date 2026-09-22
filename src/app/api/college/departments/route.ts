@@ -695,7 +695,7 @@ export async function PATCH(request: Request) {
     if (requestedHodUid !== undefined) {
       const deptForSeat = await deptRef.get();
       if (!deptForSeat.exists) return NextResponse.json({ error: "Department not found" }, { status: 404 });
-      if (session.role !== "HOD" && !canAssignSeat(session, "HOD")) {
+      if (session.role !== "HOD" && !canAssignSeat(session)) {
         return NextResponse.json({ error: "You can't assign this seat" }, { status: 403 });
       }
       const seatName = (deptForSeat.data() as { name?: string }).name ?? "";

@@ -7,6 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { MyProfileModuleTiles } from "@/components/faculty/FacultyProfileHub";
 import { useAuth } from "@/hooks/useAuth";
 import { ROLE_LABELS } from "@/types";
+import { MyResumeDownloadButton } from "@/components/faculty/MyResumeDownloadButton";
 
 export default function CollegeAccountsProfilePage() {
   const { user } = useAuth();
@@ -17,7 +18,7 @@ export default function CollegeAccountsProfilePage() {
       <PageHeader
         title="My Profile"
         description="Manage your profile photo and account details"
-        actions={<ChangePasswordDialog />}
+        actions={<div className="flex gap-2"><MyResumeDownloadButton /><ChangePasswordDialog /></div>}
       />
       <Card>
         <CardContent className="p-6 space-y-6">

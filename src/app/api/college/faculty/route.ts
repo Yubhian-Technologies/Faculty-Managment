@@ -57,6 +57,10 @@ export async function GET(request: Request) {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
       if (scope.ownDepartmentNames.length > 0) {
         primaryQuery = primaryQuery.where("department", "in", scope.ownDepartmentNames.slice(0, 30));
+      } else {
+      // An HOD with no department on file must see nothing - not the whole
+      // college, which is what leaving the query unfiltered would return.
+        primaryQuery = primaryQuery.where("department", "==", "__none__");
       }
 
       // Sub-departments only (facultyManageableDepartmentNames) - a managed/

@@ -1,22 +1,30 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { UserPlus, ChevronDown, ChevronUp, Plus, Pencil } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { UserPlus, ChevronDown, ChevronUp, Plus, Pencil, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
 import { COLLEGE_TYPE_LABELS } from "@/types";
 import type { College } from "@/types";
 
-type PrincipalRow = { uid: string; name: string; email: string; role: string; isActive: boolean };
+type PrincipalRow = { uid: string; name: string; email: string; phone?: string; roles: string[] };
+const ROLE_NAMES: Record<string, string> = { COLLEGE_ADMIN: "College Admin", PRINCIPAL: "Principal", VICE_PRINCIPAL: "Vice Principal" };
 
 export default function AdministrationCollegesPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [colleges, setColleges] = useState<College[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  // Seeded from the dashboard's college picker (?collegeId=) so arriving here
+  // via "Colleges" with one already selected lands pre-expanded on it,
+  // instead of a flat unexpanded list.
+  const [expandedId, setExpandedId] = useState<string | null>(() => searchParams.get("collegeId"));
   // Read-only: who currently holds the Principal/VP seat, shown in each row's
   // expanded detail. There's no "Add Principal" action on this page any more
   // - Principal (and every other seat) is appointed from within the college,
@@ -24,6 +32,64 @@ export default function AdministrationCollegesPage() {
   // Location Admin (see api/administration/college-people's comment).
   const [principalMap, setPrincipalMap] = useState<Record<string, PrincipalRow[]>>({});
   const [principalsLoaded, setPrincipalsLoaded] = useState(false);
+  const [editing, setEditing] = useState<{ collegeId: string; person: PrincipalRow } | null>(null);
+  const [deleting, setDeleting] = useState<{ collegeId: string; person: PrincipalRow } | null>(null);
+  const [form, setForm] = useState({ name: "", phone: "", email: "", password: "" });
+  const [busy, setBusy] = useState(false);
+
+  function openEdit(collegeId: string, person: PrincipalRow) {
+    setForm({ name: person.name, phone: person.phone ?? "", email: person.email, password: "" });
+    setEditing({ collegeId, person });
+  }
+
+  async function saveEdit() {
+    if (!editing) return;
+    if (!form.email.trim()) { toast({ variant: "destructive", title: "Email can't be empty" }); return; }
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/administration/college-people/${editing.person.uid}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          collegeId: editing.collegeId,
+          name: form.name,
+          phone: form.phone,
+          collegeEmail: form.email,
+          ...(form.password ? { newPassword: form.password } : {}),
+        }),
+      });
+      const json = (await res.json()) as { error?: string };
+      if (!res.ok) { toast({ variant: "destructive", title: "Couldn't save", description: json.error }); return; }
+      toast({ variant: "success", title: "Saved" });
+      setEditing(null);
+      loadAll();
+    } catch {
+      toast({ variant: "destructive", title: "Network error" });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function confirmDelete() {
+    if (!deleting) return;
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/administration/college-people/${deleting.person.uid}?collegeId=${deleting.collegeId}`, { method: "DELETE" });
+      const json = (await res.json()) as { error?: string; mode?: string };
+      if (!res.ok) { toast({ variant: "destructive", title: "Couldn't remove", description: json.error }); return; }
+      toast({
+        variant: "success",
+        title: json.mode === "deactivated" ? "Access removed" : "Deleted",
+        description: json.mode === "deactivated" ? "They are also on the college roster, so their account was switched off rather than deleted." : undefined,
+      });
+      setDeleting(null);
+      loadAll();
+    } catch {
+      toast({ variant: "destructive", title: "Network error" });
+    } finally {
+      setBusy(false);
+    }
+  }
 
   function loadAll() {
     setIsLoading(true);
@@ -40,6 +106,16 @@ export default function AdministrationCollegesPage() {
       .catch(() => toast({ variant: "destructive", title: "Failed to load principals" }))
       .finally(() => setPrincipalsLoaded(true));
   }
+
+  useEffect(() => {
+    // Runs once, after the picked college's row exists in the DOM - scrolls
+    // it into view so arriving from the dashboard doesn't leave it hidden
+    // below the fold in a long college list.
+    if (!isLoading && expandedId) {
+      document.getElementById(`college-${expandedId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoading]);
 
   useEffect(() => {
     loadAll();
@@ -90,7 +166,11 @@ export default function AdministrationCollegesPage() {
           const principalList = principalMap[college.id];
 
           return (
-            <div key={college.id} className="rounded-lg border bg-card overflow-hidden">
+            <div
+              key={college.id}
+              id={`college-${college.id}`}
+              className={`rounded-lg border bg-card overflow-hidden ${college.id === searchParams.get("collegeId") ? "ring-2 ring-primary/40" : ""}`}
+            >
               {/* College row */}
               <div className="flex items-center justify-between p-4">
                 <div className="flex items-center gap-3 min-w-0">
@@ -140,11 +220,11 @@ export default function AdministrationCollegesPage() {
               {/* Expanded principals list */}
               {isExpanded && (
                 <div className="border-t px-4 pb-4 pt-3 bg-muted/30">
-                  <p className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide">Principals & Vice Principals</p>
+                  <p className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide">College Admin, Principal & Vice Principal</p>
                   {!principalsLoaded ? (
                     <div className="h-8 w-32 bg-muted animate-pulse rounded" />
                   ) : (principalList ?? []).length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No principals assigned yet.</p>
+                    <p className="text-sm text-muted-foreground">No College Admin, Principal or Vice Principal yet.</p>
                   ) : (
                     <div className="space-y-2">
                       {(principalList ?? []).map((p) => (
@@ -153,9 +233,17 @@ export default function AdministrationCollegesPage() {
                             <p className="text-sm font-medium">{p.name}</p>
                             <p className="text-xs text-muted-foreground">{p.email}</p>
                           </div>
-                          <Badge variant="outline" className="text-xs">
-                            {p.role === "PRINCIPAL" ? "Principal" : "Vice Principal"}
-                          </Badge>
+                          <div className="flex items-center gap-2 shrink-0">
+                            {p.roles.map((r) => (
+                              <Badge key={r} variant="outline" className="text-xs">{ROLE_NAMES[r] ?? r}</Badge>
+                            ))}
+                            <Button size="sm" variant="ghost" onClick={() => openEdit(college.id, p)}>
+                              <Pencil className="h-3.5 w-3.5 mr-1.5" />Edit
+                            </Button>
+                            <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => setDeleting({ collegeId: college.id, person: p })}>
+                              <Trash2 className="h-3.5 w-3.5 mr-1.5" />Delete
+                            </Button>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -166,6 +254,39 @@ export default function AdministrationCollegesPage() {
           );
         })}
       </div>
+      <Dialog open={!!editing} onOpenChange={(o) => { if (!o) setEditing(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit {editing?.person.roles.map((r) => ROLE_NAMES[r] ?? r).join(" / ")}</DialogTitle>
+            <DialogDescription>Update the login details. Leave the password blank to keep it as it is.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1.5"><Label>Name</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
+            <div className="space-y-1.5"><Label>Login email</Label><Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
+            <div className="space-y-1.5"><Label>Phone</Label><Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></div>
+            <div className="space-y-1.5"><Label>New password</Label><Input type="password" autoComplete="new-password" placeholder="Leave blank to keep current" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} /></div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditing(null)} disabled={busy}>Cancel</Button>
+            <Button onClick={saveEdit} disabled={busy}>{busy ? "Saving..." : "Save"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!deleting} onOpenChange={(o) => { if (!o) setDeleting(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete {deleting?.person.name || deleting?.person.email}?</DialogTitle>
+            <DialogDescription>
+              They lose access straight away and any seat they hold ({deleting?.person.roles.map((r) => ROLE_NAMES[r] ?? r).join(", ")}) becomes empty, ready for a new appointment. This can&apos;t be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleting(null)} disabled={busy}>Cancel</Button>
+            <Button variant="destructive" onClick={confirmDelete} disabled={busy}>{busy ? "Deleting..." : "Delete"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

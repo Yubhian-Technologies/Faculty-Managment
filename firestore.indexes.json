@@ -5,6 +5,7 @@
 
     { "collectionGroup": "users", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "role", "order": "ASCENDING" }, { "fieldPath": "name", "order": "ASCENDING" }] },
     { "collectionGroup": "users", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "role", "order": "ASCENDING" }, { "fieldPath": "departments", "arrayConfig": "CONTAINS" }] },
+    { "collectionGroup": "users", "queryScope": "COLLECTION_GROUP", "fields": [{ "fieldPath": "employeeId", "order": "ASCENDING" }] },
 
     { "collectionGroup": "facultyMembers", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "department", "order": "ASCENDING" }, { "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "name", "order": "ASCENDING" }] },
     { "collectionGroup": "facultyMembers", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "designation", "order": "ASCENDING" }] },

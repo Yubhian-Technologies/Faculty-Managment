@@ -1,4 +1,5 @@
 import type { DepartmentCourseScope } from "@/types";
+import { narrowToActiveHodDepartment } from "@/lib/roles/activeHodDepartment";
 import { resolveDepartmentCourseScope } from "@/lib/college/academicStructure";
 import { canHodEditDepartmentYear, type DepartmentYearRow } from "@/lib/departments/managedBranches";
 
@@ -178,13 +179,15 @@ export async function getHodDepartmentScope(
   // `departments` is the source of truth once present; a doc that predates it
   // (or was only ever touched by the old single-field write path) falls back
   // to its one `department` string.
-  const ownDepartmentNames = Array.from(
+  // An HOD of several departments works in one at a time (the "Working as"
+  // switcher); narrow to it so every page and route sees just that department.
+  const ownDepartmentNames = await narrowToActiveHodDepartment(uid, Array.from(
     new Set(
       (userData?.departments && userData.departments.length > 0 ? userData.departments : [userData?.department ?? ""])
         .map((n) => n.trim())
         .filter(Boolean)
     )
-  ).slice(0, 30);
+  ).slice(0, 30));
 
   if (ownDepartmentNames.length === 0) {
     return emptyScope;

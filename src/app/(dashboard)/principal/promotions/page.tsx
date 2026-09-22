@@ -3,8 +3,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, GraduationCap, Users, Upload, FileSpreadsheet, AlertTriangle } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
-import { SegmentedTabs } from "@/components/shared/SegmentedTabs";
-import { StaffPromotionsPanel } from "./StaffPromotionsPanel";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -15,8 +13,7 @@ import { CardSkeleton } from "@/components/shared/SkeletonLoader";
 import { toast } from "@/hooks/useToast";
 import { yearOrdinalLabel } from "@/lib/college/academicYears";
 import { parseExcelFile, parseCSV, matchHeaders, getUnmatchedHeaders, readFileAsText } from "@/lib/utils/csv";
-import { structureFromDepartments, type DepartmentWithId } from "@/lib/college/academicStructure";
-import type { AcademicYear, Course, Department, Section, StudentRecord } from "@/types";
+import type { AcademicYear, Course, Section, StudentRecord } from "@/types";
 
 const GRADUATE = "GRADUATE" as const;
 
@@ -30,24 +27,11 @@ const ALLOTMENT_COLUMNS = [
 
 type AllotmentSummary = { matched: number; unmatched: { rollNumber: string; reason: string }[] };
 
-interface AdvancePreview {
-  fromYear: number;
-  toYear: number;
-  eligible: number;
-  groups: { department: string; section: string; students: number }[];
-  missing: { department: string; year: number; section: string; students: number }[];
-}
-
 function StudentPromotionsPanel() {
   const [sections, setSections] = useState<Section[]>([]);
   const [openYears, setOpenYears] = useState<AcademicYear[]>([]);
-  const [departments, setDepartments] = useState<Department[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
   const [isLoadingContext, setIsLoadingContext] = useState(true);
-
-  const [advancePreview, setAdvancePreview] = useState<AdvancePreview | null>(null);
-  const [isPreviewingAdvance, setIsPreviewingAdvance] = useState(false);
-  const [isAdvancing, setIsAdvancing] = useState(false);
 
   const [sourceSectionId, setSourceSectionId] = useState<string>("");
   const [roster, setRoster] = useState<StudentRecord[]>([]);
@@ -68,79 +52,16 @@ function StudentPromotionsPanel() {
     Promise.all([
       fetch("/api/college/sections").then((r) => r.json() as Promise<{ sections: Section[] }>).then((d) => d.sections ?? []),
       fetch("/api/college/academic-years").then((r) => r.json() as Promise<{ academicYears: AcademicYear[] }>).then((d) => (d.academicYears ?? []).filter((y) => y.isActive)),
-      fetch("/api/college/departments").then((r) => r.json() as Promise<{ departments: Department[] }>).then((d) => d.departments ?? []),
       fetch("/api/college/courses").then((r) => r.json() as Promise<{ courses: Course[] }>).then((d) => d.courses ?? []),
     ])
-      .then(([sections, years, depts, courses]) => {
+      .then(([sections, years, courses]) => {
         setSections(sections);
         setOpenYears(years);
-        setDepartments(depts);
         setCourses(courses);
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load sections" }))
       .finally(() => setIsLoadingContext(false));
   }, []);
-
-  // Only a college that runs a shared year gets the cohort-advance panel;
-  // derived with the same helper the API uses so the two can't disagree.
-  const structure = useMemo(
-    () => structureFromDepartments(departments as DepartmentWithId[]),
-    [departments]
-  );
-  const isCommonFirstYear = structure.isCommonFirstYear;
-  const cohortYear = structure.commonYears[0];
-  const commonYearEnd = structure.commonDepartment?.commonYearEnd;
-
-  async function handleAdvanceCohort(dryRun: boolean) {
-    if (!cohortYear) return;
-    if (dryRun) setIsPreviewingAdvance(true);
-    else setIsAdvancing(true);
-    try {
-      const res = await fetch("/api/college/students/advance-year", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fromYear: cohortYear, dryRun }),
-      });
-      const json = await res.json() as Partial<AdvancePreview> & {
-        error?: string; advanced?: number; missing?: AdvancePreview["missing"];
-      };
-      if (!res.ok) {
-        // A 409 carries the missing-section list - keep it so the panel can
-        // show exactly what each branch's HOD still has to create.
-        if (res.status === 409 && json.missing) {
-          setAdvancePreview({
-            fromYear: cohortYear,
-            toYear: cohortYear + 1,
-            eligible: json.eligible ?? 0,
-            groups: [],
-            missing: json.missing,
-          });
-        }
-        throw new Error(json.error ?? "Failed to advance cohort");
-      }
-      if (dryRun) {
-        setAdvancePreview({
-          fromYear: json.fromYear ?? cohortYear,
-          toYear: json.toYear ?? cohortYear + 1,
-          eligible: json.eligible ?? 0,
-          groups: json.groups ?? [],
-          missing: [],
-        });
-      } else {
-        setAdvancePreview(null);
-        toast({ variant: "success", title: `Advanced ${json.advanced} students to ${yearOrdinalLabel(cohortYear + 1)}` });
-        // The moved cohort changes what the per-section flow below can target.
-        const sectionsRes = await fetch("/api/college/sections").then((r) => r.json() as Promise<{ sections: Section[] }>);
-        setSections(sectionsRes.sections ?? []);
-        setSourceSectionId("");
-      }
-    } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to advance cohort" });
-    } finally {
-      setIsPreviewingAdvance(false);
-      setIsAdvancing(false);
-    }
-  }
 
   const sourceSection = sections.find((s) => s.id === sourceSectionId) ?? null;
   const sourceCourse = sourceSection ? courses.find((c) => c.id === sourceSection.courseId) ?? null : null;
@@ -406,75 +327,6 @@ function StudentPromotionsPanel() {
         description="Move a cohort to the next year - bulk by section, with per-student override for students splitting into different departments"
       />
 
-      {isCommonFirstYear && cohortYear && (
-        <Card>
-          <CardContent className="p-5 space-y-3">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="space-y-1">
-                <p className="font-semibold">Advance {yearOrdinalLabel(cohortYear)} Cohort</p>
-                <p className="text-sm text-muted-foreground">
-                  Moves every {yearOrdinalLabel(cohortYear).toLowerCase()} student up to{" "}
-                  {yearOrdinalLabel(cohortYear + 1).toLowerCase()} at once, keeping each student in the same branch
-                  and the same section - handing each branch&apos;s cohort back to its own HOD.
-                  {commonYearEnd ? ` Shared first year ends ${commonYearEnd}.` : ""}
-                </p>
-              </div>
-              <div className="flex gap-2">
-                <Button variant="outline" onClick={() => void handleAdvanceCohort(true)} loading={isPreviewingAdvance}>
-                  Preview
-                </Button>
-                <Button
-                  onClick={() => void handleAdvanceCohort(false)}
-                  loading={isAdvancing}
-                  disabled={!advancePreview || advancePreview.missing.length > 0}
-                  title={
-                    !advancePreview
-                      ? "Run Preview first"
-                      : advancePreview.missing.length > 0
-                        ? "Create the missing sections first"
-                        : undefined
-                  }
-                >
-                  Advance Cohort
-                </Button>
-              </div>
-            </div>
-
-            {advancePreview && (
-              advancePreview.missing.length > 0 ? (
-                <div className="rounded-md border border-amber-300 bg-amber-50 p-3 space-y-1 dark:bg-amber-950/20">
-                  <p className="text-sm font-medium flex items-center gap-1.5">
-                    <AlertTriangle className="h-4 w-4 text-amber-600" />
-                    Create these sections first
-                  </p>
-                  <ul className="text-xs text-muted-foreground space-y-0.5">
-                    {advancePreview.missing.map((m) => (
-                      <li key={`${m.department}|${m.section}`}>
-                        {m.department} · {yearOrdinalLabel(m.year)} · Section {m.section} ({m.students} student
-                        {m.students === 1 ? "" : "s"})
-                      </li>
-                    ))}
-                  </ul>
-                  <p className="text-xs text-muted-foreground pt-1">
-                    Nothing has been changed. Each branch&apos;s HOD creates its own sections, then run Preview again.
-                  </p>
-                </div>
-              ) : (
-                <div className="rounded-md border p-3 space-y-1">
-                  <p className="text-sm font-medium">
-                    Ready: {advancePreview.eligible} student{advancePreview.eligible === 1 ? "" : "s"} across{" "}
-                    {advancePreview.groups.length} section{advancePreview.groups.length === 1 ? "" : "s"}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {advancePreview.groups.map((g) => `${g.department} ${g.section} (${g.students})`).join(", ")}
-                  </p>
-                </div>
-              )
-            )}
-          </CardContent>
-        </Card>
-      )}
-
       <Card>
         <CardContent className="p-5 space-y-2">
           <label className="text-sm font-medium">Source Section</label>
@@ -659,23 +511,6 @@ function StudentPromotionsPanel() {
   );
 }
 
-// Students (existing year-advancement flow, untouched above) and Staff (role
-// promotion - same login/account, just a new role - see StaffPromotionsPanel)
-// share this one "Promotions" entry point per the Principal's own naming for
-// both concepts.
 export default function PromotionsPage() {
-  const [tab, setTab] = useState<"STUDENTS" | "STAFF">("STUDENTS");
-  return (
-    <div className="space-y-6">
-      <SegmentedTabs
-        value={tab}
-        onChange={(v) => setTab(v as "STUDENTS" | "STAFF")}
-        options={[
-          { key: "STUDENTS", label: "Students" },
-          { key: "STAFF", label: "Staff" },
-        ]}
-      />
-      {tab === "STUDENTS" ? <StudentPromotionsPanel /> : <StaffPromotionsPanel />}
-    </div>
-  );
+  return <StudentPromotionsPanel />;
 }

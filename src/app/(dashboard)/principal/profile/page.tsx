@@ -3,10 +3,12 @@
 import { PageHeader } from "@/components/shared/PageHeader";
 import { ProfilePhotoUpload } from "@/components/shared/ProfilePhotoUpload";
 import { ChangePasswordDialog } from "@/components/shared/ChangePasswordDialog";
+import { PublicProfileLinkButton } from "@/components/shared/PublicProfileLinkButton";
 import { Card, CardContent } from "@/components/ui/card";
 import { ProfileModuleTiles } from "@/components/faculty/FacultyProfileHub";
 import { ProfileIdentitySummary } from "@/components/shared/ProfileIdentitySummary";
 import { useAuth } from "@/hooks/useAuth";
+import { MyResumeDownloadButton } from "@/components/faculty/MyResumeDownloadButton";
 
 // College Admin has no nav entry into this page at all (see navConfig.ts's
 // My Profile item) - it's a role-login, not one continuous employee, so its
@@ -21,7 +23,13 @@ export default function PrincipalProfilePage() {
       <PageHeader
         title="My Profile"
         description="Manage your profile photo and account details"
-        actions={<ChangePasswordDialog />}
+        actions={
+          <div className="flex gap-2">
+            <MyResumeDownloadButton />
+            <ChangePasswordDialog />
+            <PublicProfileLinkButton />
+          </div>
+        }
       />
       <Card>
         <CardContent className="p-6 space-y-6">

@@ -179,6 +179,20 @@ export default function NewSectionPage() {
     return regulationsForBatchStartYear(catalogItem?.regulationBatches ?? {}, batchStart, catalogItem?.regulations);
   }, [formCourse, catalogItems]);
   const regulationOptions = useMemo(() => regulationsForBatch(form.batch), [regulationsForBatch, form.batch]);
+  // A batch normally maps to exactly one regulation - each admission year has
+  // its own - so the field fills itself the moment a batch is picked instead
+  // of asking again for something already implied. More than one match is the
+  // exception (overlapping batch coverage in the Course Catalog), and it is
+  // deliberately NOT resolved by guessing: the picker comes back so the HOD
+  // decides, which is what regulationsForBatchStartYear's own doc-comment
+  // asks callers to do.
+  const autoRegulation = useCallback(
+    (batchValue: string) => {
+      const opts = regulationsForBatch(batchValue);
+      return opts.length === 1 ? opts[0] : "";
+    },
+    [regulationsForBatch]
+  );
 
   function selectYear(year: string) {
     // Anchor on the real current academic year, not the stored session pin
@@ -187,7 +201,7 @@ export default function NewSectionPage() {
     const sessionStart = currentAcademicStartYear();
     const admissionYear = admissionStartYearForCourseYear(sessionStart, Number(year));
     const batch = formCourse ? deriveBatch(admissionYear, formCourse.durationYears) : "";
-    setF({ year, regulation: "", batch });
+    setF({ year, batch, regulation: autoRegulation(batch) });
   }
 
   // Candidate intake years to offer in the Batch picker, centered on the
@@ -667,12 +681,16 @@ export default function NewSectionPage() {
                 <Select
                   value={form.batch}
                   onValueChange={(v) => {
-                    // Keep the current regulation only if it still covers the
-                    // newly-picked batch - otherwise it's stale (belonged to
-                    // the previous batch) and must be re-picked, exactly like
-                    // switching Year already clears it.
-                    const stillValid = regulationsForBatch(v).includes(form.regulation);
-                    setF({ batch: v, regulation: stillValid ? form.regulation : "" });
+                    // The regulation follows the batch. When the batch implies
+                    // exactly one it is filled in; when it implies several the
+                    // previous choice is kept only if it still covers this
+                    // batch, otherwise it is cleared for re-picking.
+                    const opts = regulationsForBatch(v);
+                    const auto = opts.length === 1 ? opts[0] : "";
+                    setF({
+                      batch: v,
+                      regulation: auto || (opts.includes(form.regulation) ? form.regulation : ""),
+                    });
                   }}
                   disabled={!form.year}
                 >
@@ -685,19 +703,27 @@ export default function NewSectionPage() {
               </div>
               <div className="space-y-2">
                 <Label>Regulation</Label>
-                <Select
-                  value={form.regulation}
-                  onValueChange={(v) => setF({ regulation: v })}
-                  disabled={!form.batch || regulationOptions.length === 0}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder={form.batch ? (regulationOptions.length ? "Select regulation" : "None assigned for this batch") : "Pick a batch first"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {regulationOptions.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">Which curriculum this batch follows for its whole run through this class.</p>
+                {regulationOptions.length > 1 ? (
+                  <Select value={form.regulation} onValueChange={(v) => setF({ regulation: v })}>
+                    <SelectTrigger><SelectValue placeholder="Select regulation" /></SelectTrigger>
+                    <SelectContent>
+                      {regulationOptions.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Input
+                    value={form.regulation}
+                    readOnly
+                    tabIndex={-1}
+                    className="bg-muted/50"
+                    placeholder={form.batch ? "None assigned for this batch" : "Pick a batch first"}
+                  />
+                )}
+                <p className="text-xs text-muted-foreground">
+                  {regulationOptions.length > 1
+                    ? "This batch is covered by more than one regulation - pick the one this class follows."
+                    : "Set by the batch - which curriculum this class follows for its whole run."}
+                </p>
               </div>
             </div>
 

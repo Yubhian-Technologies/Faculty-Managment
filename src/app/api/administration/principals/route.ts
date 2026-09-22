@@ -1,31 +1,31 @@
 export const dynamic = "force-dynamic";
 
-import { findUsersWithMatchedRole } from "@/lib/roles/findUsersByRoles";
 import { NextResponse } from "next/server";
 import { requireLocationMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 
-async function fetchCollegePrincipals(db: FirebaseFirestore.Firestore, collegeId: string) {
-  // Includes whoever holds the Principal / Vice Principal SEAT (see
-  // types/roleSeats.ts), reported under that seat's role - not just accounts
-  // whose own role is Principal.
-  const matches = await findUsersWithMatchedRole(db, collegeId, ["PRINCIPAL", "VICE_PRINCIPAL"], { exact: true });
+const MANAGED = ["COLLEGE_ADMIN", "PRINCIPAL", "VICE_PRINCIPAL"];
 
-  // Deduplicate: a college has exactly one Principal slot. A deactivated
-  // holder must NOT count as "existing" - otherwise the Add Principal/VP
-  // button stays hidden forever after someone is deactivated, with no way
-  // to appoint a replacement from this page.
-  let principalSeen = false;
-  return matches
-    .map((m) => ({ uid: m.doc.id, ...m.doc.data(), role: m.matchedRole }))
-    .filter((u) => (u as unknown as { isActive?: boolean }).isActive !== false)
-    .filter((u) => {
-      if ((u as unknown as { role: string }).role === "PRINCIPAL") {
-        if (principalSeen) return false;
-        principalSeen = true;
-      }
-      return true;
-    });
+// The College Admin, Principal and Vice Principal of a college, read from the
+// RAW stored roles (a College Admin normalizes to Principal elsewhere, which
+// would hide it here). Deactivated accounts are left out.
+async function fetchCollegePrincipals(db: FirebaseFirestore.Firestore, collegeId: string) {
+  const users = db.collection("colleges").doc(collegeId).collection("users");
+  const [byRole, bySeat] = await Promise.all([
+    users.where("role", "in", MANAGED).get(),
+    users.where("seatRoles", "array-contains-any", MANAGED).get(),
+  ]);
+  const seen = new Set<string>();
+  const out: { uid: string; name: string; email: string; phone?: string; roles: string[] }[] = [];
+  for (const doc of [...byRole.docs, ...bySeat.docs]) {
+    if (seen.has(doc.id)) continue;
+    seen.add(doc.id);
+    const u = doc.data() as { name?: string; email?: string; collegeEmail?: string; phone?: string; role?: string; seatRoles?: string[]; isActive?: boolean };
+    if (u.isActive === false) continue;
+    const roles = MANAGED.filter((r) => u.role === r || (u.seatRoles ?? []).includes(r));
+    out.push({ uid: doc.id, name: u.name ?? "", email: u.collegeEmail || u.email || "", phone: u.phone, roles });
+  }
+  return out;
 }
 
 export async function GET(request: Request) {

@@ -13,6 +13,7 @@ import { HiringTermsSettingsCard } from "@/components/hiring/HiringTermsSettings
 import { AcademicYearSettingsCard } from "@/components/academics/AcademicYearSettingsCard";
 import { DesignationCatalogCard } from "@/components/academics/DesignationCatalogCard";
 import { LeaveApprovalRoutingCard } from "@/components/leave/LeaveApprovalRoutingCard";
+import { LeaveVacationStaffCard } from "@/components/leave/LeaveVacationStaffCard";
 import type { FacultyNorms } from "@/types/core";
 
 interface CollegeInfo {
@@ -208,6 +209,8 @@ export default function PrincipalSettingsPage() {
       </Card>
 
       <LeaveApprovalRoutingCard />
+
+      <LeaveVacationStaffCard />
 
       <DesignationCatalogCard category="FACULTY" />
       <DesignationCatalogCard category="NON_TECHNICAL" />

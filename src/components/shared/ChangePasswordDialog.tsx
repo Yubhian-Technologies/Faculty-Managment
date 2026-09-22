@@ -68,7 +68,10 @@ export function ChangePasswordDialog() {
   return (
     <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) reset(); }}>
       <DialogTrigger asChild>
-        <Button type="button" size="sm" variant="outline">
+        {/* Default size, matching the other actions it sits beside in every
+            profile header (Download Resume, Copy Public Profile Link) - it
+            was the only one rendering small, so the row looked uneven. */}
+        <Button type="button" variant="outline">
           <KeyRound className="mr-2 h-4 w-4" />Change Password
         </Button>
       </DialogTrigger>

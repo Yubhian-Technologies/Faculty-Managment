@@ -1,5 +1,7 @@
 import { useMemo } from "react";
 import { useAuthStore } from "@/store/authStore";
+import { useWorkContext } from "@/hooks/useWorkContext";
+import { departmentOfContext } from "@/lib/roles/activeHodDepartment";
 
 const EMPTY: string[] = [];
 
@@ -19,8 +21,14 @@ const EMPTY: string[] = [];
 export function useMyDepartments(): string[] {
   const departments = useAuthStore((s) => s.user?.departments);
   const department = useAuthStore((s) => s.user?.department);
+  // A head of several departments works in the one picked in "Working as".
+  const picked = departmentOfContext(useWorkContext().active);
   return useMemo(() => {
-    if (departments && departments.length > 0) return departments;
-    return department ? [department] : EMPTY;
-  }, [departments, department]);
+    // Deduped defensively - every caller renders this straight into
+    // React keys (<SelectItem key={d}>) and a repeated name (bad data from
+    // a stale write predating the arrayUnion-based writers, or a manual
+    // Firestore edit) crashes the whole tree with a duplicate-key error.
+    const all = departments && departments.length > 0 ? Array.from(new Set(departments)) : department ? [department] : EMPTY;
+    return picked && all.includes(picked) ? [picked] : all;
+  }, [departments, department, picked]);
 }

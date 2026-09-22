@@ -35,7 +35,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const seatSnap = await seatsCol(db, ctx.collegeId).doc(id).get();
     if (!seatSnap.exists) return NextResponse.json({ error: "Seat not found" }, { status: 404 });
     const seat = { id: seatSnap.id, ...seatSnap.data() } as RoleSeat;
-    assertCanAssign(ctx, seat.role);
+    assertCanAssign(ctx);
     const previousHolder = seat.holderUid;
 
     if (body.action === "ASSIGN") {

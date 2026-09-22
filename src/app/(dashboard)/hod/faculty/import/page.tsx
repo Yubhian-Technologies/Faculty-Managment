@@ -19,6 +19,7 @@ import type { DesignationCatalogItem } from "@/types";
 import { EMPLOYEE_CATEGORY_LABELS } from "@/types";
 import { matchOption } from "@/lib/import/fieldConstraints";
 import { getFacultyImportColumns, getFacultyImportHints, getFacultyImportSampleRows } from "@/lib/faculty/csvColumns";
+import { useMyDepartments } from "@/hooks/useMyDepartments";
 import { Download, Upload, CheckCircle2, XCircle, FileSpreadsheet, ArrowLeft, AlertTriangle, Pencil } from "lucide-react";
 
 type ParsedRow = Record<string, string>;
@@ -62,7 +63,7 @@ export default function FacultyImportPage() {
   const [failedRows, setFailedRows] = useState<FailedRow[]>([]);
   const user = useAuthStore((s) => s.user);
   const isHod = user?.role === "HOD";
-  const myDepartments = user?.departments && user.departments.length > 0 ? user.departments : (user?.department ? [user.department] : []);
+  const myDepartments = useMyDepartments();
   // The template has no per-row Department column - every row in one import
   // lands in the same department - so an HOD running more than one must say
   // which one up front, same rule the API enforces.

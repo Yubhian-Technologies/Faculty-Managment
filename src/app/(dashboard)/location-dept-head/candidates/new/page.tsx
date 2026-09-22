@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { LocationCollegeSelect } from "@/components/shared/LocationCollegeSelect";
 import { toast } from "@/hooks/useToast";
 import { useAuthStore } from "@/store/authStore";
 
@@ -14,13 +15,14 @@ export default function NewLocationDeptHeadCandidatePage() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
   const [saving, setSaving] = useState(false);
+  const [collegeId, setCollegeId] = useState("");
   const [form, setForm] = useState({
     name: "", email: "", phone: "",
     department: user?.department ?? "",
     qualification: "", notes: "",
   });
 
-  const isValid = !!form.name && !!form.email && !!form.phone && !!form.department;
+  const isValid = !!form.name && !!form.email && !!form.phone && !!form.department && !!collegeId;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -30,7 +32,7 @@ export default function NewLocationDeptHeadCandidatePage() {
       const res = await fetch("/api/location/candidates", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, collegeId }),
       });
       const json = await res.json() as { id?: string; error?: string };
       if (!res.ok) {
@@ -79,6 +81,11 @@ export default function NewLocationDeptHeadCandidatePage() {
               <Label>Department</Label>
               <Input value={form.department || "-"} disabled className="bg-muted text-muted-foreground" />
               <p className="text-xs text-muted-foreground">Candidates are added for your own department only.</p>
+            </div>
+
+            <div className="space-y-2">
+              <Label>College <span className="text-destructive">*</span></Label>
+              <LocationCollegeSelect value={collegeId} onChange={setCollegeId} className="h-9 w-full text-sm" />
             </div>
 
             <div className="space-y-2">

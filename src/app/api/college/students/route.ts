@@ -202,6 +202,10 @@ export async function GET(request: Request) {
         secondaryQuery = withCommonFilters(studentsColl.where("secondaryDepartment", "in", secondaryTargets));
         const deptsSnap = await db.collection("colleges").doc(session.collegeId).collection("departments").get();
         hodDepartments = deptsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as DepartmentYearRow[];
+      } else {
+        // An HOD with no department on file must see nothing - not the whole
+        // college, which is what leaving the query unfiltered would return.
+        primaryQuery = primaryQuery.where("department", "==", "__none__");
       }
       // Sub-departments (parent HOD) and grouped/managed branches (sub-HOD) are
       // both queried together - a single `in` query covers both - but only

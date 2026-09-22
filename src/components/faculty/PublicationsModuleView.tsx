@@ -56,17 +56,22 @@ function PublicationRow({
       {(isOwnProfile && pub.status && pub.status !== "APPROVED") || canEdit ? (
         <div className="flex items-center gap-2">
           {pub.status === "PENDING" && <Badge variant="pending" className="text-xs">Pending Verification</Badge>}
+          {pub.status === "COORDINATOR_REVIEW" && <Badge variant="pending" className="text-xs">With R&amp;D Coordinator</Badge>}
           {pub.status === "REJECTED" && <Badge variant="rejected" className="text-xs">Rejected</Badge>}
+          {pub.status === "SENT_BACK" && <Badge variant="rejected" className="text-xs">Sent Back</Badge>}
           {canEdit && onEdit && (
             <button type="button" onClick={() => onEdit(pub)} className="text-xs font-medium text-primary hover:underline inline-flex items-center gap-1">
               <Pencil className="h-3 w-3" />
-              {pub.status === "REJECTED" ? "Edit & Resubmit" : pub.status === "PENDING" ? "Edit" : "Edit (sends for re-verification)"}
+              {pub.status === "REJECTED" || pub.status === "SENT_BACK" ? "Edit & Resubmit" : pub.status === "PENDING" || pub.status === "COORDINATOR_REVIEW" ? "Edit" : "Edit (sends for re-verification)"}
             </button>
           )}
         </div>
       ) : null}
       {pub.status === "REJECTED" && pub.rejectionReason && (
         <p className="text-xs text-destructive">Reason: {pub.rejectionReason}</p>
+      )}
+      {pub.status === "SENT_BACK" && pub.sentBackReason && (
+        <p className="text-xs text-destructive">Sent back: {pub.sentBackReason}</p>
       )}
       {pub.changeLog && pub.changeLog.length > 0 && (
         <p className="text-xs text-muted-foreground">
