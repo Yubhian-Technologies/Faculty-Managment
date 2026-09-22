@@ -22,7 +22,7 @@ export interface RoleSeat {
   role: UserRole;
   // Human label shown in lists: "Head of Department - CSE", "Principal", ...
   label: string;
-  // HOD seats only - one seat per department.
+  // HOD / R&D Coordinator seats only - one seat per department.
   departmentId?: string;
   departmentName?: string;
   // The seat's own contact address (e.g. hod.cse@college.edu). It is an alias /

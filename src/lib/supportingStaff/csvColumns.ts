@@ -32,17 +32,17 @@ const PERSONAL_COLUMNS: SupportingStaffCsvColumn[] = [
   // (Full Name as per SSC, Name as per Aadhar); leave a header that vague
   // unmatched rather than guess which one it means.
   { key: "name",               label: "Name (as per PAN)",           required: false, sample: "Optional; full name", aliases: ["Staff Name", "Employee Name"] },
-  { key: "collegeEmail",      label: "College Email",                required: true,  sample: "Required; must contain @" },
+  { key: "collegeEmail",      label: "College Email",                required: true,  sample: "Required; e.g. name@example.com" },
   { key: "password",          label: "Login Password (min 8 characters)", required: true, sample: "Required; minimum 8 characters", aliases: ["Password", "Login Password"] },
-  { key: "phone",              label: "Mobile No",                   required: true,  sample: "Required; phone/text", aliases: ["Phone", "Mobile", "Mobile Number", "Phone Number", "Contact Number"] },
+  { key: "phone",              label: "Mobile No",                   required: true,  sample: "Required; exactly 10 digits, starting with 6-9", aliases: ["Phone", "Mobile", "Mobile Number", "Phone Number", "Contact Number"] },
   { key: "designation",        label: "Designation",                 required: true,  sample: "" },
   { key: "qualification",     label: "Highest Qualification",        required: true,  sample: "Required; free text", aliases: ["Qualification"] },
   { key: "joiningDate",        label: "Date of Joining Institution (YYYY-MM-DD)", required: true, sample: "Required; YYYY-MM-DD", aliases: ["Joining Date", "Date of Joining", "DOJ"] },
   { key: "gender",            label: "Gender",                       required: true,  sample: "Required: Male / Female / Other" },
   { key: "dateOfBirth",       label: "Date of Birth (YYYY-MM-DD)",   required: true,  sample: "Required; YYYY-MM-DD" },
   { key: "nameAsPerAadhar",   label: "Name (as per Aadhar)",         required: false, sample: "Optional; text" },
-  { key: "aadharNo",          label: "Aadhar No",                    required: true,  sample: "Required; text" },
-  { key: "panNo",             label: "PAN No",                       required: true,  sample: "Required; text" },
+  { key: "aadharNo",          label: "Aadhar No",                    required: true,  sample: "Required; exactly 12 digits" },
+  { key: "panNo",             label: "PAN No",                       required: true,  sample: "Required; 5 letters + 4 digits + 1 letter, e.g. ABCDE1234F" },
   { key: "ratificationStatus",label: "Ratification Status",          required: true,  sample: "Required: Ratified / Not Ratified" },
 ];
 

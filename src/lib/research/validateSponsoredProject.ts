@@ -13,6 +13,9 @@ interface SponsoredProjectRequiredFields {
   dateProposalSubmitted?: string;
   amountApplied?: number;
   extendedToSeedFund?: "YES" | "NO";
+  seedFundTitle?: string;
+  seedFundAmountSanctioned?: number | null;
+  seedFundSanctionDate?: string;
   sanctionedStatus?: SponsoredProjectSanctionedStatus;
   dateProjectSanctioned?: string;
   dateOfStart?: string;
@@ -25,12 +28,15 @@ interface SponsoredProjectRequiredFields {
   financialYearOfCompletion?: string;
   noOfYears?: number;
   yearlyData?: SponsoredProjectYearData[];
-  progressReportUrl?: string;
-  completionReportUrl?: string;
-  utilizationCertificateUrl?: string;
-  statementOfExpenditureUrl?: string;
-  submittedRequiredDocs?: "YES" | "NO";
-  dateOfSubmission?: string;
+}
+
+// A real calendar date typed as DD-MM-YYYY (so 31-02-2025 is rejected).
+export function isValidDdMmYyyy(v: string | undefined): boolean {
+  const m = /^(\d{2})-(\d{2})-(\d{4})$/.exec(v ?? "");
+  if (!m) return false;
+  const [d, mo, y] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const date = new Date(Date.UTC(y, mo - 1, d));
+  return y >= 1900 && date.getUTCFullYear() === y && date.getUTCMonth() === mo - 1 && date.getUTCDate() === d;
 }
 
 function isYearDataComplete(y: SponsoredProjectYearData): boolean {
@@ -44,6 +50,29 @@ function isYearDataComplete(y: SponsoredProjectYearData): boolean {
   if (!y.papersPublished?.length || y.papersPublished.some((p) => !p.title?.trim())) return false;
   if (!y.patents?.length || y.patents.some((p) => !p.patentTitle?.trim())) return false;
   return true;
+}
+
+// Each year answers "Submitted All Required Documents to Sponsoring Agency"
+// itself; a Yes needs that year's date and reports. Returns the message for
+// the first year that falls short, or null.
+function yearDocumentsError(
+  years: SponsoredProjectYearData[], sanctionedStatus: SponsoredProjectSanctionedStatus
+): string | null {
+  const isOngoing = sanctionedStatus === "ONGOING";
+  for (let i = 0; i < years.length; i++) {
+    const y = years[i];
+    const at = `Year ${i + 1}`;
+    if (!y.submittedRequiredDocs) return `${at}: Submitted Required Documents to Sponsoring Agency is required`;
+    if (y.submittedRequiredDocs !== "YES") continue;
+    if (!y.dateOfSubmission) return `${at}: Date of Submission is required`;
+    if (isOngoing ? !y.progressReportUrl : !y.completionReportUrl) {
+      return `${at}: ${isOngoing ? "Progress Report" : "Completion Report"} is required`;
+    }
+    if (!y.utilizationCertificateUrl || !y.statementOfExpenditureUrl) {
+      return `${at}: Utilization Certificate and Statement of Expenditure are required`;
+    }
+  }
+  return null;
 }
 
 // Almost every Sponsored Research Project field is compulsory - mirrors the
@@ -65,6 +94,13 @@ export function validateSponsoredProjectBody(body: SponsoredProjectRequiredField
     if (!body.dateProposalSubmitted || body.amountApplied === undefined || Number.isNaN(body.amountApplied) || !body.extendedToSeedFund) {
       return "Date of Proposal Submitted, Amount Applied and Extended to Seed Fund are required";
     }
+    if (body.extendedToSeedFund === "YES") {
+      if (!body.seedFundTitle?.trim()) return "Title of Seed Funding is required";
+      if (body.seedFundAmountSanctioned == null || Number.isNaN(body.seedFundAmountSanctioned)) {
+        return "Seed Funding Amount Sanctioned is required";
+      }
+      if (!isValidDdMmYyyy(body.seedFundSanctionDate)) return "Year of Sanctioning must be a valid date in DD-MM-YYYY format";
+    }
     return null;
   }
 
@@ -81,15 +117,5 @@ export function validateSponsoredProjectBody(body: SponsoredProjectRequiredField
   if (!body.yearlyData || body.yearlyData.length !== body.noOfYears || body.yearlyData.some((y) => !isYearDataComplete(y))) {
     return "Every year's Amount Received, Infrastructure Procured, Outcomes, Papers Published, Patents and Students & Training are required";
   }
-  if (!body.submittedRequiredDocs) return "Submitted Required Documents to Sponsoring Agency is required";
-  if (body.submittedRequiredDocs === "YES") {
-    if (!body.dateOfSubmission) return "Date of Submission is required";
-    if (body.sanctionedStatus === "ONGOING" ? !body.progressReportUrl : !body.completionReportUrl) {
-      return body.sanctionedStatus === "ONGOING" ? "Progress Report is required" : "Completion Report is required";
-    }
-    if (!body.utilizationCertificateUrl || !body.statementOfExpenditureUrl) {
-      return "Utilization Certificate and Statement of Expenditure are required";
-    }
-  }
-  return null;
+  return yearDocumentsError(body.yearlyData, body.sanctionedStatus);
 }

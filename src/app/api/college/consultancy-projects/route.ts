@@ -3,7 +3,9 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import { notifyRole } from "@/lib/notify";
+import { finalizeFacultyConsultants } from "@/lib/research/finalizeConsultants";
+import { validateConsultancyBody } from "@/lib/research/validateConsultancyProject";
+import { isVisibleToRnD, notifyReviewer, resolveSubmissionRoute, routeFields } from "@/lib/research/coordinatorReview";
 import { PUBLICATION_ELIGIBLE_ROLES } from "@/lib/publications/eligibleRoles";
 import { resolveOwnerDesignation } from "@/lib/publications/resolveOwnerDesignation";
 import { CONSULTANCY_CATEGORIES, CONSULTANCY_CLIENT_TYPES, CONSULTANCY_DELIVERABLES } from "@/lib/research/consultancyProjectOptions";
@@ -36,6 +38,7 @@ export async function GET(request: Request) {
     const snap = await query.get();
     const projects = snap.docs
       .map((d) => ({ id: d.id, ...d.data() }))
+      .filter((r) => session.role !== "R_AND_D" || isVisibleToRnD((r as { status?: string }).status))
       .sort((a, b) => {
         const aTime = (a as { createdAt?: { toMillis?: () => number } }).createdAt?.toMillis?.() ?? 0;
         const bTime = (b as { createdAt?: { toMillis?: () => number } }).createdAt?.toMillis?.() ?? 0;
@@ -55,13 +58,13 @@ export async function GET(request: Request) {
 interface ConsultancyProjectBody {
   uid?: string;
   title?: string;
-  facultyConsultantsCount?: number;
-  facultyConsultantsNames?: string;
+  facultyConsultantIds?: string[];
   department?: string;
   clientName?: string;
   clientType?: ConsultancyClientType;
   consultancyCategory?: ConsultancyCategory;
   problemStatement?: string;
+  projectStatus?: "ONGOING" | "COMPLETED";
   startDate?: string;
   endDate?: string;
   durationMonths?: number;
@@ -101,6 +104,11 @@ export async function POST(request: Request) {
     }
 
     const db = getAdminDb();
+    const consultants = await finalizeFacultyConsultants(db, session.collegeId, body.facultyConsultantIds ?? []);
+    if ("error" in consultants) return NextResponse.json({ error: consultants.error }, { status: 400 });
+    const validationError = validateConsultancyBody({ ...body, deliverables }, consultants.fields.facultyConsultants.length);
+    if (validationError) return NextResponse.json({ error: validationError }, { status: 400 });
+
     const ownerSnap = await db.collection("colleges").doc(session.collegeId).collection("users").doc(uid).get();
     if (!ownerSnap.exists) {
       return NextResponse.json({ error: "Staff member not found" }, { status: 404 });
@@ -118,6 +126,7 @@ export async function POST(request: Request) {
 
     const ownerDesignation = await resolveOwnerDesignation(db, session.collegeId, uid, owner.role);
 
+    const route = await resolveSubmissionRoute(db, session.collegeId, uid, isRnD);
     const now = new Date();
     const docRef = await db.collection("colleges").doc(session.collegeId).collection("consultancyProjects").add({
       collegeId: session.collegeId,
@@ -128,15 +137,16 @@ export async function POST(request: Request) {
       // R&D is the verifying authority itself - anything it adds directly is
       // already official. Everyone else's own submission needs R&D's review
       // before it counts as an official record.
-      status: (isRnD ? "APPROVED" : "PENDING") satisfies PublicationStatus,
+      status: route.status satisfies PublicationStatus,
+      ...routeFields(route),
       title,
-      facultyConsultantsCount: body.facultyConsultantsCount ?? null,
-      facultyConsultantsNames: body.facultyConsultantsNames ?? "",
+      ...consultants.fields,
       department: body.department ?? "",
       clientName,
       clientType,
       consultancyCategory,
       problemStatement,
+      projectStatus: body.projectStatus === "ONGOING" || body.projectStatus === "COMPLETED" ? body.projectStatus : null,
       startDate,
       endDate: body.endDate ?? "",
       durationMonths: body.durationMonths ?? null,
@@ -167,15 +177,11 @@ export async function POST(request: Request) {
       timestamp: now,
     });
 
-    if (!isRnD) {
-      await notifyRole(
-        db, session.collegeId, "R_AND_D",
-        "CONSULTANCY_PROJECT_PENDING_VERIFICATION",
-        "New consultancy project submitted for verification",
-        `${owner.name ?? "A staff member"} submitted "${title}" for verification`,
-        "/r-and-d/consultancy-projects"
-      );
-    }
+    await notifyReviewer(db, session.collegeId, route, {
+        type: "CONSULTANCY_PROJECT_PENDING_VERIFICATION", title: "New consultancy project submitted for verification",
+        message: `${owner.name ?? "A staff member"} submitted "${title}" for verification`,
+        rndLink: "/r-and-d/consultancy-projects",
+      });
 
     return NextResponse.json({ id: docRef.id }, { status: 201 });
   } catch (err) {

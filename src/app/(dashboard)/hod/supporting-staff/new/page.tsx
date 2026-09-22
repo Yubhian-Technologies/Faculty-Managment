@@ -20,15 +20,16 @@ import { getSupportingStaffProfileModules } from "@/lib/supportingStaff/profileM
 import { useCollegeType } from "@/hooks/useCollegeType";
 import { toast } from "@/hooks/useToast";
 import { hasSupportingStaffSplit } from "@/lib/designations/config";
+import { PHONE_REGEX, EMAIL_REGEX } from "@/lib/validations";
 import type { DesignationCatalogItem } from "@/types";
 
 const schema = z.object({
   employeeId: z.string().min(1, "Employee ID is required"),
   name: z.string().optional(),
-  email: z.string().email("Invalid email address").optional().or(z.literal("")),
-  collegeEmail: z.string().min(1, "College email is required").email("Invalid email address"),
+  email: z.string().regex(EMAIL_REGEX, "Invalid email address").optional().or(z.literal("")),
+  collegeEmail: z.string().min(1, "College email is required").regex(EMAIL_REGEX, "Invalid email address"),
   password: z.string().min(8, "Password must be at least 8 characters"),
-  phone: z.string().min(1, "Mobile No is required"),
+  phone: z.string().min(1, "Mobile No is required").regex(PHONE_REGEX, "Mobile No must be exactly 10 digits, starting with 6, 7, 8 or 9"),
   designation: z.string().min(1, "Designation is required"),
   qualification: z.string().min(1, "Highest Qualification is required"),
   experienceYears: z.number().min(0, "Cannot be negative").optional(),
@@ -254,7 +255,15 @@ export default function NewHodSupportingStaffPage() {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="phone">Mobile No *</Label>
-                    <Input id="phone" type="tel" autoComplete="off" {...register("phone")} placeholder="+91 98765 43210" />
+                    <Input
+                      id="phone" type="tel" inputMode="numeric" autoComplete="off" maxLength={10}
+                      {...register("phone")}
+                      onChange={(e) => {
+                        e.target.value = e.target.value.replace(/\D/g, "").slice(0, 10);
+                        void register("phone").onChange(e);
+                      }}
+                      placeholder="9876543210"
+                    />
                     {errors.phone && <p className="text-sm text-destructive">{errors.phone.message}</p>}
                   </div>
                 </div>

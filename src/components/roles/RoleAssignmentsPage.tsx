@@ -539,7 +539,7 @@ function AddSeatDialog({
   // (see api/administration/college-people) - this dialog would otherwise let
   // someone create an unfillable vacant seat.
   const roleOptions = SEAT_ROLES.filter((r) => r !== "COLLEGE_ADMIN" && canCreate() && (!isSingletonSeatRole(r) || !seats.some((s) => s.role === r)));
-  const freeDepartments = departments.filter((d) => !seats.some((s) => s.role === "HOD" && s.departmentId === d.id));
+  const freeDepartments = departments.filter((d) => !seats.some((s) => s.role === role && s.departmentId === d.id));
 
   async function submit() {
     if (!role) { toast({ variant: "destructive", title: "Pick a role" }); return; }
@@ -593,7 +593,7 @@ function AddSeatDialog({
                   {freeDepartments.map((d) => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
                 </SelectContent>
               </Select>
-              {freeDepartments.length === 0 && <p className="text-xs text-muted-foreground">Every department already has an HOD role.</p>}
+              {freeDepartments.length === 0 && <p className="text-xs text-muted-foreground">Every department already has a {ROLE_LABELS[role as UserRole]} seat.</p>}
             </div>
           )}
           {role && !seatNeedsDepartment(role) && !isSingletonSeatRole(role) && (

@@ -335,6 +335,10 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "My Leave", href: "/r-and-d/leave", iconName: "CalendarClock", roles: ["R_AND_D"] },
   { label: "Adjustment Requests", href: "/leave/adjustments", iconName: "UserCheck", roles: ["R_AND_D"] },
 
+  // R&D Coordinator (seat, one per department) - the only position module; everything
+  // personal stays under the holder's own primary role.
+  { label: "Dashboard", href: "/rnd-coordinator", iconName: "LayoutDashboard", roles: ["RND_COORDINATOR"] },
+
   // Faculty (PANEL_MEMBER) — My Interviews is injected dynamically in Sidebar when assigned
   // Full module set — Super Admin controls which modules/items are actually
   // visible per college via the Nav Visibility settings (filterVisibleNavItems).
@@ -805,6 +809,9 @@ export const BOTTOM_NAV_ITEMS: Record<UserRole, NavItem[]> = {
     { label: "Hackathons", href: "/r-and-d/hackathons", iconName: "Trophy", roles: ["R_AND_D"] },
     { label: "Innovations", href: "/r-and-d/innovations", iconName: "Sparkles", roles: ["R_AND_D"] },
     { label: "Profile", href: "/r-and-d/profile", iconName: "UserCircle", roles: ["R_AND_D"] },
+  ],
+  RND_COORDINATOR: [
+    { label: "Home", href: "/rnd-coordinator", iconName: "LayoutDashboard", roles: ["RND_COORDINATOR"] },
   ],
   PANEL_MEMBER: [
     { label: "Home", href: "/panel", iconName: "LayoutDashboard", roles: ["PANEL_MEMBER"] },

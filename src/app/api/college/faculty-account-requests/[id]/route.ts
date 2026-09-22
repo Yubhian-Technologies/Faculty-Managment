@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { provisionFacultyFromOffer, linkFacultyToExistingAccount, generatePassword, type ProvisionResult } from "@/lib/firestore/facultyProvisioning";
-import { notify, notifyRole } from "@/lib/notify";
+import { notify, notifyRole, getDepartmentHeadUids } from "@/lib/notify";
 import type { FacultyAccountRequestStatus, EmployeeCategory } from "@/types";
 
 type Action = "START_REVIEW" | "CREATE_CREDENTIALS" | "LINK_EXISTING_ACCOUNT" | "REVEAL_CREDENTIALS";
@@ -240,8 +240,8 @@ export async function PATCH(
         const hodUid = (vacancySnap?.data() as { hodUid?: string } | undefined)?.hodUid;
 
         const hiredMessage = `${reqData.candidateName ?? "The candidate"} has been hired as ${reqData.designation ?? "faculty"} in ${reqData.department ?? "the department"} — the hiring cycle is now closed.`;
-        if (hodUid) {
-          await notify(db, session.collegeId, hodUid, "CANDIDATE_HIRED", "Candidate Hired", hiredMessage, "/hod/pipeline");
+        for (const uid of await getDepartmentHeadUids(db, session.collegeId, reqData.department, hodUid)) {
+          await notify(db, session.collegeId, uid, "CANDIDATE_HIRED", "Candidate Hired", hiredMessage, "/hod/pipeline");
         }
         await notifyRole(db, session.collegeId, "PRINCIPAL", "CANDIDATE_HIRED", "Candidate Hired", hiredMessage, "/principal/vacancies");
         await notifyRole(db, session.collegeId, "VICE_PRINCIPAL", "CANDIDATE_HIRED", "Candidate Hired", hiredMessage, "/principal/vacancies");
