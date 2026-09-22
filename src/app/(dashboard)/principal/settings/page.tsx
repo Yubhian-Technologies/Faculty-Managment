@@ -213,6 +213,13 @@ export default function PrincipalSettingsPage() {
       <LeaveVacationStaffCard />
 
       <DesignationCatalogCard category="FACULTY" />
+      {/* Supporting Staff splits into Technical and Non-Technical (see
+          hasSupportingStaffSplit). Only the Non-Technical half was offered
+          here, so the titles an HOD's Add Supporting Staff form reads
+          (category=TECHNICAL) could be curated by each HOD but never
+          centrally - the page even told them to "add one under Settings"
+          that college leadership had no card for. */}
+      <DesignationCatalogCard category="TECHNICAL" />
       <DesignationCatalogCard category="NON_TECHNICAL" />
 
       <HiringTermsSettingsCard />
