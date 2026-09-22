@@ -25,6 +25,7 @@ function fixFieldOptions(
   fieldKey: string,
   designationOptions: string[] | undefined,
   departmentOptions: string[] | undefined,
+  departmentCodeOptions: string[] | undefined,
 ): string[] | undefined {
   switch (fieldKey) {
     case "designation":
@@ -47,6 +48,8 @@ function fixFieldOptions(
       return [...BLOOD_GROUP_OPTIONS];
     case "department":
       return departmentOptions;
+    case "departmentCode":
+      return departmentCodeOptions;
     default:
       return YES_NO_KEYS.has(fieldKey) ? ["Yes", "No"] : undefined;
   }
@@ -65,10 +68,13 @@ interface Props {
   designationOptions?: string[];
   // Only Non-Technical Staff's Fix dialog passes this (College Office's own
   // "Add Staff" form is the only one of the three with a Department picker -
-  // Faculty has no Department column at all, and HOD's Supporting Staff
-  // defaults it automatically with no picker either - see the manual add
-  // pages this mirrors).
+  // HOD's Supporting Staff defaults it automatically with no picker either -
+  // see the manual add pages this mirrors). Holds full department NAMEs.
   departmentOptions?: string[];
+  // Faculty's own per-row "Dept Code" column (fieldKey "departmentCode") -
+  // the department CODEs this account may import into, so correcting a
+  // rejected code is a pick from a real list instead of a guess at spelling.
+  departmentCodeOptions?: string[];
 }
 
 // One "Fix Row" dialog field: a dropdown wherever the import template states
@@ -79,9 +85,9 @@ interface Props {
 // Falls through to a plain text Input for every other column, unchanged from
 // before.
 export function ImportFixField({
-  fieldKey, label, required, value, placeholder, onChange, designationOptions, departmentOptions,
+  fieldKey, label, required, value, placeholder, onChange, designationOptions, departmentOptions, departmentCodeOptions,
 }: Props) {
-  const options = fixFieldOptions(fieldKey, designationOptions, departmentOptions);
+  const options = fixFieldOptions(fieldKey, designationOptions, departmentOptions, departmentCodeOptions);
 
   if (!options) {
     return (
