@@ -130,10 +130,13 @@ export function PersonalDetailsView({ value, hideLegalName = false, hiddenFields
             label="Permanent Address"
             value={p.permanentAddressSameAsTemporary ? p.permanentAddress || p.temporaryAddress : p.permanentAddress}
           />
-          <Field
-            label="Permanent Address Same as Temporary"
-            value={p.permanentAddressSameAsTemporary === undefined ? undefined : p.permanentAddressSameAsTemporary ? "Yes" : "No"}
-          />
+          {/* Only shown when the answer is actually "Yes", where it explains why
+              the two addresses above read identically. A "No" is already
+              evident from the two differing addresses, so the row was stating
+              the obvious; unset says nothing at all. */}
+          {p.permanentAddressSameAsTemporary === true && (
+            <Field label="Permanent Address Same as Temporary" value="Yes" />
+          )}
         </div>
       </div>
 

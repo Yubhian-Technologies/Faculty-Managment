@@ -17,6 +17,8 @@ import { ExportFacultyDialog } from "@/components/faculty/ExportFacultyDialog";
 import { toast } from "@/hooks/useToast";
 import { useMyDepartments } from "@/hooks/useMyDepartments";
 import { downloadResumePdf } from "@/lib/pdf/downloadResume";
+import { ResumeSectionsDialog } from "@/components/faculty/ResumeSectionsDialog";
+import type { ResumeSectionKey } from "@/lib/pdf/resumeSections";
 import { hasSupportingStaffSplit } from "@/lib/designations/config";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { allPreviousExperienceEntries, totalYearsOfExperience } from "@/lib/faculty/experienceCalc";
@@ -71,6 +73,9 @@ export default function HODFacultyPage() {
   const [deleteTarget, setDeleteTarget] = useState<FacultyRow | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [downloadingResumeId, setDownloadingResumeId] = useState<string | null>(null);
+  // The row whose Download was clicked - the section picker opens against it,
+  // and the actual generation waits until the choice is made.
+  const [resumeTarget, setResumeTarget] = useState<FacultyRow | null>(null);
   const [collegeName, setCollegeName] = useState("");
   const [collegeType, setCollegeType] = useState<CollegeType | undefined>(undefined);
   const myDepartments = useMyDepartments();
@@ -232,7 +237,7 @@ export default function HODFacultyPage() {
     }
   }
 
-  async function handleDownloadResume(row: FacultyRow) {
+  async function handleDownloadResume(row: FacultyRow, sections: ResumeSectionKey[]) {
     setDownloadingResumeId(row.id as string);
     try {
       let teachingAssignments: unknown[] = [];
@@ -250,11 +255,12 @@ export default function HODFacultyPage() {
           researchPublications = pubData.publications ?? [];
         } catch { /* non-critical - resume falls back to self-reported publications, if any */ }
       }
-      await downloadResumePdf({ ...row, teachingAssignments, researchPublications, collegeName }, (row.employeeId as string) || facultyDisplayName(row));
+      await downloadResumePdf({ ...row, teachingAssignments, researchPublications, collegeName, sections }, (row.employeeId as string) || facultyDisplayName(row));
     } catch (err) {
       toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to generate resume" });
     } finally {
       setDownloadingResumeId(null);
+      setResumeTarget(null);
     }
   }
 
@@ -427,7 +433,7 @@ export default function HODFacultyPage() {
             size="sm"
             title="Download resume PDF"
             loading={downloadingResumeId === (row.id as string)}
-            onClick={(e) => { e.stopPropagation(); void handleDownloadResume(row); }}
+            onClick={(e) => { e.stopPropagation(); setResumeTarget(row); }}
           >
             <FileDown className="h-3.5 w-3.5" /><span className="ml-1 hidden sm:inline">Download</span>
           </Button>
@@ -596,6 +602,17 @@ export default function HODFacultyPage() {
         onConfirm={() => void handleRemoveSubHod()}
         loading={isRemovingSubHod}
       />
+
+      {/* ── Resume section picker ── */}
+      {resumeTarget && (
+        <ResumeSectionsDialog
+          open
+          onOpenChange={(o) => { if (!o) setResumeTarget(null); }}
+          personName={facultyDisplayName(resumeTarget) || "this faculty member"}
+          downloading={downloadingResumeId === (resumeTarget.id as string)}
+          onDownload={(sections) => handleDownloadResume(resumeTarget, sections)}
+        />
+      )}
     </div>
   );
 }

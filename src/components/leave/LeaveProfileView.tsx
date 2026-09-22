@@ -9,6 +9,7 @@ import { toast } from "@/hooks/useToast";
 import { formatDate, toDate } from "@/lib/utils";
 import { Plus, ChevronRight, History, CalendarPlus } from "lucide-react";
 import { evaluateODProof } from "@/lib/leave/odProof";
+import { PermissionRequestDialog } from "@/components/leave/PermissionRequestDialog";
 import { LEAVE_REQUEST_STATUS_LABELS, EFFECTIVE_CATEGORY_LABELS, LEAVE_TYPE_LABELS } from "@/types/leave";
 import type { EffectiveLeaveCategory, LeaveRequest, LeaveRequestStatus, LeaveTypeCode, PeriodSubstitution } from "@/types/leave";
 
@@ -176,6 +177,11 @@ export function LeaveProfileView({ uid, applyHref, historyBaseHref }: LeaveProfi
             </Badge>
           )}
         </div>
+        {/* Both actions sit together at the right. They are wrapped rather
+            than left as separate children of the justify-between row above,
+            where a third child pushed "Apply for Leave" into the middle of
+            the header instead of next to its companion. */}
+        <div className="flex items-center gap-2">
         {applyHref && (
           // Currently on leave (already started, not just approved for a
           // future date) - offer "Extend Leave" instead of a dead-end
@@ -214,6 +220,14 @@ export function LeaveProfileView({ uid, applyHref, historyBaseHref }: LeaveProfi
             </Button>
           )
         )}
+        {/* Permission for a late arrival (or a short absence inside one day).
+            Deliberately not a leave type - it carries no balance and never
+            reaches the monthly register - so it sits beside Apply for Leave
+            rather than inside it, and stays available even when a leave is
+            already scheduled, which disables the button above. Shown on the
+            same condition as Apply, i.e. only on one's OWN leave page. */}
+        {applyHref && <PermissionRequestDialog onSubmitted={() => void load()} />}
+        </div>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
