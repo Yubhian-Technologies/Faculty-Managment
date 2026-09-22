@@ -160,6 +160,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       secondaryDepartment?: string | null;
       rollNumber?: string;
       status?: StudentStatus;
+      /** Which lab sub-group (e.g. "Batch 1") - see StudentRecord.labBatch. Empty string clears it. */
+      labBatch?: string;
       /** Admission details from the Office's per-student Edit form. */
       details?: Record<string, unknown>;
     };
@@ -331,12 +333,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     // HOD (years 2-4) or sub-HOD (year 1) fills them in after sectioning - so
     // this path is closed to the College Office and faculty.
     if (!body.targetSectionId) {
-      if (body.rollNumber === undefined && body.status === undefined) {
+      if (body.rollNumber === undefined && body.status === undefined && body.labBatch === undefined) {
         return NextResponse.json({ error: "targetSectionId is required" }, { status: 400 });
       }
       if (!["HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN"].includes(session.role)) {
         return NextResponse.json(
-          { error: "Only the department's HOD can set a student's roll number or status" },
+          { error: "Only the department's HOD can set a student's roll number, status, or lab batch" },
           { status: 403 }
         );
       }
@@ -383,6 +385,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
           }
         }
         updates.rollNumber = roll;
+      }
+
+      if (body.labBatch !== undefined) {
+        updates.labBatch = body.labBatch.trim();
       }
 
       await studentRef.update(updates);
