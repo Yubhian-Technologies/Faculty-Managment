@@ -83,6 +83,20 @@ export async function GET(request: Request) {
       ? (migrateUserDoc(facultyDoc.data()) as unknown as FMSUser)
       : (migrateFacultyDoc(facultyDoc.data()) as unknown as FacultyMember);
     const collegeName = (collegeSnap?.data() as { name?: string } | undefined)?.name ?? "";
+
+    // Every college on this platform, so each past posting can be marked as
+    // INTERNAL (somewhere in the group) or EXTERNAL. Resolved here rather than
+    // in the browser: the public page is unauthenticated and has no business
+    // being handed the group's college list just to label two headings.
+    // Compared on a normalized name - the only thing an experience entry
+    // stores is free text typed by the faculty member, so punctuation and
+    // casing routinely differ from the college record.
+    const normalizeName = (v: string) => v.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+    const collegeNames = new Set(
+      (await db.collection("colleges").get()).docs
+        .map((d) => normalizeName(((d.data() as { name?: string }).name ?? "")))
+        .filter(Boolean)
+    );
     const ap = normalizeAcademicProfile(faculty.academicProfile);
     const joiningDate = isUserDoc ? (faculty as FMSUser).dateOfJoining : (faculty as FacultyMember).joiningDate;
 
@@ -102,6 +116,9 @@ export async function GET(request: Request) {
         totalYearsOfExperience: experienceBreakdown(allPreviousExperienceEntries(ap), joiningDate).total,
         officialEmail: (isUserDoc ? (faculty as FMSUser).collegeEmail : (faculty as FacultyMember).officialEmail) || undefined,
         joiningYear: joiningDate ? joiningDate.toDate().getFullYear() : undefined,
+        // Full date as well as the year: the public page counts service at
+        // this college from it, and a year alone can be a year out.
+        joiningDate: joiningDate ? joiningDate.toDate().toISOString().slice(0, 10) : undefined,
 
         education: ap
           ? {
@@ -131,6 +148,8 @@ export async function GET(request: Request) {
           toDate: p.toDate,
           fromYear: p.fromYear,
           toYear: p.toYear,
+          // Whether this posting was at a college on this platform.
+          isInternal: collegeNames.has(normalizeName(p.institutionName ?? "")),
         })),
 
         research: ap
