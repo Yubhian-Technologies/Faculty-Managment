@@ -56,11 +56,11 @@ function SeedFundingRow({
     <div className="rounded-md border bg-muted/20 shadow-sm p-2 space-y-2">
       {isOwnProfile && project.status !== "APPROVED" && (
         <div className="flex items-center gap-2">
-          {project.status === "PENDING" ? (
-            <Badge variant="pending" className="text-xs">Pending Verification</Badge>
+          {project.status === "PENDING" || project.status === "COORDINATOR_REVIEW" ? (
+            <Badge variant="pending" className="text-xs">{project.status === "COORDINATOR_REVIEW" ? "With R&D Coordinator" : "Pending Verification"}</Badge>
           ) : (
             <>
-              <Badge variant="rejected" className="text-xs">Rejected</Badge>
+              <Badge variant="rejected" className="text-xs">{project.status === "SENT_BACK" ? "Sent Back" : "Rejected"}</Badge>
               {onEdit && (
                 <button type="button" onClick={() => onEdit(project)} className="text-xs font-medium text-primary hover:underline inline-flex items-center gap-1">
                   <Pencil className="h-3 w-3" />Edit &amp; Resubmit
@@ -72,6 +72,9 @@ function SeedFundingRow({
       )}
       {project.status === "REJECTED" && project.rejectionReason && (
         <p className="text-xs text-destructive">Reason: {project.rejectionReason}</p>
+      )}
+      {project.status === "SENT_BACK" && project.sentBackReason && (
+        <p className="text-xs text-destructive">Sent back: {project.sentBackReason}</p>
       )}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         <Field label="Title" value={project.title} />

@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import { notifyRole } from "@/lib/notify";
+import { isVisibleToRnD, notifyReviewer, resolveSubmissionRoute, routeFields } from "@/lib/research/coordinatorReview";
 import { PUBLICATION_ELIGIBLE_ROLES } from "@/lib/publications/eligibleRoles";
 import { resolveOwnerDesignation } from "@/lib/publications/resolveOwnerDesignation";
 import { finalizeIprInventors } from "@/lib/research/finalizeIprInventors";
@@ -34,6 +34,7 @@ export async function GET(request: Request) {
     const snap = await query.get();
     const records = snap.docs
       .map((d) => ({ id: d.id, ...d.data() }))
+      .filter((r) => session.role !== "R_AND_D" || isVisibleToRnD((r as { status?: string }).status))
       .sort((a, b) => {
         const aTime = (a as { createdAt?: { toMillis?: () => number } }).createdAt?.toMillis?.() ?? 0;
         const bTime = (b as { createdAt?: { toMillis?: () => number } }).createdAt?.toMillis?.() ?? 0;
@@ -121,6 +122,7 @@ export async function POST(request: Request) {
 
     const ownerDesignation = await resolveOwnerDesignation(db, session.collegeId, uid, owner.role);
 
+    const route = await resolveSubmissionRoute(db, session.collegeId, uid, isRnD);
     const now = new Date();
     const docRef = await db.collection("colleges").doc(session.collegeId).collection("discoveryInnovations").add({
       collegeId: session.collegeId,
@@ -128,7 +130,8 @@ export async function POST(request: Request) {
       ownerName: owner.name ?? "Unknown",
       ownerRole: owner.role,
       ...(ownerDesignation ? { ownerDesignation } : {}),
-      status: (isRnD ? "APPROVED" : "PENDING") satisfies PublicationStatus,
+      status: route.status satisfies PublicationStatus,
+      ...routeFields(route),
       iprType,
       iprStatus,
       applicationNumber,
@@ -172,15 +175,11 @@ export async function POST(request: Request) {
       timestamp: now,
     });
 
-    if (!isRnD) {
-      await notifyRole(
-        db, session.collegeId, "R_AND_D",
-        "DISCOVERY_INNOVATION_PENDING_VERIFICATION",
-        "New IPR record submitted for verification",
-        `${owner.name ?? "A staff member"} submitted "${title}" for verification`,
-        "/r-and-d/discovery-innovation"
-      );
-    }
+    await notifyReviewer(db, session.collegeId, route, {
+        type: "DISCOVERY_INNOVATION_PENDING_VERIFICATION", title: "New IPR record submitted for verification",
+        message: `${owner.name ?? "A staff member"} submitted "${title}" for verification`,
+        rndLink: "/r-and-d/discovery-innovation",
+      });
 
     return NextResponse.json({ id: docRef.id }, { status: 201 });
   } catch (err) {

@@ -4,7 +4,8 @@ import { NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import { notify, notifyRole } from "@/lib/notify";
+import { notify } from "@/lib/notify";
+import { isResubmittable, notifyReviewer, resolveSubmissionRoute, routeFields } from "@/lib/research/coordinatorReview";
 import { PUBLICATION_ELIGIBLE_ROLES } from "@/lib/publications/eligibleRoles";
 import { validateSponsoredProjectBody } from "@/lib/research/validateSponsoredProject";
 import type {
@@ -165,8 +166,8 @@ export async function PATCH(
     }
 
     if (isOwner && !isRnD) {
-      if (project.status !== "REJECTED") {
-        return NextResponse.json({ error: "Only a rejected submission can be edited" }, { status: 403 });
+      if (!isResubmittable(project.status)) {
+        return NextResponse.json({ error: "Only a rejected or sent-back submission can be edited" }, { status: 403 });
       }
 
       const validationError = validateSponsoredProjectBody({ ...project, ...body });
@@ -174,11 +175,15 @@ export async function PATCH(
         return NextResponse.json({ error: validationError }, { status: 400 });
       }
 
+      const route = await resolveSubmissionRoute(db, session.collegeId, session.uid, false);
       const now = new Date();
       const updates: Record<string, unknown> = {
+        ...routeFields(route),
+        sentBackReason: FieldValue.delete(),
+        coordinatorNote: FieldValue.delete(),
         ...pickEditableFields(body),
         updatedAt: now,
-        status: "PENDING" satisfies PublicationStatus,
+        status: route.status satisfies PublicationStatus,
         reviewedBy: FieldValue.delete(),
         reviewedByName: FieldValue.delete(),
         reviewedAt: FieldValue.delete(),
@@ -200,13 +205,11 @@ export async function PATCH(
         details: { title: body.title ?? project.title },
         timestamp: now,
       });
-      await notifyRole(
-        db, session.collegeId, "R_AND_D",
-        "SPONSORED_PROJECT_PENDING_VERIFICATION",
-        "Sponsored project resubmitted for verification",
-        `A previously rejected sponsored project ("${body.title ?? project.title}") was corrected and resubmitted`,
-        "/r-and-d/sponsored-projects"
-      );
+      await notifyReviewer(db, session.collegeId, route, {
+        type: "SPONSORED_PROJECT_PENDING_VERIFICATION", title: "Sponsored project resubmitted for verification",
+        message: `A previously rejected sponsored project ("${body.title ?? project.title}") was corrected and resubmitted`,
+        rndLink: "/r-and-d/sponsored-projects",
+      });
       return NextResponse.json({ ok: true });
     }
 

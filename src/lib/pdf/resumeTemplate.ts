@@ -1,4 +1,5 @@
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { isResumeSectionEnabled, type ResumeSectionKey } from "@/lib/pdf/resumeSections";
 import { normalizeAcademicProfile } from "@/lib/faculty/academicProfileCompat";
 import { facultyMobileNo } from "@/lib/faculty/mobileNo";
 import { migratePersonalFlat } from "@/lib/faculty/fieldRenames";
@@ -116,6 +117,10 @@ interface FacultyProfileFieldsLike {
 }
 
 export interface ResumeData {
+  /** Which sections to render. Absent = all of them, so any caller that
+   *  doesn't offer the choice keeps producing the full resume. See
+   *  lib/pdf/resumeSections.ts. */
+  sections?: string[];
   // legalName (below) is the only display name - see facultyDisplayName()
   // usage in the header rendering.
   role?: string;
@@ -323,6 +328,9 @@ export function getResumeHTML(rawData: ResumeData): string {
   const data = migratePersonalFlat(rawData as unknown as Record<string, unknown>) as unknown as ResumeData;
   // Lift legacy Academic Qualification key names on un-migrated docs.
   const ap = normalizeAcademicProfile(data.academicProfile);
+  // Reads the caller's section choice; with none given every section renders,
+  // so existing callers are untouched (see isResumeSectionEnabled).
+  const on = (key: ResumeSectionKey) => isResumeSectionEnabled(data.sections, key);
   const roleLabel = data.role ? (ROLE_LABELS[data.role as keyof typeof ROLE_LABELS] ?? data.role) : "";
   const designationLabel = data.designation
     ? (DESIGNATION_LABELS[data.designation as keyof typeof DESIGNATION_LABELS] ?? data.designation)
@@ -525,14 +533,14 @@ export function getResumeHTML(rawData: ResumeData): string {
     </div>
   </div>
 
-  ${renderSection("Personal & Contact Details", personalBody)}
-  ${renderSection("Education", educationBody)}
-  ${renderSection("Previous Experience", experienceBody)}
-  ${renderSection("Teaching Load", teachingLoadBody)}
-  ${renderSection("Research & Innovation", publicationsBody)}
-  ${renderSection("Mentorship & Institutional Contribution", mentorshipBody)}
-  ${renderSection("Other Information", otherInfoBody)}
-  ${renderSection("Financial Standing", financialBody)}
+  ${on("personal") ? renderSection("Personal & Contact Details", personalBody) : ""}
+  ${on("education") ? renderSection("Education", educationBody) : ""}
+  ${on("experience") ? renderSection("Previous Experience", experienceBody) : ""}
+  ${on("teachingLoad") ? renderSection("Teaching Load", teachingLoadBody) : ""}
+  ${on("research") ? renderSection("Research & Innovation", publicationsBody) : ""}
+  ${on("mentorship") ? renderSection("Mentorship & Institutional Contribution", mentorshipBody) : ""}
+  ${on("otherInfo") ? renderSection("Other Information", otherInfoBody) : ""}
+  ${on("financial") ? renderSection("Financial Standing", financialBody) : ""}
 
   <div class="footer">Generated on ${esc(formatDate(new Date()))} - Confidential, for internal institutional use only.</div>
 </div>

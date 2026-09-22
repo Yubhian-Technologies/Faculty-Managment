@@ -85,7 +85,7 @@ export function RoleAssignmentsPage({ collegeId }: { collegeId?: string }) {
       if (!res.ok) throw new Error(data.error ?? "Failed");
       toast({
         variant: "success",
-        title: data.created ? `${data.created} existing role account(s) converted to seats` : "Nothing to convert",
+        title: data.created ? `${data.created} existing role account(s) converted to roles` : "Nothing to convert",
         description: data.skipped?.length ? `Skipped: ${data.skipped.join("; ")}` : undefined,
       });
       await load();
@@ -108,7 +108,7 @@ export function RoleAssignmentsPage({ collegeId }: { collegeId?: string }) {
     <div className="max-w-4xl space-y-6">
       <PageHeader
         title="Role Assignments"
-        description="Appoint people to seats - Principal, each department's HOD, Vice Principal, Academics and so on. Everyone signs in with their own college email; a seat adds its modules to their dashboard and stays with the position when the person changes."
+        description="Appoint people to roles - Principal, each department's HOD, Vice Principal, Academics and so on. Everyone signs in with their own college email; a role adds its modules to their dashboard and stays with the position when the person changes."
         actions={
           <>
             <Button variant="outline" onClick={convertLegacy} loading={isConverting}>
@@ -314,7 +314,7 @@ function AssignDialog({
           <DialogTitle>{seat.holderUid ? "Change" : "Assign"} - {seat.label}</DialogTitle>
           <DialogDescription>
             The person keeps their own login and dashboard; this seat&apos;s modules are added to it.
-            {seat.holderUid && ` ${seat.holderName} loses this seat's modules straight away - their own profile and history are untouched.`}
+            {seat.holderUid && ` ${seat.holderName} loses this role's modules straight away - their own profile and history are untouched.`}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
@@ -401,14 +401,14 @@ function VacateDialog({
     <ConfirmDialog
       open onOpenChange={(o) => { if (!o) onClose(); }}
       title={`Vacate ${seat.label}?`}
-      description={`${seat.holderName} loses this seat's modules straight away. Nothing is deleted - the seat keeps its history and the next person to sit in it inherits everything.`}
+      description={`${seat.holderName} loses this role's modules straight away. Nothing is deleted - the role keeps its history and the next person to hold it inherits everything.`}
       confirmLabel="Vacate" variant="destructive" loading={busy}
       onConfirm={async () => {
         setBusy(true);
         const r = await patchSeat(seat.id, { action: "VACATE", ...(outgoingNeeded ? { outgoing } : {}) });
         setBusy(false);
         if (!r.ok) { toast({ variant: "destructive", title: r.error ?? "Failed" }); return; }
-        toast({ variant: "success", title: "Seat vacated" });
+        toast({ variant: "success", title: "Role vacated" });
         onClose();
         await onDone();
       }}
@@ -439,12 +439,12 @@ function HistoryDialog({ seat, onClose, qs }: { seat: RoleSeat | null; onClose: 
       <DialogContent>
         <DialogHeader>
           <DialogTitle>History - {seat.label}</DialogTitle>
-          <DialogDescription>Everyone who has held this seat, most recent first.</DialogDescription>
+          <DialogDescription>Everyone who has held this role, most recent first.</DialogDescription>
         </DialogHeader>
         {history === null ? (
           <div className="h-16 bg-muted animate-pulse rounded-lg" />
         ) : history.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No one has held this seat yet.</p>
+          <p className="text-sm text-muted-foreground">No one has held this role yet.</p>
         ) : (
           <ul className="divide-y rounded-lg border max-h-80 overflow-y-auto">
             {history.map((h) => (
@@ -539,7 +539,7 @@ function AddSeatDialog({
   // (see api/administration/college-people) - this dialog would otherwise let
   // someone create an unfillable vacant seat.
   const roleOptions = SEAT_ROLES.filter((r) => r !== "COLLEGE_ADMIN" && canCreate() && (!isSingletonSeatRole(r) || !seats.some((s) => s.role === r)));
-  const freeDepartments = departments.filter((d) => !seats.some((s) => s.role === "HOD" && s.departmentId === d.id));
+  const freeDepartments = departments.filter((d) => !seats.some((s) => s.role === role && s.departmentId === d.id));
 
   async function submit() {
     if (!role) { toast({ variant: "destructive", title: "Pick a role" }); return; }
@@ -556,7 +556,7 @@ function AddSeatDialog({
       });
       const data = await res.json() as { error?: string };
       if (!res.ok) throw new Error(data.error ?? "Failed");
-      toast({ variant: "success", title: "Seat added" });
+      toast({ variant: "success", title: "Role added" });
       setRole(""); setDepartmentId(""); setLabel(""); setRoleEmail("");
       onOpenChange(false);
       await onDone();
@@ -572,7 +572,7 @@ function AddSeatDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Add Role</DialogTitle>
-          <DialogDescription>Create the position first, then appoint a person to it. The role email is entered once here and stays with the seat.</DialogDescription>
+          <DialogDescription>Create the position first, then appoint a person to it. The role email is entered once here and stays with the role.</DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
           <div className="space-y-2">
@@ -593,12 +593,12 @@ function AddSeatDialog({
                   {freeDepartments.map((d) => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
                 </SelectContent>
               </Select>
-              {freeDepartments.length === 0 && <p className="text-xs text-muted-foreground">Every department already has an HOD seat.</p>}
+              {freeDepartments.length === 0 && <p className="text-xs text-muted-foreground">Every department already has a {ROLE_LABELS[role as UserRole]} seat.</p>}
             </div>
           )}
           {role && !seatNeedsDepartment(role) && !isSingletonSeatRole(role) && (
             <div className="space-y-2">
-              <Label>Name of the seat</Label>
+              <Label>Name of the role</Label>
               <Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder={`e.g. ${ROLE_LABELS[role as UserRole]} (Academics)`} />
             </div>
           )}

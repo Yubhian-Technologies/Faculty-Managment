@@ -4,9 +4,10 @@ import { NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import { notify, notifyRole } from "@/lib/notify";
+import { notify } from "@/lib/notify";
 import { finalizeFacultyConsultants } from "@/lib/research/finalizeConsultants";
 import { validateConsultancyBody } from "@/lib/research/validateConsultancyProject";
+import { isResubmittable, notifyReviewer, resolveSubmissionRoute, routeFields } from "@/lib/research/coordinatorReview";
 import { PUBLICATION_ELIGIBLE_ROLES } from "@/lib/publications/eligibleRoles";
 import { CONSULTANCY_CATEGORIES, CONSULTANCY_CLIENT_TYPES, CONSULTANCY_DELIVERABLES } from "@/lib/research/consultancyProjectOptions";
 import type { ConsultancyCategory, ConsultancyClientType, ConsultancyDeliverable, PublicationStatus } from "@/types";
@@ -166,8 +167,8 @@ export async function PATCH(
 
     // Owner editing+resubmitting their own rejected submission.
     if (isOwner && !isRnD) {
-      if (project.status !== "REJECTED") {
-        return NextResponse.json({ error: "Only a rejected submission can be edited" }, { status: 403 });
+      if (!isResubmittable(project.status)) {
+        return NextResponse.json({ error: "Only a rejected or sent-back submission can be edited" }, { status: 403 });
       }
       // The owner resubmits the whole form, so the same compulsory-sections rule
       // as a fresh submission applies to what they send.
@@ -178,12 +179,16 @@ export async function PATCH(
       );
       if (validationError) return NextResponse.json({ error: validationError }, { status: 400 });
 
+      const route = await resolveSubmissionRoute(db, session.collegeId, session.uid, false);
       const now = new Date();
       const updates: Record<string, unknown> = {
+        ...routeFields(route),
+        sentBackReason: FieldValue.delete(),
+        coordinatorNote: FieldValue.delete(),
         ...pickEditableFields(body),
         ...consultantFields,
         updatedAt: now,
-        status: "PENDING" satisfies PublicationStatus,
+        status: route.status satisfies PublicationStatus,
         reviewedBy: FieldValue.delete(),
         reviewedByName: FieldValue.delete(),
         reviewedAt: FieldValue.delete(),
@@ -205,13 +210,11 @@ export async function PATCH(
         details: { title: body.title ?? project.title },
         timestamp: now,
       });
-      await notifyRole(
-        db, session.collegeId, "R_AND_D",
-        "CONSULTANCY_PROJECT_PENDING_VERIFICATION",
-        "Consultancy project resubmitted for verification",
-        `A previously rejected consultancy project ("${body.title ?? project.title}") was corrected and resubmitted`,
-        "/r-and-d/consultancy-projects"
-      );
+      await notifyReviewer(db, session.collegeId, route, {
+        type: "CONSULTANCY_PROJECT_PENDING_VERIFICATION", title: "Consultancy project resubmitted for verification",
+        message: `A previously rejected consultancy project ("${body.title ?? project.title}") was corrected and resubmitted`,
+        rndLink: "/r-and-d/consultancy-projects",
+      });
       return NextResponse.json({ ok: true });
     }
 

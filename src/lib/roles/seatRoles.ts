@@ -7,7 +7,7 @@ import type { UserRole } from "@/types/core";
 // College Admin - is a primary role.
 export const SEAT_ROLES: UserRole[] = [
   "PRINCIPAL", "COLLEGE_ADMIN", "VICE_PRINCIPAL", "ACADEMICS", "HOD",
-  "IQAC_COORDINATOR", "T_AND_P", "R_AND_D", "PLACEMENT_DEPT", "EXAM_CELL", "LIBRARY",
+  "IQAC_COORDINATOR", "T_AND_P", "R_AND_D", "RND_COORDINATOR", "PLACEMENT_DEPT", "EXAM_CELL", "LIBRARY",
 ];
 
 // What someone's primary role can be set to when they step out of a legacy
@@ -22,7 +22,7 @@ export function isSeatRole(role: string): role is UserRole {
 // Admin; HOD is one seat per department; Academics is the only named position that
 // can exist more than once.
 export function isSingletonSeatRole(role: string): boolean {
-  return role !== "ACADEMICS" && role !== "HOD";
+  return role !== "ACADEMICS" && !seatNeedsDepartment(role);
 }
 
 // Does a users doc's STORED role make that account the very role a seat
@@ -36,8 +36,10 @@ export function roleMatchesSeat(storedRole: string, seatRole: string): boolean {
   return seatRole === "HOD" && storedRole === "DEPARTMENT_OFFICE";
 }
 
+// One seat per department: the HOD, and the R&D Coordinator who reviews that
+// department's research submissions before they reach R&D.
 export function seatNeedsDepartment(role: string): boolean {
-  return role === "HOD";
+  return role === "HOD" || role === "RND_COORDINATOR";
 }
 
 // The roles stored on a users doc can still be the un-normalized forms.
@@ -104,7 +106,7 @@ export function orderHeldRoles(primary: string, seatRoles: string[]): string[] {
 // T&P, Placement, Exam Cell, Library) can go to anyone. An old role account
 // (whose own role IS a seat role) is always eligible: it's the seat's current
 // or former holder, not a new appointment.
-export const FACULTY_ONLY_SEAT_ROLES: UserRole[] = ["HOD", "ACADEMICS", "IQAC_COORDINATOR", "R_AND_D"];
+export const FACULTY_ONLY_SEAT_ROLES: UserRole[] = ["HOD", "ACADEMICS", "IQAC_COORDINATOR", "R_AND_D", "RND_COORDINATOR"];
 
 export function canHoldSeat(personPrimaryRole: string, seatRole: string): boolean {
   if (!(FACULTY_ONLY_SEAT_ROLES as string[]).includes(seatRole)) return true;

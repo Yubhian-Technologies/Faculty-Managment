@@ -96,6 +96,8 @@ export async function GET(request: Request) {
       if (scope.ownDepartmentNames.length > 0) {
         const ownSet = new Set(scope.ownDepartmentNames);
         users = users.filter((u) => ownSet.has((u as unknown as { department?: string }).department ?? ""));
+      } else {
+        users = [];
       }
     }
 

@@ -43,6 +43,9 @@ export type UserRole =
   | "IQAC_COORDINATOR"
   | "T_AND_P"
   | "R_AND_D"
+  // Per-department seat: first-level reviewer of that department's Research &
+  // Innovation submissions before they reach R&D. Held on top of a faculty login.
+  | "RND_COORDINATOR"
   | "PLACEMENT_DEPT"
   | "LIBRARY"
   | "EXAM_CELL"
@@ -74,6 +77,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   IQAC_COORDINATOR: "IQAC Coordinator",
   T_AND_P: "T&P",
   R_AND_D: "R&D",
+  RND_COORDINATOR: "R&D Coordinator",
   PLACEMENT_DEPT: "Placement Department",
   LIBRARY: "Library",
   EXAM_CELL: "Exam Cell",
@@ -98,7 +102,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
 // the one Principal-tier role a Principal itself appoints).
 export const MANAGEABLE_STAFF_ROLES: UserRole[] = [
   "HOD", "DEPARTMENT_OFFICE", "COLLEGE_OFFICE", "VICE_PRINCIPAL", "COLLEGE_ADMIN", "COLLEGE_STAFF",
-  "ACADEMICS", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D", "PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL",
+  "ACADEMICS", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D", "RND_COORDINATOR", "PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL",
   "PANEL_MEMBER", "WEBMASTER", "COLLEGE_ACCOUNTS",
 ];
 
@@ -121,6 +125,7 @@ export const ROLE_DASHBOARD_PATHS: Record<UserRole, string> = {
   IQAC_COORDINATOR: "/iqac-coordinator",
   T_AND_P: "/t-and-p",
   R_AND_D: "/r-and-d",
+  RND_COORDINATOR: "/rnd-coordinator",
   PLACEMENT_DEPT: "/placement-dept",
   LIBRARY: "/library",
   EXAM_CELL: "/exam-cell",
@@ -163,6 +168,7 @@ export const ROLE_LEVEL: Record<UserRole, 0 | 1 | 2 | 3 | 4 | 5 | 6> = {
   IQAC_COORDINATOR: 4,
   T_AND_P: 4,
   R_AND_D: 4,
+  RND_COORDINATOR: 4,
   PLACEMENT_DEPT: 4,
   LIBRARY: 4,
   EXAM_CELL: 4,
@@ -211,6 +217,7 @@ export const ROLE_SCOPE: Record<UserRole, RoleScope> = {
   IQAC_COORDINATOR: "COLLEGE",
   T_AND_P: "COLLEGE",
   R_AND_D: "COLLEGE",
+  RND_COORDINATOR: "COLLEGE",
   PLACEMENT_DEPT: "COLLEGE",
   LIBRARY: "COLLEGE",
   EXAM_CELL: "COLLEGE",
@@ -861,6 +868,10 @@ export interface FacultyNorms {
   // (see src/lib/leave/approvalRouting.ts). A role with no entry here uses the
   // built-in default for that role.
   leaveApprovalRouting?: Partial<Record<UserRole, "HOD" | "PRINCIPAL" | "MANAGEMENT">>;
+  // Per requester role: true = vacation staff (teaching-style leave), false =
+  // non-vacation (see src/lib/leave/staffCategoryRouting.ts). A role with no
+  // entry keeps its built-in default.
+  leaveVacationRoles?: Partial<Record<UserRole, boolean>>;
   updatedAt?: Timestamp;
   updatedByName?: string;
 }
@@ -1224,7 +1235,10 @@ export interface Publication {
 // the owner (`uid`) can only read their own rows - see
 // src/app/api/college/publications/route.ts. Reuses Publication's field
 // names so it renders as a drop-in for the existing Research module UI.
-export type PublicationStatus = "PENDING" | "APPROVED" | "REJECTED";
+// COORDINATOR_REVIEW: waiting on the submitter's department R&D Coordinator.
+// PENDING: waiting on R&D (forwarded by the coordinator, or no coordinator).
+// SENT_BACK: returned to the submitter for changes; editing resubmits it.
+export type PublicationStatus = "COORDINATOR_REVIEW" | "PENDING" | "APPROVED" | "REJECTED" | "SENT_BACK";
 
 // Rich, type-specific publication details (Journal/Conference/Book Chapter/
 // Text Book), each institution's R&D policy field set - additive on top of
@@ -1312,6 +1326,7 @@ export interface ResearchPublication {
   reviewedByName?: string;
   reviewedAt?: Timestamp;
   rejectionReason?: string;
+  sentBackReason?: string; // set when an R&D Coordinator returns it for changes
   // Rich Journal/Conference/Book Chapter/Text Book breakdown - absent on
   // every record added before this shipped (CSV-imported or hand-added with
   // the old flat form), which still display fine off the flat fields below.
@@ -1382,6 +1397,7 @@ export interface ResearchProfileRequest {
   reviewedByName?: string;
   reviewedAt?: Timestamp;
   rejectionReason?: string;
+  sentBackReason?: string; // set when an R&D Coordinator returns it for changes
   createdAt: Timestamp;
   updatedAt?: Timestamp;
 }
@@ -1411,6 +1427,7 @@ export interface CitationMetricsRequest {
   reviewedByName?: string;
   reviewedAt?: Timestamp;
   rejectionReason?: string;
+  sentBackReason?: string; // set when an R&D Coordinator returns it for changes
   createdAt: Timestamp;
   updatedAt?: Timestamp;
 }
@@ -1442,6 +1459,7 @@ export interface ConsultancyProjectRequest {
   reviewedByName?: string;
   reviewedAt?: Timestamp;
   rejectionReason?: string;
+  sentBackReason?: string; // set when an R&D Coordinator returns it for changes
 
   title: string;
   facultyConsultantsCount?: number;
@@ -1529,6 +1547,7 @@ export interface SeedFundingProjectRequest {
   reviewedByName?: string;
   reviewedAt?: Timestamp;
   rejectionReason?: string;
+  sentBackReason?: string; // set when an R&D Coordinator returns it for changes
 
   title: string;
   durationMonths?: number;
@@ -1619,6 +1638,7 @@ export interface SponsoredProjectRequest {
   reviewedByName?: string;
   reviewedAt?: Timestamp;
   rejectionReason?: string;
+  sentBackReason?: string; // set when an R&D Coordinator returns it for changes
 
   agencyName: string;
   schemeName: string;
@@ -1725,6 +1745,7 @@ export interface DiscoveryInnovationRequest {
   reviewedByName?: string;
   reviewedAt?: Timestamp;
   rejectionReason?: string;
+  sentBackReason?: string; // set when an R&D Coordinator returns it for changes
 
   iprType: IprType;
   iprStatus: IprStatus; // Published / Granted
@@ -1787,6 +1808,7 @@ export interface PhdSupervisionRequest {
   reviewedByName?: string;
   reviewedAt?: Timestamp;
   rejectionReason?: string;
+  sentBackReason?: string; // set when an R&D Coordinator returns it for changes
 
   recognizedSupervisor: PhdRecognizedSupervisor;
   otherUniversityName?: string; // when recognizedSupervisor === OTHER
@@ -1869,6 +1891,7 @@ export interface ResearchServiceRequest {
   reviewedByName?: string;
   reviewedAt?: Timestamp;
   rejectionReason?: string;
+  sentBackReason?: string; // set when an R&D Coordinator returns it for changes
 
   serviceType: ResearchServiceType;
 
@@ -1978,6 +2001,7 @@ export interface HackathonRequest {
   reviewedByName?: string;
   reviewedAt?: Timestamp;
   rejectionReason?: string;
+  sentBackReason?: string; // set when an R&D Coordinator returns it for changes
 
   academicYear: string;
   eventTitle: string;
@@ -2043,6 +2067,7 @@ export interface InnovationRequest {
   reviewedByName?: string;
   reviewedAt?: Timestamp;
   rejectionReason?: string;
+  sentBackReason?: string; // set when an R&D Coordinator returns it for changes
 
   academicYear: string;
   innovatorType: InnovatorType;
@@ -2716,6 +2741,10 @@ export type NotificationType =
   | "LEAVE_APPROVED"
   | "LEAVE_REJECTED"
   | "LEAVE_OD_PROOF_PENDING_VERIFICATION"
+  // Late-attendance permission (see types/permission.ts)
+  | "PERMISSION_REQUESTED"
+  | "PERMISSION_APPROVED"
+  | "PERMISSION_REJECTED"
   | "LEAVE_OD_PROOF_VERIFIED"
   | "LEAVE_OD_PROOF_REJECTED"
   | "ATTENDANCE_MANUALLY_MARKED"
