@@ -126,6 +126,23 @@ export default function LabBatchesPage() {
   function handleCreateBatch() {
     const name = newBatchName.trim();
     if (!name) return;
+    // The very first batch in a section starts as everyone's default home -
+    // before any batching, the whole class is effectively one group as far
+    // as lab attendance is concerned, so there's nothing to hand-pick yet.
+    // Every batch after that starts empty - splitting a class that's already
+    // divided is a deliberate choice, made by swapping specific students
+    // across with </>> below (staged like any other move, not saved until
+    // Update).
+    if (batchOptions.length === 0) {
+      setPending((prev) => {
+        const next = new Map(prev);
+        for (const s of sectionStudents) {
+          const current = (prev.get(s.id) ?? s.labBatch ?? "").trim();
+          if (current === "") next.set(s.id, name);
+        }
+        return next;
+      });
+    }
     setBatch(name);
     setNewBatchName("");
     setLeftChecked(new Set());
@@ -249,6 +266,11 @@ export default function LabBatchesPage() {
                 <Plus className="h-4 w-4 mr-1.5" />Add batch
               </Button>
             </div>
+            {selectedSection && batchOptions.length === 0 && (
+              <p className="text-xs text-muted-foreground">
+                This section has no batches yet - the first one you add gets everyone. Add a second batch, then move specific students into it below.
+              </p>
+            )}
           </CardHeader>
           <CardContent>
             {isLoading ? (
