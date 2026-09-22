@@ -25,12 +25,12 @@ const EMPTY_DRAFT: Draft = { name: "", cadre: NO_CADRE };
 
 const TITLE_BY_CATEGORY: Record<DesignationCategory, string> = {
   FACULTY: "Faculty Designations",
-  TECHNICAL: "Technical Staff Designations",
+  TECHNICAL: "Supporting Staff Designations",
   NON_TECHNICAL: "Non-Technical Staff Designations",
 };
 const DESCRIPTION_BY_CATEGORY: Record<DesignationCategory, string> = {
   FACULTY: "The job titles Faculty can be added/hired under - departments only select from these. Tag one as a Professor/Associate/Assistant Professor cadre to keep AICTE cadre-ratio reporting working even with a custom title.",
-  TECHNICAL: "The job titles your department's Technical Staff can be added under.",
+  TECHNICAL: "The job titles Supporting Staff can be added under - departments only select from these.",
   NON_TECHNICAL: "The job titles Non-Technical Staff can be added under.",
 };
 
