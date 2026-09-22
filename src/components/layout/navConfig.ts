@@ -370,6 +370,13 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Student Attendance", href: "/panel/mark-attendance", iconName: "CalendarCheck", roles: ["PANEL_MEMBER"] },
   { label: "Attendance Report", href: "/panel/monthly-records", iconName: "CalendarRange", roles: ["PANEL_MEMBER"] },
   { label: "Students", href: "/panel/students", iconName: "GraduationCap", roles: ["PANEL_MEMBER"] },
+  // Dividing a section's own roster into lab sub-groups (StudentRecord.
+  // labBatch) - only meaningful once this login is Faculty Incharge of at
+  // least one section (see Section.facultyInchargeUid); the page itself shows
+  // an empty state otherwise, same convention as the entries above. HOD-only
+  // by design elsewhere (hod/students' per-student Edit dialog) - this is the
+  // Faculty Incharge's own equivalent, not offered to HOD here.
+  { label: "Lab Batches", href: "/panel/students/batches", iconName: "Layers", roles: ["PANEL_MEMBER"] },
   { label: "My Feedback", href: "/panel/feedback", iconName: "MessageSquare", roles: ["PANEL_MEMBER"] },
   { label: "Leave", href: "/panel/leave", iconName: "CalendarClock", roles: ["PANEL_MEMBER"], section: "Leave & Attendance" },
   { label: "Adjustment Requests", href: "/leave/adjustments", iconName: "UserCheck", roles: ["PANEL_MEMBER"] },
