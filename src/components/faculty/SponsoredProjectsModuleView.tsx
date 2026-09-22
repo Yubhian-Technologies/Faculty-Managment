@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { ExternalLink, Plus, Pencil } from "lucide-react";
 import {
-  Section, SubLabel, Field, TextInput, NumInput, DateInput, RepeatingGroup, TableRepeatingGroup,
+  Section, SubLabel, Field, TextInput, NumInput, DateInput, TableRepeatingGroup,
 } from "@/components/shared/ProfileFieldPrimitives";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -16,6 +16,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
+import { isValidDdMmYyyy } from "@/lib/research/validateSponsoredProject";
 import type {
   SeedFundingEquipmentItem, SeedFundingPaperItem, SeedFundingPatentItem,
   SponsoredProjectCoPI, SponsoredProjectRequest, SponsoredProjectSanctionedStatus,
@@ -23,6 +24,8 @@ import type {
 } from "@/types";
 
 const PREVIEW_COUNT = 3;
+// Guards against a typo like 1000 spawning a thousand Co-PI rows.
+const MAX_COPIS = 50;
 
 const EMPTY_COPI: SponsoredProjectCoPI = { name: "", department: "", affiliation: "" };
 const EMPTY_EQUIPMENT: SeedFundingEquipmentItem = { name: "", makeModel: "", softwareOrHardware: "", amount: undefined, purpose: "" };
@@ -59,6 +62,29 @@ function toNumberOrUndefined(v: string): number | undefined {
   return Number.isNaN(n) ? undefined : n;
 }
 
+// A browser's native date picker shows the viewer's own locale (often
+// MM/DD/YYYY), which can't be forced - so this is a masked text box that always
+// reads DD-MM-YYYY, inserting the dashes as digits are typed.
+function DdMmYyyyInput({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+  function format(raw: string): string {
+    const d = raw.replace(/\D/g, "").slice(0, 8);
+    if (d.length <= 2) return d;
+    if (d.length <= 4) return `${d.slice(0, 2)}-${d.slice(2)}`;
+    return `${d.slice(0, 2)}-${d.slice(2, 4)}-${d.slice(4)}`;
+  }
+  const invalid = value.length === 10 && !isValidDdMmYyyy(value);
+  return (
+    <div className="space-y-2">
+      <Label>{label}</Label>
+      <Input
+        value={value} onChange={(e) => onChange(format(e.target.value))}
+        placeholder="DD-MM-YYYY" inputMode="numeric" maxLength={10} aria-invalid={invalid}
+      />
+      {invalid && <p className="text-xs text-destructive">Enter a valid date as DD-MM-YYYY</p>}
+    </div>
+  );
+}
+
 function SponsoredProjectRow({
   project, isOwnProfile, onEdit,
 }: {
@@ -66,6 +92,20 @@ function SponsoredProjectRow({
   isOwnProfile?: boolean;
   onEdit?: (project: SponsoredProjectRequest) => void;
 }) {
+  // Reports are filed per year; the project-level ones only exist on records
+  // saved before that. "Year N" is only worth prefixing when there's more than one.
+  const years = project.yearlyData ?? [];
+  const reportLinks: { label: string; url: string }[] = [];
+  const addReports = (prefix: string, src: { progressReportUrl?: string; completionReportUrl?: string; utilizationCertificateUrl?: string; statementOfExpenditureUrl?: string }) => {
+    const items: [string, string | undefined][] = [
+      ["Progress Report", src.progressReportUrl], ["Completion Report", src.completionReportUrl],
+      ["Utilization Certificate", src.utilizationCertificateUrl], ["Statement of Expenditure", src.statementOfExpenditureUrl],
+    ];
+    for (const [label, url] of items) if (url) reportLinks.push({ label: `${prefix}${label}`, url });
+  };
+  addReports("", project);
+  years.forEach((y, i) => addReports(years.length > 1 ? `${yearOrdinal(i + 1)} Year - ` : "", y));
+
   return (
     <div className="rounded-md border bg-muted/20 shadow-sm p-2 space-y-2">
       {isOwnProfile && project.status !== "APPROVED" && (
@@ -95,7 +135,7 @@ function SponsoredProjectRow({
         <Field label="Type" value={PROJECT_TYPE_LABELS[project.projectType]} />
         <Field label="PI" value={project.piName} />
         <Field label="Status" value={project.projectStatus === "APPLIED" ? "Applied" : `Sanctioned - ${project.sanctionedStatus === "COMPLETED" ? "Completed" : "Ongoing"}`} />
-        <Field label="Amount Sanctioned (Rs.)" value={project.totalAmountSanctioned ?? project.amountApplied} />
+        <Field label={project.totalAmountSanctioned !== undefined ? "Total Amount Sanctioned (Rs.)" : "Amount Applied (Rs.)"} value={project.totalAmountSanctioned ?? project.amountApplied} />
       </div>
       {project.objectives && (
         <div>
@@ -104,26 +144,11 @@ function SponsoredProjectRow({
         </div>
       )}
       <div className="flex flex-wrap gap-3">
-        {project.progressReportUrl && (
-          <a href={project.progressReportUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline">
-            <ExternalLink className="h-3.5 w-3.5" />Progress Report
+        {reportLinks.map((l) => (
+          <a key={l.label} href={l.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline">
+            <ExternalLink className="h-3.5 w-3.5" />{l.label}
           </a>
-        )}
-        {project.completionReportUrl && (
-          <a href={project.completionReportUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline">
-            <ExternalLink className="h-3.5 w-3.5" />Completion Report
-          </a>
-        )}
-        {project.utilizationCertificateUrl && (
-          <a href={project.utilizationCertificateUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline">
-            <ExternalLink className="h-3.5 w-3.5" />Utilization Certificate
-          </a>
-        )}
-        {project.statementOfExpenditureUrl && (
-          <a href={project.statementOfExpenditureUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline">
-            <ExternalLink className="h-3.5 w-3.5" />Statement of Expenditure
-          </a>
-        )}
+        ))}
       </div>
     </div>
   );
@@ -144,6 +169,12 @@ interface YearFormData {
   teachingStaffTrainedCount: string;
   nonTeachingStaffTrainedCount: string;
   externalPersonsTrainedCount: string;
+  submittedRequiredDocs: "YES" | "NO" | "";
+  dateOfSubmission: string;
+  progressReportUrl: string;
+  completionReportUrl: string;
+  utilizationCertificateUrl: string;
+  statementOfExpenditureUrl: string;
 }
 
 const EMPTY_YEAR_DATA: YearFormData = {
@@ -151,6 +182,8 @@ const EMPTY_YEAR_DATA: YearFormData = {
   infrastructureProcured: [], papersPublished: [], patents: [],
   studentsProjectsUG: "", studentsProjectsPG: "", studentsProjectsPhD: "",
   studentsTrainedCount: "", teachingStaffTrainedCount: "", nonTeachingStaffTrainedCount: "", externalPersonsTrainedCount: "",
+  submittedRequiredDocs: "", dateOfSubmission: "", progressReportUrl: "", completionReportUrl: "",
+  utilizationCertificateUrl: "", statementOfExpenditureUrl: "",
 };
 
 function yearFormFromData(y?: SponsoredProjectYearData): YearFormData {
@@ -163,6 +196,9 @@ function yearFormFromData(y?: SponsoredProjectYearData): YearFormData {
     studentsProjectsUG: n(y?.studentsProjectsUG), studentsProjectsPG: n(y?.studentsProjectsPG), studentsProjectsPhD: n(y?.studentsProjectsPhD),
     studentsTrainedCount: n(y?.studentsTrainedCount), teachingStaffTrainedCount: n(y?.teachingStaffTrainedCount),
     nonTeachingStaffTrainedCount: n(y?.nonTeachingStaffTrainedCount), externalPersonsTrainedCount: n(y?.externalPersonsTrainedCount),
+    submittedRequiredDocs: y?.submittedRequiredDocs ?? "", dateOfSubmission: y?.dateOfSubmission ?? "",
+    progressReportUrl: y?.progressReportUrl ?? "", completionReportUrl: y?.completionReportUrl ?? "",
+    utilizationCertificateUrl: y?.utilizationCertificateUrl ?? "", statementOfExpenditureUrl: y?.statementOfExpenditureUrl ?? "",
   };
 }
 
@@ -177,14 +213,22 @@ function yearDataToPayload(y: YearFormData): SponsoredProjectYearData {
     teachingStaffTrainedCount: toNumberOrUndefined(y.teachingStaffTrainedCount),
     nonTeachingStaffTrainedCount: toNumberOrUndefined(y.nonTeachingStaffTrainedCount),
     externalPersonsTrainedCount: toNumberOrUndefined(y.externalPersonsTrainedCount),
+    submittedRequiredDocs: y.submittedRequiredDocs || undefined,
+    // Only the answer "Yes" carries a date/reports - flipping to No drops any left over.
+    dateOfSubmission: y.submittedRequiredDocs === "YES" ? y.dateOfSubmission || undefined : undefined,
+    progressReportUrl: y.submittedRequiredDocs === "YES" ? y.progressReportUrl || undefined : undefined,
+    completionReportUrl: y.submittedRequiredDocs === "YES" ? y.completionReportUrl || undefined : undefined,
+    utilizationCertificateUrl: y.submittedRequiredDocs === "YES" ? y.utilizationCertificateUrl || undefined : undefined,
+    statementOfExpenditureUrl: y.submittedRequiredDocs === "YES" ? y.statementOfExpenditureUrl || undefined : undefined,
   };
 }
 
 // Every field of a yearly group is compulsory (Amount Received, at least one
-// Infrastructure/Paper/Patent row, Students & Training) - mirrors the
+// Infrastructure/Paper/Patent row, Students & Training, and the
+// submitted-documents answer with its reports when Yes) - mirrors the
 // compulsory-everything treatment of Discovery & Innovation's Applicants/
-// Inventors.
-function isYearDataValid(y: YearFormData): boolean {
+// Inventors. `isOngoing` picks Progress Report vs Completion Report.
+function isYearDataValid(y: YearFormData, isOngoing: boolean): boolean {
   const numFields = [
     y.totalAmountReceived, y.recurringAmountReceived, y.nonRecurringAmountReceived, y.instituteContributionReceived,
     y.studentsProjectsUG, y.studentsProjectsPG, y.studentsProjectsPhD, y.studentsTrainedCount,
@@ -194,6 +238,12 @@ function isYearDataValid(y: YearFormData): boolean {
   if (y.infrastructureProcured.length === 0 || y.infrastructureProcured.some((it) => !it.name.trim())) return false;
   if (y.papersPublished.length === 0 || y.papersPublished.some((p) => !p.title.trim())) return false;
   if (y.patents.length === 0 || y.patents.some((p) => !p.patentTitle.trim())) return false;
+  if (!y.submittedRequiredDocs) return false;
+  if (y.submittedRequiredDocs === "YES") {
+    if (!y.dateOfSubmission) return false;
+    if (isOngoing ? !y.progressReportUrl : !y.completionReportUrl) return false;
+    if (!y.utilizationCertificateUrl || !y.statementOfExpenditureUrl) return false;
+  }
   return true;
 }
 
@@ -215,6 +265,9 @@ interface ProjectFormState {
   dateProposalSubmitted: string;
   amountApplied: string;
   extendedToSeedFund: "YES" | "NO" | "";
+  seedFundTitle: string;
+  seedFundAmountSanctioned: string;
+  seedFundSanctionDate: string;
   sanctionedStatus: SponsoredProjectSanctionedStatus | "";
   dateProjectSanctioned: string;
   dateOfStart: string;
@@ -227,12 +280,6 @@ interface ProjectFormState {
   financialYearOfCompletion: string;
   noOfYears: string;
   yearlyData: YearFormData[];
-  progressReportUrl: string;
-  completionReportUrl: string;
-  utilizationCertificateUrl: string;
-  statementOfExpenditureUrl: string;
-  submittedRequiredDocs: "YES" | "NO" | "";
-  dateOfSubmission: string;
 }
 
 function initialFormState(editing: SponsoredProjectRequest | null): ProjectFormState {
@@ -242,31 +289,46 @@ function initialFormState(editing: SponsoredProjectRequest | null): ProjectFormS
       agencyName: "", schemeName: "", applicationNumber: "", title: "", projectType: "", durationMonths: "",
       objectives: "", tentativeOutcomes: "", piName: "", piDepartment: "", piAffiliation: "", coPiCount: "",
       coPis: [], projectStatus: "", dateProposalSubmitted: "", amountApplied: "", extendedToSeedFund: "",
+      seedFundTitle: "", seedFundAmountSanctioned: "", seedFundSanctionDate: "",
       sanctionedStatus: "", dateProjectSanctioned: "", dateOfStart: "", financialYearOfStart: "",
       totalAmountSanctioned: "", recurringAmountSanctioned: "", nonRecurringAmountSanctioned: "",
       instituteContributionSanctioned: "", dateOfCompletion: "", financialYearOfCompletion: "",
       noOfYears: "", yearlyData: [],
-      progressReportUrl: "", completionReportUrl: "", utilizationCertificateUrl: "", statementOfExpenditureUrl: "",
-      submittedRequiredDocs: "", dateOfSubmission: "",
     };
   }
   return {
     agencyName: editing.agencyName, schemeName: editing.schemeName, applicationNumber: editing.applicationNumber,
     title: editing.title, projectType: editing.projectType, durationMonths: n(editing.durationMonths),
     objectives: editing.objectives, tentativeOutcomes: editing.tentativeOutcomes ?? "", piName: editing.piName,
-    piDepartment: editing.piDepartment ?? "", piAffiliation: editing.piAffiliation ?? "", coPiCount: n(editing.coPiCount),
+    piDepartment: editing.piDepartment ?? "", piAffiliation: editing.piAffiliation ?? "",
+    // Records added with the old "Add Co-PI" button may have rows but no count.
+    coPiCount: n(editing.coPiCount ?? ((editing.coPis?.length ?? 0) || undefined)),
     coPis: editing.coPis ?? [], projectStatus: editing.projectStatus, dateProposalSubmitted: editing.dateProposalSubmitted ?? "",
     amountApplied: n(editing.amountApplied), extendedToSeedFund: editing.extendedToSeedFund ?? "",
+    seedFundTitle: editing.seedFundTitle ?? "", seedFundAmountSanctioned: n(editing.seedFundAmountSanctioned ?? undefined),
+    seedFundSanctionDate: editing.seedFundSanctionDate ?? "",
     sanctionedStatus: editing.sanctionedStatus ?? "", dateProjectSanctioned: editing.dateProjectSanctioned ?? "",
     dateOfStart: editing.dateOfStart ?? "", financialYearOfStart: editing.financialYearOfStart ?? "",
     totalAmountSanctioned: n(editing.totalAmountSanctioned), recurringAmountSanctioned: n(editing.recurringAmountSanctioned),
     nonRecurringAmountSanctioned: n(editing.nonRecurringAmountSanctioned),
     instituteContributionSanctioned: n(editing.instituteContributionSanctioned),
     dateOfCompletion: editing.dateOfCompletion ?? "", financialYearOfCompletion: editing.financialYearOfCompletion ?? "",
-    noOfYears: n(editing.noOfYears), yearlyData: (editing.yearlyData ?? []).map(yearFormFromData),
-    progressReportUrl: editing.progressReportUrl ?? "", completionReportUrl: editing.completionReportUrl ?? "",
-    utilizationCertificateUrl: editing.utilizationCertificateUrl ?? "", statementOfExpenditureUrl: editing.statementOfExpenditureUrl ?? "",
-    submittedRequiredDocs: editing.submittedRequiredDocs ?? "", dateOfSubmission: editing.dateOfSubmission ?? "",
+    noOfYears: n(editing.noOfYears),
+    yearlyData: (editing.yearlyData ?? []).map((y, i, all) => {
+      const form = yearFormFromData(y);
+      // Before this was asked per year, the documents answer and reports sat on
+      // the project and showed only under the last year - carry them onto that
+      // year so an older record still opens with them filled in.
+      if (i !== all.length - 1 || form.submittedRequiredDocs || !editing.submittedRequiredDocs) return form;
+      return {
+        ...form,
+        submittedRequiredDocs: editing.submittedRequiredDocs,
+        dateOfSubmission: editing.dateOfSubmission ?? "",
+        progressReportUrl: editing.progressReportUrl ?? "", completionReportUrl: editing.completionReportUrl ?? "",
+        utilizationCertificateUrl: editing.utilizationCertificateUrl ?? "",
+        statementOfExpenditureUrl: editing.statementOfExpenditureUrl ?? "",
+      };
+    }),
   };
 }
 
@@ -283,6 +345,26 @@ function ProjectFormFields({
 
   function set<K extends keyof ProjectFormState>(key: K, value: ProjectFormState[K]) {
     setForm((f) => ({ ...f, [key]: value }));
+  }
+
+  // Digits only, clamped to MAX_COPIS. Clearing the box keeps rows already
+  // filled in, so backspace-and-retype doesn't wipe them; the submit payload
+  // drops them when the count is empty.
+  function setCoPiCount(raw: string) {
+    const digits = raw.replace(/\D/g, "").replace(/^0+/, "");
+    const v = digits === "" ? "" : String(Math.min(Number(digits), MAX_COPIS));
+    setForm((f) => ({
+      ...f, coPiCount: v,
+      coPis: v === "" ? f.coPis : resizeArray(f.coPis, Number(v), EMPTY_COPI),
+    }));
+  }
+
+  function updateCoPi(i: number, patch: Partial<SponsoredProjectCoPI>) {
+    setForm((f) => {
+      const next = [...f.coPis];
+      next[i] = { ...next[i], ...patch };
+      return { ...f, coPis: next };
+    });
   }
 
   function setNoOfYears(v: string) {
@@ -309,7 +391,12 @@ function ProjectFormFields({
     || (form.coPis.length > 0 && form.coPis.every((c) => c.name.trim() && c.department.trim() && c.affiliation.trim()));
 
   const appliedValid = isSanctioned || (
-    !!form.dateProposalSubmitted && form.amountApplied.trim() !== "" && !Number.isNaN(Number(form.amountApplied)) && !!form.extendedToSeedFund
+    !!form.dateProposalSubmitted && form.amountApplied.trim() !== "" && !Number.isNaN(Number(form.amountApplied)) && !!form.extendedToSeedFund &&
+    (form.extendedToSeedFund !== "YES" || (
+      !!form.seedFundTitle.trim() &&
+      form.seedFundAmountSanctioned.trim() !== "" && !Number.isNaN(Number(form.seedFundAmountSanctioned)) &&
+      isValidDdMmYyyy(form.seedFundSanctionDate)
+    ))
   );
 
   const sanctionedValid = !isSanctioned || (
@@ -319,13 +406,7 @@ function ProjectFormFields({
     [form.totalAmountSanctioned, form.recurringAmountSanctioned, form.nonRecurringAmountSanctioned, form.instituteContributionSanctioned]
       .every((v) => v.trim() !== "" && !Number.isNaN(Number(v))) &&
     form.noOfYears.trim() !== "" && !Number.isNaN(Number(form.noOfYears)) && Number(form.noOfYears) > 0 &&
-    form.yearlyData.length === Number(form.noOfYears) && form.yearlyData.every(isYearDataValid) &&
-    !!form.submittedRequiredDocs &&
-    (form.submittedRequiredDocs === "NO" || (
-      !!form.dateOfSubmission &&
-      (isOngoing ? !!form.progressReportUrl : !!form.completionReportUrl) &&
-      !!form.utilizationCertificateUrl && !!form.statementOfExpenditureUrl
-    ))
+    form.yearlyData.length === Number(form.noOfYears) && form.yearlyData.every((y) => isYearDataValid(y, isOngoing))
   );
 
   const isValid =
@@ -353,11 +434,15 @@ function ProjectFormFields({
         piDepartment: form.piDepartment.trim(),
         piAffiliation: form.piAffiliation.trim(),
         coPiCount: toNumberOrUndefined(form.coPiCount),
-        coPis: form.coPis,
+        coPis: (toNumberOrUndefined(form.coPiCount) ?? 0) > 0 ? form.coPis : [],
         projectStatus: form.projectStatus || undefined,
         dateProposalSubmitted: form.dateProposalSubmitted || undefined,
         amountApplied: toNumberOrUndefined(form.amountApplied),
         extendedToSeedFund: form.extendedToSeedFund || undefined,
+        // Cleared (not omitted) when not "Yes" so an edit flipping Yes -> No drops the old values.
+        seedFundTitle: form.extendedToSeedFund === "YES" ? form.seedFundTitle.trim() : "",
+        seedFundAmountSanctioned: form.extendedToSeedFund === "YES" ? toNumberOrUndefined(form.seedFundAmountSanctioned) : null,
+        seedFundSanctionDate: form.extendedToSeedFund === "YES" ? form.seedFundSanctionDate : "",
         sanctionedStatus: form.sanctionedStatus || undefined,
         dateProjectSanctioned: form.dateProjectSanctioned || undefined,
         dateOfStart: form.dateOfStart || undefined,
@@ -370,12 +455,10 @@ function ProjectFormFields({
         financialYearOfCompletion: form.financialYearOfCompletion || undefined,
         noOfYears: toNumberOrUndefined(form.noOfYears),
         yearlyData: form.yearlyData.map(yearDataToPayload),
-        progressReportUrl: form.progressReportUrl || undefined,
-        completionReportUrl: form.completionReportUrl || undefined,
-        utilizationCertificateUrl: form.utilizationCertificateUrl || undefined,
-        statementOfExpenditureUrl: form.statementOfExpenditureUrl || undefined,
-        submittedRequiredDocs: form.submittedRequiredDocs || undefined,
-        dateOfSubmission: form.dateOfSubmission || undefined,
+        // Cleared explicitly so an older record's project-level values (now
+        // carried onto its last year) don't linger and show twice.
+        progressReportUrl: "", completionReportUrl: "", utilizationCertificateUrl: "",
+        statementOfExpenditureUrl: "", submittedRequiredDocs: "", dateOfSubmission: "",
       };
       const res = editingId
         ? await fetch(`/api/college/sponsored-projects/${editingId}`, {
@@ -446,21 +529,21 @@ function ProjectFormFields({
             <TextInput label="Dept. of PI" value={form.piDepartment} onChange={(v) => set("piDepartment", v)} />
             <TextInput label="Affiliation of PI" value={form.piAffiliation} onChange={(v) => set("piAffiliation", v)} />
           </div>
-          <NumInput label="No. of Co-PI's" value={toNumberOrUndefined(form.coPiCount)} onChange={(v) => set("coPiCount", String(v))} />
-          <RepeatingGroup
-            title="Co-PIs"
-            items={form.coPis}
-            empty={EMPTY_COPI}
-            onChange={(v) => set("coPis", v)}
-            addLabel="Add Co-PI"
-            renderRow={(item, update) => (
-              <>
-                <TextInput label="Name of Co-PI" value={item.name} onChange={(v) => update({ name: v })} />
-                <TextInput label="Dept of Co-PI" value={item.department} onChange={(v) => update({ department: v })} />
-                <TextInput label="Affiliation of Co-PI" value={item.affiliation} onChange={(v) => update({ affiliation: v })} />
-              </>
-            )}
-          />
+          <div className="space-y-2 max-w-[200px]">
+            <Label>No. of Co-PI&apos;s</Label>
+            <Input
+              type="number" inputMode="numeric" min={0} max={MAX_COPIS} step={1}
+              value={form.coPiCount} onChange={(e) => setCoPiCount(e.target.value)}
+              placeholder="Enter number"
+            />
+          </div>
+          {(toNumberOrUndefined(form.coPiCount) ?? 0) > 0 && form.coPis.map((c, i) => (
+            <div key={i} className="grid grid-cols-1 gap-3 sm:grid-cols-3 rounded-md bg-muted/30 p-3">
+              <TextInput label={`Name of Co-PI ${i + 1}`} value={c.name} onChange={(v) => updateCoPi(i, { name: v })} />
+              <TextInput label={`Dept of Co-PI ${i + 1}`} value={c.department} onChange={(v) => updateCoPi(i, { department: v })} />
+              <TextInput label={`Affiliation of Co-PI ${i + 1}`} value={c.affiliation} onChange={(v) => updateCoPi(i, { affiliation: v })} />
+            </div>
+          ))}
         </div>
 
         <div className="space-y-4">
@@ -490,6 +573,13 @@ function ProjectFormFields({
                   </SelectContent>
                 </Select>
               </div>
+              {form.extendedToSeedFund === "YES" && (
+                <div className="grid grid-cols-1 gap-4 sm:col-span-2 sm:grid-cols-3 rounded-md bg-muted/30 p-3">
+                  <TextInput label="Title of Seed Funding" value={form.seedFundTitle} onChange={(v) => set("seedFundTitle", v)} />
+                  <NumInput label="Amount Sanctioned (Rs.)" value={toNumberOrUndefined(form.seedFundAmountSanctioned)} onChange={(v) => set("seedFundAmountSanctioned", String(v))} />
+                  <DdMmYyyyInput label="Year of Sanctioning" value={form.seedFundSanctionDate} onChange={(v) => set("seedFundSanctionDate", v)} />
+                </div>
+              )}
             </div>
           )}
 
@@ -517,7 +607,7 @@ function ProjectFormFields({
                 </div>
               )}
               <div className="space-y-2">
-                <SubLabel>Amount Sanctioned</SubLabel>
+                <SubLabel>Total Amount Sanctioned</SubLabel>
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                   <NumInput label="Total Amount (Rs.)" value={toNumberOrUndefined(form.totalAmountSanctioned)} onChange={(v) => set("totalAmountSanctioned", String(v))} />
                   <NumInput label="Recurring (Rs.)" value={toNumberOrUndefined(form.recurringAmountSanctioned)} onChange={(v) => set("recurringAmountSanctioned", String(v))} />
@@ -612,63 +702,63 @@ function ProjectFormFields({
                   </div>
                 </div>
               </div>
+
+              <div className="space-y-4">
+                <div className="space-y-2 max-w-[280px]">
+                  <Label>Submitted All Required Documents to Sponsoring Agency</Label>
+                  <Select value={yr.submittedRequiredDocs} onValueChange={(v) => updateYear(i, { submittedRequiredDocs: v as "YES" | "NO" })}>
+                    <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="YES">Yes</SelectItem>
+                      <SelectItem value="NO">No</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {yr.submittedRequiredDocs === "YES" && (
+                  <div className="space-y-4 rounded-lg border p-3">
+                    <SubLabel>Reports</SubLabel>
+                    <DateInput label="Date of Submission" value={yr.dateOfSubmission} onChange={(v) => updateYear(i, { dateOfSubmission: v })} />
+                    {isOngoing ? (
+                      <DocumentUploadField
+                        label="Progress Report"
+                        value={yr.progressReportUrl}
+                        uploadEndpoint="/api/upload/sponsored-project-doc"
+                        extraFields={{ kind: "progress-report" }}
+                        onUploaded={(url) => updateYear(i, { progressReportUrl: url })}
+                        onRemoved={() => updateYear(i, { progressReportUrl: "" })}
+                      />
+                    ) : (
+                      <DocumentUploadField
+                        label="Completion Report"
+                        value={yr.completionReportUrl}
+                        uploadEndpoint="/api/upload/sponsored-project-doc"
+                        extraFields={{ kind: "completion-report" }}
+                        onUploaded={(url) => updateYear(i, { completionReportUrl: url })}
+                        onRemoved={() => updateYear(i, { completionReportUrl: "" })}
+                      />
+                    )}
+                    <DocumentUploadField
+                      label="Utilization Certificate"
+                      value={yr.utilizationCertificateUrl}
+                      uploadEndpoint="/api/upload/sponsored-project-doc"
+                      extraFields={{ kind: "utilization-certificate" }}
+                      onUploaded={(url) => updateYear(i, { utilizationCertificateUrl: url })}
+                      onRemoved={() => updateYear(i, { utilizationCertificateUrl: "" })}
+                    />
+                    <DocumentUploadField
+                      label="Statement of Expenditure"
+                      value={yr.statementOfExpenditureUrl}
+                      uploadEndpoint="/api/upload/sponsored-project-doc"
+                      extraFields={{ kind: "statement-of-expenditure" }}
+                      onUploaded={(url) => updateYear(i, { statementOfExpenditureUrl: url })}
+                      onRemoved={() => updateYear(i, { statementOfExpenditureUrl: "" })}
+                    />
+                  </div>
+                )}
+              </div>
             </div>
           ))}
-
-          <div className="space-y-4">
-            <div className="space-y-2 max-w-[280px]">
-              <Label>Submitted All Required Documents to Sponsoring Agency</Label>
-              <Select value={form.submittedRequiredDocs} onValueChange={(v) => set("submittedRequiredDocs", v as "YES" | "NO")}>
-                <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="YES">Yes</SelectItem>
-                  <SelectItem value="NO">No</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {form.submittedRequiredDocs === "YES" && (
-              <div className="space-y-4 rounded-lg border p-3">
-                <SubLabel>Reports</SubLabel>
-                <DateInput label="Date of Submission" value={form.dateOfSubmission} onChange={(v) => set("dateOfSubmission", v)} />
-                {isOngoing ? (
-                  <DocumentUploadField
-                    label="Progress Report"
-                    value={form.progressReportUrl}
-                    uploadEndpoint="/api/upload/sponsored-project-doc"
-                    extraFields={{ kind: "progress-report" }}
-                    onUploaded={(url) => set("progressReportUrl", url)}
-                    onRemoved={() => set("progressReportUrl", "")}
-                  />
-                ) : (
-                  <DocumentUploadField
-                    label="Completion Report"
-                    value={form.completionReportUrl}
-                    uploadEndpoint="/api/upload/sponsored-project-doc"
-                    extraFields={{ kind: "completion-report" }}
-                    onUploaded={(url) => set("completionReportUrl", url)}
-                    onRemoved={() => set("completionReportUrl", "")}
-                  />
-                )}
-                <DocumentUploadField
-                  label="Utilization Certificate"
-                  value={form.utilizationCertificateUrl}
-                  uploadEndpoint="/api/upload/sponsored-project-doc"
-                  extraFields={{ kind: "utilization-certificate" }}
-                  onUploaded={(url) => set("utilizationCertificateUrl", url)}
-                  onRemoved={() => set("utilizationCertificateUrl", "")}
-                />
-                <DocumentUploadField
-                  label="Statement of Expenditure"
-                  value={form.statementOfExpenditureUrl}
-                  uploadEndpoint="/api/upload/sponsored-project-doc"
-                  extraFields={{ kind: "statement-of-expenditure" }}
-                  onUploaded={(url) => set("statementOfExpenditureUrl", url)}
-                  onRemoved={() => set("statementOfExpenditureUrl", "")}
-                />
-              </div>
-            )}
-          </div>
         </div>
       )}
       </div>

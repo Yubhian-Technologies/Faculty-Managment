@@ -108,6 +108,27 @@ export async function POST(request: Request) {
     if (!departmentId || !courseId || !year || !collegeStartTime || !collegeEndTime || !numberOfPeriods || !periodDurationMinutes) {
       return NextResponse.json({ error: "Missing required timing fields" }, { status: 400 });
     }
+    if (!TIME_RE.test(collegeStartTime) || !TIME_RE.test(collegeEndTime)) {
+      return NextResponse.json({ error: "Enter valid College Start/End times" }, { status: 400 });
+    }
+
+    const availableMinutes = toMinutes(collegeEndTime) - toMinutes(collegeStartTime);
+    if (availableMinutes <= 0) {
+      return NextResponse.json({ error: "College End Time must be after College Start Time" }, { status: 400 });
+    }
+    // Same total as defaultPeriodTimings below sums while laying periods out
+    // end-to-end, checked up front so a day that can never fit isn't stored
+    // at all - not even the client's own submit guard can be relied on here,
+    // since COLLEGE_OFFICE can also POST this directly.
+    const breaksTotal = (lunchBreak?.durationMinutes || 0) + (shortBreaks ?? []).reduce((sum, sb) => sum + (sb.durationMinutes || 0), 0);
+    const requiredMinutes = Number(numberOfPeriods) * Number(periodDurationMinutes) + breaksTotal;
+    if (requiredMinutes > availableMinutes) {
+      const fmt = (mins: number) => `${Math.floor(mins / 60)}h ${mins % 60}m`;
+      return NextResponse.json(
+        { error: `Periods and breaks need ${fmt(requiredMinutes)}, but only ${fmt(availableMinutes)} is available between ${collegeStartTime} and ${collegeEndTime}` },
+        { status: 400 },
+      );
+    }
 
     let semesters: { semester: number; startDate: Date; endDate: Date }[] = [];
     try {

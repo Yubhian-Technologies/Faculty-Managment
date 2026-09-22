@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { ExternalLink, Plus, Pencil } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { ExternalLink, Plus, Pencil, Trash2 } from "lucide-react";
 import { Section, SubLabel, Field, TextInput, NumInput, DateInput } from "@/components/shared/ProfileFieldPrimitives";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -61,9 +62,10 @@ function ConsultancyProjectRow({
         <Field label="Faculty Consultant(s)" value={project.facultyConsultantsNames} />
         <Field label="Department" value={project.department} />
         <Field label="Start Date" value={project.startDate} />
-        <Field label="End Date" value={project.endDate} />
+        <Field label="Status" value={project.projectStatus === "ONGOING" ? "Ongoing" : project.projectStatus === "COMPLETED" ? "Completed" : undefined} />
+        <Field label={project.projectStatus === "ONGOING" ? "Tentative End Date" : "End Date"} value={project.endDate} />
         <Field label="Duration (Months)" value={project.durationMonths} />
-        <Field label="Consultancy Amount (Rs.)" value={project.consultancyAmount} />
+        <Field label="Approved Consultancy Amount (Rs.)" value={project.consultancyAmount} />
         <Field label="Amount Received (Rs.)" value={project.amountReceived} />
         <Field label="Institutional Share (Rs.)" value={project.institutionalShare} />
         <Field label="Faculty Share (Rs.)" value={project.facultyShare} />
@@ -102,15 +104,88 @@ function ConsultancyProjectRow({
   );
 }
 
+// One Faculty Consultant row: the Employee ID is typed and the name is fetched
+// from the faculty record (same lookup Research Publications/IPR use for an
+// internal author), never typed by hand.
+interface ConsultantRow {
+  facultyId: string;
+  name: string;
+  lookup: "idle" | "loading" | "found" | "not-found";
+}
+
+const EMPTY_CONSULTANT: ConsultantRow = { facultyId: "", name: "", lookup: "idle" };
+
+function FacultyConsultantRows({
+  rows, onChange,
+}: {
+  rows: ConsultantRow[];
+  onChange: (next: ConsultantRow[]) => void;
+}) {
+  // Keeps the latest rows reachable from an async lookup that resolves later,
+  // so a slow response never overwrites edits made to other rows meanwhile.
+  const rowsRef = useRef(rows);
+  useEffect(() => { rowsRef.current = rows; }, [rows]);
+  const timers = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
+
+  function patch(i: number, p: Partial<ConsultantRow>) {
+    const next = [...rowsRef.current];
+    next[i] = { ...next[i], ...p };
+    rowsRef.current = next;
+    onChange(next);
+  }
+
+  function setId(i: number, raw: string) {
+    const facultyId = raw;
+    clearTimeout(timers.current[i]);
+    if (!facultyId.trim()) { patch(i, { facultyId, name: "", lookup: "idle" }); return; }
+    patch(i, { facultyId, name: "", lookup: "loading" });
+    timers.current[i] = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/college/faculty-lookup?employeeId=${encodeURIComponent(facultyId.trim())}`);
+        const data = res.ok ? await res.json() as { name?: string } : null;
+        // Ignore a result for an ID the user has since changed.
+        if (rowsRef.current[i]?.facultyId !== facultyId) return;
+        patch(i, data?.name ? { name: data.name, lookup: "found" } : { name: "", lookup: "not-found" });
+      } catch {
+        if (rowsRef.current[i]?.facultyId === facultyId) patch(i, { name: "", lookup: "not-found" });
+      }
+    }, 400);
+  }
+
+  return (
+    <div className="space-y-2">
+      <Label>Faculty Consultant ID(s)</Label>
+      {rows.map((r, i) => (
+        <div key={i} className="flex items-start gap-2">
+          <div className="flex-1 space-y-1">
+            <Input value={r.facultyId} onChange={(e) => setId(i, e.target.value)} placeholder={`Faculty ID of consultant ${i + 1}`} />
+            {r.lookup === "loading" && <p className="text-xs text-muted-foreground">Looking up…</p>}
+            {r.lookup === "found" && <p className="text-xs text-green-700">{r.name}</p>}
+            {r.lookup === "not-found" && <p className="text-xs text-destructive">No faculty member found with that ID</p>}
+          </div>
+          {rows.length > 1 && (
+            <Button type="button" variant="ghost" size="sm" onClick={() => onChange(rows.filter((_, idx) => idx !== i))}>
+              <Trash2 className="h-3.5 w-3.5 text-destructive" />
+            </Button>
+          )}
+        </div>
+      ))}
+      <Button type="button" variant="outline" size="sm" onClick={() => onChange([...rows, { ...EMPTY_CONSULTANT }])}>
+        <Plus className="h-3.5 w-3.5 mr-1" />Add Faculty Consultant
+      </Button>
+    </div>
+  );
+}
+
 interface ProjectFormState {
   title: string;
-  facultyConsultantsCount: string;
-  facultyConsultantsNames: string;
+  consultants: ConsultantRow[];
   department: string;
   clientName: string;
   clientType: ConsultancyClientType | "";
   consultancyCategory: ConsultancyCategory | "";
   problemStatement: string;
+  projectStatus: "ONGOING" | "COMPLETED" | "";
   startDate: string;
   endDate: string;
   durationMonths: string;
@@ -130,8 +205,8 @@ interface ProjectFormState {
 function initialFormState(editing: ConsultancyProjectRequest | null): ProjectFormState {
   if (!editing) {
     return {
-      title: "", facultyConsultantsCount: "", facultyConsultantsNames: "", department: "",
-      clientName: "", clientType: "", consultancyCategory: "", problemStatement: "",
+      title: "", consultants: [{ ...EMPTY_CONSULTANT }], department: "",
+      clientName: "", clientType: "", consultancyCategory: "", problemStatement: "", projectStatus: "",
       startDate: "", endDate: "", durationMonths: "", consultancyAmount: "", amountReceived: "",
       amountReceivedDate: "", institutionalInfrastructureUsage: "", hoursSpentDuringAcademicHours: "",
       institutionalShare: "", facultyShare: "", facultyShareProofUrl: "", deliverables: [],
@@ -140,13 +215,15 @@ function initialFormState(editing: ConsultancyProjectRequest | null): ProjectFor
   }
   return {
     title: editing.title,
-    facultyConsultantsCount: editing.facultyConsultantsCount !== undefined ? String(editing.facultyConsultantsCount) : "",
-    facultyConsultantsNames: editing.facultyConsultantsNames ?? "",
+    consultants: editing.facultyConsultants?.length
+      ? editing.facultyConsultants.map((c) => ({ facultyId: c.facultyId, name: c.name, lookup: "found" as const }))
+      : [{ ...EMPTY_CONSULTANT }],
     department: editing.department ?? "",
     clientName: editing.clientName,
     clientType: editing.clientType,
     consultancyCategory: editing.consultancyCategory,
     problemStatement: editing.problemStatement,
+    projectStatus: editing.projectStatus ?? "",
     startDate: editing.startDate,
     endDate: editing.endDate ?? "",
     durationMonths: editing.durationMonths !== undefined ? String(editing.durationMonths) : "",
@@ -192,13 +269,29 @@ function ProjectFormFields({
     }));
   }
 
+  // A row left blank is ignored; at least one must be filled, and every filled
+  // one must have resolved to a real faculty member (the server re-checks).
+  const filledConsultants = form.consultants.filter((c) => c.facultyId.trim());
+  const consultantsValid = filledConsultants.length > 0 && filledConsultants.every((c) => c.lookup === "found");
+  const isCompleted = form.projectStatus === "COMPLETED";
+  const isOngoing = form.projectStatus === "ONGOING";
+
+  // Every section is compulsory except Financials (mirrors
+  // validateConsultancyBody on the server). Deliverables & Reports only apply
+  // once Completed; the two financial proofs in it stay optional.
   const isValid =
     form.title.trim().length > 1 &&
+    consultantsValid &&
+    form.department.trim().length > 0 &&
     form.clientName.trim().length > 1 &&
     !!form.clientType &&
     !!form.consultancyCategory &&
     form.problemStatement.trim().length > 1 &&
-    !!form.startDate;
+    !!form.projectStatus &&
+    !!form.startDate &&
+    !!form.endDate &&
+    form.durationMonths.trim() !== "" && !Number.isNaN(Number(form.durationMonths)) &&
+    (!isCompleted || (form.deliverables.length > 0 && !!form.completionReportUrl));
 
   async function handleSubmit() {
     if (!isValid) return;
@@ -206,13 +299,13 @@ function ProjectFormFields({
     try {
       const body = {
         title: form.title.trim(),
-        facultyConsultantsCount: toNumberOrUndefined(form.facultyConsultantsCount),
-        facultyConsultantsNames: form.facultyConsultantsNames.trim(),
+        facultyConsultantIds: filledConsultants.map((c) => c.facultyId.trim()),
         department: form.department.trim(),
         clientName: form.clientName.trim(),
         clientType: form.clientType || undefined,
         consultancyCategory: form.consultancyCategory || undefined,
         problemStatement: form.problemStatement.trim(),
+        projectStatus: form.projectStatus || undefined,
         startDate: form.startDate,
         endDate: form.endDate || undefined,
         durationMonths: toNumberOrUndefined(form.durationMonths),
@@ -223,10 +316,12 @@ function ProjectFormFields({
         hoursSpentDuringAcademicHours: toNumberOrUndefined(form.hoursSpentDuringAcademicHours),
         institutionalShare: toNumberOrUndefined(form.institutionalShare),
         facultyShare: toNumberOrUndefined(form.facultyShare),
-        facultyShareProofUrl: form.facultyShareProofUrl || undefined,
-        deliverables: form.deliverables,
-        completionReportUrl: form.completionReportUrl || undefined,
-        incomeSupportingDocUrl: form.incomeSupportingDocUrl || undefined,
+        // Deliverables & reports only exist once Completed. Empty values (not
+        // undefined) so an edit flipping Completed -> Ongoing clears what was saved.
+        facultyShareProofUrl: isCompleted ? form.facultyShareProofUrl : "",
+        deliverables: isCompleted ? form.deliverables : [],
+        completionReportUrl: isCompleted ? form.completionReportUrl : "",
+        incomeSupportingDocUrl: isCompleted ? form.incomeSupportingDocUrl : "",
       };
       const res = editingId
         ? await fetch(`/api/college/consultancy-projects/${editingId}`, {
@@ -265,10 +360,10 @@ function ProjectFormFields({
         <div className="space-y-4">
           <SubLabel>Overview</SubLabel>
           <TextInput label="Title of the Consultancy Project" value={form.title} onChange={(v) => set("title", v)} />
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <NumInput label="No. of Faculty Consultant(s)" value={toNumberOrUndefined(form.facultyConsultantsCount)} onChange={(v) => set("facultyConsultantsCount", String(v))} />
-            <TextInput label="Name of the Faculty Consultant(s)" value={form.facultyConsultantsNames} onChange={(v) => set("facultyConsultantsNames", v)} placeholder="Comma-separated names" />
-          </div>
+          <FacultyConsultantRows rows={form.consultants} onChange={(next) => set("consultants", next)} />
+          {!editingProject?.facultyConsultants?.length && editingProject?.facultyConsultantsNames && (
+            <p className="text-xs text-muted-foreground">Previously entered as text: {editingProject.facultyConsultantsNames}. Add their Faculty IDs above - they are required.</p>
+          )}
           <TextInput label="Department" value={form.department} onChange={(v) => set("department", v)} />
         </div>
 
@@ -299,13 +394,23 @@ function ProjectFormFields({
             <Label>Problem Statement</Label>
             <Textarea value={form.problemStatement} onChange={(e) => set("problemStatement", e.target.value)} placeholder="Brief description of the work assigned" rows={3} />
           </div>
+          <div className="space-y-2 max-w-[240px]">
+            <Label>Status of Consultancy Project</Label>
+            <Select value={form.projectStatus} onValueChange={(v) => set("projectStatus", v as "ONGOING" | "COMPLETED")}>
+              <SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ONGOING">Ongoing</SelectItem>
+                <SelectItem value="COMPLETED">Completed</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
         <div className="space-y-4">
           <SubLabel>Timeline</SubLabel>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <DateInput label="Start Date" value={form.startDate} onChange={(v) => set("startDate", v)} />
-            <DateInput label="End Date" value={form.endDate} onChange={(v) => set("endDate", v)} />
+            <DateInput label={isOngoing ? "Tentative End Date" : "End Date"} value={form.endDate} onChange={(v) => set("endDate", v)} />
             <NumInput label="Duration (Months)" value={toNumberOrUndefined(form.durationMonths)} onChange={(v) => set("durationMonths", String(v))} />
           </div>
         </div>
@@ -313,7 +418,7 @@ function ProjectFormFields({
         <div className="space-y-4">
           <SubLabel>Financials</SubLabel>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <NumInput label="Consultancy Amount (Rs.)" value={toNumberOrUndefined(form.consultancyAmount)} onChange={(v) => set("consultancyAmount", String(v))} />
+            <NumInput label="Approved Consultancy Amount (Rs.)" value={toNumberOrUndefined(form.consultancyAmount)} onChange={(v) => set("consultancyAmount", String(v))} />
             <NumInput label="Amount Received (Rs.)" value={toNumberOrUndefined(form.amountReceived)} onChange={(v) => set("amountReceived", String(v))} />
           </div>
           <DateInput label="Date of Amount Received" value={form.amountReceivedDate} onChange={(v) => set("amountReceivedDate", v)} />
@@ -328,7 +433,7 @@ function ProjectFormFields({
                 </SelectContent>
               </Select>
             </div>
-            <NumInput label="Hours Spent during Academic Hours" value={toNumberOrUndefined(form.hoursSpentDuringAcademicHours)} onChange={(v) => set("hoursSpentDuringAcademicHours", String(v))} />
+            <NumInput label={isOngoing ? "Tentative Total Hours Spent during Academic Hours" : "Total Hours Spent during Academic Hours"} value={toNumberOrUndefined(form.hoursSpentDuringAcademicHours)} onChange={(v) => set("hoursSpentDuringAcademicHours", String(v))} />
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <NumInput label="Institutional Share (Rs.)" value={toNumberOrUndefined(form.institutionalShare)} onChange={(v) => set("institutionalShare", String(v))} />
@@ -337,6 +442,7 @@ function ProjectFormFields({
         </div>
       </div>
 
+      {isCompleted && (
       <div className="space-y-5">
         <div className="space-y-4">
           <SubLabel>Deliverables &amp; Reports</SubLabel>
@@ -374,6 +480,7 @@ function ProjectFormFields({
           />
         </div>
       </div>
+      )}
       </div>
       </div>
       <DialogFooter>

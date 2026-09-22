@@ -1425,6 +1425,11 @@ export type ConsultancyDeliverable = "REPORTS" | "SOFTWARE" | "PROTOTYPE" | "TES
 // CitationMetricsRequest), same PENDING/APPROVED/REJECTED verification flow
 // as ResearchPublication: self-submitted rows start PENDING and only count
 // as official once R&D approves them; R&D's own adds are auto-APPROVED.
+export interface ConsultancyFacultyConsultant {
+  facultyId: string; // Employee ID
+  name: string; // resolved from facultyMembers
+}
+
 export interface ConsultancyProjectRequest {
   id: string;
   collegeId: string;
@@ -1440,14 +1445,18 @@ export interface ConsultancyProjectRequest {
 
   title: string;
   facultyConsultantsCount?: number;
-  facultyConsultantsNames: string; // free text - comma-separated names
+  facultyConsultantsNames: string; // comma-separated names - derived from facultyConsultants (free text on older records)
+  facultyConsultants?: ConsultancyFacultyConsultant[]; // by Faculty ID, names resolved server-side
   department?: string;
   clientName: string;
   clientType: ConsultancyClientType;
   consultancyCategory: ConsultancyCategory;
   problemStatement: string; // brief description of the work assigned
+  // Older records predate this. Ongoing => endDate/hours are tentative and no
+  // deliverables/reports are collected; Completed => actuals plus reports.
+  projectStatus?: "ONGOING" | "COMPLETED";
   startDate: string; // yyyy-mm-dd
-  endDate?: string; // yyyy-mm-dd
+  endDate?: string; // yyyy-mm-dd (tentative while Ongoing)
   durationMonths?: number;
   consultancyAmount?: number; // total sanctioned/agreed value
   amountReceived?: number; // actual amount received so far
@@ -1489,7 +1498,8 @@ export interface SeedFundingPaperItem {
   quartile?: string;
   impactFactor?: string;
   indexedScopusWos?: string;
-  citeAs?: string;
+  citeAs?: string; // Seed Funding asks for this in IEEE format
+  paperUrl?: string; // link or uploaded PDF of the paper (Seed Funding)
 }
 
 export interface SeedFundingPatentItem {
@@ -1498,6 +1508,7 @@ export interface SeedFundingPatentItem {
   patentTitle: string;
   inventorDetails: string;
   status: string; // Filed / Published / Granted
+  proofUrl?: string; // link or uploaded PDF of the proof for `status` (Seed Funding)
 }
 
 export type SeedFundingProjectStatus = "SANCTIONED" | "COMPLETED";
@@ -1579,6 +1590,16 @@ export interface SponsoredProjectYearData {
   teachingStaffTrainedCount?: number;
   nonTeachingStaffTrainedCount?: number;
   externalPersonsTrainedCount?: number;
+  // Reporting to the sponsoring agency is per year: each year answers whether
+  // its documents were submitted and, if so, attaches them. Supersedes the
+  // project-level fields of the same names on SponsoredProjectRequest, which
+  // only older records still carry.
+  submittedRequiredDocs?: "YES" | "NO";
+  dateOfSubmission?: string;
+  progressReportUrl?: string; // Ongoing
+  completionReportUrl?: string; // Completed
+  utilizationCertificateUrl?: string;
+  statementOfExpenditureUrl?: string;
 }
 
 // A staff-submitted Sponsored Research Project record (Research & Innovation's
@@ -1619,6 +1640,10 @@ export interface SponsoredProjectRequest {
   dateProposalSubmitted?: string;
   amountApplied?: number;
   extendedToSeedFund?: "YES" | "NO";
+  // Only when extendedToSeedFund === "YES". The date is stored as typed, DD-MM-YYYY.
+  seedFundTitle?: string;
+  seedFundAmountSanctioned?: number;
+  seedFundSanctionDate?: string;
 
   // Sanctioned branch
   sanctionedStatus?: SponsoredProjectSanctionedStatus; // Ongoing / Completed
@@ -1640,6 +1665,8 @@ export interface SponsoredProjectRequest {
   noOfYears?: number;
   yearlyData: SponsoredProjectYearData[];
 
+  // Legacy - records saved before these moved onto each year (see
+  // SponsoredProjectYearData). New submissions leave them empty.
   progressReportUrl?: string; // Ongoing
   completionReportUrl?: string; // Completed
   utilizationCertificateUrl?: string;
@@ -1714,6 +1741,10 @@ export interface DiscoveryInnovationRequest {
   inventors: IprInventor[];
 
   isStudentPatent?: "YES" | "NO";
+  // Only when isStudentPatent === "YES".
+  studentName?: string;
+  studentRegistrationNumber?: string;
+  studentDepartment?: string;
   publishedProofUrl?: string;
   grantedProofUrl?: string;
 
@@ -1870,7 +1901,8 @@ export interface ResearchServiceRequest {
   papersAccepted?: number;
   papersPublishedCount?: number;
   papersIndexedCount?: number;
-  conferenceProceedingsUrl?: string;
+  conferenceProceedingsUrl?: string; // uploaded PDF
+  conferenceProceedingsLink?: string; // proceedings / DOI link - may be given alongside the PDF
 
   // Workshop-only
   participantsRegisteredInternal?: number;

@@ -65,6 +65,9 @@ interface DiscoveryInnovationBody {
   inventorsCount?: number;
   inventors?: IprInventor[];
   isStudentPatent?: "YES" | "NO";
+  studentName?: string;
+  studentRegistrationNumber?: string;
+  studentDepartment?: string;
   publishedProofUrl?: string;
   grantedProofUrl?: string;
   isCommercialized?: "YES" | "NO";
@@ -139,6 +142,9 @@ export async function POST(request: Request) {
       inventorsCount: body.inventorsCount ?? null,
       inventors,
       isStudentPatent: body.isStudentPatent ?? null,
+      studentName: body.isStudentPatent === "YES" ? body.studentName?.trim() ?? "" : "",
+      studentRegistrationNumber: body.isStudentPatent === "YES" ? body.studentRegistrationNumber?.trim() ?? "" : "",
+      studentDepartment: body.isStudentPatent === "YES" ? body.studentDepartment?.trim() ?? "" : "",
       publishedProofUrl: body.publishedProofUrl ?? "",
       grantedProofUrl: body.grantedProofUrl ?? "",
       isCommercialized: body.isCommercialized ?? null,

@@ -54,6 +54,9 @@ interface SponsoredProjectPatchBody {
   dateProposalSubmitted?: string;
   amountApplied?: number;
   extendedToSeedFund?: "YES" | "NO";
+  seedFundTitle?: string;
+  seedFundAmountSanctioned?: number | null;
+  seedFundSanctionDate?: string;
   sanctionedStatus?: SponsoredProjectSanctionedStatus;
   dateProjectSanctioned?: string;
   dateOfStart?: string;
@@ -79,7 +82,8 @@ interface SponsoredProjectPatchBody {
 const EDITABLE_KEYS = [
   "agencyName", "schemeName", "applicationNumber", "title", "projectType", "durationMonths",
   "objectives", "tentativeOutcomes", "piName", "piDepartment", "piAffiliation", "coPiCount", "coPis",
-  "projectStatus", "dateProposalSubmitted", "amountApplied", "extendedToSeedFund", "sanctionedStatus",
+  "projectStatus", "dateProposalSubmitted", "amountApplied", "extendedToSeedFund", "seedFundTitle",
+  "seedFundAmountSanctioned", "seedFundSanctionDate", "sanctionedStatus",
   "dateProjectSanctioned", "dateOfStart", "financialYearOfStart", "totalAmountSanctioned",
   "recurringAmountSanctioned", "nonRecurringAmountSanctioned", "instituteContributionSanctioned",
   "dateOfCompletion", "financialYearOfCompletion", "noOfYears", "yearlyData", "progressReportUrl",

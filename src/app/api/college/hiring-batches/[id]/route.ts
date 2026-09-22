@@ -6,6 +6,7 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import type { Firestore } from "firebase-admin/firestore";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
+import { excludeLeadershipUids, getDepartmentHeadUids } from "@/lib/notify";
 
 async function getUserName(db: Firestore, collegeId: string, uid: string): Promise<string> {
   if (!collegeId || !uid) return "Unknown";
@@ -292,42 +293,40 @@ export async function PATCH(
     // Notifications based on what changed
     const notifBatch = db.batch();
 
-    if (body.status === "APPROVED") {
+    // This department's HOD and Department Office head both run its hiring, so
+    // every department-level update below goes to both, not just the one uid
+    // that happened to create the batch.
+    const deptHeadUids = await getDepartmentHeadUids(db, session.collegeId, batchData.department, batchData.hodUid);
+    const notifyDeptHeads = (n: { type: string; title: string; message: string }) => {
+      for (const toUid of deptHeadUids) {
+        notifBatch.set(db.collection("colleges").doc(session.collegeId).collection("notifications").doc(), {
+          collegeId: session.collegeId,
+          toUid,
+          ...n,
+          link: `/hod/batches/${id}`,
+          read: false,
+          createdAt: now,
+        });
+      }
+    };
 
-      const hodNotifRef = db.collection("colleges").doc(session.collegeId).collection("notifications").doc();
-      notifBatch.set(hodNotifRef, {
-        collegeId: session.collegeId,
-        toUid: batchData.hodUid,
+    if (body.status === "APPROVED") {
+      notifyDeptHeads({
         type: "INTERVIEW_PLAN_APPROVED",
         title: "Interview Plan Approved - Please Set Up Logistics",
-        message: `Your interview plan for ${batchData.position} has been approved. Please add the venue, required documents, demo classroom, and coordinator.`,
-        link: `/hod/batches/${id}`,
-        read: false,
-        createdAt: now,
+        message: `The interview plan for ${batchData.position} has been approved. Please add the venue, required documents, demo classroom, and coordinator.`,
       });
     } else if (body.status === "REJECTED") {
-      const hodNotifRef = db.collection("colleges").doc(session.collegeId).collection("notifications").doc();
-      notifBatch.set(hodNotifRef, {
-        collegeId: session.collegeId,
-        toUid: batchData.hodUid,
+      notifyDeptHeads({
         type: "INTERVIEW_PLAN_REJECTED",
         title: "Interview Plan Rejected",
-        message: `Your interview plan for ${batchData.position} was rejected.${body.principalNotes ? ` Notes: ${body.principalNotes}` : ""}`,
-        link: `/hod/batches/${id}`,
-        read: false,
-        createdAt: now,
+        message: `The interview plan for ${batchData.position} was rejected.${body.principalNotes ? ` Notes: ${body.principalNotes}` : ""}`,
       });
     } else if (body.status === "MODIFIED") {
-      const hodNotifRef = db.collection("colleges").doc(session.collegeId).collection("notifications").doc();
-      notifBatch.set(hodNotifRef, {
-        collegeId: session.collegeId,
-        toUid: batchData.hodUid,
+      notifyDeptHeads({
         type: "INTERVIEW_PLAN_MODIFIED",
         title: "Interview Plan Modified",
-        message: `Your interview plan for ${batchData.position} was modified. Please review and resubmit.${body.principalNotes ? ` Notes: ${body.principalNotes}` : ""}`,
-        link: `/hod/batches/${id}`,
-        read: false,
-        createdAt: now,
+        message: `The interview plan for ${batchData.position} was modified. Please review and resubmit.${body.principalNotes ? ` Notes: ${body.principalNotes}` : ""}`,
       });
     }
 
@@ -349,7 +348,7 @@ export async function PATCH(
 
     // If HOD releases to panel interview, notify all panel members
     if (body.currentPhase === "PANEL_INTERVIEW") {
-      for (const panelUid of (batchData.panelMemberUids ?? [])) {
+      for (const panelUid of await excludeLeadershipUids(db, session.collegeId, batchData.panelMemberUids ?? [])) {
         const panelRef = db.collection("colleges").doc(session.collegeId).collection("notifications").doc();
         notifBatch.set(panelRef, {
           collegeId: session.collegeId,
@@ -385,18 +384,12 @@ export async function PATCH(
 
     // If demo marked complete, notify HOD and all panel members
     if (body.demoComplete === true && !batchData.demoComplete) {
-      const hodRef = db.collection("colleges").doc(session.collegeId).collection("notifications").doc();
-      notifBatch.set(hodRef, {
-        collegeId: session.collegeId,
-        toUid: batchData.hodUid,
+      notifyDeptHeads({
         type: "GENERAL",
         title: "Demo Class Complete",
         message: `Demo class for ${batchData.position} is done. Panel members can now submit their interview feedback.`,
-        link: `/hod/batches/${id}`,
-        read: false,
-        createdAt: now,
       });
-      for (const panelUid of (batchData.panelMemberUids ?? [])) {
+      for (const panelUid of await excludeLeadershipUids(db, session.collegeId, batchData.panelMemberUids ?? [])) {
         const panelRef = db.collection("colleges").doc(session.collegeId).collection("notifications").doc();
         notifBatch.set(panelRef, {
           collegeId: session.collegeId,

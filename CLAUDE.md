@@ -71,4 +71,4 @@ All routes use `requireCollegeMember()` (`src/lib/auth/verifySession.ts`) + Fire
 | 13 | `.../offer-letters/[id]/request-credentials/route.ts`, `faculty-account-requests/route.ts` |
 | 14 | `faculty-account-requests/[id]/route.ts`, `src/lib/firestore/facultyProvisioning.ts` |
 | UI (Office) | `src/app/(dashboard)/college-office/pipeline/` (consolidated board, new), `documents/[department]/[vacancyId]/`, `documents/candidate/[applicationId]/`, `offers/`, `offers/new/` |
-| UI (Webmaster) | `src/app/(dashboard)/webmaster/credential-requests/page.tsx` |
+| UI (Webmaster) | `src/app/(dashboard)/webmaster/credential-requests/page.tsx`

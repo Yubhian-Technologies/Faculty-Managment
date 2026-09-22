@@ -22,7 +22,7 @@ import {
 import { TextInput } from "@/components/shared/ProfileFieldPrimitives";
 import { syncTeachingAssignments } from "@/lib/teaching/syncTeachingAssignments";
 import { experienceBreakdown, totalYearsOfExperience, formatDuration, allPreviousExperienceEntries } from "@/lib/faculty/experienceCalc";
-import { PHONE_REGEX } from "@/lib/validations";
+import { PHONE_REGEX, EMAIL_REGEX, APAAR_REGEX } from "@/lib/validations";
 import { AvatarUploadField } from "@/components/shared/AvatarUploadField";
 import { PROFILE_MODULES } from "@/lib/faculty/profileModules";
 import { EMPLOYEE_CATEGORY_LABELS } from "@/types";
@@ -46,11 +46,11 @@ const OTHER_QUALIFICATION = "__OTHER__";
 // depends on which mode the page is in.
 const schema = z.object({
   employeeId: z.string().min(1, "Employee ID is required"),
-  apaarFacultyId: z.string().optional(),
-  email: z.string().email("Invalid email address").optional().or(z.literal("")),
-  collegeEmail: z.string().email("Invalid email address").optional().or(z.literal("")),
+  apaarFacultyId: z.string().regex(APAAR_REGEX, "APAAR Faculty ID must be exactly 12 digits").optional().or(z.literal("")),
+  email: z.string().regex(EMAIL_REGEX, "Invalid email address").optional().or(z.literal("")),
+  collegeEmail: z.string().regex(EMAIL_REGEX, "Invalid email address").optional().or(z.literal("")),
   password: z.string().min(8, "Password must be at least 8 characters").optional().or(z.literal("")),
-  mobileNo: z.string().min(1, "Mobile No is required").regex(PHONE_REGEX, "Doesn't look like a valid phone number"),
+  mobileNo: z.string().min(1, "Mobile No is required").regex(PHONE_REGEX, "Mobile No must be exactly 10 digits, starting with 6, 7, 8 or 9"),
   designation: z.string().min(1, "Designation is required"),
   employeeCategory: z.string().min(1, "Employee Category is required"),
   highestQualification: z.string().min(1, "Highest Qualification is required"),
@@ -434,7 +434,16 @@ export default function NewFacultyPage() {
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="apaarFacultyId">APAAR Faculty ID</Label>
-                      <Input id="apaarFacultyId" {...register("apaarFacultyId")} placeholder="NBA/AICTE APAAR ID" />
+                      <Input
+                        id="apaarFacultyId" inputMode="numeric" maxLength={12}
+                        {...register("apaarFacultyId")}
+                        onChange={(e) => {
+                          e.target.value = e.target.value.replace(/\D/g, "").slice(0, 12);
+                          void register("apaarFacultyId").onChange(e);
+                        }}
+                        placeholder="123456789012"
+                      />
+                      {errors.apaarFacultyId && <p className="text-sm text-destructive">{errors.apaarFacultyId.message}</p>}
                     </div>
                   </div>
                 </div>
@@ -605,7 +614,15 @@ export default function NewFacultyPage() {
                         + Add Number
                       </Button>
                     </div>
-                    <Input id="mobileNo" type="tel" autoComplete="off" {...register("mobileNo")} placeholder="+91 98765 43210" />
+                    <Input
+                      id="mobileNo" type="tel" inputMode="numeric" autoComplete="off" maxLength={10}
+                      {...register("mobileNo")}
+                      onChange={(e) => {
+                        e.target.value = e.target.value.replace(/\D/g, "").slice(0, 10);
+                        void register("mobileNo").onChange(e);
+                      }}
+                      placeholder="9876543210"
+                    />
                     {errors.mobileNo && <p className="text-sm text-destructive">{errors.mobileNo.message}</p>}
                   </div>
                 </div>

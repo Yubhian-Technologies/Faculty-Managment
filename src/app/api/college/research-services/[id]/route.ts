@@ -65,6 +65,7 @@ interface ResearchServicePatchBody {
   papersPublishedCount?: number;
   papersIndexedCount?: number;
   conferenceProceedingsUrl?: string;
+  conferenceProceedingsLink?: string;
   participantsRegisteredInternal?: number;
   participantsRegisteredExternal?: number;
   papersAttendedInternal?: number;
@@ -97,7 +98,7 @@ const EDITABLE_KEYS = [
   "committeeMembersCount", "committeeMembers", "noOfDays", "academicYear", "startDate", "endDate",
   "amountSanctioned", "amountReceived", "expenditureMade", "sanctionedLetterUrl", "brochureUrl", "scheduleUrl",
   "resourcePersonsCount", "resourcePersons", "completionReportUrl", "papersReceived", "papersAccepted",
-  "papersPublishedCount", "papersIndexedCount", "conferenceProceedingsUrl", "participantsRegisteredInternal",
+  "papersPublishedCount", "papersIndexedCount", "conferenceProceedingsUrl", "conferenceProceedingsLink", "participantsRegisteredInternal",
   "participantsRegisteredExternal", "papersAttendedInternal", "papersAttendedExternal", "reviewerType",
   "reviewerPublicationName", "reviewerPublisherName", "reviewerPaperTitle", "reviewerReviewDate",
   "reviewerCertificateUrl", "editorialRole", "editorPublicationType", "editorPublicationName", "editorPublisher",

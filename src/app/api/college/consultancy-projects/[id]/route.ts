@@ -5,6 +5,8 @@ import { FieldValue } from "firebase-admin/firestore";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { notify, notifyRole } from "@/lib/notify";
+import { finalizeFacultyConsultants } from "@/lib/research/finalizeConsultants";
+import { validateConsultancyBody } from "@/lib/research/validateConsultancyProject";
 import { PUBLICATION_ELIGIBLE_ROLES } from "@/lib/publications/eligibleRoles";
 import { CONSULTANCY_CATEGORIES, CONSULTANCY_CLIENT_TYPES, CONSULTANCY_DELIVERABLES } from "@/lib/research/consultancyProjectOptions";
 import type { ConsultancyCategory, ConsultancyClientType, ConsultancyDeliverable, PublicationStatus } from "@/types";
@@ -35,13 +37,13 @@ export async function GET(
 
 interface ConsultancyProjectPatchBody {
   title?: string;
-  facultyConsultantsCount?: number;
-  facultyConsultantsNames?: string;
+  facultyConsultantIds?: string[];
   department?: string;
   clientName?: string;
   clientType?: ConsultancyClientType;
   consultancyCategory?: ConsultancyCategory;
   problemStatement?: string;
+  projectStatus?: "ONGOING" | "COMPLETED";
   startDate?: string;
   endDate?: string;
   durationMonths?: number;
@@ -62,9 +64,9 @@ interface ConsultancyProjectPatchBody {
 }
 
 const EDITABLE_KEYS = [
-  "title", "facultyConsultantsCount", "facultyConsultantsNames", "department",
+  "title", "department",
   "clientName", "clientType", "consultancyCategory", "problemStatement",
-  "startDate", "endDate", "durationMonths", "consultancyAmount", "amountReceived",
+  "projectStatus", "startDate", "endDate", "durationMonths", "consultancyAmount", "amountReceived",
   "amountReceivedDate", "institutionalInfrastructureUsage", "hoursSpentDuringAcademicHours",
   "institutionalShare", "facultyShare", "facultyShareProofUrl", "deliverables",
   "completionReportUrl", "incomeSupportingDocUrl",
@@ -76,6 +78,7 @@ function pickEditableFields(body: ConsultancyProjectPatchBody): Record<string, u
     if (body[key] === undefined) continue;
     if (key === "clientType" && !CONSULTANCY_CLIENT_TYPES.includes(body.clientType as ConsultancyClientType)) continue;
     if (key === "consultancyCategory" && !CONSULTANCY_CATEGORIES.includes(body.consultancyCategory as ConsultancyCategory)) continue;
+    if (key === "projectStatus" && body.projectStatus !== "ONGOING" && body.projectStatus !== "COMPLETED") continue;
     if (key === "deliverables") {
       updates.deliverables = (body.deliverables ?? []).filter((d) => CONSULTANCY_DELIVERABLES.includes(d));
       continue;
@@ -106,6 +109,16 @@ export async function PATCH(
     const isOwner = project.uid === session.uid;
     if (!isRnD && !isOwner) {
       return NextResponse.json({ error: "Not authorized to edit this consultancy project" }, { status: 403 });
+    }
+
+    // Consultant names are re-resolved from the submitted Faculty IDs. Only
+    // touched when the client sent IDs, so a record that still carries older
+    // free-text names isn't blanked by an edit that never mentions consultants.
+    let consultantFields: Record<string, unknown> = {};
+    if (!body.decision && body.facultyConsultantIds !== undefined) {
+      const consultants = await finalizeFacultyConsultants(db, session.collegeId, body.facultyConsultantIds);
+      if ("error" in consultants) return NextResponse.json({ error: consultants.error }, { status: 400 });
+      consultantFields = consultants.fields;
     }
 
     // R&D's verification decision - approve/reject a self-submitted record.
@@ -156,9 +169,19 @@ export async function PATCH(
       if (project.status !== "REJECTED") {
         return NextResponse.json({ error: "Only a rejected submission can be edited" }, { status: 403 });
       }
+      // The owner resubmits the whole form, so the same compulsory-sections rule
+      // as a fresh submission applies to what they send.
+      const consultantCount = (consultantFields.facultyConsultants as unknown[] | undefined)?.length ?? 0;
+      const validationError = validateConsultancyBody(
+        { ...body, deliverables: pickEditableFields(body).deliverables as string[] | undefined },
+        consultantCount
+      );
+      if (validationError) return NextResponse.json({ error: validationError }, { status: 400 });
+
       const now = new Date();
       const updates: Record<string, unknown> = {
         ...pickEditableFields(body),
+        ...consultantFields,
         updatedAt: now,
         status: "PENDING" satisfies PublicationStatus,
         reviewedBy: FieldValue.delete(),
@@ -193,7 +216,7 @@ export async function PATCH(
     }
 
     // R&D's own full edit - any field, any status.
-    await ref.update({ ...pickEditableFields(body), updatedAt: new Date() });
+    await ref.update({ ...pickEditableFields(body), ...consultantFields, updatedAt: new Date() });
     let actorName = "Unknown";
     try {
       const actorSnap = await db.collection("colleges").doc(session.collegeId).collection("users").doc(session.uid).get();

@@ -4,6 +4,8 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { notifyRole } from "@/lib/notify";
+import { finalizeFacultyConsultants } from "@/lib/research/finalizeConsultants";
+import { validateConsultancyBody } from "@/lib/research/validateConsultancyProject";
 import { PUBLICATION_ELIGIBLE_ROLES } from "@/lib/publications/eligibleRoles";
 import { resolveOwnerDesignation } from "@/lib/publications/resolveOwnerDesignation";
 import { CONSULTANCY_CATEGORIES, CONSULTANCY_CLIENT_TYPES, CONSULTANCY_DELIVERABLES } from "@/lib/research/consultancyProjectOptions";
@@ -55,13 +57,13 @@ export async function GET(request: Request) {
 interface ConsultancyProjectBody {
   uid?: string;
   title?: string;
-  facultyConsultantsCount?: number;
-  facultyConsultantsNames?: string;
+  facultyConsultantIds?: string[];
   department?: string;
   clientName?: string;
   clientType?: ConsultancyClientType;
   consultancyCategory?: ConsultancyCategory;
   problemStatement?: string;
+  projectStatus?: "ONGOING" | "COMPLETED";
   startDate?: string;
   endDate?: string;
   durationMonths?: number;
@@ -101,6 +103,11 @@ export async function POST(request: Request) {
     }
 
     const db = getAdminDb();
+    const consultants = await finalizeFacultyConsultants(db, session.collegeId, body.facultyConsultantIds ?? []);
+    if ("error" in consultants) return NextResponse.json({ error: consultants.error }, { status: 400 });
+    const validationError = validateConsultancyBody({ ...body, deliverables }, consultants.fields.facultyConsultants.length);
+    if (validationError) return NextResponse.json({ error: validationError }, { status: 400 });
+
     const ownerSnap = await db.collection("colleges").doc(session.collegeId).collection("users").doc(uid).get();
     if (!ownerSnap.exists) {
       return NextResponse.json({ error: "Staff member not found" }, { status: 404 });
@@ -130,13 +137,13 @@ export async function POST(request: Request) {
       // before it counts as an official record.
       status: (isRnD ? "APPROVED" : "PENDING") satisfies PublicationStatus,
       title,
-      facultyConsultantsCount: body.facultyConsultantsCount ?? null,
-      facultyConsultantsNames: body.facultyConsultantsNames ?? "",
+      ...consultants.fields,
       department: body.department ?? "",
       clientName,
       clientType,
       consultancyCategory,
       problemStatement,
+      projectStatus: body.projectStatus === "ONGOING" || body.projectStatus === "COMPLETED" ? body.projectStatus : null,
       startDate,
       endDate: body.endDate ?? "",
       durationMonths: body.durationMonths ?? null,

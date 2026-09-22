@@ -68,6 +68,9 @@ interface SponsoredProjectBody {
   dateProposalSubmitted?: string;
   amountApplied?: number;
   extendedToSeedFund?: "YES" | "NO";
+  seedFundTitle?: string;
+  seedFundAmountSanctioned?: number;
+  seedFundSanctionDate?: string;
   sanctionedStatus?: SponsoredProjectSanctionedStatus;
   dateProjectSanctioned?: string;
   dateOfStart?: string;
@@ -152,6 +155,9 @@ export async function POST(request: Request) {
       dateProposalSubmitted: body.dateProposalSubmitted ?? "",
       amountApplied: body.amountApplied ?? null,
       extendedToSeedFund: body.extendedToSeedFund ?? null,
+      seedFundTitle: body.extendedToSeedFund === "YES" ? body.seedFundTitle?.trim() ?? "" : "",
+      seedFundAmountSanctioned: body.extendedToSeedFund === "YES" ? body.seedFundAmountSanctioned ?? null : null,
+      seedFundSanctionDate: body.extendedToSeedFund === "YES" ? body.seedFundSanctionDate ?? "" : "",
       sanctionedStatus: body.sanctionedStatus ?? null,
       dateProjectSanctioned: body.dateProjectSanctioned ?? "",
       dateOfStart: body.dateOfStart ?? "",

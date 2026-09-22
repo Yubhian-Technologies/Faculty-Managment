@@ -79,6 +79,7 @@ interface ResearchServiceBody {
   papersPublishedCount?: number;
   papersIndexedCount?: number;
   conferenceProceedingsUrl?: string;
+  conferenceProceedingsLink?: string;
   participantsRegisteredInternal?: number;
   participantsRegisteredExternal?: number;
   papersAttendedInternal?: number;
@@ -109,7 +110,7 @@ const SCALAR_KEYS = [
   "committeeMembersCount", "noOfDays", "academicYear", "startDate", "endDate",
   "amountSanctioned", "amountReceived", "expenditureMade", "sanctionedLetterUrl", "brochureUrl", "scheduleUrl",
   "resourcePersonsCount", "completionReportUrl", "papersReceived", "papersAccepted",
-  "papersPublishedCount", "papersIndexedCount", "conferenceProceedingsUrl", "participantsRegisteredInternal",
+  "papersPublishedCount", "papersIndexedCount", "conferenceProceedingsUrl", "conferenceProceedingsLink", "participantsRegisteredInternal",
   "participantsRegisteredExternal", "papersAttendedInternal", "papersAttendedExternal", "reviewerType",
   "reviewerPublicationName", "reviewerPublisherName", "reviewerPaperTitle", "reviewerReviewDate",
   "reviewerCertificateUrl", "editorialRole", "editorPublicationType", "editorPublicationName", "editorPublisher",

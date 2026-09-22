@@ -51,6 +51,9 @@ interface DiscoveryInnovationPatchBody {
   inventorsCount?: number;
   inventors?: IprInventor[];
   isStudentPatent?: "YES" | "NO";
+  studentName?: string;
+  studentRegistrationNumber?: string;
+  studentDepartment?: string;
   publishedProofUrl?: string;
   grantedProofUrl?: string;
   isCommercialized?: "YES" | "NO";
@@ -69,7 +72,7 @@ interface DiscoveryInnovationPatchBody {
 const EDITABLE_KEYS = [
   "iprType", "iprStatus", "applicationNumber", "title", "sdgGoals", "dateOfFiling", "datePublished",
   "dateGranted", "applicantsCount", "applicants", "inventorsCount", "inventors", "isStudentPatent",
-  "publishedProofUrl", "grantedProofUrl", "isCommercialized", "commercializationStatus",
+  "studentName", "studentRegistrationNumber", "studentDepartment", "publishedProofUrl", "grantedProofUrl", "isCommercialized", "commercializationStatus",
   "commercializationDate", "licenseePartner", "commercializationType", "commercializationValue",
   "revenueGenerated", "commercializedProofUrl", "revenueGeneratedProofUrl",
 ] as const satisfies readonly (keyof DiscoveryInnovationPatchBody)[];
