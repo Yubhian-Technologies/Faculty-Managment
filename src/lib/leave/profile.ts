@@ -1,6 +1,9 @@
 import type { Firestore } from "firebase-admin/firestore";
 import { resolveEmployeeIdentity } from "./identity";
 import { PROFILES_COL } from "./balanceEngine";
+import { loadCollegeSettings } from "@/lib/firestore/collegeSettings";
+import { orderHeldRoles } from "@/lib/roles/seatRoles";
+import { resolveIsVacation } from "./staffCategoryRouting";
 import type { EmployeeLeaveProfile } from "@/types/leave";
 
 type TimestampLike = { toMillis?: () => number; toDate?: () => Date } | Date | undefined;
@@ -11,6 +14,20 @@ function toMillis(v: TimestampLike): number | undefined {
   if (typeof v.toMillis === "function") return v.toMillis();
   if (typeof v.toDate === "function") return v.toDate().getTime();
   return undefined;
+}
+
+// Vacation vs non-vacation is the college's own setting per role (Settings >
+// Vacation / Non-Vacation Staff), judged on the highest seat this person holds.
+async function resolveStaffCategory(
+  db: Firestore, collegeId: string, uid: string, identityIsTeaching: boolean
+): Promise<EmployeeLeaveProfile["staffCategory"]> {
+  const [settings, userSnap] = await Promise.all([
+    loadCollegeSettings(db, collegeId),
+    db.collection("colleges").doc(collegeId).collection("users").doc(uid).get(),
+  ]);
+  const u = userSnap.data() as { role?: string; seatRoles?: string[] } | undefined;
+  const held = u?.role ? orderHeldRoles(u.role, u.seatRoles ?? []) : [];
+  return resolveIsVacation(settings.leaveVacationRoles, held, identityIsTeaching) ? "vacation" : "non-vacation";
 }
 
 // Auto-creates a leave profile from FacultyMember/user defaults on first
@@ -37,7 +54,7 @@ export async function getOrCreateProfile(
     if (neverManuallyEdited) {
       const identity = await resolveEmployeeIdentity(db, collegeId, uid);
       if (identity) {
-        const freshStaffCategory: EmployeeLeaveProfile["staffCategory"] = identity.isTeachingStaff ? "vacation" : "non-vacation";
+        const freshStaffCategory = await resolveStaffCategory(db, collegeId, uid, identity.isTeachingStaff);
         const changed =
           existing.staffCategory !== freshStaffCategory ||
           existing.isTeachingStaff !== identity.isTeachingStaff ||
@@ -66,7 +83,7 @@ export async function getOrCreateProfile(
   const newProfile: Omit<EmployeeLeaveProfile, "id"> = {
     collegeId,
     uid,
-    staffCategory: identity.isTeachingStaff ? "vacation" : "non-vacation",
+    staffCategory: await resolveStaffCategory(db, collegeId, uid, identity.isTeachingStaff),
     isTeachingStaff: identity.isTeachingStaff,
     dateOfJoining: identity.dateOfJoining as unknown as EmployeeLeaveProfile["dateOfJoining"],
     ...(identity.department ? { department: identity.department } : {}),
