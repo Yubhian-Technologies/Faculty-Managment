@@ -621,21 +621,33 @@ export function QualificationsFields({
   );
 }
 
-export function QualificationsView({ items, title = "Educational Qualifications" }: { items: StaffQualification[] | undefined; title?: string }) {
+export function QualificationsView({
+  items, title = "Educational Qualifications", hideEmpty = false,
+}: {
+  items: StaffQualification[] | undefined;
+  title?: string;
+  // Faculty (School-type colleges) opts into this - it drops the "None
+  // recorded." message and the whole section when the list is empty, and
+  // renders each entry's fields with OptionalField instead of Field.
+  // Supporting Staff doesn't pass it, so its display is unchanged.
+  hideEmpty?: boolean;
+}) {
   const list = (migrateStaffQualifications(items) as StaffQualification[] | undefined) ?? [];
+  const FieldComp = hideEmpty ? OptionalField : Field;
+  if (hideEmpty && list.length === 0) return null;
   return (
     <div className="space-y-2">
       <SubLabel>{title}</SubLabel>
       {list.length === 0 ? <p className="text-xs text-muted-foreground">None recorded.</p> : (
         list.map((item, i) => (
           <div key={i} className="rounded-md border bg-muted/20 shadow-sm p-2 grid grid-cols-2 sm:grid-cols-3 gap-2">
-            <Field label="Level" value={item.level} />
-            <Field label="Course" value={item.course} />
-            <Field label="Institution Name" value={item.institutionName} />
-            <Field label="Place" value={item.place} />
-            <Field label="Percentage / CGPA" value={item.percentageCgpa} />
-            <Field label="Year of Passing" value={item.yearOfPassing} />
-            <Field label="Hall Ticket Number" value={item.hallTicketNumber} />
+            <FieldComp label="Level" value={item.level} />
+            <FieldComp label="Course" value={item.course} />
+            <FieldComp label="Institution Name" value={item.institutionName} />
+            <FieldComp label="Place" value={item.place} />
+            <FieldComp label="Percentage / CGPA" value={item.percentageCgpa} />
+            <FieldComp label="Year of Passing" value={item.yearOfPassing} />
+            <FieldComp label="Hall Ticket Number" value={item.hallTicketNumber} />
             {item.certificateUrl && (
               <div className="col-span-2 sm:col-span-3"><DocLink url={item.certificateUrl} label="View Certificate" /></div>
             )}
@@ -743,12 +755,58 @@ export function Field({ label, value }: { label: string; value: string | number 
   );
 }
 
+/** True for an actually-entered value - 0 and false count; "", null, undefined don't. */
+export function hasValue(v: unknown): boolean {
+  return v !== undefined && v !== null && v !== "";
+}
+
+/** True when at least one of `vs` is an actually-entered value (see hasValue). */
+export function hasAnyValue(...vs: unknown[]): boolean {
+  return vs.some(hasValue);
+}
+
+/**
+ * Faculty Details' non-Research tabs (Personal/Qualification/Experience/
+ * Professional Development/Financial/Others) render nothing at all for a
+ * field that was never entered or doesn't apply to what's saved, instead of
+ * a "label: -" placeholder row. A separate component from `Field` (left
+ * exactly as it was) so nothing that already renders with `Field` - Research
+ * & Innovation, Supporting Staff - changes its own display.
+ */
+export function OptionalField({ label, value }: { label: string; value: string | number | undefined | null }) {
+  if (!hasValue(value)) return null;
+  return <Field label={label} value={value} />;
+}
+
 const PHD_STATUS_VIEW_LABELS: Record<PhdStatus, string> = { AWARDED: "Awarded", PURSUING: "Pursuing" };
 const PHD_MODE_VIEW_LABELS: Record<PhdMode, string> = { FULL_TIME: "Full-Time", PART_TIME: "Part-Time" };
+
+// Every key a DegreeDetail can actually hold real data under - checked on the
+// RAW (pre-default) value, before resolveDegree fills in EMPTY_DEGREE's
+// placeholders (a blank Year of Passing/Award defaults to the current
+// calendar year for the edit form's number input, which must never be read
+// back as "this entry has data").
+const DEGREE_DATA_KEYS = [
+  "course", "branch", "specialization", "institutionName", "place", "percentageCgpa",
+  "hallTicketNumber", "certificateUrl", "domain", "board", "institutionType",
+  "affiliatedUniversity", "status", "mode", "nameOfTheGuideSupervisor", "yearOfRegistration",
+  "yearOfAward", "yearOfPassing", "degreeType",
+] as const;
+
+/** True when this qualification entry has any real data on it - see DEGREE_DATA_KEYS. */
+export function hasDegreeData(degree: DegreeDetail | undefined): boolean {
+  if (!degree) return false;
+  // Lift legacy key names first, so data still under an old key isn't missed.
+  const migrated = migrateDegree(degree as unknown as Record<string, unknown>, false) as Record<string, unknown>;
+  return DEGREE_DATA_KEYS.some((k) => hasValue(migrated[k]));
+}
 
 export function DegreeView({
   label, degree: degreeInput, level,
 }: { label: string; degree: DegreeDetail | undefined; level?: DegreeLevel }) {
+  // Nothing was ever entered for this qualification level - don't render an
+  // empty card just because the slot exists in the schema.
+  if (!hasDegreeData(degreeInput)) return null;
   const degree = resolveDegree(degreeInput, level === "DOCTORAL" || level === "POST_DOCTORAL");
   const isDoctoral = level === "DOCTORAL";
   const isDoctoralOrPostDoc = level === "DOCTORAL" || level === "POST_DOCTORAL";
@@ -762,43 +820,43 @@ export function DegreeView({
       <p className="col-span-2 sm:col-span-4 text-xs font-medium text-muted-foreground uppercase tracking-wide">{label}</p>
       {isDoctoralOrPostDoc && (
         <>
-          <Field label="Status" value={degree?.status ? PHD_STATUS_VIEW_LABELS[degree.status] : undefined} />
-          <Field label="Mode" value={degree?.mode ? PHD_MODE_VIEW_LABELS[degree.mode] : undefined} />
+          <OptionalField label="Status" value={degree?.status ? PHD_STATUS_VIEW_LABELS[degree.status] : undefined} />
+          <OptionalField label="Mode" value={degree?.mode ? PHD_MODE_VIEW_LABELS[degree.mode] : undefined} />
         </>
       )}
-      {degree?.domain && <Field label="Domain" value={EDUCATION_DOMAIN_LABELS[degree.domain as EducationDomain] ?? degree.domain} />}
+      {degree?.domain && <OptionalField label="Domain" value={EDUCATION_DOMAIN_LABELS[degree.domain as EducationDomain] ?? degree.domain} />}
       {/* Doctoral has no Course input - only render the row when a value exists. */}
-      {degree?.course && <Field label="Course" value={degree.course} />}
-      {isUgOrPg && degreeTypeOptions(degree?.course).length > 0 && <Field label="Degree" value={degree.degreeType} />}
+      {degree?.course && <OptionalField label="Course" value={degree.course} />}
+      {isUgOrPg && degreeTypeOptions(degree?.course).length > 0 && <OptionalField label="Degree" value={degree.degreeType} />}
       {isDoctoral ? (
-        <Field label="Specialization" value={doctoralSpecialization} />
+        <OptionalField label="Specialization" value={doctoralSpecialization} />
       ) : !isSchoolLevel ? (
-        <Field label="Branch" value={degree?.branch} />
+        <OptionalField label="Branch" value={degree?.branch} />
       ) : null}
-      {isSchoolLevel && <Field label="Board" value={degree?.board} />}
+      {isSchoolLevel && <OptionalField label="Board" value={degree?.board} />}
       {isUgOrPg ? (
         <>
-          <Field label="Institution Type" value={degree?.institutionType === "INSTITUTE" ? "Institute" : degree?.institutionType === "UNIVERSITY" ? "University" : undefined} />
-          <Field label="Institution Name" value={degree?.institutionName} />
-          {degree?.institutionType === "INSTITUTE" && <Field label="Affiliated University" value={degree?.affiliatedUniversity} />}
+          <OptionalField label="Institution Type" value={degree?.institutionType === "INSTITUTE" ? "Institute" : degree?.institutionType === "UNIVERSITY" ? "University" : undefined} />
+          <OptionalField label="Institution Name" value={degree?.institutionName} />
+          {degree?.institutionType === "INSTITUTE" && <OptionalField label="Affiliated University" value={degree?.affiliatedUniversity} />}
         </>
       ) : (
-        <Field label="Institution Name" value={degree?.institutionName} />
+        <OptionalField label="Institution Name" value={degree?.institutionName} />
       )}
-      <Field label="Place" value={degree?.place} />
-      {!isDoctoral && <Field label="Percentage / CGPA" value={degree?.percentageCgpa} />}
-      {isDoctoral && degree?.percentageCgpa && <Field label="Percentage / CGPA (legacy)" value={degree.percentageCgpa} />}
-      {isDoctoralOrPostDoc && <Field label="Year of Registration" value={degree?.yearOfRegistration} />}
+      <OptionalField label="Place" value={degree?.place} />
+      {!isDoctoral && <OptionalField label="Percentage / CGPA" value={degree?.percentageCgpa} />}
+      {isDoctoral && degree?.percentageCgpa && <OptionalField label="Percentage / CGPA (legacy)" value={degree.percentageCgpa} />}
+      {isDoctoralOrPostDoc && <OptionalField label="Year of Registration" value={degree?.yearOfRegistration} />}
       {isDoctoralOrPostDoc ? (
         degree?.status === "AWARDED" ? (
-          <Field label="Year of Award" value={degreeYear(degree, true)} />
+          <OptionalField label="Year of Award" value={degreeYear(degree, true)} />
         ) : degree?.status === "PURSUING" ? (
-          <Field label="Name of the Guide / Supervisor" value={degree?.nameOfTheGuideSupervisor} />
+          <OptionalField label="Name of the Guide / Supervisor" value={degree?.nameOfTheGuideSupervisor} />
         ) : null
       ) : (
-        <Field label="Year of Passing" value={degreeYear(degree, false)} />
+        <OptionalField label="Year of Passing" value={degreeYear(degree, false)} />
       )}
-      <Field label="Hall Ticket Number" value={degree?.hallTicketNumber} />
+      <OptionalField label="Hall Ticket Number" value={degree?.hallTicketNumber} />
       {degree?.certificateUrl && (
         <div className="col-span-2 sm:col-span-4">
           <a

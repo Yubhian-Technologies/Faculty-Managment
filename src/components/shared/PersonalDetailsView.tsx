@@ -3,6 +3,7 @@ import { RELIGION_LABELS, CASTE_LABELS } from "@/types";
 import type { Religion, Caste } from "@/types";
 import type { Timestamp } from "firebase/firestore";
 import { migratePersonalFlat } from "@/lib/faculty/fieldRenames";
+import { OptionalField as Field, hasAnyValue } from "@/components/shared/ProfileFieldPrimitives";
 
 export interface PersonalDetailsSource {
   gender?: string;
@@ -65,15 +66,6 @@ interface Props {
   showNameAsPerPan?: boolean;
 }
 
-function Field({ label, value }: { label: string; value: string | undefined | null }) {
-  return (
-    <div>
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="text-sm font-medium">{value || "-"}</p>
-    </div>
-  );
-}
-
 export function PersonalDetailsView({ value, hideLegalName = false, hiddenFields = [], showNameAsPerPan = false }: Props) {
   // Lift a record still carrying the legacy key names (passportNumber, bankAccountNo, ...).
   const p = (value ? migratePersonalFlat(value as Record<string, unknown>) : {}) as PersonalDetailsSource;
@@ -102,82 +94,95 @@ export function PersonalDetailsView({ value, hideLegalName = false, hiddenFields
         {p.differentlyAbled && <Field label="Differently Abled Details" value={p.differentlyAbledDetails} />}
       </div>
 
-      <div className="rounded-lg border bg-muted/20 shadow-sm p-3">
-        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Personal Attributes</p>
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-          <Field label="Mother Tongue" value={p.motherTongue} />
-          <Field label="Languages Known" value={p.languagesKnown && p.languagesKnown.length > 0 ? p.languagesKnown.join(", ") : undefined} />
-          <Field label="Height" value={p.heightFeet || p.heightInches ? `${p.heightFeet ?? 0} ft ${p.heightInches ?? 0} in` : undefined} />
-          <Field label="Weight" value={p.weightKg !== undefined ? `${p.weightKg} kg` : undefined} />
-        </div>
-      </div>
-
-      <div className="rounded-lg border bg-muted/20 shadow-sm p-3">
-        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Family &amp; Other Details</p>
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-          <Field label="Marital Status" value={p.maritalStatus} />
-          <Field label="Blood Group" value={p.bloodGroup} />
-          {p.maritalStatus === "Married" && (
-            <>
-              <Field label="Spouse Name" value={p.spouseName} />
-              <Field label="Number of Children" value={p.numberOfChildren !== undefined ? String(p.numberOfChildren) : undefined} />
-            </>
-          )}
-        </div>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 mt-3">
-          <Field label="Temporary Address" value={p.temporaryAddress} />
-          <Field
-            label="Permanent Address"
-            value={p.permanentAddressSameAsTemporary ? p.permanentAddress || p.temporaryAddress : p.permanentAddress}
-          />
-          <Field
-            label="Permanent Address Same as Temporary"
-            value={p.permanentAddressSameAsTemporary === undefined ? undefined : p.permanentAddressSameAsTemporary ? "Yes" : "No"}
-          />
-        </div>
-      </div>
-
-      <div className="rounded-lg border bg-muted/20 shadow-sm p-3">
-        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Bank Account Details</p>
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-          <Field label="Bank Account Number" value={p.bankAccountNumber} />
-          <Field label="IFSC Code" value={p.ifscCode} />
-          <Field label="Bank Name" value={p.bankName} />
-          <Field label="Bank Branch" value={p.bankBranch} />
-        </div>
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 mt-3">
-          <Field label="PF Number" value={p.pfNumber} />
-          <Field label="UAN Number" value={p.uanNumber} />
-          {!hiddenFields.includes("esiNumber") && <Field label="ESI Number" value={p.esiNumber} />}
-        </div>
-        {p.bankOtherDetails && (
-          <div className="mt-3">
-            <Field label="Bank Other Details" value={p.bankOtherDetails} />
+      {hasAnyValue(p.motherTongue, p.languagesKnown?.length ? "x" : undefined, p.heightFeet, p.heightInches, p.weightKg) && (
+        <div className="rounded-lg border bg-muted/20 shadow-sm p-3">
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Personal Attributes</p>
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            <Field label="Mother Tongue" value={p.motherTongue} />
+            <Field label="Languages Known" value={p.languagesKnown && p.languagesKnown.length > 0 ? p.languagesKnown.join(", ") : undefined} />
+            <Field label="Height" value={p.heightFeet || p.heightInches ? `${p.heightFeet ?? 0} ft ${p.heightInches ?? 0} in` : undefined} />
+            <Field label="Weight" value={p.weightKg !== undefined ? `${p.weightKg} kg` : undefined} />
           </div>
-        )}
-      </div>
-
-      <div className="rounded-lg border bg-muted/20 shadow-sm p-3">
-        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Emergency Contact</p>
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-          <Field label="Emergency Contact Name" value={p.emergencyContactName} />
-          <Field label="Emergency Contact Relation" value={p.emergencyContactRelation} />
-          <Field label="Emergency Contact Mobile No" value={p.emergencyContactMobileNo} />
         </div>
-      </div>
+      )}
 
-      <div className="rounded-lg border bg-muted/20 shadow-sm p-3">
-        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Ratification</p>
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-          <Field label="Ratification Status" value={p.ratificationStatus} />
-          {p.ratificationStatus === "Ratified" && (
-            <>
-              <Field label="Ratification Proceedings Number" value={p.ratificationProceedingsNumber} />
-              <Field label="Ratification Date" value={p.ratificationDate ? formatDate(p.ratificationDate) : undefined} />
-            </>
+      {hasAnyValue(
+        p.maritalStatus, p.bloodGroup, p.spouseName, p.numberOfChildren,
+        p.temporaryAddress, p.permanentAddress, p.permanentAddressSameAsTemporary
+      ) && (
+        <div className="rounded-lg border bg-muted/20 shadow-sm p-3">
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Family &amp; Other Details</p>
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            <Field label="Marital Status" value={p.maritalStatus} />
+            <Field label="Blood Group" value={p.bloodGroup} />
+            {p.maritalStatus === "Married" && (
+              <>
+                <Field label="Spouse Name" value={p.spouseName} />
+                <Field label="Number of Children" value={p.numberOfChildren !== undefined ? String(p.numberOfChildren) : undefined} />
+              </>
+            )}
+          </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 mt-3">
+            <Field label="Temporary Address" value={p.temporaryAddress} />
+            <Field
+              label="Permanent Address"
+              value={p.permanentAddressSameAsTemporary ? p.permanentAddress || p.temporaryAddress : p.permanentAddress}
+            />
+            <Field
+              label="Permanent Address Same as Temporary"
+              value={p.permanentAddressSameAsTemporary === undefined ? undefined : p.permanentAddressSameAsTemporary ? "Yes" : "No"}
+            />
+          </div>
+        </div>
+      )}
+
+      {hasAnyValue(p.bankAccountNumber, p.ifscCode, p.bankName, p.bankBranch, p.pfNumber, p.uanNumber, p.esiNumber, p.bankOtherDetails) && (
+        <div className="rounded-lg border bg-muted/20 shadow-sm p-3">
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Bank Account Details</p>
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            <Field label="Bank Account Number" value={p.bankAccountNumber} />
+            <Field label="IFSC Code" value={p.ifscCode} />
+            <Field label="Bank Name" value={p.bankName} />
+            <Field label="Bank Branch" value={p.bankBranch} />
+          </div>
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 mt-3">
+            <Field label="PF Number" value={p.pfNumber} />
+            <Field label="UAN Number" value={p.uanNumber} />
+            {!hiddenFields.includes("esiNumber") && <Field label="ESI Number" value={p.esiNumber} />}
+          </div>
+          {p.bankOtherDetails && (
+            <div className="mt-3">
+              <Field label="Bank Other Details" value={p.bankOtherDetails} />
+            </div>
           )}
         </div>
-      </div>
+      )}
+
+      {hasAnyValue(p.emergencyContactName, p.emergencyContactRelation, p.emergencyContactMobileNo) && (
+        <div className="rounded-lg border bg-muted/20 shadow-sm p-3">
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Emergency Contact</p>
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            <Field label="Emergency Contact Name" value={p.emergencyContactName} />
+            <Field label="Emergency Contact Relation" value={p.emergencyContactRelation} />
+            <Field label="Emergency Contact Mobile No" value={p.emergencyContactMobileNo} />
+          </div>
+        </div>
+      )}
+
+      {hasAnyValue(p.ratificationStatus, p.ratificationProceedingsNumber, p.ratificationDate) && (
+        <div className="rounded-lg border bg-muted/20 shadow-sm p-3">
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Ratification</p>
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            <Field label="Ratification Status" value={p.ratificationStatus} />
+            {p.ratificationStatus === "Ratified" && (
+              <>
+                <Field label="Ratification Proceedings Number" value={p.ratificationProceedingsNumber} />
+                <Field label="Ratification Date" value={p.ratificationDate ? formatDate(p.ratificationDate) : undefined} />
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

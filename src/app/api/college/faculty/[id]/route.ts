@@ -11,8 +11,10 @@ import { normalizeAcademicProfile } from "@/lib/faculty/academicProfileCompat";
 import { degreeTypeError } from "@/lib/faculty/degreeType";
 import {
   academicProfileFirestoreUpdates, applyAcademicProfileChanges, parseAcademicProfileChanges, touchesTrainingEntries,
-  type AcademicProfileChanges,
+  withoutAcademicProfileKeys, type AcademicProfileChanges,
 } from "@/lib/faculty/academicProfileChanges";
+import { PROMOTION_HISTORY_KEY, DESIGNATION_MANAGED_BY_HISTORY_MESSAGE } from "@/lib/faculty/promotionHistory";
+import { designationKey } from "@/lib/designations/config";
 import { migrateFacultyDoc } from "@/lib/faculty/fieldRenames";
 import { withLegacyFacultyKeysDeleted } from "@/lib/faculty/legacyKeyDeletes";
 import { mobileNoFromBody } from "@/lib/faculty/mobileNo";
@@ -194,6 +196,18 @@ export async function PATCH(
     for (const key of stringFields) {
       if (body[key] !== undefined) updates[key] = body[key];
     }
+    // Once a faculty member has a Promotion History, that history (edited by College Office
+    // under Promotion & Salary) decides their current designation - it can't be changed here.
+    // Re-sending the value it already has (the Edit page always does) is a harmless no-op.
+    const storedProfile = normalizeAcademicProfile((snap.data() as { academicProfile?: unknown }).academicProfile ?? {}) as Record<string, unknown>;
+    const storedHistory = storedProfile[PROMOTION_HISTORY_KEY];
+    if (Array.isArray(storedHistory) && storedHistory.length > 0 && body.designation !== undefined) {
+      const current = (snap.data() as { designation?: string }).designation;
+      if (designationKey(body.designation) !== designationKey(current)) {
+        return NextResponse.json({ error: DESIGNATION_MANAGED_BY_HISTORY_MESSAGE }, { status: 409 });
+      }
+      delete updates.designation;
+    }
     // One category per faculty member, whatever spelling/casing the caller sent.
     if (typeof updates.highestQualification === "string") {
       updates.highestQualification = normalizeHighestQualification(updates.highestQualification);
@@ -221,12 +235,17 @@ export async function PATCH(
       if (!parsed) return NextResponse.json({ error: "Invalid academicProfileChanges" }, { status: 400 });
       const degreeErr = degreeTypeError(parsed.set);
       if (degreeErr) return NextResponse.json({ error: degreeErr }, { status: 400 });
-      academicChanges = parsed;
+      // Promotion History belongs to College Office (PATCH .../promotion-salary) - never written here.
+      academicChanges = withoutAcademicProfileKeys(parsed, [PROMOTION_HISTORY_KEY]);
       Object.assign(updates, academicProfileFirestoreUpdates((snap.data() as { academicProfile?: unknown }).academicProfile, academicChanges, FieldValue.delete()));
     } else if (body.academicProfile !== undefined) {
       const degreeErr = degreeTypeError(body.academicProfile);
       if (degreeErr) return NextResponse.json({ error: degreeErr }, { status: 400 });
-      updates.academicProfile = normalizeAcademicProfile(body.academicProfile);
+      const ap = { ...normalizeAcademicProfile(body.academicProfile) } as Record<string, unknown>;
+      // Whole-profile replace must not carry (or drop) Promotion History: keep whatever is stored.
+      delete ap[PROMOTION_HISTORY_KEY];
+      if (storedProfile[PROMOTION_HISTORY_KEY] !== undefined) ap[PROMOTION_HISTORY_KEY] = storedProfile[PROMOTION_HISTORY_KEY];
+      updates.academicProfile = ap;
     }
     if (body.technicalProfile !== undefined) updates.technicalProfile = body.technicalProfile;
 

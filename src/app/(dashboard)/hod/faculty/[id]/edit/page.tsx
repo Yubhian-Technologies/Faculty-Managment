@@ -67,6 +67,9 @@ export default function EditHodFacultyIdentityPage() {
   const [qualIsOther, setQualIsOther] = useState(false);
   const [extraPhones, setExtraPhones] = useState<{ label?: string; number: string }[]>([]);
   const [photoUrl, setPhotoUrl] = useState<string | undefined>(undefined);
+  // With a Promotion History on file, that history (College Office > Promotion & Salary) decides the
+  // current designation - the server rejects a different value here, so the field is read-only.
+  const [designationManaged, setDesignationManaged] = useState(false);
   const [designationOptions, setDesignationOptions] = useState<string[]>([]);
 
   useEffect(() => {
@@ -96,6 +99,8 @@ export default function EditHodFacultyIdentityPage() {
           email: (m.email as string) ?? "",
           mobileNo: (m.mobileNo as string) ?? "",
         });
+        const history = (m.academicProfile as { promotionHistory?: unknown[] } | undefined)?.promotionHistory;
+        setDesignationManaged(Array.isArray(history) && history.length > 0);
         setExtraPhones((m.additionalPhoneNumbers as { label?: string; number: string }[]) ?? []);
         setPhotoUrl((m.profilePhotoUrl as string) || undefined);
       })
@@ -246,7 +251,7 @@ export default function EditHodFacultyIdentityPage() {
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label>Designation *</Label>
-                <Select value={form.designation} onValueChange={(v) => set({ designation: v as Designation })}>
+                <Select value={form.designation} onValueChange={(v) => set({ designation: v as Designation })} disabled={designationManaged}>
                   <SelectTrigger><SelectValue placeholder="Select designation" /></SelectTrigger>
                   <SelectContent>
                     {designationOptions.map((d) => <SelectItem key={d} value={d}>{designationLabel(d)}</SelectItem>)}
@@ -258,6 +263,11 @@ export default function EditHodFacultyIdentityPage() {
                     )}
                   </SelectContent>
                 </Select>
+                {designationManaged && (
+                  <p className="text-xs text-muted-foreground">
+                    Managed by this faculty member&apos;s Promotion History - College Office updates it under Promotion &amp; Salary.
+                  </p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label>Employee Category *</Label>

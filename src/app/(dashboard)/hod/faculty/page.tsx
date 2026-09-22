@@ -47,6 +47,15 @@ function joiningLabel(status: unknown): string {
 
 type FacultyRow = Record<string, unknown> & FacultyMember;
 
+// Selection checkboxes on this list (header "select all" + every row): a bit larger than
+// the shared Checkbox default, with a clear 2px slate border and a white fill so an
+// unchecked box reads against the white table. Applied via className here so the shared
+// Checkbox - used across the app - keeps its default look everywhere else.
+const SELECT_CHECKBOX_CLASS =
+  "h-5 w-5 border-2 border-slate-500 bg-white hover:border-primary [&_svg]:h-3.5 [&_svg]:w-3.5 " +
+  "data-[state=checked]:border-primary data-[state=indeterminate]:border-primary " +
+  "data-[state=indeterminate]:bg-primary data-[state=indeterminate]:text-primary-foreground";
+
 const STATUS_VARIANTS: Record<FacultyStatus, "default" | "secondary" | "outline" | "destructive"> = {
   INTERVIEW_DONE: "outline",
   ACTIVE: "default",
@@ -276,6 +285,7 @@ export default function HODFacultyPage() {
           checked={allSelected ? true : someSelected ? "indeterminate" : false}
           onCheckedChange={(checked) => setSelectedIds(checked ? new Set(faculty.map((f) => f.id as string)) : new Set())}
           aria-label="Select all faculty"
+          className={SELECT_CHECKBOX_CLASS}
         />
       ),
       render: (row) => (
@@ -290,6 +300,7 @@ export default function HODFacultyPage() {
               })
             }
             aria-label={`Select ${facultyDisplayName(row)}`}
+            className={SELECT_CHECKBOX_CLASS}
           />
         </div>
       ),
