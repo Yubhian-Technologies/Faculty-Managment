@@ -349,7 +349,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         && !(session.role === "PANEL_MEMBER" && isLabBatchOnly)
       ) {
         return NextResponse.json(
-          { error: "Only the department's HOD can set a student's roll number, status, or lab batch" },
+          { error: "Only the department's HOD can set a student's roll number or status" },
           { status: 403 }
         );
       }

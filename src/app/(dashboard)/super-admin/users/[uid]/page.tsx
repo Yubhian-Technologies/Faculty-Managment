@@ -6,12 +6,16 @@ import { FacultyProfileHub } from "@/components/faculty/FacultyProfileHub";
 import { toast } from "@/hooks/useToast";
 import type { FacultyMember, UserRole } from "@/types";
 
-// Only PRINCIPAL/DIRECTOR (the COLLEGE-scoped roles Super Admin edits) have
-// rich enough data for the module-tile hub - every other Super-Admin-editable
-// role (ACCOUNTS/FINANCE/PURCHASE_DEPT/ADMINISTRATION/MANAGEMENT) only supports
-// photo + Module 6 - Others, so they skip straight to the flat edit page
-// (see super-admin/users/[uid]/edit/page.tsx's non-college-scoped branch).
-const HUB_ROLES: UserRole[] = ["PRINCIPAL", "DIRECTOR"];
+// PRINCIPAL/DIRECTOR (the COLLEGE-scoped roles Super Admin edits) have rich
+// enough data for the module-tile hub - every other Super-Admin-editable role
+// (ACCOUNTS/FINANCE/PURCHASE_DEPT/ADMINISTRATION/MANAGEMENT) only supports
+// photo + Module 6 - Others, so they skip straight to the flat edit page (see
+// super-admin/users/[uid]/edit/page.tsx's non-college-scoped branch).
+// PANEL_MEMBER (Faculty) also gets the hub - but view-only, no editHref below -
+// Super Admin can look at a faculty member's profile without being able to
+// change it (that stays with their own HOD/Principal).
+const HUB_ROLES: UserRole[] = ["PRINCIPAL", "DIRECTOR", "PANEL_MEMBER"];
+const VIEW_ONLY_ROLES: UserRole[] = ["PANEL_MEMBER"];
 
 export default function SuperAdminUserViewPage() {
   const router = useRouter();
@@ -48,12 +52,14 @@ export default function SuperAdminUserViewPage() {
   if (isLoading) return <p className="text-sm text-muted-foreground">Loading…</p>;
   if (!staff) return null;
 
+  const isViewOnly = roleParam !== "" && VIEW_ONLY_ROLES.includes(roleParam);
+
   return (
     <FacultyProfileHub
       faculty={staff}
       basePath={`/super-admin/users/${uid}`}
       backHref="/super-admin/users"
-      editHref={`/super-admin/users/${uid}/edit?${searchParams.toString()}`}
+      editHref={isViewOnly ? undefined : `/super-admin/users/${uid}/edit?${searchParams.toString()}`}
       hideFinancialModule
       excludeModules={["research", "teaching-load"]}
     />
