@@ -527,7 +527,6 @@ function AddSeatDialog({
   const [role, setRole] = useState("");
   const [departmentId, setDepartmentId] = useState("");
   const [label, setLabel] = useState("");
-  const [roleEmail, setRoleEmail] = useState("");
   const [busy, setBusy] = useState(false);
 
   // Only roles you're allowed to appoint, and - for one-per-college roles - not
@@ -551,13 +550,12 @@ function AddSeatDialog({
           role,
           departmentId: seatNeedsDepartment(role) ? departmentId : undefined,
           label: label.trim() || undefined,
-          roleEmail: roleEmail.trim() || undefined,
         }),
       });
       const data = await res.json() as { error?: string };
       if (!res.ok) throw new Error(data.error ?? "Failed");
       toast({ variant: "success", title: "Role added" });
-      setRole(""); setDepartmentId(""); setLabel(""); setRoleEmail("");
+      setRole(""); setDepartmentId(""); setLabel("");
       onOpenChange(false);
       await onDone();
     } catch (e) {
@@ -602,10 +600,6 @@ function AddSeatDialog({
               <Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder={`e.g. ${ROLE_LABELS[role as UserRole]} (Academics)`} />
             </div>
           )}
-          <div className="space-y-2">
-            <Label>Role email <span className="font-normal text-muted-foreground">(optional - contact address, not a login)</span></Label>
-            <Input type="email" value={roleEmail} onChange={(e) => setRoleEmail(e.target.value)} placeholder="e.g. hod.cse@yourcollege.edu" />
-          </div>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>

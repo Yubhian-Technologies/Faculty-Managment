@@ -16,17 +16,19 @@ import { ROLE_LABELS, ROLE_LEVEL, ROLE_SCOPE, LEVEL_LABELS } from "@/types";
 import { toast } from "@/hooks/useToast";
 import type { College, Location, FacultyProfileFields, UserRole } from "@/types";
 
-// Roles a Super Admin creates - the level L1–L2 set plus DIRECTOR (L3). Scope
-// (GLOBAL/LOCATION/COLLEGE) is read from ROLE_SCOPE, which drives which tenant
-// picker is shown and what the provisioning route (api/admin/users) writes.
-// Principal is deliberately not here any more: it's a SEAT, appointed by a
-// college's own College Admin via Role Assignments, not handed out directly -
-// same reasoning as removing it from Location Admin. Must match
-// SUPER_ADMIN_CREATABLE in api/admin/users/route.ts.
+// Roles a Super Admin creates - the level L1–L2 set plus DIRECTOR (L3) and
+// PANEL_MEMBER/Faculty (L5, a plain login - not the full HOD-side hiring/
+// onboarding wizard). Scope (GLOBAL/LOCATION/COLLEGE) is read from ROLE_SCOPE,
+// which drives which tenant picker is shown and what the provisioning route
+// (api/admin/users) writes. Principal is deliberately not here any more: it's
+// a SEAT, appointed by a college's own College Admin via Role Assignments, not
+// handed out directly - same reasoning as removing it from Location Admin.
+// Must match SUPER_ADMIN_CREATABLE in api/admin/users/route.ts.
 const CREATABLE_ROLES: UserRole[] = [
   "MANAGEMENT", "FINANCE", "PURCHASE_DEPT",   // L1 · GLOBAL
   "ADMINISTRATION", "ACCOUNTS",               // L2 · LOCATION
   "DIRECTOR",                                 // L3 · COLLEGE
+  "PANEL_MEMBER",                             // L5 · COLLEGE (Faculty)
 ];
 
 // Creatable roles grouped by their L0–L6 level, so the role picker is level-scoped.
@@ -43,6 +45,7 @@ export default function NewUserPage() {
   const [email, setEmail] = useState("");
   const [collegeEmail, setCollegeEmail] = useState("");
   const [employeeId, setEmployeeId] = useState("");
+  const [department, setDepartment] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("12345678");
   const [role, setRole] = useState<UserRole>("MANAGEMENT");
@@ -71,8 +74,12 @@ export default function NewUserPage() {
   // College picker cascades off the chosen location (multiple colleges per location).
   const collegesForLocation = colleges.filter((c) => c.locationId === locationId);
 
+  // Employee ID is mandatory when manually adding a college-scoped person -
+  // there's no import/bulk flow behind this form to backfill it later.
+  const employeeIdRequired = role === "DIRECTOR" || role === "PANEL_MEMBER";
   const isValid = !!name && !!email && !!password && !!role &&
-    (scope === "GLOBAL" ? true : scope === "LOCATION" ? !!locationId : !!locationId && !!collegeId);
+    (scope === "GLOBAL" ? true : scope === "LOCATION" ? !!locationId : !!locationId && !!collegeId) &&
+    (!employeeIdRequired || !!employeeId.trim());
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -86,6 +93,7 @@ export default function NewUserPage() {
           name, email, password, role, collegeId, locationId, phone,
           academicProfile,
           ...(role === "DIRECTOR" ? { ...personalDetails, collegeEmail, employeeId } : {}),
+          ...(role === "PANEL_MEMBER" ? { employeeId, department } : {}),
           ...(photoUrl ? { profilePhotoUrl: photoUrl } : {}),
         }),
       });
@@ -135,8 +143,20 @@ export default function NewUserPage() {
                       <Input type="email" value={collegeEmail} onChange={(e) => setCollegeEmail(e.target.value)} placeholder="name@example.com" />
                     </div>
                     <div className="space-y-2">
-                      <Label>Employee ID</Label>
+                      <Label>Employee ID <span className="text-destructive">*</span></Label>
                       <Input value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} placeholder="EMP-001" />
+                    </div>
+                  </>
+                )}
+                {role === "PANEL_MEMBER" && (
+                  <>
+                    <div className="space-y-2">
+                      <Label>Employee ID <span className="text-destructive">*</span></Label>
+                      <Input value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} placeholder="EMP-001" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Department</Label>
+                      <Input value={department} onChange={(e) => setDepartment(e.target.value)} placeholder="e.g. CSE" />
                     </div>
                   </>
                 )}
@@ -244,6 +264,11 @@ export default function NewUserPage() {
             </CardContent>
           </Card>
         </>
+      ) : role === "PANEL_MEMBER" ? (
+        // Kept deliberately minimal - a quick login for an existing/incoming
+        // faculty member. Their full profile (qualifications, experience, ...)
+        // is filled in later from their own faculty record, not at creation.
+        null
       ) : (
         <Card className="mt-6">
           <CardHeader><CardTitle className="text-base">Module 6 - Others</CardTitle></CardHeader>
