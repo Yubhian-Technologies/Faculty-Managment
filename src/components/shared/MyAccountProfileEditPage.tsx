@@ -95,7 +95,7 @@ export function MyAccountProfileEditPage({ basePath, fetchEndpoint, patchEndpoin
               </div>
               <div className="space-y-2">
                 <Label>Phone</Label>
-                <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Optional" />
+                <Input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Optional" />
               </div>
               <div className="flex justify-end gap-3 pt-4 border-t">
                 <Button variant="outline" onClick={() => router.push(basePath)}>Cancel</Button>

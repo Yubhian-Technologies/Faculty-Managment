@@ -166,15 +166,26 @@ export default function UsersPage() {
     {
       key: "name",
       header: "Name",
-      render: (row) => (
-        <div className="flex items-center gap-3">
-          <Avatar name={facultyDisplayName(row) || (row.name as string)} photoUrl={row.profilePhotoUrl as string | undefined} size="sm" />
-          <div>
-            <p className="font-medium">{facultyDisplayName(row) || (row.name as string)}</p>
-            <p className="text-xs text-muted-foreground">{row.email as string}</p>
+      render: (row) => {
+        const isSystemWide = !(row.collegeId as string) && !(row.locationId as string);
+        const depts = row.departments && row.departments.length > 0 ? row.departments : [row.department].filter(Boolean) as string[];
+        return (
+          <div className="flex items-center gap-3">
+            <Avatar name={facultyDisplayName(row) || (row.name as string)} photoUrl={row.profilePhotoUrl as string | undefined} size="sm" />
+            <div>
+              <p className="font-medium">{facultyDisplayName(row) || (row.name as string)}</p>
+              <p className="text-xs text-muted-foreground">{row.email as string}</p>
+              {isSystemWide ? (
+                <p className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                  <Globe className="h-3 w-3" />System-Wide
+                </p>
+              ) : depts.length > 0 && (
+                <p className="text-xs text-muted-foreground">{depts.join(", ")}</p>
+              )}
+            </div>
           </div>
-        </div>
-      ),
+        );
+      },
     },
     {
       key: "role",
@@ -211,29 +222,6 @@ export default function UsersPage() {
       },
     },
     {
-      key: "department",
-      header: "Department",
-      hideOnMobile: true,
-      render: (row) => {
-        if (!(row.collegeId as string) && !(row.locationId as string)) {
-          return (
-            <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-              <Globe className="h-3 w-3" />System-Wide
-            </span>
-          );
-        }
-        const depts = row.departments && row.departments.length > 0 ? row.departments : [row.department].filter(Boolean) as string[];
-        if (depts.length === 0) return <span>-</span>;
-        const [primary, ...rest] = depts;
-        return (
-          <span>
-            {primary}
-            {rest.length > 0 && <span className="text-muted-foreground"> · also {rest.join(", ")}</span>}
-          </span>
-        );
-      },
-    },
-    {
       key: "isActive",
       header: "Status",
       render: (row) => (
@@ -254,15 +242,20 @@ export default function UsersPage() {
         const isCollegeScoped = !!(row.collegeId as string);
         const isLocationScoped = !isCollegeScoped && !!(row.locationId as string);
         const canEdit = PHOTO_EDITABLE_ROLES.includes(row.role);
+        // Faculty isn't Super-Admin-editable (their HOD/Principal owns that),
+        // but Super Admin can still view the profile - same hub view PRINCIPAL/
+        // DIRECTOR get, just without an Edit button (see [uid]/page.tsx's
+        // HUB_ROLES and the module page's own read-only check for that role).
+        const canView = row.role === "PANEL_MEMBER";
         const editHref = `/super-admin/users/${row.uid}?role=${row.role}` +
           (row.collegeId ? `&collegeId=${row.collegeId}` : "") +
           (row.locationId ? `&locationId=${row.locationId}` : "");
         return (
           <div className="flex items-center gap-1 flex-wrap">
-            {canEdit && (
+            {(canEdit || canView) && (
               <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); router.push(editHref); }}>
                 <Eye className="h-3.5 w-3.5" />
-                <span className="ml-1 hidden lg:inline">{row.role === "PRINCIPAL" ? "View" : "Edit"}</span>
+                <span className="ml-1 hidden lg:inline">{row.role === "PRINCIPAL" || canView ? "View" : "Edit"}</span>
               </Button>
             )}
             <Button
@@ -395,6 +388,7 @@ export default function UsersPage() {
         columns={columns}
         isLoading={isLoading}
         keyExtractor={(r) => r.uid as string}
+        paginate
         searchPlaceholder="Search users..."
         searchKeys={["name", "email", "department"] as (keyof UserRow)[]}
         emptyTitle={selectedCollegeId === GLOBAL_SCOPE ? "No system-wide users" : `No users in ${collegeLabel}`}

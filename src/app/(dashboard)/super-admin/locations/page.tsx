@@ -2,9 +2,11 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable } from "@/components/shared/DataTable";
 import { MobileCard } from "@/components/shared/MobileCard";
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/useToast";
@@ -15,6 +17,8 @@ export default function LocationsPage() {
   const isMobile = useMobile();
   const [locations, setLocations] = useState<Location[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [deleteLocation, setDeleteLocation] = useState<Location | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   function load() {
     setIsLoading(true);
@@ -34,6 +38,26 @@ export default function LocationsPage() {
       body: JSON.stringify({ isActive: !loc.isActive }),
     });
     load();
+  }
+
+  async function handleDelete(loc: Location) {
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/admin/locations/${loc.id}`, { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || "Failed to delete location");
+      toast({ variant: "success", title: "Location deleted" });
+      setDeleteLocation(null);
+      load();
+    } catch (err) {
+      toast({
+        variant: "destructive",
+        title: "Failed to delete location",
+        description: err instanceof Error ? err.message : undefined,
+      });
+    } finally {
+      setDeleting(false);
+    }
   }
 
   return (
@@ -63,7 +87,10 @@ export default function LocationsPage() {
                     <Link href={`/super-admin/locations/${loc.id}/edit`}>Edit</Link>
                   </Button>
                   <Button size="sm" variant="outline" onClick={() => void toggleActive(loc)}>
-                    {loc.isActive ? "Deactivate" : "Activate"}
+                    {loc.isActive ? "Deactivate" : "Reactivate"}
+                  </Button>
+                  <Button size="sm" variant="outline" className="text-destructive hover:text-destructive" onClick={() => setDeleteLocation(loc)}>
+                    <Trash2 className="h-3.5 w-3.5" />
                   </Button>
                 </div>
               }
@@ -102,7 +129,15 @@ export default function LocationsPage() {
                       <Link href={`/super-admin/locations/${loc.id}/edit`}>Edit</Link>
                     </Button>
                     <Button size="sm" variant="outline" onClick={() => void toggleActive(loc)}>
-                      {loc.isActive ? "Deactivate" : "Activate"}
+                      {loc.isActive ? "Deactivate" : "Reactivate"}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-destructive hover:text-destructive"
+                      onClick={(e) => { e.stopPropagation(); setDeleteLocation(loc); }}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   </div>
                 );
@@ -111,6 +146,17 @@ export default function LocationsPage() {
           ]}
         />
       )}
+
+      <ConfirmDialog
+        open={!!deleteLocation}
+        onOpenChange={(open) => !open && setDeleteLocation(null)}
+        title="Delete Location?"
+        description={`This will permanently delete "${deleteLocation?.name}". This cannot be undone. The location must have no colleges or administrators before it can be deleted.`}
+        confirmLabel="Delete"
+        variant="destructive"
+        loading={deleting}
+        onConfirm={() => { if (deleteLocation) void handleDelete(deleteLocation); }}
+      />
     </div>
   );
 }

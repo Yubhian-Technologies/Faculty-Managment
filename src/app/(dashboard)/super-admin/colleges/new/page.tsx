@@ -152,6 +152,7 @@ export default function NewCollegePage() {
               <div className="space-y-2">
                 <Label>Contact Phone</Label>
                 <Input
+                  type="tel"
                   value={contactPhone}
                   onChange={(e) => setContactPhone(e.target.value)}
                   placeholder="9876543210"

@@ -133,23 +133,6 @@ export default function CollegesPage() {
       ),
     },
     {
-      key: "contactEmail",
-      header: "Contact",
-      hideOnMobile: true,
-      render: (row) => (
-        <div>
-          <p className="text-sm">{row.contactEmail || "-"}</p>
-          <p className="text-xs text-muted-foreground">{row.contactPhone || ""}</p>
-        </div>
-      ),
-    },
-    {
-      key: "address",
-      header: "Address",
-      hideOnMobile: true,
-      render: (row) => <span className="text-sm text-muted-foreground">{row.address || "-"}</span>,
-    },
-    {
       key: "isActive",
       header: "Status",
       render: (row) => (
@@ -157,6 +140,7 @@ export default function CollegesPage() {
           {row.isActive ? "Active" : "Inactive"}
         </Badge>
       ),
+      csvValue: (row) => (row.isActive ? "Active" : "Inactive"),
     },
     {
       key: "actions",
@@ -219,7 +203,7 @@ export default function CollegesPage() {
         isLoading={isLoading}
         keyExtractor={(r) => r.id}
         searchPlaceholder="Search colleges..."
-        searchKeys={["name", "contactEmail", "address"] as (keyof CollegeRow)[]}
+        searchKeys={["name"] as (keyof CollegeRow)[]}
         filterComponent={
           <Select value={typeFilter} onValueChange={(v) => setTypeFilter(v as CollegeType | "All")}>
             <SelectTrigger className="w-44">

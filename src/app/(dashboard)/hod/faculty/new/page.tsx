@@ -178,6 +178,8 @@ export default function NewFacultyPage() {
     handleSubmit,
     setValue,
     watch,
+    trigger,
+    getValues,
     formState: { errors },
   } = useForm<FormData>({
     resolver: zodResolver(schema),
@@ -243,8 +245,9 @@ export default function NewFacultyPage() {
 
   // Every validated/required field lives on the "core" step; map each to a
   // friendly label so a failed submit can say exactly what's missing and in
-  // which module (see onInvalid). Steps can be navigated freely - validation
-  // is deferred entirely to submit time.
+  // which module (see onInvalid). Next enforces the current step before
+  // advancing (findStepProblem); submit re-checks everything, since the step
+  // indicator can still jump straight to Review.
   const FIELD_LABELS: Record<string, string> = {
     employeeId: "Employee ID", collegeEmail: "College Email",
     password: "Login Password", mobileNo: "Mobile No", designation: "Designation",
@@ -254,7 +257,71 @@ export default function NewFacultyPage() {
     legalName: "Full Name (as per SSC)",
   };
 
+  // Every constraint the final submit enforces, grouped by the step whose
+  // fields it reads. Leaving a step checks that step's own fields, so a
+  // problem is raised where it can be fixed - rather than surfacing all at
+  // once at the very end, several steps away from the input at fault.
+  //
+  // A rule spanning two steps belongs to the LATER of them: Date of Birth
+  // (Personal Details) vs Date of Joining (Identity & Employment) can only be
+  // compared once both have been passed through.
+  function findStepProblem(key: WizardStepKey): { title: string; description: string } | null {
+    if (key === "core") {
+      // The zod schema covers this step alone, so its own messages are the
+      // complete list - each already reads as a full sentence ("Employee ID
+      // is required", "Mobile No must be exactly 10 digits, ...").
+      const problems = schema.safeParse(getValues()).error?.issues.map((i) => i.message) ?? [];
+      // Not in the schema (they don't apply in link mode) - same checks
+      // onSubmit makes, just raised a step earlier.
+      if (!isLinkMode && !department) problems.push("Department is required");
+      if (!isLinkMode && !getValues("collegeEmail")?.trim()) problems.push("College Email is required");
+      if (!isLinkMode && !getValues("password")?.trim()) problems.push("Login Password is required");
+      if (!personalDetails.legalName?.trim()) problems.push("Full Name (as per SSC) is required");
+      if (problems.length > 0) {
+        return {
+          title: "Identity & Employment is incomplete",
+          description: Array.from(new Set(problems)).join(" · "),
+        };
+      }
+      return null;
+    }
+
+    if (key === "personal") {
+      const missing = getMissingRequiredPersonalFields(personalDetails, FACULTY_REQUIRED_PERSONAL_FIELDS);
+      if (missing.length > 0) {
+        return { title: "Personal Details is incomplete", description: `Required: ${missing.join(", ")}` };
+      }
+      const joiningDate = getValues("joiningDate");
+      if (personalDetails.dateOfBirth && joiningDate && personalDetails.dateOfBirth >= joiningDate) {
+        return {
+          title: "Date of Birth must be before Date of Joining",
+          description: "Check the Date of Birth on this step and the Date of Joining on Identity & Employment.",
+        };
+      }
+      return null;
+    }
+
+    // The remaining steps carry no required fields - everything on them is
+    // optional profile detail.
+    return null;
+  }
+
   function goNext() {
+    const problem = findStepProblem(step.key);
+    if (problem) {
+      // trigger() in parallel so the offending inputs are marked inline too,
+      // not just named in the toast.
+      if (step.key === "core") void trigger();
+      setErroredSteps((prev) => new Set(prev).add(step.key));
+      toast({ variant: "destructive", title: problem.title, description: problem.description });
+      return;
+    }
+    setErroredSteps((prev) => {
+      if (!prev.has(step.key)) return prev;
+      const next = new Set(prev);
+      next.delete(step.key);
+      return next;
+    });
     setStepIndex((i) => Math.min(i + 1, steps.length - 1));
   }
 
@@ -397,7 +464,8 @@ export default function NewFacultyPage() {
       />
 
       {/* Step indicator - click any step to jump to it; steps with missing
-          required fields (after a submit attempt) are outlined in red. */}
+          required fields are outlined in red. Jumping stays free (it is how
+          you go back to fix something); it is Next that enforces the step. */}
       <div className="flex flex-wrap gap-2 mb-4">
         {steps.map((s, i) => (
           <button
@@ -659,9 +727,10 @@ export default function NewFacultyPage() {
                           />
                           <TextInput
                             label="Mobile Number"
+                            type="tel"
                             value={item.number}
                             onChange={(v) => setExtraPhones((prev) => prev.map((p, idx) => (idx === i ? { ...p, number: v } : p)))}
-                            placeholder="+91 98765 43210"
+                            placeholder="9876543210"
                           />
                         </div>
                         <Button

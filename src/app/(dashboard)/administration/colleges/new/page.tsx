@@ -99,9 +99,10 @@ export default function NewAdministrationCollegePage() {
               <div className="space-y-2">
                 <Label>Contact Phone</Label>
                 <Input
+                  type="tel"
                   value={collegeForm.contactPhone}
                   onChange={(e) => set({ contactPhone: e.target.value })}
-                  placeholder="+91 98765 43210"
+                  placeholder="9876543210"
                 />
               </div>
             </div>
