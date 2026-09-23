@@ -30,6 +30,12 @@ export async function GET(request: Request) {
     // HOD's sub-departments'/managed branches' staff roll up alongside their
     // own, which reads as "another department's staff leaking into mine".
     const ownOnly = searchParams.get("scope") === "own";
+    // A specific department (e.g. hod/timetable's Assign Timetable Incharge
+    // dialog, picking Technical staff for one exact course-year's
+    // department) - see the matching `department` handling in
+    // college/faculty/route.ts for why this needs the HOD's FULL scope
+    // rather than whichever department is active in the Working-as switcher.
+    const deptFilter = searchParams.get("department");
 
     const db = getAdminDb();
     const staffColl = db.collection("colleges").doc(session.collegeId).collection("supportingStaff");
@@ -44,11 +50,16 @@ export async function GET(request: Request) {
     // the scoping src/app/api/college/faculty/route.ts applies for HOD's
     // Faculty view.
     if (session.role === "HOD") {
-      const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
+      const scope = await getHodDepartmentScope(db, session.collegeId, session.uid, { activeOnly: !deptFilter });
       const ownedNames = ownOnly
         ? scope.ownDepartmentNames
         : [...scope.ownDepartmentNames, ...scope.childDepartmentNames, ...scope.managedDepartmentNames];
-      if (ownedNames.length > 0) {
+      if (deptFilter) {
+        if (!ownedNames.includes(deptFilter)) {
+          return NextResponse.json({ error: "That department isn't yours to manage" }, { status: 403 });
+        }
+        query = query.where("department", "==", deptFilter);
+      } else if (ownedNames.length > 0) {
         query = query.where("department", "in", ownedNames.slice(0, 30));
       }
     }

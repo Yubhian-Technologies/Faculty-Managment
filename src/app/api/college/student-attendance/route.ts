@@ -124,7 +124,13 @@ export async function POST(request: Request) {
     // assignment (a department can run a same-named section under more than
     // one course - see StudentRecord.courseId's doc-comment - without this,
     // attendance could be taken against the wrong course's roster entirely).
-    const students = (await fetchSectionStudents(collegeRef, { department, sectionName, year, courseId }))
+    // A split lab period (TimetableSlot.labBatch set) only ever rosters the
+    // students carrying the matching StudentRecord.labBatch - each batch's own
+    // faculty marks only their own half of the section (see sectionRoster.ts).
+    // An ordinary period has no labBatch, so this is a no-op and the roster
+    // is the whole section, exactly as before this existed.
+    const labBatch = windowCheck.slot.labBatch ?? undefined;
+    const students = (await fetchSectionStudents(collegeRef, { department, sectionName, year, courseId, labBatch }))
       .sort((a, b) => a.rollNumber.localeCompare(b.rollNumber, undefined, { numeric: true }));
 
     if (!existingSnap.exists) {
@@ -149,6 +155,7 @@ export async function POST(request: Request) {
         facultyName: assignment.facultyName ?? "",
         date,
         periodNumber: windowCheck.slot.periodNumber,
+        ...(labBatch ? { labBatch } : {}),
         status: "DRAFT" as const,
         entries,
         totalStudents: entries.length,
