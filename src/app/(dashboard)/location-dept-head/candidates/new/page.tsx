@@ -73,7 +73,7 @@ export default function NewLocationDeptHeadCandidatePage() {
               </div>
               <div className="space-y-2">
                 <Label>Phone <span className="text-destructive">*</span></Label>
-                <Input value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} placeholder="9876543210" />
+                <Input type="tel" value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} placeholder="9876543210" />
               </div>
             </div>
 

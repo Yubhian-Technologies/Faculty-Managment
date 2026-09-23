@@ -181,7 +181,7 @@ export default function EditHodSupportingStaffPage() {
                 </div>
                 <div className="space-y-2">
                   <Label>Mobile No *</Label>
-                  <Input value={form.phone} onChange={(e) => set({ phone: e.target.value })} placeholder="+91 98765 43210" />
+                  <Input type="tel" value={form.phone} onChange={(e) => set({ phone: e.target.value })} placeholder="9876543210" />
                 </div>
               </div>
             </div>
