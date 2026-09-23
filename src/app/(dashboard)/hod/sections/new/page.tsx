@@ -97,7 +97,7 @@ export default function NewSectionPage() {
   const [letter, setLetter] = useState("");
 
   useEffect(() => {
-    fetch("/api/college/faculty?status=ACTIVE")
+    fetch("/api/college/faculty?availableOnly=true")
       .then((r) => r.json())
       .then((d: { faculty?: { id: string; name?: string; legalName?: string; designation: string; userUid?: string }[] }) => {
         setFacultyList((d.faculty ?? []).map((f) => ({ id: f.id, name: facultyDisplayName(f), designation: f.designation, userUid: f.userUid })));

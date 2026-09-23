@@ -18,6 +18,10 @@ export const AADHAR_REGEX = /^\d{12}$/;
 // APAAR Faculty ID: exactly 12 digits, no letters or separators.
 export const APAAR_REGEX = /^\d{12}$/;
 
+// Height as "<feet>.<inches>" - e.g. "5.7" (5 ft 7 in). Feet: 1-2 digits.
+// Inches: 0-11 (a real foot/inch value), written as 1 or 2 digits.
+export const HEIGHT_REGEX = /^\d{1,2}\.(?:[0-9]|1[01])$/;
+
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 
 export const loginSchema = z.object({

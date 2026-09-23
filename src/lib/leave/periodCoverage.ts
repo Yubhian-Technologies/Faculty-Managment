@@ -7,6 +7,7 @@ import { enumerateWorkingDates, isoDateKey, todayISODate } from "@/lib/leave/day
 import { loadUnavailability } from "@/lib/leave/availability";
 import { resolveSectionCurrentSemester, matchesCurrentSemester as slotMatchesCurrentSemester } from "@/lib/college/semester";
 import { resolveTimetableAcademicYear, matchesCurrentAcademicYear } from "@/lib/college/academicSession";
+import { isFacultyAvailable } from "@/types";
 import type { DayOfWeek, FacultyMember, TimetableSlot } from "@/types";
 import type { LeaveRequest, PeriodSubstitution, StaffAdjustment } from "@/types/leave";
 
@@ -233,7 +234,7 @@ export async function buildPeriodCoverage(
     // designation lives in the admin-curated FACULTY Designation Catalog,
     // EXCEPT a not-yet-migrated legacy technical record (see
     // scripts/migrate-technical-staff-to-supporting-staff.mjs).
-    .filter((f) => f.status === "ACTIVE" && !LEGACY_TECHNICAL_DESIGNATIONS.includes(f.designation))
+    .filter((f) => isFacultyAvailable(f.status) && !LEGACY_TECHNICAL_DESIGNATIONS.includes(f.designation))
     .filter((f) => !opts.candidateFilter || opts.candidateFilter(f));
 
   // Only the LIVE timetable counts as "already teaching then" - a section's

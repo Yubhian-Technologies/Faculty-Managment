@@ -15,11 +15,12 @@ import {
 } from "@/types";
 import type {
   FacultyMember, FacultyProfileFields, DegreeDetail, StaffQualification, CourseAssignment, Publication,
-  PreviousInstitution, LabEstablished, PromotionRecord,
+  PreviousInstitution, LabEstablished, PromotionRecord, RatificationRecord,
   AdminResponsibilityEntry, TrainingEntry, ProfessionalMembership, AwardEntry, Religion, Caste,
 } from "@/types";
 import { normalizeAcademicProfile } from "@/lib/faculty/academicProfileCompat";
 import { migrateFacultyDoc } from "@/lib/faculty/fieldRenames";
+import { ratificationRecordsFromDoc } from "@/lib/faculty/ratificationHistory";
 import { allPreviousExperienceEntries, experienceBreakdown } from "@/lib/faculty/experienceCalc";
 import { normalizeResourcePersonsDetails } from "@/components/faculty/TrainingEntryFields";
 import { awardYear } from "@/lib/faculty/awardYear";
@@ -106,6 +107,10 @@ function experienceCells(p: PreviousInstitution): string[] {
 
 function promotionCells(p: PromotionRecord): string[] {
   return [p.designation ? designationLabel(p.designation) : "", p.fromDate ?? "", p.toDate ?? ""];
+}
+
+function ratificationCells(r: RatificationRecord): string[] {
+  return [r.designation ? designationLabel(r.designation) : "", r.proceedingsNumber ?? "", r.date ?? ""];
 }
 
 function courseCells(c: CourseAssignment): string[] {
@@ -280,8 +285,7 @@ function buildRow(rawFaculty: FacultyMember, teachingSummary: string): Record<st
     differentlyAbledDetails: s(faculty.differentlyAbledDetails),
     motherTongue: s(faculty.motherTongue),
     languagesKnown: (faculty.languagesKnown ?? []).join(", "),
-    heightFeet: s(faculty.heightFeet),
-    heightInches: s(faculty.heightInches),
+    height: s(faculty.height),
     weightKg: s(faculty.weightKg),
     maritalStatus: s(faculty.maritalStatus),
     spouseName: s(faculty.spouseName),
@@ -301,8 +305,13 @@ function buildRow(rawFaculty: FacultyMember, teachingSummary: string): Record<st
     emergencyContactRelation: s(faculty.emergencyContactRelation),
     emergencyContactMobileNo: s(faculty.emergencyContactMobileNo),
     ratificationStatus: s(faculty.ratificationStatus),
-    ratificationProceedingsNumber: s(faculty.ratificationProceedingsNumber),
-    ratificationDate: toDateInputValue(faculty.ratificationDate),
+    // Auto-migrates a record still on the old flat ratificationProceedingsNumber/
+    // ratificationDate pair into a single entry (Designation blank) - see
+    // ratificationRecordsFromDoc's own doc-comment.
+    ratificationsGroup: combineGroup(
+      "ratificationsGroup",
+      ratificationRecordsFromDoc(faculty as unknown as Record<string, unknown>).map(ratificationCells)
+    ),
 
     // ─── Academic Qualification ─────────────────────────────────────────────
     academicProfileHighestQualification: s(p.highestQualification),

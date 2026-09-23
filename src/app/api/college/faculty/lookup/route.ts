@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
+import { AVAILABLE_FACULTY_STATUSES } from "@/types";
 
 // Minimal, broadly-readable faculty-by-department lookup - purely for
 // populating a picker (e.g. the FDP/Workshop "co-conducting faculty" picker
@@ -34,9 +35,13 @@ export async function GET(request: Request) {
     }
     const departmentName = (deptSnap.data() as { name?: string }).name ?? "";
 
+    // Co-conducting faculty must be available for work, same as any other
+    // "pick a faculty member to do something" flow - a Resigned/Retired
+    // person shouldn't be nameable on a brand new training entry.
     const facultySnap = await collegeRef
       .collection("facultyMembers")
       .where("department", "==", departmentName)
+      .where("status", "in", AVAILABLE_FACULTY_STATUSES)
       .get();
 
     const faculty = facultySnap.docs

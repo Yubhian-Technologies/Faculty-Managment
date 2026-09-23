@@ -62,6 +62,9 @@ interface Props {
   // self-submission. Everyone viewing someone ELSE's profile (HOD/Principal/
   // Super Admin/Management drill-downs) leaves this unset.
   isOwnProfile?: boolean;
+  // True only for a genuine FacultyMember record - see PersonalDetailsView's
+  // own doc-comment on this same prop.
+  ratificationHistory?: boolean;
 }
 
 // Renders exactly one module's content for the per-module View pages - the
@@ -69,11 +72,11 @@ interface Props {
 // pieces as the old single-scroll views (ProfileFieldsView's per-module
 // exports, PersonalDetailsView, TeachingLoadTable) so nothing here
 // duplicates field-rendering logic.
-export function FacultyProfileModuleContent({ moduleKey, faculty, teachingAssignments = [], includeTeachingAssignment = true, collegeType, publications, hideLegalName, showNameAsPerPan, isOwnProfile }: Props) {
+export function FacultyProfileModuleContent({ moduleKey, faculty, teachingAssignments = [], includeTeachingAssignment = true, collegeType, publications, hideLegalName, showNameAsPerPan, isOwnProfile, ratificationHistory }: Props) {
   return (
     <Card>
       <CardContent className="pt-6">
-        {moduleKey === "personal" && <PersonalDetailsView value={faculty} hideLegalName={hideLegalName} showNameAsPerPan={showNameAsPerPan} hiddenFields={["esiNumber"]} />}
+        {moduleKey === "personal" && <PersonalDetailsView value={faculty} hideLegalName={hideLegalName} showNameAsPerPan={showNameAsPerPan} hiddenFields={["esiNumber"]} ratificationHistory={ratificationHistory} />}
         {moduleKey === "qualification" && <QualificationModule profile={faculty.academicProfile} collegeType={collegeType} />}
         {moduleKey === "experience" && (
           <ExperienceModule profile={faculty.academicProfile} includeTeachingAssignment={includeTeachingAssignment} joiningDate={faculty.joiningDate} />

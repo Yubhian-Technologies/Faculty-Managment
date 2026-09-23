@@ -28,6 +28,7 @@ const STATUS_VARIANTS: Record<FacultyStatus, "default" | "secondary" | "outline"
   ON_LEAVE: "outline",
   RESIGNED: "secondary",
   RETIRED: "secondary",
+  RETAINERSHIP: "default",
 };
 
 function designationLabel(designation: SupportingStaffDesignation): string {
@@ -163,7 +164,7 @@ export default function CollegeOfficeNonTechnicalStaffPage() {
         isLoading={isLoading}
         keyExtractor={(r) => r.id}
         searchPlaceholder="Search by name, email, employee ID..."
-        searchKeys={["name", "email", "employeeId"] as (keyof StaffRow)[]}
+        searchKeys={["legalName", "nameAsPerPan", "email", "employeeId"] as (keyof StaffRow)[]}
         emptyTitle="No non-technical staff records yet"
         emptyDescription="Add Non-Technical staff to build your college's records"
         emptyAction={<Button onClick={() => router.push("/college-office/non-technical-staff/new")}><UserPlus className="h-4 w-4 mr-2" />Add Staff</Button>}

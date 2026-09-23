@@ -11,6 +11,7 @@
 // esiNumber is deliberately not here: it is hidden for Faculty on both surfaces.
 
 import { toDateInputValue } from "@/lib/utils";
+import { ratificationRecordsFromDoc, normalizeRatificationRecords } from "@/lib/faculty/ratificationHistory";
 import type { FacultyEditRecord } from "@/components/faculty/FacultyProfileModuleEditor";
 
 type Doc = Record<string, unknown>;
@@ -18,7 +19,16 @@ type Doc = Record<string, unknown>;
 const str = (v: unknown): string => (typeof v === "string" ? v : "");
 
 // Form state for the Personal Details module, from a (lifted) facultyMembers doc.
-export function personalRecordFromDoc(m: Doc): Partial<FacultyEditRecord> {
+//
+// `ratificationHistory` must be true ONLY for a genuine facultyMembers doc
+// (HOD's Faculty edit pages, and the Panel self-edit page via /api/college/
+// faculty/me) - this same function is also called by every other role's "My
+// Profile" edit page (MyProfileModuleEditPage), which for them reads/writes a
+// plain FMSUser doc instead. Left false (the default) there so those saves
+// keep using the single Proceedings Number/Date pair untouched, instead of
+// wrongly emitting the Faculty-only multi-entry `ratifications` array.
+export function personalRecordFromDoc(m: Doc, opts: { ratificationHistory?: boolean } = {}): Partial<FacultyEditRecord> {
+  const { ratificationHistory = false } = opts;
   return {
     gender: str(m.gender),
     dateOfBirth: toDateInputValue(m.dateOfBirth as never) || undefined,
@@ -44,8 +54,12 @@ export function personalRecordFromDoc(m: Doc): Partial<FacultyEditRecord> {
     emergencyContactRelation: str(m.emergencyContactRelation),
     emergencyContactMobileNo: str(m.emergencyContactMobileNo),
     ratificationStatus: str(m.ratificationStatus),
-    ratificationProceedingsNumber: str(m.ratificationProceedingsNumber),
-    ratificationDate: toDateInputValue(m.ratificationDate as never) || undefined,
+    ...(ratificationHistory
+      ? { ratifications: ratificationRecordsFromDoc(m) }
+      : {
+          ratificationProceedingsNumber: str(m.ratificationProceedingsNumber),
+          ratificationDate: toDateInputValue(m.ratificationDate as never) || undefined,
+        }),
     maritalStatus: str(m.maritalStatus),
     spouseName: str(m.spouseName),
     numberOfChildren: m.numberOfChildren as number | undefined,
@@ -55,16 +69,17 @@ export function personalRecordFromDoc(m: Doc): Partial<FacultyEditRecord> {
     bloodGroup: str(m.bloodGroup),
     motherTongue: str(m.motherTongue),
     languagesKnown: (m.languagesKnown as string[]) ?? [],
-    heightFeet: m.heightFeet as number | undefined,
-    heightInches: m.heightInches as number | undefined,
+    height: str(m.height),
     weightKg: m.weightKg as number | undefined,
     pfNumber: str(m.pfNumber),
     uanNumber: str(m.uanNumber),
   };
 }
 
-// PATCH body for the Personal Details module, from the form state.
-export function personalPatchBody(record: FacultyEditRecord): Record<string, unknown> {
+// PATCH body for the Personal Details module, from the form state. See
+// personalRecordFromDoc's own doc-comment on `ratificationHistory`.
+export function personalPatchBody(record: FacultyEditRecord, opts: { ratificationHistory?: boolean } = {}): Record<string, unknown> {
+  const { ratificationHistory = false } = opts;
   return {
     gender: record.gender, dateOfBirth: record.dateOfBirth, legalName: record.legalName,
     nameAsPerAadhar: record.nameAsPerAadhar, nameAsPerPan: record.nameAsPerPan,
@@ -76,13 +91,15 @@ export function personalPatchBody(record: FacultyEditRecord): Record<string, unk
     bankName: record.bankName, bankBranch: record.bankBranch, bankOtherDetails: record.bankOtherDetails,
     emergencyContactName: record.emergencyContactName, emergencyContactRelation: record.emergencyContactRelation,
     emergencyContactMobileNo: record.emergencyContactMobileNo, ratificationStatus: record.ratificationStatus,
-    ratificationProceedingsNumber: record.ratificationProceedingsNumber,
-    ratificationDate: record.ratificationDate, maritalStatus: record.maritalStatus, spouseName: record.spouseName,
+    ...(ratificationHistory
+      ? { ratifications: normalizeRatificationRecords(record.ratifications) }
+      : { ratificationProceedingsNumber: record.ratificationProceedingsNumber, ratificationDate: record.ratificationDate }),
+    maritalStatus: record.maritalStatus, spouseName: record.spouseName,
     numberOfChildren: record.numberOfChildren,
     temporaryAddress: record.temporaryAddress, permanentAddressSameAsTemporary: record.permanentAddressSameAsTemporary,
     permanentAddress: record.permanentAddress, bloodGroup: record.bloodGroup,
     motherTongue: record.motherTongue, languagesKnown: record.languagesKnown,
-    heightFeet: record.heightFeet, heightInches: record.heightInches, weightKg: record.weightKg,
+    height: record.height, weightKg: record.weightKg,
     pfNumber: record.pfNumber, uanNumber: record.uanNumber,
   };
 }

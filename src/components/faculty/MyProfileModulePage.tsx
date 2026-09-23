@@ -18,7 +18,7 @@ type MyFaculty = Partial<FacultyMember> & { id: string; isActive?: boolean };
 // same way MyProfileDetails used to. Principal/VP's own profile sources from
 // the authStore user directly instead (no FacultyMember record - see
 // principal/profile/page.tsx), so it doesn't use this.
-export function MyProfileModulePage({ basePath, hideLegalName = false }: { basePath: string; hideLegalName?: boolean }) {
+export function MyProfileModulePage({ basePath, hideLegalName = false, ratificationHistory = false }: { basePath: string; hideLegalName?: boolean; ratificationHistory?: boolean }) {
   const params = useParams<{ module: string }>();
   const moduleKey = params.module as ProfileModuleKey;
   const moduleDef = PROFILE_MODULES[moduleKey];
@@ -65,7 +65,7 @@ export function MyProfileModulePage({ basePath, hideLegalName = false }: { baseP
       {isLoading ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
       ) : faculty ? (
-        <FacultyProfileModuleContent moduleKey={moduleKey} faculty={faculty} teachingAssignments={teachingAssignments} collegeType={collegeType} isOwnProfile hideLegalName={hideLegalName} showNameAsPerPan />
+        <FacultyProfileModuleContent moduleKey={moduleKey} faculty={faculty} teachingAssignments={teachingAssignments} collegeType={collegeType} isOwnProfile hideLegalName={hideLegalName} showNameAsPerPan ratificationHistory={ratificationHistory} />
       ) : (
         <p className="text-sm text-muted-foreground">{noRecordMessage ?? "No profile record found."}</p>
       )}

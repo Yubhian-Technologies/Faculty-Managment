@@ -64,6 +64,7 @@ const STATUS_VARIANTS: Record<FacultyStatus, "default" | "secondary" | "outline"
   ON_LEAVE: "outline",
   RESIGNED: "secondary",
   RETIRED: "secondary",
+  RETAINERSHIP: "default",
 };
 
 export default function HODFacultyPage() {
@@ -277,6 +278,7 @@ export default function HODFacultyPage() {
     { key: "", label: "All" },
     { key: "INTERVIEW_DONE", label: "Interview Done" },
     { key: "ACTIVE", label: "Active" },
+    { key: "RETAINERSHIP", label: "Retainership" },
     { key: "ON_LEAVE", label: "On Leave" },
     { key: "RESIGNED", label: "Resigned" },
     { key: "RETIRED", label: "Retired" },
@@ -587,7 +589,15 @@ export default function HODFacultyPage() {
         searchKeys={["legalName", "nameAsPerPan", "email", "employeeId", "specialization"] as (keyof FacultyRow)[]}
         emptyTitle="No teaching faculty records yet"
         emptyDescription="Add faculty members to build your department's staff register"
-        emptyAction={<Button onClick={() => router.push("/hod/faculty/new")}><UserPlus className="h-4 w-4 mr-2" />Add Faculty</Button>}
+        // Only shown for the "All"/"Active" filters - the button reads as "Add
+        // Faculty" generically, so offering it under a status like Resigned or
+        // On Leave would wrongly suggest it creates a faculty member already in
+        // that status.
+        emptyAction={
+          (statusFilter === "" || statusFilter === "ACTIVE")
+            ? <Button onClick={() => router.push("/hod/faculty/new")}><UserPlus className="h-4 w-4 mr-2" />Add Faculty</Button>
+            : undefined
+        }
       />
 
       {/* ── Delete Confirm ── */}

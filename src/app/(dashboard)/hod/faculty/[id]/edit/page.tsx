@@ -19,8 +19,8 @@ import { toast } from "@/hooks/useToast";
 import { migrateFacultyDoc } from "@/lib/faculty/fieldRenames";
 import { toDateInputValue } from "@/lib/utils";
 import { designationLabel } from "@/lib/designations/config";
-import { EMPLOYEE_CATEGORY_LABELS } from "@/types";
-import type { DesignationCatalogItem, Designation, EmployeeCategory } from "@/types";
+import { EMPLOYEE_CATEGORY_LABELS, FACULTY_STATUS_LABELS, SELECTABLE_FACULTY_STATUS_VALUES } from "@/types";
+import type { DesignationCatalogItem, Designation, EmployeeCategory, FacultyStatus } from "@/types";
 
 // Sentinel for the "Others" row - matches hod/faculty/new/page.tsx's own
 // highest-qualification picker.
@@ -31,6 +31,7 @@ interface IdentityForm {
   apaarFacultyId: string;
   designation: Designation | "";
   employeeCategory: EmployeeCategory | "";
+  status: FacultyStatus;
   highestQualification: string;
   specialization: string;
   joiningDate: string;
@@ -40,7 +41,7 @@ interface IdentityForm {
 }
 
 const EMPTY_FORM: IdentityForm = {
-  legalName: "", apaarFacultyId: "", designation: "", employeeCategory: "",
+  legalName: "", apaarFacultyId: "", designation: "", employeeCategory: "", status: "ACTIVE",
   highestQualification: "", specialization: "", joiningDate: "", aicteFacultyId: "",
   email: "", mobileNo: "",
 };
@@ -92,6 +93,7 @@ export default function EditHodFacultyIdentityPage() {
           apaarFacultyId: (m.apaarFacultyId as string) ?? "",
           designation: (m.designation as Designation) ?? "",
           employeeCategory: (m.employeeCategory as EmployeeCategory) ?? "",
+          status: (m.status as FacultyStatus) ?? "ACTIVE",
           highestQualification,
           specialization: (m.specialization as string) ?? "",
           joiningDate: toDateInputValue(m.joiningDate as never),
@@ -170,6 +172,7 @@ export default function EditHodFacultyIdentityPage() {
           apaarFacultyId: form.apaarFacultyId.trim(),
           designation: form.designation,
           employeeCategory: form.employeeCategory,
+          status: form.status,
           highestQualification: form.highestQualification.trim(),
           specialization: form.specialization.trim(),
           joiningDate: form.joiningDate,
@@ -292,6 +295,17 @@ export default function EditHodFacultyIdentityPage() {
                   <SelectContent>
                     {Object.entries(EMPLOYEE_CATEGORY_LABELS).map(([k, label]) => (
                       <SelectItem key={k} value={k}>{label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Status *</Label>
+                <Select value={form.status} onValueChange={(v) => set({ status: v as FacultyStatus })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {SELECTABLE_FACULTY_STATUS_VALUES.map((s) => (
+                      <SelectItem key={s} value={s}>{FACULTY_STATUS_LABELS[s]}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>

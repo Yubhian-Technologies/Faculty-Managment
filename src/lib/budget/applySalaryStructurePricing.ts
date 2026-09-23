@@ -1,4 +1,5 @@
 import type { Firestore } from "firebase-admin/firestore";
+import { AVAILABLE_FACULTY_STATUSES } from "@/types";
 import type { BudgetCategoryGroup } from "@/types";
 
 interface StructureInfo {
@@ -63,7 +64,7 @@ export async function applySalaryStructurePricing(
         .where("department", "==", department)
         .where("designation", "==", info.designation)
         .where("employeeCategory", "==", toEmployeeCategory(info.employmentType))
-        .where("status", "==", "ACTIVE")
+        .where("status", "in", AVAILABLE_FACULTY_STATUSES)
         .get();
       headcountByStructureId.set(id, snap.size);
     })

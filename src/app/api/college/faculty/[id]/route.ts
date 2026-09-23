@@ -22,7 +22,7 @@ import { normalizeHighestQualification } from "@/lib/faculty/highestQualificatio
 import { FieldValue } from "firebase-admin/firestore";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import type { Designation, EmployeeCategory, FacultyStatus, TrainingEntry } from "@/types";
-import { EMPLOYEE_CATEGORY_VALUES, EMPLOYEE_CATEGORY_ERROR_MESSAGE } from "@/types";
+import { EMPLOYEE_CATEGORY_VALUES, EMPLOYEE_CATEGORY_ERROR_MESSAGE, SELECTABLE_FACULTY_STATUS_VALUES, FACULTY_STATUS_ERROR_MESSAGE } from "@/types";
 
 export async function GET(
   _request: Request,
@@ -154,6 +154,12 @@ export async function PATCH(
     if (body.employeeCategory !== undefined && !EMPLOYEE_CATEGORY_VALUES.includes(body.employeeCategory)) {
       return NextResponse.json({ error: EMPLOYEE_CATEGORY_ERROR_MESSAGE }, { status: 400 });
     }
+    // Only the SELECTABLE_FACULTY_STATUS_VALUES keys are accepted here -
+    // INTERVIEW_DONE is system-managed only (set by the hiring pipeline, see
+    // provisionFacultyFromOffer/applyOfferDecision), never hand-set via Edit.
+    if (body.status !== undefined && !(SELECTABLE_FACULTY_STATUS_VALUES as string[]).includes(body.status)) {
+      return NextResponse.json({ error: FACULTY_STATUS_ERROR_MESSAGE }, { status: 400 });
+    }
 
     const updates: Record<string, unknown> = { updatedAt: new Date() };
 
@@ -183,8 +189,8 @@ export async function PATCH(
     // builder also used by the create route (POST /api/college/faculty), so
     // an edit persists exactly the fields creation does instead of a second,
     // easily-incomplete hand-rolled whitelist (a prior version of this route
-    // omitted pfNumber/motherTongue/languagesKnown/heightFeet/heightInches/
-    // weightKg entirely, so those silently failed to save on edit).
+    // omitted pfNumber/motherTongue/languagesKnown/height/weightKg entirely,
+    // so those silently failed to save on edit).
     Object.assign(updates, buildPersonalDetailsUpdate(body));
 
     // Non-personal string fields

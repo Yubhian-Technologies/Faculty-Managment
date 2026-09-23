@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { parseAcademicYearStart } from "@/lib/college/academicSession";
+import { isFacultyAvailable } from "@/types";
 import type { FacultyStatus } from "@/types";
 
 export async function GET(request: Request) {
@@ -106,7 +107,7 @@ export async function POST(request: Request) {
         const facultySnap = await collegeRef.collection("facultyMembers").doc(facultyId).get();
         if (!facultySnap.exists) continue;
         const facultyData = facultySnap.data() as { status?: FacultyStatus };
-        if (facultyData.status !== "ACTIVE") continue;
+        if (!isFacultyAvailable(facultyData.status)) continue;
         facultyUpdated++;
       }
 
