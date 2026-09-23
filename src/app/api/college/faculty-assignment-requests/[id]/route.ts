@@ -7,6 +7,7 @@ import { notify } from "@/lib/notify";
 import { getHodDepartmentScope, canHodEditDepartment, ownDepartmentNames } from "@/lib/departments/scope";
 import { isTimetableInchargeForDepartment } from "@/lib/departments/timetableIncharge";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
+import { isFacultyAvailable } from "@/types";
 import type { FacultyAssignmentRequest } from "@/types";
 
 // Fulfills (allocate) or declines an incoming faculty-assignment request -
@@ -93,8 +94,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
     const facultySnap = await collegeRef.collection("facultyMembers").doc(body.facultyId).get();
     if (!facultySnap.exists) return NextResponse.json({ error: "Faculty not found" }, { status: 404 });
-    const faculty = facultySnap.data() as { legalName?: string; department?: string };
+    const faculty = facultySnap.data() as { legalName?: string; department?: string; status?: string };
     const allocatedName = facultyDisplayName(faculty);
+    // Defense-in-depth: the lending department's own picker already filters
+    // to available faculty, but facultyId is still trusted input here.
+    if (!isFacultyAvailable(faculty.status)) {
+      return NextResponse.json({ error: "That faculty member is not currently available for teaching assignments" }, { status: 409 });
+    }
     // An Incharge (no HOD scope tree) may only offer up faculty from the
     // exact department the request targeted - an HOD may also reach into a
     // sub-department's own faculty, same as before.

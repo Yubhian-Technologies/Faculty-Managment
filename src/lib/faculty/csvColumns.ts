@@ -139,8 +139,7 @@ export const EXPORT_FIELDS: ExportField[] = [
   scalar("personal", "differentlyAbledDetails", "Differently Abled Details", true),
   scalar("personal", "motherTongue", "Mother Tongue", true),
   scalar("personal", "languagesKnown", "Languages Known", true),
-  scalar("personal", "heightFeet", "Height (Feet)", true),
-  scalar("personal", "heightInches", "Height (Inches)", true),
+  scalar("personal", "height", "Height (ft.in)", true),
   scalar("personal", "weightKg", "Weight (Kg)", true),
   scalar("personal", "maritalStatus", "Marital Status", true),
   scalar("personal", "bloodGroup", "Blood Group", true),
@@ -160,8 +159,10 @@ export const EXPORT_FIELDS: ExportField[] = [
   scalar("personal", "emergencyContactRelation", "Emergency Contact Relation", true),
   scalar("personal", "emergencyContactMobileNo", "Emergency Contact Mobile No", true),
   scalar("personal", "ratificationStatus", "Ratification Status", true),
-  scalar("personal", "ratificationProceedingsNumber", "Ratification Proceedings Number", true),
-  scalar("personal", "ratificationDate", "Ratification Date", true),
+  // A faculty member may be ratified more than once across their career, once
+  // per designation held at the time (see RatificationRecord in types/core.ts) -
+  // exported the same way Promotion History below is, one line per entry.
+  group("personal", "ratificationsGroup", "Ratification Records", ["Designation", "Proceedings Number", "Date"]),
 
   // ─── Academic Qualification ───────────────────────────────────────────────
   // Ordered to match the Add Faculty wizard's own Qualification step

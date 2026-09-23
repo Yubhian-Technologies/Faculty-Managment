@@ -25,8 +25,8 @@ import { experienceBreakdown, totalYearsOfExperience, formatDuration, allPreviou
 import { PHONE_REGEX, EMAIL_REGEX, APAAR_REGEX } from "@/lib/validations";
 import { AvatarUploadField } from "@/components/shared/AvatarUploadField";
 import { PROFILE_MODULES } from "@/lib/faculty/profileModules";
-import { EMPLOYEE_CATEGORY_LABELS } from "@/types";
-import type { DesignationCatalogItem, EmployeeCategory } from "@/types";
+import { EMPLOYEE_CATEGORY_LABELS, FACULTY_STATUS_LABELS, SELECTABLE_FACULTY_STATUS_VALUES } from "@/types";
+import type { DesignationCatalogItem, EmployeeCategory, FacultyStatus } from "@/types";
 import { useCollegeType } from "@/hooks/useCollegeType";
 import { designationLabel } from "@/lib/designations/config";
 import { useAuthStore } from "@/store/authStore";
@@ -54,6 +54,7 @@ const schema = z.object({
   mobileNo: z.string().min(1, "Mobile No is required").regex(PHONE_REGEX, "Mobile No must be exactly 10 digits, starting with 6, 7, 8 or 9"),
   designation: z.string().min(1, "Designation is required"),
   employeeCategory: z.string().min(1, "Employee Category is required"),
+  status: z.string().min(1, "Status is required"),
   highestQualification: z.string().min(1, "Highest Qualification is required"),
   specialization: z.string().optional(),
   totalYearsOfExperience: z.number().min(0, "Cannot be negative").optional(),
@@ -184,13 +185,14 @@ export default function NewFacultyPage() {
   } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: {
-      totalYearsOfExperience: 0, designation: "", password: "",
+      totalYearsOfExperience: 0, designation: "", password: "", status: "ACTIVE",
     },
   });
   const [erroredSteps, setErroredSteps] = useState<Set<WizardStepKey>>(new Set());
 
   const designation = watch("designation");
   const employeeCategory = watch("employeeCategory");
+  const status = watch("status");
   const highestQualification = watch("highestQualification");
   // "Others" is a mode, not a stored value - it reveals a free-text box whose
   // contents become `highestQualification`. Needs its own state because once the user
@@ -251,7 +253,7 @@ export default function NewFacultyPage() {
   const FIELD_LABELS: Record<string, string> = {
     employeeId: "Employee ID", collegeEmail: "College Email",
     password: "Login Password", mobileNo: "Mobile No", designation: "Designation",
-    employeeCategory: "Employee Category",
+    employeeCategory: "Employee Category", status: "Status",
     highestQualification: "Highest Qualification", totalYearsOfExperience: "Total Years of Experience",
     joiningDate: "Date of Joining",
     legalName: "Full Name (as per SSC)",
@@ -618,6 +620,22 @@ export default function NewFacultyPage() {
                     {errors.employeeCategory && <p className="text-sm text-destructive">{errors.employeeCategory.message}</p>}
                   </div>
                   <div className="space-y-2">
+                    <Label>Status *</Label>
+                    <Select
+                      value={status ?? "ACTIVE"}
+                      onValueChange={(v) => setValue("status", v as FacultyStatus)}
+                    >
+                      <SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger>
+                      <SelectContent>
+                        {SELECTABLE_FACULTY_STATUS_VALUES.map((s) => (
+                          <SelectItem key={s} value={s}>{FACULTY_STATUS_LABELS[s]}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {errors.status && <p className="text-sm text-destructive">{errors.status.message}</p>}
+                    <p className="text-xs text-muted-foreground">Defaults to Active for a faculty member who has already joined.</p>
+                  </div>
+                  <div className="space-y-2">
                     <Label>Highest Qualification *</Label>
                     <Select
                       value={qualIsOther ? OTHER_QUALIFICATION : (HIGHEST_QUALIFICATION_OPTIONS as readonly string[]).includes(highestQualification) ? highestQualification : ""}
@@ -756,6 +774,7 @@ export default function NewFacultyPage() {
                 requiredFields={FACULTY_REQUIRED_PERSONAL_FIELDS}
                 hiddenFields={["legalName", "esiNumber"]}
                 showNameAsPerPan
+                ratificationHistory
               />
             )}
             {step.key === "qualification" && <QualificationFields value={academicProfile} onChange={setAcademicProfile} collegeType={collegeType} />}

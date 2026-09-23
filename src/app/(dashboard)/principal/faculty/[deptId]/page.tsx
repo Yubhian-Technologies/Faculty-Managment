@@ -24,12 +24,14 @@ const STATUS_VARIANTS: Record<FacultyStatus, "default" | "secondary" | "outline"
   ON_LEAVE: "outline",
   RESIGNED: "secondary",
   RETIRED: "secondary",
+  RETAINERSHIP: "default",
 };
 
 const STATUS_TABS = [
   { key: "", label: "All" },
   { key: "INTERVIEW_DONE", label: "Interview Done" },
   { key: "ACTIVE", label: "Active" },
+  { key: "RETAINERSHIP", label: "Retainership" },
   { key: "ON_LEAVE", label: "On Leave" },
   { key: "RESIGNED", label: "Resigned" },
   { key: "RETIRED", label: "Retired" },

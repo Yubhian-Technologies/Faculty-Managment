@@ -94,7 +94,7 @@ export default function TeachingAssignmentsPage() {
   function load() {
     setIsLoading(true);
     Promise.all([
-      fetch("/api/college/faculty?status=ACTIVE").then((r) => r.json() as Promise<{ faculty: FacultyRow[] }>).then((d) => setFaculty((d.faculty ?? []).map((f) => ({ ...f, name: facultyDisplayName(f) })))),
+      fetch("/api/college/faculty?availableOnly=true").then((r) => r.json() as Promise<{ faculty: FacultyRow[] }>).then((d) => setFaculty((d.faculty ?? []).map((f) => ({ ...f, name: facultyDisplayName(f) })))),
       fetch("/api/college/teaching-assignments?dept=true").then((r) => r.json() as Promise<{ assignments: AssignmentRow[] }>).then((d) => setAssignments(d.assignments ?? [])),
       fetch("/api/college/departments").then((r) => r.json() as Promise<{ departments: Department[] }>).then((d) => setDepartments(d.departments ?? [])),
       fetch("/api/college/faculty-assignment-requests").then((r) => r.json() as Promise<{ requests: FacultyAssignmentRequest[] }>).then((d) => setAssignmentRequests(d.requests ?? [])),

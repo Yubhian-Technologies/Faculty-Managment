@@ -971,12 +971,16 @@ export const EMPLOYMENT_TYPE_LABELS: Record<string, string> = {
 // is marked ACCEPTED (see offer-letters/[id]/route.ts PATCH). Faculty in this
 // status haven't joined yet, so their joiningDate is a proposed/expected date —
 // UI should read "Expected to join on <date>", not "Joined".
+// RETAINERSHIP — functionally equivalent to ACTIVE for availability/teaching
+// purposes (see isFacultyAvailable below); kept as its own status because it's
+// a distinct engagement type, but salary/HR rules for it aren't modeled yet.
 export type FacultyStatus =
   | "INTERVIEW_DONE"
   | "ACTIVE"
   | "ON_LEAVE"
   | "RESIGNED"
-  | "RETIRED";
+  | "RETIRED"
+  | "RETAINERSHIP";
 
 export const FACULTY_STATUS_LABELS: Record<FacultyStatus, string> = {
   INTERVIEW_DONE: "Interview Done",
@@ -984,7 +988,30 @@ export const FACULTY_STATUS_LABELS: Record<FacultyStatus, string> = {
   ON_LEAVE: "On Leave",
   RESIGNED: "Resigned",
   RETIRED: "Retired",
+  RETAINERSHIP: "Retainership",
 };
+
+// Statuses that count as "currently available to work" - the only ones that
+// should ever appear in a faculty picker/assignment/headcount (Teaching
+// Assignments, Sections' Faculty Incharge, Timetable, budget headcounts,
+// etc.). Everything else (ON_LEAVE/RESIGNED/RETIRED/INTERVIEW_DONE) stays
+// visible in the Faculty Register for historical/reference purposes but must
+// never be selectable as a working faculty member.
+export const AVAILABLE_FACULTY_STATUSES: FacultyStatus[] = ["ACTIVE", "RETAINERSHIP"];
+export function isFacultyAvailable(status: FacultyStatus | string | undefined): boolean {
+  return !!status && (AVAILABLE_FACULTY_STATUSES as string[]).includes(status);
+}
+
+// The statuses a human can pick from the Add/Edit Faculty status dropdown -
+// every status except INTERVIEW_DONE, which is system-managed only (set by
+// the hiring pipeline, see provisionFacultyFromOffer/applyOfferDecision -
+// never chosen directly). Single source of truth for both the form UI and
+// server-side validation (faculty POST/PATCH), so the accepted list can't
+// drift between routes - mirrors EMPLOYEE_CATEGORY_VALUES below.
+export const SELECTABLE_FACULTY_STATUS_VALUES = (Object.keys(FACULTY_STATUS_LABELS) as FacultyStatus[]).filter(
+  (s) => s !== "INTERVIEW_DONE"
+);
+export const FACULTY_STATUS_ERROR_MESSAGE = `Status must be one of ${SELECTABLE_FACULTY_STATUS_VALUES.map((s) => FACULTY_STATUS_LABELS[s]).join(", ")}`;
 
 export interface FacultyMember {
   id: string;
@@ -1059,8 +1086,16 @@ export interface FacultyMember {
   emergencyContactMobileNo?: string;
   collegeEmail: string; // required — this is the faculty member's login username
   ratificationStatus?: "Ratified" | "Not Ratified";
+  // Historical ratification record(s) - see RatificationRecord's own doc-comment
+  // below. A doc saved before this existed may still only carry the legacy flat
+  // fields right below with no `ratifications` array; ratificationRecordsFromDoc()
+  // (lib/faculty/ratificationHistory.ts) reads those as a single entry (Designation
+  // left blank) until the record is re-saved, which migrates it to this shape.
+  ratifications?: RatificationRecord[];
+  /** @deprecated superseded by `ratifications` above - still read for legacy docs, never written by current code. */
   ratificationProceedingsNumber?: string;
-  ratificationDate?: Timestamp; // Ratification Proceedings Date
+  /** @deprecated superseded by `ratifications` above - still read for legacy docs, never written by current code. */
+  ratificationDate?: Timestamp;
   maritalStatus?: "Single" | "Married";
   spouseName?: string;
   numberOfChildren?: number;
@@ -1070,8 +1105,12 @@ export interface FacultyMember {
   bloodGroup?: string;
   motherTongue?: string;
   languagesKnown?: string[];
-  heightFeet?: number;
-  heightInches?: number;
+  // Height as "<feet>.<inches>" - e.g. "5.7" = 5 ft 7 in, "5.11" = 5 ft 11 in
+  // (inches 0-11). A string, not a number, so two-digit inches (.10/.11)
+  // aren't silently collapsed by float parsing (5.10 === 5.1). See
+  // migrateHeight() in lib/faculty/fieldRenames.ts for the legacy
+  // heightFeet/heightInches -> height migration.
+  height?: string;
   weightKg?: number;
   pfNumber?: string; // Provident Fund number
   uanNumber?: string; // Universal Account Number (EPFO) - shown right after PF Number
@@ -1218,6 +1257,24 @@ export interface PromotionRecord {
   fromDate?: string;
   toDate?: string;
   promotionOrderUrl?: string; // promotion order document (legacy key: orderUrl - see fieldRenames.ts)
+}
+
+// Personal Details — Ratification History. A faculty member's ratification (by
+// the state/university) may happen more than once across their career, once
+// per designation they held at the time (e.g. ratified as Assistant Professor,
+// then again years later as Associate Professor). Each entry's `designation`
+// is a plain historical fact captured at the time of THAT ratification - it
+// must NEVER be compared with, restricted by, or kept in sync with the faculty
+// member's current/ongoing `designation` field above. A later promotion or
+// demotion must never alter any existing ratification entry.
+//
+// Stored as a plain "YYYY-MM-DD" date string (like PromotionRecord above),
+// not a Firestore Timestamp, so array entries need no per-element Timestamp
+// conversion on read - see lib/faculty/ratificationHistory.ts.
+export interface RatificationRecord {
+  designation: string;
+  proceedingsNumber?: string;
+  date?: string; // "YYYY-MM-DD"
 }
 
 export interface Publication {

@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { STUDENT_FACULTY_RATIO, CADRE_PARTS, CADRE_TOTAL_PARTS, requiredFacultyCount } from "@/lib/college/facultyRatio";
+import { AVAILABLE_FACULTY_STATUSES } from "@/types";
 
 export type CadreEntry = {
   key: "PROFESSOR" | "ASSOCIATE_PROFESSOR" | "ASSISTANT_PROFESSOR";
@@ -111,7 +112,7 @@ export async function GET(request: Request) {
     // relevant catalog entry is tagged with the right cadre.
     const [facultySnap, designationSnap] = await Promise.all([
       db.collection("colleges").doc(session.collegeId).collection("facultyMembers")
-        .where("department", "==", dept).where("status", "==", "ACTIVE").get(),
+        .where("department", "==", dept).where("status", "in", AVAILABLE_FACULTY_STATUSES).get(),
       // Not filtered by category - cadre is meaningful wherever an admin set
       // it, and matching by category name would break if it's ever renamed.
       db.collection("colleges").doc(session.collegeId).collection("designations").get(),

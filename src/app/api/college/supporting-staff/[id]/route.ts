@@ -9,6 +9,7 @@ import { supportingStaffDisplayName } from "@/lib/supportingStaff/supportingStaf
 import { normalizeSupportingStaffProfile } from "@/lib/faculty/academicProfileCompat";
 import { migrateSupportingStaffDoc } from "@/lib/faculty/fieldRenames";
 import { withLegacyPersonalKeysDeleted } from "@/lib/faculty/legacyKeyDeletes";
+import { experienceBreakdown } from "@/lib/faculty/experienceCalc";
 import { FieldValue } from "firebase-admin/firestore";
 import type { SupportingStaffCategory, SupportingStaffDesignation, EmploymentType, FacultyStatus } from "@/types";
 
@@ -66,17 +67,17 @@ export async function PATCH(
     const { id } = await params;
 
     const body = (await request.json()) as Partial<{
-      name: string;
+      nameAsPerPan: string;
       employeeId: string;
       email: string;
-      phone: string;
+      mobileNo: string;
+      additionalPhoneNumbers: { label?: string; number: string }[];
       collegeEmail: string;
       staffCategory: SupportingStaffCategory;
       designation: SupportingStaffDesignation;
       otherDesignationTitle: string;
       department: string;
-      qualification: string;
-      experienceYears: number;
+      highestQualification: string;
       joiningDate: string;
       dateOfBirth: string;
       employmentType: EmploymentType;
@@ -176,8 +177,8 @@ export async function PATCH(
     }
 
     const stringFields = [
-      "name", "email", "phone", "collegeEmail", "staffCategory", "designation", "otherDesignationTitle",
-      "department", "qualification", "employmentType", "status", "gender", "legalName", "nameAsPerAadhar",
+      "nameAsPerPan", "email", "mobileNo", "collegeEmail", "staffCategory", "designation", "otherDesignationTitle",
+      "department", "highestQualification", "employmentType", "status", "gender", "legalName", "nameAsPerAadhar",
       "fatherName", "motherName", "religion", "caste", "subCaste", "aadharNo", "passportNo",
       "bankAccountNumber", "bankName", "bankBranch", "bankOtherDetails",
       "emergencyContactName", "emergencyContactRelation", "emergencyContactMobileNo", "ratificationStatus",
@@ -190,7 +191,7 @@ export async function PATCH(
     // that explicitly sends an empty string for it. Name (as per PAN) and
     // Name (as per Aadhar) are deliberately excluded - both are optional.
     const REQUIRED_IF_PRESENT = [
-      "collegeEmail", "phone", "designation", "qualification", "employmentType",
+      "collegeEmail", "mobileNo", "designation", "highestQualification", "employmentType",
       "gender", "legalName", "aadharNo", "panNo", "ratificationStatus",
     ] as const;
     for (const key of REQUIRED_IF_PRESENT) {
@@ -206,13 +207,29 @@ export async function PATCH(
     if (body.panNo !== undefined) updates.panNo = body.panNo.toUpperCase();
     if (body.ifscCode !== undefined) updates.ifscCode = body.ifscCode.toUpperCase();
 
-    if (body.experienceYears !== undefined) updates.experienceYears = Number(body.experienceYears);
     if (body.numberOfChildren !== undefined) updates.numberOfChildren = Number(body.numberOfChildren);
     if (body.permanentAddressSameAsTemporary !== undefined) updates.permanentAddressSameAsTemporary = body.permanentAddressSameAsTemporary;
 
+    // Extra contact numbers beyond the primary Mobile No - cleaned/filtered
+    // the same way the create route does. Writing [] (not omitting the key)
+    // is how a caller clears every extra number back out. Mirrors Faculty's
+    // own handling (PATCH /api/college/faculty/[id]).
+    if (body.additionalPhoneNumbers !== undefined) {
+      updates.additionalPhoneNumbers = body.additionalPhoneNumbers
+        .map((p) => ({ ...(p.label?.trim() ? { label: p.label.trim() } : {}), number: p.number?.trim() ?? "" }))
+        .filter((p) => p.number);
+    }
+
     if (body.supportingStaffProfile !== undefined) updates.supportingStaffProfile = normalizeSupportingStaffProfile(body.supportingStaffProfile);
 
-    if (body.joiningDate) updates.joiningDate = new Date(body.joiningDate);
+    if (body.joiningDate) {
+      updates.joiningDate = new Date(body.joiningDate);
+      // Recomputed here, same as Faculty's totalYearsOfExperience (PATCH
+      // /api/college/faculty/[id]) - never taken from client input. No
+      // "previous experience entries" concept exists for Supporting Staff, so
+      // this is purely tenure-since-joining.
+      updates.totalYearsOfExperience = experienceBreakdown(undefined, new Date(body.joiningDate)).total;
+    }
     if (body.dateOfBirth) updates.dateOfBirth = new Date(body.dateOfBirth);
     if (body.ratificationDate) updates.ratificationDate = new Date(body.ratificationDate);
 
@@ -230,7 +247,7 @@ export async function PATCH(
     // Drop the old-named twin of any personal key written above on a not-yet-migrated doc.
     await ref.update(withLegacyPersonalKeysDeleted(updates, FieldValue.delete()));
 
-    if (body.profilePhotoUrl !== undefined || body.name !== undefined || body.legalName !== undefined) {
+    if (body.profilePhotoUrl !== undefined || body.nameAsPerPan !== undefined || body.legalName !== undefined) {
       const linkedUid = (snap.data() as { userUid?: string }).userUid;
       if (linkedUid) {
         const loginSync: Record<string, string> = {};
@@ -240,10 +257,10 @@ export async function PATCH(
         // own creation (POST's finalName) and supportingStaffDisplayName().
         // Recomputed from whichever of the two changed here, merged with
         // whatever the current doc already holds for the other.
-        if (body.name !== undefined || body.legalName !== undefined) {
-          const current = snap.data() as { name?: string; legalName?: string };
+        if (body.nameAsPerPan !== undefined || body.legalName !== undefined) {
+          const current = snap.data() as { nameAsPerPan?: string; legalName?: string };
           const effectiveLegalName = body.legalName !== undefined ? body.legalName : current.legalName;
-          const effectiveName = body.name !== undefined ? body.name : current.name;
+          const effectiveName = body.nameAsPerPan !== undefined ? body.nameAsPerPan : current.nameAsPerPan;
           loginSync.name = effectiveLegalName?.trim() || effectiveName?.trim() || "";
         }
         try {
@@ -278,7 +295,7 @@ export async function DELETE(
     if (!snap.exists) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
-    const staffData = snap.data() as { name?: string; legalName?: string; userUid?: string; staffCategory?: SupportingStaffCategory; department?: string };
+    const staffData = migrateSupportingStaffDoc(snap.data() ?? {}) as { nameAsPerPan?: string; legalName?: string; userUid?: string; staffCategory?: SupportingStaffCategory; department?: string };
 
     if (!canRolePostCategory(session.role, staffData.staffCategory ?? "NON_TECHNICAL")) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });

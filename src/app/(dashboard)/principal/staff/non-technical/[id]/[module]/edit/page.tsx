@@ -25,7 +25,6 @@ export default function PrincipalNonTechnicalStaffModuleEditPage() {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [name, setName] = useState("");
   const [record, setRecord] = useState<SupportingStaffEditRecord>({});
 
   useEffect(() => {
@@ -38,11 +37,11 @@ export default function PrincipalNonTechnicalStaffModuleEditPage() {
           return;
         }
         const m = migrateSupportingStaffDoc(data.staff);
-        setName((m.name as string) ?? "");
         setRecord({
           gender: (m.gender as string) ?? "",
           dateOfBirth: (m.dateOfBirth as string) ?? undefined,
           legalName: (m.legalName as string) ?? "",
+          nameAsPerPan: (m.nameAsPerPan as string) ?? "",
           nameAsPerAadhar: (m.nameAsPerAadhar as string) ?? "",
           fatherName: (m.fatherName as string) ?? "",
           motherName: (m.motherName as string) ?? "",
@@ -72,8 +71,7 @@ export default function PrincipalNonTechnicalStaffModuleEditPage() {
           bloodGroup: (m.bloodGroup as string) ?? "",
           motherTongue: (m.motherTongue as string) ?? "",
           languagesKnown: (m.languagesKnown as string[]) ?? [],
-          heightFeet: m.heightFeet as number | undefined,
-          heightInches: m.heightInches as number | undefined,
+          height: (m.height as string) ?? "",
           weightKg: m.weightKg as number | undefined,
           pfNumber: (m.pfNumber as string) ?? "",
           uanNumber: (m.uanNumber as string) ?? "",
@@ -103,7 +101,7 @@ export default function PrincipalNonTechnicalStaffModuleEditPage() {
         moduleKey === "personal"
           ? {
               gender: record.gender, dateOfBirth: record.dateOfBirth, legalName: record.legalName,
-              nameAsPerAadhar: record.nameAsPerAadhar,
+              nameAsPerAadhar: record.nameAsPerAadhar, nameAsPerPan: record.nameAsPerPan,
               fatherName: record.fatherName, motherName: record.motherName, religion: record.religion,
               caste: record.caste, subCaste: record.subCaste, aadharNo: record.aadharNo, panNo: record.panNo,
               passportNo: record.passportNo,
@@ -117,7 +115,7 @@ export default function PrincipalNonTechnicalStaffModuleEditPage() {
               temporaryAddress: record.temporaryAddress, permanentAddressSameAsTemporary: record.permanentAddressSameAsTemporary,
               permanentAddress: record.permanentAddress, bloodGroup: record.bloodGroup,
               motherTongue: record.motherTongue, languagesKnown: record.languagesKnown,
-              heightFeet: record.heightFeet, heightInches: record.heightInches, weightKg: record.weightKg,
+              height: record.height, weightKg: record.weightKg,
               pfNumber: record.pfNumber, uanNumber: record.uanNumber, esiNumber: record.esiNumber,
             }
           : { supportingStaffProfile: record.supportingStaffProfile };
@@ -144,7 +142,7 @@ export default function PrincipalNonTechnicalStaffModuleEditPage() {
     <div className="space-y-6">
       <PageHeader
         title={`Edit ${moduleDef.label}`}
-        description={supportingStaffDisplayName({ legalName: record.legalName, name })}
+        description={supportingStaffDisplayName(record)}
         actions={
           <Button variant="outline" asChild>
             <Link href={`/principal/staff/non-technical/${staffId}/${moduleKey}`}><ArrowLeft className="h-4 w-4 mr-2" />Back</Link>

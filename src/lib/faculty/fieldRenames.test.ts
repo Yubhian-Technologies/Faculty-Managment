@@ -130,9 +130,10 @@ describe("whole-document migrations", () => {
     expect(out).toEqual({ passportNo: "P", permanentAddressSameAsTemporary: false, experienceYears: 3, academicProfile: { fdpsWorkshopsMoocsCertifications: [] } });
   });
 
-  it("migrates the shared-shape lists on supportingStaff docs without touching its flat qualification/experienceYears", () => {
+  it("migrates the shared-shape lists on supportingStaff docs and renames its flat qualification/experienceYears/name/phone to match FacultyMember's own names", () => {
     const out = migrateSupportingStaffDoc({
-      qualification: "keep", experienceYears: 4, bankAccountNo: "9", permanentSameAsTemporary: true,
+      name: "PAN Name", qualification: "keep", experienceYears: 4, phone: "9876543210",
+      bankAccountNo: "9", permanentSameAsTemporary: true,
       supportingStaffProfile: {
         qualifications: [{ level: "Degree", degree: "B.Com", yearOfCompletion: 2001 }],
         nonTechnicalProfile: {
@@ -141,8 +142,14 @@ describe("whole-document migrations", () => {
         },
       },
     }) as Record<string, any>;
-    expect(out.qualification).toBe("keep");
-    expect(out.experienceYears).toBe(4);
+    expect(out.nameAsPerPan).toBe("PAN Name");
+    expect(out.highestQualification).toBe("keep");
+    expect(out.totalYearsOfExperience).toBe(4);
+    expect(out.mobileNo).toBe("9876543210");
+    expect("name" in out).toBe(false);
+    expect("qualification" in out).toBe(false);
+    expect("experienceYears" in out).toBe(false);
+    expect("phone" in out).toBe(false);
     expect(out.bankAccountNumber).toBe("9");
     expect(out.permanentAddressSameAsTemporary).toBe(true);
     expect("permanentSameAsTemporary" in out).toBe(false);

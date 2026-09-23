@@ -32,7 +32,12 @@ export const MANAGE_ROLES_BY_CATEGORY: Record<DesignationCategory, string[]> = {
 export async function GET(request: Request) {
   try {
     const session = await requireCollegeMember(
-      "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "HOD", "COLLEGE_OFFICE", "COLLEGE_ADMIN"
+      "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "HOD", "COLLEGE_OFFICE", "COLLEGE_ADMIN",
+      // Read-only - a Faculty (Panel) login needs this to pick a Designation
+      // on their own Ratification Records (My Profile > Personal Details);
+      // they still can't ADD/EDIT/DELETE catalog entries (see POST above,
+      // which is unchanged).
+      "PANEL_MEMBER"
     );
     const { searchParams } = new URL(request.url);
     const category = searchParams.get("category");
