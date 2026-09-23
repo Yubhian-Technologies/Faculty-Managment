@@ -8,25 +8,29 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
 import { AcademicProfileFields } from "@/components/faculty/AcademicProfileFields";
 import { PersonalDetailsFields, type PersonalDetailsValue } from "@/components/shared/PersonalDetailsFields";
 import { AvatarUploadField } from "@/components/shared/AvatarUploadField";
 import { Textarea } from "@/components/ui/textarea";
 import { ROLE_LABELS, ROLE_LEVEL, ROLE_SCOPE, LEVEL_LABELS } from "@/types";
+import { PHONE_REGEX } from "@/lib/validations";
 import { toast } from "@/hooks/useToast";
 import type { College, Location, FacultyProfileFields, UserRole } from "@/types";
 
-// Roles a Super Admin creates - the level L1–L2 set plus DIRECTOR (L3). Scope
-// (GLOBAL/LOCATION/COLLEGE) is read from ROLE_SCOPE, which drives which tenant
-// picker is shown and what the provisioning route (api/admin/users) writes.
-// Principal is deliberately not here any more: it's a SEAT, appointed by a
-// college's own College Admin via Role Assignments, not handed out directly -
-// same reasoning as removing it from Location Admin. Must match
-// SUPER_ADMIN_CREATABLE in api/admin/users/route.ts.
+// Roles a Super Admin creates - the level L1–L2 set plus DIRECTOR (L3) and
+// PANEL_MEMBER/Faculty (L5, a plain login - not the full HOD-side hiring/
+// onboarding wizard). Scope (GLOBAL/LOCATION/COLLEGE) is read from ROLE_SCOPE,
+// which drives which tenant picker is shown and what the provisioning route
+// (api/admin/users) writes. Principal is deliberately not here any more: it's
+// a SEAT, appointed by a college's own College Admin via Role Assignments, not
+// handed out directly - same reasoning as removing it from Location Admin.
+// Must match SUPER_ADMIN_CREATABLE in api/admin/users/route.ts.
 const CREATABLE_ROLES: UserRole[] = [
   "MANAGEMENT", "FINANCE", "PURCHASE_DEPT",   // L1 · GLOBAL
   "ADMINISTRATION", "ACCOUNTS",               // L2 · LOCATION
   "DIRECTOR",                                 // L3 · COLLEGE
+  "PANEL_MEMBER",                             // L5 · COLLEGE (Faculty)
 ];
 
 // Creatable roles grouped by their L0–L6 level, so the role picker is level-scoped.
@@ -43,6 +47,7 @@ export default function NewUserPage() {
   const [email, setEmail] = useState("");
   const [collegeEmail, setCollegeEmail] = useState("");
   const [employeeId, setEmployeeId] = useState("");
+  const [department, setDepartment] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("12345678");
   const [role, setRole] = useState<UserRole>("MANAGEMENT");
@@ -71,8 +76,19 @@ export default function NewUserPage() {
   // College picker cascades off the chosen location (multiple colleges per location).
   const collegesForLocation = colleges.filter((c) => c.locationId === locationId);
 
+  // Employee ID is mandatory when manually adding a college-scoped person -
+  // there's no import/bulk flow behind this form to backfill it later.
+  const employeeIdRequired = role === "DIRECTOR" || role === "PANEL_MEMBER";
+  // Phone stays optional (not every seat needs one on file), but a filled-in
+  // value has to actually be a usable 10-digit Indian mobile number - same
+  // PHONE_REGEX every other phone field in the app (faculty import, Add
+  // Faculty, ...) is held to, rather than accepting any text.
+  const phoneError = phone.trim() && !PHONE_REGEX.test(phone.trim())
+    ? "Enter a valid 10-digit mobile number (starts with 6-9)"
+    : "";
   const isValid = !!name && !!email && !!password && !!role &&
-    (scope === "GLOBAL" ? true : scope === "LOCATION" ? !!locationId : !!locationId && !!collegeId);
+    (scope === "GLOBAL" ? true : scope === "LOCATION" ? !!locationId : !!locationId && !!collegeId) &&
+    (!employeeIdRequired || !!employeeId.trim()) && !phoneError;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -86,6 +102,7 @@ export default function NewUserPage() {
           name, email, password, role, collegeId, locationId, phone,
           academicProfile,
           ...(role === "DIRECTOR" ? { ...personalDetails, collegeEmail, employeeId } : {}),
+          ...(role === "PANEL_MEMBER" ? { employeeId, department } : {}),
           ...(photoUrl ? { profilePhotoUrl: photoUrl } : {}),
         }),
       });
@@ -108,7 +125,7 @@ export default function NewUserPage() {
   }
 
   return (
-    <div className="max-w-xl">
+    <div className="w-full">
       <PageHeader title="Add User" description="Create a staff account by level and assign scope" />
       <Card>
         <CardHeader><CardTitle className="text-base">User Details</CardTitle></CardHeader>
@@ -135,8 +152,20 @@ export default function NewUserPage() {
                       <Input type="email" value={collegeEmail} onChange={(e) => setCollegeEmail(e.target.value)} placeholder="name@example.com" />
                     </div>
                     <div className="space-y-2">
-                      <Label>Employee ID</Label>
+                      <Label>Employee ID <span className="text-destructive">*</span></Label>
                       <Input value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} placeholder="EMP-001" />
+                    </div>
+                  </>
+                )}
+                {role === "PANEL_MEMBER" && (
+                  <>
+                    <div className="space-y-2">
+                      <Label>Employee ID <span className="text-destructive">*</span></Label>
+                      <Input value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} placeholder="EMP-001" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Department</Label>
+                      <Input value={department} onChange={(e) => setDepartment(e.target.value)} placeholder="e.g. CSE" />
                     </div>
                   </>
                 )}
@@ -179,7 +208,16 @@ export default function NewUserPage() {
             {scope === "GLOBAL" ? (
               <div className="space-y-2">
                 <Label>Phone</Label>
-                <Input type="tel" autoComplete="off" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Phone / WhatsApp" />
+                <Input
+                  type="tel"
+                  autoComplete="off"
+                  inputMode="numeric"
+                  maxLength={10}
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                  placeholder="10-digit mobile number"
+                />
+                {phoneError && <p className="text-xs text-destructive">{phoneError}</p>}
               </div>
             ) : (
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -217,7 +255,16 @@ export default function NewUserPage() {
             {scope !== "GLOBAL" && (
               <div className="space-y-2">
                 <Label>Phone</Label>
-                <Input type="tel" autoComplete="off" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Phone / WhatsApp" />
+                <Input
+                  type="tel"
+                  autoComplete="off"
+                  inputMode="numeric"
+                  maxLength={10}
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                  placeholder="10-digit mobile number"
+                />
+                {phoneError && <p className="text-xs text-destructive">{phoneError}</p>}
               </div>
             )}
 
@@ -230,20 +277,31 @@ export default function NewUserPage() {
       </Card>
 
       {role === "DIRECTOR" ? (
-        <>
-          <Card className="mt-6">
-            <CardHeader><CardTitle className="text-base">Personal Details</CardTitle></CardHeader>
-            <CardContent>
+        // Collapsed by default (no defaultValue) - Personal Details and
+        // Academic Profile are both long forms, and having both permanently
+        // expanded stacked below the main form was most of what made this
+        // page so scrolly. Each section's fields now only appear once its
+        // own header is clicked; "multiple" (not "single") still lets both
+        // be open at once if the person wants that.
+        <Accordion type="multiple" className="mt-6 space-y-3">
+          <AccordionItem value="personal" className="border rounded-lg bg-card px-4">
+            <AccordionTrigger className="text-base font-semibold hover:no-underline">Personal Details</AccordionTrigger>
+            <AccordionContent>
               <PersonalDetailsFields value={personalDetails} onChange={setPersonalDetails} />
-            </CardContent>
-          </Card>
-          <Card className="mt-6">
-            <CardHeader><CardTitle className="text-base">Academic Profile</CardTitle></CardHeader>
-            <CardContent>
+            </AccordionContent>
+          </AccordionItem>
+          <AccordionItem value="academic" className="border rounded-lg bg-card px-4">
+            <AccordionTrigger className="text-base font-semibold hover:no-underline">Academic Profile</AccordionTrigger>
+            <AccordionContent>
               <AcademicProfileFields value={academicProfile} onChange={setAcademicProfile} includeTeachingAssignment={false} collegeType={collegeType} />
-            </CardContent>
-          </Card>
-        </>
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
+      ) : role === "PANEL_MEMBER" ? (
+        // Kept deliberately minimal - a quick login for an existing/incoming
+        // faculty member. Their full profile (qualifications, experience, ...)
+        // is filled in later from their own faculty record, not at creation.
+        null
       ) : (
         <Card className="mt-6">
           <CardHeader><CardTitle className="text-base">Module 6 - Others</CardTitle></CardHeader>

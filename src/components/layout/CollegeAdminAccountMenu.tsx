@@ -113,7 +113,7 @@ export function CollegeAdminAccountMenu({
                 </div>
                 <div className="space-y-2">
                   <Label>Phone</Label>
-                  <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Optional" />
+                  <Input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Optional" />
                 </div>
               </div>
               <Button size="sm" onClick={() => void saveDetails()} loading={savingDetails} disabled={!detailsDirty}>Save</Button>

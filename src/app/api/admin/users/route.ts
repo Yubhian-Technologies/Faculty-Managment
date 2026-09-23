@@ -9,6 +9,7 @@ import { type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
 import { provisionCollegeUser, provisionLocationUser } from "@/lib/firestore/userProvisioning";
 import { normalizeAcademicProfile } from "@/lib/faculty/academicProfileCompat";
 import { migrateUserDoc, migrateFacultyDoc, migrateSupportingStaffDoc } from "@/lib/faculty/fieldRenames";
+import { PHONE_REGEX } from "@/lib/validations";
 import type { UserRole } from "@/types";
 import { ROLE_SCOPE } from "@/types";
 
@@ -76,17 +77,20 @@ export async function GET(request: Request) {
   }
 }
 
-// Roles a Super Admin can create - the level L1–L2 set plus DIRECTOR (L3). Each
-// role's write target (systemUsers / locationUsers / college users) is derived
-// from ROLE_SCOPE, so the single source of truth stays in core.ts. Principal and
-// the rest of L3 and below are seats - a college's own College Admin appoints
-// them via Role Assignments, never Super Admin directly (same reasoning as
-// removing it from Location Admin). DIRECTOR is the one college-scoped role
-// Super Admin still provisions directly.
+// Roles a Super Admin can create - the level L1–L2 set plus DIRECTOR (L3) and
+// PANEL_MEMBER/Faculty (L5, a plain login - not the full HOD-side hiring/
+// onboarding wizard at /hod/faculty/new). Each role's write target
+// (systemUsers / locationUsers / college users) is derived from ROLE_SCOPE, so
+// the single source of truth stays in core.ts. Principal and the rest of L3
+// and below (besides Faculty) are seats - a college's own College Admin
+// appoints them via Role Assignments, never Super Admin directly (same
+// reasoning as removing it from Location Admin). Must match CREATABLE_ROLES in
+// super-admin/users/new/page.tsx.
 const SUPER_ADMIN_CREATABLE: UserRole[] = [
   "MANAGEMENT", "FINANCE", "PURCHASE_DEPT",   // L1 · GLOBAL
   "ADMINISTRATION", "ACCOUNTS",               // L2 · LOCATION
   "DIRECTOR",                                 // L3 · COLLEGE
+  "PANEL_MEMBER",                             // L5 · COLLEGE (Faculty)
 ];
 // Global-scoped subset - used by the GET ?scope=global (System-Wide) listing.
 const GLOBAL_ROLES: UserRole[] = SUPER_ADMIN_CREATABLE.filter((r) => ROLE_SCOPE[r] === "GLOBAL");
@@ -117,6 +121,12 @@ export async function POST(request: Request) {
 
     if (!name || !email || !password || !role) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    }
+    // Optional, but a filled-in value must be a real 10-digit mobile number -
+    // the client already enforces this (super-admin/users/new/page.tsx), this
+    // is the server-side backstop for any other caller of this route.
+    if (phone && !PHONE_REGEX.test(phone.trim())) {
+      return NextResponse.json({ error: "Phone must be exactly 10 digits, starting with 6, 7, 8 or 9" }, { status: 400 });
     }
     // Uploaded before the account exists (under a temp id), so we can only check
     // it came from our own upload endpoint, not that it names this specific uid.

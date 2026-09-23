@@ -166,11 +166,14 @@ export function MonthInput({ label, value, onChange, required }: { label: string
   );
 }
 
-export function TextInput({ label, value, onChange, placeholder, required }: { label: string; value: string | undefined; onChange: (v: string) => void; placeholder?: string; required?: boolean }) {
+// `type` is passed through for the one case that needs it: "tel", which makes
+// Input enforce the 10-digit phone rule (see components/ui/input.tsx). Left
+// undefined everywhere else, so every other field stays a plain text box.
+export function TextInput({ label, value, onChange, placeholder, required, type }: { label: string; value: string | undefined; onChange: (v: string) => void; placeholder?: string; required?: boolean; type?: string }) {
   return (
     <div className="space-y-2">
       <Label>{label}<RequiredMark required={required} /></Label>
-      <Input value={value ?? ""} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} />
+      <Input type={type} value={value ?? ""} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} />
     </div>
   );
 }

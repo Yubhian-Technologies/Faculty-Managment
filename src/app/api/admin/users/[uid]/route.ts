@@ -5,7 +5,7 @@ import { requireSuperAdmin } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
 import { normalizeAcademicProfile } from "@/lib/faculty/academicProfileCompat";
-import { migrateUserDoc } from "@/lib/faculty/fieldRenames";
+import { migrateUserDoc, migrateFacultyDoc, migrateSupportingStaffDoc } from "@/lib/faculty/fieldRenames";
 import { withLegacyPersonalKeysDeleted } from "@/lib/faculty/legacyKeyDeletes";
 import { FieldValue } from "firebase-admin/firestore";
 import type { UserRole } from "@/types";
@@ -38,7 +38,29 @@ export async function GET(
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    return NextResponse.json({ user: { uid: snap.id, ...migrateUserDoc(snap.data() ?? {}) } });
+    const user = { uid: snap.id, ...migrateUserDoc(snap.data() ?? {}) } as Record<string, unknown> & { role?: string };
+
+    // PANEL_MEMBER (Faculty) / COLLEGE_STAFF login docs only ever store a thin
+    // subset (name/email/role/department/isActive) - their real profile
+    // (designation, qualifications, experience, ...) lives on the linked
+    // facultyMembers/supportingStaff record. Same merge as the list route
+    // (api/admin/users GET), needed here so the Super-Admin read-only faculty
+    // profile view (super-admin/users/[uid]) has real data to show, not an
+    // almost-empty module hub.
+    let linkedCollection: string | null = null;
+    if (user.role === "PANEL_MEMBER") linkedCollection = "facultyMembers";
+    else if (user.role === "COLLEGE_STAFF") linkedCollection = "supportingStaff";
+    if (linkedCollection) {
+      const linkedSnap = await db.collection("colleges").doc(collegeId).collection(linkedCollection)
+        .where("userUid", "==", uid).limit(1).get();
+      if (!linkedSnap.empty) {
+        const linkedData = linkedSnap.docs[0].data();
+        const linkedLifted = linkedCollection === "facultyMembers" ? migrateFacultyDoc(linkedData) : migrateSupportingStaffDoc(linkedData);
+        return NextResponse.json({ user: { ...linkedLifted, ...user, recordId: linkedSnap.docs[0].id } });
+      }
+    }
+
+    return NextResponse.json({ user });
   } catch (err) {
     if (err instanceof Error && err.message === "UNAUTHORIZED") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

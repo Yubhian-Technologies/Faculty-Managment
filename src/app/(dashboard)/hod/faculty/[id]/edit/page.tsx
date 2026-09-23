@@ -399,9 +399,10 @@ export default function EditHodFacultyIdentityPage() {
                       />
                       <TextInput
                         label="Mobile Number"
+                        type="tel"
                         value={item.number}
                         onChange={(v) => setExtraPhones((prev) => prev.map((p, idx) => (idx === i ? { ...p, number: v } : p)))}
-                        placeholder="+91 98765 43210"
+                        placeholder="9876543210"
                       />
                     </div>
                     <Button

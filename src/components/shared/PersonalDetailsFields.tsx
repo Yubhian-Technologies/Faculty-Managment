@@ -531,6 +531,7 @@ export function PersonalDetailsFields({ value: rawValue, onChange, requiredField
         <div className="space-y-2">
           <Label>Emergency Contact Mobile No</Label>
           <Input
+            type="tel"
             value={value.emergencyContactMobileNo ?? ""}
             onChange={(e) => set("emergencyContactMobileNo", e.target.value.replace(/\D/g, "").slice(0, 10))}
             placeholder="9876543210"

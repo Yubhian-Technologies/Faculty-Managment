@@ -538,7 +538,7 @@ export default function NewSectionPage() {
                     BS-ENGLISH. */}
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
-                    <Label>Section Letter *</Label>
+                    <Label>Section Name *</Label>
                     <Input
                       value={letter}
                       onChange={(e) => setLetter(e.target.value.toUpperCase())}
@@ -618,7 +618,7 @@ export default function NewSectionPage() {
                 )}
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
-                    <Label>Section Letter *</Label>
+                    <Label>Section Name *</Label>
                     <Input
                       value={letter}
                       onChange={(e) => setLetter(e.target.value.toUpperCase())}
@@ -646,7 +646,7 @@ export default function NewSectionPage() {
             ) : (
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
-                  <Label>Section Letter *</Label>
+                  <Label>Section Name *</Label>
                   <Input
                     value={letter}
                     onChange={(e) => setLetter(e.target.value.toUpperCase())}
