@@ -45,6 +45,15 @@ export default function UsersPage() {
   const [actionUid, setActionUid] = useState<string | null>(null);
   const [confirmUser, setConfirmUser] = useState<{ user: UserRow; action: "deactivate" | "activate" | "delete" } | null>(null);
   const [resetUser, setResetUser] = useState<UserRow | null>(null);
+  // Read-only fallback for every role that has neither a rich profile hub
+  // (PRINCIPAL/DIRECTOR/PANEL_MEMBER) nor a Super-Admin edit form (ACCOUNTS/
+  // FINANCE/PURCHASE_DEPT/ADMINISTRATION/MANAGEMENT) - e.g. HOD, VICE_PRINCIPAL,
+  // COLLEGE_ADMIN, WEBMASTER, COLLEGE_OFFICE, COLLEGE_ACCOUNTS, COORDINATOR,
+  // COLLEGE_STAFF, HR_ADMIN, ADMIN_OFFICE. Those roles used to have no View/Edit
+  // action at all on this list. Reuses the row's already-fetched fields - no
+  // extra request, no dependency on a role-specific hub/edit route that was
+  // never built for them.
+  const [viewUser, setViewUser] = useState<UserRow | null>(null);
   const [newPassword, setNewPassword] = useState("");
   const [resetSaving, setResetSaving] = useState(false);
   const [downloadingResumeUid, setDownloadingResumeUid] = useState<string | null>(null);
@@ -250,12 +259,25 @@ export default function UsersPage() {
         const editHref = `/super-admin/users/${row.uid}?role=${row.role}` +
           (row.collegeId ? `&collegeId=${row.collegeId}` : "") +
           (row.locationId ? `&locationId=${row.locationId}` : "");
+        // Never wraps to a second line - a college with a longer role label
+        // (e.g. "Head of Department") had enough buttons here to wrap onto
+        // two lines while a shorter-label college's row stayed on one, so
+        // the action column's height varied row to row. Kept on one line
+        // always now; if the row genuinely doesn't fit, the table's own
+        // horizontal scroll (DataTable's existing responsive fallback, same
+        // as every other list in this app) takes over instead of an
+        // inconsistent wrap.
         return (
-          <div className="flex items-center gap-1 flex-wrap">
-            {(canEdit || canView) && (
+          <div className="flex items-center gap-1 whitespace-nowrap">
+            {canEdit || canView ? (
               <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); router.push(editHref); }}>
                 <Eye className="h-3.5 w-3.5" />
                 <span className="ml-1 hidden lg:inline">{row.role === "PRINCIPAL" || canView ? "View" : "Edit"}</span>
+              </Button>
+            ) : (
+              <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); setViewUser(row); }}>
+                <Eye className="h-3.5 w-3.5" />
+                <span className="ml-1 hidden lg:inline">View</span>
               </Button>
             )}
             <Button
@@ -401,6 +423,74 @@ export default function UsersPage() {
         }
         csvFilename="users"
       />
+
+      {/* Read-only View Dialog - the fallback for roles with no profile hub/edit form (see viewUser above) */}
+      <Dialog open={!!viewUser} onOpenChange={(open) => !open && setViewUser(null)}>
+        <DialogContent aria-describedby={undefined}>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-3">
+              <Avatar name={facultyDisplayName(viewUser ?? {}) || (viewUser?.name as string)} photoUrl={viewUser?.profilePhotoUrl as string | undefined} size="sm" />
+              {facultyDisplayName(viewUser ?? {}) || (viewUser?.name as string)}
+            </DialogTitle>
+          </DialogHeader>
+          {viewUser && (
+            <div className="space-y-3 text-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Role</span>
+                <Badge variant="outline">{ROLE_LABELS[viewUser.role as keyof typeof ROLE_LABELS] ?? viewUser.role}</Badge>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Status</span>
+                <Badge variant={(viewUser.isActive as boolean) ? "default" : "secondary"}>
+                  {(viewUser.isActive as boolean) ? "Active" : "Inactive"}
+                </Badge>
+              </div>
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-muted-foreground shrink-0">Email</span>
+                <span className="text-right truncate">{viewUser.email as string}</span>
+              </div>
+              {!!viewUser.collegeEmail && (
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-muted-foreground shrink-0">College Email</span>
+                  <span className="text-right truncate">{viewUser.collegeEmail as string}</span>
+                </div>
+              )}
+              {!!viewUser.phone && (
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-muted-foreground shrink-0">Phone</span>
+                  <span>{viewUser.phone as string}</span>
+                </div>
+              )}
+              {!!viewUser.employeeId && (
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-muted-foreground shrink-0">Employee ID</span>
+                  <span>{viewUser.employeeId as string}</span>
+                </div>
+              )}
+              {!!viewUser.designation && (
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-muted-foreground shrink-0">Designation</span>
+                  <span>{viewUser.designation as string}</span>
+                </div>
+              )}
+              {(() => {
+                const depts = viewUser.departments && (viewUser.departments as string[]).length > 0
+                  ? (viewUser.departments as string[])
+                  : [viewUser.department as string | undefined].filter(Boolean) as string[];
+                return depts.length > 0 && (
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="text-muted-foreground shrink-0">Department{depts.length > 1 ? "s" : ""}</span>
+                    <span className="text-right">{depts.join(", ")}</span>
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setViewUser(null)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Reset Password Dialog */}
       <Dialog open={!!resetUser} onOpenChange={(open) => { if (!open) { setResetUser(null); setNewPassword(""); } }}>

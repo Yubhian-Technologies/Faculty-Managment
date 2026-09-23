@@ -105,16 +105,22 @@ export default function CollegesPage() {
     {
       key: "name",
       header: "College",
+      // Full-width Firestore doc ID under the name used to force this column
+      // (and the whole table) wider than the viewport - truncated to a fixed
+      // width instead, with the full ID still reachable via the title
+      // tooltip on hover/long-press.
+      className: "max-w-[220px]",
       render: (row) => (
-        <div>
-          <p className="font-medium">{row.name}</p>
-          <p className="text-xs text-muted-foreground">{row.id}</p>
+        <div className="min-w-0">
+          <p className="font-medium truncate">{row.name}</p>
+          <p className="text-xs text-muted-foreground truncate" title={row.id}>{row.id}</p>
         </div>
       ),
     },
     {
       key: "type",
       header: "Type",
+      hideOnMobile: true,
       render: (row) => (
         row.type ? (
           <Badge variant="outline" className="text-xs font-normal">{COLLEGE_TYPE_LABELS[row.type]}</Badge>
@@ -126,6 +132,7 @@ export default function CollegesPage() {
     {
       key: "locationId",
       header: "Location",
+      hideOnMobile: true,
       render: (row) => (
         <Badge variant="outline" className="text-xs font-normal">
           {row.locationId ? (locationMap[row.locationId] ?? row.locationId) : <span className="text-muted-foreground italic">Unassigned</span>}
@@ -145,19 +152,30 @@ export default function CollegesPage() {
     {
       key: "actions",
       header: "",
+      // Edit/Delete stay icon-only (pencil/trash are self-explanatory) - but
+      // the activate/deactivate toggle icon alone reads as unclear (easy to
+      // mistake for something else, e.g. a view/eye icon), so that one keeps
+      // a text label. The label is hidden below sm so this button doesn't
+      // reintroduce the horizontal-scroll problem on narrow/mobile widths;
+      // there's ample room for it from sm up.
       render: (row) => (
         <div className="flex items-center gap-1">
           <Button
             variant="ghost"
-            size="sm"
+            size="icon"
+            className="h-8 w-8"
+            title="Edit"
+            aria-label="Edit"
             onClick={(e) => { e.stopPropagation(); router.push(`/super-admin/colleges/${row.id}/edit`); }}
           >
             <Pencil className="h-4 w-4" />
-            <span className="ml-1 hidden sm:inline">Edit</span>
           </Button>
           <Button
             variant="ghost"
             size="sm"
+            className="h-8 px-2"
+            title={row.isActive ? "Deactivate" : "Activate"}
+            aria-label={row.isActive ? "Deactivate" : "Activate"}
             loading={toggling === row.id}
             onClick={(e) => { e.stopPropagation(); setConfirmCollege(row); }}
           >
@@ -166,18 +184,17 @@ export default function CollegesPage() {
             ) : (
               <ToggleLeft className="h-4 w-4 text-muted-foreground" />
             )}
-            <span className="ml-1 hidden sm:inline">
-              {row.isActive ? "Deactivate" : "Activate"}
-            </span>
+            <span className="ml-1 hidden sm:inline">{row.isActive ? "Deactivate" : "Activate"}</span>
           </Button>
           <Button
             variant="ghost"
-            size="sm"
-            className="text-destructive hover:text-destructive"
+            size="icon"
+            className="h-8 w-8 text-destructive hover:text-destructive"
+            title="Delete"
+            aria-label="Delete"
             onClick={(e) => { e.stopPropagation(); setDeleteCollege(row); }}
           >
             <Trash2 className="h-4 w-4" />
-            <span className="ml-1 hidden sm:inline">Delete</span>
           </Button>
         </div>
       ),
