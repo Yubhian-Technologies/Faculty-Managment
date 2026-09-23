@@ -299,6 +299,11 @@ export function getFacultyImportColumns(designationOptions: string[]): FacultyCs
   // file cover more than one department at once instead of the whole batch
   // landing in a single department picked up front. A single-department HOD
   // may leave this blank to default to their own department.
+  // Always mandatory, even for an HOD who manages only one department -
+  // deliberately no "leave blank to default to your own department"
+  // shortcut, since that let a blank cell on a row that actually belonged to
+  // a different department (e.g. a CSE row in a sheet an HOD is filing under
+  // Basic Science) silently land in the wrong department instead of erroring.
   { key: "departmentCode", label: "Dept Code", required: true, sample: "Required; this department's short code, e.g. CSE - see the department list on the import page", aliases: ["Dept", "Dept Code", "Department", "Department Code"] },
   { key: "legalName",    label: "Full Name (as per SSC)", required: true, sample: "Required; text", aliases: ["Legal Name (as per SSC)"] },
   // Optional - matches the name on the faculty member's PAN card, for
@@ -423,7 +428,7 @@ export function getFacultyImportHints(designationOptions: string[]): string[] {
     ? `Designation: ${designationOptions.join(" / ")} - added under Settings > Designations. Supporting Staff (Lab Assistant, Programmer, Office Assistant, etc.) is added from the Supporting Staff module instead. Common abbreviations (e.g. Prof., Asst. Prof., Assoc. Prof.) are recognized too, case-insensitively.`
     : "Designation: add at least one under Settings > Designations before importing - a row can only use a title that's been added there.",
   "Dates must be in DD-MM-YYYY format (e.g. 15-06-2020)",
-  "Dept Code: which department this row belongs to, by its short code (e.g. CSE) - see the department list above the upload area for the codes you can use. Different rows can use different codes, so one file can cover more than one department. Leave it blank to default to your own department, if you only manage one.",
+  "Dept Code: which department this row belongs to, by its short code (e.g. CSE) - see the department list above the upload area for the codes you can use. Different rows can use different codes, so one file can cover more than one department. Always required, even if you only manage one department - a blank cell is rejected rather than guessed.",
   "Login Password is mandatory: it creates the faculty member's login account (as a Panel Member) automatically during import, using their College Email as the login ID - must be at least 8 characters. Use a real, unique password per person - never reuse the sample column's placeholder values.",
   `Employee Category: ${Object.values(EMPLOYEE_CATEGORY_LABELS).join(" / ")} - how the person is engaged (drives salary/budget), separate from Designation.`,
   "Every column above is required except Name (as per PAN) and Name (as per Aadhar) - a row missing a required one, or with an invalid value, is rejected and reported back so it can be corrected and re-imported.",

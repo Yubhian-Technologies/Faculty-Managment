@@ -9,6 +9,7 @@ import { type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
 import { provisionCollegeUser, provisionLocationUser } from "@/lib/firestore/userProvisioning";
 import { normalizeAcademicProfile } from "@/lib/faculty/academicProfileCompat";
 import { migrateUserDoc, migrateFacultyDoc, migrateSupportingStaffDoc } from "@/lib/faculty/fieldRenames";
+import { PHONE_REGEX } from "@/lib/validations";
 import type { UserRole } from "@/types";
 import { ROLE_SCOPE } from "@/types";
 
@@ -120,6 +121,12 @@ export async function POST(request: Request) {
 
     if (!name || !email || !password || !role) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    }
+    // Optional, but a filled-in value must be a real 10-digit mobile number -
+    // the client already enforces this (super-admin/users/new/page.tsx), this
+    // is the server-side backstop for any other caller of this route.
+    if (phone && !PHONE_REGEX.test(phone.trim())) {
+      return NextResponse.json({ error: "Phone must be exactly 10 digits, starting with 6, 7, 8 or 9" }, { status: 400 });
     }
     // Uploaded before the account exists (under a temp id), so we can only check
     // it came from our own upload endpoint, not that it names this specific uid.

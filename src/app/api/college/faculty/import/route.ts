@@ -124,11 +124,12 @@ export async function POST(request: Request) {
     function resolveRowDepartment(raw: string | undefined): { name: string } | { error: string } {
       const code = raw?.trim();
       if (!code) {
-        // A single-department HOD needs no Dept Code at all - same implicit
-        // default the manual Add Faculty form's single-department case uses.
-        if (session.role === "HOD" && manageableDepartments.length === 1) {
-          return { name: manageableDepartments[0].name };
-        }
+        // Always explicit, even for a single-department HOD: a blank cell
+        // silently defaulting to "your own department" is exactly what let a
+        // sheet mixing several departments' faculty (e.g. CSE rows with no
+        // Dept Code filled in) get every one of those rows misfiled under
+        // whichever single department the importing HOD happens to head,
+        // with no error to catch it.
         return { error: `Dept Code is required - one of: ${manageableDepartments.map((d) => d.code).join(", ")}` };
       }
       const matched = departmentsByCode.get(code.toLowerCase());

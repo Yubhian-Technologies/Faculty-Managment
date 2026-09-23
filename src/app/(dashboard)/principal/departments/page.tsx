@@ -227,19 +227,20 @@ export default function DepartmentsPage() {
                   <div className="flex gap-1 shrink-0">
                     <Button
                       variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
+                      size="sm"
                       onClick={(e) => { e.stopPropagation(); router.push(`/principal/departments/${dept.id}/edit`); }}
                     >
-                      <Pencil className="h-3.5 w-3.5" />
+                      <Pencil className="h-3.5 w-3.5 mr-1" />
+                      Edit
                     </Button>
                     <Button
                       variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-destructive hover:text-destructive"
+                      size="sm"
+                      className="text-destructive hover:text-destructive"
                       onClick={(e) => { e.stopPropagation(); setDeletingDept(dept); }}
                     >
-                      <Trash2 className="h-3.5 w-3.5" />
+                      <Trash2 className="h-3.5 w-3.5 mr-1" />
+                      Delete
                     </Button>
                   </div>
                 </div>
