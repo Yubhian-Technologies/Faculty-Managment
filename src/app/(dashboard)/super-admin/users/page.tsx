@@ -9,6 +9,13 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { Avatar } from "@/components/shared/Avatar";
 import {
@@ -42,6 +49,11 @@ export default function UsersPage() {
   const [selectedCollegeId, setSelectedCollegeId] = useState("");
   const [users, setUsers] = useState<UserRow[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  // Department-wise filter (college-scoped view only)
+  const [departmentsList, setDepartmentsList] = useState<{ id: string; name: string }[]>([]);
+  const [selectedDeptName, setSelectedDeptName] = useState("");
+  const [hasDeptLoaded, setHasDeptLoaded] = useState(false);
+  const [isDeptLoading, setIsDeptLoading] = useState(false);
   const [actionUid, setActionUid] = useState<string | null>(null);
   const [confirmUser, setConfirmUser] = useState<{ user: UserRow; action: "deactivate" | "activate" | "delete" } | null>(null);
   const [resetUser, setResetUser] = useState<UserRow | null>(null);
@@ -74,6 +86,10 @@ export default function UsersPage() {
       .catch(() => {});
   }, []);
 
+  function isCollegeScopedId(id: string) {
+    return id !== GLOBAL_SCOPE && !id.startsWith(LOCATION_PREFIX) && !!id;
+  }
+
   function usersUrl() {
     if (selectedCollegeId === GLOBAL_SCOPE) return "/api/admin/users?scope=global";
     if (selectedCollegeId.startsWith(LOCATION_PREFIX)) {
@@ -84,13 +100,34 @@ export default function UsersPage() {
 
   useEffect(() => {
     if (!selectedCollegeId) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsLoading(true);
+    // reset department filter whenever college scope changes
+    setSelectedDeptName("");
+    setHasDeptLoaded(false);
     fetch(usersUrl())
       .then((r) => r.json())
       .then((data: { users: UserRow[] }) => setUsers(data.users ?? []))
       .catch(() => toast({ variant: "destructive", title: "Failed to load users" }))
       .finally(() => setIsLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCollegeId]);
+
+  // Department list for college-scoped view only — uses the location browse
+  // route which supports SUPER_ADMIN + ?collegeId=, unlike /api/college/departments
+  // which is locked to session.collegeId.
+  useEffect(() => {
+    if (!isCollegeScopedId(selectedCollegeId)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setDepartmentsList([]);
+      return;
+    }
+    setIsDeptLoading(true);
+    fetch(`/api/location/college-browse/departments?collegeId=${encodeURIComponent(selectedCollegeId)}`)
+      .then((r) => r.json() as Promise<{ departments: { id: string; name: string }[] }>)
+      .then((data) => setDepartmentsList(data.departments ?? []))
+      .catch(() => setDepartmentsList([]))
+      .finally(() => setIsDeptLoading(false));
   }, [selectedCollegeId]);
 
   async function handleToggleActive(user: UserRow, isActive: boolean) {
@@ -340,6 +377,24 @@ export default function UsersPage() {
     ? locations.find((l) => l.id === selectedCollegeId.slice(LOCATION_PREFIX.length))?.name ?? "Location"
     : colleges.find((c) => c.id === selectedCollegeId)?.name ?? "All Users";
 
+  const isCollegeScope = isCollegeScopedId(selectedCollegeId);
+  const displayedUsers = hasDeptLoaded && selectedDeptName
+    ? users.filter((u) => {
+        const depts = (u.departments as string[] | undefined) && (u.departments as string[]).length > 0
+          ? (u.departments as string[])
+          : ([u.department as string | undefined].filter(Boolean) as string[]);
+        return depts.includes(selectedDeptName);
+      })
+    : users;
+
+  const deptEmptyTitle = hasDeptLoaded && selectedDeptName && displayedUsers.length === 0
+    ? `No users in ${selectedDeptName}`
+    : selectedCollegeId === GLOBAL_SCOPE ? "No system-wide users" : `No users in ${collegeLabel}`;
+
+  const deptEmptyDescription = hasDeptLoaded && selectedDeptName && displayedUsers.length === 0
+    ? `No accounts are assigned to ${selectedDeptName} in ${collegeLabel}`
+    : selectedCollegeId === GLOBAL_SCOPE ? "Create a Management account to see it here" : "Create the first user for this college";
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -405,16 +460,52 @@ export default function UsersPage() {
         </div>
       )}
 
+      {isCollegeScope && (
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:gap-4 rounded-lg border bg-card p-4">
+          <div className="flex flex-col gap-1.5 min-w-[200px]">
+            <Label className="text-xs">Department</Label>
+            <Select value={selectedDeptName} onValueChange={setSelectedDeptName} disabled={isDeptLoading || departmentsList.length === 0}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder={isDeptLoading ? "Loading..." : departmentsList.length === 0 ? "No departments" : "Select department"} />
+              </SelectTrigger>
+              <SelectContent>
+                {departmentsList.map((d) => (
+                  <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              disabled={!selectedDeptName}
+              onClick={() => setHasDeptLoaded(true)}
+            >
+              Load
+            </Button>
+            {hasDeptLoaded && (
+              <Button variant="outline" size="sm" onClick={() => { setSelectedDeptName(""); setHasDeptLoaded(false); }}>Clear filter</Button>
+            )}
+          </div>
+          {!hasDeptLoaded && departmentsList.length > 0 && (
+            <span className="text-xs text-muted-foreground sm:ml-auto">Select a department and click Load to filter</span>
+          )}
+          {hasDeptLoaded && selectedDeptName && (
+            <span className="text-xs text-muted-foreground sm:ml-auto">Showing {displayedUsers.length} of {users.length} users in {selectedDeptName}</span>
+          )}
+        </div>
+      )}
+
       <DataTable
-        data={users}
+        data={displayedUsers}
         columns={columns}
         isLoading={isLoading}
         keyExtractor={(r) => r.uid as string}
         paginate
         searchPlaceholder="Search users..."
         searchKeys={["name", "email", "department"] as (keyof UserRow)[]}
-        emptyTitle={selectedCollegeId === GLOBAL_SCOPE ? "No system-wide users" : `No users in ${collegeLabel}`}
-        emptyDescription={selectedCollegeId === GLOBAL_SCOPE ? "Create a Management account to see it here" : "Create the first user for this college"}
+        emptyTitle={deptEmptyTitle}
+        emptyDescription={deptEmptyDescription}
         emptyAction={
           <Button onClick={() => router.push("/super-admin/users/new")}>
             <UserPlus className="h-4 w-4 mr-2" />

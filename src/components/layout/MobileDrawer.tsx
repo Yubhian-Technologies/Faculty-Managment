@@ -12,7 +12,7 @@ import { useAssignedInterviews } from "@/hooks/useAssignedInterviews";
 import { useAssignedCoordinator } from "@/hooks/useAssignedCoordinator";
 import { useIsSubDepartmentHod } from "@/hooks/useIsSubDepartmentHod";
 import { usePrincipalPendingHiring } from "@/hooks/usePrincipalPendingHiring";
-import { isNavItemActive, filterVisibleNavItems, ROLES_WITH_EMBEDDED_PANEL_ACCESS, type NavItem } from "./navConfig";
+import { isNavItemActive, filterVisibleNavItems, isPathHidden, ROLES_WITH_EMBEDDED_PANEL_ACCESS, type NavItem } from "./navConfig";
 import { useIsTimetableIncharge } from "@/hooks/useIsTimetableIncharge";
 import { NavIcon } from "./NavIcon";
 import { CollegeAdminAccountMenu } from "./CollegeAdminAccountMenu";
@@ -66,8 +66,10 @@ export function MobileDrawer({ hiddenModules, hiddenItems }: MobileDrawerProps) 
     const injected: NavItem[] = [];
     // Skip roles that already have a static "Panel Scoring" tab in navConfig,
     // and roles whose own hiring-pipeline board already links into panel scoring.
+    const isInterviewHidden = isPathHidden(INTERVIEW_NAV_ITEM.href, user.role, hiddenModules, hiddenItems);
     if (
       hasInterviews &&
+      !isInterviewHidden &&
       !ROLES_WITH_EMBEDDED_PANEL_ACCESS.has(user.role) &&
       !baseNavItems.some((i) => i.href === INTERVIEW_NAV_ITEM.href)
     ) {

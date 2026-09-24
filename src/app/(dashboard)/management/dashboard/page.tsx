@@ -5,6 +5,9 @@ import { Building2, BookOpen, UsersRound, IdCard } from "lucide-react";
 import Link from "next/link";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
+import { useAuthStore } from "@/store/authStore";
+import { useNavVisibility } from "@/hooks/useNavVisibility";
+import { isPathHidden } from "@/components/layout/navConfig";
 
 interface Stats {
   totalColleges: number;
@@ -14,6 +17,9 @@ interface Stats {
 }
 
 export default function ManagementDashboardPage() {
+  const user = useAuthStore((s) => s.user);
+  const { hiddenModules, hiddenItems } = useNavVisibility();
+  const isHidden = (href: string) => !!user?.role && isPathHidden(href, user.role, hiddenModules, hiddenItems);
   const { data: stats } = useQuery({
     queryKey: ["mgmt-stats"],
     queryFn: () => fetch("/api/management/stats").then((r) => r.json() as Promise<Stats>),
@@ -47,6 +53,7 @@ export default function ManagementDashboardPage() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
+        {!isHidden("/management/budget") && (
         <Card className="shadow-md hover:shadow-lg transition-shadow duration-200">
           <CardContent className="p-5 flex items-center justify-between">
             <div>
@@ -58,6 +65,8 @@ export default function ManagementDashboardPage() {
             </Link>
           </CardContent>
         </Card>
+        )}
+        {!isHidden("/management/faculty") && (
         <Card className="shadow-md hover:shadow-lg transition-shadow duration-200">
           <CardContent className="p-5 flex items-center justify-between">
             <div>
@@ -69,6 +78,7 @@ export default function ManagementDashboardPage() {
             </Link>
           </CardContent>
         </Card>
+        )}
       </div>
     </div>
   );

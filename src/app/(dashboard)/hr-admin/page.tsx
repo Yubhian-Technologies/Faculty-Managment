@@ -7,9 +7,13 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/store/authStore";
+import { useNavVisibility } from "@/hooks/useNavVisibility";
+import { isPathHidden } from "@/components/layout/navConfig";
 
 export default function HRAdminDashboard() {
   const user = useAuthStore((s) => s.user);
+  const { hiddenModules, hiddenItems } = useNavVisibility();
+  const isHidden = (href: string) => !!user?.role && isPathHidden(href, user.role, hiddenModules, hiddenItems);
   const [pendingVacancies, setPendingVacancies] = useState<number | null>(null);
   const [pendingCandidates, setPendingCandidates] = useState<number | null>(null);
   const [pendingInterviews, setPendingInterviews] = useState<number | null>(null);
@@ -65,7 +69,7 @@ export default function HRAdminDashboard() {
         description="Location-level HR management"
       />
       <div className="grid gap-4 sm:grid-cols-2">
-        {actions.map((a) => (
+        {actions.filter((a) => !isHidden(a.href)).map((a) => (
           <Card key={a.href} className="hover:shadow-md transition-shadow">
             <CardContent className="p-5 flex items-start gap-4">
               <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">

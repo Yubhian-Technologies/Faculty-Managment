@@ -6,6 +6,9 @@ import { Building2, BookOpen, CalendarDays, GraduationCap, Layers, UserCog, User
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useAuthStore } from "@/store/authStore";
+import { useNavVisibility } from "@/hooks/useNavVisibility";
+import { isPathHidden } from "@/components/layout/navConfig";
 import { toast } from "@/hooks/useToast";
 import type { Course, Section, TeachingAssignment } from "@/types";
 
@@ -17,6 +20,9 @@ function ordinalYear(year: number) {
 }
 
 export default function ClassLeaderDashboardPage() {
+  const user = useAuthStore((s) => s.user);
+  const { hiddenModules, hiddenItems } = useNavVisibility();
+  const isHidden = (href: string) => !!user?.role && isPathHidden(href, user.role, hiddenModules, hiddenItems);
   const [course, setCourse] = useState<Course | null>(null);
   const [section, setSection] = useState<Section | null>(null);
   const [assignments, setAssignments] = useState<AssignmentRow[]>([]);
@@ -118,7 +124,7 @@ export default function ClassLeaderDashboardPage() {
         </Card>
       )}
 
-      {section && (
+      {section && !isHidden("/class-leader/timetable") && (
         <Button asChild>
           <Link href="/class-leader/timetable">
             <CalendarDays className="h-4 w-4 mr-2" />View Timetable

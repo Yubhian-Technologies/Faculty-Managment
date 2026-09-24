@@ -6,6 +6,8 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/store/authStore";
+import { useNavVisibility } from "@/hooks/useNavVisibility";
+import { isPathHidden } from "@/components/layout/navConfig";
 import { ClipboardList, ArrowRight } from "lucide-react";
 
 interface VacancyRequest {
@@ -15,6 +17,8 @@ interface VacancyRequest {
 
 export default function AdminOfficeDashboard() {
   const user = useAuthStore((s) => s.user);
+  const { hiddenModules, hiddenItems } = useNavVisibility();
+  const isHidden = (href: string) => !!user?.role && isPathHidden(href, user.role, hiddenModules, hiddenItems);
   const [vacancies, setVacancies] = useState<VacancyRequest[]>([]);
 
   useEffect(() => {
@@ -55,6 +59,7 @@ export default function AdminOfficeDashboard() {
         </Card>
       </div>
 
+      {!isHidden("/admin-office/vacancies") && (
       <Card>
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
@@ -74,6 +79,7 @@ export default function AdminOfficeDashboard() {
           </Button>
         </CardContent>
       </Card>
+      )}
     </div>
   );
 }

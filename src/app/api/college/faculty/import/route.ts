@@ -13,6 +13,8 @@ import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/fir
 import { PHONE_REGEX, EMAIL_REGEX, PAN_REGEX, AADHAR_REGEX } from "@/lib/validations";
 import { getHodDepartmentScope, facultyManageableDepartmentNames } from "@/lib/departments/scope";
 import { normalizeHighestQualification } from "@/lib/faculty/highestQualification";
+import { loadCollegeSettings } from "@/lib/firestore/collegeSettings";
+import { isQualificationSufficient } from "@/lib/faculty/minQualificationCheck";
 import type { Designation } from "@/types";
 import { EMPLOYEE_CATEGORY_LABELS, EMPLOYEE_CATEGORY_VALUES, EMPLOYEE_CATEGORY_ERROR_MESSAGE } from "@/types";
 
@@ -175,6 +177,13 @@ export async function POST(request: Request) {
       .map((d) => (d.data() as { name?: string }).name)
       .filter((n): n is string => !!n);
 
+    const settings = await loadCollegeSettings(db, collegeId);
+    const cadreByDesignation = new Map<string, string>();
+    for (const doc of designationSnap.docs) {
+      const data = doc.data() as { name?: string; cadre?: string };
+      if (data.name && data.cadre) cadreByDesignation.set(data.name, data.cadre);
+    }
+
     const now = new Date();
     // Rows that passed validation and were queued for write, alongside which
     // ChunkedBatch chunk their writes landed in - kept separate from `created`
@@ -264,6 +273,23 @@ export async function POST(request: Request) {
           error: `Designation "${designationRaw}" is not one of the titles your college allows (${allowedTeachingDesignations.join(" / ")})`,
         });
         continue;
+      }
+
+      // Minimum qualifications enforcement (WARN mode — does not block row).
+      const cadre = cadreByDesignation.get(designation);
+      let required = "";
+      if (cadre === "PROFESSOR") required = settings.minimumQualifications.professor;
+      else if (cadre === "ASSOCIATE_PROFESSOR") required = settings.minimumQualifications.associateProfessor;
+      else if (cadre === "ASSISTANT_PROFESSOR") required = settings.minimumQualifications.assistantProfessor;
+      if (required) {
+        const candidateQual = row.highestQualification || "";
+        if (!isQualificationSufficient(candidateQual, required)) {
+          warnings.push({
+            row: rowNum,
+            employeeId: empId,
+            warning: `Highest Qualification "${candidateQual.trim()}" does not meet minimum for ${designation}: requires ${required}`,
+          });
+        }
       }
 
       // Employee Category - the same closed set the Add/Edit form and PATCH
