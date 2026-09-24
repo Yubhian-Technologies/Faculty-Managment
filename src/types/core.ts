@@ -852,8 +852,6 @@ export type RegulatoryBody = "UGC" | "AICTE" | "STATE" | "NAAC";
 
 export interface PositionNorm {
   designation: string;
-  minQualification: string;
-  minExperienceYears: number;
   requiredPerDept: number;
 }
 
