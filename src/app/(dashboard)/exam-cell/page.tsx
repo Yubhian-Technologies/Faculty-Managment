@@ -6,6 +6,9 @@ import { ClipboardList, CheckCircle2, Clock, Layers } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { useAuthStore } from "@/store/authStore";
+import { useNavVisibility } from "@/hooks/useNavVisibility";
+import { isPathHidden } from "@/components/layout/navConfig";
 import { EXAM_TYPE_LABELS } from "@/types";
 import type { Course, ExamConfiguration } from "@/types";
 
@@ -15,6 +18,9 @@ function ordinalYear(year: number) {
 }
 
 export default function ExamCellDashboard() {
+  const user = useAuthStore((s) => s.user);
+  const { hiddenModules, hiddenItems } = useNavVisibility();
+  const isHidden = (href: string) => !!user?.role && isPathHidden(href, user.role, hiddenModules, hiddenItems);
   const [configurations, setConfigurations] = useState<ExamConfiguration[]>([]);
   // Every (courseId, year) pair a course could be configured for — the same
   // granularity a configuration now covers (branch is implied by courseId).
@@ -61,9 +67,11 @@ export default function ExamCellDashboard() {
         title="Exam Cell"
         description="Configure Internal and External examination marks for every course, year and branch — applied automatically to every subject taught under it."
         actions={
-          <Button asChild>
-            <Link href="/exam-cell/configure">Configure Examination</Link>
-          </Button>
+          !isHidden("/exam-cell/configure") && (
+            <Button asChild>
+              <Link href="/exam-cell/configure">Configure Examination</Link>
+            </Button>
+          )
         }
       />
 

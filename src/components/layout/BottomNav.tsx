@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/store/authStore";
 import { useAssignedInterviews } from "@/hooks/useAssignedInterviews";
 import { usePrincipalPendingHiring } from "@/hooks/usePrincipalPendingHiring";
-import { BOTTOM_NAV_ITEMS, isNavItemActive, filterVisibleNavItems, type NavItem } from "./navConfig";
+import { BOTTOM_NAV_ITEMS, isNavItemActive, filterVisibleNavItems, isPathHidden, type NavItem } from "./navConfig";
 import { NavIcon } from "./NavIcon";
 import { useNotifications } from "@/hooks/useNotifications";
 import { useUIStore } from "@/store/uiStore";
@@ -37,9 +37,10 @@ export function BottomNav({ hiddenModules, hiddenItems }: BottomNavProps) {
   if (!user || user.role === "STUDENT") return null;
 
   const baseItems = filterVisibleNavItems(BOTTOM_NAV_ITEMS[user.role] ?? [], hiddenModules, hiddenItems, user.realRole);
-  // Faculty: inject Interviews after Home when assigned, keep total ≤ 5 slots
+  // Faculty: inject Interviews after Home when assigned, keep total ≤ 5 slots — respects hidden
+  const isInterviewHidden = isPathHidden(INTERVIEW_NAV_ITEM.href, user.role, hiddenModules, hiddenItems);
   const items: NavItem[] =
-    user.role === "PANEL_MEMBER" && hasInterviews
+    user.role === "PANEL_MEMBER" && hasInterviews && !isInterviewHidden
       ? [baseItems[0], INTERVIEW_NAV_ITEM, ...baseItems.slice(1, 4)]
       : baseItems;
 

@@ -139,7 +139,19 @@ export async function PATCH(
       applicationIds?: string[];
       currentPhase?: string;
       coordinatorUid?: string | null;
+      coordinatorFacultyId?: string;
+      hiringMode?: string;
+      positionCategory?: string;
+      demoClassroom?: string;
+      interviewVenue?: string;
+      meetingLink?: string;
+      meetingPlatform?: string;
     };
+
+    // SUPPORTING_STAFF hires skip the demo-class stage entirely - same
+    // treatment an ONLINE interview already gets (no physical demo/QR
+    // session), so both share every "no demo" branch below.
+    const skipsDemo = batchData.hiringMode === "ONLINE" || batchData.positionCategory === "SUPPORTING_STAFF";
 
     const isPrincipalRole = ["PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN"].includes(session.role);
     const isOwnerHod = session.role === "HOD" && session.uid === batchData.hodUid;
@@ -177,7 +189,30 @@ export async function PATCH(
         }
       }
 
+      if (body.currentPhase === "INTERVIEW_READY") {
+        const effectiveVenue = body.interviewVenue ?? batchData.interviewVenue;
+        const effectiveMeetingLink = body.meetingLink ?? batchData.meetingLink;
+        const effectiveMeetingPlatform = body.meetingPlatform ?? batchData.meetingPlatform;
+        const effectiveDemoClassroom = body.demoClassroom ?? batchData.demoClassroom;
+        const effectiveCoordinator = body.coordinatorFacultyId ?? batchData.coordinatorFacultyId;
+        if (batchData.hiringMode === "ONLINE") {
+          if (!effectiveMeetingPlatform || !effectiveMeetingLink) {
+            return NextResponse.json({ error: "Meeting platform and link are required before marking interview ready" }, { status: 400 });
+          }
+        } else {
+          if (!effectiveVenue) {
+            return NextResponse.json({ error: "Interview venue is required before marking interview ready" }, { status: 400 });
+          }
+          if (batchData.positionCategory !== "SUPPORTING_STAFF" && (!effectiveDemoClassroom || !effectiveCoordinator)) {
+            return NextResponse.json({ error: "Demo classroom and coordinator are required before marking interview ready" }, { status: 400 });
+          }
+        }
+      }
+
       if (body.currentPhase === "PANEL_INTERVIEW") {
+        if (!skipsDemo && !batchData.demoComplete) {
+          return NextResponse.json({ error: "Cannot open panel scoring before the demo is marked complete" }, { status: 409 });
+        }
         const appIds = batchData.applicationIds ?? [];
         if (appIds.length > 0) {
           const appRefs = appIds.map((aid) => db.collection("colleges").doc(session.collegeId).collection("candidateApplications").doc(aid));
@@ -216,6 +251,37 @@ export async function PATCH(
       !isOwnerHod && !isPrincipalRole
     ) {
       return NextResponse.json({ error: "Only this batch's HOD can edit this" }, { status: 403 });
+    }
+
+    if (body.panelMemberUids !== undefined && body.panelMemberUids.length < 2) {
+      return NextResponse.json({ error: "At least 2 panel members are required" }, { status: 400 });
+    }
+
+    // applicationIds diff, validated up front so the sync writes below (which
+    // keep each candidateApplications.batchId in step with this array) only
+    // run once we know every added id is real and not already claimed by
+    // another batch - mirrors the same re-check the POST route's transaction
+    // does at creation time.
+    let addedApplicationIds: string[] = [];
+    let removedApplicationIds: string[] = [];
+    if (body.applicationIds !== undefined) {
+      const oldIds = new Set(batchData.applicationIds ?? []);
+      const newIds = new Set(body.applicationIds);
+      addedApplicationIds = body.applicationIds.filter((aid) => !oldIds.has(aid));
+      removedApplicationIds = (batchData.applicationIds ?? []).filter((aid) => !newIds.has(aid));
+      if (addedApplicationIds.length > 0) {
+        const addedRefs = addedApplicationIds.map((aid) => db.collection("colleges").doc(session.collegeId).collection("candidateApplications").doc(aid));
+        const addedSnaps = await db.getAll(...addedRefs);
+        for (let i = 0; i < addedSnaps.length; i++) {
+          if (!addedSnaps[i].exists) {
+            return NextResponse.json({ error: `Candidate application not found: ${addedApplicationIds[i]}` }, { status: 404 });
+          }
+          const existingBatchId = (addedSnaps[i].data() as { batchId?: string }).batchId;
+          if (existingBatchId && existingBatchId !== id) {
+            return NextResponse.json({ error: `One or more candidates are already in another interview batch` }, { status: 409 });
+          }
+        }
+      }
     }
 
     // Demo-complete is the coordinator's own call (or the owning HOD/Principal
@@ -266,7 +332,13 @@ export async function PATCH(
     }
     if (body.panelMemberUids !== undefined) updates.panelMemberUids = body.panelMemberUids;
     if (body.applicationIds !== undefined) updates.applicationIds = body.applicationIds;
-    if (body.interviewDate !== undefined) updates.interviewDate = new Date(body.interviewDate);
+    if (body.interviewDate !== undefined) {
+      const parsedDate = new Date(body.interviewDate);
+      if (isNaN(parsedDate.getTime())) {
+        return NextResponse.json({ error: "Invalid interview date" }, { status: 400 });
+      }
+      updates.interviewDate = parsedDate;
+    }
     if (body.interviewTime !== undefined) updates.interviewTime = body.interviewTime;
     if (body.demoComplete === true) {
       updates.demoComplete = true;
@@ -281,6 +353,22 @@ export async function PATCH(
       .collection("hiringBatches")
       .doc(id)
       .update(updates);
+
+    // Keep each candidateApplications.batchId in step with this batch's own
+    // applicationIds array - without this, applications added/removed here
+    // would silently drift from the batch that thinks it owns them.
+    if (addedApplicationIds.length > 0 || removedApplicationIds.length > 0) {
+      const syncBatch = db.batch();
+      for (const aid of addedApplicationIds) {
+        const aRef = db.collection("colleges").doc(session.collegeId).collection("candidateApplications").doc(aid);
+        syncBatch.update(aRef, { batchId: id, isShortlisted: true, status: "SHORTLISTED", updatedAt: now });
+      }
+      for (const aid of removedApplicationIds) {
+        const aRef = db.collection("colleges").doc(session.collegeId).collection("candidateApplications").doc(aid);
+        syncBatch.update(aRef, { batchId: "", updatedAt: now });
+      }
+      await syncBatch.commit();
+    }
 
     // Rejected proposal: free up its applications so the HOD can pick them
     // again for a new interview session (they remain shortlisted).

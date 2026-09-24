@@ -10,12 +10,16 @@ import { Badge } from "@/components/ui/badge";
 import { CardSkeleton } from "@/components/shared/SkeletonLoader";
 import { MyDashboardOverview } from "@/components/dashboard/MyDashboardOverview";
 import { useAuthStore } from "@/store/authStore";
+import { useNavVisibility } from "@/hooks/useNavVisibility";
+import { isPathHidden } from "@/components/layout/navConfig";
 import type { Candidate, CandidateApplication } from "@/types";
 
 type CandidateRow = { id: string; name: string; position: string; department: string };
 
 export default function CollegeOfficeDashboard() {
   const user = useAuthStore((s) => s.user);
+  const { hiddenModules, hiddenItems } = useNavVisibility();
+  const isHidden = (href: string) => !!user?.role && isPathHidden(href, user.role, hiddenModules, hiddenItems);
   const [candidates, setCandidates] = useState<CandidateRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -48,6 +52,7 @@ export default function CollegeOfficeDashboard() {
       <MyDashboardOverview />
 
       <div className="flex flex-wrap gap-4">
+        {!isHidden("/college-office/candidates") && (
         <Link href="/college-office/candidates" className="block">
           <Card className="hover:shadow-md transition-shadow cursor-pointer">
             <CardContent className="p-4 flex items-center gap-3">
@@ -61,7 +66,8 @@ export default function CollegeOfficeDashboard() {
             </CardContent>
           </Card>
         </Link>
-
+        )}
+        {!isHidden("/college-office/students") && (
         <Link href="/college-office/students" className="block">
           <Card className="hover:shadow-md transition-shadow cursor-pointer">
             <CardContent className="p-4 flex items-center gap-3">
@@ -75,7 +81,8 @@ export default function CollegeOfficeDashboard() {
             </CardContent>
           </Card>
         </Link>
-
+        )}
+        {!isHidden("/college-office/faculty") && (
         <Link href="/college-office/faculty" className="block">
           <Card className="hover:shadow-md transition-shadow cursor-pointer">
             <CardContent className="p-4 flex items-center gap-3">
@@ -89,8 +96,10 @@ export default function CollegeOfficeDashboard() {
             </CardContent>
           </Card>
         </Link>
+        )}
       </div>
 
+      {!isHidden("/college-office/candidates") && (
       <Card>
         <CardHeader className="flex-row items-center justify-between space-y-0 pb-3">
           <CardTitle className="text-base">Recently Sent to Accounts</CardTitle>
@@ -124,6 +133,7 @@ export default function CollegeOfficeDashboard() {
           )}
         </CardContent>
       </Card>
+      )}
     </div>
   );
 }

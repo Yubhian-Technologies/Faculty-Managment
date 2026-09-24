@@ -306,7 +306,7 @@ export default function HodAttendanceReportPage() {
                   <th className="px-4 py-3">Name</th>
                   {subjects.map((s) => (
                     <th key={s.subjectId} className="px-4 py-3 text-center" title={s.subjectName}>
-                      {s.subjectCode || s.subjectName}
+                      {s.subjectName}
                     </th>
                   ))}
                 </tr>

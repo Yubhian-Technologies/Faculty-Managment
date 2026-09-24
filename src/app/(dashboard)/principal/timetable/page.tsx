@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Coffee, Utensils } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/useToast";
 import { formatDMY, currentWeekDates } from "@/lib/utils";
 import { isoDateKey } from "@/lib/leave/dayCounter";
@@ -48,6 +49,7 @@ export default function PrincipalTimetablePage() {
   const [sectionId, setSectionId] = useState("");
   const [timing, setTiming] = useState<CourseYearTiming | null>(null);
   const [slots, setSlots] = useState<TimetableSlot[]>([]);
+  const [typeFilter, setTypeFilter] = useState<"ALL" | "THEORY" | "PRACTICAL">("ALL");
   const [isLoading, setIsLoading] = useState(true);
   // Derived rather than a separate flag: a synchronous setIsLoading(true) inside
   // the fetch effect would be a cascading render (react-hooks/set-state-in-effect).
@@ -189,6 +191,7 @@ export default function PrincipalTimetablePage() {
   }, [sectionId, weekStart]);
 
   const rows = timing ? buildRows(timing) : [];
+  const displaySlots = typeFilter === "ALL" ? slots : slots.filter((s) => s.subjectType === typeFilter);
   const selectClass =
     "h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus:border-primary focus:outline-none";
 
@@ -278,7 +281,17 @@ export default function PrincipalTimetablePage() {
         </div>
       ) : (
         <>
-        <WeekNavigator weekStart={weekStart} onChange={setWeekStart} />
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <WeekNavigator weekStart={weekStart} onChange={setWeekStart} />
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium text-muted-foreground">Show:</span>
+            {(["ALL", "THEORY", "PRACTICAL"] as const).map((t) => (
+              <Button key={t} size="sm" variant={typeFilter === t ? "default" : "outline"} onClick={() => setTypeFilter(t)}>
+                {t === "ALL" ? "All" : t === "THEORY" ? "Theory" : "Practical"}
+              </Button>
+            ))}
+          </div>
+        </div>
         <div className="overflow-x-auto rounded-lg border">
           <table className="w-full text-sm border-collapse">
             <thead>
@@ -318,7 +331,7 @@ export default function PrincipalTimetablePage() {
                       )}
                     </td>
                     {DAYS.map((d) => {
-                      const slot = slots.find((s) => s.day === d && s.periodNumber === row.period);
+                      const slot = displaySlots.find((s) => s.day === d && s.periodNumber === row.period);
                       return (
                         <td key={d} className="p-2 align-top">
                           {slot ? (

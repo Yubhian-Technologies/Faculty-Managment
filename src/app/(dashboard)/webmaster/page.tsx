@@ -5,9 +5,15 @@ import Link from "next/link";
 import { KeyRound, Users } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
+import { useAuthStore } from "@/store/authStore";
+import { useNavVisibility } from "@/hooks/useNavVisibility";
+import { isPathHidden } from "@/components/layout/navConfig";
 import type { FacultyAccountRequest, FMSUser } from "@/types";
 
 export default function WebmasterDashboardPage() {
+  const user = useAuthStore((s) => s.user);
+  const { hiddenModules, hiddenItems } = useNavVisibility();
+  const isHidden = (href: string) => !!user?.role && isPathHidden(href, user.role, hiddenModules, hiddenItems);
   const [pendingFacultyAccountRequests, setPendingFacultyAccountRequests] = useState(0);
   const [totalAccounts, setTotalAccounts] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
@@ -35,6 +41,7 @@ export default function WebmasterDashboardPage() {
       />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {!isHidden("/webmaster/credential-requests") && (
         <Link href="/webmaster/credential-requests">
           <Card className="hover:border-primary/50 transition-colors h-full">
             <CardContent className="p-4 flex items-center gap-4">
@@ -48,6 +55,8 @@ export default function WebmasterDashboardPage() {
             </CardContent>
           </Card>
         </Link>
+        )}
+        {!isHidden("/webmaster/users") && (
         <Link href="/webmaster/users">
           <Card className="hover:border-primary/50 transition-colors h-full">
             <CardContent className="p-4 flex items-center gap-4">
@@ -61,6 +70,7 @@ export default function WebmasterDashboardPage() {
             </CardContent>
           </Card>
         </Link>
+        )}
       </div>
     </div>
   );

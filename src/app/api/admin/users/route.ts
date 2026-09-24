@@ -20,6 +20,7 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const collegeId = searchParams.get("collegeId");
     const scope = searchParams.get("scope");
+    const departmentFilter = searchParams.get("department")?.trim() ?? "";
 
     const db = getAdminDb();
 
@@ -66,8 +67,16 @@ export async function GET(request: Request) {
         return { ...linkedLifted, ...u, recordId: linkedSnap.docs[0].id };
       })
     );
-    users.sort((a, b) => ((a as { name?: string }).name ?? "").localeCompare((b as { name?: string }).name ?? ""));
-    return NextResponse.json({ users });
+    let filteredUsers = users;
+    if (departmentFilter) {
+      filteredUsers = users.filter((u) => {
+        const rec = u as Record<string, unknown> & { department?: string; departments?: string[] };
+        const depts = rec.departments && rec.departments.length > 0 ? rec.departments : [rec.department].filter(Boolean) as string[];
+        return depts.includes(departmentFilter);
+      });
+    }
+    filteredUsers.sort((a, b) => ((a as { name?: string }).name ?? "").localeCompare((b as { name?: string }).name ?? ""));
+    return NextResponse.json({ users: filteredUsers });
   } catch (err) {
     if (err instanceof Error && err.message === "UNAUTHORIZED") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -77,20 +86,17 @@ export async function GET(request: Request) {
   }
 }
 
-// Roles a Super Admin can create - the level L1–L2 set plus DIRECTOR (L3) and
-// PANEL_MEMBER/Faculty (L5, a plain login - not the full HOD-side hiring/
-// onboarding wizard at /hod/faculty/new). Each role's write target
-// (systemUsers / locationUsers / college users) is derived from ROLE_SCOPE, so
-// the single source of truth stays in core.ts. Principal and the rest of L3
-// and below (besides Faculty) are seats - a college's own College Admin
-// appoints them via Role Assignments, never Super Admin directly (same
+// Roles a Super Admin can create - the level L1–L2 set plus DIRECTOR (L3).
+// Each role's write target (systemUsers / locationUsers / college users) is
+// derived from ROLE_SCOPE, so the single source of truth stays in core.ts.
+// Principal and the rest of L3 and below are seats - a college's own College
+// Admin appoints them via Role Assignments, never Super Admin directly (same
 // reasoning as removing it from Location Admin). Must match CREATABLE_ROLES in
 // super-admin/users/new/page.tsx.
 const SUPER_ADMIN_CREATABLE: UserRole[] = [
   "MANAGEMENT", "FINANCE", "PURCHASE_DEPT",   // L1 · GLOBAL
   "ADMINISTRATION", "ACCOUNTS",               // L2 · LOCATION
   "DIRECTOR",                                 // L3 · COLLEGE
-  "PANEL_MEMBER",                             // L5 · COLLEGE (Faculty)
 ];
 // Global-scoped subset - used by the GET ?scope=global (System-Wide) listing.
 const GLOBAL_ROLES: UserRole[] = SUPER_ADMIN_CREATABLE.filter((r) => ROLE_SCOPE[r] === "GLOBAL");

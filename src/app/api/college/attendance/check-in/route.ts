@@ -78,39 +78,43 @@ export async function POST(request: Request) {
 
     const recordId = `${session.uid}_${docSuffix}`;
     const recordRef = collegeRef.collection("attendanceRecords").doc(recordId);
-    const existingSnap = await recordRef.get();
-    const existing = existingSnap.data() as { checkIn?: string; status?: string } | undefined;
-
-    if (existing?.checkIn) {
-      return NextResponse.json({ error: "You have already checked in today" }, { status: 409 });
-    }
-    if (existing?.status && !["PRESENT"].includes(existing.status)) {
-      return NextResponse.json({ error: `Today is already marked as ${existing.status} — contact your HOD to update this` }, { status: 409 });
-    }
-
     const now = new Date();
-    // An HOD may grant this specific person an exception for today, set
-    // before they check in themselves (see check-in-permission/route.ts) -
-    // snapshotted onto the record so every "Late" derivation downstream
-    // (isLateCheckIn) reads it the same way without a second lookup, and so
-    // it stays fixed even if the permission is later changed or removed.
     const permittedCheckInTime = await resolveCheckInPermission(db, session.collegeId, session.uid, docSuffix);
-    await recordRef.set({
-      collegeId: session.collegeId,
-      facultyId: session.uid,
-      facultyName: user?.name ?? "",
-      department: user?.department ?? "",
-      date,
-      status: "PRESENT",
-      checkIn,
-      source: "BIOMETRIC",
-      checkInLocation: { latitude, longitude },
-      checkInFaceMatchDistance: faceMatchDistance ?? null,
-      checkInVerified: true,
-      ...(permittedCheckInTime ? { permittedCheckInTime } : {}),
-      updatedAt: now,
-      ...(existingSnap.exists ? {} : { createdAt: now }),
-    }, { merge: true });
+
+    // Transactional check-then-set so a double-tapped/retried request cannot
+    // double-write and double-fire recordLateCheckIn for one physical check-in.
+    try {
+      await db.runTransaction(async (tx) => {
+        const snap = await tx.get(recordRef);
+        const existing = snap.data() as { checkIn?: string; status?: string } | undefined;
+        if (existing?.checkIn) throw new Error("ALREADY_CHECKED_IN");
+        if (existing?.status && !["PRESENT"].includes(existing.status)) throw new Error(`ALREADY_MARKED_${existing.status}`);
+        tx.set(recordRef, {
+          collegeId: session.collegeId,
+          facultyId: session.uid,
+          facultyName: user?.name ?? "",
+          department: user?.department ?? "",
+          date,
+          status: "PRESENT",
+          checkIn,
+          source: "BIOMETRIC",
+          checkInLocation: { latitude, longitude },
+          checkInFaceMatchDistance: faceMatchDistance ?? null,
+          checkInVerified: true,
+          ...(permittedCheckInTime ? { permittedCheckInTime } : {}),
+          updatedAt: now,
+          ...(snap.exists ? {} : { createdAt: now }),
+        }, { merge: true });
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "";
+      if (msg === "ALREADY_CHECKED_IN") return NextResponse.json({ error: "You have already checked in today" }, { status: 409 });
+      if (msg.startsWith("ALREADY_MARKED_")) {
+        const st = msg.replace("ALREADY_MARKED_", "");
+        return NextResponse.json({ error: `Today is already marked as ${st} — contact your HOD to update this` }, { status: 409 });
+      }
+      throw e;
+    }
 
     if (isLateCheckIn(checkIn, permittedCheckInTime)) {
       try {

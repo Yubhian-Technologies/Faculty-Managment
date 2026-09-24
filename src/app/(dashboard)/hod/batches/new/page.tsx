@@ -138,11 +138,10 @@ export default function NewBatchPage() {
       .catch(() => toast({ variant: "destructive", title: "Failed to load data" }));
   }, [user?.uid, myDepartments]);
 
-  // Uids that must always stay in selectedPanel
-  const lockedUids = new Set([
-    ...(user?.uid ? [user.uid] : []),
-    ...defaultMembers.map((u) => u.uid),
-  ]);
+  // Only the HOD themself must always stay in selectedPanel - Principal/VP/
+  // College Admin are pre-checked defaults but can be unchecked like any
+  // other member if this batch doesn't need them.
+  const lockedUids = new Set(user?.uid ? [user.uid] : []);
 
   const selectedVacancy = vacancies.find((v) => v.id === selectedVacancyId);
   const filteredApplications = selectedVacancy
@@ -169,6 +168,7 @@ export default function NewBatchPage() {
     if (selectedApplications.length === 0) { toast({ variant: "destructive", title: "Select at least one candidate" }); return; }
     if (!interviewDate) { toast({ variant: "destructive", title: "Set an interview date" }); return; }
     if (!interviewTime) { toast({ variant: "destructive", title: "Set an interview time" }); return; }
+    if (selectedPanel.length < 2) { toast({ variant: "destructive", title: "Select at least 2 panel members" }); return; }
 
     const vacancy = vacancies.find((v) => v.id === selectedVacancyId);
     if (!vacancy) { toast({ variant: "destructive", title: "That hiring request is no longer available — refresh and try again" }); return; }
@@ -206,8 +206,6 @@ export default function NewBatchPage() {
       setIsSubmitting(false);
     }
   }
-
-  const extraSelected = selectedPanel.filter((uid) => !lockedUids.has(uid)).length;
 
   return (
     <div className="max-w-2xl space-y-6">
@@ -368,8 +366,7 @@ export default function NewBatchPage() {
             <CardTitle className="text-base">
               Step 4: Panel Members
               <span className="ml-2 text-xs font-normal text-muted-foreground">
-                {selectedPanel.length} total ({lockedUids.size} default
-                {extraSelected > 0 && ` + ${extraSelected} selected`})
+                {selectedPanel.length} member{selectedPanel.length !== 1 ? "s" : ""} selected
               </span>
             </CardTitle>
           </CardHeader>
@@ -381,13 +378,22 @@ export default function NewBatchPage() {
               subtitle={`Head of Department${user?.department ? ` · ${user.department}` : ""}`}
             />
 
-            {/* Principal + VP - locked */}
+            {/* Principal + VP + College Admin - pre-checked defaults, editable */}
             {defaultMembers.map((m) => (
-              <DefaultMemberRow
-                key={m.uid}
-                name={m.name}
-                subtitle={ROLE_LABELS[m.role] ?? m.role}
-              />
+              <div key={m.uid} className="flex items-center gap-3 p-2.5 border-2 border-primary/30 bg-primary/5 rounded-lg">
+                <Checkbox
+                  id={`d-${m.uid}`}
+                  checked={selectedPanel.includes(m.uid)}
+                  onCheckedChange={() => togglePanel(m.uid)}
+                />
+                <label htmlFor={`d-${m.uid}`} className="flex-1 min-w-0 cursor-pointer">
+                  <p className="text-sm font-medium">{m.name}</p>
+                  <p className="text-xs text-muted-foreground">{ROLE_LABELS[m.role] ?? m.role}</p>
+                </label>
+                <span className="text-[10px] font-semibold bg-primary text-primary-foreground px-2 py-0.5 rounded-full shrink-0">
+                  Default
+                </span>
+              </div>
             ))}
 
             {/* Divider */}
