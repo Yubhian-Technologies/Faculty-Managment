@@ -875,7 +875,7 @@ export interface FacultyNorms {
   // Which approval tier each requester role's leave request goes to first
   // (see src/lib/leave/approvalRouting.ts). A role with no entry here uses the
   // built-in default for that role.
-  leaveApprovalRouting?: Partial<Record<UserRole, "HOD" | "PRINCIPAL" | "MANAGEMENT">>;
+  leaveApprovalRouting?: Partial<Record<UserRole, "HOD" | "PRINCIPAL" | "VICE_PRINCIPAL" | "MANAGEMENT">>;
   // Per requester role: true = vacation staff (teaching-style leave), false =
   // non-vacation (see src/lib/leave/staffCategoryRouting.ts). A role with no
   // entry keeps its built-in default.

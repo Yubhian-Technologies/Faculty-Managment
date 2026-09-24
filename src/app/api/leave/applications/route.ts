@@ -98,8 +98,15 @@ export async function GET(request: Request) {
         return NextResponse.json({ requests: sortByCreatedAtDesc(await attachRequesterContext(db, session.collegeId, requests)) });
       }
       if (session.role === "PRINCIPAL" || session.role === "VICE_PRINCIPAL") {
+        // Principal sees requests routed to either Principal or Vice
+        // Principal (senior override); Vice Principal sees only the ones
+        // routed specifically to them - see PENDING_VICE_PRINCIPAL's comment
+        // in types/leave.ts.
+        const statuses = session.role === "PRINCIPAL"
+          ? ["PENDING_PRINCIPAL", "PENDING_VICE_PRINCIPAL"]
+          : ["PENDING_VICE_PRINCIPAL"];
         const snap = await REQUESTS_COL(session.collegeId, db)
-          .where("status", "==", "PENDING_PRINCIPAL")
+          .where("status", "in", statuses)
           .get();
         let requests = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as LeaveRequest);
         // A Vice Principal's own leave request must go to the Principal, not
@@ -210,7 +217,7 @@ export async function POST(request: Request) {
     const hasPendingRequest = existingSnap.docs.some((d) => {
       const status = (d.data() as LeaveRequest).status;
       return status === "PENDING_ACCEPTANCE" || status === "PENDING_HOD" ||
-        status === "PENDING_PRINCIPAL" || status === "PENDING_MANAGEMENT";
+        status === "PENDING_PRINCIPAL" || status === "PENDING_VICE_PRINCIPAL" || status === "PENDING_MANAGEMENT";
     });
     if (hasPendingRequest) {
       return NextResponse.json(

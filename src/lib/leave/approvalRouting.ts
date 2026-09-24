@@ -15,15 +15,17 @@ export const ROUTABLE_REQUESTER_ROLES: UserRole[] = [
 ];
 
 // A Principal's own leave has no one above them inside the college, so it
-// always goes to Management. An HOD / Vice Principal can't sit at the HOD tier
-// (that would be approving their own leave), so those two choose between the
-// Principal tier and Management. Everyone else may pick any tier - the HOD tier
-// only takes effect for someone who actually has a department (see
-// resolveApproverStage).
+// always goes to Management. A Vice Principal can't be routed to the
+// VICE_PRINCIPAL stage for their own leave (that would be self-approval), so
+// they choose between PRINCIPAL and MANAGEMENT only. An HOD can be routed to
+// either senior officer specifically, or Management. Everyone else may pick
+// any tier - the HOD tier only takes effect for someone who actually has a
+// department (see resolveApproverStage).
 export function allowedStagesForRole(role: UserRole): LeaveApproverStage[] {
   if (role === "PRINCIPAL") return ["MANAGEMENT"];
-  if (role === "HOD" || role === "VICE_PRINCIPAL") return ["PRINCIPAL", "MANAGEMENT"];
-  return ["HOD", "PRINCIPAL", "MANAGEMENT"];
+  if (role === "VICE_PRINCIPAL") return ["PRINCIPAL", "MANAGEMENT"];
+  if (role === "HOD") return ["PRINCIPAL", "VICE_PRINCIPAL", "MANAGEMENT"];
+  return ["HOD", "PRINCIPAL", "VICE_PRINCIPAL", "MANAGEMENT"];
 }
 
 // What each role did before this was configurable - kept as the default so a
@@ -60,7 +62,11 @@ export function resolveApproverStage(
 // Two held roles at the same level (HOD + Academics, both L4) would otherwise
 // resolve by whichever came first in the list; the higher approver tier wins
 // instead, so the result never depends on ordering.
-const STAGE_RANK: Record<LeaveApproverStage, number> = { HOD: 0, PRINCIPAL: 1, MANAGEMENT: 2 };
+// PRINCIPAL outranks VICE_PRINCIPAL here (a Principal can decide a
+// VP-routed request, not the reverse - see PENDING_VICE_PRINCIPAL's comment
+// in types/leave.ts), so someone holding roles that resolve to both wins the
+// broader-visibility PRINCIPAL stage rather than the narrower VP one.
+const STAGE_RANK: Record<LeaveApproverStage, number> = { HOD: 0, VICE_PRINCIPAL: 1, PRINCIPAL: 2, MANAGEMENT: 3 };
 
 export function resolveApproverStageForHeldRoles(
   routing: LeaveApprovalRouting | undefined,
@@ -77,8 +83,11 @@ export function resolveApproverStageForHeldRoles(
     .reduce((best, stage) => (STAGE_RANK[stage] > STAGE_RANK[best] ? stage : best));
 }
 
-export function approverStageToStatus(stage: LeaveApproverStage): Extract<LeaveRequestStatus, "PENDING_HOD" | "PENDING_PRINCIPAL" | "PENDING_MANAGEMENT"> {
-  return stage === "HOD" ? "PENDING_HOD" : stage === "MANAGEMENT" ? "PENDING_MANAGEMENT" : "PENDING_PRINCIPAL";
+export function approverStageToStatus(stage: LeaveApproverStage): Extract<LeaveRequestStatus, "PENDING_HOD" | "PENDING_PRINCIPAL" | "PENDING_VICE_PRINCIPAL" | "PENDING_MANAGEMENT"> {
+  if (stage === "HOD") return "PENDING_HOD";
+  if (stage === "MANAGEMENT") return "PENDING_MANAGEMENT";
+  if (stage === "VICE_PRINCIPAL") return "PENDING_VICE_PRINCIPAL";
+  return "PENDING_PRINCIPAL";
 }
 
 // Validates a client-submitted routing map, dropping anything that isn't a
@@ -88,7 +97,7 @@ export function sanitizeLeaveApprovalRouting(input: unknown): { ok: true; routin
   const routing: LeaveApprovalRouting = {};
   for (const [role, stage] of Object.entries(input as Record<string, unknown>)) {
     if (!ROUTABLE_REQUESTER_ROLES.includes(role as UserRole)) return { ok: false, error: `${role} can't have a leave routing` };
-    if (stage !== "HOD" && stage !== "PRINCIPAL" && stage !== "MANAGEMENT") return { ok: false, error: `Invalid approver for ${role}` };
+    if (stage !== "HOD" && stage !== "PRINCIPAL" && stage !== "VICE_PRINCIPAL" && stage !== "MANAGEMENT") return { ok: false, error: `Invalid approver for ${role}` };
     if (!allowedStagesForRole(role as UserRole).includes(stage)) return { ok: false, error: `${role} can't be routed to ${stage}` };
     routing[role as UserRole] = stage;
   }

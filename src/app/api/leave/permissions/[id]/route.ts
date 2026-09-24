@@ -65,8 +65,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         return NextResponse.json({ error: "That request belongs to another department" }, { status: 403 });
       }
     } else if (req.status === "PENDING_PRINCIPAL") {
-      if (session.role !== "PRINCIPAL" && session.role !== "VICE_PRINCIPAL") {
+      if (session.role !== "PRINCIPAL") {
         return NextResponse.json({ error: "This request is waiting on the Principal" }, { status: 403 });
+      }
+    } else if (req.status === "PENDING_VICE_PRINCIPAL") {
+      if (session.role !== "PRINCIPAL" && session.role !== "VICE_PRINCIPAL") {
+        return NextResponse.json({ error: "This request is waiting on the Vice Principal" }, { status: 403 });
       }
     } else if (req.status === "PENDING_MANAGEMENT") {
       if (session.role !== "MANAGEMENT") {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Check, ChevronsUpDown, History, Mail, Plus, RefreshCw, Trash2, UserCog, UserMinus } from "lucide-react";
+import { Check, ChevronsUpDown, History, Mail, Plus, Trash2, UserCog, UserMinus } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { Badge } from "@/components/ui/badge";
@@ -77,26 +77,6 @@ export function RoleAssignmentsPage({ collegeId }: { collegeId?: string }) {
   const [emailSeat, setEmailSeat] = useState<RoleSeat | null>(null);
   const [vacateSeat, setVacateSeat] = useState<RoleSeat | null>(null);
   const [removeSeat, setRemoveSeat] = useState<RoleSeat | null>(null);
-  const [isConverting, setIsConverting] = useState(false);
-
-  async function convertLegacy() {
-    setIsConverting(true);
-    try {
-      const res = await fetch(`/api/college/role-seats/convert-legacy${qs}`, { method: "POST" });
-      const data = await res.json() as { created?: number; skipped?: string[]; error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed");
-      toast({
-        variant: "success",
-        title: data.created ? `${data.created} existing role account(s) converted to roles` : "Nothing to convert",
-        description: data.skipped?.length ? `Skipped: ${data.skipped.join("; ")}` : undefined,
-      });
-      await load();
-    } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Conversion failed" });
-    } finally {
-      setIsConverting(false);
-    }
-  }
 
   async function patchSeat(id: string, body: Record<string, unknown>): Promise<{ ok: boolean; error?: string; code?: string }> {
     const res = await fetch(`/api/college/role-seats/${id}${qs}`, {
@@ -112,12 +92,7 @@ export function RoleAssignmentsPage({ collegeId }: { collegeId?: string }) {
         title="Role Assignments"
         description="Appoint people to roles - Principal, each department's HOD, Vice Principal, Academics and so on. Everyone signs in with their own college email; a role adds its modules to their dashboard and stays with the position when the person changes."
         actions={
-          <>
-            <Button variant="outline" onClick={convertLegacy} loading={isConverting}>
-              <RefreshCw className="h-4 w-4 mr-2" />Convert existing role accounts
-            </Button>
-            <Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4 mr-2" />Add Role</Button>
-          </>
+          <Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4 mr-2" />Add Role</Button>
         }
       />
 
@@ -127,10 +102,9 @@ export function RoleAssignmentsPage({ collegeId }: { collegeId?: string }) {
         <Card>
           <CardContent className="py-10 text-center space-y-3">
             <p className="text-sm text-muted-foreground">
-              No seats yet. If your college already has HOD / Principal / Vice Principal logins, convert them so each becomes a seat you can hand to a person.
-              Otherwise add a seat and appoint someone.
+              No seats yet. Add a seat and appoint someone to get started.
             </p>
-            <Button variant="outline" onClick={convertLegacy} loading={isConverting}>Convert existing role accounts</Button>
+            <Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4 mr-2" />Add Role</Button>
           </CardContent>
         </Card>
       ) : (
