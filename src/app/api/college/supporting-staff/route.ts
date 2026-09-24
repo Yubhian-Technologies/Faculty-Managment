@@ -91,6 +91,7 @@ export async function POST(request: Request) {
 
     const body = (await request.json()) as {
       employeeId: string;
+      apaarFacultyId?: string;
       email?: string;
       collegeEmail: string;
       password: string;
@@ -216,6 +217,7 @@ export async function POST(request: Request) {
       collegeId,
       ...(department ? { department } : {}),
       employeeId,
+      ...(body.apaarFacultyId ? { apaarFacultyId: body.apaarFacultyId } : {}),
       collegeEmail,
       ...(body.email ? { email: body.email } : {}),
       mobileNo: body.mobileNo ?? "",

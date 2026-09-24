@@ -84,6 +84,7 @@ export interface SupportingStaffMember {
   collegeId: string;
   department?: string; // optional - unlike FacultyMember.department, many roles are college-wide
   employeeId: string;
+  apaarFacultyId?: string; // NBA/AICTE — APAAR Faculty ID. Mirrors FacultyMember.apaarFacultyId exactly (same key).
   // Name (as per PAN) - optional statutory-matching detail, independent of
   // legalName below. Mirrors FacultyMember.nameAsPerPan exactly (same key).
   nameAsPerPan?: string;

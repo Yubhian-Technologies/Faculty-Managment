@@ -69,6 +69,7 @@ export async function PATCH(
     const body = (await request.json()) as Partial<{
       nameAsPerPan: string;
       employeeId: string;
+      apaarFacultyId: string;
       email: string;
       mobileNo: string;
       additionalPhoneNumbers: { label?: string; number: string }[];
@@ -177,7 +178,7 @@ export async function PATCH(
     }
 
     const stringFields = [
-      "nameAsPerPan", "email", "mobileNo", "collegeEmail", "staffCategory", "designation", "otherDesignationTitle",
+      "nameAsPerPan", "apaarFacultyId", "email", "mobileNo", "collegeEmail", "staffCategory", "designation", "otherDesignationTitle",
       "department", "highestQualification", "employmentType", "status", "gender", "legalName", "nameAsPerAadhar",
       "fatherName", "motherName", "religion", "caste", "subCaste", "aadharNo", "passportNo",
       "bankAccountNumber", "bankName", "bankBranch", "bankOtherDetails",

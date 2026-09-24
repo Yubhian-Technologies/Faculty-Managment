@@ -14,11 +14,13 @@ import { AvatarUploadField } from "@/components/shared/AvatarUploadField";
 import { TextInput } from "@/components/shared/ProfileFieldPrimitives";
 import { toast } from "@/hooks/useToast";
 import { toDateInputValue } from "@/lib/utils";
+import { APAAR_REGEX } from "@/lib/validations";
 import { FACULTY_STATUS_LABELS } from "@/types";
 import type { DesignationCatalogItem, FacultyStatus, SupportingStaffDesignation } from "@/types";
 
 interface StaffForm {
   legalName: string;
+  apaarFacultyId: string;
   mobileNo: string;
   collegeEmail: string;
   designation: SupportingStaffDesignation;
@@ -29,7 +31,7 @@ interface StaffForm {
 }
 
 const EMPTY_FORM: StaffForm = {
-  legalName: "", mobileNo: "", collegeEmail: "", designation: "", otherDesignationTitle: "", highestQualification: "",
+  legalName: "", apaarFacultyId: "", mobileNo: "", collegeEmail: "", designation: "", otherDesignationTitle: "", highestQualification: "",
   status: "ACTIVE", joiningDate: "",
 };
 
@@ -65,6 +67,7 @@ export default function EditHodSupportingStaffPage() {
         setDepartment((m.department as string) ?? "");
         setForm({
           legalName: (m.legalName as string) ?? "",
+          apaarFacultyId: (m.apaarFacultyId as string) ?? "",
           mobileNo: (m.mobileNo as string) ?? "",
           collegeEmail: (m.collegeEmail as string) ?? "",
           designation: (m.designation as SupportingStaffDesignation) ?? "",
@@ -117,6 +120,10 @@ export default function EditHodSupportingStaffPage() {
     }
     if (!form.legalName.trim()) {
       toast({ variant: "destructive", title: "Full Name (as per SSC) is required" });
+      return;
+    }
+    if (form.apaarFacultyId.trim() && !APAAR_REGEX.test(form.apaarFacultyId.trim())) {
+      toast({ variant: "destructive", title: "APAAR Faculty ID must be exactly 12 digits" });
       return;
     }
     setSaving(true);
@@ -188,6 +195,15 @@ export default function EditHodSupportingStaffPage() {
                     onChange={(e) => set({ legalName: e.target.value.toUpperCase() })}
                     placeholder="FULL NAME IN CAPITALS"
                     className="uppercase"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>APAAR Faculty ID</Label>
+                  <Input
+                    inputMode="numeric" maxLength={12}
+                    value={form.apaarFacultyId}
+                    onChange={(e) => set({ apaarFacultyId: e.target.value.replace(/\D/g, "").slice(0, 12) })}
+                    placeholder="123456789012"
                   />
                 </div>
               </div>

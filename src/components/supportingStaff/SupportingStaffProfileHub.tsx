@@ -79,6 +79,7 @@ export function SupportingStaffProfileHub({ staff, basePath, backHref, editHref 
           </div>
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
             <Fact label="Employee ID" value={staff.employeeId} />
+            <Fact label="APAAR Faculty ID" value={staff.apaarFacultyId} />
             <Fact label="College Email" value={staff.collegeEmail} />
             <Fact label="Personal Email" value={staff.email} />
             <Fact label="Mobile No" value={staff.mobileNo} />
