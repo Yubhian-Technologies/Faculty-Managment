@@ -154,9 +154,26 @@ export async function PATCH(
     // Keep systemUsers in sync for session-role resolution
     const systemUpdates: Record<string, unknown> = {};
     if (role !== undefined) systemUpdates.role = role;
+    if (isActive !== undefined) systemUpdates.isActive = isActive;
     if (name !== undefined && name.trim()) systemUpdates.name = name.trim();
     if (Object.keys(systemUpdates).length > 0) {
       await db.collection("systemUsers").doc(uid).set(systemUpdates, { merge: true });
+    }
+
+    // Best-effort: the Firestore writes above are what the app enforces live
+    // (see liveRoles.ts's short-TTL re-check) - this additionally stops the
+    // old login/token from being used, mirroring lib/roles/seats.ts's
+    // retireAccount so a role change or deactivation can't be worked around
+    // by holding onto an already-issued Firebase ID token/refresh token.
+    if (role !== undefined || isActive !== undefined) {
+      try {
+        const { getAdminAuth } = await import("@/lib/firebase/admin");
+        const auth = await getAdminAuth();
+        if (isActive === false) await auth.updateUser(uid, { disabled: true });
+        else if (isActive === true) await auth.updateUser(uid, { disabled: false });
+        if (role !== undefined) await auth.setCustomUserClaims(uid, { role, collegeId });
+        await auth.revokeRefreshTokens(uid);
+      } catch { /* non-fatal */ }
     }
 
     const action =

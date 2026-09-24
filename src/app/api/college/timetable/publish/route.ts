@@ -67,6 +67,26 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "This draft has no slots to publish" }, { status: 400 });
     }
 
+    // A draft can carry placements for a TeachingAssignment that's since been
+    // deleted (assignment deletion cascades live timetableSlots but has no
+    // way to reach back into an in-progress, unpublished draft's own slots
+    // array) - publishing those anyway would put a faculty/subject pairing
+    // the HOD believed was removed back onto the live timetable. Drop them
+    // here, the one place every draft->live transition goes through,
+    // regardless of how the draft ended up stale.
+    const validAssignmentIds = new Set(
+      (await collegeRef.collection("teachingAssignments").where("sectionId", "==", sectionId).get())
+        .docs.map((d) => d.id),
+    );
+    const publishableSlots = draft.slots.filter((s) => validAssignmentIds.has(s.assignmentId));
+    const droppedCount = draft.slots.length - publishableSlots.length;
+    if (publishableSlots.length === 0) {
+      return NextResponse.json(
+        { error: "Every placement in this draft belongs to a teaching assignment that's since been removed. Discard the draft and rebuild it." },
+        { status: 400 },
+      );
+    }
+
     // Only the section's own department - or an HOD who owns/manages it (a
     // parent HOD over a sub-department, or a Sub-HOD's grouped/managed
     // branch) - may actually publish. An HOD only lending faculty to an
@@ -116,7 +136,7 @@ export async function POST(request: Request) {
       );
 
     const conflicts: string[] = [];
-    for (const s of draft.slots) {
+    for (const s of publishableSlots) {
       const clash = allSlots.find(
         (existing) =>
           existing.sectionId !== sectionId &&
@@ -167,7 +187,7 @@ export async function POST(request: Request) {
       if (++count >= 400) flush();
     }
 
-    for (const s of draft.slots) {
+    for (const s of publishableSlots) {
       const ref = collegeRef.collection("timetableSlots").doc();
       batch.set(ref, {
         collegeId: session.collegeId,
@@ -205,8 +225,9 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       ok: true,
-      published: draft.slots.length,
+      published: publishableSlots.length,
       replaced: staleGenerated.length,
+      droppedStaleAssignments: droppedCount,
     });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {

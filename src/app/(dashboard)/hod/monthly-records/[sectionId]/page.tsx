@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SegmentedTabs } from "@/components/shared/SegmentedTabs";
 import { currentAcademicStartYear, academicSessionLabel } from "@/lib/college/academicSession";
+import { formatPercent } from "@/lib/studentAttendance/percentage";
 
 const MONTH_LABELS = [
   "January", "February", "March", "April", "May", "June",
@@ -34,7 +35,7 @@ interface SubjectColumn {
 interface SubjectStat {
   held: number;
   attended: number;
-  percentage: number;
+  percentage: number | null;
 }
 interface RangeStudentRow {
   studentId: string;
@@ -81,7 +82,7 @@ function RangeReportTable({ subjects, students, summary }: {
                 <th rowSpan={2} className="px-4 py-3 text-left align-bottom">Name</th>
                 {subjects.map((s) => (
                   <th key={s.subjectId} colSpan={3} className="border-l px-4 py-2 text-center" title={s.subjectName}>
-                    {s.subjectCode || s.subjectName}
+                    {s.subjectName}
                   </th>
                 ))}
                 <th colSpan={3} className="border-l px-4 py-2 text-center">Overall Attendance</th>
@@ -110,13 +111,13 @@ function RangeReportTable({ subjects, students, summary }: {
                       <Fragment key={sub.subjectId}>
                         <td className="border-l px-3 py-2.5 text-center">{stat.held}</td>
                         <td className="px-3 py-2.5 text-center">{stat.attended}</td>
-                        <td className="px-3 py-2.5 text-center font-medium">{stat.percentage}%</td>
+                        <td className="px-3 py-2.5 text-center font-medium">{formatPercent(stat.percentage)}</td>
                       </Fragment>
                     );
                   })}
                   <td className="border-l px-3 py-2.5 text-center font-semibold">{s.overall.held}</td>
                   <td className="px-3 py-2.5 text-center font-semibold">{s.overall.attended}</td>
-                  <td className="px-3 py-2.5 text-center font-semibold">{s.overall.percentage}%</td>
+                  <td className="px-3 py-2.5 text-center font-semibold">{formatPercent(s.overall.percentage)}</td>
                 </tr>
               ))}
             </tbody>

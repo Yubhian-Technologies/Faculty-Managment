@@ -2,6 +2,7 @@ import type { Firestore } from "firebase-admin/firestore";
 import type { CourseYearTiming, DayOfWeek, TimetableSlot } from "@/types";
 import { defaultPeriodTimings } from "@/lib/timetable/buildGrid";
 import { resolveCurrentSemester, matchesCurrentSemester } from "@/lib/college/semester";
+import { resolveSubstituteSlotsForDate } from "@/lib/leave/periodCoverage";
 
 // Exported for callers that need to map an arbitrary calendar date (not just
 // "now") to a DayOfWeek against published timetableSlots - e.g. backfilling
@@ -87,16 +88,32 @@ export async function getCurrentTimetableSlot(
   facultyMemberId: string,
   now: Date = new Date(),
 ): Promise<CurrentPeriodSlot | null> {
-  const { day, minutes: nowMinutes } = collegeNow(now);
+  const { date, day, minutes: nowMinutes } = collegeNow(now);
   if (!day) return null;
 
   const collegeRef = db.collection("colleges").doc(collegeId);
   const slotsSnap = await collegeRef.collection("timetableSlots")
     .where("facultyId", "==", facultyMemberId)
     .get();
-  const todaySlots = slotsSnap.docs
+  const ownTodaySlots = slotsSnap.docs
     .map((d) => ({ id: d.id, ...d.data() }) as TimetableSlot & { id: string })
     .filter((s) => s.day === day);
+
+  // Also resolve any slot this person is covering today as an approved
+  // substitute - their own facultyId never appears on that slot doc (see
+  // resolveSubstituteSlotsForDate's own doc-comment), so it's invisible to
+  // the query above without this.
+  const substituted = await resolveSubstituteSlotsForDate(db, collegeId, facultyMemberId, date);
+  const ownSlotIds = new Set(ownTodaySlots.map((s) => s.id));
+  const missingSubIds = [...substituted.keys()].filter((id) => !ownSlotIds.has(id));
+  const subSlots: (TimetableSlot & { id: string })[] = [];
+  if (missingSubIds.length) {
+    const subSnaps = await Promise.all(missingSubIds.map((id) => collegeRef.collection("timetableSlots").doc(id).get()));
+    for (const snap of subSnaps) {
+      if (snap.exists) subSlots.push({ id: snap.id, ...snap.data() } as TimetableSlot & { id: string });
+    }
+  }
+  const todaySlots = [...ownTodaySlots, ...subSlots];
   if (todaySlots.length === 0) return null;
 
   for (const slot of todaySlots) {
@@ -149,9 +166,26 @@ export async function getFacultyPeriodsForDate(
   const slotsSnap = await collegeRef.collection("timetableSlots")
     .where("facultyId", "==", facultyId)
     .get();
-  const daySlots = slotsSnap.docs
+  const ownDaySlots = slotsSnap.docs
     .map((s) => ({ id: s.id, ...s.data() }) as TimetableSlot & { id: string })
     .filter((s) => s.day === day);
+
+  // Also include slots this person is covering on dateISO as an approved
+  // substitute (see resolveSubstituteSlotsForDate's own doc-comment) - this
+  // is what makes a covering faculty's own "today's classes" list (Mark
+  // Attendance, Attendance Completion) actually show the class they're
+  // standing in for, not just the ones they're directly assigned.
+  const substituted = await resolveSubstituteSlotsForDate(db, collegeId, facultyId, dateISO);
+  const ownSlotIds = new Set(ownDaySlots.map((s) => s.id));
+  const missingSubIds = [...substituted.keys()].filter((id) => !ownSlotIds.has(id));
+  const subSlots: (TimetableSlot & { id: string })[] = [];
+  if (missingSubIds.length) {
+    const subSnaps = await Promise.all(missingSubIds.map((id) => collegeRef.collection("timetableSlots").doc(id).get()));
+    for (const snap of subSnaps) {
+      if (snap.exists) subSlots.push({ id: snap.id, ...snap.data() } as TimetableSlot & { id: string });
+    }
+  }
+  const daySlots = [...ownDaySlots, ...subSlots];
 
   const resolved: FacultyPeriodOnDate[] = [];
   for (const slot of daySlots) {
@@ -224,9 +258,26 @@ export async function checkFacultyPeriodWindow(
   // day) - each period keeps its own doc, so resolve every one of today's
   // and check them all rather than assuming the first result is the one
   // covering "now".
-  const todaySlots = slotsSnap.docs
+  let todaySlots = slotsSnap.docs
     .map((d) => ({ id: d.id, ...d.data() }) as TimetableSlot & { id: string })
     .filter((s) => s.day === day);
+
+  // Fallback: this exact facultyMemberId+assignmentId combo may belong to a
+  // different faculty (on leave), with facultyMemberId covering it today as
+  // an approved substitute instead - checked only when the direct query
+  // above finds nothing, so the ordinary (non-substitute) path never pays
+  // this extra cost. See resolveSubstituteSlotsForDate's own doc-comment.
+  if (todaySlots.length === 0) {
+    const substituted = await resolveSubstituteSlotsForDate(db, collegeId, facultyMemberId, dateISO);
+    if (substituted.size > 0) {
+      const assignmentSlotsSnap = await collegeRef.collection("timetableSlots")
+        .where("assignmentId", "==", assignmentId)
+        .get();
+      todaySlots = assignmentSlotsSnap.docs
+        .map((d) => ({ id: d.id, ...d.data() }) as TimetableSlot & { id: string })
+        .filter((s) => s.day === day && substituted.has(s.id));
+    }
+  }
   if (todaySlots.length === 0) return { ok: false, reason: "NOT_SCHEDULED" };
 
   const resolved: { slot: TimetableSlot & { id: string }; startTime: string; endTime: string }[] = [];

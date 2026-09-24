@@ -7,10 +7,14 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/store/authStore";
+import { useNavVisibility } from "@/hooks/useNavVisibility";
+import { isPathHidden } from "@/components/layout/navConfig";
 import type { IndentRequest } from "@/types";
 
 export default function PurchaseDashboard() {
   const user = useAuthStore((s) => s.user);
+  const { hiddenModules, hiddenItems } = useNavVisibility();
+  const isHidden = (href: string) => !!user?.role && isPathHidden(href, user.role, hiddenModules, hiddenItems);
   const [stats, setStats] = useState({
     pendingReview: null as number | null,
     awaitingFinance: null as number | null,
@@ -42,6 +46,7 @@ export default function PurchaseDashboard() {
         description="Source quotations, track the purchase status of goods, and submit receipts to Finance"
       />
 
+      {!isHidden("/purchase/indents") && (
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
         {[
           { label: "Needs Quotations", value: fmt(stats.pendingReview), icon: Clock, color: "text-yellow-600 bg-yellow-50" },
@@ -64,8 +69,10 @@ export default function PurchaseDashboard() {
           </Link>
         ))}
       </div>
+      )}
 
       <div className="grid gap-4 md:grid-cols-2">
+        {!isHidden("/purchase/indents") && (
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Quick Actions</CardTitle>
@@ -79,6 +86,8 @@ export default function PurchaseDashboard() {
             </Button>
           </CardContent>
         </Card>
+        )}
+
 
         <Card>
           <CardHeader>

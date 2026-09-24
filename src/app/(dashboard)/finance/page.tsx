@@ -7,12 +7,16 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/store/authStore";
+import { useNavVisibility } from "@/hooks/useNavVisibility";
+import { isPathHidden } from "@/components/layout/navConfig";
 import { collegeFetch } from "@/lib/api/collegeFetch";
 import { formatCurrency } from "@/lib/utils";
 import type { FinanceBudget, FinanceBudgetRequest, FinanceExpenseRequest, FinancePurchaseClearance } from "@/types";
 
 export default function FinanceDashboard() {
   const user = useAuthStore((s) => s.user);
+  const { hiddenModules, hiddenItems } = useNavVisibility();
+  const isHidden = (href: string) => !!user?.role && isPathHidden(href, user.role, hiddenModules, hiddenItems);
   const [stats, setStats] = useState({
     totalAllocated: null as number | null,
     totalUtilized: null as number | null,
@@ -54,7 +58,7 @@ export default function FinanceDashboard() {
           { label: "Total Utilized", value: fmt(stats.totalUtilized), icon: IndianRupee, color: "text-green-600 bg-green-50", href: "/finance/fund-allocation" },
           { label: "Pending Approvals", value: fmtCount(stats.pendingApprovals), icon: ClipboardCheck, color: "text-orange-600 bg-orange-50", href: "/finance/budget-approvals" },
           { label: "Pending Clearances", value: fmtCount(stats.pendingClearances), icon: ShoppingCart, color: "text-purple-600 bg-purple-50", href: "/finance/purchase-clearance" },
-        ].map((stat) => (
+        ].filter((stat) => !isHidden(stat.href)).map((stat) => (
           <Link key={stat.label} href={stat.href}>
             <Card className="hover:shadow-md transition-shadow cursor-pointer">
               <CardContent className="p-4 flex items-center gap-3">
@@ -77,24 +81,30 @@ export default function FinanceDashboard() {
             <CardTitle className="text-base">Quick Actions</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
+            {!isHidden("/finance/budget") && (
             <Button variant="outline" asChild className="w-full justify-start">
               <Link href="/finance/budget">
                 <Wallet className="h-4 w-4 mr-2" />
                 Manage Budgets
               </Link>
             </Button>
+            )}
+            {!isHidden("/finance/budget-approvals") && (
             <Button variant="outline" asChild className="w-full justify-start">
               <Link href="/finance/budget-approvals">
                 <ClipboardCheck className="h-4 w-4 mr-2" />
                 Review Budget Approvals
               </Link>
             </Button>
+            )}
+            {!isHidden("/finance/payments") && (
             <Button variant="outline" asChild className="w-full justify-start">
               <Link href="/finance/payments">
                 <IndianRupee className="h-4 w-4 mr-2" />
                 Process Payments
               </Link>
             </Button>
+            )}
           </CardContent>
         </Card>
 

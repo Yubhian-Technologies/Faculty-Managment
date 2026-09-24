@@ -20,6 +20,7 @@ export async function PATCH(
       entries?: { studentId: string; status: StudentAttendanceMark | null }[];
       classNotes?: string;
       submit?: boolean;
+      expectedUpdatedAt?: string | null;
     };
 
     const db = getAdminDb();
@@ -36,6 +37,27 @@ export async function PATCH(
     }
     if (existing.status === "SUBMITTED") {
       return NextResponse.json({ error: "Attendance has already been submitted and cannot be edited" }, { status: 409 });
+    }
+
+    // Version check — if client sent the updatedAt it last saw, enforce it
+    // to avoid last-write-wins silent loss when two tabs/devices edit same DRAFT.
+    if (body.expectedUpdatedAt) {
+      const serverMs = (existing.updatedAt as unknown as { toDate?: () => Date })?.toDate?.()?.getTime?.() ?? 0;
+      let clientMs: number = NaN;
+      const exp: unknown = body.expectedUpdatedAt;
+      if (typeof exp === "string") clientMs = new Date(exp).getTime();
+      else if (exp && typeof exp === "object") {
+        const o = exp as { _seconds?: number; seconds?: number; toDate?: () => Date };
+        if (typeof o.toDate === "function") clientMs = o.toDate().getTime();
+        else if (typeof o._seconds === "number") clientMs = o._seconds * 1000;
+        else if (typeof o.seconds === "number") clientMs = o.seconds * 1000;
+      }
+      if (!Number.isNaN(clientMs) && serverMs !== 0 && clientMs !== serverMs) {
+        return NextResponse.json(
+          { error: "This attendance was updated elsewhere. Please reload and try again.", session: { ...existing, id } },
+          { status: 409 }
+        );
+      }
     }
 
     // The published timetable is the source of truth for WHEN this can be
@@ -79,7 +101,9 @@ export async function PATCH(
     }
 
     if (body.submit) {
-      if (markedCount < existing.totalStudents || existing.totalStudents === 0) {
+      if (existing.totalStudents === 0) {
+        // genuinely empty section — allow submit provided classNotes present (same gate below)
+      } else if (markedCount < existing.totalStudents) {
         return NextResponse.json(
           { error: "Please mark attendance for all students before submitting" },
           { status: 400 }

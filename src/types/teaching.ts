@@ -120,6 +120,12 @@ export interface TeachingAssignment {
   createdAt: Timestamp;
   updatedAt: Timestamp;
 
+  // Joined from the Subject doc at read time only (never stored on this doc
+  // itself) by GET college/teaching-assignments - lets the Timetable editor's
+  // Theory/Practical filter and its lab-only split gate work without a
+  // separate subjects fetch. Absent from any write payload.
+  subjectType?: SubjectType;
+
   // Course/section-scoped rows only - every such row (current or past) carries
   // which academic year/semester it belongs to, for the resume/Teaching Load
   // table. Named distinctly from `academicYear`/`semester` above (which belong to
@@ -273,6 +279,12 @@ export interface TimetableSlot {
   // heads-up for next week's Tuesday, say, isn't mistaken for a permanent
   // reassignment of every Tuesday.
   substituteDate?: string;
+  // Joined from the Subject doc at read time only (never persisted on this
+  // doc itself), the same way the class-leader Timetable route already did
+  // for its own Theory/Lab filter - GET college/timetable-slots and GET
+  // college/teaching-assignments both attach it now too, so every read-only
+  // timetable view can filter by Theory vs Practical without a second fetch.
+  subjectType?: SubjectType;
 }
 
 // ─── Timetable Rules ──────────────────────────────────────────────────────────

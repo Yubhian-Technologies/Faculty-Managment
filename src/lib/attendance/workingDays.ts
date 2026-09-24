@@ -1,6 +1,6 @@
 import type { Firestore } from "firebase-admin/firestore";
 import type { UserRole } from "@/types/core";
-import { dateKey } from "@/lib/leave/dayCounter";
+import { istDateKey, istMidnightUTC } from "@/lib/attendance/istTime";
 
 // Roles that can be targeted by a Working Day override (colleges/{id}/
 // workingDays - see college-office/holidays/page.tsx's Working Days section)
@@ -29,8 +29,8 @@ export async function isWorkingDayForRole(
   date: Date,
   role: UserRole
 ): Promise<boolean> {
-  const start = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-  const endExclusive = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 1);
+  const start = istMidnightUTC(date);
+  const endExclusive = new Date(start.getTime() + 24 * 60 * 60 * 1000);
   const snap = await workingDaysRef(db, collegeId)
     .where("date", ">=", start)
     .where("date", "<", endExclusive)
@@ -52,8 +52,8 @@ export async function getWorkingDayWeightsForRole(
   to: Date,
   role: UserRole
 ): Promise<Map<string, number>> {
-  const start = new Date(from.getFullYear(), from.getMonth(), from.getDate());
-  const endExclusive = new Date(to.getFullYear(), to.getMonth(), to.getDate() + 1);
+  const start = istMidnightUTC(from);
+  const endExclusive = new Date(istMidnightUTC(to).getTime() + 24 * 60 * 60 * 1000);
   const snap = await workingDaysRef(db, collegeId)
     .where("date", ">=", start)
     .where("date", "<", endExclusive)
@@ -61,7 +61,7 @@ export async function getWorkingDayWeightsForRole(
   const weights = new Map<string, number>();
   for (const doc of snap.docs) {
     const data = doc.data() as { date: { toDate(): Date }; roles?: UserRole[]; isHalfDay?: boolean };
-    if ((data.roles ?? []).includes(role)) weights.set(dateKey(data.date.toDate()), data.isHalfDay ? 0.5 : 1);
+    if ((data.roles ?? []).includes(role)) weights.set(istDateKey(data.date.toDate()), data.isHalfDay ? 0.5 : 1);
   }
   return weights;
 }
