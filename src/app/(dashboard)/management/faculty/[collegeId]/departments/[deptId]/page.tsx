@@ -9,6 +9,7 @@ import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ProfileFieldsView } from "@/components/faculty/ProfileFieldsView";
 import { PersonalDetailsView } from "@/components/shared/PersonalDetailsView";
 import { Avatar } from "@/components/shared/Avatar";
@@ -18,10 +19,20 @@ import type { FacultyMember, FMSUser, FacultyProfileFields, College, ResearchPub
 type FacultyRow = Record<string, unknown> & FacultyMember;
 type HodProfile = FMSUser & { academicProfile?: FacultyProfileFields };
 
+const SEARCH_FIELDS = {
+  all: { label: "All", keys: ["legalName", "nameAsPerPan", "employeeId", "collegeEmail", "officialEmail", "email", "designation"] },
+  name: { label: "Name", keys: ["legalName", "nameAsPerPan"] },
+  id: { label: "ID", keys: ["employeeId"] },
+  email: { label: "Email", keys: ["collegeEmail", "officialEmail", "email"] },
+  designation: { label: "Designation", keys: ["designation"] },
+} as const;
+type SearchField = keyof typeof SEARCH_FIELDS;
+
 export default function ManagementDepartmentFacultyPage() {
   const router = useRouter();
   const { collegeId, deptId } = useParams<{ collegeId: string; deptId: string }>();
   const [showHodDetails, setShowHodDetails] = useState(false);
+  const [searchField, setSearchField] = useState<SearchField>("all");
 
   const { data, isLoading } = useQuery({
     queryKey: ["mgmt-dept-faculty", collegeId, deptId],
@@ -139,8 +150,18 @@ export default function ManagementDepartmentFacultyPage() {
         columns={columns}
         isLoading={isLoading}
         keyExtractor={(f) => f.id}
-        searchPlaceholder="Search faculty..."
-        searchKeys={["legalName", "nameAsPerPan"] as (keyof FacultyMember)[]}
+        searchPlaceholder={`Search faculty${searchField === "all" ? "" : ` by ${SEARCH_FIELDS[searchField].label.toLowerCase()}`}...`}
+        searchKeys={SEARCH_FIELDS[searchField].keys as unknown as (keyof FacultyMember)[]}
+        filterComponent={
+          <Select value={searchField} onValueChange={(v) => setSearchField(v as SearchField)}>
+            <SelectTrigger className="w-[150px]"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {(Object.keys(SEARCH_FIELDS) as SearchField[]).map((k) => (
+                <SelectItem key={k} value={k}>{SEARCH_FIELDS[k].label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        }
         emptyTitle="No faculty in this department"
         onRowClick={(f) => router.push(`/management/faculty/${collegeId}/departments/${deptId}/faculty/${f.id}`)}
       />
