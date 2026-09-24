@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { UserPlus, ChevronDown, ChevronUp, Plus, Pencil, Trash2 } from "lucide-react";
+import { UserPlus, ChevronDown, ChevronUp, Plus, Pencil, Trash2, Building } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -174,8 +174,11 @@ export default function AdministrationCollegesPage() {
               {/* College row */}
               <div className="flex items-center justify-between p-4">
                 <div className="flex items-center gap-3 min-w-0">
-                  <div className="min-w-0">
-                    <p className="font-medium truncate">{college.name}</p>
+                  <div
+                    className="min-w-0 cursor-pointer"
+                    onClick={() => router.push(`/administration/colleges/${college.id}/departments`)}
+                  >
+                    <p className="font-medium truncate hover:underline">{college.name}</p>
                     <p className="text-xs text-muted-foreground truncate">{college.contactEmail ?? college.address ?? "-"}</p>
                   </div>
                   {college.type && (
@@ -188,6 +191,14 @@ export default function AdministrationCollegesPage() {
                   </Badge>
                 </div>
                 <div className="flex items-center gap-2 shrink-0 ml-3">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => router.push(`/administration/colleges/${college.id}/departments`)}
+                  >
+                    <Building className="h-3.5 w-3.5 mr-1.5" />
+                    Departments
+                  </Button>
                   <Button
                     size="sm"
                     variant="ghost"
