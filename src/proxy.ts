@@ -122,7 +122,7 @@ export async function proxy(request: NextRequest) {
       const loginUrl = new URL("/login", request.url);
       loginUrl.searchParams.set("redirect", pathname);
       const response = NextResponse.redirect(loginUrl);
-      response.cookies.delete("fms-session");
+      response.cookies.delete({ name: "fms-session", path: "/" });
       return response;
     }
 
@@ -145,7 +145,7 @@ export async function proxy(request: NextRequest) {
   } catch {
     // Unsigned / tampered / pre-signing cookie: drop it and sign in again.
     const response = NextResponse.redirect(new URL("/login", request.url));
-    response.cookies.delete("fms-session");
+    response.cookies.delete({ name: "fms-session", path: "/" });
     return response;
   }
 }

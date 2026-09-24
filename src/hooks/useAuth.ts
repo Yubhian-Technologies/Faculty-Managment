@@ -186,6 +186,13 @@ export function useAuth() {
   }, [logout, setFirebaseToken, setLoading, setUser]);
 
   const logoutUser = async () => {
+    // Clears the httpOnly fms-session cookie server-side - signOut(auth) and
+    // the store's logout() below only clear client-side state, so without
+    // this the cookie (the only thing API guards/proxy.ts actually check)
+    // would keep authenticating requests until it naturally expires.
+    try {
+      await fetch("/api/auth/session", { method: "DELETE" });
+    } catch { /* best-effort - still proceed with client-side sign-out */ }
     await signOut(auth);
     logout();
   };

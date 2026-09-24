@@ -105,6 +105,9 @@ export async function POST(request: Request) {
     const now = new Date();
     const collegeRef = db.collection("colleges").doc(session.collegeId);
 
+    const vacancySnap = await collegeRef.collection("vacancyRequests").doc(vacancyId).get();
+    const positionCategory = (vacancySnap.data() as { positionCategory?: string } | undefined)?.positionCategory ?? "TEACHING";
+
     const batchRef = collegeRef.collection("hiringBatches").doc();
     const appRefs = applicationIds.map((aid) => collegeRef.collection("candidateApplications").doc(aid));
 
@@ -132,6 +135,7 @@ export async function POST(request: Request) {
           position,
           hodUid: session.uid,
           hodName,
+          positionCategory,
           panelMemberUids,
           applicationIds,
           interviewDate: new Date(interviewDate),

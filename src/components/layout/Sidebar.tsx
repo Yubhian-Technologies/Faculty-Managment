@@ -15,6 +15,7 @@ import { usePrincipalPendingHiring } from "@/hooks/usePrincipalPendingHiring";
 import { useCollegeType } from "@/hooks/useCollegeType";
 import { hasSupportingStaffSplit } from "@/lib/designations/config";
 import { isNavItemActive, filterVisibleNavItems, ROLES_WITH_EMBEDDED_PANEL_ACCESS, type NavItem } from "./navConfig";
+import { useIsTimetableIncharge } from "@/hooks/useIsTimetableIncharge";
 import { NavIcon } from "./NavIcon";
 import { WorkContextSwitcher } from "./WorkContextSwitcher";
 import { useWorkContext } from "@/hooks/useWorkContext";
@@ -53,6 +54,7 @@ export function Sidebar({ hiddenModules, hiddenItems }: SidebarProps) {
   const { pendingCount: pendingHiringCount } = usePrincipalPendingHiring();
   const { collegeType } = useCollegeType();
   const { items: contextItems } = useWorkContext();
+  const { isIncharge } = useIsTimetableIncharge();
 
   if (!user) return null;
 
@@ -64,7 +66,17 @@ export function Sidebar({ hiddenModules, hiddenItems }: SidebarProps) {
   // centrally owned by Principal (see hasSupportingStaffSplit).
   const baseNavItems = filterVisibleNavItems(contextItems, hiddenModules, hiddenItems, user.realRole)
     .filter((item) => !hideSubDepartmentsLink || item.href !== "/hod/settings/sub-departments")
-    .filter((item) => hasSupportingStaffSplit(collegeType) || (item.href !== "/hod/supporting-staff" && item.href !== "/hod/settings/designations"));
+    .filter((item) => hasSupportingStaffSplit(collegeType) || (item.href !== "/hod/supporting-staff" && item.href !== "/hod/settings/designations"))
+    .filter((item) => {
+      // Timetable Incharge is delegated — hide the nav entry when the user holds
+      // no such delegation (checked once on mount via useIsTimetableIncharge).
+      // HOD/PRINCIPAL etc. never use this href, so they are unaffected.
+      const isInchargeNav = item.href === "/panel/timetable-incharge" || item.href === "/college-staff/timetable-incharge";
+      if (!isInchargeNav) return true;
+      // While loading, keep visible to avoid flicker; once resolved, hide if not incharge.
+      if (isIncharge === null) return true;
+      return isIncharge === true;
+    });
 
   // Inject dynamic nav items based on panel assignments (any role can be a panel member)
   let navItems = baseNavItems;

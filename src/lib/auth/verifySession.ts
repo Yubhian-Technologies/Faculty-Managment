@@ -2,7 +2,7 @@ import { cookies } from "next/headers";
 import { readSession } from "@/lib/auth/sessionToken";
 import { canRoleAccessRole } from "@/types";
 import type { UserRole } from "@/types";
-import { resolveHeldRoles } from "@/lib/auth/liveRoles";
+import { resolveHeldRoles, resolveRealRole } from "@/lib/auth/liveRoles";
 import { pickEffectiveRole } from "@/lib/roles/seatRoles";
 
 export interface SessionPayload {
@@ -63,6 +63,13 @@ export async function requireSuperAdmin(): Promise<SessionPayload> {
   if (!session || session.role !== "SUPER_ADMIN") {
     throw new Error("UNAUTHORIZED");
   }
+  // Live-check against systemUsers (see liveRoles.ts) so a revoked/deactivated
+  // Super Admin account stops passing within the cache TTL, not only once the
+  // 24h session cookie naturally expires.
+  const held = await resolveHeldRoles(session);
+  if (!held.includes("SUPER_ADMIN")) {
+    throw new Error("UNAUTHORIZED");
+  }
   return session;
 }
 
@@ -82,6 +89,11 @@ export async function requireManagement(): Promise<SessionPayload> {
   if (!session || session.role !== "MANAGEMENT") {
     throw new Error("UNAUTHORIZED");
   }
+  // Same live re-check as requireSuperAdmin - see liveRoles.ts.
+  const held = await resolveHeldRoles(session);
+  if (!held.includes("MANAGEMENT")) {
+    throw new Error("UNAUTHORIZED");
+  }
   return session;
 }
 
@@ -98,7 +110,13 @@ export async function requireRole(...roles: string[]): Promise<SessionPayload> {
   const held = await resolveHeldRoles(session);
   const match = pickEffectiveRole(held, roles);
   if (!match) throw new Error("UNAUTHORIZED");
-  return match === session.role ? { ...session, roles: held } : { ...session, role: match, roles: held };
+  // Re-derived live (see liveRoles.ts) rather than trusted from the cookie -
+  // isCollegeAdmin/isDepartmentOffice gate real privileges on this, so a role
+  // change must take effect within the same cache window as `held` above.
+  const realRole = await resolveRealRole(session);
+  return match === session.role
+    ? { ...session, realRole, roles: held }
+    : { ...session, role: match, realRole, roles: held };
 }
 
 // Passes if the caller's role IS one of `targetRoles` OR inherits it via the

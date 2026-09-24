@@ -91,14 +91,18 @@ export async function PATCH(
     if (isShortlisted !== undefined && !isHodRole && !isPrincipalRole) {
       return NextResponse.json({ error: "Only the HOD or Principal can update the shortlist" }, { status: 403 });
     }
-    if (hasArrived !== undefined && session.role !== "HOD" && session.role !== "PANEL_MEMBER" && !isPrincipalRole) {
-      return NextResponse.json({ error: "Only the HOD or panel can mark a candidate as arrived" }, { status: 403 });
+    if (hasArrived !== undefined && session.role !== "HOD" && session.role !== "PANEL_MEMBER" && !isCollegeOfficeRole && !isPrincipalRole) {
+      return NextResponse.json({ error: "Only the HOD, panel, or College Office can mark a candidate as arrived" }, { status: 403 });
     }
     if (batchId !== undefined && !isHodRole && !isPrincipalRole) {
       return NextResponse.json({ error: "Only the HOD or Principal can reassign a candidate's batch" }, { status: 403 });
     }
     if ((status !== undefined || stage !== undefined || committeeRecommendation !== undefined) && !isPrincipalRole) {
       return NextResponse.json({ error: "Only the Principal can record a hiring decision" }, { status: 403 });
+    }
+    const VALID_STAGES = ["DEMO", "INTERVIEW", "SALARY_NEGOTIATION", "DECISION"];
+    if (stage !== undefined && !VALID_STAGES.includes(stage)) {
+      return NextResponse.json({ error: "Invalid stage" }, { status: 400 });
     }
     if (
       (expectedSalary !== undefined || negotiatedSalary !== undefined || dateOfJoining !== undefined || termsAndConditions !== undefined) &&

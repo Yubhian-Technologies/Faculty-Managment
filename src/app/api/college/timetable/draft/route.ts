@@ -81,12 +81,32 @@ const cellKey = (day: string, period: number) => `${day}:${period}`;
  * (day, startPeriod). `ignore` holds cells being vacated by the same action, so
  * moving a block one period sideways isn't blocked by its own current cells.
  */
+/** Longest run of consecutive integers present in `periods`. */
+function longestConsecutiveRun(periods: Set<number>): number {
+  let max = 0;
+  for (const p of periods) {
+    if (periods.has(p - 1)) continue; // not the start of a run
+    let run = 1;
+    while (periods.has(p + run)) run++;
+    max = Math.max(max, run);
+  }
+  return max;
+}
+
+/** Number of separate same-subject sessions in `periods` (a contiguous run counts once). */
+function countSessions(periods: Set<number>): number {
+  let sessions = 0;
+  for (const p of periods) if (!periods.has(p - 1)) sessions++;
+  return sessions;
+}
+
 function validatePlacement(
   ctx: TimetableContext,
   draft: TimetableDraft,
   opts: {
     facultyId: string;
     facultyName: string;
+    subjectId: string;
     day: string;
     startPeriod: number;
     blockSize: number;
@@ -106,7 +126,7 @@ function validatePlacement(
 ): string | null {
   const { timing, rules } = ctx;
   if (!timing) return "No period timing is configured for this course year.";
-  const { facultyId, facultyName, day, startPeriod, blockSize, ignore } = opts;
+  const { facultyId, facultyName, subjectId, day, startPeriod, blockSize, ignore } = opts;
   const allowAcrossBreaks = opts.allowAcrossBreaks ?? rules.allowLabAcrossBreaks;
 
   if (!rules.workingDays.includes(day as DayOfWeek)) return `${day} is not a working day.`;
@@ -142,6 +162,40 @@ function validatePlacement(
   const otherSections = Array.from(facultyBusy).filter((c) => c.startsWith(`${day}:`)).length;
   if (sameDay + otherSections + blockSize > rules.maxPeriodsPerFacultyPerDay) {
     return `${facultyName} would exceed the ${rules.maxPeriodsPerFacultyPerDay} periods/day limit on ${day}.`;
+  }
+
+  // Per-faculty consecutive-period cap: this section's own draft placements
+  // for this faculty on this day, plus every other section's (busyFaculty),
+  // plus the block being placed - a faculty back-to-back across two
+  // different sections is just as much "consecutive" as within one.
+  const facultyDayPeriods = new Set<number>();
+  for (const cell of facultyBusy) {
+    const [cellDay, cellPeriod] = cell.split(":");
+    if (cellDay === day) facultyDayPeriods.add(Number(cellPeriod));
+  }
+  for (const s of draft.slots) {
+    if (s.facultyId === facultyId && s.day === day && !ignore.has(cellKey(s.day, s.periodNumber))) {
+      facultyDayPeriods.add(s.periodNumber);
+    }
+  }
+  for (let i = 0; i < blockSize; i++) facultyDayPeriods.add(startPeriod + i);
+  const longestRun = longestConsecutiveRun(facultyDayPeriods);
+  if (longestRun > rules.maxConsecutivePeriodsPerFaculty) {
+    return `${facultyName} would have ${longestRun} consecutive periods on ${day}, exceeding the ${rules.maxConsecutivePeriodsPerFaculty}-period limit.`;
+  }
+
+  // Per-subject daily repeat cap, for this section only - a contiguous lab
+  // block counts as one session, not one per period (see countSessions).
+  const subjectDayPeriods = new Set<number>();
+  for (const s of draft.slots) {
+    if (s.subjectId === subjectId && s.day === day && !ignore.has(cellKey(s.day, s.periodNumber))) {
+      subjectDayPeriods.add(s.periodNumber);
+    }
+  }
+  for (let i = 0; i < blockSize; i++) subjectDayPeriods.add(startPeriod + i);
+  const sessionCount = countSessions(subjectDayPeriods);
+  if (sessionCount > rules.maxPeriodsPerSubjectPerDay) {
+    return `This subject would be scheduled ${sessionCount} separate times on ${day}, exceeding the ${rules.maxPeriodsPerSubjectPerDay}/day limit.`;
   }
 
   return null;
@@ -220,6 +274,7 @@ function checkPlacementAcrossBreak(
   opts: {
     facultyId: string;
     facultyName: string;
+    subjectId: string;
     day: string;
     startPeriod: number;
     blockSize: number;
@@ -528,10 +583,18 @@ export async function PATCH(request: Request) {
       const subjectType = subject?.type ?? "THEORY";
       const blockSize = subjectType === "PRACTICAL" ? Math.max(1, ctx.rules.labBlockSize) : 1;
 
+      // Same gate as timetable-slots/route.ts's manual pin path - a split
+      // period (two+ subjects/faculty sharing one cell) only makes sense for
+      // parallel lab batches, not two theory classes at once.
+      if (body.allowSplit && subjectType !== "PRACTICAL") {
+        return NextResponse.json({ error: "Only lab (PRACTICAL) subjects can be split into batches" }, { status: 400 });
+      }
+
       const placeAt = Number(toPeriod);
       const placementOpts = {
         facultyId: assignment.facultyId,
         facultyName: assignment.facultyName,
+        subjectId: assignment.subjectId,
         day: toDay,
         startPeriod: placeAt,
         blockSize,
@@ -577,6 +640,7 @@ export async function PATCH(request: Request) {
       const placementOpts = {
         facultyId: block[0].facultyId,
         facultyName: block[0].facultyName,
+        subjectId: block[0].subjectId,
         day: toDay,
         startPeriod: placeAt,
         blockSize: block.length,

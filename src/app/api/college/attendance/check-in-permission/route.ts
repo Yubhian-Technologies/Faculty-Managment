@@ -8,6 +8,7 @@ import { CHECKIN_PERMISSIONS_COL, checkInPermissionDocId } from "@/lib/attendanc
 import { isLateCheckIn } from "@/lib/attendance/lateStatus";
 import { reverseLateCheckIn } from "@/lib/leave/lateAttendancePenalty";
 import { nowInIndia } from "@/lib/leave/dayCounter";
+import { isHodOrUnitHead } from "@/lib/attendance/collegeStaffUnits";
 import type { AttendanceCheckInPermission } from "@/types";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -25,7 +26,7 @@ function parseDocDate(dateStr: string): Date {
 // it in place (e.g. the HOD changing their mind about the permitted time).
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember("HOD");
+    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL");
     const body = (await request.json()) as {
       facultyId?: string;
       date?: string;
@@ -72,13 +73,19 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Person not found" }, { status: 404 });
     }
     const target = targetSnap.data() as { name?: string; department?: string; role?: string };
-    if (target.role !== "PANEL_MEMBER") {
-      return NextResponse.json({ error: "Check-in permission can only be granted to Faculty (teaching or technical)" }, { status: 403 });
-    }
-
-    const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
-    if (!canHodEditDepartment(scope, target.department ?? "")) {
-      return NextResponse.json({ error: "You can only grant this for faculty in your department" }, { status: 403 });
+    if (session.role === "HOD") {
+      if (target.role !== "PANEL_MEMBER") {
+        return NextResponse.json({ error: "Check-in permission can only be granted to Faculty (teaching or technical)" }, { status: 403 });
+      }
+      const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
+      if (!canHodEditDepartment(scope, target.department ?? "")) {
+        return NextResponse.json({ error: "You can only grant this for faculty in your department" }, { status: 403 });
+      }
+    } else {
+      // PRINCIPAL / VICE_PRINCIPAL — one tier up, grants to HOD or unit heads
+      if (!isHodOrUnitHead(target as { role?: string; department?: string })) {
+        return NextResponse.json({ error: "You can only grant this for an HOD or unit head" }, { status: 403 });
+      }
     }
 
     const grantorSnap = await collegeRef.collection("users").doc(session.uid).get();

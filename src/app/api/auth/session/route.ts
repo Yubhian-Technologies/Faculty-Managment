@@ -173,6 +173,8 @@ export async function POST(request: Request) {
 
 export async function DELETE() {
   const response = NextResponse.json({ ok: true });
-  response.cookies.delete("fms-session");
+  // Must match the path the cookie was set with (path: "/" above) - the
+  // bare-name overload's default path isn't guaranteed to line up with it.
+  response.cookies.delete({ name: "fms-session", path: "/" });
   return response;
 }

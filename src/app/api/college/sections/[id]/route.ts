@@ -595,7 +595,25 @@ export async function DELETE(
       );
     }
 
-    await ref.delete();
+    // A section owns its own teachingAssignments/timetableSlots/timetableDraft
+    // (all keyed by sectionId, unreachable any other way) - left behind
+    // otherwise as orphans referencing a sectionId that no longer exists, the
+    // same class of bug scripts/cleanup-orphaned-timetable-slots.mjs was
+    // written to clean up for assignment deletion, which already cascades
+    // this way - see teaching-assignments/[id]/route.ts DELETE.
+    const collegeRef = db.collection("colleges").doc(session.collegeId);
+    const [assignmentsSnap, slotsSnap, draftsSnap] = await Promise.all([
+      collegeRef.collection("teachingAssignments").where("sectionId", "==", id).get(),
+      collegeRef.collection("timetableSlots").where("sectionId", "==", id).get(),
+      collegeRef.collection("timetableDrafts").where("sectionId", "==", id).get(),
+    ]);
+    const cascadeBatch = new ChunkedBatch(db);
+    for (const d of assignmentsSnap.docs) cascadeBatch.delete(d.ref);
+    for (const d of slotsSnap.docs) cascadeBatch.delete(d.ref);
+    for (const d of draftsSnap.docs) cascadeBatch.delete(d.ref);
+    cascadeBatch.delete(ref);
+    await cascadeBatch.commit();
+
     return NextResponse.json({ success: true });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {

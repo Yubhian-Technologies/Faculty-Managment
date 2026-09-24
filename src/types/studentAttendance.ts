@@ -55,6 +55,25 @@ export interface StudentAttendanceSession {
   presentCount: number;
   classNotes: string; // "Record of the Class Work" - what the faculty covered in this class session
 
+  // Set only when this session was created/completed through the
+  // Department Office correction flow (see /api/college/student-attendance/
+  // office-correction) rather than the faculty's own live period-window
+  // submission - i.e. the faculty didn't post within class hours, so an
+  // HOD/DEPARTMENT_OFFICE login (DEPARTMENT_OFFICE normalizes to "HOD" for
+  // auth - see UserRole's own doc-comment) posted or finished it afterward.
+  // Absent (not "FACULTY") on every normal session - the common case.
+  postedBy?: "OFFICE";
+  correctedByUid?: string;
+  correctedByName?: string;
+  correctionReason?: string; // required by the office-correction route - why the faculty didn't post it themselves
+
+  // Set only when `facultyId`/`facultyName` above are the COVERING faculty,
+  // not the one this class was originally assigned to - i.e. posted by an
+  // approved leave substitute (see resolveSubstituteSlotsForDate) rather
+  // than the assignment's own facultyId. Absent on every ordinary session.
+  substituteForFacultyId?: string;
+  substituteForFacultyName?: string;
+
   submittedAt?: Timestamp | null;
   createdAt: Timestamp;
   updatedAt: Timestamp;

@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { FieldPath } from "firebase-admin/firestore";
 import { requiredFacultyCount } from "@/lib/college/facultyRatio";
 import { getHodDepartmentScope, canHodEditDepartment, canHodManageAssignment, facultyManageableDepartmentNames } from "@/lib/departments/scope";
 import { canHodEditDepartmentYear, type DepartmentYearRow } from "@/lib/departments/managedBranches";
@@ -12,7 +13,7 @@ import { getActiveSubstitutionsForDates, currentWeekDateKeys } from "@/lib/leave
 import { resolveSectionCurrentSemester, resolveRequestedSemester, matchesCurrentSemester } from "@/lib/college/semester";
 import { resolveTimetableAcademicYear, matchesCurrentAcademicYear } from "@/lib/college/academicSession";
 import { isTimetableIncharge } from "@/lib/departments/timetableIncharge";
-import type { Department, TeachingAssignment, TimetableSlot } from "@/types";
+import type { Department, SubjectType, TeachingAssignment, TimetableSlot } from "@/types";
 import { loadDepartmentIndex, stampDepartmentIds } from "@/lib/departments/stampIds";
 
 export async function GET(request: Request) {
@@ -271,6 +272,26 @@ export async function GET(request: Request) {
       return tb - ta; // descending
     });
 
+    // Joined onto each assignment/slot at read time only (never stored on
+    // either doc - see TeachingAssignment.subjectType/TimetableSlot.
+    // subjectType's own doc-comments) so the Timetable editor's Theory/
+    // Practical filter and its lab-only split gate work client-side without
+    // a separate subjects fetch - same technique as class-leader/timetable/
+    // route.ts's own Theory/Lab filter. Chunked by document id (Firestore's
+    // "in" caps at 30), same pattern already used elsewhere in this file.
+    const subjectIds = new Set<string>();
+    for (const a of assignments) if (a.subjectId) subjectIds.add(a.subjectId);
+    for (const s of timetableSlots) if (s.subjectId) subjectIds.add(s.subjectId);
+    const subjectTypeById = new Map<string, SubjectType | undefined>();
+    const subjectIdList = Array.from(subjectIds);
+    for (let i = 0; i < subjectIdList.length; i += 30) {
+      const chunk = subjectIdList.slice(i, i + 30);
+      const chunkSnap = await collegeRef.collection("subjects").where(FieldPath.documentId(), "in", chunk).get();
+      for (const d of chunkSnap.docs) subjectTypeById.set(d.id, (d.data() as { type?: SubjectType }).type);
+    }
+    assignments = assignments.map((a) => ({ ...a, subjectType: a.subjectId ? subjectTypeById.get(a.subjectId) : undefined })) as typeof assignments;
+    timetableSlots = timetableSlots.map((s) => ({ ...s, subjectType: s.subjectId ? subjectTypeById.get(s.subjectId) : undefined }));
+
     return NextResponse.json({ assignments, timetableSlots });
   } catch (err) {
     if (
@@ -424,6 +445,23 @@ export async function POST(request: Request) {
           return !data.isPast && matchesCurrentSemester(data.timetableSemester, timetableSemester);
         })) {
           return NextResponse.json({ error: "This faculty is already assigned to this subject for this section" }, { status: 409 });
+        }
+        // Lab-only split: THEORY/TUTORIAL/PROJECT stay single-faculty per section; only PRACTICAL may have 2 faculties (Batch 1/Batch 2 half-half)
+        const subjectTypeForGuard = (subject as unknown as { type?: string }).type;
+        const isLab = subjectTypeForGuard === "PRACTICAL";
+        const anyExisting = await collegeRef.collection("teachingAssignments")
+          .where("sectionId", "==", sectionId)
+          .where("subjectId", "==", subjectId)
+          .get();
+        const countInSemester = anyExisting.docs.filter((d) => {
+          const data = d.data() as { isPast?: boolean; timetableSemester?: number | null };
+          return !data.isPast && matchesCurrentSemester(data.timetableSemester, timetableSemester);
+        }).length;
+        if (!isLab && countInSemester >= 1) {
+          return NextResponse.json({ error: "This subject is already assigned for this section — only lab (PRACTICAL) subjects can have 2 faculties (Batch 1/Batch 2)" }, { status: 409 });
+        }
+        if (isLab && countInSemester >= 2) {
+          return NextResponse.json({ error: "Lab subject already has 2 faculties assigned for this section (Batch 1 & Batch 2)" }, { status: 409 });
         }
       }
 

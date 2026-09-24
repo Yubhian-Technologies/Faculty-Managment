@@ -54,8 +54,8 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const session = await verifySession();
-    if (!session || session.role !== "LOCATION_DEPT_HEAD") {
-      return NextResponse.json({ error: "Only Dept Head can submit vacancy requests" }, { status: 403 });
+    if (!session || !["LOCATION_DEPT_HEAD", "ADMIN_OFFICE"].includes(session.role)) {
+      return NextResponse.json({ error: "Only Dept Head or Admin Office can submit vacancy requests" }, { status: 403 });
     }
     if (!session.locationId) {
       return NextResponse.json({ error: "No location context" }, { status: 400 });

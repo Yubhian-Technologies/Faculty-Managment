@@ -5,8 +5,10 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 import { checkFacultyPeriodWindow, periodWindowMessage } from "@/lib/timetable/currentPeriod";
+import { resolveSubstituteSlotsForDate } from "@/lib/leave/periodCoverage";
 import { fetchSectionStudents } from "@/lib/students/sectionRoster";
-import type { Section, StudentAttendanceEntry, StudentAttendanceSession, TeachingAssignment } from "@/types";
+import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
+import type { FacultyMember, Section, StudentAttendanceEntry, StudentAttendanceSession, TeachingAssignment } from "@/types";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -34,8 +36,27 @@ export async function POST(request: Request) {
     // teachingAssignments.facultyId is the facultyMembers doc id, not the
     // login uid (see resolveFacultyMemberId) — resolve before comparing.
     const facultyMemberId = await resolveFacultyMemberId(db, session.collegeId, session.uid);
-    if (assignment.facultyId !== facultyMemberId || assignment.isPast) {
+    if (assignment.isPast) {
       return NextResponse.json({ error: "You are not assigned to teach this subject" }, { status: 403 });
+    }
+    // Not the assignment's own faculty - only other legitimate path is an
+    // approved leave substitute covering this exact slot on this exact date
+    // (see resolveSubstituteSlotsForDate's own doc-comment - the
+    // substitution is never written onto the assignment/slot doc itself, so
+    // it has to be resolved fresh here).
+    let substituteFor: { originalFacultyId: string; originalFacultyName: string } | null = null;
+    if (assignment.facultyId !== facultyMemberId) {
+      const substituted = await resolveSubstituteSlotsForDate(db, session.collegeId, facultyMemberId, date);
+      if (substituted.size > 0) {
+        const assignmentSlotsSnap = await collegeRef.collection("timetableSlots")
+          .where("assignmentId", "==", assignmentId)
+          .get();
+        const matched = assignmentSlotsSnap.docs.find((d) => substituted.has(d.id));
+        if (matched) substituteFor = substituted.get(matched.id) ?? null;
+      }
+      if (!substituteFor) {
+        return NextResponse.json({ error: "You are not assigned to teach this subject" }, { status: 403 });
+      }
     }
 
     // Two independent teachingAssignments shapes (see TeachingAssignment):
@@ -66,8 +87,12 @@ export async function POST(request: Request) {
       year = section.year;
       courseId = section.courseId;
     } else {
+      const sec = assignment.section?.trim();
+      if (!sec) {
+        return NextResponse.json({ error: "This assignment has no section configured — contact your HOD to fix the teaching assignment" }, { status: 400 });
+      }
       department = assignment.department;
-      sectionName = assignment.section?.trim() || "Section";
+      sectionName = sec;
     }
 
     const now = new Date();
@@ -99,42 +124,58 @@ export async function POST(request: Request) {
     const id = `${assignmentId}_${date}_${periodNumber}`;
     const ref = collegeRef.collection("studentAttendance").doc(id);
 
-    const existingSnap = await ref.get();
-
-    // A submitted session is a locked historical record - safe to just read
-    // back (e.g. faculty re-polling mid-period after already submitting)
-    // without redoing the roster fetch below.
-    if (existingSnap.exists) {
-      const existing = existingSnap.data() as StudentAttendanceSession;
-      if (existing.status === "SUBMITTED") {
-        return NextResponse.json({ session: { ...existing, id } });
-      }
-    }
-
-    // Current roster, ordered for a stable S.No. column. Section-scoped
-    // assignments resolve to a real section (department+section+year); the
-    // semester-scoped shape has no course "year" to filter by, so it matches
-    // on department+section name alone (best-effort until this college's data
-    // has been migrated to real sections). A shared-first-year student in
-    // this section stays filed under their common department (preserved
-    // until promotion) with secondaryDepartment naming this section's real
-    // branch instead - fetchSectionStudents matches both and merges them, or
-    // the roster (and therefore attendance for the whole class) would come
-    // up empty. Also scoped by `courseId` when this is a section-scoped
-    // assignment (a department can run a same-named section under more than
-    // one course - see StudentRecord.courseId's doc-comment - without this,
-    // attendance could be taken against the wrong course's roster entirely).
+    // Current roster — fetched before transaction so transaction can merge without
+    // interleaving roster reads. Ordering stable by rollNumber for S.No. column.
     const students = (await fetchSectionStudents(collegeRef, { department, sectionName, year, courseId }))
       .sort((a, b) => a.rollNumber.localeCompare(b.rollNumber, undefined, { numeric: true }));
 
-    if (!existingSnap.exists) {
+    // Wrap existing-doc read + roster-merge + write in a transaction so a
+    // concurrent PATCH landing between the read and the write doesn't silently
+    // discard marks. The roster itself is fetched outside the transaction
+    // (two collection queries via fetchSectionStudents cannot be done via
+    // tx.get), but the merge + write of the studentAttendance doc is atomic.
+    let resultSession: StudentAttendanceSession & { id: string };
+    let resultStatus: number | undefined;
+    await db.runTransaction(async (tx) => {
+      const existingSnap = await tx.get(ref);
+      if (existingSnap.exists) {
+        const existing = existingSnap.data() as StudentAttendanceSession;
+        if (existing.status === "SUBMITTED") {
+          resultSession = { ...existing, id } as StudentAttendanceSession & { id: string };
+          resultStatus = 200;
+          return;
+        }
+        // DRAFT reconcile — preserve marks for still-present students
+        const existingByStudent = new Map(existing.entries.map((e) => [e.studentId, e]));
+        const entries: StudentAttendanceEntry[] = students.map((s) => ({
+          studentId: s.id,
+          rollNumber: s.rollNumber,
+          name: s.name,
+          status: existingByStudent.get(s.id)?.status ?? null,
+        }));
+        const presentCount = entries.filter((e) => e.status === "PRESENT").length;
+        tx.update(ref, {
+          entries,
+          totalStudents: entries.length,
+          presentCount,
+          updatedAt: now,
+        });
+        resultSession = { ...existing, id, entries, totalStudents: entries.length, presentCount, updatedAt: now as unknown as StudentAttendanceSession["updatedAt"] } as unknown as StudentAttendanceSession & { id: string };
+        resultStatus = 200;
+        return;
+      }
+
       const entries: StudentAttendanceEntry[] = students.map((s) => ({
         studentId: s.id,
         rollNumber: s.rollNumber,
         name: s.name,
         status: null,
       }));
-
+      let facultyNameToStore = assignment.facultyName ?? "";
+      if (substituteFor) {
+        const subFacSnap = await collegeRef.collection("facultyMembers").doc(facultyMemberId).get();
+        if (subFacSnap.exists) facultyNameToStore = facultyDisplayName(subFacSnap.data() as FacultyMember);
+      }
       const attendanceSession = {
         collegeId: session.collegeId,
         department,
@@ -146,7 +187,8 @@ export async function POST(request: Request) {
         subjectName: assignment.subjectName,
         subjectCode: assignment.subjectCode,
         facultyId: session.uid,
-        facultyName: assignment.facultyName ?? "",
+        facultyName: facultyNameToStore,
+        ...(substituteFor ? { substituteForFacultyId: substituteFor.originalFacultyId, substituteForFacultyName: substituteFor.originalFacultyName } : {}),
         date,
         periodNumber: windowCheck.slot.periodNumber,
         status: "DRAFT" as const,
@@ -158,34 +200,13 @@ export async function POST(request: Request) {
         createdAt: now,
         updatedAt: now,
       };
-      await ref.set(attendanceSession);
-      return NextResponse.json({ session: { id, ...attendanceSession } }, { status: 201 });
-    }
-
-    // Only a DRAFT session reaches here (SUBMITTED already returned above).
-    // Roster may have changed since it was created (student added/moved
-    // section) — reconcile while still a draft, preserving marks already
-    // entered for students who are still in the section.
-    const existing = existingSnap.data() as StudentAttendanceSession;
-    const existingByStudent = new Map(existing.entries.map((e) => [e.studentId, e]));
-    const entries: StudentAttendanceEntry[] = students.map((s) => ({
-      studentId: s.id,
-      rollNumber: s.rollNumber,
-      name: s.name,
-      status: existingByStudent.get(s.id)?.status ?? null,
-    }));
-    const presentCount = entries.filter((e) => e.status === "PRESENT").length;
-
-    await ref.update({
-      entries,
-      totalStudents: entries.length,
-      presentCount,
-      updatedAt: now,
+      tx.set(ref, attendanceSession);
+      resultSession = { id, ...attendanceSession } as unknown as StudentAttendanceSession & { id: string };
+      resultStatus = 201;
     });
 
-    return NextResponse.json({
-      session: { ...existing, id, entries, totalStudents: entries.length, presentCount },
-    });
+    return NextResponse.json({ session: resultSession! }, { status: resultStatus as unknown as number });
+
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

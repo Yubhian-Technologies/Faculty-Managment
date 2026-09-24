@@ -256,7 +256,8 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
 
   async function saveDetails() {
     const isOnline = batch?.hiringMode === "ONLINE";
-    if (!isOnline && !coordinatorFacultyId) {
+    const isSupportingStaff = batch?.positionCategory === "SUPPORTING_STAFF";
+    if (!isOnline && !isSupportingStaff && !coordinatorFacultyId) {
       toast({ variant: "destructive", title: "Please assign a coordinator" });
       return;
     }
@@ -280,6 +281,8 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
           currentPhase: "INTERVIEW_READY",
           ...(isOnline
             ? { meetingPlatform }
+            : isSupportingStaff
+            ? { interviewVenue: interviewVenue.trim() }
             : { interviewVenue: interviewVenue.trim(), demoClassroom: demoClassroom.trim(), coordinatorFacultyId }),
         }),
       });
@@ -488,7 +491,7 @@ ${institution}`;
 
     // CC: Principal, Vice Principal, College Admin (mirrors Principal's
     // authority), College Office, and this batch's selected panel members
-    const panelEmails = batch.panelMemberUids.map((uid) => userMap[uid]?.email).filter(Boolean) as string[];
+    const panelEmails = (batch.panelMemberUids ?? []).map((uid) => userMap[uid]?.email).filter(Boolean) as string[];
     const ccEmails = Array.from(new Set([
       ...allUsers
         .filter((u) => [u.role, ...(u.seatRoles ?? [])].some((r) => r === "PRINCIPAL" || r === "VICE_PRINCIPAL" || r === "COLLEGE_ADMIN" || r === "COLLEGE_OFFICE"))
@@ -512,6 +515,8 @@ ${institution}`;
   }
 
   if (!batch) return <div className="text-center py-12 text-muted-foreground">Batch not found</div>;
+
+  const skipsDemo = batch.hiringMode === "ONLINE" || batch.positionCategory === "SUPPORTING_STAFF";
 
   const canEditCommittee =
     batch.currentPhase !== "IN_PROGRESS" &&
@@ -688,7 +693,7 @@ ${institution}`;
                   />
                 </div>
               </div>
-            ) : (
+            ) : batch.positionCategory === "SUPPORTING_STAFF" ? null : (
               <>
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
@@ -921,7 +926,7 @@ ${institution}`;
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
-            <CardTitle className="text-base">Panel Members ({batch.panelMemberUids.length})</CardTitle>
+            <CardTitle className="text-base">Panel Members ({(batch.panelMemberUids ?? []).length})</CardTitle>
             {canEditCommittee && !editingCommittee && (
               <Button size="sm" variant="outline" onClick={openCommitteeEdit}>
                 <Pencil className="h-3.5 w-3.5 mr-1.5" />
@@ -1010,10 +1015,10 @@ ${institution}`;
             </div>
           ) : (
             <>
-              {batch.panelMemberUids.length === 0 ? (
+              {(batch.panelMemberUids ?? []).length === 0 ? (
                 <p className="text-sm text-muted-foreground">No panel members assigned.</p>
               ) : (
-                batch.panelMemberUids.map((uid) => {
+                (batch.panelMemberUids ?? []).map((uid) => {
                   const user = userMap[uid];
                   return (
                     <div key={uid} className="flex items-center gap-3 p-3 rounded-lg border">
@@ -1036,8 +1041,8 @@ ${institution}`;
       </Card>
 
 
-      {/* ── STEP A: Demo complete — HOD reviews student scores (offline only, no demo/QR for online interviews) ── */}
-      {batch.hiringMode !== "ONLINE" && (batch.currentPhase === "IN_PROGRESS" || batch.currentPhase === "PANEL_INTERVIEW" || batch.currentPhase === "PRINCIPAL_FINAL_REVIEW" || batch.currentPhase === "COMPLETED") && (
+      {/* ── STEP A: Demo complete — HOD reviews student scores (skipped for online interviews and supporting-staff hires, neither of which run a demo/QR session) ── */}
+      {!skipsDemo && (batch.currentPhase === "IN_PROGRESS" || batch.currentPhase === "PANEL_INTERVIEW" || batch.currentPhase === "PRINCIPAL_FINAL_REVIEW" || batch.currentPhase === "COMPLETED") && (
         <Card>
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
@@ -1178,23 +1183,23 @@ ${institution}`;
         <Card className="border-primary/30">
           <CardContent className="p-5 flex items-center justify-between gap-4">
             <div>
-              <p className="font-medium text-sm">{batch.hiringMode === "ONLINE" ? "Open for Evaluations" : "Release for Panel Interview Scoring"}</p>
+              <p className="font-medium text-sm">{skipsDemo ? "Open for Evaluations" : "Release for Panel Interview Scoring"}</p>
               <p className="text-xs text-muted-foreground mt-0.5">
-                {batch.hiringMode === "ONLINE"
-                  ? "Once the panel has finished interviewing candidates over the meeting link, open evaluations so they can submit their assessments."
+                {skipsDemo
+                  ? "Once the panel has finished interviewing candidates, open evaluations so they can submit their assessments."
                   : "Once you review the demo scores above, open panel scoring so all panel members can submit their interview assessments."}
               </p>
             </div>
             <Button onClick={() => void releaseToPanelInterview()} loading={isReleasingToPanel} className="shrink-0">
               <ArrowRight className="h-4 w-4 mr-2" />
-              {batch.hiringMode === "ONLINE" ? "Open for Evaluations" : "Open Panel Scoring"}
+              {skipsDemo ? "Open for Evaluations" : "Open Panel Scoring"}
             </Button>
           </CardContent>
         </Card>
       )}
 
       {/* ── HOD's own assessment — shown when HOD is also a panel member ──────── */}
-      {batch.currentPhase === "PANEL_INTERVIEW" && (batch.panelMemberUids as string[]).includes(myUid) && (() => {
+      {batch.currentPhase === "PANEL_INTERVIEW" && (batch.panelMemberUids ?? []).includes(myUid) && (() => {
         const hodSubmittedFor = panelFeedback.filter((f) => f.panelUid === myUid).map((f) => f.candidateId);
         const allDone = candidates.length > 0 && candidates.every((c) => hodSubmittedFor.includes(c.candidateId));
         return (
@@ -1265,9 +1270,9 @@ ${institution}`;
                 <p className="text-sm text-muted-foreground">No candidates.</p>
               ) : candidates.map((c) => {
                 const feedbacks = panelFeedback.filter((f) => f.candidateId === c.candidateId);
-                const total = batch.panelMemberUids.length;
+                const total = (batch.panelMemberUids ?? []).length;
                 const submittedUids = new Set(feedbacks.map((f) => f.panelUid));
-                const pendingUids = batch.panelMemberUids.filter((uid) => !submittedUids.has(uid));
+                const pendingUids = (batch.panelMemberUids ?? []).filter((uid) => !submittedUids.has(uid));
                 return (
                   <div key={c.id} className="p-3 rounded-lg border space-y-2">
                     <div className="flex items-center justify-between">
@@ -1337,11 +1342,13 @@ ${institution}`;
         <Card className={candidates.some((c) => c.hasArrived) ? "border-primary/30" : "border-dashed"}>
           <CardContent className="p-6 text-center">
             {candidates.some((c) => c.hasArrived) ? (
-              batch.hiringMode === "ONLINE" ? (
+              skipsDemo ? (
                 <>
                   <p className="font-medium text-sm">Candidates are ready</p>
                   <p className="text-xs text-muted-foreground mt-1 mb-3">
-                    Open the interview session to reveal the meeting link to panel members so they can join and interview candidates.
+                    {batch.hiringMode === "ONLINE"
+                      ? "Open the interview session to reveal the meeting link to panel members so they can join and interview candidates."
+                      : "Open the interview session so panel members can begin interviewing candidates."}
                   </p>
                   <Button onClick={() => void markInterviewComplete()} loading={isMarkingComplete}>
                     Open Interview Session
@@ -1367,7 +1374,7 @@ ${institution}`;
                 <Clock className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
                 <p className="font-medium text-sm">Waiting for candidates to arrive</p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Mark candidates arrived above, then {batch.hiringMode === "ONLINE" ? "open the interview session" : "open the interview session to run the demo and scoring"}.
+                  Mark candidates arrived above, then {skipsDemo ? "open the interview session" : "open the interview session to run the demo and scoring"}.
                 </p>
               </>
             )}

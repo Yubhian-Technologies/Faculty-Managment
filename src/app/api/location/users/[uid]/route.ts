@@ -31,6 +31,17 @@ export async function PATCH(
       .doc(uid)
       .update({ isActive, updatedAt: new Date() });
 
+    // Best-effort: the Firestore write above is what the app enforces live
+    // (see liveRoles.ts's short-TTL re-check for LOCATION-scoped sessions) -
+    // this additionally stops the old login/token from being used immediately,
+    // mirroring lib/roles/seats.ts's retireAccount.
+    try {
+      const { getAdminAuth } = await import("@/lib/firebase/admin");
+      const auth = await getAdminAuth();
+      await auth.updateUser(uid, { disabled: !isActive });
+      await auth.revokeRefreshTokens(uid);
+    } catch { /* non-fatal */ }
+
     return NextResponse.json({ ok: true });
   } catch (err) {
     if (err instanceof Error && err.message === "UNAUTHORIZED") {

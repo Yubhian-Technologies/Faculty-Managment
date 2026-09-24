@@ -457,6 +457,32 @@ export async function getActiveSubstitutionsForDates(
   }));
 }
 
+// Every timetableSlotId `substituteFacultyId` is covering on `dateISO`,
+// mapped to who they're covering FOR (display purposes only) - built on
+// getActiveSubstitutionsForDates above (reuse, not re-derived from
+// leaveRequests/staffAdjustments directly). Consumed by
+// lib/timetable/currentPeriod.ts's getFacultyPeriodsForDate/
+// getCurrentTimetableSlot/checkFacultyPeriodWindow so a substitute's own
+// attendance flow (today-periods list, and the actual write gate) recognizes
+// a slot that was never assigned to them - the substitution is a read-time
+// overlay only (see TimetableSlot.substituteFacultyId's own doc-comment,
+// never written onto the slot doc itself), so anything that used to resolve
+// "my periods" purely off TimetableSlot.facultyId has to check this too.
+export async function resolveSubstituteSlotsForDate(
+  db: Firestore,
+  collegeId: string,
+  substituteFacultyId: string,
+  dateISO: string,
+): Promise<Map<string, { originalFacultyId: string; originalFacultyName: string }>> {
+  const subs = await getActiveSubstitutionsForDates(db, collegeId, [dateISO]);
+  const map = new Map<string, { originalFacultyId: string; originalFacultyName: string }>();
+  for (const s of subs) {
+    if (s.substituteFacultyId !== substituteFacultyId) continue;
+    map.set(s.timetableSlotId, { originalFacultyId: s.requesterUid, originalFacultyName: s.requesterName });
+  }
+  return map;
+}
+
 // Notifies each assigned substitute once - called only when a leave request
 // reaches a final APPROVED status (see applications/[id]/route.ts and
 // decideFinalStage.ts), never on a tentative HOD forward that might still be
