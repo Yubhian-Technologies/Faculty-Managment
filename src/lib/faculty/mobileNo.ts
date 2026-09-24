@@ -1,9 +1,11 @@
 // FacultyMember "Mobile No" is stored as `mobileNo` (it used to be `phone` - see
 // FACULTY_DOC_KEY_RENAMES in fieldRenames.ts and
-// scripts/migrate-faculty-phone-to-mobileno.mjs).
+// scripts/migrate-faculty-phone-to-mobileno.mjs). SupportingStaffMember's own
+// `phone` was renamed to `mobileNo` too (SUPPORTING_STAFF_DOC_KEY_RENAMES),
+// same field name, same rename-migration mechanism.
 //
-// `users.phone` (FMSUser), `supportingStaff.phone`, `candidates.phone` and the other
-// `phone` fields are different entities and keep their names.
+// `users.phone` (FMSUser), `candidates.phone` and the other `phone` fields on
+// different record shapes are different entities and keep their names.
 
 type Contactable = { mobileNo?: unknown; phone?: unknown };
 

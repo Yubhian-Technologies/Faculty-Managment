@@ -6,6 +6,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { createFirebaseUser } from "@/lib/firebase/authRest";
 import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
 import { SUPPORTING_STAFF_ROLE_CATEGORY } from "@/lib/supportingStaff/roleCategory";
+import { migrateSupportingStaffDoc } from "@/lib/faculty/fieldRenames";
 import { NON_TECHNICAL_STAFF_DESIGNATION_LABELS } from "@/types";
 import type { SupportingStaffCategory, SupportingStaffDesignation } from "@/types";
 
@@ -48,8 +49,8 @@ export async function POST(
       return NextResponse.json({ error: "Staff record not found" }, { status: 404 });
     }
 
-    const data = snap.data() as {
-      userUid?: string; name?: string; legalName?: string; department?: string; profilePhotoUrl?: string;
+    const data = migrateSupportingStaffDoc(snap.data() ?? {}) as {
+      userUid?: string; nameAsPerPan?: string; legalName?: string; department?: string; profilePhotoUrl?: string;
       staffCategory?: SupportingStaffCategory; designation?: SupportingStaffDesignation;
       otherDesignationTitle?: string;
     };
@@ -75,7 +76,7 @@ export async function POST(
     // Full Name (as per SSC) takes precedence over Name (as per PAN) for the
     // login's display name - same precedence as record creation (finalName
     // in supporting-staff POST/import) and supportingStaffDisplayName().
-    const name = data.legalName?.trim() || data.name?.trim() || "";
+    const name = data.legalName?.trim() || data.nameAsPerPan?.trim() || "";
     const department = data.department ?? "";
     const profilePhotoUrl = data.profilePhotoUrl;
     const designation =

@@ -8,7 +8,8 @@ import { getActiveSubstitutionsForDates, currentWeekDateKeys } from "@/lib/leave
 import { resolveSectionCurrentSemester, resolveRequestedSemester, matchesCurrentSemester } from "@/lib/college/semester";
 import { resolveTimetableAcademicYear, matchesCurrentAcademicYear } from "@/lib/college/academicSession";
 import { isTimetableIncharge } from "@/lib/departments/timetableIncharge";
-import type { DayOfWeek, TimetableSlot } from "@/types";
+import type { DayOfWeek, SubjectType, TimetableRules, TimetableSlot } from "@/types";
+import { DEFAULT_TIMETABLE_RULES } from "@/types";
 import { loadDepartmentIndex, stampDepartmentIds } from "@/lib/departments/stampIds";
 
 export async function GET(request: Request) {
@@ -58,9 +59,14 @@ export async function GET(request: Request) {
     // specific history year it may not actually belong to.
     const isBrowsingPastYear = requestedAcademicYear !== currentAcademicYear;
 
-    const snap = await collegeRef.collection("timetableSlots")
-      .where("sectionId", "==", sectionId)
-      .get();
+    const [snap, subjectsSnap] = await Promise.all([
+      collegeRef.collection("timetableSlots").where("sectionId", "==", sectionId).get(),
+      // Joined onto each slot below so the Timetable pages' Theory/Practical
+      // filter can group by SubjectType without a second round-trip - same
+      // technique as class-leader/timetable/route.ts's own Theory/Lab filter.
+      collegeRef.collection("subjects").where("courseId", "==", section.courseId).where("year", "==", section.year).get(),
+    ]);
+    const subjectTypeById = new Map(subjectsSnap.docs.map((d) => [d.id, (d.data() as { type?: SubjectType }).type]));
     // A prior semester's or prior session's published slots stay in
     // Firestore as history (see publish/route.ts) but drop out of this
     // "current timetable" read once the next one starts - unless `semester`/
@@ -70,7 +76,8 @@ export async function GET(request: Request) {
       .filter((s) =>
         matchesCurrentSemester(s.semester, currentSemester) &&
         (isBrowsingPastYear ? s.academicYear === requestedAcademicYear : matchesCurrentAcademicYear(s.academicYear, requestedAcademicYear))
-      );
+      )
+      .map((s) => ({ ...s, subjectType: s.subjectId ? subjectTypeById.get(s.subjectId) : undefined }));
 
     // Overlay the displayed week's approved-leave substitutions, if any -
     // who's actually taking a period on a given day instead of the regular
@@ -133,6 +140,13 @@ export async function POST(request: Request) {
       sectionId: string; subjectId: string; subjectName: string; department: string;
       timetableSemester?: number;
     };
+    // Resolve subject type to gate lab-only split — only PRACTICAL may use allowSplit/labBatch
+    const subjectSnapForType = await collegeRef.collection("subjects").doc(assignment.subjectId).get();
+    const subjectType = (subjectSnapForType.data() as { type?: string } | undefined)?.type;
+    const isLabSubject = subjectType === "PRACTICAL";
+    if (!isLabSubject && (body.allowSplit || body.labBatch)) {
+      return NextResponse.json({ error: "Only lab (PRACTICAL) subjects can be split into batches" }, { status: 400 });
+    }
 
     // This pins a slot straight into a section's published timetable - an
     // HOD may only do that for their own department (or one they own/manage),
@@ -166,6 +180,39 @@ export async function POST(request: Request) {
     const currentAcademicYear = resolveTimetableAcademicYear(
       sessionSnap.empty ? undefined : (sessionSnap.docs[0].data() as { label?: string }).label
     );
+
+    // This route backs the manual per-faculty pin (see `source: "MANUAL"`
+    // below) and previously skipped the college's own TimetableRules
+    // entirely - a human deliberately placing one period is still bound by
+    // the same working-days and daily-cap rules the draft editor enforces,
+    // not just the section/faculty double-booking checks further down.
+    const rulesSnap = await collegeRef.collection("settings").doc("timetableRules").get();
+    const rules: TimetableRules = rulesSnap.exists
+      ? { ...DEFAULT_TIMETABLE_RULES, ...(rulesSnap.data() as Partial<TimetableRules>) }
+      : DEFAULT_TIMETABLE_RULES;
+
+    if (!rules.workingDays.includes(day)) {
+      return NextResponse.json({ error: `${day} is not a working day.` }, { status: 400 });
+    }
+
+    const dayCountSnap = await collegeRef.collection("timetableSlots")
+      .where("facultyId", "==", assignment.facultyId)
+      .where("day", "==", day)
+      .get();
+    let dayCount = 0;
+    for (const d of dayCountSnap.docs) {
+      const other = d.data() as TimetableSlot;
+      const otherSemester = await resolveSectionCurrentSemester(db, session.collegeId, other.courseId, other.year);
+      if (matchesCurrentSemester(other.semester, otherSemester) && matchesCurrentAcademicYear(other.academicYear, currentAcademicYear)) {
+        dayCount++;
+      }
+    }
+    if (dayCount + 1 > rules.maxPeriodsPerFacultyPerDay) {
+      return NextResponse.json(
+        { error: `${assignment.facultyName || "This faculty"} would exceed the ${rules.maxPeriodsPerFacultyPerDay} periods/day limit on ${day}.` },
+        { status: 409 },
+      );
+    }
 
     if (!body.allowSplit) {
       const conflictSnap = await collegeRef.collection("timetableSlots")

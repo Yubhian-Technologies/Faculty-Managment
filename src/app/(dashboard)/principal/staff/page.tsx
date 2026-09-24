@@ -11,7 +11,7 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { CardSkeleton } from "@/components/shared/SkeletonLoader";
 import { toast } from "@/hooks/useToast";
 import { supportingStaffDisplayName } from "@/lib/supportingStaff/supportingStaffDisplayName";
-import { NON_TECHNICAL_STAFF_DESIGNATION_LABELS, ROLE_LABELS, STAFF_CATEGORY_LABELS } from "@/types";
+import { NON_TECHNICAL_STAFF_DESIGNATION_LABELS, ROLE_LABELS, STAFF_CATEGORY_LABELS, FACULTY_STATUS_LABELS } from "@/types";
 import type { Department, UserRole, SupportingStaffMember, SupportingStaffCategory, SupportingStaffDesignation } from "@/types";
 
 type StaffUser = {
@@ -240,7 +240,7 @@ export default function PrincipalStaffPage() {
                             </td>
                             <td className="px-4 py-2.5 text-muted-foreground">{m.department || "Centrally managed"}</td>
                             <td className="px-4 py-2.5">
-                              <Badge variant={m.status === "ACTIVE" ? "default" : "secondary"} className="text-xs">{m.status}</Badge>
+                              <Badge variant={m.status === "ACTIVE" ? "default" : "secondary"} className="text-xs">{FACULTY_STATUS_LABELS[m.status] ?? m.status}</Badge>
                             </td>
                             {g.category === "NON_TECHNICAL" && (
                               <td className="px-4 py-2.5 text-right">

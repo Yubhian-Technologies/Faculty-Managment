@@ -313,7 +313,7 @@ export default function CandidateFormPage() {
       const experiences_ = experiences.filter((r) => r.organization.trim() || r.designation.trim());
       const relatives_ = hasRelatives ? relatives.filter((r) => r.name.trim() || r.workingLocation.trim()) : [];
 
-      const res = await fetch(`/api/public/candidate-form/${collegeId}/${candidateId}`, {
+      const res = await fetch(`/api/public/candidate-form/${collegeId}/${candidateId}?applicationId=${applicationId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -525,7 +525,7 @@ export default function CandidateFormPage() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="emergencyContactPhone">Emergency Contact Phone <span className="text-destructive">*</span></Label>
-                  <Input id="emergencyContactPhone" value={form.emergencyContactPhone ?? ""} inputMode="numeric" maxLength={10} onChange={(e) => updateForm({ emergencyContactPhone: onlyDigits(e.target.value, 10) })} placeholder="10-digit number" />
+                  <Input id="emergencyContactPhone" type="tel" value={form.emergencyContactPhone ?? ""} inputMode="numeric" maxLength={10} onChange={(e) => updateForm({ emergencyContactPhone: onlyDigits(e.target.value, 10) })} placeholder="10-digit number" />
                 </div>
               </div>
             </AccordionContent>

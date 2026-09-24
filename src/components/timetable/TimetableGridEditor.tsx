@@ -99,6 +99,8 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref }: Tim
   const [activeView, setActiveView] = useState<"timetable" | "history">("timetable");
 
   const [modeState, setModeState] = useState<Mode>("published");
+  // View filter, independent of edit mode - "ALL" shows everything as before.
+  const [typeFilter, setTypeFilter] = useState<"ALL" | "THEORY" | "PRACTICAL">("ALL");
   const [isEditing, setIsEditing] = useState(false);
   const [selected, setSelected] = useState<DraftSlot | null>(null);
   const [busy, setBusy] = useState<null | "publish" | "discard" | "move" | "blank">(null);
@@ -149,7 +151,7 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref }: Tim
           .then((r) => r.json() as Promise<{ draft: TimetableDraft | null }>),
         fetch(`/api/college/teaching-assignments?sectionId=${encodeURIComponent(sectionId)}`)
           .then((r) => r.json() as Promise<{ assignments: TeachingAssignment[] }>),
-        fetch("/api/college/faculty?status=ACTIVE")
+        fetch("/api/college/faculty?availableOnly=true")
           .then((r) => r.json() as Promise<{ faculty: { id: string; accessLevel?: string }[] }>),
         fetch("/api/college/faculty-assignment-requests")
           .then((r) => r.json() as Promise<{ requests: FacultyAssignmentRequest[] }>),
@@ -227,12 +229,21 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref }: Tim
       : assignments.filter((a) => myFacultyIds.has(a.facultyId)).map((a) => a.id)
     : assignments.filter((a) => !lentInAssignmentIds.has(a.id)).map((a) => a.id);
   // Same restriction, applied to the "Add a subject" picker - also excludes
-  // whatever's already occupying the target cell, so a split-add can't
-  // double-place the exact same assignment onto its own cell.
+  // whatever's already occupying the target cell (rawCellEntriesFor, not the
+  // Theory/Practical-filtered cellEntriesFor - a cell hidden by the view
+  // filter is still genuinely occupied), so a split-add can't double-place
+  // the exact same assignment onto its own cell.
   const occupyingAtTarget = new Set(
-    addingAt ? cellEntriesFor(addingAt.day, addingAt.period).map((e) => e.slot.assignmentId) : []
+    addingAt ? rawCellEntriesFor(addingAt.day, addingAt.period).map((e) => e.slot.assignmentId) : []
   );
-  const pickableAssignments = assignments.filter((a) => myAssignmentIds.includes(a.id) && !occupyingAtTarget.has(a.id));
+  // A cell that already holds something is a split-add - only a lab
+  // (PRACTICAL) subject may join it (see draft/route.ts's own allowSplit
+  // gate), whether the existing occupant is itself a lab or a theory class,
+  // so the picker never offers a theory subject there in the first place.
+  const isSplitTarget = addingAt ? rawCellEntriesFor(addingAt.day, addingAt.period).length > 0 : false;
+  const pickableAssignments = assignments.filter(
+    (a) => myAssignmentIds.includes(a.id) && !occupyingAtTarget.has(a.id) && (!isSplitTarget || a.subjectType === "PRACTICAL")
+  );
   const draftHasSlots = Boolean(draft?.slots?.length);
   // Gates the Update button specifically: having *some* slots in the draft
   // isn't enough if none of them are this HOD's own faculty's yet.
@@ -255,16 +266,19 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref }: Tim
     return slots.filter((s) => s.day === day && s.periodNumber === period && s.source !== "GENERATED");
   }
   /**
-   * Everything occupying a cell, for whichever mode is showing - a split
-   * period (two+ subjects/faculty sharing one section+day+period) means
-   * this can now hold more than one entry. Draft mode unions pinned
-   * (locked, from the published timetable) with the draft's own entries,
-   * deduped by assignmentId - a pinned subject is never also independently
-   * present in draft.slots for the same cell, but a split cell can
-   * legitimately have one pinned occupant and one freshly-added draft
-   * occupant side by side.
+   * Everything ACTUALLY occupying a cell, for whichever mode is showing -
+   * regardless of the Theory/Practical view filter below. Used for real
+   * occupancy checks (is this cell free, what's already here) that must
+   * never be fooled by a hidden-by-filter entry - see cellEntriesFor, the
+   * filtered version used for display. A split period (two+ subjects/
+   * faculty sharing one section+day+period) means this can now hold more
+   * than one entry. Draft mode unions pinned (locked, from the published
+   * timetable) with the draft's own entries, deduped by assignmentId - a
+   * pinned subject is never also independently present in draft.slots for
+   * the same cell, but a split cell can legitimately have one pinned
+   * occupant and one freshly-added draft occupant side by side.
    */
-  function cellEntriesFor(day: DayOfWeek, period: number): { slot: TimetableSlot | DraftSlot; isPinned: boolean }[] {
+  function rawCellEntriesFor(day: DayOfWeek, period: number): { slot: TimetableSlot | DraftSlot; isPinned: boolean }[] {
     if (mode !== "draft") {
       return publishedSlotsFor(day, period).map((slot) => ({ slot, isPinned: slot.source !== "GENERATED" }));
     }
@@ -276,6 +290,14 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref }: Tim
         .filter((s) => !pinnedAssignmentIds.has(s.assignmentId))
         .map((slot) => ({ slot, isPinned: false })),
     ];
+  }
+  /** rawCellEntriesFor, narrowed to the Theory/Practical view filter - for
+   *  display only. "ALL" (the default) shows every entry exactly as before.
+   *  A slot with no resolved subjectType (e.g. a legacy row from before this
+   *  field existed) still shows under "ALL". */
+  function cellEntriesFor(day: DayOfWeek, period: number): { slot: TimetableSlot | DraftSlot; isPinned: boolean }[] {
+    const entries = rawCellEntriesFor(day, period);
+    return typeFilter === "ALL" ? entries : entries.filter((e) => e.slot.subjectType === typeFilter);
   }
 
   /** Starts an empty draft so the whole timetable can be built by hand. */
@@ -308,8 +330,9 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref }: Tim
     try {
       // Only a genuinely already-occupied cell opts into a split period -
       // the empty-cell "Add" flow never sets this, so it still gets the
-      // normal double-booking rejection if something raced it.
-      const allowSplit = cellEntriesFor(addingAt.day, addingAt.period).length > 0;
+      // normal double-booking rejection if something raced it. Reuses the
+      // same isSplitTarget the picker itself was already filtered by.
+      const allowSplit = isSplitTarget;
       const res = await fetch("/api/college/timetable/draft", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -659,6 +682,15 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref }: Tim
         </ul>
       ) : null}
 
+      <div className="flex items-center gap-2">
+        <span className="text-xs font-medium text-muted-foreground">Show:</span>
+        {(["ALL", "THEORY", "PRACTICAL"] as const).map((t) => (
+          <Button key={t} size="sm" variant={typeFilter === t ? "default" : "outline"} onClick={() => setTypeFilter(t)}>
+            {t === "ALL" ? "All" : t === "THEORY" ? "Theory" : "Practical"}
+          </Button>
+        ))}
+      </div>
+
       {/* ── Grid ──────────────────────────────────────────────────────────── */}
       {isLoading ? (
         <div className="h-96 rounded-lg border bg-muted/30 animate-pulse" />
@@ -837,18 +869,21 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref }: Tim
               Add a subject{addingAt ? ` - ${DAY_LABELS[addingAt.day]}, period ${addingAt.period}` : ""}
             </DialogTitle>
             <DialogDescription>
-              Pick a subject assigned to this section. Its faculty comes along automatically;
-              labs take {DEFAULT_TIMETABLE_RULES.labBlockSize} continuous periods.
+              {isSplitTarget
+                ? `This period already has a subject - only a lab (Practical) subject can be added alongside it.`
+                : `Pick a subject assigned to this section. Its faculty comes along automatically; labs take ${DEFAULT_TIMETABLE_RULES.labBlockSize} continuous periods.`}
             </DialogDescription>
           </DialogHeader>
 
           {pickableAssignments.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              {isCrossDepartment
-                ? "None of your faculty are assigned to this section yet. Add that under Teaching Assignments first."
-                : assignments.length > 0
-                  ? "Every remaining subject was lent in through an Assignment Request - the lending department places its own periods from their side."
-                  : "No subjects are assigned to this section yet. Add them under Teaching Assignments first."}
+              {isSplitTarget
+                ? "None of your remaining lab (Practical) subjects can be added here - only a lab may share an already-occupied period."
+                : isCrossDepartment
+                  ? "None of your faculty are assigned to this section yet. Add that under Teaching Assignments first."
+                  : assignments.length > 0
+                    ? "Every remaining subject was lent in through an Assignment Request - the lending department places its own periods from their side."
+                    : "No subjects are assigned to this section yet. Add them under Teaching Assignments first."}
             </p>
           ) : (
             <div className="max-h-80 space-y-1.5 overflow-y-auto">

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ChevronLeft, ChevronRight, Check, UsersRound } from "lucide-react";
+import { ChevronLeft, ChevronRight, Check, Trash2, UsersRound } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,25 +14,25 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AvatarUploadField } from "@/components/shared/AvatarUploadField";
+import { TextInput } from "@/components/shared/ProfileFieldPrimitives";
 import { getMissingRequiredPersonalFields } from "@/components/shared/PersonalDetailsFields";
 import { SupportingStaffModuleEditor, type SupportingStaffEditRecord } from "@/components/supportingStaff/SupportingStaffModuleEditor";
 import { getSupportingStaffProfileModules } from "@/lib/supportingStaff/profileModules";
 import { useCollegeType } from "@/hooks/useCollegeType";
 import { toast } from "@/hooks/useToast";
 import { hasSupportingStaffSplit } from "@/lib/designations/config";
-import { PHONE_REGEX, EMAIL_REGEX } from "@/lib/validations";
+import { PHONE_REGEX, EMAIL_REGEX, APAAR_REGEX } from "@/lib/validations";
 import type { DesignationCatalogItem } from "@/types";
 
 const schema = z.object({
   employeeId: z.string().min(1, "Employee ID is required"),
-  name: z.string().optional(),
+  apaarFacultyId: z.string().regex(APAAR_REGEX, "APAAR Faculty ID must be exactly 12 digits").optional().or(z.literal("")),
   email: z.string().regex(EMAIL_REGEX, "Invalid email address").optional().or(z.literal("")),
   collegeEmail: z.string().min(1, "College email is required").regex(EMAIL_REGEX, "Invalid email address"),
   password: z.string().min(8, "Password must be at least 8 characters"),
-  phone: z.string().min(1, "Mobile No is required").regex(PHONE_REGEX, "Mobile No must be exactly 10 digits, starting with 6, 7, 8 or 9"),
+  mobileNo: z.string().min(1, "Mobile No is required").regex(PHONE_REGEX, "Mobile No must be exactly 10 digits, starting with 6, 7, 8 or 9"),
   designation: z.string().min(1, "Designation is required"),
-  qualification: z.string().min(1, "Highest Qualification is required"),
-  experienceYears: z.number().min(0, "Cannot be negative").optional(),
+  highestQualification: z.string().min(1, "Highest Qualification is required"),
   joiningDate: z.string().min(1, "Joining date is required"),
 });
 
@@ -54,6 +54,7 @@ export default function NewHodSupportingStaffPage() {
   const router = useRouter();
   const { collegeType, loading: collegeTypeLoading } = useCollegeType();
   const [record, setRecord] = useState<SupportingStaffEditRecord>({});
+  const [extraPhones, setExtraPhones] = useState<{ label?: string; number: string }[]>([]);
   const [photoUrl, setPhotoUrl] = useState<string | undefined>(undefined);
   const [tempPhotoId] = useState(() => crypto.randomUUID());
   const [stepIndex, setStepIndex] = useState(0);
@@ -67,12 +68,11 @@ export default function NewHodSupportingStaffPage() {
     formState: { errors },
   } = useForm<FormData>({
     resolver: zodResolver(schema),
-    defaultValues: { experienceYears: 0, designation: "", password: "" },
+    defaultValues: { designation: "", password: "" },
   });
   const [erroredSteps, setErroredSteps] = useState<Set<WizardStepKey>>(new Set());
 
   const designation = watch("designation");
-  const name = watch("name");
   const [designationOptions, setDesignationOptions] = useState<string[]>([]);
   useEffect(() => {
     void (async () => {
@@ -97,9 +97,10 @@ export default function NewHodSupportingStaffPage() {
   // All required fields live on the "core" step; deferred to submit time so
   // steps can be navigated freely (see onInvalid).
   const FIELD_LABELS: Record<string, string> = {
-    employeeId: "Employee ID", name: "Name (as per PAN)", collegeEmail: "College Email",
-    password: "Login Password", phone: "Mobile No", designation: "Designation",
-    qualification: "Highest Qualification", joiningDate: "Joining Date",
+    employeeId: "Employee ID", collegeEmail: "College Email",
+    password: "Login Password", mobileNo: "Mobile No", designation: "Designation",
+    highestQualification: "Highest Qualification", joiningDate: "Date of Joining",
+    legalName: "Full Name (as per SSC)",
   };
 
   function goNext() {
@@ -118,7 +119,18 @@ export default function NewHodSupportingStaffPage() {
   }
 
   const onSubmit = async (data: FormData) => {
-    // Personal Details isn't zod-validated (SupportingStaffModuleEditor's
+    // Full Name (as per SSC) lives in `record` (shared with the "personal"
+    // step's state) but is rendered on the "core" step (right after Employee
+    // ID, matching Faculty's own field order) - not zod-validated, so it's
+    // checked here, same pattern as hod/faculty/new/page.tsx, and routes back
+    // to "core" (not "personal", where the input no longer visually is).
+    if (!record.legalName?.trim()) {
+      setErroredSteps(new Set<WizardStepKey>(["core"]));
+      setStepIndex(steps.findIndex((s) => s.key === "core"));
+      toast({ variant: "destructive", title: "Some required fields are missing", description: "Identity & Employment: Full Name (as per SSC)" });
+      return;
+    }
+    // Remaining Personal Details isn't zod-validated (SupportingStaffModuleEditor's
     // "personal" step is plain React state) - checked here instead, same
     // pattern as Add Faculty's equivalent check.
     const missingPersonal = getMissingRequiredPersonalFields(record);
@@ -137,6 +149,7 @@ export default function NewHodSupportingStaffPage() {
           ...data,
           staffCategory: "TECHNICAL",
           ...record,
+          additionalPhoneNumbers: extraPhones.filter((p) => p.number.trim()),
           supportingStaffProfile: record.supportingStaffProfile ?? {},
           ...(photoUrl ? { profilePhotoUrl: photoUrl } : {}),
         }),
@@ -152,7 +165,7 @@ export default function NewHodSupportingStaffPage() {
         return;
       }
 
-      toast({ variant: "success", title: "Supporting Staff added", description: `${data.name || "The staff member"} has been added.` });
+      toast({ variant: "success", title: "Supporting Staff added", description: `${record.legalName || "The staff member"} has been added.` });
       router.push("/hod/supporting-staff");
     } catch {
       toast({ variant: "destructive", title: "Network error", description: "Please try again." });
@@ -225,7 +238,7 @@ export default function NewHodSupportingStaffPage() {
                 <div className="flex flex-col gap-5 pb-5 border-b sm:flex-row sm:items-start">
                   <div className="flex shrink-0 flex-col items-center gap-2 sm:pt-6">
                     <Label>Profile Photo</Label>
-                    <AvatarUploadField name={name || "?"} photoUrl={photoUrl} targetId={tempPhotoId} onUploaded={setPhotoUrl} onDeleted={() => setPhotoUrl(undefined)} />
+                    <AvatarUploadField name={record.legalName || "?"} photoUrl={photoUrl} targetId={tempPhotoId} onUploaded={setPhotoUrl} onDeleted={() => setPhotoUrl(undefined)} />
                   </div>
                   <div className="grid flex-1 grid-cols-1 gap-4">
                     <div className="space-y-2">
@@ -234,38 +247,36 @@ export default function NewHodSupportingStaffPage() {
                       {errors.employeeId && <p className="text-sm text-destructive">{errors.employeeId.message}</p>}
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="name">Name (as per PAN)</Label>
-                      <Input id="name" {...register("name")} placeholder="Suresh Babu" />
-                      {errors.name && <p className="text-sm text-destructive">{errors.name.message}</p>}
+                      <Label htmlFor="legalName">Full Name (as per SSC) *</Label>
+                      <Input
+                        id="legalName"
+                        value={record.legalName ?? ""}
+                        onChange={(e) => setRecord((r) => ({ ...r, legalName: e.target.value.toUpperCase() }))}
+                        placeholder="FULL NAME IN CAPITALS"
+                        className="uppercase"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="apaarFacultyId">APAAR Faculty ID</Label>
+                      <Input
+                        id="apaarFacultyId" inputMode="numeric" maxLength={12}
+                        {...register("apaarFacultyId")}
+                        onChange={(e) => {
+                          e.target.value = e.target.value.replace(/\D/g, "").slice(0, 12);
+                          void register("apaarFacultyId").onChange(e);
+                        }}
+                        placeholder="123456789012"
+                      />
+                      {errors.apaarFacultyId && <p className="text-sm text-destructive">{errors.apaarFacultyId.message}</p>}
                     </div>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="collegeEmail">College Email *</Label>
-                    <Input id="collegeEmail" type="email" {...register("collegeEmail")} placeholder="name@example.com" />
-                    {errors.collegeEmail && <p className="text-sm text-destructive">{errors.collegeEmail.message}</p>}
-                    <p className="text-xs text-muted-foreground">This is used as their login username.</p>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="email">Personal Email</Label>
-                    <Input id="email" type="email" {...register("email")} placeholder="staff@example.com" />
-                    {errors.email && <p className="text-sm text-destructive">{errors.email.message}</p>}
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="phone">Mobile No *</Label>
-                    <Input
-                      id="phone" type="tel" inputMode="numeric" autoComplete="off" maxLength={10}
-                      {...register("phone")}
-                      onChange={(e) => {
-                        e.target.value = e.target.value.replace(/\D/g, "").slice(0, 10);
-                        void register("phone").onChange(e);
-                      }}
-                      placeholder="9876543210"
-                    />
-                    {errors.phone && <p className="text-sm text-destructive">{errors.phone.message}</p>}
-                  </div>
+                <div className="space-y-2">
+                  <Label htmlFor="collegeEmail">College Email *</Label>
+                  <Input id="collegeEmail" type="email" {...register("collegeEmail")} placeholder="name@example.com" />
+                  {errors.collegeEmail && <p className="text-sm text-destructive">{errors.collegeEmail.message}</p>}
+                  <p className="text-xs text-muted-foreground">This is used as their login username.</p>
                 </div>
 
                 <div className="space-y-2">
@@ -291,17 +302,9 @@ export default function NewHodSupportingStaffPage() {
                     {errors.designation && <p className="text-sm text-destructive">{errors.designation.message}</p>}
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="qualification">Highest Qualification *</Label>
-                    <Input id="qualification" {...register("qualification")} placeholder="e.g. Diploma, B.Com, ITI" />
-                    {errors.qualification && <p className="text-sm text-destructive">{errors.qualification.message}</p>}
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="experienceYears">Total Years of Experience</Label>
-                    <Input id="experienceYears" type="number" min={0} placeholder="e.g. 10" {...register("experienceYears", { valueAsNumber: true })} />
-                    <p className="text-xs text-muted-foreground">
-                      Their whole career, including previous institutions - not just years served here.
-                    </p>
-                    {errors.experienceYears && <p className="text-sm text-destructive">{errors.experienceYears.message}</p>}
+                    <Label htmlFor="highestQualification">Highest Qualification *</Label>
+                    <Input id="highestQualification" {...register("highestQualification")} placeholder="e.g. Diploma, B.Com, ITI" />
+                    {errors.highestQualification && <p className="text-sm text-destructive">{errors.highestQualification.message}</p>}
                   </div>
                 </div>
 
@@ -311,11 +314,82 @@ export default function NewHodSupportingStaffPage() {
 
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
-                    <Label htmlFor="joiningDate">Joining Date *</Label>
+                    <Label htmlFor="joiningDate">Date of Joining *</Label>
                     <Input id="joiningDate" type="date" {...register("joiningDate")} />
                     {errors.joiningDate && <p className="text-sm text-destructive">{errors.joiningDate.message}</p>}
+                    <p className="text-xs text-muted-foreground">
+                      Total Years of Experience is calculated automatically from this date.
+                    </p>
                   </div>
                 </div>
+
+                <div className="pt-2 pb-1 border-t">
+                  <p className="text-sm font-medium text-muted-foreground">Contact Details</p>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="email">Personal Email</Label>
+                    <Input id="email" type="email" {...register("email")} placeholder="staff@example.com" />
+                    {errors.email && <p className="text-sm text-destructive">{errors.email.message}</p>}
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="mobileNo">Mobile No *</Label>
+                      <Button
+                        type="button"
+                        variant="link"
+                        size="sm"
+                        className="h-auto p-0 text-xs"
+                        onClick={() => setExtraPhones((p) => [...p, { label: "", number: "" }])}
+                      >
+                        + Add Number
+                      </Button>
+                    </div>
+                    <Input
+                      id="mobileNo" type="tel" inputMode="numeric" autoComplete="off" maxLength={10}
+                      {...register("mobileNo")}
+                      onChange={(e) => {
+                        e.target.value = e.target.value.replace(/\D/g, "").slice(0, 10);
+                        void register("mobileNo").onChange(e);
+                      }}
+                      placeholder="9876543210"
+                    />
+                    {errors.mobileNo && <p className="text-sm text-destructive">{errors.mobileNo.message}</p>}
+                  </div>
+                </div>
+
+                {extraPhones.length > 0 && (
+                  <div className="space-y-3">
+                    {extraPhones.map((item, i) => (
+                      <div key={i} className="flex items-start gap-2">
+                        <div className="flex-1 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                          <TextInput
+                            label="Label (optional)"
+                            value={item.label}
+                            onChange={(v) => setExtraPhones((prev) => prev.map((p, idx) => (idx === i ? { ...p, label: v } : p)))}
+                            placeholder="e.g. Personal, WhatsApp, or a name"
+                          />
+                          <TextInput
+                            label="Mobile Number"
+                            value={item.number}
+                            onChange={(v) => setExtraPhones((prev) => prev.map((p, idx) => (idx === i ? { ...p, number: v } : p)))}
+                            placeholder="+91 98765 43210"
+                          />
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="mt-7"
+                          onClick={() => setExtraPhones((prev) => prev.filter((_, idx) => idx !== i))}
+                        >
+                          <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </>
             )}
 
@@ -330,7 +404,7 @@ export default function NewHodSupportingStaffPage() {
 
             {step.key === "review" && (
               <p className="text-sm text-muted-foreground">
-                Review the steps above using Back, then submit to create <strong>{name || "this staff member"}</strong>&apos;s account and record.
+                Review the steps above using Back, then submit to create <strong>{record.legalName || "this staff member"}</strong>&apos;s account and record.
               </p>
             )}
           </CardContent>

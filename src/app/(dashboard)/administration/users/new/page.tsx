@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { AvatarUploadField } from "@/components/shared/AvatarUploadField";
 import { useAuthStore } from "@/store/authStore";
 import { toast } from "@/hooks/useToast";
@@ -22,6 +23,10 @@ const CREATABLE_ROLES = [
 ] as const;
 
 const SINGLETON_ROLES = ["HR_ADMIN", "ADMIN_OFFICE", "ACCOUNTS"];
+// These three can cover several departments at once (or all of them) - a
+// Dept Head stays single-department (locationDeptId below), since they head
+// exactly one and a department can only have one head (deptsTaken below).
+const MULTI_DEPT_ROLES = ["HR_ADMIN", "ADMIN_OFFICE", "ACCOUNTS"];
 
 export default function NewLocationUserPage() {
   const router = useRouter();
@@ -31,6 +36,9 @@ export default function NewLocationUserPage() {
   const [password, setPassword] = useState("12345678");
   const [role, setRole] = useState("");
   const [locationDeptId, setLocationDeptId] = useState("");
+  // For HR_ADMIN/ADMIN_OFFICE/ACCOUNTS only - see MULTI_DEPT_ROLES above.
+  const [locationDeptIds, setLocationDeptIds] = useState<string[]>([]);
+  const [allLocationDepts, setAllLocationDepts] = useState(false);
   const [depts, setDepts] = useState<LocationDepartment[]>([]);
   const [existingUsers, setExistingUsers] = useState<FMSUser[]>([]);
   const [saving, setSaving] = useState(false);
@@ -83,6 +91,7 @@ export default function NewLocationUserPage() {
           name, email, password, role,
           locationId: user?.locationId ?? "",
           locationDeptId: role === "LOCATION_DEPT_HEAD" ? locationDeptId : undefined,
+          ...(MULTI_DEPT_ROLES.includes(role) ? { locationDeptIds, allLocationDepts } : {}),
           ...(photoUrl ? { profilePhotoUrl: photoUrl } : {}),
         }),
       });
@@ -124,7 +133,7 @@ export default function NewLocationUserPage() {
               <Label>Role <span className="text-destructive">*</span></Label>
               <Select
                 value={role}
-                onValueChange={(v) => { setRole(v); setLocationDeptId(""); }}
+                onValueChange={(v) => { setRole(v); setLocationDeptId(""); setLocationDeptIds([]); setAllLocationDepts(false); }}
                 disabled={loadingUsers}
               >
                 <SelectTrigger>
@@ -179,6 +188,39 @@ export default function NewLocationUserPage() {
                     })}
                   </SelectContent>
                 </Select>
+              </div>
+            )}
+
+            {MULTI_DEPT_ROLES.includes(role) && (
+              <div className="space-y-2">
+                <Label>Departments</Label>
+                <p className="text-xs text-muted-foreground">
+                  Optional - which department(s) this staff member covers. Leave everything
+                  unchecked if they aren&apos;t tied to a specific department.
+                </p>
+                <label className="flex items-center gap-2 text-sm cursor-pointer">
+                  <Checkbox
+                    checked={allLocationDepts}
+                    onCheckedChange={(checked) => { setAllLocationDepts(!!checked); if (checked) setLocationDeptIds([]); }}
+                  />
+                  All Departments
+                </label>
+                {!allLocationDepts && (
+                  <div className="space-y-1.5 pl-1">
+                    {depts.map((d) => (
+                      <label key={d.id} className="flex items-center gap-2 text-sm cursor-pointer">
+                        <Checkbox
+                          checked={locationDeptIds.includes(d.id)}
+                          onCheckedChange={(checked) =>
+                            setLocationDeptIds((prev) => (checked ? [...prev, d.id] : prev.filter((id) => id !== d.id)))
+                          }
+                        />
+                        {d.name}
+                      </label>
+                    ))}
+                    {depts.length === 0 && <p className="text-xs text-muted-foreground italic">No departments yet.</p>}
+                  </div>
+                )}
               </div>
             )}
 

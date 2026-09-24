@@ -33,7 +33,10 @@ export function SupportingStaffModuleContent({ moduleKey, staff }: Props) {
   return (
     <Card>
       <CardContent className="pt-6">
-        {moduleKey === "personal" && <PersonalDetailsView value={staff} />}
+        {/* Full Name (as per SSC) is shown on Identity & Employment instead
+            (hideLegalName); Name (as per PAN) shows here, mirroring Faculty's
+            own PersonalDetailsView usage (FacultyProfileModuleContent.tsx). */}
+        {moduleKey === "personal" && <PersonalDetailsView value={staff} hideLegalName showNameAsPerPan />}
 
         {moduleKey === "qualifications" && <QualificationsView items={profile.qualifications} />}
 

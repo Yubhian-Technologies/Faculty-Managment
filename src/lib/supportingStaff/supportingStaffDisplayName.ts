@@ -5,7 +5,7 @@
 // statutory detail, kept only as a fallback for a record that happens to have
 // no legalName on file. Mirrors src/lib/faculty/facultyDisplayName.ts.
 export function supportingStaffDisplayName(
-  s: { legalName?: string; name?: string } | null | undefined
+  s: { legalName?: string; nameAsPerPan?: string } | null | undefined
 ): string {
-  return s?.legalName?.trim() || s?.name?.trim() || "";
+  return s?.legalName?.trim() || s?.nameAsPerPan?.trim() || "";
 }

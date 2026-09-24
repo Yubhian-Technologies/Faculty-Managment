@@ -26,9 +26,14 @@ const FIREBASE_ERROR_MESSAGES: Record<string, string> = {
 // whoever currently holds it) and password live instead, off the account row
 // every sidebar/drawer already renders.
 export function CollegeAdminAccountMenu({
-  uid, name: initialName, phone: initialPhone, fullWidth,
-}: { uid: string; name: string; phone?: string; fullWidth?: boolean }) {
-  const [open, setOpen] = useState(false);
+  uid, name: initialName, phone: initialPhone, fullWidth, open: controlledOpen, onOpenChange,
+}: { uid: string; name: string; phone?: string; fullWidth?: boolean; open?: boolean; onOpenChange?: (open: boolean) => void }) {
+  // Pass open/onOpenChange to drive it from the top-bar settings menu (no
+  // trigger button is rendered then).
+  const controlled = controlledOpen !== undefined;
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = controlled ? controlledOpen : internalOpen;
+  const setOpen = (v: boolean) => { if (!controlled) setInternalOpen(v); onOpenChange?.(v); };
   const [name, setName] = useState(initialName);
   const [phone, setPhone] = useState(initialPhone ?? "");
   const [savingDetails, setSavingDetails] = useState(false);
@@ -83,7 +88,7 @@ export function CollegeAdminAccountMenu({
 
   return (
     <>
-      {fullWidth ? (
+      {controlled ? null : fullWidth ? (
         <button
           onClick={() => setOpen(true)}
           className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors w-full px-2 py-2 rounded-lg hover:bg-muted"
@@ -113,7 +118,7 @@ export function CollegeAdminAccountMenu({
                 </div>
                 <div className="space-y-2">
                   <Label>Phone</Label>
-                  <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Optional" />
+                  <Input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Optional" />
                 </div>
               </div>
               <Button size="sm" onClick={() => void saveDetails()} loading={savingDetails} disabled={!detailsDirty}>Save</Button>

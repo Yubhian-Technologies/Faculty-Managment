@@ -286,7 +286,7 @@ function RecordFormFields({
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <TextInput label="Affiliation of Scholar" value={form.scholarAffiliation} onChange={(v) => set("scholarAffiliation", v)} />
-            <TextInput label="Phone Number of Scholar" value={form.scholarPhone} onChange={(v) => set("scholarPhone", v)} />
+            <TextInput label="Phone Number of Scholar" type="tel" value={form.scholarPhone} onChange={(v) => set("scholarPhone", v)} />
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <TextInput label="Year of Scholar Allocation" value={form.yearOfAllocation} onChange={(v) => setAndCount("yearOfAllocation", v)} placeholder="e.g. 2022" />

@@ -11,8 +11,10 @@ import { normalizeAcademicProfile } from "@/lib/faculty/academicProfileCompat";
 import { degreeTypeError } from "@/lib/faculty/degreeType";
 import {
   academicProfileFirestoreUpdates, applyAcademicProfileChanges, parseAcademicProfileChanges, touchesTrainingEntries,
-  type AcademicProfileChanges,
+  withoutAcademicProfileKeys, type AcademicProfileChanges,
 } from "@/lib/faculty/academicProfileChanges";
+import { PROMOTION_HISTORY_KEY, DESIGNATION_MANAGED_BY_HISTORY_MESSAGE } from "@/lib/faculty/promotionHistory";
+import { designationKey } from "@/lib/designations/config";
 import { migrateFacultyDoc } from "@/lib/faculty/fieldRenames";
 import { withLegacyFacultyKeysDeleted } from "@/lib/faculty/legacyKeyDeletes";
 import { mobileNoFromBody } from "@/lib/faculty/mobileNo";
@@ -20,7 +22,10 @@ import { normalizeHighestQualification } from "@/lib/faculty/highestQualificatio
 import { FieldValue } from "firebase-admin/firestore";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import type { Designation, EmployeeCategory, FacultyStatus, TrainingEntry } from "@/types";
-import { EMPLOYEE_CATEGORY_VALUES, EMPLOYEE_CATEGORY_ERROR_MESSAGE } from "@/types";
+import {
+  EMPLOYEE_CATEGORY_VALUES, EMPLOYEE_CATEGORY_ERROR_MESSAGE, SELECTABLE_FACULTY_STATUS_VALUES, FACULTY_STATUS_ERROR_MESSAGE,
+  FACULTY_STATUS_DATE_FIELD, FACULTY_STATUS_DATE_LABELS,
+} from "@/types";
 
 export async function GET(
   _request: Request,
@@ -86,6 +91,9 @@ export async function PATCH(
       employeeCategory: EmployeeCategory;
       aicteFacultyId: string;
       status: FacultyStatus;
+      resignedDate: string;
+      retiredDate: string;
+      retainershipDate: string;
       userUid: string;
       academicProfile: Record<string, unknown>;
       // Section-scoped alternative to `academicProfile`: only the keys that changed
@@ -152,6 +160,23 @@ export async function PATCH(
     if (body.employeeCategory !== undefined && !EMPLOYEE_CATEGORY_VALUES.includes(body.employeeCategory)) {
       return NextResponse.json({ error: EMPLOYEE_CATEGORY_ERROR_MESSAGE }, { status: 400 });
     }
+    // Only the SELECTABLE_FACULTY_STATUS_VALUES keys are accepted here -
+    // INTERVIEW_DONE is system-managed only (set by the hiring pipeline, see
+    // provisionFacultyFromOffer/applyOfferDecision), never hand-set via Edit.
+    if (body.status !== undefined && !(SELECTABLE_FACULTY_STATUS_VALUES as string[]).includes(body.status)) {
+      return NextResponse.json({ error: FACULTY_STATUS_ERROR_MESSAGE }, { status: 400 });
+    }
+    // Resigned/Retired/Retainership each need their own date on record -
+    // whichever field applies to the status this PATCH is setting (see
+    // FACULTY_STATUS_DATE_FIELD's own doc-comment in types/core.ts). The Edit
+    // page always resends the current status (and its date, if already on
+    // file) on every save, so this only ever fires on a genuinely missing date.
+    if (body.status !== undefined) {
+      const statusDateField = FACULTY_STATUS_DATE_FIELD[body.status];
+      if (statusDateField && !body[statusDateField]?.trim()) {
+        return NextResponse.json({ error: `${FACULTY_STATUS_DATE_LABELS[statusDateField]} is required` }, { status: 400 });
+      }
+    }
 
     const updates: Record<string, unknown> = { updatedAt: new Date() };
 
@@ -181,8 +206,8 @@ export async function PATCH(
     // builder also used by the create route (POST /api/college/faculty), so
     // an edit persists exactly the fields creation does instead of a second,
     // easily-incomplete hand-rolled whitelist (a prior version of this route
-    // omitted pfNumber/motherTongue/languagesKnown/heightFeet/heightInches/
-    // weightKg entirely, so those silently failed to save on edit).
+    // omitted pfNumber/motherTongue/languagesKnown/height/weightKg entirely,
+    // so those silently failed to save on edit).
     Object.assign(updates, buildPersonalDetailsUpdate(body));
 
     // Non-personal string fields
@@ -193,6 +218,18 @@ export async function PATCH(
 
     for (const key of stringFields) {
       if (body[key] !== undefined) updates[key] = body[key];
+    }
+    // Once a faculty member has a Promotion History, that history (edited by College Office
+    // under Promotion & Salary) decides their current designation - it can't be changed here.
+    // Re-sending the value it already has (the Edit page always does) is a harmless no-op.
+    const storedProfile = normalizeAcademicProfile((snap.data() as { academicProfile?: unknown }).academicProfile ?? {}) as Record<string, unknown>;
+    const storedHistory = storedProfile[PROMOTION_HISTORY_KEY];
+    if (Array.isArray(storedHistory) && storedHistory.length > 0 && body.designation !== undefined) {
+      const current = (snap.data() as { designation?: string }).designation;
+      if (designationKey(body.designation) !== designationKey(current)) {
+        return NextResponse.json({ error: DESIGNATION_MANAGED_BY_HISTORY_MESSAGE }, { status: 409 });
+      }
+      delete updates.designation;
     }
     // One category per faculty member, whatever spelling/casing the caller sent.
     if (typeof updates.highestQualification === "string") {
@@ -221,17 +258,27 @@ export async function PATCH(
       if (!parsed) return NextResponse.json({ error: "Invalid academicProfileChanges" }, { status: 400 });
       const degreeErr = degreeTypeError(parsed.set);
       if (degreeErr) return NextResponse.json({ error: degreeErr }, { status: 400 });
-      academicChanges = parsed;
+      // Promotion History belongs to College Office (PATCH .../promotion-salary) - never written here.
+      academicChanges = withoutAcademicProfileKeys(parsed, [PROMOTION_HISTORY_KEY]);
       Object.assign(updates, academicProfileFirestoreUpdates((snap.data() as { academicProfile?: unknown }).academicProfile, academicChanges, FieldValue.delete()));
     } else if (body.academicProfile !== undefined) {
       const degreeErr = degreeTypeError(body.academicProfile);
       if (degreeErr) return NextResponse.json({ error: degreeErr }, { status: 400 });
-      updates.academicProfile = normalizeAcademicProfile(body.academicProfile);
+      const ap = { ...normalizeAcademicProfile(body.academicProfile) } as Record<string, unknown>;
+      // Whole-profile replace must not carry (or drop) Promotion History: keep whatever is stored.
+      delete ap[PROMOTION_HISTORY_KEY];
+      if (storedProfile[PROMOTION_HISTORY_KEY] !== undefined) ap[PROMOTION_HISTORY_KEY] = storedProfile[PROMOTION_HISTORY_KEY];
+      updates.academicProfile = ap;
     }
     if (body.technicalProfile !== undefined) updates.technicalProfile = body.technicalProfile;
 
     // Date fields
     if (body.joiningDate) updates.joiningDate = new Date(body.joiningDate);
+    // Never auto-cleared once set - see FACULTY_STATUS_DATE_FIELD's own
+    // doc-comment in types/core.ts.
+    if (body.resignedDate) updates.resignedDate = new Date(body.resignedDate);
+    if (body.retiredDate) updates.retiredDate = new Date(body.retiredDate);
+    if (body.retainershipDate) updates.retainershipDate = new Date(body.retainershipDate);
 
     // Total Years of Experience (Internal since Date of Joining + External
     // from the Academic/Industry/Research Experience entries) - always

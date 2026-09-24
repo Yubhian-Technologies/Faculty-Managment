@@ -105,7 +105,7 @@ export function TeachingAssignmentsEditor({ courseId, year, backHref }: Teaching
           // Timetable Incharge (PANEL_MEMBER/COLLEGE_STAFF) branch of
           // college/faculty/route.ts already restricts to just their own
           // department regardless.
-          fetch(`/api/college/faculty?department=${encodeURIComponent(deptName)}&status=ACTIVE`)
+          fetch(`/api/college/faculty?department=${encodeURIComponent(deptName)}&availableOnly=true`)
             .then((r) => r.json() as Promise<{ faculty: FacultyMember[] }>)
             .then((d) => setFaculty((d.faculty ?? []).map((f) => ({ ...f, name: facultyDisplayName(f) }))))
             .catch(() => toast({ variant: "destructive", title: "Failed to load faculty" }));
@@ -164,14 +164,18 @@ export function TeachingAssignmentsEditor({ courseId, year, backHref }: Teaching
   const availableSubjectsForAssign = assignForm.sectionId
     ? (() => {
         const selectedSection = sections.find((s) => s.id === assignForm.sectionId);
-        return subjects.filter((s) =>
-          (!selectedSection?.regulation || !s.regulation || s.regulation === selectedSection.regulation) &&
-          !assignments.some((a) =>
+        return subjects.filter((s) => {
+          if (selectedSection?.regulation && s.regulation && s.regulation !== selectedSection.regulation) return false;
+          if (pendingRequestKeys.has(`${assignForm.sectionId}_${s.id}`)) return false;
+          const existingForSubject = assignments.filter((a) =>
             a.sectionId === assignForm.sectionId && a.subjectId === s.id &&
             matchesCurrentSemester(a.timetableSemester, effectiveSemester)
-          ) &&
-          !pendingRequestKeys.has(`${assignForm.sectionId}_${s.id}`)
-        );
+          );
+          // Only PRACTICAL (lab) subjects may be staffed twice for Batch 1 / Batch 2 half-half split.
+          // THEORY/TUTORIAL/PROJECT stay single-faculty per section.
+          if (s.type === "PRACTICAL") return existingForSubject.length < 2;
+          return existingForSubject.length === 0;
+        });
       })()
     : subjects;
 

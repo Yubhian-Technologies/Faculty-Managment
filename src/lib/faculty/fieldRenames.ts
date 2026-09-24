@@ -109,7 +109,18 @@ export const PERSONAL_KEY_RENAMES: Record<string, string> = {
 export const FACULTY_DOC_KEY_RENAMES: Record<string, string> = {
   qualification: "highestQualification",
   experienceYears: "totalYearsOfExperience",
-  // Mobile No. facultyMembers only - users/supportingStaff docs keep `phone`.
+  // Mobile No. facultyMembers only - users docs keep `phone`.
+  phone: "mobileNo",
+};
+
+// supportingStaff-only top-level keys - same renames as FacultyMember's own,
+// applied to the equivalent Supporting Staff fields so both modules share one
+// set of names (name -> nameAsPerPan additionally, since Supporting Staff's
+// own `name` field used to mean "Name (as per PAN)" under a different key).
+export const SUPPORTING_STAFF_DOC_KEY_RENAMES: Record<string, string> = {
+  name: "nameAsPerPan",
+  qualification: "highestQualification",
+  experienceYears: "totalYearsOfExperience",
   phone: "mobileNo",
 };
 
@@ -273,9 +284,25 @@ export function migrateAcademicProfile(ap: unknown): unknown {
   return out;
 }
 
+// Height used to be captured as two separate number fields (Feet + Inches).
+// It's now one field, `height`, a STRING shaped "<feet>.<inches>" (e.g. "5.7"
+// = 5 ft 7 in, "5.11" = 5 ft 11 in) - not a number, so two-digit inches like
+// .10/.11 survive; as a float, 5.10 === 5.1, which would silently read back
+// as 5 ft 1 in. Same idempotency rule as renameKeys: if `height` is already
+// present it wins, and any lingering heightFeet/heightInches are just dropped.
+export function migrateHeight(doc: Obj): Obj {
+  if (!("heightFeet" in doc) && !("heightInches" in doc)) return doc;
+  const { heightFeet, heightInches, ...rest } = doc;
+  if ("height" in rest) return rest;
+  const hasFeet = typeof heightFeet === "number";
+  const hasInches = typeof heightInches === "number";
+  if (!hasFeet && !hasInches) return rest;
+  return { ...rest, height: `${hasFeet ? heightFeet : 0}.${hasInches ? heightInches : 0}` };
+}
+
 // Flat personal keys (works for facultyMembers, users and supportingStaff docs).
 export function migratePersonalFlat(doc: Obj): Obj {
-  return renameKeys(doc, PERSONAL_KEY_RENAMES);
+  return migrateHeight(renameKeys(doc, PERSONAL_KEY_RENAMES));
 }
 
 // A whole facultyMembers doc: top-level renames, personal keys, academicProfile.
@@ -293,11 +320,13 @@ export function migrateUserDoc(doc: Obj): Obj {
   return out;
 }
 
-// A whole supportingStaff doc: personal keys + the three shared-shape lists
-// under supportingStaffProfile. (The flat qualification/experienceYears keys on
-// this collection are NOT renamed - they're a separate type from FacultyMember.)
+// A whole supportingStaff doc: top-level renames (name/qualification/
+// experienceYears/phone -> nameAsPerPan/highestQualification/
+// totalYearsOfExperience/mobileNo, mirroring FacultyMember's own names),
+// personal keys, and the three shared-shape lists under supportingStaffProfile.
 export function migrateSupportingStaffDoc(doc: Obj): Obj {
-  const out = migratePersonalFlat(doc);
+  let out = renameKeys(doc, SUPPORTING_STAFF_DOC_KEY_RENAMES);
+  out = migratePersonalFlat(out);
   const sp = out.supportingStaffProfile;
   if (isObj(sp)) {
     const next: Obj = { ...sp };

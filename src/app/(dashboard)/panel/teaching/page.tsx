@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Clock, Layers } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/useToast";
 import { formatDMY, currentWeekDates } from "@/lib/utils";
 import { isoDateKey } from "@/lib/leave/dayCounter";
@@ -42,6 +43,7 @@ export default function TeachingLoadPage() {
   const [assignments, setAssignments] = useState<TeachingAssignment[]>([]);
   const [timetableSlots, setTimetableSlots] = useState<TimetableSlot[]>([]);
   const [timings, setTimings] = useState<CourseYearTiming[]>([]);
+  const [typeFilter, setTypeFilter] = useState<"ALL" | "THEORY" | "PRACTICAL">("ALL");
   const [isLoading, setIsLoading] = useState(true);
   // Monday of the week currently on screen - navigable via WeekNavigator,
   // defaulting to this calendar week. weekDates pairs positionally with
@@ -84,6 +86,7 @@ export default function TeachingLoadPage() {
   const assignmentById = new Map(assignments.map((a) => [a.id, a]));
   const maxPeriod = timetableSlots.reduce((max, s) => Math.max(max, s.periodNumber), 0);
   const periods = Array.from({ length: maxPeriod }, (_, i) => i + 1);
+  const displaySlots = typeFilter === "ALL" ? timetableSlots : timetableSlots.filter((s) => s.subjectType === typeFilter);
 
   // Each course-year's own period-by-period breakdown, resolved once up
   // front (falls back to the plain numberOfPeriods/periodDurationMinutes
@@ -152,7 +155,17 @@ export default function TeachingLoadPage() {
         </div>
       ) : (
         <>
-        <WeekNavigator weekStart={weekStart} onChange={setWeekStart} />
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <WeekNavigator weekStart={weekStart} onChange={setWeekStart} />
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium text-muted-foreground">Show:</span>
+            {(["ALL", "THEORY", "PRACTICAL"] as const).map((t) => (
+              <Button key={t} size="sm" variant={typeFilter === t ? "default" : "outline"} onClick={() => setTypeFilter(t)}>
+                {t === "ALL" ? "All" : t === "THEORY" ? "Theory" : "Practical"}
+              </Button>
+            ))}
+          </div>
+        </div>
         <div className="overflow-x-auto rounded-lg border">
           <table className="w-full text-sm border-collapse">
             <thead>
@@ -171,7 +184,7 @@ export default function TeachingLoadPage() {
                 <tr key={period} className="border-b last:border-b-0">
                   <td className="p-2.5 font-medium text-muted-foreground">{period}</td>
                   {DAYS.map((d) => {
-                    const slot = timetableSlots.find((s) => s.day === d && s.periodNumber === period);
+                    const slot = displaySlots.find((s) => s.day === d && s.periodNumber === period);
                     const assignment = slot ? assignmentById.get(slot.assignmentId) : undefined;
                     // Resolved from this slot's OWN course+year, not a shared
                     // row-level time - a period "3" in a 1st Year section can

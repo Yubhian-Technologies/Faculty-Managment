@@ -493,7 +493,7 @@ function RecordFormFields({
                   <>
                     <TextInput label="Name of the Resource Person" value={item.name} onChange={(v) => update({ name: v })} />
                     <TextInput label="Affiliation of Resource Person" value={item.affiliation} onChange={(v) => update({ affiliation: v })} />
-                    <TextInput label="Phone Number of Resource Person" value={item.phone} onChange={(v) => update({ phone: v })} />
+                    <TextInput label="Phone Number of Resource Person" type="tel" value={item.phone} onChange={(v) => update({ phone: v })} />
                   </>
                 )}
               />

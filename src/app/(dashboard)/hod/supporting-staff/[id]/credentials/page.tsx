@@ -33,7 +33,7 @@ export default function HodSupportingStaffCredentialsPage() {
           return;
         }
         const s = data.staff;
-        setStaffName(supportingStaffDisplayName({ legalName: s.legalName as string, name: s.name as string }));
+        setStaffName(supportingStaffDisplayName({ legalName: s.legalName as string, nameAsPerPan: s.nameAsPerPan as string }));
         setEmail(((s.collegeEmail as string) || (s.email as string)) ?? "");
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load staff record" }))

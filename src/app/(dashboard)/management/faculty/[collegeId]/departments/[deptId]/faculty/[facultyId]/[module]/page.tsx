@@ -65,6 +65,7 @@ export default function ManagementFacultyModulePage() {
           publications={publications}
           hideLegalName
           showNameAsPerPan
+          ratificationHistory
         />
       ) : (
         <p className="text-sm text-muted-foreground">Faculty record not found.</p>

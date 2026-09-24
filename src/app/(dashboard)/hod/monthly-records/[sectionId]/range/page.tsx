@@ -117,7 +117,7 @@ export default function HodAttendanceRangeReportPage() {
                   <th className="px-4 py-3">Name</th>
                   {subjects.map((s) => (
                     <th key={s.subjectId} className="px-4 py-3 text-center border-l" colSpan={3} title={s.subjectName}>
-                      {s.subjectCode || s.subjectName}
+                      {s.subjectName}
                     </th>
                   ))}
                 </tr>

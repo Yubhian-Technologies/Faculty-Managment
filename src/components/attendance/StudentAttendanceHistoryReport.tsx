@@ -312,7 +312,7 @@ export function StudentAttendanceHistoryReport({
                   {subjects.map((s, i) => (
                     <tr key={s.subjectId}>
                       <td className="px-4 py-2.5 text-muted-foreground">{i + 1}</td>
-                      <td className="px-4 py-2.5 font-medium" title={s.subjectName}>{s.subjectCode || s.subjectName}</td>
+                      <td className="px-4 py-2.5 font-medium" title={s.subjectName}>{s.subjectName}</td>
                       <td className="px-4 py-2.5 text-center">{s.held}</td>
                       <td className="px-4 py-2.5 text-center">{s.attend}</td>
                       <td className="px-4 py-2.5 text-center"><PercentCell value={s.percent} /></td>

@@ -25,8 +25,8 @@ import { experienceBreakdown, totalYearsOfExperience, formatDuration, allPreviou
 import { PHONE_REGEX, EMAIL_REGEX, APAAR_REGEX } from "@/lib/validations";
 import { AvatarUploadField } from "@/components/shared/AvatarUploadField";
 import { PROFILE_MODULES } from "@/lib/faculty/profileModules";
-import { EMPLOYEE_CATEGORY_LABELS } from "@/types";
-import type { DesignationCatalogItem, EmployeeCategory } from "@/types";
+import { EMPLOYEE_CATEGORY_LABELS, FACULTY_STATUS_LABELS, SELECTABLE_FACULTY_STATUS_VALUES, FACULTY_STATUS_DATE_FIELD, FACULTY_STATUS_DATE_LABELS } from "@/types";
+import type { DesignationCatalogItem, EmployeeCategory, FacultyStatus } from "@/types";
 import { useCollegeType } from "@/hooks/useCollegeType";
 import { designationLabel } from "@/lib/designations/config";
 import { useAuthStore } from "@/store/authStore";
@@ -54,6 +54,10 @@ const schema = z.object({
   mobileNo: z.string().min(1, "Mobile No is required").regex(PHONE_REGEX, "Mobile No must be exactly 10 digits, starting with 6, 7, 8 or 9"),
   designation: z.string().min(1, "Designation is required"),
   employeeCategory: z.string().min(1, "Employee Category is required"),
+  status: z.string().min(1, "Status is required"),
+  resignedDate: z.string().optional(),
+  retiredDate: z.string().optional(),
+  retainershipDate: z.string().optional(),
   highestQualification: z.string().min(1, "Highest Qualification is required"),
   specialization: z.string().optional(),
   totalYearsOfExperience: z.number().min(0, "Cannot be negative").optional(),
@@ -178,17 +182,24 @@ export default function NewFacultyPage() {
     handleSubmit,
     setValue,
     watch,
+    trigger,
+    getValues,
     formState: { errors },
   } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: {
-      totalYearsOfExperience: 0, designation: "", password: "",
+      totalYearsOfExperience: 0, designation: "", password: "", status: "ACTIVE",
     },
   });
   const [erroredSteps, setErroredSteps] = useState<Set<WizardStepKey>>(new Set());
 
   const designation = watch("designation");
   const employeeCategory = watch("employeeCategory");
+  const status = watch("status");
+  // Which of resignedDate/retiredDate/retainershipDate (if any) applies to
+  // the currently-picked status - undefined for Active/On Leave, so no date
+  // field renders at all for those.
+  const statusDateField = FACULTY_STATUS_DATE_FIELD[status as FacultyStatus];
   const highestQualification = watch("highestQualification");
   // "Others" is a mode, not a stored value - it reveals a free-text box whose
   // contents become `highestQualification`. Needs its own state because once the user
@@ -243,18 +254,88 @@ export default function NewFacultyPage() {
 
   // Every validated/required field lives on the "core" step; map each to a
   // friendly label so a failed submit can say exactly what's missing and in
-  // which module (see onInvalid). Steps can be navigated freely - validation
-  // is deferred entirely to submit time.
+  // which module (see onInvalid). Next enforces the current step before
+  // advancing (findStepProblem); submit re-checks everything, since the step
+  // indicator can still jump straight to Review.
   const FIELD_LABELS: Record<string, string> = {
     employeeId: "Employee ID", collegeEmail: "College Email",
     password: "Login Password", mobileNo: "Mobile No", designation: "Designation",
-    employeeCategory: "Employee Category",
+    employeeCategory: "Employee Category", status: "Status",
     highestQualification: "Highest Qualification", totalYearsOfExperience: "Total Years of Experience",
     joiningDate: "Date of Joining",
     legalName: "Full Name (as per SSC)",
   };
 
+  // Every constraint the final submit enforces, grouped by the step whose
+  // fields it reads. Leaving a step checks that step's own fields, so a
+  // problem is raised where it can be fixed - rather than surfacing all at
+  // once at the very end, several steps away from the input at fault.
+  //
+  // A rule spanning two steps belongs to the LATER of them: Date of Birth
+  // (Personal Details) vs Date of Joining (Identity & Employment) can only be
+  // compared once both have been passed through.
+  function findStepProblem(key: WizardStepKey): { title: string; description: string } | null {
+    if (key === "core") {
+      // The zod schema covers this step alone, so its own messages are the
+      // complete list - each already reads as a full sentence ("Employee ID
+      // is required", "Mobile No must be exactly 10 digits, ...").
+      const problems = schema.safeParse(getValues()).error?.issues.map((i) => i.message) ?? [];
+      // Not in the schema (they don't apply in link mode) - same checks
+      // onSubmit makes, just raised a step earlier.
+      if (!isLinkMode && !department) problems.push("Department is required");
+      if (!isLinkMode && !getValues("collegeEmail")?.trim()) problems.push("College Email is required");
+      if (!isLinkMode && !getValues("password")?.trim()) problems.push("Login Password is required");
+      if (!personalDetails.legalName?.trim()) problems.push("Full Name (as per SSC) is required");
+      // Resigned/Retired/Retainership each need their own date - not in the
+      // zod schema since which field (if any) applies depends on the status
+      // just picked (FACULTY_STATUS_DATE_FIELD).
+      const coreDateField = FACULTY_STATUS_DATE_FIELD[getValues("status") as FacultyStatus];
+      if (coreDateField && !getValues(coreDateField)?.trim()) problems.push(`${FACULTY_STATUS_DATE_LABELS[coreDateField]} is required`);
+      if (problems.length > 0) {
+        return {
+          title: "Identity & Employment is incomplete",
+          description: Array.from(new Set(problems)).join(" · "),
+        };
+      }
+      return null;
+    }
+
+    if (key === "personal") {
+      const missing = getMissingRequiredPersonalFields(personalDetails, FACULTY_REQUIRED_PERSONAL_FIELDS);
+      if (missing.length > 0) {
+        return { title: "Personal Details is incomplete", description: `Required: ${missing.join(", ")}` };
+      }
+      const joiningDate = getValues("joiningDate");
+      if (personalDetails.dateOfBirth && joiningDate && personalDetails.dateOfBirth >= joiningDate) {
+        return {
+          title: "Date of Birth must be before Date of Joining",
+          description: "Check the Date of Birth on this step and the Date of Joining on Identity & Employment.",
+        };
+      }
+      return null;
+    }
+
+    // The remaining steps carry no required fields - everything on them is
+    // optional profile detail.
+    return null;
+  }
+
   function goNext() {
+    const problem = findStepProblem(step.key);
+    if (problem) {
+      // trigger() in parallel so the offending inputs are marked inline too,
+      // not just named in the toast.
+      if (step.key === "core") void trigger();
+      setErroredSteps((prev) => new Set(prev).add(step.key));
+      toast({ variant: "destructive", title: problem.title, description: problem.description });
+      return;
+    }
+    setErroredSteps((prev) => {
+      if (!prev.has(step.key)) return prev;
+      const next = new Set(prev);
+      next.delete(step.key);
+      return next;
+    });
     setStepIndex((i) => Math.min(i + 1, steps.length - 1));
   }
 
@@ -303,6 +384,16 @@ export default function NewFacultyPage() {
       setErroredSteps(new Set<WizardStepKey>(["core"]));
       setStepIndex(steps.findIndex((s) => s.key === "core"));
       toast({ variant: "destructive", title: "Some required fields are missing", description: "Identity & Employment: Full Name (as per SSC)" });
+      return;
+    }
+    // Resigned/Retired/Retainership each need their own date - see
+    // findStepProblem's own comment above (same check, defense in depth for
+    // the "jump straight to Review" case).
+    const submitDateField = FACULTY_STATUS_DATE_FIELD[data.status as FacultyStatus];
+    if (submitDateField && !data[submitDateField]?.trim()) {
+      setErroredSteps(new Set<WizardStepKey>(["core"]));
+      setStepIndex(steps.findIndex((s) => s.key === "core"));
+      toast({ variant: "destructive", title: "Some required fields are missing", description: `Identity & Employment: ${FACULTY_STATUS_DATE_LABELS[submitDateField]}` });
       return;
     }
     // Personal Details isn't zod-validated (PersonalDetailsFields is plain
@@ -397,7 +488,8 @@ export default function NewFacultyPage() {
       />
 
       {/* Step indicator - click any step to jump to it; steps with missing
-          required fields (after a submit attempt) are outlined in red. */}
+          required fields are outlined in red. Jumping stays free (it is how
+          you go back to fix something); it is Next that enforces the step. */}
       <div className="flex flex-wrap gap-2 mb-4">
         {steps.map((s, i) => (
           <button
@@ -550,6 +642,35 @@ export default function NewFacultyPage() {
                     {errors.employeeCategory && <p className="text-sm text-destructive">{errors.employeeCategory.message}</p>}
                   </div>
                   <div className="space-y-2">
+                    <Label>Status *</Label>
+                    <Select
+                      value={status ?? "ACTIVE"}
+                      onValueChange={(v) => setValue("status", v as FacultyStatus)}
+                    >
+                      <SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger>
+                      <SelectContent>
+                        {SELECTABLE_FACULTY_STATUS_VALUES.map((s) => (
+                          <SelectItem key={s} value={s}>{FACULTY_STATUS_LABELS[s]}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {errors.status && <p className="text-sm text-destructive">{errors.status.message}</p>}
+                    <p className="text-xs text-muted-foreground">Defaults to Active for a faculty member who has already joined.</p>
+                  </div>
+                  {/* Only Resigned/Retired/Retainership carry a date - which
+                      field depends on the status just picked above
+                      (FACULTY_STATUS_DATE_FIELD). Required so every such
+                      record can say exactly when that happened - also what
+                      the Faculty Register's Duration filter reads to know
+                      when someone's active-tenure window closed. */}
+                  {statusDateField && (
+                    <div className="space-y-2">
+                      <Label>{FACULTY_STATUS_DATE_LABELS[statusDateField]} *</Label>
+                      <Input type="date" {...register(statusDateField)} />
+                      {errors[statusDateField] && <p className="text-sm text-destructive">{errors[statusDateField]?.message}</p>}
+                    </div>
+                  )}
+                  <div className="space-y-2">
                     <Label>Highest Qualification *</Label>
                     <Select
                       value={qualIsOther ? OTHER_QUALIFICATION : (HIGHEST_QUALIFICATION_OPTIONS as readonly string[]).includes(highestQualification) ? highestQualification : ""}
@@ -659,9 +780,10 @@ export default function NewFacultyPage() {
                           />
                           <TextInput
                             label="Mobile Number"
+                            type="tel"
                             value={item.number}
                             onChange={(v) => setExtraPhones((prev) => prev.map((p, idx) => (idx === i ? { ...p, number: v } : p)))}
-                            placeholder="+91 98765 43210"
+                            placeholder="9876543210"
                           />
                         </div>
                         <Button
@@ -687,6 +809,7 @@ export default function NewFacultyPage() {
                 requiredFields={FACULTY_REQUIRED_PERSONAL_FIELDS}
                 hiddenFields={["legalName", "esiNumber"]}
                 showNameAsPerPan
+                ratificationHistory
               />
             )}
             {step.key === "qualification" && <QualificationFields value={academicProfile} onChange={setAcademicProfile} collegeType={collegeType} />}

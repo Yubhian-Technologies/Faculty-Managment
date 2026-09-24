@@ -14,8 +14,13 @@ import { migrateFacultyDoc } from "@/lib/faculty/fieldRenames";
 import { mobileNoFromBody } from "@/lib/faculty/mobileNo";
 import { normalizeHighestQualification } from "@/lib/faculty/highestQualification";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
+import { loadCollegeSettings } from "@/lib/firestore/collegeSettings";
+import { isQualificationSufficient } from "@/lib/faculty/minQualificationCheck";
 import type { Designation, FacultyStatus, EmployeeCategory } from "@/types";
-import { EMPLOYEE_CATEGORY_VALUES, EMPLOYEE_CATEGORY_ERROR_MESSAGE } from "@/types";
+import {
+  EMPLOYEE_CATEGORY_VALUES, EMPLOYEE_CATEGORY_ERROR_MESSAGE, SELECTABLE_FACULTY_STATUS_VALUES, FACULTY_STATUS_ERROR_MESSAGE,
+  isFacultyAvailable, FACULTY_STATUS_DATE_FIELD, FACULTY_STATUS_DATE_LABELS,
+} from "@/types";
 import { loadDepartmentIndex, stampDepartmentIds } from "@/lib/departments/stampIds";
 
 export async function GET(request: Request) {
@@ -24,6 +29,15 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const deptFilter = searchParams.get("department");
     const statusFilter = searchParams.get("status");
+    // "Available for work" (ACTIVE or RETAINERSHIP) - used by every real
+    // picker (Teaching Assignments, Sections' Faculty Incharge, Timetable,
+    // etc.) instead of the old status=ACTIVE-only literal, so Retainership
+    // faculty are offered everywhere Active ones are. Applied as a plain JS
+    // filter on the already department/scope-narrowed result below, not a
+    // second Firestore "in" clause - Firestore allows only one "in"/
+    // "array-contains-any" per query, and department filtering below already
+    // uses one (scope.ownDepartmentNames/relatedNames).
+    const availableOnly = searchParams.get("availableOnly") === "true";
     // Opt-in for a plain HOD's own Faculty roster (see hod/faculty/page.tsx) -
     // a parent/managing HOD's sub-departments' faculty were showing up
     // unannounced in what reads as "my department's roster", confusing an
@@ -136,7 +150,8 @@ export async function GET(request: Request) {
     // (Firestore only allows one inequality filter per query, already spent on
     // department/status) so the Faculty Register stays teaching-only even for
     // any pre-migration record still sitting in facultyMembers.
-    const teachingOnly = faculty.filter((f) => !LEGACY_TECHNICAL_DESIGNATIONS.includes(f.designation as string));
+    let teachingOnly = faculty.filter((f) => !LEGACY_TECHNICAL_DESIGNATIONS.includes(f.designation as string));
+    if (availableOnly) teachingOnly = teachingOnly.filter((f) => isFacultyAvailable(f.status as string));
 
     teachingOnly.sort((a, b) =>
       facultyDisplayName(a as { legalName?: string }).localeCompare(
@@ -173,6 +188,10 @@ export async function POST(request: Request) {
       joiningDate: string;
       aicteFacultyId?: string;
       department?: string;
+      status?: FacultyStatus;
+      resignedDate?: string;
+      retiredDate?: string;
+      retainershipDate?: string;
       academicProfile?: Record<string, unknown>;
       technicalProfile?: Record<string, unknown>;
       profilePhotoUrl?: string;
@@ -197,6 +216,20 @@ export async function POST(request: Request) {
     if (!EMPLOYEE_CATEGORY_VALUES.includes(employeeCategory)) {
       return NextResponse.json({ error: EMPLOYEE_CATEGORY_ERROR_MESSAGE }, { status: 400 });
     }
+    // Status is selectable on the Add Faculty wizard (defaults to ACTIVE when
+    // not sent, e.g. any external caller) - INTERVIEW_DONE is deliberately
+    // excluded, that's system-managed only (see SELECTABLE_FACULTY_STATUS_VALUES).
+    const status: FacultyStatus = body.status ?? "ACTIVE";
+    if (!(SELECTABLE_FACULTY_STATUS_VALUES as string[]).includes(status)) {
+      return NextResponse.json({ error: FACULTY_STATUS_ERROR_MESSAGE }, { status: 400 });
+    }
+    // Resigned/Retired/Retainership each need their own date on record (which
+    // field depends on the status just picked - see FACULTY_STATUS_DATE_FIELD's
+    // own doc-comment in types/core.ts).
+    const statusDateField = FACULTY_STATUS_DATE_FIELD[status];
+    if (statusDateField && !body[statusDateField]?.trim()) {
+      return NextResponse.json({ error: `${FACULTY_STATUS_DATE_LABELS[statusDateField]} is required` }, { status: 400 });
+    }
     const degreeErr = degreeTypeError(body.academicProfile);
     if (degreeErr) return NextResponse.json({ error: degreeErr }, { status: 400 });
     // Matches the mandatory field set the bulk-import template and Add
@@ -219,6 +252,35 @@ export async function POST(request: Request) {
 
     const db = getAdminDb();
     const collegeId = session.collegeId;
+
+    // Minimum qualifications enforcement (WARN mode — does not block creation).
+    let qualificationWarning: string | undefined;
+    try {
+      const settings = await loadCollegeSettings(db, collegeId);
+      const desigSnap = await db
+        .collection("colleges")
+        .doc(collegeId)
+        .collection("designations")
+        .where("category", "==", "FACULTY")
+        .where("isActive", "==", true)
+        .get();
+      const cadreByDesignation = new Map<string, string>();
+      for (const doc of desigSnap.docs) {
+        const d = doc.data() as { name?: string; cadre?: string };
+        if (d.name && d.cadre) cadreByDesignation.set(d.name, d.cadre);
+      }
+      const cadre = cadreByDesignation.get(designation);
+      let required = "";
+      if (cadre === "PROFESSOR") required = settings.minimumQualifications.professor;
+      else if (cadre === "ASSOCIATE_PROFESSOR") required = settings.minimumQualifications.associateProfessor;
+      else if (cadre === "ASSISTANT_PROFESSOR") required = settings.minimumQualifications.assistantProfessor;
+      if (required && !isQualificationSufficient(highestQualification || "", required)) {
+        qualificationWarning = `Highest Qualification "${(highestQualification || "").trim()}" does not meet minimum for ${designation}: requires ${required}`;
+        console.warn(`[college/faculty POST] Qualification warning: ${qualificationWarning}`);
+      }
+    } catch (e) {
+      console.warn("[college/faculty POST] Failed to check minimum qualifications", e);
+    }
 
     // Resolve the owning department. A parent HOD may add faculty straight into
     // one of their sub-departments by naming it; anything else falls back to
@@ -336,7 +398,10 @@ export async function POST(request: Request) {
       ).total,
       joiningDate: new Date(joiningDate),
       ...(body.aicteFacultyId?.trim() ? { aicteFacultyId: body.aicteFacultyId.trim() } : {}),
-      status: "ACTIVE" as FacultyStatus,
+      status,
+      ...(body.resignedDate?.trim() ? { resignedDate: new Date(body.resignedDate) } : {}),
+      ...(body.retiredDate?.trim() ? { retiredDate: new Date(body.retiredDate) } : {}),
+      ...(body.retainershipDate?.trim() ? { retainershipDate: new Date(body.retainershipDate) } : {}),
       userUid: uid,
       ...(body.academicProfile ? { academicProfile: normalizeAcademicProfile(body.academicProfile) } : {}),
       ...(body.technicalProfile ? { technicalProfile: body.technicalProfile } : {}),
@@ -352,6 +417,9 @@ export async function POST(request: Request) {
       ...(profilePhotoUrl ? { profilePhotoUrl } : {}),
     });
 
+    if (qualificationWarning) {
+      return NextResponse.json({ id: docRef.id, uid, warning: qualificationWarning }, { status: 201 });
+    }
     return NextResponse.json({ id: docRef.id, uid }, { status: 201 });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {

@@ -32,11 +32,15 @@ export async function applyOfferDecision(
     // All reads must happen before any writes in a transaction - resolve the
     // faculty doc (if any) now, apply it in the write phase below.
     let facultyRef: FirebaseFirestore.DocumentReference | null = null;
+    let facultyCurrentStatus: string | undefined;
     if (params.decision === "ACCEPTED" && letter.candidateId) {
       const facultySnap = await tx.get(
         collegeRef.collection("facultyMembers").where("candidateId", "==", letter.candidateId).limit(1)
       );
-      if (!facultySnap.empty) facultyRef = facultySnap.docs[0].ref;
+      if (!facultySnap.empty) {
+        facultyRef = facultySnap.docs[0].ref;
+        facultyCurrentStatus = (facultySnap.docs[0].data() as { status?: string }).status;
+      }
     }
 
     const updates: Record<string, unknown> = {
@@ -51,9 +55,12 @@ export async function applyOfferDecision(
 
     // Candidate formally accepted -> mark them APPROVED and flip the faculty
     // record (provisioned as INTERVIEW_DONE when the offer was sent) to ACTIVE.
+    // Only if it's still INTERVIEW_DONE - if staff already hand-set the
+    // record to something else (e.g. Retainership) while the offer sat SENT,
+    // this must not stomp that back to Active.
     if (params.decision === "ACCEPTED" && letter.candidateId) {
       tx.update(collegeRef.collection("candidates").doc(letter.candidateId), { status: "APPROVED", updatedAt: now });
-      if (facultyRef) tx.update(facultyRef, { status: "ACTIVE", updatedAt: now });
+      if (facultyRef && facultyCurrentStatus === "INTERVIEW_DONE") tx.update(facultyRef, { status: "ACTIVE", updatedAt: now });
     }
 
     return "applied";

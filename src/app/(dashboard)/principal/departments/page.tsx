@@ -153,9 +153,9 @@ export default function DepartmentsPage() {
                       ) : (
                         <p className="text-xs text-orange-500">No HOD assigned</p>
                       )}
-                      <Link href="/principal/role-assignments" className="text-xs text-primary hover:underline">
-                        Change in Role Assignments
-                      </Link>
+                      <Button asChild variant="outline" size="sm" className="mt-1.5 h-7 px-2 text-xs">
+                        <Link href="/principal/role-assignments">Change in Role Assignments</Link>
+                      </Button>
                     </div>
                     {(() => {
                       const deptCourses = coursesOf(dept.id);
@@ -244,7 +244,18 @@ export default function DepartmentsPage() {
                     </Button>
                   </div>
                 </div>
-                <p className="text-xs text-primary mt-3">Manage courses &amp; timings →</p>
+                {/* Same destination the card itself opens - given a button's
+                    affordance so it reads as the action it is, rather than as a
+                    bare line of blue text. */}
+                <Button
+                  asChild
+                  variant="outline"
+                  size="sm"
+                  className="mt-3 h-8 w-full text-xs"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <Link href={`/principal/departments/${dept.id}`}>Manage courses &amp; timings →</Link>
+                </Button>
               </CardContent>
             </Card>
           ))}

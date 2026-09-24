@@ -15,6 +15,7 @@ export default function PanelProfileModuleEditPage() {
       sectionScopedProfileSave
       requiredPersonalFields={FACULTY_REQUIRED_PERSONAL_FIELDS}
       hideLegalName
+      ratificationHistory
     />
   );
 }

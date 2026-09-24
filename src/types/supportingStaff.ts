@@ -84,16 +84,26 @@ export interface SupportingStaffMember {
   collegeId: string;
   department?: string; // optional - unlike FacultyMember.department, many roles are college-wide
   employeeId: string;
-  name: string;
+  apaarFacultyId?: string; // NBA/AICTE — APAAR Faculty ID. Mirrors FacultyMember.apaarFacultyId exactly (same key).
+  // Name (as per PAN) - optional statutory-matching detail, independent of
+  // legalName below. Mirrors FacultyMember.nameAsPerPan exactly (same key).
+  nameAsPerPan?: string;
   email?: string;
-  phone?: string;
+  mobileNo?: string;
+  // Extra contact numbers beyond the primary Mobile No above - each with an
+  // optional freeform label (e.g. "Personal", "WhatsApp", or just whoever's
+  // number it is). Mirrors FacultyMember.additionalPhoneNumbers exactly.
+  additionalPhoneNumbers?: { label?: string; number: string }[];
   staffCategory: SupportingStaffCategory;
   designation: SupportingStaffDesignation;
   otherDesignationTitle?: string; // when designation === "OTHER"
   // Flat mandatory field, distinct from supportingStaffProfile.qualifications
-  // (the deeper qualifications-list module) - mirrors FacultyMember.highestQualification.
-  qualification?: string;
-  experienceYears: number;
+  // (the deeper qualifications-list module) - mirrors FacultyMember.highestQualification (same key).
+  highestQualification?: string;
+  // Computed server-side from joiningDate (see experienceBreakdown in
+  // src/lib/faculty/experienceCalc.ts), same as FacultyMember.totalYearsOfExperience -
+  // never taken from client input.
+  totalYearsOfExperience: number;
   joiningDate: Timestamp;
   // Optional - no longer collected via Add/Edit or CSV import (the college's
   // own Employee Category catalog was retired; only Designation remains).
@@ -137,8 +147,9 @@ export interface SupportingStaffMember {
   bloodGroup?: string;
   motherTongue?: string;
   languagesKnown?: string[];
-  heightFeet?: number;
-  heightInches?: number;
+  // Height as "<feet>.<inches>" - e.g. "5.7" = 5 ft 7 in (see FacultyMember's
+  // own `height` field in types/core.ts for the full format note).
+  height?: string;
   weightKg?: number;
   pfNumber?: string; // Provident Fund number
   uanNumber?: string; // Universal Account Number (EPFO) - shown right after PF Number

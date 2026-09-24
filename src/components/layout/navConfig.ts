@@ -83,7 +83,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Interview Plans", href: "/administration/interviews", iconName: "CalendarCheck", roles: ["ADMINISTRATION"] },
   { label: "Offer Letters", href: "/administration/offers", iconName: "FileText", roles: ["ADMINISTRATION"] },
   { label: "My Profile", href: "/administration/profile", iconName: "UserCircle", roles: ["ADMINISTRATION"], section: "Personal" },
-  { label: "Settings", href: "/administration/settings", iconName: "Settings2", roles: ["ADMINISTRATION"] },
+  { label: "Settings", href: "/administration/settings", iconName: "Settings2", roles: ["ADMINISTRATION"], section: "System" },
 
   // HR Admin
   { label: "Dashboard", href: "/hr-admin", iconName: "LayoutDashboard", roles: ["HR_ADMIN"] },
@@ -95,6 +95,7 @@ export const NAV_ITEMS: NavItem[] = [
 
   // Admin Office
   { label: "Dashboard", href: "/admin-office", iconName: "LayoutDashboard", roles: ["ADMIN_OFFICE"] },
+  { label: "Vacancies", href: "/admin-office/vacancies", iconName: "ClipboardList", roles: ["ADMIN_OFFICE"] },
   { label: "My Profile", href: "/admin-office/profile", iconName: "UserCircle", roles: ["ADMIN_OFFICE"], section: "Personal" },
 
   // Placement Department
@@ -122,6 +123,9 @@ export const NAV_ITEMS: NavItem[] = [
   // Exam Cell
   { label: "Dashboard", href: "/exam-cell", iconName: "LayoutDashboard", roles: ["EXAM_CELL"] },
   { label: "Exam Configuration", href: "/exam-cell/configure", iconName: "ClipboardList", roles: ["EXAM_CELL"] },
+  { label: "Exam Cell Guidelines", href: "/exam-cell/guidelines", iconName: "BookOpen", roles: ["EXAM_CELL"] },
+  { label: "Circulars", href: "/exam-cell/circulars", iconName: "ScrollText", roles: ["EXAM_CELL"] },
+  { label: "Attendance Reports", href: "/exam-cell/attendance-report", iconName: "BarChart3", roles: ["EXAM_CELL"] },
   { label: "Staff Attendance", href: "/exam-cell/staff-attendance", iconName: "ClipboardCheck", roles: ["EXAM_CELL"] },
   { label: "Import Attendance", href: "/exam-cell/attendance-import", iconName: "Upload", roles: ["EXAM_CELL"] },
   { label: "My Profile", href: "/exam-cell/profile", iconName: "UserCircle", roles: ["EXAM_CELL"], section: "Personal" },
@@ -140,22 +144,12 @@ export const NAV_ITEMS: NavItem[] = [
   // is shared with Principal below (VICE_PRINCIPAL added to those roles arrays)
   // since the two roles carry equal authority per AGENTS.md.
   { label: "Dashboard", href: "/vice-principal", iconName: "LayoutDashboard", roles: ["VICE_PRINCIPAL"] },
-  { label: "General Admin Vacancies", href: "/principal/vacancies/general-admin", iconName: "ClipboardPlus", roles: ["VICE_PRINCIPAL"], section: "Hiring" },
 
   // Principal (shared with Vice Principal — see note above)
   // Full module set — Super Admin controls which modules/items are actually
   // visible per college via the Nav Visibility settings (filterVisibleNavItems).
   // Grouped by functional domain (see PRINCIPAL_DASHBOARD.md), not by data location.
   { label: "Dashboard", href: "/principal", iconName: "LayoutDashboard", roles: ["PRINCIPAL"] },
-  // Panel Scoring and Appointment Letters are no longer separate tabs - both
-  // are folded into the Hiring Requests pipeline's own status badges/actions
-  // (see PrincipalPipelineBoard.tsx) since they're just later stages of the
-  // same hiring request, not independent destinations.
-  // Vacancy/interview/candidate decisions live here end-to-end - College Admin
-  // enters data and settings but never decides, so the whole board is Principal/
-  // Vice Principal only (see NavItem.hideForRealRoles and the matching API
-  // guards in vacancy-requests, hiring-batches, and candidate-applications).
-  { label: "Hiring Requests", href: "/principal/vacancies", iconName: "ClipboardList", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Hiring Pipeline", hideForRealRoles: ["COLLEGE_ADMIN"] },
   { label: "Courses", href: "/principal/courses", iconName: "GraduationCap", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Academic Management" },
   { label: "Departments", href: "/principal/departments", iconName: "BookOpen", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   // College-wide, read-only view of every section. A College Admin reaches it
@@ -165,7 +159,6 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Student Promotion", href: "/principal/promotions", iconName: "GraduationCap", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Graduated Students", href: "/principal/graduates", iconName: "Award", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Timetable", href: "/principal/timetable", iconName: "CalendarDays", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
-  { label: "Student Attendance History", href: "/principal/attendance-history", iconName: "CalendarCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Internal Marks", href: "/principal/internal-marks", iconName: "ClipboardCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Faculty", href: "/principal/faculty", iconName: "UsersRound", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Staff & HR Management" },
   { label: "Staff", href: "/principal/staff", iconName: "UsersRound", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
@@ -176,14 +169,31 @@ export const NAV_ITEMS: NavItem[] = [
   // Arrange cover for someone below them (Vice Principal / Academics / HODs) who has
   // other work on a date or range - see StaffAdjustmentsPage.
   { label: "Adjustments", href: "/principal/adjustments", iconName: "UserCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
-  { label: "Attendance Report", href: "/principal/attendance-report", iconName: "ClipboardCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
-  // Views whether faculty submitted student attendance for their scheduled
-  // periods, and whether it was on time - distinct from "Attendance Report"
-  // above (staff self check-in/out). College Admin needs this to chase
-  // whoever hasn't logged it yet, so unlike the other Principal-decision
-  // items on this page it stays visible to them (see NavItem.hideForRealRoles).
-  { label: "Attendance Completion", href: "/principal/attendance-completion", iconName: "ClipboardCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
-  { label: "Import Attendance", href: "/principal/attendance-import", iconName: "Upload", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
+  // Was 7 separate sidebar items (Student Attendance History, Attendance
+  // Report, Attendance Completion, Absent Report, Shortage Report, Faculty
+  // Not Posted, Import Attendance), all ungrouped. Now split into two:
+  // "Attendance" is daily check-in/out marking (see
+  // principal/attendance-report/page.tsx, Import reached via its own
+  // internal link); "Attendance Reports" is every report/history/completion
+  // view (see principal/attendance-reports/page.tsx). Attendance Completion
+  // is no longer its own nav item, but FacultyAttendanceCompletionView still
+  // redirects a COLLEGE_ADMIN login away client-side (and the API still
+  // 403s them) regardless of how the tab is reached - see that component's
+  // own guard. The old routes still work standalone (unlinked, not deleted)
+  // for any existing notification links/bookmarks.
+  { label: "Attendance", href: "/principal/attendance-report", iconName: "ClipboardCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
+  { label: "Attendance Reports", href: "/principal/attendance-reports", iconName: "CalendarRange", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
+  { label: "Circulars", href: "/principal/circulars", iconName: "Megaphone", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
+  // Panel Scoring and Appointment Letters are no longer separate tabs - both
+  // are folded into the Hiring Requests pipeline's own status badges/actions
+  // (see PrincipalPipelineBoard.tsx) since they're just later stages of the
+  // same hiring request, not independent destinations.
+  // Vacancy/interview/candidate decisions live here end-to-end - College Admin
+  // enters data and settings but never decides, so the whole board is Principal/
+  // Vice Principal only (see NavItem.hideForRealRoles and the matching API
+  // guards in vacancy-requests, hiring-batches, and candidate-applications).
+  { label: "Hiring Requests", href: "/principal/vacancies", iconName: "ClipboardList", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Hiring Pipeline", hideForRealRoles: ["COLLEGE_ADMIN"] },
+  { label: "General Admin Vacancies", href: "/principal/vacancies/general-admin", iconName: "ClipboardPlus", roles: ["VICE_PRINCIPAL"] },
   // Budget-cycle and budget-request approval is Principal/VP decision
   // authority, not College Admin's - see the matching guards in
   // api/college/budget-cycles/[id] and api/college/budget-requests/[id].
@@ -205,11 +215,11 @@ export const NAV_ITEMS: NavItem[] = [
   // The Principal is never named as anyone's substitute/handover, so only the
   // Vice Principal has requests to accept or decline here.
   { label: "Adjustment Requests", href: "/leave/adjustments", iconName: "UserCheck", roles: ["VICE_PRINCIPAL"] },
-  { label: "Settings", href: "/principal/settings", iconName: "Settings2", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Audit Logs", href: "/principal/audit-logs", iconName: "History", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Administration" },
   // Appoint people to seats (Principal, each HOD, Vice Principal, Academics, ...) -
   // see types/roleSeats.ts.
   { label: "Role Assignments", href: "/principal/role-assignments", iconName: "UserCog", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
+  { label: "Settings", href: "/principal/settings", iconName: "Settings2", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Reset Member Password", href: "/principal/reset-password", iconName: "KeyRound", roles: ["PRINCIPAL"], showOnlyForRealRoles: ["COLLEGE_ADMIN"] },
 
   // HOD
@@ -231,21 +241,27 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Teaching Assignments", href: "/hod/teaching-assignments", iconName: "BookOpen", roles: ["HOD"] },
   { label: "Assignment Requests", href: "/hod/assignment-requests", iconName: "Send", roles: ["HOD"] },
   { label: "Internal Exam", href: "/hod/internal-exam", iconName: "ClipboardCheck", roles: ["HOD"] },
+  { label: "Mid Paper Setter", href: "/hod/mid-paper-setter", iconName: "UserCog", roles: ["HOD"] },
   // Sits directly below Teaching Assignments: subjects are assigned there first,
   // then scheduled here.
   { label: "Timetable", href: "/hod/timetable", iconName: "CalendarDays", roles: ["HOD"] },
-  { label: "Attendance Reports", href: "/hod/monthly-records", iconName: "CalendarRange", roles: ["HOD"] },
-  { label: "Attendance History", href: "/hod/attendance-history", iconName: "CalendarCheck", roles: ["HOD"] },
   { label: "Leave Approvals", href: "/hod/leave-approvals", iconName: "CalendarClock", roles: ["HOD"], section: "Approvals" },
   { label: "Leave History", href: "/hod/leave-history", iconName: "History", roles: ["HOD"] },
   // Arrange cover for their department's faculty / supporting staff who have
   // other work on a date or range - see StaffAdjustmentsPage.
   { label: "Adjustments", href: "/hod/adjustments", iconName: "UserCheck", roles: ["HOD"] },
-  { label: "Faculty Attendance", href: "/hod/faculty-attendance", iconName: "ClipboardCheck", roles: ["HOD"] },
-  // Same view as Principal's "Attendance Completion" - own department's
-  // faculty only (see faculty-attendance-completion/route.ts's HOD scoping).
-  { label: "Attendance Completion", href: "/hod/attendance-completion", iconName: "ClipboardCheck", roles: ["HOD"] },
-  { label: "Import Attendance", href: "/hod/attendance-import", iconName: "Upload", roles: ["HOD"] },
+  // Was 8 separate sidebar items (Attendance Reports, Attendance History,
+  // Faculty Attendance, Attendance Completion, Absent Report, Shortage
+  // Report, Faculty Not Posted, Import Attendance), all ungrouped and, on
+  // mobile, buried in one long drawer list. Now split into two: "Attendance"
+  // is daily check-in/out marking (see hod/faculty-attendance/page.tsx,
+  // Import reached via its own internal link); "Attendance Reports" is
+  // every report/history/completion view (see
+  // hod/attendance-reports/page.tsx). The old routes still work standalone
+  // (unlinked, not deleted) for any existing notification links/bookmarks.
+  { label: "Attendance", href: "/hod/faculty-attendance", iconName: "ClipboardCheck", roles: ["HOD"] },
+  { label: "Attendance Reports", href: "/hod/attendance-reports", iconName: "CalendarRange", roles: ["HOD"] },
+  { label: "Circulars", href: "/hod/circulars", iconName: "Megaphone", roles: ["HOD"] },
   { label: "Leave Profiles", href: "/hod/leave/profiles", iconName: "ClipboardList", roles: ["HOD"] },
   { label: "Budget", href: "/hod/budget", iconName: "PiggyBank", roles: ["HOD"], section: "Budget & Purchase" },
   { label: "Indents", href: "/hod/indents", iconName: "ShoppingCart", roles: ["HOD"] },
@@ -350,6 +366,7 @@ export const NAV_ITEMS: NavItem[] = [
   // R&D Coordinator (seat, one per department) - the only position module; everything
   // personal stays under the holder's own primary role.
   { label: "Dashboard", href: "/rnd-coordinator", iconName: "LayoutDashboard", roles: ["RND_COORDINATOR"] },
+  { label: "My Profile", href: "/rnd-coordinator/profile", iconName: "UserCircle", roles: ["RND_COORDINATOR"], section: "Personal" },
 
   // Faculty (PANEL_MEMBER) — My Interviews is injected dynamically in Sidebar when assigned
   // Full module set — Super Admin controls which modules/items are actually
@@ -367,6 +384,7 @@ export const NAV_ITEMS: NavItem[] = [
   // like the entry above, same empty-state convention.
   { label: "Assignment Requests", href: "/panel/assignment-requests", iconName: "Send", roles: ["PANEL_MEMBER"] },
   { label: "Internal Exam", href: "/panel/internal-exam", iconName: "ClipboardList", roles: ["PANEL_MEMBER"] },
+  { label: "Add Mid Bank", href: "/panel/mid-bank", iconName: "BookOpen", roles: ["PANEL_MEMBER"] },
   { label: "Student Attendance", href: "/panel/mark-attendance", iconName: "CalendarCheck", roles: ["PANEL_MEMBER"] },
   { label: "Attendance Report", href: "/panel/monthly-records", iconName: "CalendarRange", roles: ["PANEL_MEMBER"] },
   { label: "Students", href: "/panel/students", iconName: "GraduationCap", roles: ["PANEL_MEMBER"] },
@@ -378,6 +396,7 @@ export const NAV_ITEMS: NavItem[] = [
   // Faculty Incharge's own equivalent, not offered to HOD here.
   { label: "Lab Batches", href: "/panel/students/batches", iconName: "Layers", roles: ["PANEL_MEMBER"] },
   { label: "My Feedback", href: "/panel/feedback", iconName: "MessageSquare", roles: ["PANEL_MEMBER"] },
+  { label: "Circulars", href: "/panel/circulars", iconName: "Megaphone", roles: ["PANEL_MEMBER"] },
   { label: "Leave", href: "/panel/leave", iconName: "CalendarClock", roles: ["PANEL_MEMBER"], section: "Leave & Attendance" },
   { label: "Adjustment Requests", href: "/leave/adjustments", iconName: "UserCheck", roles: ["PANEL_MEMBER"] },
   { label: "My Attendance", href: "/panel/attendance", iconName: "ClipboardCheck", roles: ["PANEL_MEMBER"] },
@@ -414,6 +433,7 @@ export const NAV_ITEMS: NavItem[] = [
   // Class Leader
   { label: "Dashboard", href: "/class-leader", iconName: "LayoutDashboard", roles: ["CLASS_LEADER"] },
   { label: "Timetable", href: "/class-leader/timetable", iconName: "CalendarDays", roles: ["CLASS_LEADER"] },
+  { label: "My Profile", href: "/class-leader/profile", iconName: "UserCircle", roles: ["CLASS_LEADER"], section: "Personal" },
 
   // Webmaster
   { label: "Dashboard", href: "/webmaster", iconName: "LayoutDashboard", roles: ["WEBMASTER"] },
@@ -616,20 +636,23 @@ export function filterVisibleNavItems(
   // NavItem.hideForRealRoles. Independent of hiddenModules/hiddenItems (a
   // per-college Super Admin setting): this check is hardcoded, not
   // configurable, and applies regardless of it.
-  realRole?: UserRole
+  realRole?: UserRole,
+  // Drop "My Profile" (top-bar avatar) and "Settings" (top-bar gear). Done
+  // here, after modules are fixed, so removing them can't shift their
+  // neighbours into the module above.
+  excludeTopBarItems = false
 ): NavItem[] {
-  const roleFiltered = items.filter((item) => {
-    if (realRole && item.hideForRealRoles?.includes(realRole)) return false;
-    if (item.showOnlyForRealRoles && !(realRole && item.showOnlyForRealRoles.includes(realRole))) return false;
-    return true;
-  });
-
-  if (hiddenModules.length === 0 && hiddenItems.length === 0) return roleFiltered;
-
+  // Each item's module is fixed from the FULL list before anything is removed.
+  // Computing it after removal let the items following a removed section-header
+  // item (e.g. Budget, hidden for College Admin) slide into the previous
+  // module - Budget Report / Budget History ended up under "Staff & HR".
   const kept: { item: NavItem; module: string }[] = [];
-  roleFiltered.forEach((item, i) => {
+  items.forEach((item, i) => {
+    if (realRole && item.hideForRealRoles?.includes(realRole)) return;
+    if (item.showOnlyForRealRoles && !(realRole && item.showOnlyForRealRoles.includes(realRole))) return;
+    if (excludeTopBarItems && (isProfileNavItem(item) || isSettingsNavItem(item))) return;
     if (hiddenItems.includes(item.href)) return;
-    const moduleName = computeItemModule(roleFiltered, i);
+    const moduleName = computeItemModule(items, i);
     if (hiddenModules.includes(moduleName)) return;
     kept.push({ item, module: moduleName });
   });
@@ -642,6 +665,36 @@ export function filterVisibleNavItems(
       ? { ...item, section: module }
       : { ...item, section: undefined };
   });
+}
+
+// "My Profile" lives behind the avatar in the top bar, not in the sidebar.
+export function isProfileNavItem(item: Pick<NavItem, "href">): boolean {
+  return /^\/[a-z-]+\/profile$/.test(item.href);
+}
+
+// "Settings" lives behind the gear in the top bar, not in the sidebar.
+export function isSettingsNavItem(item: Pick<NavItem, "href">): boolean {
+  return /^\/[a-z-]+\/settings$/.test(item.href);
+}
+
+// The Settings page of the first role the login holds that has one - its own
+// role first, then any seats (a faculty login holding the Principal seat gets
+// the Principal's Settings). Null when none of its roles has a Settings page.
+export function getSettingsHref(role: UserRole, heldRoles: readonly UserRole[] = []): string | null {
+  for (const r of [role, ...heldRoles]) {
+    const item = getNavItemsForRole(r).find(isSettingsNavItem);
+    if (item) return item.href;
+  }
+  return null;
+}
+
+// The role's own profile page for the top-bar avatar link, or null when its
+// login has none (College Admin - see NavItem.hideForRealRoles).
+export function getProfileHref(role: UserRole, realRole?: UserRole): string | null {
+  const item = getNavItemsForRole(role).find(isProfileNavItem);
+  if (!item) return null;
+  if (realRole && item.hideForRealRoles?.includes(realRole)) return null;
+  return item.href;
 }
 
 // True if a role's Nav Visibility settings hide the item/module a pathname
@@ -658,7 +711,14 @@ export function isPathHidden(
   if (idx === -1) {
     idx = items.findIndex((item) => item.href !== "/" && pathname.startsWith(item.href + "/"));
   }
-  if (idx === -1) return false;
+  if (idx === -1) {
+    // Not one of the primary role's own pages - it may belong to a seat the
+    // login holds (e.g. a faculty login acting as Principal). hiddenItems is
+    // already limited to the held roles' hrefs, so match against every item.
+    const exact = NAV_ITEMS.find((item) => item.href === pathname);
+    const match = exact ?? NAV_ITEMS.find((item) => item.href !== "/" && pathname.startsWith(item.href + "/"));
+    return !!match && hiddenItems.includes(match.href);
+  }
   const item = items[idx];
   if (hiddenItems.includes(item.href)) return true;
   return hiddenModules.includes(computeItemModule(items, idx));
@@ -702,6 +762,7 @@ export const BOTTOM_NAV_ITEMS: Record<UserRole, NavItem[]> = {
   ],
   ADMIN_OFFICE: [
     { label: "Home", href: "/admin-office", iconName: "LayoutDashboard", roles: ["ADMIN_OFFICE"] },
+    { label: "Vacancies", href: "/admin-office/vacancies", iconName: "ClipboardList", roles: ["ADMIN_OFFICE"] },
     { label: "Profile", href: "/admin-office/profile", iconName: "UserCircle", roles: ["ADMIN_OFFICE"] },
   ],
   PLACEMENT_DEPT: [

@@ -11,6 +11,7 @@ import { mobileNoFromBody } from "@/lib/faculty/mobileNo";
 import { normalizeAcademicProfile } from "@/lib/faculty/academicProfileCompat";
 import { normalizeHighestQualification } from "@/lib/faculty/highestQualification";
 import type { Designation, FacultyStatus } from "@/types";
+import { SELECTABLE_FACULTY_STATUS_VALUES, FACULTY_STATUS_ERROR_MESSAGE, FACULTY_STATUS_DATE_FIELD, FACULTY_STATUS_DATE_LABELS } from "@/types";
 
 // An HOD or Sub-HOD login (Department.hodUid/hodName, role "HOD" on their
 // `users` doc) is "just a normal HOD account, no separate role" - it never
@@ -41,6 +42,10 @@ export async function POST(request: Request) {
       specialization?: string;
       joiningDate: string;
       aicteFacultyId?: string;
+      status?: FacultyStatus;
+      resignedDate?: string;
+      retiredDate?: string;
+      retainershipDate?: string;
       academicProfile?: Record<string, unknown>;
       technicalProfile?: Record<string, unknown>;
       profilePhotoUrl?: string;
@@ -53,6 +58,17 @@ export async function POST(request: Request) {
 
     if (!linkUid || !department || !employeeId || !designation || !highestQualification || !joiningDate) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    }
+    // Status is selectable on the Add Faculty wizard's link-mode flow too
+    // (defaults to ACTIVE when not sent) - see POST /api/college/faculty for
+    // the same validation.
+    const status: FacultyStatus = body.status ?? "ACTIVE";
+    if (!(SELECTABLE_FACULTY_STATUS_VALUES as string[]).includes(status)) {
+      return NextResponse.json({ error: FACULTY_STATUS_ERROR_MESSAGE }, { status: 400 });
+    }
+    const statusDateField = FACULTY_STATUS_DATE_FIELD[status];
+    if (statusDateField && !body[statusDateField]?.trim()) {
+      return NextResponse.json({ error: `${FACULTY_STATUS_DATE_LABELS[statusDateField]} is required` }, { status: 400 });
     }
     // Same personal-detail requirements as the default create flow (POST
     // /api/college/faculty) - link mode only skips collegeEmail/password
@@ -145,7 +161,10 @@ export async function POST(request: Request) {
       ).total,
       joiningDate: new Date(joiningDate),
       ...(body.aicteFacultyId?.trim() ? { aicteFacultyId: body.aicteFacultyId.trim() } : {}),
-      status: "ACTIVE" as FacultyStatus,
+      status,
+      ...(body.resignedDate?.trim() ? { resignedDate: new Date(body.resignedDate) } : {}),
+      ...(body.retiredDate?.trim() ? { retiredDate: new Date(body.retiredDate) } : {}),
+      ...(body.retainershipDate?.trim() ? { retainershipDate: new Date(body.retainershipDate) } : {}),
       userUid: linkUid,
       ...(body.academicProfile ? { academicProfile: normalizeAcademicProfile(body.academicProfile) } : {}),
       ...(body.technicalProfile ? { technicalProfile: body.technicalProfile } : {}),

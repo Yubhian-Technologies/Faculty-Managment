@@ -43,6 +43,12 @@ interface Props {
   // page has no such separate page, so this tab stays their only place to set
   // it - default false preserves that.
   hideLegalName?: boolean;
+  // True only for Panel (a genuine facultyMembers record) - see
+  // personalRecordFromDoc/personalPatchBody's own doc-comment. Every other
+  // role reached through this page (via /api/college/users/me) edits a plain
+  // FMSUser doc, so this defaults to false there and keeps the single
+  // Ratification Proceedings Number/Date pair.
+  ratificationHistory?: boolean;
 }
 
 // Shared self-profile per-module edit page for HOD and Panel (both source
@@ -50,7 +56,7 @@ interface Props {
 // thin users/{uid} doc for roles with no FacultyMember record - see that
 // route's comments). Principal/VP have their own edit page since their View
 // side already bypasses this endpoint entirely (see principal/profile).
-export function MyProfileModuleEditPage({ basePath, patchEndpoint, sectionScopedProfileSave = false, requiredPersonalFields = STAFF_REQUIRED_PERSONAL_FIELDS, hideLegalName = false }: Props) {
+export function MyProfileModuleEditPage({ basePath, patchEndpoint, sectionScopedProfileSave = false, requiredPersonalFields = STAFF_REQUIRED_PERSONAL_FIELDS, hideLegalName = false, ratificationHistory = false }: Props) {
   const router = useRouter();
   const params = useParams<{ module: string }>();
   const moduleKey = params.module as ProfileModuleKey;
@@ -84,11 +90,11 @@ export function MyProfileModuleEditPage({ basePath, patchEndpoint, sectionScoped
         const academicProfile = (m.academicProfile as FacultyEditRecord["academicProfile"]) ?? {};
         setRecordId(typeof d.faculty.id === "string" ? d.faculty.id : "");
         setOriginalAcademicProfile(academicProfile);
-        setRecord({ ...personalRecordFromDoc(m), academicProfile });
+        setRecord({ ...personalRecordFromDoc(m, { ratificationHistory }), academicProfile });
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load profile" }))
       .finally(() => setLoading(false));
-  }, []);
+  }, [ratificationHistory]);
 
   function patch(next: Partial<FacultyEditRecord>) {
     setRecord((r) => ({ ...r, ...next }));
@@ -113,7 +119,7 @@ export function MyProfileModuleEditPage({ basePath, patchEndpoint, sectionScoped
     try {
       let body: Record<string, unknown>;
       if (moduleKey === "personal") {
-        body = personalPatchBody(record);
+        body = personalPatchBody(record, { ratificationHistory });
       } else if (sectionScopedProfileSave) {
         const academicProfileChanges = diffAcademicProfile(originalAcademicProfile, record.academicProfile);
         if (isEmptyChanges(academicProfileChanges)) {
@@ -199,6 +205,7 @@ export function MyProfileModuleEditPage({ basePath, patchEndpoint, sectionScoped
               collegeType={collegeType}
               requiredPersonalFields={requiredPersonalFields}
               hideLegalName={hideLegalName}
+              ratificationHistory={ratificationHistory}
             />
             <div className="flex justify-end gap-3 pt-4 border-t">
               <Button variant="outline" onClick={() => router.push(`${basePath}/${moduleKey}`)}>Cancel</Button>

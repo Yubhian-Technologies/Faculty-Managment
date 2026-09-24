@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -11,26 +11,28 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AvatarUploadField } from "@/components/shared/AvatarUploadField";
+import { TextInput } from "@/components/shared/ProfileFieldPrimitives";
 import { toast } from "@/hooks/useToast";
 import { toDateInputValue } from "@/lib/utils";
+import { APAAR_REGEX } from "@/lib/validations";
 import { FACULTY_STATUS_LABELS } from "@/types";
 import type { DesignationCatalogItem, FacultyStatus, SupportingStaffDesignation } from "@/types";
 
 interface StaffForm {
-  name: string;
-  phone: string;
+  legalName: string;
+  apaarFacultyId: string;
+  mobileNo: string;
   collegeEmail: string;
   designation: SupportingStaffDesignation;
   otherDesignationTitle: string;
-  qualification: string;
-  experienceYears: number;
+  highestQualification: string;
   status: FacultyStatus;
   joiningDate: string;
 }
 
 const EMPTY_FORM: StaffForm = {
-  name: "", phone: "", collegeEmail: "", designation: "", otherDesignationTitle: "", qualification: "",
-  experienceYears: 0, status: "ACTIVE", joiningDate: "",
+  legalName: "", apaarFacultyId: "", mobileNo: "", collegeEmail: "", designation: "", otherDesignationTitle: "", highestQualification: "",
+  status: "ACTIVE", joiningDate: "",
 };
 
 // Department isn't editable here - a Technical staff record stays owned by
@@ -47,6 +49,7 @@ export default function EditHodSupportingStaffPage() {
   const [email, setEmail] = useState("");
   const [department, setDepartment] = useState("");
   const [form, setForm] = useState<StaffForm>(EMPTY_FORM);
+  const [extraPhones, setExtraPhones] = useState<{ label?: string; number: string }[]>([]);
   const [photoUrl, setPhotoUrl] = useState<string | undefined>(undefined);
 
   useEffect(() => {
@@ -63,16 +66,17 @@ export default function EditHodSupportingStaffPage() {
         setEmail((m.email as string) ?? "");
         setDepartment((m.department as string) ?? "");
         setForm({
-          name: (m.name as string) ?? "",
-          phone: (m.phone as string) ?? "",
+          legalName: (m.legalName as string) ?? "",
+          apaarFacultyId: (m.apaarFacultyId as string) ?? "",
+          mobileNo: (m.mobileNo as string) ?? "",
           collegeEmail: (m.collegeEmail as string) ?? "",
           designation: (m.designation as SupportingStaffDesignation) ?? "",
           otherDesignationTitle: (m.otherDesignationTitle as string) ?? "",
-          qualification: (m.qualification as string) ?? "",
-          experienceYears: (m.experienceYears as number) ?? 0,
+          highestQualification: (m.highestQualification as string) ?? "",
           status: (m.status as FacultyStatus) ?? "ACTIVE",
           joiningDate: toDateInputValue(m.joiningDate as never),
         });
+        setExtraPhones((m.additionalPhoneNumbers as { label?: string; number: string }[]) ?? []);
         setPhotoUrl((m.profilePhotoUrl as string) || undefined);
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load staff record" }))
@@ -106,12 +110,20 @@ export default function EditHodSupportingStaffPage() {
       toast({ variant: "destructive", title: "College email is required" });
       return;
     }
-    if (!form.phone.trim()) {
+    if (!form.mobileNo.trim()) {
       toast({ variant: "destructive", title: "Mobile No is required" });
       return;
     }
-    if (!form.qualification.trim()) {
+    if (!form.highestQualification.trim()) {
       toast({ variant: "destructive", title: "Highest Qualification is required" });
+      return;
+    }
+    if (!form.legalName.trim()) {
+      toast({ variant: "destructive", title: "Full Name (as per SSC) is required" });
+      return;
+    }
+    if (form.apaarFacultyId.trim() && !APAAR_REGEX.test(form.apaarFacultyId.trim())) {
+      toast({ variant: "destructive", title: "APAAR Faculty ID must be exactly 12 digits" });
       return;
     }
     setSaving(true);
@@ -123,6 +135,7 @@ export default function EditHodSupportingStaffPage() {
           ...form,
           email,
           employeeId,
+          additionalPhoneNumbers: extraPhones.filter((p) => p.number.trim()),
           ...(photoUrl !== undefined ? { profilePhotoUrl: photoUrl } : {}),
         }),
       });
@@ -168,7 +181,7 @@ export default function EditHodSupportingStaffPage() {
             <div className="flex flex-col gap-5 pb-5 border-b sm:flex-row sm:items-start">
               <div className="flex shrink-0 flex-col items-center gap-2 sm:pt-6">
                 <Label>Profile Photo</Label>
-                <AvatarUploadField name={form.name || "?"} photoUrl={photoUrl} targetId={staffId} onUploaded={setPhotoUrl} onDeleted={() => setPhotoUrl("")} />
+                <AvatarUploadField name={form.legalName || "?"} photoUrl={photoUrl} targetId={staffId} onUploaded={setPhotoUrl} onDeleted={() => setPhotoUrl("")} />
               </div>
               <div className="grid flex-1 grid-cols-1 gap-4">
                 <div className="space-y-2">
@@ -176,26 +189,30 @@ export default function EditHodSupportingStaffPage() {
                   <Input value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} placeholder="EMP-001" />
                 </div>
                 <div className="space-y-2">
-                  <Label>Name (as per PAN)</Label>
-                  <Input value={form.name} onChange={(e) => set({ name: e.target.value })} />
+                  <Label>Full Name (as per SSC) *</Label>
+                  <Input
+                    value={form.legalName}
+                    onChange={(e) => set({ legalName: e.target.value.toUpperCase() })}
+                    placeholder="FULL NAME IN CAPITALS"
+                    className="uppercase"
+                  />
                 </div>
                 <div className="space-y-2">
-                  <Label>Mobile No *</Label>
-                  <Input value={form.phone} onChange={(e) => set({ phone: e.target.value })} placeholder="+91 98765 43210" />
+                  <Label>APAAR Faculty ID</Label>
+                  <Input
+                    inputMode="numeric" maxLength={12}
+                    value={form.apaarFacultyId}
+                    onChange={(e) => set({ apaarFacultyId: e.target.value.replace(/\D/g, "").slice(0, 12) })}
+                    placeholder="123456789012"
+                  />
                 </div>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label>College Email *</Label>
-                <Input type="email" value={form.collegeEmail} onChange={(e) => set({ collegeEmail: e.target.value })} placeholder="name@example.com" />
-                <p className="text-xs text-muted-foreground">This is their login username.</p>
-              </div>
-              <div className="space-y-2">
-                <Label>Personal Email</Label>
-                <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="staff@example.com" />
-              </div>
+            <div className="space-y-2">
+              <Label>College Email *</Label>
+              <Input type="email" value={form.collegeEmail} onChange={(e) => set({ collegeEmail: e.target.value })} placeholder="name@example.com" />
+              <p className="text-xs text-muted-foreground">This is their login username.</p>
             </div>
 
             <div className="pt-2 pb-1 border-t">
@@ -225,11 +242,7 @@ export default function EditHodSupportingStaffPage() {
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label>Highest Qualification *</Label>
-                <Input value={form.qualification} onChange={(e) => set({ qualification: e.target.value })} placeholder="e.g. Diploma, B.Com, ITI" />
-              </div>
-              <div className="space-y-2">
-                <Label>Total Years of Experience</Label>
-                <Input type="number" min={0} value={form.experienceYears} onChange={(e) => set({ experienceYears: e.target.value === "" ? 0 : Number(e.target.value) })} />
+                <Input value={form.highestQualification} onChange={(e) => set({ highestQualification: e.target.value })} placeholder="e.g. Diploma, B.Com, ITI" />
               </div>
               <div className="space-y-2">
                 <Label>Status *</Label>
@@ -247,10 +260,68 @@ export default function EditHodSupportingStaffPage() {
             </div>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label>Joining Date *</Label>
+                <Label>Date of Joining *</Label>
                 <Input type="date" value={form.joiningDate} onChange={(e) => set({ joiningDate: e.target.value })} />
+                <p className="text-xs text-muted-foreground">Total Years of Experience is calculated automatically from this date.</p>
               </div>
             </div>
+
+            <div className="pt-2 pb-1 border-t">
+              <p className="text-sm font-medium text-muted-foreground">Contact Details</p>
+            </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Personal Email</Label>
+                <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="staff@example.com" />
+              </div>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label>Mobile No *</Label>
+                  <Button
+                    type="button"
+                    variant="link"
+                    size="sm"
+                    className="h-auto p-0 text-xs"
+                    onClick={() => setExtraPhones((p) => [...p, { label: "", number: "" }])}
+                  >
+                    + Add Number
+                  </Button>
+                </div>
+                <Input value={form.mobileNo} onChange={(e) => set({ mobileNo: e.target.value })} placeholder="+91 98765 43210" />
+              </div>
+            </div>
+
+            {extraPhones.length > 0 && (
+              <div className="space-y-3">
+                {extraPhones.map((item, i) => (
+                  <div key={i} className="flex items-start gap-2">
+                    <div className="flex-1 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <TextInput
+                        label="Label (optional)"
+                        value={item.label}
+                        onChange={(v) => setExtraPhones((prev) => prev.map((p, idx) => (idx === i ? { ...p, label: v } : p)))}
+                        placeholder="e.g. Personal, WhatsApp, or a name"
+                      />
+                      <TextInput
+                        label="Mobile Number"
+                        value={item.number}
+                        onChange={(v) => setExtraPhones((prev) => prev.map((p, idx) => (idx === i ? { ...p, number: v } : p)))}
+                        placeholder="+91 98765 43210"
+                      />
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="mt-7"
+                      onClick={() => setExtraPhones((prev) => prev.filter((_, idx) => idx !== i))}
+                    >
+                      <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
 

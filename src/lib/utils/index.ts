@@ -144,7 +144,11 @@ export function exportToCSV<T extends Record<string, unknown>>(
       .join(",")
   );
   const csv = [headers, ...rows].join("\n");
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  // Leading UTF-8 BOM - without it, Excel on Windows opens a local CSV using
+  // the system ANSI codepage regardless of the Blob's declared charset, so
+  // any non-ASCII character (e.g. the "—" placeholder for a null percentage)
+  // renders as mojibake ("â€"") instead of the real character.
+  const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;

@@ -97,7 +97,7 @@ export default function NewSectionPage() {
   const [letter, setLetter] = useState("");
 
   useEffect(() => {
-    fetch("/api/college/faculty?status=ACTIVE")
+    fetch("/api/college/faculty?availableOnly=true")
       .then((r) => r.json())
       .then((d: { faculty?: { id: string; name?: string; legalName?: string; designation: string; userUid?: string }[] }) => {
         setFacultyList((d.faculty ?? []).map((f) => ({ id: f.id, name: facultyDisplayName(f), designation: f.designation, userUid: f.userUid })));
@@ -538,7 +538,7 @@ export default function NewSectionPage() {
                     BS-ENGLISH. */}
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
-                    <Label>Section Letter *</Label>
+                    <Label>Section Name *</Label>
                     <Input
                       value={letter}
                       onChange={(e) => setLetter(e.target.value.toUpperCase())}
@@ -618,7 +618,7 @@ export default function NewSectionPage() {
                 )}
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
-                    <Label>Section Letter *</Label>
+                    <Label>Section Name *</Label>
                     <Input
                       value={letter}
                       onChange={(e) => setLetter(e.target.value.toUpperCase())}
@@ -646,7 +646,7 @@ export default function NewSectionPage() {
             ) : (
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
-                  <Label>Section Letter *</Label>
+                  <Label>Section Name *</Label>
                   <Input
                     value={letter}
                     onChange={(e) => setLetter(e.target.value.toUpperCase())}

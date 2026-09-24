@@ -10,11 +10,11 @@ import { NON_TECHNICAL_RESPONSIBILITY_LABELS, COMPUTER_SKILL_LABELS } from "@/ty
 import type { SupportingStaffModuleKey } from "@/lib/supportingStaff/profileModules";
 import type { SupportingStaffProfileFields, NonTechnicalProfile, NonTechnicalResponsibility, ComputerSkill, CollegeType } from "@/types";
 
-// The record shape every per-module edit page holds in local state - name +
-// PersonalDetailsFields' fields live at the top level (matching the host doc),
-// supportingStaffProfile is nested exactly as the PATCH route expects it.
+// The record shape every per-module edit page holds in local state -
+// PersonalDetailsFields' fields (which already include nameAsPerPan) live at
+// the top level (matching the host doc), supportingStaffProfile is nested
+// exactly as the PATCH route expects it.
 export interface SupportingStaffEditRecord extends PersonalDetailsValue {
-  name?: string;
   supportingStaffProfile?: Partial<SupportingStaffProfileFields>;
 }
 
@@ -49,7 +49,10 @@ export function SupportingStaffModuleEditor({ moduleKey, record, onChange, colle
 
   switch (moduleKey) {
     case "personal":
-      return <PersonalDetailsFields value={record} onChange={(v) => onChange(v)} />;
+      // Full Name (as per SSC) is edited on Identity & Employment instead
+      // (hidden here); Name (as per PAN) lives here, mirroring Faculty's own
+      // PersonalDetailsFields usage (FacultyProfileModuleEditor.tsx).
+      return <PersonalDetailsFields value={record} onChange={(v) => onChange(v)} hiddenFields={["legalName"]} showNameAsPerPan />;
 
     case "qualifications":
       return (

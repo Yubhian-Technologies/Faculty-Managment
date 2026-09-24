@@ -5,6 +5,8 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
 import { fetchSectionStudents } from "@/lib/students/sectionRoster";
+import { calcPercent } from "@/lib/studentAttendance/percentage";
+import { isShortageByPercent } from "@/lib/studentAttendance/shortage";
 import type { Section, StudentAttendanceMark, StudentAttendanceSession, TeachingAssignment } from "@/types";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -105,6 +107,13 @@ export async function GET(request: Request) {
     const toParam = searchParams.get("to");
     const allTimeParam = searchParams.get("allTime") === "true";
     const tillNow = searchParams.get("tillNow") === "true";
+    const absentOnly = searchParams.get("absentOnly") === "true";
+    const shortage = searchParams.get("shortage") === "true";
+    const subjectFilter = searchParams.get("subjectId")?.trim() || null;
+    const consolidated = searchParams.get("consolidated") === "true";
+    const thresholdRaw = searchParams.get("threshold");
+    const threshold = thresholdRaw != null ? Math.max(0, Math.min(100, Number(thresholdRaw) || 75)) : 75;
+    const dailyPercent = searchParams.get("dailyPercent") === "true";
 
     if (!sectionId) {
       return NextResponse.json({ error: "sectionId is required" }, { status: 400 });
@@ -192,7 +201,7 @@ export async function GET(request: Request) {
         courseId: section.courseId,
       });
 
-      const students = roster
+      let students = roster
         .map((stu) => {
           const bySubject: Record<string, { held: number; attend: number; percent: number | null }> = {};
           for (const sub of subjects) {
@@ -202,13 +211,41 @@ export async function GET(request: Request) {
               held += 1;
               if (r.entries.find((e) => e.studentId === stu.id)?.status === "PRESENT") attend += 1;
             }
-            bySubject[sub.subjectId] = { held, attend, percent: held > 0 ? Math.round((attend / held) * 10000) / 100 : null };
+            bySubject[sub.subjectId] = { held, attend, percent: calcPercent(attend, held) };
           }
-          return { id: stu.id, rollNumber: stu.rollNumber, name: stu.name, bySubject };
+          // consolidated overall for this range
+          let cHeld = 0, cAttend = 0;
+          for (const v of Object.values(bySubject)) { cHeld += v.held; cAttend += v.attend; }
+          const overall = { held: cHeld, attended: cAttend, percentage: calcPercent(cAttend, cHeld) };
+          return { id: stu.id, rollNumber: stu.rollNumber, name: stu.name, bySubject, overall };
         })
         .sort((a, b) => a.rollNumber.localeCompare(b.rollNumber, undefined, { numeric: true }));
 
-      return NextResponse.json({ subjects, students });
+      // Apply absentOnly / shortage / subjectFilter / consolidated filters
+      if (subjectFilter) {
+        // keep original but filter downstream: shortage/absent checks only that subject
+      }
+      if (absentOnly) {
+        students = students.filter((s) => {
+          const keys = subjectFilter ? [subjectFilter] : Object.keys(s.bySubject);
+          return keys.some((k) => {
+            const v = s.bySubject[k];
+            return v && v.held > 0 && v.attend < v.held;
+          }) || (consolidated && s.overall.held > 0 && s.overall.attended < s.overall.held);
+        });
+      }
+      if (shortage) {
+        students = students.filter((s) => {
+          if (consolidated) return isShortageByPercent(s.overall.percentage, threshold);
+          const keys = subjectFilter ? [subjectFilter] : Object.keys(s.bySubject);
+          return keys.some((k) => {
+            const v = s.bySubject[k];
+            return v && isShortageByPercent(v.percent, threshold);
+          });
+        });
+      }
+
+      return NextResponse.json({ subjects, students, meta: { absentOnly, shortage, threshold, consolidated, subjectFilter, total: students.length } });
     }
 
     // A second, independently built Period/Till Now mode (bare `from`/`to`,
@@ -245,23 +282,22 @@ export async function GET(request: Request) {
         courseId: section.courseId,
       });
 
-      const students = roster
+      let students = roster
         .map((stu) => {
           let overallHeld = 0;
           let overallAttended = 0;
-          const bySubject: Record<string, { held: number; attended: number; percentage: number }> = {};
+          const bySubject: Record<string, { held: number; attended: number; percentage: number | null }> = {};
           for (const s of subjects) {
             const sessionsForSubject = sessionsBySubject.get(s.subjectId) ?? [];
             const held = sessionsForSubject.length;
             const attended = sessionsForSubject.filter(
               (r) => r.entries.find((e) => e.studentId === stu.id)?.status === "PRESENT"
             ).length;
-            const percentage = held > 0 ? Math.round((attended / held) * 100) : 0;
-            bySubject[s.subjectId] = { held, attended, percentage };
+            bySubject[s.subjectId] = { held, attended, percentage: calcPercent(attended, held) };
             overallHeld += held;
             overallAttended += attended;
           }
-          const overallPercentage = overallHeld > 0 ? Math.round((overallAttended / overallHeld) * 100) : 0;
+          const overallPercentage = calcPercent(overallAttended, overallHeld);
           return {
             studentId: stu.id,
             rollNumber: stu.rollNumber,
@@ -271,6 +307,26 @@ export async function GET(request: Request) {
           };
         })
         .sort((a, b) => a.rollNumber.localeCompare(b.rollNumber, undefined, { numeric: true }));
+
+      if (absentOnly) {
+        students = students.filter((s: { bySubject: Record<string, { held: number; attended: number; percentage: number | null }>; overall: { held: number; attended: number; percentage: number | null } }) => {
+          const keys = subjectFilter ? [subjectFilter] : Object.keys(s.bySubject);
+          return keys.some((k) => {
+            const v = s.bySubject[k];
+            return v && v.held > 0 && v.attended < v.held;
+          }) || (consolidated && s.overall.held > 0 && s.overall.attended < s.overall.held);
+        }) as typeof students;
+      }
+      if (shortage) {
+        students = students.filter((s: { bySubject: Record<string, { held: number; attended: number; percentage: number | null }>; overall: { held: number; attended: number; percentage: number | null } }) => {
+          if (consolidated) return isShortageByPercent(s.overall.percentage, threshold);
+          const keys = subjectFilter ? [subjectFilter] : Object.keys(s.bySubject);
+          return keys.some((k) => {
+            const v = s.bySubject[k];
+            return v && isShortageByPercent(v.percentage, threshold);
+          });
+        }) as typeof students;
+      }
 
       // Section-wide summary for the "Total Attendance" footer - Held is a
       // period count (sum of every subject's held sessions, same for every
@@ -347,7 +403,7 @@ export async function GET(request: Request) {
         courseId: section.courseId,
       });
 
-      const students = roster
+      let students = roster
         .map((stu) => {
           const bySubject: Record<string, { weeks: (number | null)[]; monthPresent: number; monthTotal: number; monthPercent: number | null }> = {};
           for (const sub of subjects) {
@@ -370,7 +426,32 @@ export async function GET(request: Request) {
         })
         .sort((a, b) => a.rollNumber.localeCompare(b.rollNumber, undefined, { numeric: true }));
 
-      return NextResponse.json({ subjects, weekLabels: weekRanges.map((w) => w.label), students });
+      // Apply absentOnly / shortage filters for month view
+      if (absentOnly) {
+        students = students.filter((s: { bySubject: Record<string, { weeks: (number | null)[]; monthPresent: number; monthTotal: number; monthPercent: number | null }> }) => {
+          const keys = subjectFilter ? [subjectFilter] : Object.keys(s.bySubject);
+          return keys.some((k) => {
+            const v = s.bySubject[k];
+            return v && v.monthTotal > 0 && v.monthPresent < v.monthTotal;
+          });
+        }) as typeof students;
+      }
+      if (shortage) {
+        students = students.filter((s: { bySubject: Record<string, { monthPercent: number | null }> }) => {
+          if (consolidated) {
+            let cHeld = 0, cAtt = 0;
+            for (const v of Object.values(s.bySubject) as unknown as { monthPresent: number; monthTotal: number }[]) { cHeld += (v as { monthTotal: number }).monthTotal; cAtt += (v as { monthPresent: number }).monthPresent; }
+            return isShortageByPercent(calcPercent(cAtt, cHeld), threshold);
+          }
+          const keys = subjectFilter ? [subjectFilter] : Object.keys(s.bySubject);
+          return keys.some((k) => {
+            const v = s.bySubject[k];
+            return v && isShortageByPercent(v.monthPercent, threshold);
+          });
+        }) as typeof students;
+      }
+
+      return NextResponse.json({ subjects, weekLabels: weekRanges.map((w) => w.label), students, meta: { absentOnly, shortage, threshold } });
     }
 
     if (!dateParam) {
@@ -402,7 +483,7 @@ export async function GET(request: Request) {
       courseId: section.courseId,
     });
 
-    const students = roster
+    let students = roster
       .map((stu) => {
         const statusBySubject: Record<string, StudentAttendanceMark | null> = {};
         for (const s of subjects) {
@@ -410,11 +491,39 @@ export async function GET(request: Request) {
           const entry = r?.entries.find((e) => e.studentId === stu.id);
           statusBySubject[s.subjectId] = entry?.status ?? null;
         }
-        return { id: stu.id, rollNumber: stu.rollNumber, name: stu.name, statusBySubject };
+        // also compute percent per subject for this single day (1 held if session exists)
+        const bySubjectDaily: Record<string, { held: number; attend: number; percent: number | null }> = {};
+        for (const s of subjects) {
+          const has = sessionBySubject.has(s.subjectId) ? 1 : 0;
+          const present = statusBySubject[s.subjectId] === "PRESENT" ? 1 : 0;
+          bySubjectDaily[s.subjectId] = { held: has, attend: present, percent: has > 0 ? (present === 1 ? 100 : 0) : null };
+        }
+        let cHeld = 0, cAtt = 0;
+        for (const v of Object.values(bySubjectDaily)) { cHeld += v.held; cAtt += v.attend; }
+        const overall = { held: cHeld, attended: cAtt, percentage: calcPercent(cAtt, cHeld) };
+        return { id: stu.id, rollNumber: stu.rollNumber, name: stu.name, statusBySubject, bySubjectDaily, overall };
       })
       .sort((a, b) => a.rollNumber.localeCompare(b.rollNumber, undefined, { numeric: true }));
 
-    return NextResponse.json({ subjects, students, classwork });
+    if (absentOnly) {
+      students = students.filter((s) => {
+        const keys = subjectFilter ? [subjectFilter] : Object.keys(s.statusBySubject);
+        return keys.some((k) => s.statusBySubject[k] === "ABSENT") || (consolidated && s.overall.held > 0 && s.overall.attended < s.overall.held);
+      });
+    }
+    if (shortage) {
+      students = students.filter((s) => {
+        if (consolidated) return isShortageByPercent(s.overall.percentage, threshold);
+        const keys = subjectFilter ? [subjectFilter] : Object.keys(s.bySubjectDaily);
+        return keys.some((k) => {
+          const v = s.bySubjectDaily[k];
+          return v && isShortageByPercent(v.percent, threshold);
+        });
+      });
+    }
+    // dailyPercent flag: if requested, client can read bySubjectDaily/overall percent directly
+
+    return NextResponse.json({ subjects, students, classwork, meta: { absentOnly, shortage, threshold, dailyPercent } });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

@@ -11,8 +11,12 @@ import { PromotionFields, FinancialFields } from "@/components/faculty/AcademicP
 import { useCollegeType } from "@/hooks/useCollegeType";
 import { normalizeAcademicProfile } from "@/lib/faculty/academicProfileCompat";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
+import {
+  validatePromotionHistory, sortPromotionHistory, samePromotionHistory, runningDesignation, toDateOnly,
+} from "@/lib/faculty/promotionHistory";
+import { designationLabel, designationKey } from "@/lib/designations/config";
 import { toast } from "@/hooks/useToast";
-import type { FacultyProfileFields } from "@/types";
+import type { FacultyProfileFields, PromotionRecord } from "@/types";
 
 type PromotionSalarySlice = Pick<
   FacultyProfileFields,
@@ -31,10 +35,15 @@ export default function CollegeOfficeFacultyPromotionSalaryPage() {
   const [saving, setSaving] = useState(false);
   const [name, setName] = useState("");
   const [value, setValue] = useState<Partial<PromotionSalarySlice>>({});
+  // What the Promotion History rules are checked against (see lib/faculty/promotionHistory.ts).
+  const [joiningDate, setJoiningDate] = useState<string | undefined>();
+  const [status, setStatus] = useState<string | undefined>();
+  const [currentDesignation, setCurrentDesignation] = useState<string | undefined>();
+  const [initialHistory, setInitialHistory] = useState<PromotionRecord[]>([]);
 
   useEffect(() => {
     fetch(`/api/college/faculty/${facultyId}`)
-      .then((r) => r.json() as Promise<{ faculty?: { name?: string; legalName?: string; academicProfile?: PromotionSalarySlice } }>)
+      .then((r) => r.json() as Promise<{ faculty?: { name?: string; legalName?: string; joiningDate?: unknown; status?: string; designation?: string; academicProfile?: PromotionSalarySlice } }>)
       .then((data) => {
         if (!data.faculty) {
           toast({ variant: "destructive", title: "Faculty record not found" });
@@ -44,13 +53,31 @@ export default function CollegeOfficeFacultyPromotionSalaryPage() {
         setName(facultyDisplayName(data.faculty));
         // Un-migrated docs still carry legacy key names - lift them so the form
         // (and the PATCH body) only ever holds the current ones.
-        setValue(normalizeAcademicProfile(data.faculty.academicProfile ?? {}));
+        const profile = normalizeAcademicProfile(data.faculty.academicProfile ?? {}) as Partial<FacultyProfileFields>;
+        // Shown chronologically (the server stores it that way too).
+        const history = sortPromotionHistory(profile.promotionHistory ?? []);
+        setValue({ ...profile, promotionHistory: history });
+        setInitialHistory(history);
+        setJoiningDate(toDateOnly(data.faculty.joiningDate));
+        setStatus(data.faculty.status);
+        setCurrentDesignation(data.faculty.designation);
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load faculty record" }))
       .finally(() => setLoading(false));
   }, [facultyId, router]);
 
+  const history = value.promotionHistory ?? [];
+  const rules = { joiningDate, status };
+  const issues = validatePromotionHistory(history, rules);
+  // Only a CHANGED history has to satisfy the rules - salary can still be saved for a faculty
+  // member whose stored history predates them (it is shown with its problems, never rewritten).
+  const historyChanged = !samePromotionHistory(history, initialHistory);
+  const blocked = historyChanged && issues.length > 0;
+  const nextDesignation = historyChanged && issues.length === 0 ? runningDesignation(history) : undefined;
+  const designationWillChange = !!nextDesignation && designationKey(nextDesignation) !== designationKey(currentDesignation);
+
   async function handleSave() {
+    if (blocked) return;
     setSaving(true);
     try {
       const res = await fetch(`/api/college/faculty/${facultyId}/promotion-salary`, {
@@ -58,7 +85,11 @@ export default function CollegeOfficeFacultyPromotionSalaryPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(value),
       });
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({})) as { error?: string };
+        toast({ variant: "destructive", title: "Failed to save", description: err.error });
+        return;
+      }
       toast({ variant: "success", title: "Saved" });
       router.push("/college-office/faculty");
     } catch {
@@ -85,11 +116,22 @@ export default function CollegeOfficeFacultyPromotionSalaryPage() {
       ) : (
         <Card>
           <CardContent className="pt-6 space-y-6">
-            <PromotionFields value={value} collegeType={collegeType} onChange={(next) => setValue((v) => ({ ...v, ...next }))} />
+            <PromotionFields value={value} collegeType={collegeType} rules={rules} onChange={(next) => setValue((v) => ({ ...v, ...next }))} />
+            {designationWillChange && (
+              <p className="rounded-md border bg-muted/30 p-3 text-sm">
+                Saving will set this faculty member&apos;s current designation to <strong>{designationLabel(nextDesignation)}</strong>
+                {currentDesignation ? <> (now {designationLabel(currentDesignation)})</> : null}.
+              </p>
+            )}
+            {blocked && (
+              <p className="text-sm font-medium text-destructive">
+                Fix the highlighted Promotion History rows before saving.
+              </p>
+            )}
             <FinancialFields value={value} onChange={(next) => setValue((v) => ({ ...v, ...next }))} />
             <div className="flex justify-end gap-3 pt-4 border-t">
               <Button variant="outline" onClick={() => router.push("/college-office/faculty")}>Cancel</Button>
-              <Button onClick={handleSave} loading={saving}>Save Changes</Button>
+              <Button onClick={handleSave} loading={saving} disabled={blocked}>Save Changes</Button>
             </div>
           </CardContent>
         </Card>

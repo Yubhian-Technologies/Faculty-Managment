@@ -66,10 +66,16 @@ export async function POST(request: Request) {
       locationId: string;
       department?: string;
       locationDeptId?: string;
+      // For HR_ADMIN/ADMIN_OFFICE/ACCOUNTS only - see FMSUser's own doc-comment.
+      locationDeptIds?: string[];
+      allLocationDepts?: boolean;
       profilePhotoUrl?: string;
     };
 
-    const { name, email, password, role, locationId, department, locationDeptId, profilePhotoUrl } = body;
+    const {
+      name, email, password, role, locationId, department, locationDeptId,
+      locationDeptIds, allLocationDepts, profilePhotoUrl,
+    } = body;
 
     if (!name || !email || !password || !role || !locationId) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
@@ -139,6 +145,11 @@ export async function POST(request: Request) {
         role,
         department: resolvedDepartment,
         locationDeptId: locationDeptId ?? "",
+        // Only meaningful for HR_ADMIN/ADMIN_OFFICE/ACCOUNTS - a Dept Head's
+        // single locationDeptId above is their whole story, never these two.
+        ...(role !== "LOCATION_DEPT_HEAD"
+          ? { allLocationDepts: !!allLocationDepts, locationDeptIds: allLocationDepts ? [] : (locationDeptIds ?? []) }
+          : {}),
         ...(profilePhotoUrl ? { profilePhotoUrl } : {}),
         isActive: true,
         createdAt: now,

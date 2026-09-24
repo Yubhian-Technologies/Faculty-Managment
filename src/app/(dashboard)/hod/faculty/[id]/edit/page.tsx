@@ -19,8 +19,8 @@ import { toast } from "@/hooks/useToast";
 import { migrateFacultyDoc } from "@/lib/faculty/fieldRenames";
 import { toDateInputValue } from "@/lib/utils";
 import { designationLabel } from "@/lib/designations/config";
-import { EMPLOYEE_CATEGORY_LABELS } from "@/types";
-import type { DesignationCatalogItem, Designation, EmployeeCategory } from "@/types";
+import { EMPLOYEE_CATEGORY_LABELS, FACULTY_STATUS_LABELS, SELECTABLE_FACULTY_STATUS_VALUES, FACULTY_STATUS_DATE_FIELD, FACULTY_STATUS_DATE_LABELS } from "@/types";
+import type { DesignationCatalogItem, Designation, EmployeeCategory, FacultyStatus } from "@/types";
 
 // Sentinel for the "Others" row - matches hod/faculty/new/page.tsx's own
 // highest-qualification picker.
@@ -31,6 +31,10 @@ interface IdentityForm {
   apaarFacultyId: string;
   designation: Designation | "";
   employeeCategory: EmployeeCategory | "";
+  status: FacultyStatus;
+  resignedDate: string;
+  retiredDate: string;
+  retainershipDate: string;
   highestQualification: string;
   specialization: string;
   joiningDate: string;
@@ -40,7 +44,8 @@ interface IdentityForm {
 }
 
 const EMPTY_FORM: IdentityForm = {
-  legalName: "", apaarFacultyId: "", designation: "", employeeCategory: "",
+  legalName: "", apaarFacultyId: "", designation: "", employeeCategory: "", status: "ACTIVE",
+  resignedDate: "", retiredDate: "", retainershipDate: "",
   highestQualification: "", specialization: "", joiningDate: "", aicteFacultyId: "",
   email: "", mobileNo: "",
 };
@@ -67,6 +72,9 @@ export default function EditHodFacultyIdentityPage() {
   const [qualIsOther, setQualIsOther] = useState(false);
   const [extraPhones, setExtraPhones] = useState<{ label?: string; number: string }[]>([]);
   const [photoUrl, setPhotoUrl] = useState<string | undefined>(undefined);
+  // With a Promotion History on file, that history (College Office > Promotion & Salary) decides the
+  // current designation - the server rejects a different value here, so the field is read-only.
+  const [designationManaged, setDesignationManaged] = useState(false);
   const [designationOptions, setDesignationOptions] = useState<string[]>([]);
 
   useEffect(() => {
@@ -89,6 +97,10 @@ export default function EditHodFacultyIdentityPage() {
           apaarFacultyId: (m.apaarFacultyId as string) ?? "",
           designation: (m.designation as Designation) ?? "",
           employeeCategory: (m.employeeCategory as EmployeeCategory) ?? "",
+          status: (m.status as FacultyStatus) ?? "ACTIVE",
+          resignedDate: toDateInputValue(m.resignedDate as never),
+          retiredDate: toDateInputValue(m.retiredDate as never),
+          retainershipDate: toDateInputValue(m.retainershipDate as never),
           highestQualification,
           specialization: (m.specialization as string) ?? "",
           joiningDate: toDateInputValue(m.joiningDate as never),
@@ -96,6 +108,8 @@ export default function EditHodFacultyIdentityPage() {
           email: (m.email as string) ?? "",
           mobileNo: (m.mobileNo as string) ?? "",
         });
+        const history = (m.academicProfile as { promotionHistory?: unknown[] } | undefined)?.promotionHistory;
+        setDesignationManaged(Array.isArray(history) && history.length > 0);
         setExtraPhones((m.additionalPhoneNumbers as { label?: string; number: string }[]) ?? []);
         setPhotoUrl((m.profilePhotoUrl as string) || undefined);
       })
@@ -134,6 +148,11 @@ export default function EditHodFacultyIdentityPage() {
       toast({ variant: "destructive", title: "Employee Category is required" });
       return;
     }
+    const statusDateField = FACULTY_STATUS_DATE_FIELD[form.status];
+    if (statusDateField && !form[statusDateField].trim()) {
+      toast({ variant: "destructive", title: `${FACULTY_STATUS_DATE_LABELS[statusDateField]} is required` });
+      return;
+    }
     if (!form.highestQualification.trim()) {
       toast({ variant: "destructive", title: "Highest Qualification is required" });
       return;
@@ -165,6 +184,10 @@ export default function EditHodFacultyIdentityPage() {
           apaarFacultyId: form.apaarFacultyId.trim(),
           designation: form.designation,
           employeeCategory: form.employeeCategory,
+          status: form.status,
+          ...(form.resignedDate ? { resignedDate: form.resignedDate } : {}),
+          ...(form.retiredDate ? { retiredDate: form.retiredDate } : {}),
+          ...(form.retainershipDate ? { retainershipDate: form.retainershipDate } : {}),
           highestQualification: form.highestQualification.trim(),
           specialization: form.specialization.trim(),
           joiningDate: form.joiningDate,
@@ -262,7 +285,7 @@ export default function EditHodFacultyIdentityPage() {
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label>Designation *</Label>
-                <Select value={form.designation} onValueChange={(v) => set({ designation: v as Designation })}>
+                <Select value={form.designation} onValueChange={(v) => set({ designation: v as Designation })} disabled={designationManaged}>
                   <SelectTrigger><SelectValue placeholder="Select designation" /></SelectTrigger>
                   <SelectContent>
                     {designationOptions.map((d) => <SelectItem key={d} value={d}>{designationLabel(d)}</SelectItem>)}
@@ -274,6 +297,11 @@ export default function EditHodFacultyIdentityPage() {
                     )}
                   </SelectContent>
                 </Select>
+                {designationManaged && (
+                  <p className="text-xs text-muted-foreground">
+                    Managed by this faculty member&apos;s Promotion History - College Office updates it under Promotion &amp; Salary.
+                  </p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label>Employee Category *</Label>
@@ -286,6 +314,29 @@ export default function EditHodFacultyIdentityPage() {
                   </SelectContent>
                 </Select>
               </div>
+              <div className="space-y-2">
+                <Label>Status *</Label>
+                <Select value={form.status} onValueChange={(v) => set({ status: v as FacultyStatus })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {SELECTABLE_FACULTY_STATUS_VALUES.map((s) => (
+                      <SelectItem key={s} value={s}>{FACULTY_STATUS_LABELS[s]}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              {/* Only Resigned/Retired/Retainership carry a date - see
+                  FACULTY_STATUS_DATE_FIELD's own doc-comment in types/core.ts. */}
+              {FACULTY_STATUS_DATE_FIELD[form.status] && (
+                <div className="space-y-2">
+                  <Label>{FACULTY_STATUS_DATE_LABELS[FACULTY_STATUS_DATE_FIELD[form.status]!]} *</Label>
+                  <Input
+                    type="date"
+                    value={form[FACULTY_STATUS_DATE_FIELD[form.status]!]}
+                    onChange={(e) => set({ [FACULTY_STATUS_DATE_FIELD[form.status]!]: e.target.value })}
+                  />
+                </div>
+              )}
               <div className="space-y-2">
                 <Label>Highest Qualification *</Label>
                 <Select
@@ -375,9 +426,10 @@ export default function EditHodFacultyIdentityPage() {
                       />
                       <TextInput
                         label="Mobile Number"
+                        type="tel"
                         value={item.number}
                         onChange={(v) => setExtraPhones((prev) => prev.map((p, idx) => (idx === i ? { ...p, number: v } : p)))}
-                        placeholder="+91 98765 43210"
+                        placeholder="9876543210"
                       />
                     </div>
                     <Button

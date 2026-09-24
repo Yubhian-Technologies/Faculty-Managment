@@ -9,7 +9,7 @@ import {
 } from "@/lib/import/fieldConstraints";
 import { FACULTY_STATUS_LABELS, EMPLOYEE_CATEGORY_LABELS } from "@/types";
 
-const STATUS_KEYS = ["ACTIVE", "ON_LEAVE", "RESIGNED", "RETIRED"] as const;
+const STATUS_KEYS = ["ACTIVE", "RETAINERSHIP", "ON_LEAVE", "RESIGNED", "RETIRED"] as const;
 // Columns whose template guidance states a plain Yes/No answer.
 const YES_NO_KEYS = new Set(["differentlyAbled", "permanentAddressSameAsTemporary"]);
 

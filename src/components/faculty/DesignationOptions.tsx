@@ -8,7 +8,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import type { DesignationCatalogItem } from "@/types";
-import { designationLabel } from "@/lib/designations/config";
+import { designationLabel, designationKey } from "@/lib/designations/config";
 
 // Faculty (FacultyMember) is teaching-only; "supporting" is the full
 // Supporting Staff list (Salary Structures, Budget line items - covers
@@ -20,6 +20,17 @@ type DesignationKind = "teaching" | "supporting" | "non-technical" | "both";
 
 interface Props {
   kind?: DesignationKind;
+  // Designations to show greyed-out and unselectable (compared with designationKey, so a
+  // legacy code and its display name count as the same one) - e.g. ones already used in a
+  // Promotion History. Omitted = every option selectable, as before.
+  disabledKeys?: string[];
+  // When set, only catalog entries whose designationKey matches one of these
+  // names are shown (compared the same way as disabledKeys, so a legacy code
+  // and its display name count as the same one) - e.g. Ratification Records,
+  // which only ever apply to the teaching cadre proper (Assistant/Associate/
+  // Professor, Principal), never the full admin-curated Teaching catalog
+  // (Lecturer, Visiting Faculty, HOD, etc). Omitted = every catalog entry shown.
+  allowedNames?: string[];
 }
 
 function useDesignationCatalog(kind: DesignationKind) {
@@ -51,15 +62,20 @@ function useDesignationCatalog(kind: DesignationKind) {
 // Deliberately no "Other" free-text escape hatch here - Add/Edit forms only
 // offer what the admin has actually added (see DesignationSelect below for
 // the one place that still needs a fallback, for pre-existing legacy text).
-export function DesignationOptions({ kind = "both" }: Props) {
-  const { teaching, supporting } = useDesignationCatalog(kind);
+export function DesignationOptions({ kind = "both", disabledKeys, allowedNames }: Props) {
+  const isDisabled = (name: string) => !!disabledKeys?.includes(designationKey(name));
+  const allowedKeys = allowedNames?.map(designationKey);
+  const isAllowed = (name: string) => !allowedKeys || allowedKeys.includes(designationKey(name));
+  const { teaching: allTeaching, supporting: allSupporting } = useDesignationCatalog(kind);
+  const teaching = allTeaching.filter((d) => isAllowed(d.name));
+  const supporting = allSupporting.filter((d) => isAllowed(d.name));
   return (
     <>
       {teaching.length > 0 && (
         <SelectGroup>
           <SelectLabel>Teaching</SelectLabel>
           {teaching.map((d) => (
-            <SelectItem key={d.id} value={d.name}>{designationLabel(d.name)}</SelectItem>
+            <SelectItem key={d.id} value={d.name} disabled={isDisabled(d.name)}>{designationLabel(d.name)}</SelectItem>
           ))}
         </SelectGroup>
       )}
@@ -68,7 +84,7 @@ export function DesignationOptions({ kind = "both" }: Props) {
         <SelectGroup>
           <SelectLabel>Supporting</SelectLabel>
           {supporting.map((d) => (
-            <SelectItem key={d.id} value={d.name}>{designationLabel(d.name)}</SelectItem>
+            <SelectItem key={d.id} value={d.name} disabled={isDisabled(d.name)}>{designationLabel(d.name)}</SelectItem>
           ))}
         </SelectGroup>
       )}
@@ -85,15 +101,25 @@ export function DesignationOptions({ kind = "both" }: Props) {
 // the original text visible in the input beside it, the same pattern
 // DegreeFields uses for Course.
 export function DesignationSelect({
-  label, value, onChange, kind = "both",
+  label, value, onChange, kind = "both", disabledKeys, allowOther = true, allowedNames,
 }: {
   label: string;
   value: string | undefined;
   onChange: (v: string) => void;
   kind?: DesignationKind;
+  disabledKeys?: string[];
+  // false = catalogue entries only (no "Other" free text). A value that is already stored
+  // but not in the catalogue is still shown, so nothing silently disappears.
+  allowOther?: boolean;
+  // See DesignationOptions' allowedNames - restricts the picklist to just these
+  // (a value already stored outside this restricted set still shows, via the
+  // "Other" free-text fallback, so nothing silently disappears).
+  allowedNames?: string[];
 }) {
   const { teaching, supporting } = useDesignationCatalog(kind);
-  const known = [...teaching.map((d) => d.name), ...supporting.map((d) => d.name)];
+  const allowedKeys = allowedNames?.map(designationKey);
+  const isAllowed = (name: string) => !allowedKeys || allowedKeys.includes(designationKey(name));
+  const known = [...teaching, ...supporting].filter((d) => isAllowed(d.name)).map((d) => d.name);
   const isOther = !!value && !known.includes(value);
   return (
     <div className="space-y-2">
@@ -101,17 +127,24 @@ export function DesignationSelect({
       <Select value={isOther ? "OTHER" : (value ?? "")} onValueChange={onChange}>
         <SelectTrigger><SelectValue placeholder="Select designation" /></SelectTrigger>
         <SelectContent>
-          <DesignationOptions kind={kind} />
-          <SelectSeparator />
-          <SelectItem value="OTHER">Other</SelectItem>
+          <DesignationOptions kind={kind} disabledKeys={disabledKeys} allowedNames={allowedNames} />
+          {allowOther && (
+            <>
+              <SelectSeparator />
+              <SelectItem value="OTHER">Other</SelectItem>
+            </>
+          )}
         </SelectContent>
       </Select>
-      {isOther && (
+      {isOther && allowOther && (
         <Input
           value={value === "OTHER" ? "" : value}
           onChange={(e) => onChange(e.target.value || "OTHER")}
           placeholder="Please specify"
         />
+      )}
+      {isOther && !allowOther && value && (
+        <p className="text-xs text-destructive">&quot;{value}&quot; is not in this college&apos;s designation catalogue - select one above.</p>
       )}
     </div>
   );

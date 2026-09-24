@@ -7,6 +7,8 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/store/authStore";
+import { useNavVisibility } from "@/hooks/useNavVisibility";
+import { isPathHidden } from "@/components/layout/navConfig";
 import type { College } from "@/types";
 
 interface Stats {
@@ -24,6 +26,8 @@ interface DashboardStats {
 
 export default function SuperAdminDashboard() {
   const user = useAuthStore((s) => s.user);
+  const { hiddenModules, hiddenItems } = useNavVisibility();
+  const isHidden = (href: string) => !!user?.role && isPathHidden(href, user.role, hiddenModules, hiddenItems);
   const [stats, setStats] = useState<Stats | null>(null);
   const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
 
@@ -92,9 +96,11 @@ export default function SuperAdminDashboard() {
         title={`Welcome, ${user?.name ?? "Admin"}`}
         description="System-wide overview of all colleges and operations"
         actions={
-          <Button asChild>
-            <Link href="/super-admin/colleges">Manage Colleges</Link>
-          </Button>
+          !isHidden("/super-admin/colleges") && (
+            <Button asChild>
+              <Link href="/super-admin/colleges">Manage Colleges</Link>
+            </Button>
+          )
         }
       />
 
@@ -121,21 +127,17 @@ export default function SuperAdminDashboard() {
             <CardTitle className="text-base">Quick Actions</CardTitle>
           </CardHeader>
           <CardContent className="grid grid-cols-1 gap-3">
-            <Button variant="outline" asChild className="justify-start">
-              <Link href="/super-admin/colleges/new">
-                <Building2 className="h-4 w-4 mr-2" />Add New College
-              </Link>
-            </Button>
-            <Button variant="outline" asChild className="justify-start">
-              <Link href="/super-admin/users/new">
-                <Users className="h-4 w-4 mr-2" />Create User
-              </Link>
-            </Button>
-            <Button variant="outline" asChild className="justify-start">
-              <Link href="/super-admin/audit-logs">
-                <ScrollText className="h-4 w-4 mr-2" />View Audit Logs
-              </Link>
-            </Button>
+            {[
+              { href: "/super-admin/colleges/new", icon: Building2, label: "Add New College" },
+              { href: "/super-admin/users/new", icon: Users, label: "Create User" },
+              { href: "/super-admin/audit-logs", icon: ScrollText, label: "View Audit Logs" },
+            ].filter((a) => !isHidden(a.href)).map((a) => (
+              <Button key={a.href} variant="outline" asChild className="justify-start">
+                <Link href={a.href}>
+                  <a.icon className="h-4 w-4 mr-2" />{a.label}
+                </Link>
+              </Button>
+            ))}
           </CardContent>
         </Card>
 

@@ -24,8 +24,11 @@ export async function PATCH(
       name?: string;
       email?: string;
       locationDeptId?: string;
+      // For HR_ADMIN/ADMIN_OFFICE/ACCOUNTS only - see FMSUser's own doc-comment.
+      locationDeptIds?: string[];
+      allLocationDepts?: boolean;
     };
-    const { locationId, isActive, name, email, locationDeptId } = body;
+    const { locationId, isActive, name, email, locationDeptId, locationDeptIds, allLocationDepts } = body;
 
     if (!locationId) {
       return NextResponse.json({ error: "locationId required" }, { status: 400 });
@@ -33,7 +36,10 @@ export async function PATCH(
     if (session.role === "ADMINISTRATION" && session.locationId !== locationId) {
       return NextResponse.json({ error: "Cannot manage users for another location" }, { status: 403 });
     }
-    if (isActive === undefined && name === undefined && email === undefined && locationDeptId === undefined) {
+    if (
+      isActive === undefined && name === undefined && email === undefined && locationDeptId === undefined &&
+      locationDeptIds === undefined && allLocationDepts === undefined
+    ) {
       return NextResponse.json({ error: "Nothing to update" }, { status: 400 });
     }
 
@@ -54,6 +60,12 @@ export async function PATCH(
     // below and sets the new one's, so a department never shows a stale head.
     if (locationDeptId !== undefined && existing.role === "LOCATION_DEPT_HEAD") {
       updates.locationDeptId = locationDeptId;
+    }
+    // Only meaningful for HR_ADMIN/ADMIN_OFFICE/ACCOUNTS - see the POST
+    // route's own comment on why these two are ignored for a Dept Head.
+    if ((locationDeptIds !== undefined || allLocationDepts !== undefined) && existing.role !== "LOCATION_DEPT_HEAD") {
+      updates.allLocationDepts = !!allLocationDepts;
+      updates.locationDeptIds = allLocationDepts ? [] : (locationDeptIds ?? []);
     }
 
     await userRef.set(updates, { merge: true });
@@ -79,6 +91,17 @@ export async function PATCH(
         await deptsRef.doc(locationDeptId).set({ deptHeadUid: uid, deptHeadName: name?.trim() || existing.name || "", updatedAt: new Date() }, { merge: true });
       }
     }
+
+    // Best-effort: the Firestore write above is what the app enforces live
+    // (see liveRoles.ts's short-TTL re-check for LOCATION-scoped sessions) -
+    // this additionally stops the old login/token from being used immediately,
+    // mirroring lib/roles/seats.ts's retireAccount.
+    try {
+      const { getAdminAuth } = await import("@/lib/firebase/admin");
+      const auth = await getAdminAuth();
+      await auth.updateUser(uid, { disabled: !isActive });
+      await auth.revokeRefreshTokens(uid);
+    } catch { /* non-fatal */ }
 
     return NextResponse.json({ ok: true });
   } catch (err) {
