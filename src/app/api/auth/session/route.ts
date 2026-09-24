@@ -148,6 +148,12 @@ export async function POST(request: Request) {
     // things that tell it apart from a Principal (see SessionPayload.realRole),
     // exactly as a dedicated College Admin login always was.
     if (seatRoles.includes("COLLEGE_ADMIN")) realRole = "COLLEGE_ADMIN";
+    // Same for the Department Office seat, which an HOD hands to one of their
+    // own faculty (see api/college/department-office). Their `role` becomes
+    // "HOD" through orderHeldRoles below, exactly as a standalone
+    // DEPARTMENT_OFFICE login's does - and `realRole` is what stops them
+    // appointing, and so replacing, another office head.
+    if (seatRoles.includes("DEPARTMENT_OFFICE")) realRole = "DEPARTMENT_OFFICE";
     const roles = role === "UNKNOWN" ? [role] : orderHeldRoles(role, seatRoles);
 
     const sessionData = {
