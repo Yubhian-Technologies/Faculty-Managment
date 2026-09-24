@@ -22,7 +22,7 @@ import type { UserRole } from "@/types";
 // COLLEGE_STAFF is intentionally omitted - non-teaching staff are created via
 // the Supporting Staff module (which makes both a login and a profile record),
 // not as a bare login here. See principal/staff/new/page.tsx for the rationale.
-const PRINCIPAL_BASE_ROLES: UserRole[] = ["COLLEGE_OFFICE", "COLLEGE_ACCOUNTS"];
+const PRINCIPAL_BASE_ROLES: UserRole[] = ["COLLEGE_OFFICE", "COLLEGE_ACCOUNTS", "WEBMASTER"];
 // CLASS_LEADER is included so an HOD can create their own sections' Class
 // Leader logins from hod/sections/[id]/edit - the College Office pages that
 // used to be the only place this happened were removed; this is where
@@ -35,9 +35,10 @@ const HOD_ROLES: UserRole[] = ["PANEL_MEMBER", "CLASS_LEADER", "DEPARTMENT_OFFIC
 // via `sectionId` below. (The College Office section pages that used to call
 // this were removed; sections are managed from the HOD and Principal views.)
 const OFFICE_ROLES: UserRole[] = ["CLASS_LEADER"];
-// One holder per role per college. (Library/Exam Cell are seats now, singular
-// by construction via isSingletonSeatRole - Webmaster and College Accounts
-// are the only plain accounts left that still need this check here.)
+// One holder per role per college. (Library/Exam Cell are seats, singular by
+// construction via isSingletonSeatRole, and so is Webmaster - but Webmaster
+// can ALSO still be created here as a plain login, so it needs the check too;
+// College Accounts is a plain account and always has.)
 const COLLEGE_SINGLETON_ROLES: UserRole[] = ["WEBMASTER", "COLLEGE_ACCOUNTS"];
 
 export async function GET(request: Request) {
