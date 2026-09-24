@@ -21,11 +21,12 @@ import { getSupportingStaffProfileModules } from "@/lib/supportingStaff/profileM
 import { useCollegeType } from "@/hooks/useCollegeType";
 import { toast } from "@/hooks/useToast";
 import { hasSupportingStaffSplit } from "@/lib/designations/config";
-import { PHONE_REGEX, EMAIL_REGEX } from "@/lib/validations";
+import { PHONE_REGEX, EMAIL_REGEX, APAAR_REGEX } from "@/lib/validations";
 import type { DesignationCatalogItem } from "@/types";
 
 const schema = z.object({
   employeeId: z.string().min(1, "Employee ID is required"),
+  apaarFacultyId: z.string().regex(APAAR_REGEX, "APAAR Faculty ID must be exactly 12 digits").optional().or(z.literal("")),
   email: z.string().regex(EMAIL_REGEX, "Invalid email address").optional().or(z.literal("")),
   collegeEmail: z.string().min(1, "College email is required").regex(EMAIL_REGEX, "Invalid email address"),
   password: z.string().min(8, "Password must be at least 8 characters"),
@@ -254,6 +255,19 @@ export default function NewHodSupportingStaffPage() {
                         placeholder="FULL NAME IN CAPITALS"
                         className="uppercase"
                       />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="apaarFacultyId">APAAR Faculty ID</Label>
+                      <Input
+                        id="apaarFacultyId" inputMode="numeric" maxLength={12}
+                        {...register("apaarFacultyId")}
+                        onChange={(e) => {
+                          e.target.value = e.target.value.replace(/\D/g, "").slice(0, 12);
+                          void register("apaarFacultyId").onChange(e);
+                        }}
+                        placeholder="123456789012"
+                      />
+                      {errors.apaarFacultyId && <p className="text-sm text-destructive">{errors.apaarFacultyId.message}</p>}
                     </div>
                   </div>
                 </div>

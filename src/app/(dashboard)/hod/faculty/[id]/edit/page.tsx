@@ -19,7 +19,7 @@ import { toast } from "@/hooks/useToast";
 import { migrateFacultyDoc } from "@/lib/faculty/fieldRenames";
 import { toDateInputValue } from "@/lib/utils";
 import { designationLabel } from "@/lib/designations/config";
-import { EMPLOYEE_CATEGORY_LABELS, FACULTY_STATUS_LABELS, SELECTABLE_FACULTY_STATUS_VALUES } from "@/types";
+import { EMPLOYEE_CATEGORY_LABELS, FACULTY_STATUS_LABELS, SELECTABLE_FACULTY_STATUS_VALUES, FACULTY_STATUS_DATE_FIELD, FACULTY_STATUS_DATE_LABELS } from "@/types";
 import type { DesignationCatalogItem, Designation, EmployeeCategory, FacultyStatus } from "@/types";
 
 // Sentinel for the "Others" row - matches hod/faculty/new/page.tsx's own
@@ -32,6 +32,9 @@ interface IdentityForm {
   designation: Designation | "";
   employeeCategory: EmployeeCategory | "";
   status: FacultyStatus;
+  resignedDate: string;
+  retiredDate: string;
+  retainershipDate: string;
   highestQualification: string;
   specialization: string;
   joiningDate: string;
@@ -42,6 +45,7 @@ interface IdentityForm {
 
 const EMPTY_FORM: IdentityForm = {
   legalName: "", apaarFacultyId: "", designation: "", employeeCategory: "", status: "ACTIVE",
+  resignedDate: "", retiredDate: "", retainershipDate: "",
   highestQualification: "", specialization: "", joiningDate: "", aicteFacultyId: "",
   email: "", mobileNo: "",
 };
@@ -94,6 +98,9 @@ export default function EditHodFacultyIdentityPage() {
           designation: (m.designation as Designation) ?? "",
           employeeCategory: (m.employeeCategory as EmployeeCategory) ?? "",
           status: (m.status as FacultyStatus) ?? "ACTIVE",
+          resignedDate: toDateInputValue(m.resignedDate as never),
+          retiredDate: toDateInputValue(m.retiredDate as never),
+          retainershipDate: toDateInputValue(m.retainershipDate as never),
           highestQualification,
           specialization: (m.specialization as string) ?? "",
           joiningDate: toDateInputValue(m.joiningDate as never),
@@ -141,6 +148,11 @@ export default function EditHodFacultyIdentityPage() {
       toast({ variant: "destructive", title: "Employee Category is required" });
       return;
     }
+    const statusDateField = FACULTY_STATUS_DATE_FIELD[form.status];
+    if (statusDateField && !form[statusDateField].trim()) {
+      toast({ variant: "destructive", title: `${FACULTY_STATUS_DATE_LABELS[statusDateField]} is required` });
+      return;
+    }
     if (!form.highestQualification.trim()) {
       toast({ variant: "destructive", title: "Highest Qualification is required" });
       return;
@@ -173,6 +185,9 @@ export default function EditHodFacultyIdentityPage() {
           designation: form.designation,
           employeeCategory: form.employeeCategory,
           status: form.status,
+          ...(form.resignedDate ? { resignedDate: form.resignedDate } : {}),
+          ...(form.retiredDate ? { retiredDate: form.retiredDate } : {}),
+          ...(form.retainershipDate ? { retainershipDate: form.retainershipDate } : {}),
           highestQualification: form.highestQualification.trim(),
           specialization: form.specialization.trim(),
           joiningDate: form.joiningDate,
@@ -310,6 +325,18 @@ export default function EditHodFacultyIdentityPage() {
                   </SelectContent>
                 </Select>
               </div>
+              {/* Only Resigned/Retired/Retainership carry a date - see
+                  FACULTY_STATUS_DATE_FIELD's own doc-comment in types/core.ts. */}
+              {FACULTY_STATUS_DATE_FIELD[form.status] && (
+                <div className="space-y-2">
+                  <Label>{FACULTY_STATUS_DATE_LABELS[FACULTY_STATUS_DATE_FIELD[form.status]!]} *</Label>
+                  <Input
+                    type="date"
+                    value={form[FACULTY_STATUS_DATE_FIELD[form.status]!]}
+                    onChange={(e) => set({ [FACULTY_STATUS_DATE_FIELD[form.status]!]: e.target.value })}
+                  />
+                </div>
+              )}
               <div className="space-y-2">
                 <Label>Highest Qualification *</Label>
                 <Select

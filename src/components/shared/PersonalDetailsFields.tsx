@@ -17,6 +17,11 @@ const BLOOD_GROUPS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"] as const
 const GENDER_OPTIONS = ["Male", "Female"];
 const MOTHER_TONGUE_OPTIONS = ["Telugu", "Hindi", "English", "Tamil", "Malayalam", "Urdu"];
 
+// Ratification Records only ever apply to these four - never the full
+// admin-curated Teaching designation catalogue (Lecturer, Visiting Faculty,
+// HOD, etc).
+const RATIFICATION_DESIGNATIONS = ["Assistant Professor", "Associate Professor", "Professor", "Principal"];
+
 export interface PersonalDetailsValue {
   nameAsPerAadhar?: string;
   nameAsPerPan?: string;       // Faculty only - see showNameAsPerPan
@@ -602,6 +607,7 @@ export function PersonalDetailsFields({ value: rawValue, onChange, requiredField
                 value={item.designation}
                 onChange={(v) => update({ designation: v })}
                 kind="teaching"
+                allowedNames={RATIFICATION_DESIGNATIONS}
               />
               <div className="space-y-2">
                 <Label>Ratification Proceedings Number</Label>

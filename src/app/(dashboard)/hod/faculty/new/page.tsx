@@ -25,7 +25,7 @@ import { experienceBreakdown, totalYearsOfExperience, formatDuration, allPreviou
 import { PHONE_REGEX, EMAIL_REGEX, APAAR_REGEX } from "@/lib/validations";
 import { AvatarUploadField } from "@/components/shared/AvatarUploadField";
 import { PROFILE_MODULES } from "@/lib/faculty/profileModules";
-import { EMPLOYEE_CATEGORY_LABELS, FACULTY_STATUS_LABELS, SELECTABLE_FACULTY_STATUS_VALUES } from "@/types";
+import { EMPLOYEE_CATEGORY_LABELS, FACULTY_STATUS_LABELS, SELECTABLE_FACULTY_STATUS_VALUES, FACULTY_STATUS_DATE_FIELD, FACULTY_STATUS_DATE_LABELS } from "@/types";
 import type { DesignationCatalogItem, EmployeeCategory, FacultyStatus } from "@/types";
 import { useCollegeType } from "@/hooks/useCollegeType";
 import { designationLabel } from "@/lib/designations/config";
@@ -55,6 +55,9 @@ const schema = z.object({
   designation: z.string().min(1, "Designation is required"),
   employeeCategory: z.string().min(1, "Employee Category is required"),
   status: z.string().min(1, "Status is required"),
+  resignedDate: z.string().optional(),
+  retiredDate: z.string().optional(),
+  retainershipDate: z.string().optional(),
   highestQualification: z.string().min(1, "Highest Qualification is required"),
   specialization: z.string().optional(),
   totalYearsOfExperience: z.number().min(0, "Cannot be negative").optional(),
@@ -193,6 +196,10 @@ export default function NewFacultyPage() {
   const designation = watch("designation");
   const employeeCategory = watch("employeeCategory");
   const status = watch("status");
+  // Which of resignedDate/retiredDate/retainershipDate (if any) applies to
+  // the currently-picked status - undefined for Active/On Leave, so no date
+  // field renders at all for those.
+  const statusDateField = FACULTY_STATUS_DATE_FIELD[status as FacultyStatus];
   const highestQualification = watch("highestQualification");
   // "Others" is a mode, not a stored value - it reveals a free-text box whose
   // contents become `highestQualification`. Needs its own state because once the user
@@ -279,6 +286,11 @@ export default function NewFacultyPage() {
       if (!isLinkMode && !getValues("collegeEmail")?.trim()) problems.push("College Email is required");
       if (!isLinkMode && !getValues("password")?.trim()) problems.push("Login Password is required");
       if (!personalDetails.legalName?.trim()) problems.push("Full Name (as per SSC) is required");
+      // Resigned/Retired/Retainership each need their own date - not in the
+      // zod schema since which field (if any) applies depends on the status
+      // just picked (FACULTY_STATUS_DATE_FIELD).
+      const coreDateField = FACULTY_STATUS_DATE_FIELD[getValues("status") as FacultyStatus];
+      if (coreDateField && !getValues(coreDateField)?.trim()) problems.push(`${FACULTY_STATUS_DATE_LABELS[coreDateField]} is required`);
       if (problems.length > 0) {
         return {
           title: "Identity & Employment is incomplete",
@@ -372,6 +384,16 @@ export default function NewFacultyPage() {
       setErroredSteps(new Set<WizardStepKey>(["core"]));
       setStepIndex(steps.findIndex((s) => s.key === "core"));
       toast({ variant: "destructive", title: "Some required fields are missing", description: "Identity & Employment: Full Name (as per SSC)" });
+      return;
+    }
+    // Resigned/Retired/Retainership each need their own date - see
+    // findStepProblem's own comment above (same check, defense in depth for
+    // the "jump straight to Review" case).
+    const submitDateField = FACULTY_STATUS_DATE_FIELD[data.status as FacultyStatus];
+    if (submitDateField && !data[submitDateField]?.trim()) {
+      setErroredSteps(new Set<WizardStepKey>(["core"]));
+      setStepIndex(steps.findIndex((s) => s.key === "core"));
+      toast({ variant: "destructive", title: "Some required fields are missing", description: `Identity & Employment: ${FACULTY_STATUS_DATE_LABELS[submitDateField]}` });
       return;
     }
     // Personal Details isn't zod-validated (PersonalDetailsFields is plain
@@ -635,6 +657,19 @@ export default function NewFacultyPage() {
                     {errors.status && <p className="text-sm text-destructive">{errors.status.message}</p>}
                     <p className="text-xs text-muted-foreground">Defaults to Active for a faculty member who has already joined.</p>
                   </div>
+                  {/* Only Resigned/Retired/Retainership carry a date - which
+                      field depends on the status just picked above
+                      (FACULTY_STATUS_DATE_FIELD). Required so every such
+                      record can say exactly when that happened - also what
+                      the Faculty Register's Duration filter reads to know
+                      when someone's active-tenure window closed. */}
+                  {statusDateField && (
+                    <div className="space-y-2">
+                      <Label>{FACULTY_STATUS_DATE_LABELS[statusDateField]} *</Label>
+                      <Input type="date" {...register(statusDateField)} />
+                      {errors[statusDateField] && <p className="text-sm text-destructive">{errors[statusDateField]?.message}</p>}
+                    </div>
+                  )}
                   <div className="space-y-2">
                     <Label>Highest Qualification *</Label>
                     <Select
