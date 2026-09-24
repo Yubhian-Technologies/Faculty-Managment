@@ -60,14 +60,16 @@ export function RoleAssignmentsPage({ collegeId }: { collegeId?: string }) {
     void (async () => { await load(); })();
   }, [load]);
 
+  const visibleSeats = useMemo(() => seats.filter((s) => s.role !== "ACCOUNTS"), [seats]);
+
   const grouped = useMemo(() => {
     const map = new Map<number, RoleSeat[]>();
-    for (const s of seats) {
+    for (const s of visibleSeats) {
       const level = ROLE_LEVEL[s.role] ?? 9;
       map.set(level, [...(map.get(level) ?? []), s]);
     }
     return Array.from(map.entries()).sort((a, b) => a[0] - b[0]);
-  }, [seats]);
+  }, [visibleSeats]);
 
   const [addOpen, setAddOpen] = useState(false);
   const [assignSeat, setAssignSeat] = useState<RoleSeat | null>(null);
@@ -121,7 +123,7 @@ export function RoleAssignmentsPage({ collegeId }: { collegeId?: string }) {
 
       {isLoading ? (
         <div className="space-y-3">{[1, 2, 3].map((i) => <div key={i} className="h-20 bg-muted animate-pulse rounded-lg" />)}</div>
-      ) : seats.length === 0 ? (
+      ) : visibleSeats.length === 0 ? (
         <Card>
           <CardContent className="py-10 text-center space-y-3">
             <p className="text-sm text-muted-foreground">

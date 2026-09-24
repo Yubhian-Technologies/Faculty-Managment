@@ -11,7 +11,7 @@ export async function GET() {
 
     const db = getAdminDb();
     const snap = await db.collection("colleges").orderBy("name").get();
-    const colleges = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const colleges = snap.docs.map((d) => ({ ...d.data(), id: d.id }));
 
     return NextResponse.json({ colleges });
   } catch (err) {

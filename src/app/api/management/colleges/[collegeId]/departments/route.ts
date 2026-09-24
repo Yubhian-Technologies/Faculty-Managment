@@ -14,7 +14,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ col
 
     const db = getAdminDb();
     const snap = await db.collection("colleges").doc(collegeId).collection("departments").orderBy("name").get();
-    const departments = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const departments = snap.docs.map((d) => ({ ...d.data(), id: d.id }));
 
     return NextResponse.json({ departments });
   } catch (err) {

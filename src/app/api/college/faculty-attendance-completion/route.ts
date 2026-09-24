@@ -8,7 +8,9 @@ import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/s
 import { resolveMergedCourseIds } from "@/lib/departments/courseGrouping";
 import { getFacultyPeriodsForDate } from "@/lib/timetable/currentPeriod";
 import { resolvePeriodCompletionStatus } from "@/lib/attendance/periodAttendanceStatus";
+import { aggregateNotPosted, type PeriodSlotWithStatus } from "@/lib/studentAttendance/notPostedAggregation";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
+import { istDateFromParts, istDateKey } from "@/lib/attendance/istTime";
 import type { Course, FacultyMember, StudentAttendanceSession, TeachingAssignment } from "@/types";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -55,9 +57,15 @@ export async function GET(request: Request) {
     const department = searchParams.get("department") ?? "";
     const courseId = searchParams.get("courseId") ?? "";
     const facultyId = searchParams.get("facultyId") ?? "";
+    const fromParam = searchParams.get("from")?.trim() || "";
+    const toParam = searchParams.get("to")?.trim() || "";
+    const allTime = searchParams.get("allTime") === "true" || searchParams.get("tillNow") === "true";
+    const yearParam = searchParams.get("year")?.trim() || "";
+    const monthParam = searchParams.get("month")?.trim() || "";
+    const hasRange = !!(fromParam || toParam || allTime || (yearParam && monthParam));
 
-    if (!DATE_RE.test(date)) {
-      return NextResponse.json({ error: "A valid date (YYYY-MM-DD) is required" }, { status: 400 });
+    if (!DATE_RE.test(date) && !hasRange) {
+      return NextResponse.json({ error: "A valid date (YYYY-MM-DD) or range (from/to or allTime or year+month) is required" }, { status: 400 });
     }
 
     const db = getAdminDb();
@@ -75,6 +83,72 @@ export async function GET(request: Request) {
         if (!canHodEditDepartment(scope, faculty.department)) {
           return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
         }
+      }
+
+      // Aggregated range mode for not-posted reports (monthly/period/tillNow)
+      if (hasRange) {
+        const dates: string[] = [];
+        if (allTime) {
+          // Cap at 365 days back to bound reads. Anchored on the IST calendar
+          // day (istDateKey/istDateFromParts - same helpers currentPeriod.ts's
+          // collegeNow uses), not a raw `new Date()` local-server day - a
+          // UTC-hosted function is 5h30 behind India, so during the first
+          // ~5.5h of every IST day, local Date getters would report
+          // yesterday's date and silently drop the most recent day from range.
+          const todayIST = istDateKey();
+          const [ty, tm, td] = todayIST.split("-").map(Number);
+          for (let i = 0; i < 365; i++) {
+            const anchor = istDateFromParts(ty, tm, td);
+            const d = new Date(anchor.getTime() - i * 24 * 60 * 60 * 1000);
+            dates.unshift(istDateKey(d));
+          }
+        } else if (yearParam && monthParam) {
+          const y = Number(yearParam), m = Number(monthParam);
+          const dim = new Date(y, m, 0).getDate();
+          for (let d = 1; d <= dim; d++) dates.push(`${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`);
+        } else if (fromParam && toParam) {
+          if (!DATE_RE.test(fromParam) || !DATE_RE.test(toParam) || fromParam > toParam) {
+            return NextResponse.json({ error: "Valid from/to (YYYY-MM-DD) with from <= to required" }, { status: 400 });
+          }
+          const start = new Date(fromParam + "T00:00:00");
+          const end = new Date(toParam + "T00:00:00");
+          for (let cur = new Date(start); cur <= end; cur.setDate(cur.getDate() + 1)) {
+            dates.push(`${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, "0")}-${String(cur.getDate()).padStart(2, "0")}`);
+          }
+          if (dates.length > 365) return NextResponse.json({ error: "Range too large (max 365 days)" }, { status: 400 });
+        } else {
+          return NextResponse.json({ error: "Provide from/to, allTime, or year+month for range" }, { status: 400 });
+        }
+        // Independent per-date lookups - run concurrently instead of one
+        // await per date (an allTime request spans up to 365 dates, which
+        // serialized into hundreds of round trips otherwise).
+        const perDateResults = await Promise.all(dates.map(async (d) => {
+          const slotsR = await getFacultyPeriodsForDate(db, session.collegeId, facultyId, d);
+          if (slotsR.length === 0) return null;
+          const snaps = await Promise.all(slotsR.map((p) => collegeRef.collection("studentAttendance").doc(`${p.slot.assignmentId}_${d}_${p.slot.periodNumber}`).get()));
+          const slotStatuses: PeriodSlotWithStatus[] = slotsR.map((p, i) => {
+            const sess = snaps[i].exists ? (snaps[i].data() as StudentAttendanceSession) : null;
+            const status = resolvePeriodCompletionStatus({ dateISO: d, endTime: p.endTime, session: sess });
+            return { periodNumber: p.slot.periodNumber, startTime: p.startTime, endTime: p.endTime, assignmentId: p.slot.assignmentId, status };
+          });
+          return { date: d, slotStatuses };
+        }));
+
+        const byDate: Record<string, { periods: number; notMarked: number }> = {};
+        const allStatuses: PeriodSlotWithStatus[] = [];
+        for (const r of perDateResults) {
+          if (!r) continue;
+          const dayAgg = aggregateNotPosted(r.slotStatuses);
+          byDate[r.date] = { periods: dayAgg.totalPeriods, notMarked: dayAgg.notMarked };
+          allStatuses.push(...r.slotStatuses);
+        }
+        const overall = aggregateNotPosted(allStatuses);
+        return NextResponse.json({
+          facultyId, facultyName: facultyDisplayName(faculty), dates,
+          totalPeriods: overall.totalPeriods, onTime: overall.onTime, late: overall.late,
+          notMarked: overall.notMarked, pending: overall.pending, notPosted: overall.notPosted,
+          byDate,
+        });
       }
 
       const slots = await getFacultyPeriodsForDate(db, session.collegeId, facultyId, date);
@@ -109,6 +183,7 @@ export async function GET(request: Request) {
           ? (assignmentSnap.data() as TeachingAssignment).sectionName ?? null
           : null;
         return {
+          assignmentId: p.slot.assignmentId,
           periodNumber: p.slot.periodNumber,
           startTime: p.startTime,
           endTime: p.endTime,

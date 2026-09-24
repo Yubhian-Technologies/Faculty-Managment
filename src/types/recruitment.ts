@@ -308,6 +308,11 @@ export interface HiringBatch {
   vacancyId: string;
   department: string;
   position: string;
+  // Copied from VacancyRequest.positionCategory at creation - SUPPORTING_STAFF
+  // batches skip the demo-class/QR-feedback stage entirely (see hod/batches
+  // pages), same treatment ONLINE hiringMode already gets. Undefined on old
+  // data = TEACHING (full demo flow).
+  positionCategory?: PositionCategory;
   hodUid: string;
   hodName?: string;
   panelMemberUids: string[];

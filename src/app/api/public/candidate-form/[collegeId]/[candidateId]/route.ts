@@ -62,16 +62,34 @@ export async function PATCH(
 ) {
   try {
     const { collegeId, candidateId } = await params;
+    const { searchParams } = new URL(request.url);
+    const applicationId = searchParams.get("applicationId");
+    if (!applicationId) {
+      return NextResponse.json({ error: "applicationId required" }, { status: 400 });
+    }
     const body = (await request.json()) as {
       bioData?: CandidateBioData;
       certificates?: Array<{ name: string; url: string }>;
     };
 
     const db = getAdminDb();
-    const ref = db.collection("colleges").doc(collegeId).collection("candidates").doc(candidateId);
-    const snap = await ref.get();
-    if (!snap.exists) {
+    const collegeRef = db.collection("colleges").doc(collegeId);
+    const ref = collegeRef.collection("candidates").doc(candidateId);
+    const [snap, applicationSnap] = await Promise.all([
+      ref.get(),
+      collegeRef.collection("candidateApplications").doc(applicationId).get(),
+    ]);
+    if (!snap.exists || !applicationSnap.exists) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+    const applicationData = applicationSnap.data() as CandidateApplication;
+    if (applicationData.candidateId !== candidateId) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+
+    const candidateData = snap.data() as Candidate;
+    if (candidateData.bioDataSubmitted) {
+      return NextResponse.json({ error: "Bio data has already been submitted" }, { status: 409 });
     }
 
     const now = new Date();

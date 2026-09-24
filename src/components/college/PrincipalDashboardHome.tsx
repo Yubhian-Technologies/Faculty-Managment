@@ -69,10 +69,10 @@ export function PrincipalDashboardHome({ fallbackName }: { fallbackName: string 
 
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
         {[
-          { label: "Pending Vacancies", value: isLoading ? "—" : pendingVacancies.length, icon: ClipboardList, color: "text-yellow-600 bg-yellow-50", href: "/principal/vacancies" },
-          { label: "Interviews & Decisions", value: isLoading ? "—" : pendingBatches.length, icon: CalendarCheck, color: "text-blue-600 bg-blue-50", href: "/principal/interviews" },
-          { label: "Departments", value: isLoading ? "—" : topLevelDepartmentCount, icon: BookOpen, color: "text-purple-600 bg-purple-50", href: "/principal/departments" },
-        ].filter((stat) => !isHidden(stat.href)).map((stat) => (
+          { label: "Pending Vacancies", value: isLoading ? "—" : pendingVacancies.length, icon: ClipboardList, color: "text-yellow-600 bg-yellow-50", href: "/principal/vacancies", hiddenHref: "/principal/vacancies" },
+          { label: "Interviews & Decisions", value: isLoading ? "—" : pendingBatches.length, icon: CalendarCheck, color: "text-blue-600 bg-blue-50", href: "/principal/interviews", hiddenHref: "/principal/vacancies" },
+          { label: "Departments", value: isLoading ? "—" : topLevelDepartmentCount, icon: BookOpen, color: "text-purple-600 bg-purple-50", href: "/principal/departments", hiddenHref: "/principal/departments" },
+        ].filter((stat) => !isHidden(stat.hiddenHref)).map((stat) => (
           <Link key={stat.label} href={stat.href}>
             <Card className="hover:shadow-md transition-shadow cursor-pointer">
               <CardContent className="p-4 flex items-center gap-3">
@@ -129,7 +129,7 @@ export function PrincipalDashboardHome({ fallbackName }: { fallbackName: string 
       </Card>
       )}
 
-      {!isHidden("/principal/interviews") && pendingBatches.length > 0 && (
+      {!isHidden("/principal/vacancies") && pendingBatches.length > 0 && (
         <Card>
           <CardHeader className="flex-row items-center justify-between space-y-0 pb-3">
             <CardTitle className="text-base">Pending Interview Plans</CardTitle>

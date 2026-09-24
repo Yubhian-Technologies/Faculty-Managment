@@ -6,7 +6,7 @@ import type { StudentAttendanceSession } from "@/types/studentAttendance";
 // StudentAttendanceSession. Shared by the Principal and HOD "Attendance
 // Completion" views so both derive it identically from the same raw data.
 
-export type PeriodAttendanceStatus = "ON_TIME" | "LATE" | "NOT_MARKED" | "PENDING";
+export type PeriodAttendanceStatus = "ON_TIME" | "LATE" | "NOT_MARKED" | "PENDING" | "IN_PROGRESS";
 
 function toMinutes(hhmm: string): number {
   const [h, m] = hhmm.split(":").map(Number);
@@ -35,7 +35,7 @@ function periodEndInstant(dateISO: string, endTime: string): Date {
 export function resolvePeriodCompletionStatus(params: {
   dateISO: string;
   endTime: string; // "HH:MM", the period's own scheduled end
-  session: Pick<StudentAttendanceSession, "status" | "submittedAt"> | null | undefined;
+  session: Pick<StudentAttendanceSession, "status" | "submittedAt" | "entries" | "totalStudents" | "presentCount"> | null | undefined;
   now?: Date;
 }): PeriodAttendanceStatus {
   const { dateISO, endTime, session, now = new Date() } = params;
@@ -45,6 +45,15 @@ export function resolvePeriodCompletionStatus(params: {
     const submittedAt = session.submittedAt as Timestamp | null | undefined;
     if (!submittedAt) return "ON_TIME"; // submitted but no timestamp on record - don't penalize
     return submittedAt.toDate().getTime() <= periodEnd.getTime() ? "ON_TIME" : "LATE";
+  }
+
+  // DRAFT with partial marks — abandoned but not empty, distinct from never-opened
+  if (session?.status === "DRAFT") {
+    const entries = (session as unknown as { entries?: { status: string | null }[] }).entries;
+    const total = (session as unknown as { totalStudents?: number }).totalStudents ?? entries?.length ?? 0;
+    const marked = entries ? entries.filter((e) => e.status != null).length : 0;
+    if (marked > 0 && marked < total) return "IN_PROGRESS";
+    if (total === 0 && marked > 0) return "IN_PROGRESS";
   }
 
   // No SUBMITTED session yet - only a real gap once the period has actually

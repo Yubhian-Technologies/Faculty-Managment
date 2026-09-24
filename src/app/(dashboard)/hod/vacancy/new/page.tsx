@@ -115,6 +115,7 @@ export default function NewVacancyPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [hiringMode, setHiringMode] = useState<"OFFLINE" | "ONLINE">("OFFLINE");
   const [designations, setDesignations] = useState<DesignationCatalogItem[]>([]);
+  const [minQualifications, setMinQualifications] = useState<{ assistantProfessor: string; associateProfessor: string; professor: string } | null>(null);
 
   useEffect(() => {
     // reqLoading already starts true, so nothing is set synchronously here -
@@ -136,6 +137,19 @@ export default function NewVacancyPage() {
         setDesignations((data.items ?? []).filter((d) => d.isActive));
       } catch {
         // Non-fatal - the role picker just stays empty until the admin's catalog loads.
+      }
+    })();
+    void (async () => {
+      try {
+        const r = await fetch("/api/college/settings/general");
+        if (r.ok) {
+          const data = await r.json() as { settings?: { minimumQualifications?: { assistantProfessor: string; associateProfessor: string; professor: string } } };
+          if (data.settings?.minimumQualifications) {
+            setMinQualifications(data.settings.minimumQualifications);
+          }
+        }
+      } catch {
+        // Non-fatal - hint just won't show.
       }
     })();
   }, []);
@@ -182,6 +196,15 @@ export default function NewVacancyPage() {
 
   function removeEntry(key: string) {
     setEntries((prev) => prev.filter((e) => e.key !== key));
+  }
+
+  function requiredForDesignation(designation: string): string | null {
+    if (!designation || !minQualifications) return null;
+    const cadre = designations.find((d) => d.name === designation)?.cadre;
+    if (cadre === "PROFESSOR") return minQualifications.professor;
+    if (cadre === "ASSOCIATE_PROFESSOR") return minQualifications.associateProfessor;
+    if (cadre === "ASSISTANT_PROFESSOR") return minQualifications.assistantProfessor;
+    return null;
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -397,6 +420,12 @@ export default function NewVacancyPage() {
                         ))}
                       </SelectContent>
                     </Select>
+                    {(() => {
+                      const req = requiredForDesignation(entry.designation);
+                      return req ? (
+                        <p className="text-xs text-muted-foreground">Minimum per norms: {req}</p>
+                      ) : null;
+                    })()}
                   </div>
 
                   {entry.qualification === "Others" && (

@@ -3,13 +3,17 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb, getAdminAuth } from "@/lib/firebase/admin";
+import { canRoleAccessRole } from "@/types/core";
+import type { UserRole } from "@/types/core";
 
 const MIN_PASSWORD_LENGTH = 6; // Firebase Auth's own minimum
 
 // Deliberately dedicated to exactly one action (reset password) rather than
-// folded into the general PATCH /api/college/users/[uid] route - Webmaster's
-// scope here is intentionally unrestricted (any role in the college, including
-// Principal), so keeping it single-purpose avoids also opening up profile edits.
+// folded into the general PATCH /api/college/users/[uid] route - keeping it
+// single-purpose avoids also opening up profile edits. Webmaster may reset
+// anyone at its own level or below (HOD/Faculty/Staff tier, per the L0-L6
+// hierarchy in types/core.ts) but not a Principal/VP/College Admin above it -
+// enforced below via canRoleAccessRole.
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("WEBMASTER", "SUPER_ADMIN");
@@ -30,6 +34,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
     const target = targetSnap.data() as { role?: string; name?: string };
+    if (target.role && !canRoleAccessRole(session.role as UserRole, target.role as UserRole)) {
+      return NextResponse.json({ error: "Not authorized to reset this user's password" }, { status: 403 });
+    }
 
     const newPassword = body.password.trim();
     const auth = await getAdminAuth();

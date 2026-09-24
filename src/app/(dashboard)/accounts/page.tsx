@@ -7,10 +7,14 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/store/authStore";
+import { useNavVisibility } from "@/hooks/useNavVisibility";
+import { isPathHidden } from "@/components/layout/navConfig";
 import type { SalaryStructure, CandidateApplication } from "@/types";
 
 export default function AccountsDashboard() {
   const user = useAuthStore((s) => s.user);
+  const { hiddenModules, hiddenItems } = useNavVisibility();
+  const isHidden = (href: string) => !!user?.role && isPathHidden(href, user.role, hiddenModules, hiddenItems);
   const [structureCount, setStructureCount] = useState<number | null>(null);
   const [pendingOffers, setPendingOffers] = useState<number | null>(null);
 
@@ -33,6 +37,7 @@ export default function AccountsDashboard() {
       />
 
       <div className="grid gap-4 sm:grid-cols-3">
+        {!isHidden("/accounts/hiring") && (
         <Link href="/accounts/hiring">
           <Card className="hover:shadow-md transition-shadow cursor-pointer">
             <CardContent className="p-4 flex items-center gap-3">
@@ -46,6 +51,8 @@ export default function AccountsDashboard() {
             </CardContent>
           </Card>
         </Link>
+        )}
+        {!isHidden("/accounts/hiring") && (
         <Link href="/accounts/hiring">
           <Card className="hover:shadow-md transition-shadow cursor-pointer">
             <CardContent className="p-4 flex items-center gap-3">
@@ -59,6 +66,8 @@ export default function AccountsDashboard() {
             </CardContent>
           </Card>
         </Link>
+        )}
+        {!isHidden("/accounts/salary-structures") && (
         <Link href="/accounts/salary-structures">
           <Card className="hover:shadow-md transition-shadow cursor-pointer">
             <CardContent className="p-4 flex items-center gap-3">
@@ -72,6 +81,7 @@ export default function AccountsDashboard() {
             </CardContent>
           </Card>
         </Link>
+        )}
       </div>
 
       <Card>
@@ -79,18 +89,22 @@ export default function AccountsDashboard() {
           <CardTitle className="text-base">Quick Actions</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
+          {!isHidden("/accounts/hiring") && (
           <Button variant="outline" asChild className="w-full justify-start">
             <Link href="/accounts/hiring">
               <FileText className="h-4 w-4 mr-2" />
               Send Offer Letters
             </Link>
           </Button>
+          )}
+          {!isHidden("/accounts/salary-structures") && (
           <Button variant="outline" asChild className="w-full justify-start">
             <Link href="/accounts/salary-structures/new">
               <Plus className="h-4 w-4 mr-2" />
               New Salary Structure
             </Link>
           </Button>
+          )}
         </CardContent>
       </Card>
     </div>

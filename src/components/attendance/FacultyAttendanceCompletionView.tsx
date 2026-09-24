@@ -9,8 +9,10 @@ import { TableSkeleton } from "@/components/shared/SkeletonLoader";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/useToast";
 import { useAuth } from "@/hooks/useAuth";
+import { OfficeCorrectionDialog } from "@/components/attendance/OfficeCorrectionDialog";
 import { useMyDepartments } from "@/hooks/useMyDepartments";
 import type { Department, Course } from "@/types";
 
@@ -28,6 +30,7 @@ interface FacultyOption {
 type PeriodStatus = "ON_TIME" | "LATE" | "NOT_MARKED" | "PENDING";
 
 interface PeriodRow {
+  assignmentId: string;
   periodNumber: number;
   startTime: string;
   endTime: string;
@@ -93,6 +96,22 @@ export function FacultyAttendanceCompletionView({ title, description, hodScoped 
 
   const [periods, setPeriods] = useState<PeriodRow[]>([]);
   const [isLoadingPeriods, setIsLoadingPeriods] = useState(false);
+  const [correctingPeriod, setCorrectingPeriod] = useState<PeriodRow | null>(null);
+
+  async function refetchPeriods() {
+    if (!selectedFacultyId || !date) return;
+    setIsLoadingPeriods(true);
+    try {
+      const params = new URLSearchParams({ date, facultyId: selectedFacultyId });
+      const res = await fetch(`/api/college/faculty-attendance-completion?${params.toString()}`);
+      const d = await res.json() as { periods?: PeriodRow[]; error?: string };
+      setPeriods(d.periods ?? []);
+    } catch {
+      toast({ variant: "destructive", title: "Failed to load periods" });
+    } finally {
+      setIsLoadingPeriods(false);
+    }
+  }
 
   const myDepartments = useMyDepartments();
   const hodOwnDepartments = hodScoped
@@ -167,21 +186,9 @@ export function FacultyAttendanceCompletionView({ title, description, hodScoped 
   }, [selectedDepartment, selectedCourseId, date]);
 
   useEffect(() => {
-    void (async () => {
-      setPeriods([]);
-      if (!selectedFacultyId || !date) return;
-      setIsLoadingPeriods(true);
-      try {
-        const params = new URLSearchParams({ date, facultyId: selectedFacultyId });
-        const res = await fetch(`/api/college/faculty-attendance-completion?${params.toString()}`);
-        const d = await res.json() as { periods?: PeriodRow[]; error?: string };
-        setPeriods(d.periods ?? []);
-      } catch {
-        toast({ variant: "destructive", title: "Failed to load periods" });
-      } finally {
-        setIsLoadingPeriods(false);
-      }
-    })();
+    setPeriods([]);
+    void refetchPeriods();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedFacultyId, date]);
 
   const selectedFaculty = faculty.find((f) => f.facultyId === selectedFacultyId) ?? null;
@@ -278,6 +285,7 @@ export function FacultyAttendanceCompletionView({ title, description, hodScoped 
                     <th className="px-4 py-2 text-left font-medium text-muted-foreground whitespace-nowrap">Year / Section</th>
                     <th className="px-4 py-2 text-left font-medium text-muted-foreground whitespace-nowrap">Status</th>
                     <th className="px-4 py-2 text-left font-medium text-muted-foreground whitespace-nowrap">Submitted</th>
+                    <th className="px-4 py-2 text-left font-medium text-muted-foreground whitespace-nowrap">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
@@ -293,6 +301,13 @@ export function FacultyAttendanceCompletionView({ title, description, hodScoped 
                         </span>
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">{p.submittedAtDisplay ?? "—"}</td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {p.status === "NOT_MARKED" && (
+                          <Button size="sm" variant="outline" onClick={() => setCorrectingPeriod(p)}>
+                            Post on Behalf
+                          </Button>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -300,6 +315,21 @@ export function FacultyAttendanceCompletionView({ title, description, hodScoped 
             </div>
           </div>
         </div>
+      )}
+
+      {correctingPeriod && selectedFaculty && (
+        <OfficeCorrectionDialog
+          open={!!correctingPeriod}
+          onOpenChange={(next) => { if (!next) setCorrectingPeriod(null); }}
+          facultyId={selectedFaculty.facultyId}
+          facultyName={selectedFaculty.name}
+          assignmentId={correctingPeriod.assignmentId}
+          date={date}
+          periodNumber={correctingPeriod.periodNumber}
+          subjectName={correctingPeriod.subjectName}
+          sectionLabel={`Year ${correctingPeriod.year}${correctingPeriod.sectionName ? ` / ${correctingPeriod.sectionName}` : ""}`}
+          onSubmitted={() => void refetchPeriods()}
+        />
       )}
     </div>
   );

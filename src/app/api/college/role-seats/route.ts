@@ -58,6 +58,9 @@ export async function POST(request: Request) {
   try {
     const ctx = await requireSeatManager(request);
     const body = (await request.json()) as { role?: string; departmentId?: string; label?: string; roleEmail?: string };
+    if (body.role === "ACCOUNTS") {
+      return NextResponse.json({ error: "ACCOUNTS seat creation is disabled" }, { status: 400 });
+    }
     if (!body.role || !(SEAT_ROLES as string[]).includes(body.role)) {
       return NextResponse.json({ error: "Pick a valid role for the seat" }, { status: 400 });
     }

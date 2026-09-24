@@ -1,10 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/useToast";
-import { formatDateTime } from "@/lib/utils";
+import { formatDateTime, toDate } from "@/lib/utils";
 import type { AuditLog, College } from "@/types";
 
 type LogRow = Record<string, unknown> & AuditLog;
@@ -14,6 +17,8 @@ export default function AuditLogsPage() {
   const [selectedCollegeId, setSelectedCollegeId] = useState("");
   const [logs, setLogs] = useState<LogRow[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [fromDate, setFromDate] = useState("");
+  const [toDateStr, setToDateStr] = useState("");
 
   useEffect(() => {
     fetch("/api/admin/colleges")
@@ -28,6 +33,7 @@ export default function AuditLogsPage() {
 
   useEffect(() => {
     if (!selectedCollegeId) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsLoading(true);
 
     fetch(`/api/admin/audit-logs?collegeId=${encodeURIComponent(selectedCollegeId)}`)
@@ -36,6 +42,25 @@ export default function AuditLogsPage() {
       .catch(() => toast({ variant: "destructive", title: "Failed to load audit logs" }))
       .finally(() => setIsLoading(false));
   }, [selectedCollegeId]);
+
+  const filteredLogs = useMemo(() => {
+    if (!fromDate && !toDateStr) return logs;
+    return logs.filter((row) => {
+      const d = toDate(row.timestamp as Parameters<typeof toDate>[0]);
+      if (!d) return false;
+      const day = d.toISOString().split("T")[0];
+      if (fromDate && day < fromDate) return false;
+      if (toDateStr && day > toDateStr) return false;
+      return true;
+    });
+  }, [logs, fromDate, toDateStr]);
+
+  const csvFilename = useMemo(() => {
+    if (fromDate && toDateStr) return `audit-logs-${fromDate}_to_${toDateStr}`;
+    if (fromDate) return `audit-logs-from-${fromDate}`;
+    if (toDateStr) return `audit-logs-to-${toDateStr}`;
+    return "audit-logs";
+  }, [fromDate, toDateStr]);
 
   const columns: Column<LogRow>[] = [
     {
@@ -106,8 +131,26 @@ export default function AuditLogsPage() {
         </div>
       )}
 
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:gap-4 rounded-lg border bg-card p-4">
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="audit-from" className="text-xs">From</Label>
+          <Input id="audit-from" type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="w-[160px]" />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="audit-to" className="text-xs">To</Label>
+          <Input id="audit-to" type="date" value={toDateStr} onChange={(e) => setToDateStr(e.target.value)} className="w-[160px]" />
+        </div>
+        <div className="flex items-center gap-2 sm:ml-2">
+          <Button variant="default" size="sm" disabled={!fromDate && !toDateStr}>Apply</Button>
+          <Button variant="outline" size="sm" onClick={() => { setFromDate(""); setToDateStr(""); }} disabled={!fromDate && !toDateStr}>Clear</Button>
+        </div>
+        {(fromDate || toDateStr) && (
+          <span className="text-xs text-muted-foreground sm:ml-auto">Showing {filteredLogs.length} of {logs.length} logs</span>
+        )}
+      </div>
+
       <DataTable
-        data={logs}
+        data={filteredLogs}
         columns={columns}
         isLoading={isLoading}
         keyExtractor={(r) => r.id as string}
@@ -115,7 +158,7 @@ export default function AuditLogsPage() {
         searchKeys={["action", "performedByName"] as (keyof LogRow)[]}
         emptyTitle="No audit logs yet"
         emptyDescription="Actions will appear here as staff use the system"
-        csvFilename="audit-logs"
+        csvFilename={csvFilename}
       />
     </div>
   );
