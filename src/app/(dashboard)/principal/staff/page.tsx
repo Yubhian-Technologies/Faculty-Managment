@@ -2,12 +2,13 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import { UsersRound, Plus, Mail, Phone, Eye } from "lucide-react";
+import { UsersRound, Plus, Mail, Phone, Eye, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/shared/EmptyState";
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { CardSkeleton } from "@/components/shared/SkeletonLoader";
 import { toast } from "@/hooks/useToast";
 import { supportingStaffDisplayName } from "@/lib/supportingStaff/supportingStaffDisplayName";
@@ -35,6 +36,12 @@ export default function PrincipalStaffPage() {
   const [supportingStaff, setSupportingStaff] = useState<SupportingStaffMember[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [togglingUid, setTogglingUid] = useState<string | null>(null);
+  // Both destructive actions are confirmed rather than acting on the click.
+  // Deactivating locks someone out of the system; deleting cannot be undone at
+  // all. Activating is neither, so it stays a single click.
+  const [deactivateTarget, setDeactivateTarget] = useState<StaffUser | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<StaffUser | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const load = useCallback(async () => {
     setIsLoading(true);
@@ -67,6 +74,7 @@ export default function PrincipalStaffPage() {
 
   async function toggleActive(u: StaffUser) {
     setTogglingUid(u.uid);
+    setDeactivateTarget(null);
     try {
       const res = await fetch(`/api/college/users/${u.uid}`, {
         method: "PATCH",
@@ -84,6 +92,30 @@ export default function PrincipalStaffPage() {
       toast({ variant: "destructive", title: "Network error" });
     } finally {
       setTogglingUid(null);
+    }
+  }
+
+  async function handleDelete() {
+    const u = deleteTarget;
+    if (!u) return;
+    setIsDeleting(true);
+    try {
+      const res = await fetch(`/api/college/users/${u.uid}`, { method: "DELETE" });
+      const json = await res.json() as { error?: string };
+      if (!res.ok) {
+        // The server refuses while the person still holds a role or heads a
+        // department, and says which - worth showing in full rather than a
+        // generic failure.
+        toast({ variant: "destructive", title: json.error ?? "Failed to delete" });
+        return;
+      }
+      toast({ variant: "success", title: `${u.name} deleted` });
+      setDeleteTarget(null);
+      void load();
+    } catch {
+      toast({ variant: "destructive", title: "Network error" });
+    } finally {
+      setIsDeleting(false);
     }
   }
 
@@ -183,9 +215,17 @@ export default function PrincipalStaffPage() {
                                   size="sm"
                                   variant="outline"
                                   loading={togglingUid === u.uid}
-                                  onClick={() => void toggleActive(u)}
+                                  onClick={() => (u.isActive === false ? void toggleActive(u) : setDeactivateTarget(u))}
                                 >
                                   {u.isActive === false ? "Activate" : "Deactivate"}
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="text-destructive hover:text-destructive"
+                                  onClick={() => setDeleteTarget(u)}
+                                >
+                                  <Trash2 className="h-3.5 w-3.5 mr-1" />Delete
                                 </Button>
                               </div>
                             </td>
@@ -260,6 +300,28 @@ export default function PrincipalStaffPage() {
           ))}
         </div>
       )}
+
+      <ConfirmDialog
+        open={deactivateTarget !== null}
+        onOpenChange={(o) => { if (!o) setDeactivateTarget(null); }}
+        title={`Deactivate ${deactivateTarget?.name ?? "this account"}?`}
+        description="They lose access immediately and cannot sign in. Their records are kept, and you can activate them again at any time."
+        confirmLabel="Deactivate"
+        variant="destructive"
+        onConfirm={() => { if (deactivateTarget) void toggleActive(deactivateTarget); }}
+        loading={togglingUid === deactivateTarget?.uid}
+      />
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onOpenChange={(o) => { if (!o) setDeleteTarget(null); }}
+        title={`Delete ${deleteTarget?.name ?? "this account"}?`}
+        description="This removes their login permanently and cannot be undone. Anything they approved or recorded stays. To take away access but keep the account, use Deactivate instead."
+        confirmLabel="Delete"
+        variant="destructive"
+        onConfirm={() => void handleDelete()}
+        loading={isDeleting}
+      />
     </div>
   );
 }
