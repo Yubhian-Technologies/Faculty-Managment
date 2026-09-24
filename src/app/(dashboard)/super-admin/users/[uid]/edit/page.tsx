@@ -16,11 +16,11 @@ import { toast } from "@/hooks/useToast";
 import { ROLE_LABELS, ROLE_SCOPE } from "@/types";
 import type { FacultyProfileFields, UserRole } from "@/types";
 
-// The 6 roles Super Admin directly administers. Scope (COLLEGE/LOCATION/GLOBAL) is
+// The roles Super Admin directly administers. Scope (COLLEGE/LOCATION/GLOBAL) is
 // read from ROLE_SCOPE - a role's tenancy tier, not something re-declared here -
 // so this stays correct as roles move between tiers (e.g. ACCOUNTS is LOCATION-
-// scoped, FINANCE/PURCHASE_DEPT are GLOBAL-scoped; only PRINCIPAL is COLLEGE).
-const SUPER_ADMIN_EDITABLE_ROLES: UserRole[] = ["PRINCIPAL", "ACCOUNTS", "FINANCE", "PURCHASE_DEPT", "ADMINISTRATION", "MANAGEMENT"];
+// scoped, FINANCE/PURCHASE_DEPT are GLOBAL-scoped; PRINCIPAL/DIRECTOR are COLLEGE).
+const SUPER_ADMIN_EDITABLE_ROLES: UserRole[] = ["PRINCIPAL", "DIRECTOR", "ACCOUNTS", "FINANCE", "PURCHASE_DEPT", "ADMINISTRATION", "MANAGEMENT"];
 // Role-reassignment dropdown only offers roles within the same (COLLEGE) tier -
 // reassigning across tiers would move the profile doc to a different collection,
 // which this page's PATCH route doesn't do.
@@ -269,7 +269,7 @@ export default function EditUserPage() {
 
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
-                    <Label>Email</Label>
+                    <Label>Personal Email</Label>
                     <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="user@personal.com" />
                   </div>
                   <div className="space-y-2">

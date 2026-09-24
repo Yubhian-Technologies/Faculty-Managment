@@ -22,6 +22,14 @@ import type { Department, StudentRecord, Course, Caste } from "@/types";
 /** Radix Select rejects "" as an item value, so "not set" needs a sentinel. */
 const NONE = "__none__";
 
+// Roster fields holding a mobile number, rendered as phone inputs so they get
+// the same digits-only, 10-digit rule every other phone field in the app has
+// (see components/ui/input.tsx). They stay kind: "text" in rosterFields.ts -
+// the CSV import/export path is unchanged, this is about the on-screen form.
+// landLineNo is deliberately NOT here: a landline with its STD code runs past
+// 10 digits (the template's own sample is "08832451234").
+const PHONE_FIELD_KEYS = new Set(["guardianContact", "mobileNo"]);
+
 function ordinalYear(year: number) {
   const suffix = year === 1 ? "st" : year === 2 ? "nd" : year === 3 ? "rd" : "th";
   return `${year}${suffix} Year`;
@@ -573,7 +581,12 @@ function FieldInput({ field, values, onChange, departments, courseNames, courses
       <Label htmlFor={id}>{label}</Label>
       <Input
         id={id}
-        type={field.kind === "date" ? "date" : field.kind === "number" ? "number" : "text"}
+        type={
+          field.kind === "date" ? "date"
+            : field.kind === "number" ? "number"
+            : PHONE_FIELD_KEYS.has(field.key) ? "tel"
+            : "text"
+        }
         value={value}
         onChange={(e) => onChange(field.key, e.target.value)}
         placeholder={field.placeholder}

@@ -31,18 +31,18 @@ const PERSONAL_COLUMNS: SupportingStaffCsvColumn[] = [
   // genuinely ambiguous now that there are two other name-shaped columns
   // (Full Name as per SSC, Name as per Aadhar); leave a header that vague
   // unmatched rather than guess which one it means.
-  { key: "name",               label: "Name (as per PAN)",           required: false, sample: "Optional; full name", aliases: ["Staff Name", "Employee Name"] },
-  { key: "collegeEmail",      label: "College Email",                required: true,  sample: "Required; must contain @" },
+  { key: "nameAsPerPan",       label: "Name (as per PAN)",           required: false, sample: "Optional; full name", aliases: ["Staff Name", "Employee Name"] },
+  { key: "collegeEmail",      label: "College Email",                required: true,  sample: "Required; e.g. name@example.com" },
   { key: "password",          label: "Login Password (min 8 characters)", required: true, sample: "Required; minimum 8 characters", aliases: ["Password", "Login Password"] },
-  { key: "phone",              label: "Mobile No",                   required: true,  sample: "Required; phone/text", aliases: ["Phone", "Mobile", "Mobile Number", "Phone Number", "Contact Number"] },
+  { key: "mobileNo",           label: "Mobile No",                   required: true,  sample: "Required; exactly 10 digits, starting with 6-9", aliases: ["Phone", "Mobile", "Mobile Number", "Phone Number", "Contact Number"] },
   { key: "designation",        label: "Designation",                 required: true,  sample: "" },
-  { key: "qualification",     label: "Highest Qualification",        required: true,  sample: "Required; free text", aliases: ["Qualification"] },
+  { key: "highestQualification", label: "Highest Qualification",     required: true,  sample: "Required; free text", aliases: ["Qualification"] },
   { key: "joiningDate",        label: "Date of Joining Institution (YYYY-MM-DD)", required: true, sample: "Required; YYYY-MM-DD", aliases: ["Joining Date", "Date of Joining", "DOJ"] },
   { key: "gender",            label: "Gender",                       required: true,  sample: "Required: Male / Female / Other" },
   { key: "dateOfBirth",       label: "Date of Birth (YYYY-MM-DD)",   required: true,  sample: "Required; YYYY-MM-DD" },
   { key: "nameAsPerAadhar",   label: "Name (as per Aadhar)",         required: false, sample: "Optional; text" },
-  { key: "aadharNo",          label: "Aadhar No",                    required: true,  sample: "Required; text" },
-  { key: "panNo",             label: "PAN No",                       required: true,  sample: "Required; text" },
+  { key: "aadharNo",          label: "Aadhar No",                    required: true,  sample: "Required; exactly 12 digits" },
+  { key: "panNo",             label: "PAN No",                       required: true,  sample: "Required; 5 letters + 4 digits + 1 letter, e.g. ABCDE1234F" },
   { key: "ratificationStatus",label: "Ratification Status",          required: true,  sample: "Required: Ratified / Not Ratified" },
 ];
 
@@ -99,9 +99,9 @@ export function getSupportingStaffColumns(
 // Never reuse these literal strings for a real account.
 const SAMPLE_ROWS_BASE: Record<string, string>[] = [
   {
-    employeeId: "STF001", legalName: "RAVI TEJA", name: "Ravi Teja",
-    collegeEmail: "ravi.teja@college.edu", password: "ChangeMe#201", phone: "9876543210",
-    qualification: "Diploma",
+    employeeId: "STF001", legalName: "RAVI TEJA", nameAsPerPan: "Ravi Teja",
+    collegeEmail: "ravi.teja@college.edu", password: "ChangeMe#201", mobileNo: "9876543210",
+    highestQualification: "Diploma",
     joiningDate: "2018-06-11",
     gender: "Male", dateOfBirth: "1988-04-17",
     nameAsPerAadhar: "Ravi Teja",
@@ -109,9 +109,9 @@ const SAMPLE_ROWS_BASE: Record<string, string>[] = [
     ratificationStatus: "Ratified",
   },
   {
-    employeeId: "STF002", legalName: "LAKSHMI PRASANNA", name: "Lakshmi Prasanna",
-    collegeEmail: "lakshmi.p@college.edu", password: "ChangeMe#202", phone: "9876543211",
-    qualification: "B.Com",
+    employeeId: "STF002", legalName: "LAKSHMI PRASANNA", nameAsPerPan: "Lakshmi Prasanna",
+    collegeEmail: "lakshmi.p@college.edu", password: "ChangeMe#202", mobileNo: "9876543211",
+    highestQualification: "B.Com",
     joiningDate: "2021-09-01",
     gender: "Female", dateOfBirth: "1993-12-02",
     nameAsPerAadhar: "Lakshmi Prasanna",
@@ -119,9 +119,9 @@ const SAMPLE_ROWS_BASE: Record<string, string>[] = [
     ratificationStatus: "Not Ratified",
   },
   {
-    employeeId: "STF003", legalName: "MOHAMMED RAFI", name: "Mohammed Rafi",
-    collegeEmail: "rafi.m@college.edu", password: "ChangeMe#203", phone: "9876543212",
-    qualification: "ITI",
+    employeeId: "STF003", legalName: "MOHAMMED RAFI", nameAsPerPan: "Mohammed Rafi",
+    collegeEmail: "rafi.m@college.edu", password: "ChangeMe#203", mobileNo: "9876543212",
+    highestQualification: "ITI",
     joiningDate: "2015-02-20",
     gender: "Male", dateOfBirth: "1983-08-25",
     nameAsPerAadhar: "Mohammed Rafi",
@@ -129,9 +129,9 @@ const SAMPLE_ROWS_BASE: Record<string, string>[] = [
     ratificationStatus: "Ratified",
   },
   {
-    employeeId: "STF004", legalName: "SUNITHA RANI", name: "Sunitha Rani",
-    collegeEmail: "sunitha.rani@college.edu", password: "ChangeMe#204", phone: "9876543213",
-    qualification: "B.Sc",
+    employeeId: "STF004", legalName: "SUNITHA RANI", nameAsPerPan: "Sunitha Rani",
+    collegeEmail: "sunitha.rani@college.edu", password: "ChangeMe#204", mobileNo: "9876543213",
+    highestQualification: "B.Sc",
     joiningDate: "2023-07-03",
     gender: "Female", dateOfBirth: "1997-05-11",
     nameAsPerAadhar: "Sunitha Rani",
@@ -139,9 +139,9 @@ const SAMPLE_ROWS_BASE: Record<string, string>[] = [
     ratificationStatus: "Not Ratified",
   },
   {
-    employeeId: "STF005", legalName: "VENKAT RAO", name: "Venkat Rao",
-    collegeEmail: "venkat.rao@college.edu", password: "ChangeMe#205", phone: "9876543214",
-    qualification: "SSC",
+    employeeId: "STF005", legalName: "VENKAT RAO", nameAsPerPan: "Venkat Rao",
+    collegeEmail: "venkat.rao@college.edu", password: "ChangeMe#205", mobileNo: "9876543214",
+    highestQualification: "SSC",
     joiningDate: "2011-11-28",
     gender: "Male", dateOfBirth: "1976-01-09",
     nameAsPerAadhar: "Venkat Rao",

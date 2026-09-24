@@ -40,11 +40,11 @@ export interface Subject {
   year?: number;               // academic year within the course (1..course.durationYears) - common to all sections of that year
   semester?: number;           // semester-scoped subjects only
   // The calendar academic session this subject entry belongs to (e.g.
-  // "2026-27") - not the same as `year` above. Set by the Dean when creating
-  // a subject (see dean/subjects/new/page.tsx) and what the Dean's Subjects
-  // list is actually scoped/filtered by (dean/subjects/page.tsx) - each
+  // "2026-27") - not the same as `year` above. Set by the Academics when creating
+  // a subject (see academics/subjects/new/page.tsx) and what the Academics' Subjects
+  // list is actually scoped/filtered by (academics/subjects/page.tsx) - each
   // session gets its own independent subject list per course-year, filled in
-  // fresh by the Dean rather than carried over or auto-reset. Optional/absent
+  // fresh by the Academics rather than carried over or auto-reset. Optional/absent
   // on subjects created before this field existed or via the HOD's own
   // Subjects page.
   academicYear?: string;
@@ -58,8 +58,8 @@ export interface Subject {
   // on semester-scoped subjects and on subjects created before this field
   // existed. Immutable once set (like courseId/year) - not editable via PATCH.
   regulation?: string;
-  // Row position in the Dean's curriculum-table view of a course/year -
-  // editable, so the Dean can match a printed curriculum sheet's ordering
+  // Row position in the Academics' curriculum-table view of a course/year -
+  // editable, so the Academics can match a printed curriculum sheet's ordering
   // instead of being stuck with alphabetical-by-name. Course/year-scoped
   // subjects only; absent on legacy subjects created before this field
   // existed (those sort after any with a serialNumber, then by name).

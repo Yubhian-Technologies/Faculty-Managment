@@ -24,7 +24,7 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 export async function GET() {
   try {
-    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "HOD", "COLLEGE_OFFICE", "ACCOUNTS", "COLLEGE_ACCOUNTS", "PANEL_MEMBER", "COLLEGE_STAFF", "EXAM_CELL", "DEAN");
+    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "HOD", "COLLEGE_OFFICE", "ACCOUNTS", "COLLEGE_ACCOUNTS", "PANEL_MEMBER", "COLLEGE_STAFF", "EXAM_CELL", "ACADEMICS");
 
     const db = getAdminDb();
     const collegeRef = db.collection("colleges").doc(session.collegeId);
@@ -695,7 +695,7 @@ export async function PATCH(request: Request) {
     if (requestedHodUid !== undefined) {
       const deptForSeat = await deptRef.get();
       if (!deptForSeat.exists) return NextResponse.json({ error: "Department not found" }, { status: 404 });
-      if (session.role !== "HOD" && !canAssignSeat(session, "HOD")) {
+      if (session.role !== "HOD" && !canAssignSeat(session)) {
         return NextResponse.json({ error: "You can't assign this seat" }, { status: 403 });
       }
       const seatName = (deptForSeat.data() as { name?: string }).name ?? "";

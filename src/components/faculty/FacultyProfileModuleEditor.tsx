@@ -53,6 +53,12 @@ interface Props {
   // Personal Details tab stays their only place to set it - default false
   // preserves that.
   hideLegalName?: boolean;
+  // Passed straight through to PersonalDetailsFields - true only for a
+  // genuine facultyMembers record (HOD's Faculty edit pages, and Panel's own
+  // self-edit page). Every other role sharing this editor via
+  // MyProfileModuleEditPage edits a plain FMSUser doc instead, so this
+  // defaults to false there.
+  ratificationHistory?: boolean;
 }
 
 // Edit-side sibling of FacultyProfileModuleContent.tsx - given one moduleKey,
@@ -62,7 +68,7 @@ interface Props {
 // routes replace the field wholesale rather than deep-merging.
 export function FacultyProfileModuleEditor({
   moduleKey, record, onChange, facultyId, includeTeachingAssignment = true, teachingRows = [], onTeachingRowsChange, collegeType,
-  requiredPersonalFields, department, hideLegalName = false,
+  requiredPersonalFields, department, hideLegalName = false, ratificationHistory = false,
 }: Props) {
   const academicProfile = record.academicProfile ?? {};
 
@@ -78,6 +84,7 @@ export function FacultyProfileModuleEditor({
           requiredFields={requiredPersonalFields}
           hiddenFields={hideLegalName ? ["legalName", "esiNumber"] : ["esiNumber"]}
           showNameAsPerPan
+          ratificationHistory={ratificationHistory}
         />
       );
     case "qualification":

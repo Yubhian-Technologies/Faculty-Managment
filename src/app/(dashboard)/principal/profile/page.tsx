@@ -8,7 +8,12 @@ import { Card, CardContent } from "@/components/ui/card";
 import { ProfileModuleTiles } from "@/components/faculty/FacultyProfileHub";
 import { ProfileIdentitySummary } from "@/components/shared/ProfileIdentitySummary";
 import { useAuth } from "@/hooks/useAuth";
+import { MyResumeDownloadButton } from "@/components/faculty/MyResumeDownloadButton";
 
+// College Admin has no nav entry into this page at all (see navConfig.ts's
+// My Profile item) - it's a role-login, not one continuous employee, so its
+// Name/Phone/password live in CollegeAdminAccountMenu off the sidebar's
+// account row instead. This page is Principal/VP only.
 export default function PrincipalProfilePage() {
   const { user } = useAuth();
   if (!user) return null;
@@ -20,6 +25,7 @@ export default function PrincipalProfilePage() {
         description="Manage your profile photo and account details"
         actions={
           <div className="flex gap-2">
+            <MyResumeDownloadButton />
             <ChangePasswordDialog />
             <PublicProfileLinkButton />
           </div>

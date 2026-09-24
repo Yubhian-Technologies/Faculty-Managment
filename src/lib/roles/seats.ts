@@ -72,15 +72,15 @@ export async function createSeat(
   let departmentName: string | undefined;
 
   if (seatNeedsDepartment(role)) {
-    if (!input.departmentId) throw new SeatError("Pick the department this HOD seat belongs to");
+    if (!input.departmentId) throw new SeatError(`Pick the department this ${ROLE_LABELS[role]} seat belongs to`);
     const deptSnap = await db.collection("colleges").doc(collegeId).collection("departments").doc(input.departmentId).get();
     if (!deptSnap.exists) throw new SeatError("Department not found");
     departmentName = (deptSnap.data() as { name?: string }).name ?? "";
     departmentId = deptSnap.id;
-    if (existing.some((s) => s.role === "HOD" && s.departmentId === departmentId)) {
-      throw new SeatError(`${departmentName} already has an HOD seat`);
+    if (existing.some((s) => s.role === role && s.departmentId === departmentId)) {
+      throw new SeatError(`${departmentName} already has a ${ROLE_LABELS[role]} seat`);
     }
-    label = `${ROLE_LABELS.HOD} - ${departmentName}`;
+    label = `${ROLE_LABELS[role]} - ${departmentName}`;
   } else if (isSingletonSeatRole(role)) {
     if (existing.some((s) => s.role === role)) throw new SeatError(`There is already a ${ROLE_LABELS[role]} seat`);
   } else if (existing.some((s) => s.role === role && s.label.toLowerCase() === label.toLowerCase())) {
@@ -124,7 +124,7 @@ export async function updateSeat(
       updates.roleEmail = FieldValue.delete();
     }
   }
-  // A department's HOD seat is always named after the department.
+  // A department seat (HOD, R&D Coordinator) is always named after the department.
   if (input.label !== undefined && !seatNeedsDepartment(seat.role) && input.label.trim()) {
     updates.label = input.label.trim();
   }
@@ -306,7 +306,7 @@ export async function deactivateSeat(db: Firestore, collegeId: string, seatId: s
   await auditSeat(db, collegeId, "ROLE_SEAT_REMOVED", actor, seatId, { seat: seat.label });
 }
 
-// Existing HOD / Principal / VP / Dean / ... logins are role-based accounts:
+// Existing HOD / Principal / VP / Academics / ... logins are role-based accounts:
 // the account itself IS the role. This turns each into a seat held by that
 // account (its login email becomes the seat's role email), so from then on a
 // real person can be appointed and the old account retired - without touching
@@ -420,9 +420,9 @@ export async function ensureHodSeatForDepartment(
 // A renamed department renames its seat, and the holder's own `departments`
 // list (which the HOD scoping reads) follows.
 export async function renameDepartmentSeat(db: Firestore, collegeId: string, deptId: string, newName: string): Promise<void> {
-  const snap = await seatsCol(db, collegeId).where("role", "==", "HOD").where("departmentId", "==", deptId).get();
+  const snap = await seatsCol(db, collegeId).where("role", "in", ["HOD", "RND_COORDINATOR"]).where("departmentId", "==", deptId).get();
   for (const d of snap.docs) {
-    await d.ref.update({ departmentName: newName, label: `${ROLE_LABELS.HOD} - ${newName}`, updatedAt: new Date() });
+    await d.ref.update({ departmentName: newName, label: `${ROLE_LABELS[(d.data() as RoleSeat).role]} - ${newName}`, updatedAt: new Date() });
     const holder = (d.data() as RoleSeat).holderUid;
     if (holder) await syncHolderAccess(db, collegeId, holder);
   }
@@ -431,7 +431,7 @@ export async function renameDepartmentSeat(db: Firestore, collegeId: string, dep
 // A deleted department takes its seat with it: the holder is released (their
 // own account and the seat's history are kept) and the seat retired.
 export async function retireDepartmentSeat(db: Firestore, collegeId: string, deptId: string): Promise<void> {
-  const snap = await seatsCol(db, collegeId).where("role", "==", "HOD").where("departmentId", "==", deptId).get();
+  const snap = await seatsCol(db, collegeId).where("role", "in", ["HOD", "RND_COORDINATOR"]).where("departmentId", "==", deptId).get();
   const now = new Date();
   for (const d of snap.docs) {
     const seat = d.data() as RoleSeat;

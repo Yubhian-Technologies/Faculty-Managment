@@ -11,7 +11,8 @@ import {
   FlaskConical, Award, Users, Info,
 } from "lucide-react";
 import { DESIGNATION_LABELS } from "@/types";
-import { publicPeriod, publicYear } from "@/lib/faculty/publicProfileDates";
+import { publicMonthYear, publicPeriod, publicYear } from "@/lib/faculty/publicProfileDates";
+import { durationBetween, formatDuration } from "@/lib/faculty/experienceCalc";
 import type {
   Designation, TrainingEntryType, ProfessionalBody, AdminResponsibilityCategory, TrainingProgramMode,
 } from "@/types";
@@ -48,6 +49,7 @@ export interface FacultyPublicProfile {
   totalYearsOfExperience: number;
   officialEmail?: string;
   joiningYear?: number;
+  joiningDate?: string;
   education?: {
     highestQualification: string;
     ugDetails?: DegreeSummary;
@@ -64,7 +66,7 @@ export interface FacultyPublicProfile {
   };
   // fromDate/toDate are the real dates the current forms write; fromYear/toYear
   // are the legacy year-only fallback (see publicProfileDates.ts).
-  academicExperience: { institutionName: string; designation?: string; fromDate?: string; toDate?: string; fromYear?: number; toYear?: number }[];
+  academicExperience: { institutionName: string; designation?: string; fromDate?: string; toDate?: string; fromYear?: number; toYear?: number; isInternal?: boolean }[];
   research?: {
     publications: { title: string; coAuthors: string; journalOrConference: string; publicationYear: number; indexing?: string }[];
     totalPublications: number;
@@ -98,6 +100,21 @@ function degreeMeta(d?: DegreeSummary) {
   if (!d) return null;
   const year = d.yearOfAward ?? d.yearOfPassing;
   return [d.institutionName, year].filter(Boolean).join(" · ");
+}
+
+// How long a single prior posting lasted, counted from the very period the
+// row above it shows: the real from/to dates when the record has them, Jan 1
+// of the legacy year scalars when it only has those (the same anchor
+// experienceCalc's own rowDates falls back to). An entry with no end reads
+// "- present", so it is counted to today to match. Undefined - and so no
+// text at all - when there is no start, or when the range is empty/inverted.
+function entryDuration(inst: { fromDate?: string; toDate?: string; fromYear?: number; toYear?: number }): string | undefined {
+  const from = inst.fromDate ?? (inst.fromYear ? `${inst.fromYear}-01-01` : undefined);
+  if (!from) return undefined;
+  const to = inst.toDate ?? (inst.toYear ? `${inst.toYear}-01-01` : undefined) ?? new Date().toISOString().slice(0, 10);
+  const d = durationBetween(from, to);
+  if (d.years === 0 && d.months === 0 && d.days === 0) return undefined;
+  return formatDuration(d);
 }
 
 function Card({ title, icon: Icon, badge, children }: { title: string; icon: React.ComponentType<{ className?: string }>; badge?: React.ReactNode; children: React.ReactNode }) {
@@ -206,7 +223,19 @@ export function FacultyPublicProfileView({ profile }: { profile: FacultyPublicPr
   const showBio = !!p.otherInformation;
   const showEducation = degreeEntries.length > 0;
   const showPostdoc = !!p.education?.postdoctoralFellowshipDetails;
-  const showExperience = p.academicExperience.length > 0;
+  // Service at the college they are at NOW. academicExperience holds only
+  // PREVIOUS postings, so the current one - the longest-running entry on most
+  // profiles - was missing from this card entirely. Counted to today, so the
+  // figure stays current without anyone re-saving the record.
+  const currentPosting = p.collegeName && p.joiningDate
+    ? {
+        institutionName: p.collegeName,
+        designation: designationLabel,
+        period: `${publicMonthYear(p.joiningDate, p.joiningYear) ?? ""} – Present`,
+        duration: formatDuration(durationBetween(p.joiningDate, new Date().toISOString().slice(0, 10))),
+      }
+    : null;
+  const showExperience = p.academicExperience.length > 0 || !!currentPosting;
   const showResearch = !!hasResearchStats || (p.research?.publications.length ?? 0) > 0;
   const showAwards = (p.recognition?.awardsRecognition.length ?? 0) > 0;
   const showEngagement = !!p.recognition && (
@@ -236,25 +265,25 @@ export function FacultyPublicProfileView({ profile }: { profile: FacultyPublicPr
       <div className="bg-primary/5">
         <div className="max-w-5xl mx-auto px-5 sm:px-10 pt-6">
           <div className="flex items-center justify-center gap-3 pb-6">
-            <img src={VISHNU_LOGO_URL} alt="Vishnu Logo" className="h-8 w-8 object-contain shrink-0" />
-            <p className="font-semibold tracking-wide text-primary text-sm text-center">SHRI VISHNU EDUCATIONAL SOCIETY</p>
+            <img src={VISHNU_LOGO_URL} alt="Vishnu Logo" className="h-9 w-9 lg:h-12 lg:w-12 object-contain shrink-0" />
+            <p className="font-bold text-primary text-base sm:text-2xl lg:text-4xl text-center whitespace-nowrap">SHRI VISHNU EDUCATIONAL SOCIETY</p>
           </div>
         </div>
-        <div className="max-w-5xl mx-auto px-5 sm:px-10 pb-8 lg:pb-12 flex flex-col sm:flex-row sm:items-start gap-6 lg:gap-8">
+        <div className="max-w-5xl mx-auto px-5 sm:px-10 pb-8 lg:pb-12 flex flex-col sm:flex-row sm:items-center gap-6 lg:gap-8">
           <Avatar
             name={p.name}
             photoUrl={p.profilePhotoUrl}
             size="xl"
-            className="ring-4 ring-background shadow-lg shrink-0 lg:h-40 lg:w-40 lg:text-5xl"
+            className="ring-4 ring-background shadow-lg shrink-0 lg:h-28 lg:w-28 lg:text-3xl"
           />
-          <div className="flex-1 min-w-0 flex flex-col sm:flex-row sm:items-start justify-between gap-6">
+          <div className="flex-1 min-w-0 flex flex-col sm:flex-row sm:items-center justify-between gap-6">
             <div>
-              <h1 className="text-3xl sm:text-4xl lg:text-6xl font-extrabold text-foreground">{p.name}</h1>
-              <p className="text-base lg:text-xl text-muted-foreground mt-1.5 lg:mt-3">
+              <h1 className="text-base sm:text-lg lg:text-2xl font-extrabold text-foreground leading-tight">{p.name}</h1>
+              <p className="text-sm lg:text-base text-muted-foreground mt-1 lg:mt-1.5">
                 {designationLabel} at <span className="font-semibold text-foreground">{p.department}</span>
               </p>
               {p.collegeName && (
-                <p className="flex items-center gap-1.5 text-sm lg:text-base text-muted-foreground mt-1">
+                <p className="flex items-center gap-1.5 text-xs lg:text-sm text-muted-foreground mt-1">
                   <MapPin className="h-3.5 w-3.5" />{p.collegeName}
                 </p>
               )}
@@ -364,14 +393,47 @@ export function FacultyPublicProfileView({ profile }: { profile: FacultyPublicPr
 
         {showExperience && (
           <Card title="Academic Experience" icon={Briefcase}>
-            <EntryList>
-              {p.academicExperience.map((inst, i) => {
-                const period = publicPeriod(inst.fromDate, inst.toDate, inst.fromYear, inst.toYear);
-                return (
-                  <EntryCard key={i} title={inst.institutionName} meta={[inst.designation, period].filter(Boolean).join(" · ")} />
-                );
-              })}
-            </EntryList>
+            {/* Split into service inside this group of colleges and service
+                outside it - the server decides which, by matching each
+                institution against the platform's own college list
+                (api/public/faculty-public). A heading is shown only when that
+                side has entries, so a profile with one kind of service reads
+                exactly as it did before. */}
+            {(["internal", "external"] as const).map((kind) => {
+              const rows = p.academicExperience.filter((inst) =>
+                kind === "internal" ? inst.isInternal : !inst.isInternal
+              );
+              const showCurrent = kind === "internal" && !!currentPosting;
+              if (rows.length === 0 && !showCurrent) return null;
+              return (
+                <div key={kind} className="mb-5 last:mb-0">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+                    {kind === "internal" ? "Internal" : "External"}
+                  </p>
+                  <EntryList>
+                    {showCurrent && currentPosting && (
+                      <EntryCard
+                        title={currentPosting.institutionName}
+                        meta={[currentPosting.designation, currentPosting.period, currentPosting.duration]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      />
+                    )}
+                    {rows.map((inst, i) => {
+                      const period = publicPeriod(inst.fromDate, inst.toDate, inst.fromYear, inst.toYear);
+                      const duration = entryDuration(inst);
+                      return (
+                        <EntryCard
+                          key={`${kind}_${i}`}
+                          title={inst.institutionName}
+                          meta={[inst.designation, period, duration].filter(Boolean).join(" · ")}
+                        />
+                      );
+                    })}
+                  </EntryList>
+                </div>
+              );
+            })}
           </Card>
         )}
 

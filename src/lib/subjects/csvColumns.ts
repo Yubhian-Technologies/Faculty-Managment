@@ -1,11 +1,11 @@
-// Bulk-import template for Dean > Subjects > Import. One row = one subject.
+// Bulk-import template for Academics > Subjects > Import. One row = one subject.
 // Department/Course/Academic Year/Year are per-row columns (like the student
 // roster importer's Department/Course/Year - src/lib/students/rosterFields.ts)
 // so a single file is self-contained and can be filled in and uploaded without
 // any on-page picker first. When reached via a specific course-year's own
-// "Import Subjects" shortcut (see dean/subjects/page.tsx), these 4 columns are
+// "Import Subjects" shortcut (see academics/subjects/page.tsx), these 4 columns are
 // instead locked to that context and hidden from the template/preview - see
-// LOCKED_KEYS in dean/subjects/import/page.tsx.
+// LOCKED_KEYS in academics/subjects/import/page.tsx.
 export type SubjectCsvColumn = {
   key: string;
   label: string;

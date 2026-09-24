@@ -17,6 +17,8 @@ import { ExportFacultyDialog } from "@/components/faculty/ExportFacultyDialog";
 import { toast } from "@/hooks/useToast";
 import { useMyDepartments } from "@/hooks/useMyDepartments";
 import { downloadResumePdf } from "@/lib/pdf/downloadResume";
+import { ResumeSectionsDialog } from "@/components/faculty/ResumeSectionsDialog";
+import type { ResumeSectionKey } from "@/lib/pdf/resumeSections";
 import { hasSupportingStaffSplit } from "@/lib/designations/config";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { allPreviousExperienceEntries, totalYearsOfExperience } from "@/lib/faculty/experienceCalc";
@@ -47,12 +49,22 @@ function joiningLabel(status: unknown): string {
 
 type FacultyRow = Record<string, unknown> & FacultyMember;
 
+// Selection checkboxes on this list (header "select all" + every row): a bit larger than
+// the shared Checkbox default, with a clear 2px slate border and a white fill so an
+// unchecked box reads against the white table. Applied via className here so the shared
+// Checkbox - used across the app - keeps its default look everywhere else.
+const SELECT_CHECKBOX_CLASS =
+  "h-5 w-5 border-2 border-slate-500 bg-white hover:border-primary [&_svg]:h-3.5 [&_svg]:w-3.5 " +
+  "data-[state=checked]:border-primary data-[state=indeterminate]:border-primary " +
+  "data-[state=indeterminate]:bg-primary data-[state=indeterminate]:text-primary-foreground";
+
 const STATUS_VARIANTS: Record<FacultyStatus, "default" | "secondary" | "outline" | "destructive"> = {
   INTERVIEW_DONE: "outline",
   ACTIVE: "default",
   ON_LEAVE: "outline",
   RESIGNED: "secondary",
   RETIRED: "secondary",
+  RETAINERSHIP: "default",
 };
 
 export default function HODFacultyPage() {
@@ -61,6 +73,8 @@ export default function HODFacultyPage() {
   const [faculty, setFaculty] = useState<FacultyRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<string>("");
+  // "" = every department in the roster; otherwise one department's faculty.
+  const [deptFilter, setDeptFilter] = useState<string>("");
   // Export-only selection - when empty, ExportFacultyDialog exports everyone
   // in the register (unchanged default behavior); picking specific rows here
   // narrows it to just those faculty members.
@@ -69,6 +83,9 @@ export default function HODFacultyPage() {
   const [deleteTarget, setDeleteTarget] = useState<FacultyRow | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [downloadingResumeId, setDownloadingResumeId] = useState<string | null>(null);
+  // The row whose Download was clicked - the section picker opens against it,
+  // and the actual generation waits until the choice is made.
+  const [resumeTarget, setResumeTarget] = useState<FacultyRow | null>(null);
   const [collegeName, setCollegeName] = useState("");
   const [collegeType, setCollegeType] = useState<CollegeType | undefined>(undefined);
   const myDepartments = useMyDepartments();
@@ -230,7 +247,7 @@ export default function HODFacultyPage() {
     }
   }
 
-  async function handleDownloadResume(row: FacultyRow) {
+  async function handleDownloadResume(row: FacultyRow, sections: ResumeSectionKey[]) {
     setDownloadingResumeId(row.id as string);
     try {
       let teachingAssignments: unknown[] = [];
@@ -248,11 +265,12 @@ export default function HODFacultyPage() {
           researchPublications = pubData.publications ?? [];
         } catch { /* non-critical - resume falls back to self-reported publications, if any */ }
       }
-      await downloadResumePdf({ ...row, teachingAssignments, researchPublications, collegeName }, (row.employeeId as string) || facultyDisplayName(row));
+      await downloadResumePdf({ ...row, teachingAssignments, researchPublications, collegeName, sections }, (row.employeeId as string) || facultyDisplayName(row));
     } catch (err) {
       toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to generate resume" });
     } finally {
       setDownloadingResumeId(null);
+      setResumeTarget(null);
     }
   }
 
@@ -260,13 +278,32 @@ export default function HODFacultyPage() {
     { key: "", label: "All" },
     { key: "INTERVIEW_DONE", label: "Interview Done" },
     { key: "ACTIVE", label: "Active" },
+    { key: "RETAINERSHIP", label: "Retainership" },
     { key: "ON_LEAVE", label: "On Leave" },
     { key: "RESIGNED", label: "Resigned" },
     { key: "RETIRED", label: "Retired" },
   ];
 
-  const allSelected = faculty.length > 0 && selectedIds.size === faculty.length;
-  const someSelected = selectedIds.size > 0 && !allSelected;
+  // Departments present in the roster - shown as filter chips once the register
+  // spans more than one (an HOD of several departments, or one with
+  // sub-departments), so their faculty aren't lumped into a single list.
+  const departmentChips = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const f of faculty) {
+      const d = (f.department as string | undefined)?.trim();
+      if (d) counts.set(d, (counts.get(d) ?? 0) + 1);
+    }
+    const names = Array.from(counts.keys()).sort((a, b) => a.localeCompare(b));
+    return names.map((name) => ({ name, count: counts.get(name) ?? 0 }));
+  }, [faculty]);
+  const activeDeptFilter = departmentChips.some((c) => c.name === deptFilter) ? deptFilter : "";
+  const visibleFaculty = useMemo(
+    () => (activeDeptFilter ? faculty.filter((f) => (f.department as string | undefined)?.trim() === activeDeptFilter) : faculty),
+    [faculty, activeDeptFilter]
+  );
+
+  const allSelected = visibleFaculty.length > 0 && visibleFaculty.every((f) => selectedIds.has(f.id as string));
+  const someSelected = visibleFaculty.some((f) => selectedIds.has(f.id as string)) && !allSelected;
 
   const columns: Column<FacultyRow>[] = [
     {
@@ -274,8 +311,9 @@ export default function HODFacultyPage() {
       header: (
         <Checkbox
           checked={allSelected ? true : someSelected ? "indeterminate" : false}
-          onCheckedChange={(checked) => setSelectedIds(checked ? new Set(faculty.map((f) => f.id as string)) : new Set())}
+          onCheckedChange={(checked) => setSelectedIds(checked ? new Set(visibleFaculty.map((f) => f.id as string)) : new Set())}
           aria-label="Select all faculty"
+          className={SELECT_CHECKBOX_CLASS}
         />
       ),
       render: (row) => (
@@ -290,6 +328,7 @@ export default function HODFacultyPage() {
               })
             }
             aria-label={`Select ${facultyDisplayName(row)}`}
+            className={SELECT_CHECKBOX_CLASS}
           />
         </div>
       ),
@@ -407,7 +446,7 @@ export default function HODFacultyPage() {
             size="sm"
             title="Download resume PDF"
             loading={downloadingResumeId === (row.id as string)}
-            onClick={(e) => { e.stopPropagation(); void handleDownloadResume(row); }}
+            onClick={(e) => { e.stopPropagation(); setResumeTarget(row); }}
           >
             <FileDown className="h-3.5 w-3.5" /><span className="ml-1 hidden sm:inline">Download</span>
           </Button>
@@ -439,7 +478,7 @@ export default function HODFacultyPage() {
               <Upload className="h-4 w-4 mr-2" />Import
             </Button>
             <ExportFacultyDialog
-              faculty={selectedIds.size > 0 ? faculty.filter((f) => selectedIds.has(f.id as string)) : faculty}
+              faculty={selectedIds.size > 0 ? faculty.filter((f) => selectedIds.has(f.id as string)) : visibleFaculty}
               isSelection={selectedIds.size > 0}
             />
             <Button onClick={() => router.push("/hod/faculty/new")}>
@@ -467,6 +506,18 @@ export default function HODFacultyPage() {
           </button>
         ))}
       </div>
+
+      {departmentChips.length > 1 && (
+        <div className="flex gap-2 flex-wrap items-center">
+          <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide mr-1">Department</span>
+          {[{ name: "", count: faculty.length }, ...departmentChips].map((c) => (
+            <button key={c.name || "all"} onClick={() => setDeptFilter(c.name)}
+              className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${activeDeptFilter === c.name ? "bg-primary text-primary-foreground border-primary" : "bg-background border-border hover:bg-muted"}`}>
+              {c.name || "All Departments"} <span className="opacity-70">({c.count})</span>
+            </button>
+          ))}
+        </div>
+      )}
 
       {subDepartments.length > 0 && (
         <Card>
@@ -529,7 +580,7 @@ export default function HODFacultyPage() {
       )}
 
       <DataTable
-        data={faculty}
+        data={visibleFaculty}
         columns={columns}
         isLoading={isLoading}
         keyExtractor={(r) => r.id as string}
@@ -538,7 +589,15 @@ export default function HODFacultyPage() {
         searchKeys={["legalName", "nameAsPerPan", "email", "employeeId", "specialization"] as (keyof FacultyRow)[]}
         emptyTitle="No teaching faculty records yet"
         emptyDescription="Add faculty members to build your department's staff register"
-        emptyAction={<Button onClick={() => router.push("/hod/faculty/new")}><UserPlus className="h-4 w-4 mr-2" />Add Faculty</Button>}
+        // Only shown for the "All"/"Active" filters - the button reads as "Add
+        // Faculty" generically, so offering it under a status like Resigned or
+        // On Leave would wrongly suggest it creates a faculty member already in
+        // that status.
+        emptyAction={
+          (statusFilter === "" || statusFilter === "ACTIVE")
+            ? <Button onClick={() => router.push("/hod/faculty/new")}><UserPlus className="h-4 w-4 mr-2" />Add Faculty</Button>
+            : undefined
+        }
       />
 
       {/* ── Delete Confirm ── */}
@@ -564,6 +623,17 @@ export default function HODFacultyPage() {
         onConfirm={() => void handleRemoveSubHod()}
         loading={isRemovingSubHod}
       />
+
+      {/* ── Resume section picker ── */}
+      {resumeTarget && (
+        <ResumeSectionsDialog
+          open
+          onOpenChange={(o) => { if (!o) setResumeTarget(null); }}
+          personName={facultyDisplayName(resumeTarget) || "this faculty member"}
+          downloading={downloadingResumeId === (resumeTarget.id as string)}
+          onDownload={(sections) => handleDownloadResume(resumeTarget, sections)}
+        />
+      )}
     </div>
   );
 }

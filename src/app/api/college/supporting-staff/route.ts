@@ -10,6 +10,8 @@ import { SUPPORTING_STAFF_ROLE_CATEGORY, canRolePostCategory, supportingStaffCat
 import { hasSupportingStaffSplit } from "@/lib/designations/config";
 import { normalizeSupportingStaffProfile } from "@/lib/faculty/academicProfileCompat";
 import { migrateSupportingStaffDoc } from "@/lib/faculty/fieldRenames";
+import { experienceBreakdown } from "@/lib/faculty/experienceCalc";
+import { supportingStaffDisplayName } from "@/lib/supportingStaff/supportingStaffDisplayName";
 import { NON_TECHNICAL_STAFF_DESIGNATION_LABELS, ROLE_LABELS } from "@/types";
 import type {
   SupportingStaffCategory, SupportingStaffDesignation, FacultyStatus, CollegeType,
@@ -30,6 +32,12 @@ export async function GET(request: Request) {
     // HOD's sub-departments'/managed branches' staff roll up alongside their
     // own, which reads as "another department's staff leaking into mine".
     const ownOnly = searchParams.get("scope") === "own";
+    // A specific department (e.g. hod/timetable's Assign Timetable Incharge
+    // dialog, picking Technical staff for one exact course-year's
+    // department) - see the matching `department` handling in
+    // college/faculty/route.ts for why this needs the HOD's FULL scope
+    // rather than whichever department is active in the Working-as switcher.
+    const deptFilter = searchParams.get("department");
 
     const db = getAdminDb();
     const staffColl = db.collection("colleges").doc(session.collegeId).collection("supportingStaff");
@@ -44,11 +52,16 @@ export async function GET(request: Request) {
     // the scoping src/app/api/college/faculty/route.ts applies for HOD's
     // Faculty view.
     if (session.role === "HOD") {
-      const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
+      const scope = await getHodDepartmentScope(db, session.collegeId, session.uid, { activeOnly: !deptFilter });
       const ownedNames = ownOnly
         ? scope.ownDepartmentNames
         : [...scope.ownDepartmentNames, ...scope.childDepartmentNames, ...scope.managedDepartmentNames];
-      if (ownedNames.length > 0) {
+      if (deptFilter) {
+        if (!ownedNames.includes(deptFilter)) {
+          return NextResponse.json({ error: "That department isn't yours to manage" }, { status: 403 });
+        }
+        query = query.where("department", "==", deptFilter);
+      } else if (ownedNames.length > 0) {
         query = query.where("department", "in", ownedNames.slice(0, 30));
       }
     }
@@ -56,7 +69,11 @@ export async function GET(request: Request) {
     const snap = await query.get();
     const staff = snap.docs
       .map((d) => ({ id: d.id, ...migrateSupportingStaffDoc(d.data()) }))
-      .sort((a, b) => ((a as { name?: string }).name ?? "").localeCompare((b as { name?: string }).name ?? ""));
+      .sort((a, b) => {
+        const s = a as { legalName?: string; nameAsPerPan?: string };
+        const t = b as { legalName?: string; nameAsPerPan?: string };
+        return supportingStaffDisplayName(s).localeCompare(supportingStaffDisplayName(t));
+      });
 
     return NextResponse.json({ staff });
   } catch (err) {
@@ -74,16 +91,15 @@ export async function POST(request: Request) {
 
     const body = (await request.json()) as {
       employeeId: string;
-      name?: string;
       email?: string;
       collegeEmail: string;
       password: string;
-      phone?: string;
+      mobileNo?: string;
+      additionalPhoneNumbers?: { label?: string; number: string }[];
       staffCategory: SupportingStaffCategory;
       designation: SupportingStaffDesignation;
       otherDesignationTitle?: string;
-      qualification: string;
-      experienceYears: number;
+      highestQualification: string;
       joiningDate: string;
       department?: string;
       supportingStaffProfile?: Record<string, unknown>;
@@ -91,20 +107,17 @@ export async function POST(request: Request) {
     } & PersonalDetailsInput;
 
     const {
-      employeeId, collegeEmail, password, staffCategory, designation, qualification,
-      experienceYears, joiningDate, profilePhotoUrl,
+      employeeId, collegeEmail, password, staffCategory, designation, highestQualification,
+      joiningDate, profilePhotoUrl,
     } = body;
-    // Name (as per PAN) is optional - falls back to "" (used as the login
-    // account's display name and the record's own `name`, both fine blank).
-    const name = body.name?.trim() ?? "";
 
-    if (!employeeId || !collegeEmail || !password || !staffCategory || !designation || !qualification || !joiningDate) {
+    if (!employeeId || !collegeEmail || !password || !staffCategory || !designation || !highestQualification || !joiningDate) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
     // Matches the mandatory field set the bulk-import template and Add Staff
     // wizard's Personal Details step now both enforce. Name (as per PAN) and
     // Name (as per Aadhar) are deliberately excluded - both are optional.
-    if (!body.phone || !body.legalName || !body.gender || !body.dateOfBirth || !body.aadharNo || !body.panNo || !body.ratificationStatus) {
+    if (!body.mobileNo || !body.legalName || !body.gender || !body.dateOfBirth || !body.aadharNo || !body.panNo || !body.ratificationStatus) {
       return NextResponse.json({ error: "Missing required personal details - Mobile No, Full Name (as per SSC), Gender, Date of Birth, Aadhar No, PAN No, and Ratification Status are all required" }, { status: 400 });
     }
     if (!canRolePostCategory(session.role, staffCategory)) {
@@ -122,7 +135,7 @@ export async function POST(request: Request) {
     // (as per SSC) is the primary identity name, so it takes precedence; Name
     // (as per PAN) is only a fallback for the rare case legalName is blank.
     // Mirrors Faculty's own `finalName` (src/app/api/college/faculty/route.ts).
-    const finalName = body.legalName.trim() || name || "";
+    const finalName = body.legalName.trim() || body.nameAsPerPan?.trim() || "";
 
     const db = getAdminDb();
     const collegeId = session.collegeId;
@@ -203,23 +216,37 @@ export async function POST(request: Request) {
       collegeId,
       ...(department ? { department } : {}),
       employeeId,
-      // Stores Name (as per PAN) verbatim - genuinely optional. Anything that
-      // needs "the" display name reads legalName first - see finalName above
-      // and supportingStaffDisplayName() (src/lib/supportingStaff/supportingStaffDisplayName.ts).
-      name,
       collegeEmail,
       ...(body.email ? { email: body.email } : {}),
-      phone: body.phone ?? "",
+      mobileNo: body.mobileNo ?? "",
+      // Firestore has no ignoreUndefinedProperties, so a wholly-empty list
+      // (or one with only blank rows) is left out entirely rather than
+      // written as [] - same pattern as Faculty's own additionalPhoneNumbers
+      // (src/app/api/college/faculty/route.ts).
+      ...((() => {
+        const numbers = (body.additionalPhoneNumbers ?? [])
+          .map((p) => ({ ...(p.label?.trim() ? { label: p.label.trim() } : {}), number: p.number?.trim() ?? "" }))
+          .filter((p) => p.number);
+        return numbers.length > 0 ? { additionalPhoneNumbers: numbers } : {};
+      })()),
       staffCategory,
       designation,
       ...(body.otherDesignationTitle ? { otherDesignationTitle: body.otherDesignationTitle } : {}),
-      qualification,
-      experienceYears: Number(experienceYears),
+      highestQualification,
+      // Computed from Date of Joining, never trusted from client input - same
+      // as Faculty's totalYearsOfExperience (src/app/api/college/faculty/route.ts).
+      // No "previous experience entries" concept exists for Supporting Staff,
+      // so this is purely tenure-since-joining.
+      totalYearsOfExperience: experienceBreakdown(undefined, new Date(joiningDate)).total,
       joiningDate: new Date(joiningDate),
       status: "ACTIVE" as FacultyStatus,
       userUid: uid,
       ...(body.supportingStaffProfile ? { supportingStaffProfile: normalizeSupportingStaffProfile(body.supportingStaffProfile) } : {}),
       ...(profilePhotoUrl ? { profilePhotoUrl } : {}),
+      // Name (as per PAN) (nameAsPerPan) is stored verbatim, genuinely
+      // optional, via this spread. Anything that needs "the" display name
+      // reads legalName first - see finalName above and
+      // supportingStaffDisplayName() (src/lib/supportingStaff/supportingStaffDisplayName.ts).
       ...buildPersonalDetailsUpdate(body),
       createdAt: now,
       updatedAt: now,

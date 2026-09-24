@@ -1,4 +1,6 @@
 import { PERSONAL_KEY_RENAMES } from "@/lib/faculty/fieldRenames";
+import { normalizeRatificationRecords } from "@/lib/faculty/ratificationHistory";
+import type { RatificationRecord } from "@/types";
 
 // Shared field set for the personal/statutory details captured on FacultyMember
 // and FMSUser records (Principal, Staff, Faculty add/edit forms).
@@ -30,6 +32,11 @@ export interface PersonalDetailsInput {
   ratificationStatus?: string;
   ratificationProceedingsNumber?: string;
   ratificationDate?: string;   // yyyy-mm-dd
+  // Faculty-only multi-entry shape (see lib/faculty/ratificationHistory.ts) -
+  // when sent, supersedes ratificationProceedingsNumber/ratificationDate above
+  // (see buildPersonalDetailsUpdate). Every other caller (Supporting/Non-
+  // Technical Staff, Users) never sends this key and keeps the flat pair.
+  ratifications?: RatificationRecord[];
   maritalStatus?: string;
   spouseName?: string;
   numberOfChildren?: number;
@@ -39,8 +46,7 @@ export interface PersonalDetailsInput {
   bloodGroup?: string;
   motherTongue?: string;
   languagesKnown?: string[];
-  heightFeet?: number;
-  heightInches?: number;
+  height?: string; // "<feet>.<inches>" e.g. "5.7" = 5 ft 7 in - see FacultyMember.height in types/core.ts
   weightKg?: number;
   pfNumber?: string; // Provident Fund number - Faculty and Supporting/Non-Technical Staff alike
   uanNumber?: string; // Universal Account Number (EPFO) - Faculty and Supporting/Non-Technical Staff alike, shown right after PF Number
@@ -56,7 +62,7 @@ const STRING_FIELDS = [
   "ratificationProceedingsNumber",
   "passportNo", "differentlyAbledDetails", "bankAccountNumber", "bankName", "bankBranch", "bankOtherDetails",
   "emergencyContactName", "emergencyContactRelation", "emergencyContactMobileNo", "maritalStatus", "spouseName", "temporaryAddress", "bloodGroup",
-  "motherTongue", "pfNumber", "uanNumber", "esiNumber",
+  "motherTongue", "height", "pfNumber", "uanNumber", "esiNumber",
 ] as const;
 
 // The manual Add/Edit forms only ever write "Ratified" or "Not Ratified"
@@ -113,7 +119,15 @@ export function buildPersonalDetailsUpdate(rawBody: PersonalDetailsInput): Recor
   // clearable field here is cleared, and is exactly what an unset
   // Ratification Date already reads back as everywhere it's displayed
   // (falsy -> "-").
-  if (body.ratificationStatus === "Not Ratified") {
+  if (body.ratifications !== undefined) {
+    // Faculty-only multi-entry shape - once a record sends this, it has moved
+    // off the single Proceedings Number/Date pair below, so those legacy
+    // fields are cleared to keep them from silently going stale (never read
+    // once `ratifications` exists - see ratificationRecordsFromDoc).
+    updates.ratifications = normalizeRatificationRecords(body.ratifications);
+    updates.ratificationProceedingsNumber = "";
+    updates.ratificationDate = "";
+  } else if (body.ratificationStatus === "Not Ratified") {
     updates.ratificationProceedingsNumber = "";
     updates.ratificationDate = "";
   } else if (body.ratificationDate !== undefined) {
@@ -124,8 +138,6 @@ export function buildPersonalDetailsUpdate(rawBody: PersonalDetailsInput): Recor
   }
   if (body.numberOfChildren !== undefined) updates.numberOfChildren = body.numberOfChildren;
   if (body.languagesKnown !== undefined) updates.languagesKnown = body.languagesKnown;
-  if (body.heightFeet !== undefined) updates.heightFeet = body.heightFeet;
-  if (body.heightInches !== undefined) updates.heightInches = body.heightInches;
   if (body.weightKg !== undefined) updates.weightKg = body.weightKg;
   if (body.permanentAddressSameAsTemporary !== undefined) updates.permanentAddressSameAsTemporary = body.permanentAddressSameAsTemporary;
   if (body.differentlyAbled !== undefined) updates.differentlyAbled = body.differentlyAbled;

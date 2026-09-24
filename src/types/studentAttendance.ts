@@ -49,6 +49,12 @@ export interface StudentAttendanceSession {
   // for - set once at creation from the active period, never faculty-edited.
   // Absent on sessions created before this field existed.
   periodNumber?: number;
+  // The period's own TimetableSlot.labBatch, when this is one half of a
+  // split lab period - set once at creation, never faculty-edited. When set,
+  // `entries` only ever held the roster of students carrying the matching
+  // StudentRecord.labBatch (see sectionRoster.ts) - absent for an ordinary
+  // (non-split) period, whose roster is the whole section as before.
+  labBatch?: string;
   status: StudentAttendanceSessionStatus;
   entries: StudentAttendanceEntry[];
   totalStudents: number;

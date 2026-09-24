@@ -59,12 +59,13 @@ describe("facultyMobileNo / mobileNoFromBody", () => {
 });
 
 describe("key rename scope", () => {
-  it("lifts phone on facultyMembers docs only", () => {
+  it("lifts phone on facultyMembers and supportingStaff docs, but not users docs", () => {
     expect(migrateFacultyDoc({ phone: "9" })).toEqual({ mobileNo: "9" });
     expect(migrateFacultyDoc({ phone: "old", mobileNo: "new" })).toEqual({ mobileNo: "new" });
     expect(migrateFacultyDoc(migrateFacultyDoc({ phone: "9" }))).toEqual({ mobileNo: "9" });
     expect(migrateUserDoc({ phone: "9" })).toEqual({ phone: "9" });
-    expect(migrateSupportingStaffDoc({ phone: "9" })).toEqual({ phone: "9" });
+    expect(migrateSupportingStaffDoc({ phone: "9" })).toEqual({ mobileNo: "9" });
+    expect(migrateSupportingStaffDoc({ phone: "old", mobileNo: "new" })).toEqual({ mobileNo: "new" });
   });
   it("deletes the old phone twin only when mobileNo is part of the write", () => {
     expect(withLegacyFacultyKeysDeleted({ mobileNo: "9" }, DEL)).toEqual({ mobileNo: "9", phone: DEL });

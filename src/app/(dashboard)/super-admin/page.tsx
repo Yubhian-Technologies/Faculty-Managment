@@ -14,9 +14,18 @@ interface Stats {
   activeColleges: number;
 }
 
+interface DashboardStats {
+  activeUsers: number;
+  ongoingHirings: number;
+  auditEvents: number;
+  auditWindowDays: number;
+  systemHealth: { firestore: boolean; authentication: boolean; storage: boolean };
+}
+
 export default function SuperAdminDashboard() {
   const user = useAuthStore((s) => s.user);
   const [stats, setStats] = useState<Stats | null>(null);
+  const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
 
   useEffect(() => {
     fetch("/api/admin/colleges")
@@ -28,6 +37,11 @@ export default function SuperAdminDashboard() {
           activeColleges: colleges.filter((c) => c.isActive).length,
         });
       })
+      .catch(() => {});
+
+    fetch("/api/admin/dashboard-stats")
+      .then((r) => r.json() as Promise<DashboardStats>)
+      .then(setDashboardStats)
       .catch(() => {});
   }, []);
 
@@ -41,23 +55,36 @@ export default function SuperAdminDashboard() {
     },
     {
       label: "Active Users",
-      value: "-",
+      value: dashboardStats ? String(dashboardStats.activeUsers) : "-",
       icon: Users,
       color: "text-green-600 bg-green-50",
     },
     {
       label: "Ongoing Hirings",
-      value: "-",
+      value: dashboardStats ? String(dashboardStats.ongoingHirings) : "-",
       icon: TrendingUp,
       color: "text-orange-600 bg-orange-50",
     },
     {
       label: "Audit Events",
-      value: "-",
+      value: dashboardStats ? String(dashboardStats.auditEvents) : "-",
+      sub: dashboardStats ? `last ${dashboardStats.auditWindowDays} days` : undefined,
       icon: ScrollText,
       color: "text-purple-600 bg-purple-50",
     },
   ];
+
+  const healthChecks = dashboardStats
+    ? [
+        { label: "Firestore", ok: dashboardStats.systemHealth.firestore },
+        { label: "Authentication", ok: dashboardStats.systemHealth.authentication },
+        { label: "Storage", ok: dashboardStats.systemHealth.storage },
+      ]
+    : [
+        { label: "Firestore", ok: undefined },
+        { label: "Authentication", ok: undefined },
+        { label: "Storage", ok: undefined },
+      ];
 
   return (
     <div className="space-y-6">
@@ -117,16 +144,12 @@ export default function SuperAdminDashboard() {
             <CardTitle className="text-base">System Health</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            {[
-              { label: "Firestore", ok: true },
-              { label: "Authentication", ok: true },
-              { label: "Storage", ok: true },
-            ].map(({ label, ok }) => (
+            {healthChecks.map(({ label, ok }) => (
               <div key={label} className="flex items-center justify-between text-sm">
                 <span className="text-muted-foreground">{label}</span>
-                <span className={`font-medium flex items-center gap-1 ${ok ? "text-green-600" : "text-red-600"}`}>
-                  <span className={`h-2 w-2 rounded-full inline-block ${ok ? "bg-green-500" : "bg-red-500"}`} />
-                  {ok ? "Operational" : "Error"}
+                <span className={`font-medium flex items-center gap-1 ${ok === undefined ? "text-muted-foreground" : ok ? "text-green-600" : "text-red-600"}`}>
+                  <span className={`h-2 w-2 rounded-full inline-block ${ok === undefined ? "bg-muted-foreground/40 animate-pulse" : ok ? "bg-green-500" : "bg-red-500"}`} />
+                  {ok === undefined ? "Checking…" : ok ? "Operational" : "Error"}
                 </span>
               </div>
             ))}

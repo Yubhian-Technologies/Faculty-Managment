@@ -6,7 +6,7 @@ import { normalizeStoredRole, orderHeldRoles } from "@/lib/roles/seatRoles";
 // types/roleSeats.ts). A plain `where("role", "in", ...)` scan only sees the
 // first, so it would miss a faculty member who is the current Principal and
 // their notifications / approvals / letters would silently go nowhere. Every
-// lookup of a SEAT role (Principal, Vice Principal, HOD, Dean, IQAC, T&P, R&D,
+// lookup of a SEAT role (Principal, Vice Principal, HOD, Academics, IQAC, T&P, R&D,
 // Placement, Exam Cell, Library) goes through here; roles that are never seats
 // (College Office, Accounts, Finance, ...) keep their own simple queries.
 //
@@ -23,12 +23,15 @@ export async function findUsersWithMatchedRole(
   db: Firestore,
   collegeId: string,
   roles: string[],
-  // `exact` skips the COLLEGE_ADMIN / DEPARTMENT_OFFICE synonyms, for the few
-  // places that mean the actual Principal or HOD and not their look-alikes.
+  // `exact` skips the COLLEGE_ADMIN / DIRECTOR / DEPARTMENT_OFFICE synonyms, for
+  // the few places that mean the actual Principal or HOD and not their
+  // look-alikes. Director (Super Admin-provisioned, L3) mirrors Principal's
+  // authority exactly like College Admin does, and is stored under its own
+  // "DIRECTOR" role - never a seat, so only the primary-role query needs it.
   opts: { exact?: boolean } = {}
 ): Promise<RoleMatch[]> {
   const expanded = Array.from(new Set(roles.flatMap((r) =>
-    opts.exact ? [r] : r === "PRINCIPAL" ? ["PRINCIPAL", "COLLEGE_ADMIN"] : r === "HOD" ? ["HOD", "DEPARTMENT_OFFICE"] : [r]
+    opts.exact ? [r] : r === "PRINCIPAL" ? ["PRINCIPAL", "COLLEGE_ADMIN", "DIRECTOR"] : r === "HOD" ? ["HOD", "DEPARTMENT_OFFICE"] : [r]
   )));
   // A College Admin seat has the Principal's authority (it normalizes to
   // PRINCIPAL everywhere), so asking for the Principal also finds its holders.

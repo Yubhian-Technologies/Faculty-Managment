@@ -13,6 +13,7 @@ import { HiringTermsSettingsCard } from "@/components/hiring/HiringTermsSettings
 import { AcademicYearSettingsCard } from "@/components/academics/AcademicYearSettingsCard";
 import { DesignationCatalogCard } from "@/components/academics/DesignationCatalogCard";
 import { LeaveApprovalRoutingCard } from "@/components/leave/LeaveApprovalRoutingCard";
+import { LeaveVacationStaffCard } from "@/components/leave/LeaveVacationStaffCard";
 import type { FacultyNorms } from "@/types/core";
 
 interface CollegeInfo {
@@ -209,7 +210,16 @@ export default function PrincipalSettingsPage() {
 
       <LeaveApprovalRoutingCard />
 
+      <LeaveVacationStaffCard />
+
       <DesignationCatalogCard category="FACULTY" />
+      {/* Supporting Staff splits into Technical and Non-Technical (see
+          hasSupportingStaffSplit). Only the Non-Technical half was offered
+          here, so the titles an HOD's Add Supporting Staff form reads
+          (category=TECHNICAL) could be curated by each HOD but never
+          centrally - the page even told them to "add one under Settings"
+          that college leadership had no card for. */}
+      <DesignationCatalogCard category="TECHNICAL" />
       <DesignationCatalogCard category="NON_TECHNICAL" />
 
       <HiringTermsSettingsCard />

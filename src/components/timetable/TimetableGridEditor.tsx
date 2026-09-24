@@ -151,7 +151,7 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref }: Tim
           .then((r) => r.json() as Promise<{ draft: TimetableDraft | null }>),
         fetch(`/api/college/teaching-assignments?sectionId=${encodeURIComponent(sectionId)}`)
           .then((r) => r.json() as Promise<{ assignments: TeachingAssignment[] }>),
-        fetch("/api/college/faculty?status=ACTIVE")
+        fetch("/api/college/faculty?availableOnly=true")
           .then((r) => r.json() as Promise<{ faculty: { id: string; accessLevel?: string }[] }>),
         fetch("/api/college/faculty-assignment-requests")
           .then((r) => r.json() as Promise<{ requests: FacultyAssignmentRequest[] }>),

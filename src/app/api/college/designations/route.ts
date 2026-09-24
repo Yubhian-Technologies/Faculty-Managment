@@ -9,15 +9,19 @@ import type { DesignationCadre, DesignationCategory } from "@/types";
 const CATEGORIES: DesignationCategory[] = ["FACULTY", "TECHNICAL", "NON_TECHNICAL"];
 const CADRES: DesignationCadre[] = ["PROFESSOR", "ASSOCIATE_PROFESSOR", "ASSISTANT_PROFESSOR"];
 
-// Which roles may ADD/EDIT/DELETE each category - mirrors the existing,
-// previously-contentious Technical/Non-Technical Supporting Staff ownership
-// split (see project_technical_staff_ownership memory): Technical stays
-// HOD-owned, Non-Technical stays Principal/VP/College Office-owned. Faculty
-// is Principal/VP-owned. Read access (GET) is broader - every role that
-// populates a designation dropdown somewhere needs to fetch this list.
+// Which roles may ADD/EDIT/DELETE each category. Faculty is Principal/VP-owned;
+// Non-Technical Supporting Staff is Principal/VP/College Office-owned.
+//
+// Technical Supporting Staff was HOD-only, mirroring an earlier ownership
+// split (see project_technical_staff_ownership memory). College leadership is
+// now allowed here too, so the titles can be curated centrally instead of
+// each HOD maintaining their own - the Principal's Settings page carries the
+// card alongside Non-Technical. HOD is deliberately KEPT rather than replaced:
+// a department that already curates its own list goes on doing so, and this is
+// additive, so nothing an HOD could manage before becomes unavailable.
 export const MANAGE_ROLES_BY_CATEGORY: Record<DesignationCategory, string[]> = {
   FACULTY: ["PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN"],
-  TECHNICAL: ["HOD", "SUPER_ADMIN"],
+  TECHNICAL: ["HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN"],
   NON_TECHNICAL: ["PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_OFFICE", "SUPER_ADMIN"],
 };
 
@@ -28,7 +32,12 @@ export const MANAGE_ROLES_BY_CATEGORY: Record<DesignationCategory, string[]> = {
 export async function GET(request: Request) {
   try {
     const session = await requireCollegeMember(
-      "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "HOD", "COLLEGE_OFFICE", "COLLEGE_ADMIN"
+      "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "HOD", "COLLEGE_OFFICE", "COLLEGE_ADMIN",
+      // Read-only - a Faculty (Panel) login needs this to pick a Designation
+      // on their own Ratification Records (My Profile > Personal Details);
+      // they still can't ADD/EDIT/DELETE catalog entries (see POST above,
+      // which is unchanged).
+      "PANEL_MEMBER"
     );
     const { searchParams } = new URL(request.url);
     const category = searchParams.get("category");

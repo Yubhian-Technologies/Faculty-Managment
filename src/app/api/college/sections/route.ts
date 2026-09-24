@@ -115,6 +115,10 @@ export async function GET(request: Request) {
       hodScope = scope;
       if (scope.ownDepartmentNames.length > 0) {
         primaryQuery = primaryQuery.where("department", "in", scope.ownDepartmentNames.slice(0, 30));
+      } else {
+      // An HOD with no department on file must see nothing - not the whole
+      // college, which is what leaving the query unfiltered would return.
+        primaryQuery = primaryQuery.where("department", "==", "__none__");
       }
       // Sub-departments (parent HOD) and grouped/managed branches (sub-HOD) are
       // both fully-owned - one `in` query covers both, tagged primary below.
@@ -392,7 +396,7 @@ export async function POST(request: Request) {
       // Resolved from the ACTUAL submitted batch's own admission year
       // (parsedBatchStart, above) - not from "current session as of now" -
       // so the regulation offered always matches the specific batch being
-      // saved, the same way the client pickers (HOD/Dean) resolve it. Falls
+      // saved, the same way the client pickers (HOD/Academics) resolve it. Falls
       // back to the year+session resolution only for a batch that doesn't
       // parse as a leading 4-digit year (legacy free-typed data), reading
       // the college's real current session the same way the client pickers
@@ -413,7 +417,7 @@ export async function POST(request: Request) {
       // since has been free to disagree on casing (e.g. "r23" - see
       // scripts/set-firstyear-batch-regulation.mjs's own lowercase target).
       // Match loosely but store the catalog's own canonical casing, so a
-      // regulation the Dean clearly configured never 400s here over case
+      // regulation the Academics clearly configured never 400s here over case
       // alone, and every section that resolves through here self-heals to
       // the canonical form going forward.
       const canonical = allowed.find((r) => r.toLowerCase() === regulation!.toLowerCase());

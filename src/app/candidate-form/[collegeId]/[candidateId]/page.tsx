@@ -525,7 +525,7 @@ export default function CandidateFormPage() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="emergencyContactPhone">Emergency Contact Phone <span className="text-destructive">*</span></Label>
-                  <Input id="emergencyContactPhone" value={form.emergencyContactPhone ?? ""} inputMode="numeric" maxLength={10} onChange={(e) => updateForm({ emergencyContactPhone: onlyDigits(e.target.value, 10) })} placeholder="10-digit number" />
+                  <Input id="emergencyContactPhone" type="tel" value={form.emergencyContactPhone ?? ""} inputMode="numeric" maxLength={10} onChange={(e) => updateForm({ emergencyContactPhone: onlyDigits(e.target.value, 10) })} placeholder="10-digit number" />
                 </div>
               </div>
             </AccordionContent>

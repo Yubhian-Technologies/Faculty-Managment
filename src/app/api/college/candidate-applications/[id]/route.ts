@@ -2,9 +2,10 @@ export const dynamic = "force-dynamic";
 
 import { findUsersSnapshot } from "@/lib/roles/findUsersByRoles";
 import { NextResponse } from "next/server";
-import { requireCollegeMember } from "@/lib/auth/verifySession";
+import { isCollegeAdmin, requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import type { Firestore } from "firebase-admin/firestore";
+import { excludeLeadershipUids, getDepartmentHeadUids } from "@/lib/notify";
 
 async function getUserName(db: Firestore, collegeId: string, uid: string): Promise<string> {
   if (!collegeId || !uid) return "Unknown";
@@ -82,6 +83,11 @@ export async function PATCH(
     const isPrincipalRole = session.role === "PRINCIPAL" || session.role === "VICE_PRINCIPAL" || session.role === "SUPER_ADMIN";
     const isHodRole = session.role === "HOD";
     const isCollegeOfficeRole = session.role === "COLLEGE_OFFICE";
+    // College Admin's login reads as "PRINCIPAL" too (see isCollegeAdmin), but
+    // the final hiring decision and its negotiated terms are Principal/VP
+    // decision authority, not College Admin's - narrower than isPrincipalRole,
+    // which everything else above still uses unchanged.
+    const isPrincipalDecider = isPrincipalRole && !isCollegeAdmin(session);
 
     const { isShortlisted, hasArrived, status, stage, batchId, documentVerification, joiningLetterUrl, expectedSalary, negotiatedSalary, dateOfJoining, termsAndConditions, committeeRecommendation, notifyPrincipalDocsReady } = body;
 
@@ -97,7 +103,7 @@ export async function PATCH(
     if (batchId !== undefined && !isHodRole && !isPrincipalRole) {
       return NextResponse.json({ error: "Only the HOD or Principal can reassign a candidate's batch" }, { status: 403 });
     }
-    if ((status !== undefined || stage !== undefined || committeeRecommendation !== undefined) && !isPrincipalRole) {
+    if ((status !== undefined || stage !== undefined || committeeRecommendation !== undefined) && !isPrincipalDecider) {
       return NextResponse.json({ error: "Only the Principal can record a hiring decision" }, { status: 403 });
     }
     const VALID_STAGES = ["DEMO", "INTERVIEW", "SALARY_NEGOTIATION", "DECISION"];
@@ -106,7 +112,7 @@ export async function PATCH(
     }
     if (
       (expectedSalary !== undefined || negotiatedSalary !== undefined || dateOfJoining !== undefined || termsAndConditions !== undefined) &&
-      !isPrincipalRole
+      !isPrincipalDecider
     ) {
       return NextResponse.json({ error: "Only the Principal can set negotiation terms" }, { status: 403 });
     }
@@ -223,7 +229,7 @@ export async function PATCH(
 
         if (batchSnap.exists) {
           const batch = batchSnap.data() as { panelMemberUids?: string[]; position?: string };
-          const uidsToNotify = [...(batch.panelMemberUids ?? [])];
+          const uidsToNotify = await excludeLeadershipUids(db, session.collegeId, batch.panelMemberUids ?? []);
 
           const officeSnap = await collegeRef
             .collection("users")
@@ -305,12 +311,14 @@ export async function PATCH(
       const batchSnap = await batchRef.get();
 
       if (batchSnap.exists) {
-        const batch = batchSnap.data() as { hodUid?: string; position?: string };
+        const batch = batchSnap.data() as { hodUid?: string; position?: string; department?: string };
 
-        if (batch.hodUid) {
+        // Both the department's HOD and its Department Office head hear the
+        // hiring decision for their department's candidate.
+        for (const toUid of await getDepartmentHeadUids(db, session.collegeId, batch.department, batch.hodUid)) {
           await collegeRef.collection("notifications").add({
             collegeId: session.collegeId,
-            toUid: batch.hodUid,
+            toUid,
             type: status === "APPROVED" ? "HIRING_APPROVED" : "HIRING_REJECTED",
             title: status === "APPROVED" ? "Candidate Approved" : "Candidate Rejected",
             message: `${candidateName ?? "A candidate"} for ${batch.position ?? "the position"} was ${status === "APPROVED" ? "approved" : "rejected"} by the Principal.`,

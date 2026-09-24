@@ -6,6 +6,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { CertificateUploadField } from "@/components/shared/CertificateUploadField";
 import { DesignationSelect } from "@/components/faculty/DesignationOptions";
+import { validatePromotionHistory, suggestedNextFromDate } from "@/lib/faculty/promotionHistory";
+import { designationKey } from "@/lib/designations/config";
 import { TrainingEntryFields } from "@/components/faculty/TrainingEntryFields";
 import {
   NumInput, TextInput, DateInput, DegreeFields, DegreeFieldsList, RepeatingGroup, QualificationsFields, StringListInput,
@@ -69,7 +71,7 @@ export function QualificationFields({ value: rawValue, onChange, collegeType }: 
     return (
       <div className="space-y-5">
         <TextInput label="Highest Qualification" value={value.highestQualification} onChange={(v) => set("highestQualification", v)} placeholder="e.g. B.Ed, M.A." />
-        <StringListInput label="Research Areas/Interests *" values={value.researchAreasInterests} onChange={(v) => set("researchAreasInterests", v)} placeholder="e.g. Machine Learning - press Enter or Add" />
+        <StringListInput label="Research Areas/Interests" values={value.researchAreasInterests} onChange={(v) => set("researchAreasInterests", v)} placeholder="e.g. Machine Learning - press Enter or Add" />
         <QualificationsFields
           items={value.educationalQualifications}
           levelOptions={SCHOOL_TEACHING_QUALIFICATION_LEVELS}
@@ -82,7 +84,7 @@ export function QualificationFields({ value: rawValue, onChange, collegeType }: 
   return (
     <div className="space-y-5">
       <TextInput label="Highest Qualification" value={value.highestQualification} onChange={(v) => set("highestQualification", v)} placeholder="e.g. Ph.D" />
-      <StringListInput label="Research Areas/Interests *" values={value.researchAreasInterests} onChange={(v) => set("researchAreasInterests", v)} placeholder="e.g. Machine Learning - press Enter or Add" />
+      <StringListInput label="Research Areas/Interests" values={value.researchAreasInterests} onChange={(v) => set("researchAreasInterests", v)} placeholder="e.g. Machine Learning - press Enter or Add" />
       <div className="space-y-3 rounded-lg border p-3">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="space-y-2">
@@ -304,34 +306,59 @@ export function ExperienceFields({ value: rawValue, onChange, includeTeachingAss
 // serving in that designation, so its experience is computed up to today and
 // keeps increasing day by day until a To Date is set (same live-ticking idea
 // ExperienceFields' own "Total Years of Experience" fact uses).
-export function PromotionFields({ value: rawValue, onChange }: ModuleFieldsProps & { collegeType?: CollegeType }) {
+// `rules` switches on the real-world Promotion History rules (Faculty only - the
+// Supporting/Non-Technical Staff page leaves it out and keeps the free-form editor):
+// see src/lib/faculty/promotionHistory.ts. The server enforces the same rules; this
+// just shows the problems next to the row that caused them, pre-fills the next From
+// Date, bounds the date pickers and greys out designations already used.
+export interface PromotionRules { joiningDate?: string; status?: string }
+
+export function PromotionFields({ value: rawValue, onChange, rules }: ModuleFieldsProps & { collegeType?: CollegeType; rules?: PromotionRules }) {
   const value = normalizeAcademicProfile(rawValue);
   function set<K extends keyof FacultyProfileFields>(key: K, v: FacultyProfileFields[K]) {
     onChange({ ...value, [key]: v });
   }
   const today = new Date().toISOString().slice(0, 10);
+  const history = value.promotionHistory ?? [];
+  const issues = rules ? validatePromotionHistory(history, rules) : [];
   return (
     <RepeatingGroup
       title="Promotion History"
       items={value.promotionHistory}
-      empty={EMPTY_PROMOTION}
+      empty={rules ? () => ({ designation: "", fromDate: suggestedNextFromDate(history, rules.joiningDate) }) : EMPTY_PROMOTION}
       onChange={(v) => set("promotionHistory", v)}
       renderRow={(item, update) => {
         const duration = durationBetween(item.fromDate, item.toDate || today);
+        const idx = history.indexOf(item);
+        const rowIssues = issues.filter((i) => i.row === idx);
+        const usedByOthers = history.filter((h) => h !== item && h.designation).map((h) => designationKey(h.designation));
         return (
           <>
             {/* Drawn from this college's own designation catalogue rather
-                than typed - not narrowed by `kind` since this same field is
-                shared with Supporting/Non-Technical Staff's own promotion
-                page (see College Office staff/[uid]/promotion-salary). */}
-            <DesignationSelect label="Designation" value={item.designation} onChange={(v) => update({ designation: v })} />
-            <DateInput label="From Date" value={item.fromDate} onChange={(v) => update({ fromDate: v })} />
+                than typed. Strict (Faculty) mode: teaching catalogue only, no
+                free-text "Other", and a designation already in this history is
+                greyed out - each one can appear once. Otherwise not narrowed by
+                `kind` since this same field is shared with Supporting/Non-Technical
+                Staff's own promotion page (see College Office staff/[uid]/promotion-salary). */}
+            <DesignationSelect
+              label="Designation"
+              value={item.designation}
+              onChange={(v) => update({ designation: v })}
+              {...(rules ? { kind: "teaching" as const, disabledKeys: usedByOthers, allowOther: false } : {})}
+            />
+            <DateInput
+              label="From Date"
+              value={item.fromDate}
+              onChange={(v) => update({ fromDate: v })}
+              {...(rules ? { min: rules.joiningDate, max: today } : {})}
+            />
             <DateInput
               label="To Date"
               hint="Leave blank if currently serving"
               value={item.toDate}
               onChange={(v) => update({ toDate: v })}
               min={item.fromDate}
+              {...(rules ? { max: today } : {})}
             />
             <div className="space-y-2">
               <Label className="text-xs text-muted-foreground">Experience in this Designation</Label>
@@ -339,9 +366,12 @@ export function PromotionFields({ value: rawValue, onChange }: ModuleFieldsProps
             </div>
             {item.fromDate && !item.toDate && (
               <p className="sm:col-span-2 text-xs text-muted-foreground">
-                No To Date yet - experience is calculated up to today and will keep increasing until one is set.
+                {rules ? "Current designation - " : ""}No To Date yet - experience is calculated up to today and will keep increasing until one is set.
               </p>
             )}
+            {rowIssues.map((i, k) => (
+              <p key={k} className="sm:col-span-2 text-xs font-medium text-destructive">{i.message}</p>
+            ))}
             <div className="sm:col-span-2">
               <CertificateUploadField
                 label="Promotion Order"

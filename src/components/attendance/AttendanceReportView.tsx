@@ -345,7 +345,7 @@ export function AttendanceReportView({ title, description, groupByDepartmentAndC
       try {
         const res = await fetch(`/api/college/courses?departmentId=${selectedDepartmentId}`);
         const d = await res.json() as { courses: Course[] };
-        // Same collapse the Dean's subject picker applies: the courses API also
+        // Same collapse the Academics' subject picker applies: the courses API also
         // returns a feeder's courses (a department cross-listing this one via
         // secondaryDepartments), so one catalog course the Principal added once
         // would otherwise appear twice here, once per owning department. Keep

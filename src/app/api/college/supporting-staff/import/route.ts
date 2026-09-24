@@ -6,6 +6,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { createFirebaseUser } from "@/lib/firebase/authRest";
 import { ChunkedBatch } from "@/lib/firestore/chunkedBatch";
 import { splitDegreeAndBranch } from "@/lib/faculty/legacyProfileFallbacks";
+import { experienceBreakdown } from "@/lib/faculty/experienceCalc";
 import { getHodDepartmentScope } from "@/lib/departments/scope";
 import { hasSupportingStaffSplit } from "@/lib/designations/config";
 import { NON_TECHNICAL_STAFF_DESIGNATION_LABELS } from "@/types";
@@ -13,6 +14,7 @@ import {
   matchOption, normalizeDigits, isScientificNotation,
   GENDER_OPTIONS, RATIFICATION_STATUS_OPTIONS,
 } from "@/lib/import/fieldConstraints";
+import { PHONE_REGEX, EMAIL_REGEX, PAN_REGEX, AADHAR_REGEX } from "@/lib/validations";
 import type {
   SupportingStaffCategory, SupportingStaffDesignation, FacultyStatus, CollegeType,
   SupportingStaffProfileFields, StaffQualification, TrainingEntry, TrainingEntryType, AwardEntry, AwardCategory,
@@ -75,12 +77,12 @@ const COMPUTER_SKILL_MAP: Record<string, ComputerSkill> = {
 type ImportRow = {
   employeeId: string;
   legalName: string;
-  name: string;
+  nameAsPerPan: string;
   collegeEmail: string;
   password: string;
-  phone: string;
+  mobileNo: string;
   designation: string;
-  qualification: string;
+  highestQualification: string;
   joiningDate: string;
   gender: string;
   dateOfBirth: string;
@@ -336,16 +338,16 @@ export async function POST(request: Request) {
       // except Name (as per PAN) and Name (as per Aadhar), which are optional.
       if (!row.employeeId?.trim()) { failed.push({ row: rowNum, employeeId: "-", error: "Employee ID is required" }); continue; }
       if (!row.legalName?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Full Name (as per SSC) is required" }); continue; }
-      if (!row.collegeEmail?.trim() || !row.collegeEmail.includes("@")) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Valid College Email is required" }); continue; }
+      if (!row.collegeEmail?.trim() || !EMAIL_REGEX.test(row.collegeEmail.trim())) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Valid College Email is required (e.g. name@example.com)" }); continue; }
       if (!row.password?.trim() || row.password.trim().length < 8) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Login Password is required and must be at least 8 characters" }); continue; }
-      if (!row.phone?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Mobile No is required" }); continue; }
+      if (!row.mobileNo?.trim() || !PHONE_REGEX.test(normalizeDigits(row.mobileNo) ?? "")) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Mobile No must be exactly 10 digits, starting with 6, 7, 8 or 9" }); continue; }
       if (!row.designation?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Designation is required" }); continue; }
-      if (!row.qualification?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Highest Qualification is required" }); continue; }
+      if (!row.highestQualification?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Highest Qualification is required" }); continue; }
       if (!row.joiningDate?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Date of Joining Institution is required" }); continue; }
       if (!row.gender?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Gender is required" }); continue; }
       if (!row.dateOfBirth?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Date of Birth is required" }); continue; }
-      if (!row.aadharNo?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Aadhar No is required" }); continue; }
-      if (!row.panNo?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "PAN No is required" }); continue; }
+      if (!row.aadharNo?.trim() || !AADHAR_REGEX.test(normalizeDigits(row.aadharNo) ?? "")) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Aadhar No must be exactly 12 digits" }); continue; }
+      if (!row.panNo?.trim() || !PAN_REGEX.test(row.panNo.trim().toUpperCase())) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "PAN No must be 5 letters, 4 digits, then 1 letter (e.g. ABCDE1234F)" }); continue; }
       if (!row.ratificationStatus?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Ratification Status is required" }); continue; }
 
       const empId = row.employeeId.trim();
@@ -382,7 +384,7 @@ export async function POST(request: Request) {
       // that literal is built after the gate, so a constraint failing there was
       // recorded too late to reject the row - an invalid Gender ("M") was
       // dropped and the record imported with it blank.
-      const vPhone = checkPhone(row.phone, "Phone");
+      const vPhone = checkPhone(row.mobileNo, "Phone");
       const vGender = checkOption(row.gender, GENDER_OPTIONS, "Gender");
       const vRatification = checkOption(row.ratificationStatus, RATIFICATION_STATUS_OPTIONS, "Ratification Status");
 
@@ -406,7 +408,7 @@ export async function POST(request: Request) {
       // Full Name (as per SSC) first, same precedence as the manual Add form
       // (finalName) and supportingStaffDisplayName() - row.legalName is
       // already guaranteed non-blank by the required-field check above.
-      const staffName = row.name?.trim() ?? "";
+      const staffName = row.nameAsPerPan?.trim() ?? "";
       const finalName = row.legalName.trim() || staffName || "";
       let userUid: string;
       try {
@@ -427,12 +429,15 @@ export async function POST(request: Request) {
         collegeId,
         department: department || undefined,
         employeeId: empId,
-        name: staffName,
-        phone: vPhone ?? "",
+        nameAsPerPan: staffName,
+        mobileNo: vPhone ?? "",
         staffCategory,
         designation,
-        qualification: row.qualification.trim(),
-        experienceYears: 0,
+        highestQualification: row.highestQualification.trim(),
+        // Computed from Date of Joining, never taken from the sheet - same as
+        // Faculty's totalYearsOfExperience (src/app/api/college/faculty/import/route.ts).
+        // No "previous experience entries" concept exists for Supporting Staff.
+        totalYearsOfExperience: experienceBreakdown(undefined, joiningDate).total,
         joiningDate,
         status,
         gender: vGender,

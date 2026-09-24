@@ -1,3 +1,4 @@
+import { ROLE_LEVEL } from "@/types/core";
 import type { UserRole } from "@/types/core";
 import type { LeaveApproverStage, LeaveRequestStatus } from "@/types/leave";
 
@@ -9,7 +10,7 @@ export type LeaveApprovalRouting = Partial<Record<UserRole, LeaveApproverStage>>
 // both are normalized to PRINCIPAL / HOD before a session role is read.
 export const ROUTABLE_REQUESTER_ROLES: UserRole[] = [
   "PANEL_MEMBER", "HOD", "VICE_PRINCIPAL", "PRINCIPAL",
-  "COLLEGE_OFFICE", "COLLEGE_STAFF", "ACCOUNTS", "FINANCE", "DEAN", "IQAC_COORDINATOR",
+  "COLLEGE_OFFICE", "COLLEGE_STAFF", "ACCOUNTS", "FINANCE", "ACADEMICS", "IQAC_COORDINATOR",
   "T_AND_P", "R_AND_D", "LIBRARY", "EXAM_CELL", "WEBMASTER", "PLACEMENT_DEPT", "PURCHASE_DEPT",
 ];
 
@@ -47,6 +48,33 @@ export function resolveApproverStage(
   // requester with no department would sit there with nobody able to act.
   if (stage === "HOD" && !hasDepartment) stage = "PRINCIPAL";
   return stage;
+}
+
+// A leave request goes to whoever sits above the HIGHEST seat the requester
+// holds, not their primary role: a faculty member who is also an HOD is routed
+// as an HOD (Principal / Vice Principal decides), one who is also Vice
+// Principal as a Vice Principal, and so on. Seats that aren't requester roles
+// (e.g. the per-department R&D Coordinator) don't count, so a coordinator's
+// leave still goes to their HOD like any faculty member's.
+//
+// Two held roles at the same level (HOD + Academics, both L4) would otherwise
+// resolve by whichever came first in the list; the higher approver tier wins
+// instead, so the result never depends on ordering.
+const STAGE_RANK: Record<LeaveApproverStage, number> = { HOD: 0, PRINCIPAL: 1, MANAGEMENT: 2 };
+
+export function resolveApproverStageForHeldRoles(
+  routing: LeaveApprovalRouting | undefined,
+  heldRoles: readonly string[],
+  fallbackRole: string,
+  hasDepartment: boolean
+): LeaveApproverStage {
+  const routable = heldRoles.filter((r) => ROUTABLE_REQUESTER_ROLES.includes(r as UserRole));
+  if (routable.length === 0) return resolveApproverStage(routing, fallbackRole, hasDepartment);
+  const topLevel = Math.min(...routable.map((r) => ROLE_LEVEL[r as UserRole] ?? 99));
+  return routable
+    .filter((r) => (ROLE_LEVEL[r as UserRole] ?? 99) === topLevel)
+    .map((r) => resolveApproverStage(routing, r, hasDepartment))
+    .reduce((best, stage) => (STAGE_RANK[stage] > STAGE_RANK[best] ? stage : best));
 }
 
 export function approverStageToStatus(stage: LeaveApproverStage): Extract<LeaveRequestStatus, "PENDING_HOD" | "PENDING_PRINCIPAL" | "PENDING_MANAGEMENT"> {

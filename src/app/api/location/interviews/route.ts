@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { verifySession } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const session = await verifySession();
     const allowed = ["SUPER_ADMIN", "ADMINISTRATION", "HR_ADMIN", "LOCATION_DEPT_HEAD"];
@@ -12,6 +12,9 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     if (!session.locationId) return NextResponse.json({ error: "No location context" }, { status: 400 });
+
+    const { searchParams } = new URL(request.url);
+    const collegeIdFilter = searchParams.get("collegeId");
 
     const db = getAdminDb();
     const snap = await db
@@ -22,7 +25,12 @@ export async function GET() {
       .get();
 
     type InterviewDoc = { id: string; status: string; panelMembers?: { uid: string }[]; [key: string]: unknown };
-    const interviews = snap.docs.map((d) => ({ id: d.id, ...d.data() } as InterviewDoc));
+    let interviews = snap.docs.map((d) => ({ id: d.id, ...d.data() } as InterviewDoc));
+
+    // Optional college filter - see vacancy-requests/route.ts's identical comment.
+    if (collegeIdFilter) {
+      interviews = interviews.filter((i) => i.collegeId === collegeIdFilter);
+    }
 
     // Administration sees only PENDING_ADMIN interviews (for approval)
     if (session.role === "ADMINISTRATION") {
@@ -56,7 +64,7 @@ export async function POST(request: Request) {
     if (!session.locationId) return NextResponse.json({ error: "No location context" }, { status: 400 });
 
     const body = (await request.json()) as {
-      vacancyId?: string;
+      vacancyId: string;
       title: string;
       interviewDate: string;
       venue: string;
@@ -69,8 +77,30 @@ export async function POST(request: Request) {
     if (!title || !interviewDate || !venue || !panelMembers?.length || !shortlistedCandidateIds?.length) {
       return NextResponse.json({ error: "title, interviewDate, venue, panelMembers and shortlistedCandidateIds are required" }, { status: 400 });
     }
+    if (!vacancyId) {
+      return NextResponse.json({ error: "vacancyId is required" }, { status: 400 });
+    }
 
     const db = getAdminDb();
+
+    // Which college this interview is for - inherited from its vacancy
+    // (already picked when the Dept Head submitted it) rather than asked
+    // again here. The only UI that creates interviews already requires
+    // picking an approved vacancy before anything else on the form unlocks,
+    // so this is never actually optional in practice.
+    const vacancySnap = await db
+      .collection("locations")
+      .doc(session.locationId)
+      .collection("locationVacancyRequests")
+      .doc(vacancyId)
+      .get();
+    if (!vacancySnap.exists) {
+      return NextResponse.json({ error: "Vacancy not found" }, { status: 400 });
+    }
+    const vacancyData = vacancySnap.data() as { collegeId?: string; collegeName?: string };
+    const collegeId = vacancyData.collegeId ?? "";
+    const collegeName = vacancyData.collegeName ?? "";
+
     const now = new Date();
 
     // Fetch shortlisted candidate names for denormalisation
@@ -93,7 +123,9 @@ export async function POST(request: Request) {
       .collection("locationInterviews")
       .add({
         locationId: session.locationId,
-        vacancyId: vacancyId ?? "",
+        vacancyId,
+        collegeId,
+        collegeName,
         title: title.trim(),
         interviewDate: new Date(interviewDate),
         venue: venue.trim(),

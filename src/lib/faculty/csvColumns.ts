@@ -101,7 +101,7 @@ export const EXPORT_FIELDS: ExportField[] = [
   // Official Email) are appended at the end rather than interleaved.
   scalar("core", "employeeId", "Employee ID", true),
   scalar("core", "legalName", "Full Name (as per SSC)", true),
-  scalar("core", "apaarFacultyId", "APAAR Faculty ID", true),
+  scalar("core", "apaarFacultyId", "APAAR Faculty ID", true), // exactly 12 digits
   scalar("core", "collegeEmail", "College Email", true),
   scalar("core", "designation", "Designation", true),
   scalar("core", "highestQualification", "Highest Qualification", true),
@@ -139,8 +139,7 @@ export const EXPORT_FIELDS: ExportField[] = [
   scalar("personal", "differentlyAbledDetails", "Differently Abled Details", true),
   scalar("personal", "motherTongue", "Mother Tongue", true),
   scalar("personal", "languagesKnown", "Languages Known", true),
-  scalar("personal", "heightFeet", "Height (Feet)", true),
-  scalar("personal", "heightInches", "Height (Inches)", true),
+  scalar("personal", "height", "Height (ft.in)", true),
   scalar("personal", "weightKg", "Weight (Kg)", true),
   scalar("personal", "maritalStatus", "Marital Status", true),
   scalar("personal", "bloodGroup", "Blood Group", true),
@@ -160,8 +159,10 @@ export const EXPORT_FIELDS: ExportField[] = [
   scalar("personal", "emergencyContactRelation", "Emergency Contact Relation", true),
   scalar("personal", "emergencyContactMobileNo", "Emergency Contact Mobile No", true),
   scalar("personal", "ratificationStatus", "Ratification Status", true),
-  scalar("personal", "ratificationProceedingsNumber", "Ratification Proceedings Number", true),
-  scalar("personal", "ratificationDate", "Ratification Date", true),
+  // A faculty member may be ratified more than once across their career, once
+  // per designation held at the time (see RatificationRecord in types/core.ts) -
+  // exported the same way Promotion History below is, one line per entry.
+  group("personal", "ratificationsGroup", "Ratification Records", ["Designation", "Proceedings Number", "Date"]),
 
   // ─── Academic Qualification ───────────────────────────────────────────────
   // Ordered to match the Add Faculty wizard's own Qualification step
@@ -291,6 +292,20 @@ export interface FacultyCsvColumn {
 export function getFacultyImportColumns(designationOptions: string[]): FacultyCsvColumn[] {
   return [
   { key: "employeeId",   label: "Employee ID",   required: true,  sample: "Required; any text; unique", aliases: ["Emp ID", "Employee Code", "Employee No", "Staff ID"] },
+  // Per-row department, matched by the department's short CODE (never its
+  // full name) against whatever departments the importer may add faculty
+  // into - own department(s) + true sub-departments for an HOD, any
+  // department in the college for Principal/VP/Super Admin (see
+  // /api/college/faculty/import route.ts's resolveRowDepartment). Lets one
+  // file cover more than one department at once instead of the whole batch
+  // landing in a single department picked up front. A single-department HOD
+  // may leave this blank to default to their own department.
+  // Always mandatory, even for an HOD who manages only one department -
+  // deliberately no "leave blank to default to your own department"
+  // shortcut, since that let a blank cell on a row that actually belonged to
+  // a different department (e.g. a CSE row in a sheet an HOD is filing under
+  // Basic Science) silently land in the wrong department instead of erroring.
+  { key: "departmentCode", label: "Dept Code", required: true, sample: "Required; this department's short code, e.g. CSE - see the department list on the import page", aliases: ["Dept", "Dept Code", "Department", "Department Code"] },
   { key: "legalName",    label: "Full Name (as per SSC)", required: true, sample: "Required; text", aliases: ["Legal Name (as per SSC)"] },
   // Optional - matches the name on the faculty member's PAN card, for
   // statutory/financial paperwork only. Full Name (as per SSC) above is the
@@ -305,9 +320,9 @@ export function getFacultyImportColumns(designationOptions: string[]): FacultyCs
   // other name-shaped columns (Full Name as per SSC, Name as per Aadhar);
   // leave a header that vague unmatched rather than guess which one it means.
   { key: "nameAsPerPan", label: "Name (as per PAN)", required: false, sample: "Optional; full name exactly as on PAN card", aliases: ["Faculty Name", "Name", "Employee Name"] },
-  { key: "collegeEmail", label: "College Email", required: true,  sample: "Required; must contain @", aliases: ["Email", "Email ID"] },
+  { key: "collegeEmail", label: "College Email", required: true,  sample: "Required; e.g. name@example.com", aliases: ["Email", "Email ID"] },
   { key: "password",     label: "Login Password (min 8 characters)", required: true, sample: "Required; minimum 8 characters", aliases: ["Password"] },
-  { key: "mobileNo",     label: "Mobile No",     required: true, sample: "Required; phone/text", aliases: ["Phone", "Mobile", "Mobile Number", "Phone Number", "Contact Number"] },
+  { key: "mobileNo",     label: "Mobile No",     required: true, sample: "Required; exactly 10 digits, starting with 6-9", aliases: ["Phone", "Mobile", "Mobile Number", "Phone Number", "Contact Number"] },
   { key: "designation",  label: "Designation",   required: true,  sample: designationOptions.length
       ? `Required: ${designationOptions.join(" / ")} - common abbreviations (Prof., Asst. Prof., Assoc. Prof.) are accepted too`
       : "Required - add at least one Designation under Settings > Designations first" },
@@ -325,8 +340,8 @@ export function getFacultyImportColumns(designationOptions: string[]): FacultyCs
   { key: "gender",            label: "Gender",                       required: true, sample: "Required: Male / Female / Other" },
   { key: "dateOfBirth",       label: "Date of Birth (DD-MM-YYYY)",   required: true, sample: "Required; DD-MM-YYYY", aliases: ["DOB"] },
   { key: "nameAsPerAadhar",   label: "Name (as per Aadhar)",         required: false, sample: "Optional; text" },
-  { key: "aadharNo",          label: "Aadhar No",                    required: true, sample: "Required; text" },
-  { key: "panNo",             label: "PAN No",                       required: true, sample: "Required; text" },
+  { key: "aadharNo",          label: "Aadhar No",                    required: true, sample: "Required; exactly 12 digits" },
+  { key: "panNo",             label: "PAN No",                       required: true, sample: "Required; 5 letters + 4 digits + 1 letter, e.g. ABCDE1234F" },
   { key: "ratificationStatus",label: "Ratification Status",          required: true, sample: "Required: Ratified / Not Ratified" },
   ];
 }
@@ -349,7 +364,7 @@ export function getFacultyImportSampleRows(designationOptions: string[]): Record
   const category = (i: number) => Object.values(EMPLOYEE_CATEGORY_LABELS)[i % Object.values(EMPLOYEE_CATEGORY_LABELS).length];
   return [
   {
-    employeeId: "FAC001", legalName: "ANITHA REDDY", nameAsPerPan: "Dr. Anitha Reddy",
+    employeeId: "FAC001", departmentCode: "CSE", legalName: "ANITHA REDDY", nameAsPerPan: "Dr. Anitha Reddy",
     collegeEmail: "anitha.reddy@college.edu", password: "ChangeMe#101", mobileNo: "9876543210",
     designation: designation(0), highestQualification: "Ph.D",
     employeeCategory: category(0),
@@ -360,7 +375,7 @@ export function getFacultyImportSampleRows(designationOptions: string[]): Record
     ratificationStatus: "Ratified",
   },
   {
-    employeeId: "FAC002", legalName: "SURESH KUMAR", nameAsPerPan: "Mr. Suresh Kumar",
+    employeeId: "FAC002", departmentCode: "CSE", legalName: "SURESH KUMAR", nameAsPerPan: "Mr. Suresh Kumar",
     collegeEmail: "suresh.kumar@college.edu", password: "ChangeMe#102", mobileNo: "9876543211",
     designation: designation(1), highestQualification: "M.Tech",
     employeeCategory: category(1),
@@ -371,7 +386,7 @@ export function getFacultyImportSampleRows(designationOptions: string[]): Record
     ratificationStatus: "Ratified",
   },
   {
-    employeeId: "FAC003", legalName: "DIVYA NAIR", nameAsPerPan: "Ms. Divya Nair",
+    employeeId: "FAC003", departmentCode: "ECE", legalName: "DIVYA NAIR", nameAsPerPan: "Ms. Divya Nair",
     collegeEmail: "divya.nair@college.edu", password: "ChangeMe#103", mobileNo: "9876543212",
     designation: designation(2), highestQualification: "M.Tech",
     employeeCategory: category(2),
@@ -382,7 +397,7 @@ export function getFacultyImportSampleRows(designationOptions: string[]): Record
     ratificationStatus: "Not Ratified",
   },
   {
-    employeeId: "FAC004", legalName: "IMRAN SHAIK", nameAsPerPan: "Dr. Imran Shaik",
+    employeeId: "FAC004", departmentCode: "ECE", legalName: "IMRAN SHAIK", nameAsPerPan: "Dr. Imran Shaik",
     collegeEmail: "imran.shaik@college.edu", password: "ChangeMe#104", mobileNo: "9876543213",
     designation: designation(3), highestQualification: "Ph.D",
     employeeCategory: category(3),
@@ -393,7 +408,7 @@ export function getFacultyImportSampleRows(designationOptions: string[]): Record
     ratificationStatus: "Ratified",
   },
   {
-    employeeId: "FAC005", legalName: "GRACE THOMAS", nameAsPerPan: "Mrs. Grace Thomas",
+    employeeId: "FAC005", departmentCode: "CSE", legalName: "GRACE THOMAS", nameAsPerPan: "Mrs. Grace Thomas",
     collegeEmail: "grace.thomas@college.edu", password: "ChangeMe#105", mobileNo: "9876543214",
     designation: designation(4), highestQualification: "M.Sc",
     employeeCategory: category(4),
@@ -414,7 +429,7 @@ export function getFacultyImportHints(designationOptions: string[]): string[] {
     ? `Designation: ${designationOptions.join(" / ")} - added under Settings > Designations. Supporting Staff (Lab Assistant, Programmer, Office Assistant, etc.) is added from the Supporting Staff module instead. Common abbreviations (e.g. Prof., Asst. Prof., Assoc. Prof.) are recognized too, case-insensitively.`
     : "Designation: add at least one under Settings > Designations before importing - a row can only use a title that's been added there.",
   "Dates must be in DD-MM-YYYY format (e.g. 15-06-2020)",
-  "Department is auto-assigned from your HOD profile",
+  "Dept Code: which department this row belongs to, by its short code (e.g. CSE) - see the department list above the upload area for the codes you can use. Different rows can use different codes, so one file can cover more than one department. Always required, even if you only manage one department - a blank cell is rejected rather than guessed.",
   "Login Password is mandatory: it creates the faculty member's login account (as a Panel Member) automatically during import, using their College Email as the login ID - must be at least 8 characters. Use a real, unique password per person - never reuse the sample column's placeholder values.",
   `Employee Category: ${Object.values(EMPLOYEE_CATEGORY_LABELS).join(" / ")} - how the person is engaged (drives salary/budget), separate from Designation.`,
   "Every column above is required except Name (as per PAN) and Name (as per Aadhar) - a row missing a required one, or with an invalid value, is rejected and reported back so it can be corrected and re-imported.",

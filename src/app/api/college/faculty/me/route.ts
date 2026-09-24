@@ -6,6 +6,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
 import { syncTrainingEntryCoConductors } from "@/lib/faculty/syncTrainingEntryCoConductors";
 import { normalizeAcademicProfile } from "@/lib/faculty/academicProfileCompat";
+import { PROMOTION_HISTORY_KEY } from "@/lib/faculty/promotionHistory";
 import { degreeTypeError } from "@/lib/faculty/degreeType";
 import {
   academicProfileFirestoreUpdates, applyAcademicProfileChanges, normalizeAcademicProfileChanges, parseAcademicProfileChanges,
@@ -20,6 +21,7 @@ import { normalizeHighestQualification } from "@/lib/faculty/highestQualificatio
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import type { TrainingEntry } from "@/types";
 
+const PROMOTION_KEYS = [PROMOTION_HISTORY_KEY]; // College Office-owned - see PATCH .../promotion-salary
 const FINANCIAL_ACADEMIC_KEYS = ["monthlySalary", "grossAnnualCTC", "incrementsAwarded", "fundingConsultancyRevenueGeneration"];
 // Researcher IDs go through R&D verification (POST /api/college/research-profile)
 // instead - stripped here so a direct PATCH can't set them unverified.
@@ -46,7 +48,7 @@ export async function GET() {
   try {
     const session = await requireCollegeMember(
       "PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL",
-      "COLLEGE_OFFICE", "COLLEGE_STAFF", "DEAN", "IQAC_COORDINATOR",
+      "COLLEGE_OFFICE", "COLLEGE_STAFF", "ACADEMICS", "IQAC_COORDINATOR",
       "T_AND_P", "R_AND_D", "PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL", "WEBMASTER", "COLLEGE_ACCOUNTS"
     );
 
@@ -176,7 +178,7 @@ export async function PATCH(request: Request) {
       if (!parsed) return NextResponse.json({ error: "Invalid academicProfileChanges" }, { status: 400 });
       const degreeErr = degreeTypeError(parsed.set);
       if (degreeErr) return NextResponse.json({ error: degreeErr }, { status: 400 });
-      academicChanges = withoutAcademicProfileKeys(normalizeAcademicProfileChanges(parsed), [...FINANCIAL_ACADEMIC_KEYS, ...RESEARCH_PROFILE_KEYS]);
+      academicChanges = withoutAcademicProfileKeys(normalizeAcademicProfileChanges(parsed), [...FINANCIAL_ACADEMIC_KEYS, ...RESEARCH_PROFILE_KEYS, ...PROMOTION_KEYS]);
       Object.assign(facultyUpdates, academicProfileFirestoreUpdates(storedProfile, academicChanges, FieldValue.delete()));
     } else if (body.academicProfile !== undefined) {
       const degreeErr = degreeTypeError(body.academicProfile);
@@ -184,6 +186,10 @@ export async function PATCH(request: Request) {
       const ap = { ...normalizeAcademicProfile(body.academicProfile) };
       for (const k of FINANCIAL_ACADEMIC_KEYS) delete ap[k];
       for (const k of RESEARCH_PROFILE_KEYS) delete ap[k];
+      // Whole-profile replace must not carry (or drop) Promotion History: keep whatever is stored.
+      delete ap[PROMOTION_HISTORY_KEY];
+      const storedPromotion = (normalizeAcademicProfile(storedProfile ?? {}) as Record<string, unknown>)[PROMOTION_HISTORY_KEY];
+      if (storedPromotion !== undefined) ap[PROMOTION_HISTORY_KEY] = storedPromotion;
       facultyUpdates.academicProfile = ap;
     }
 

@@ -46,9 +46,12 @@ export async function GET(request: Request) {
     } else if (departmentId) {
       // The HOD's own management view for one department - Principal/VP/
       // SuperAdmin may look up any department; an HOD is restricted to their
-      // own scope (own + sub-departments + managed branches).
+      // own scope (own + sub-departments + managed branches). `departmentId`
+      // is already explicit here, so check against the HOD's FULL authority
+      // (activeOnly: false) rather than whichever department merely happens
+      // to be active in the Working-as switcher - see getHodDepartmentScope.
       if (session.role === "HOD") {
-        const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
+        const scope = await getHodDepartmentScope(db, session.collegeId, session.uid, { activeOnly: false });
         if (!canHodEditDepartmentId(scope, departmentId)) {
           return NextResponse.json({ error: "This department isn't yours" }, { status: 403 });
         }
@@ -113,7 +116,13 @@ export async function POST(request: Request) {
     }
 
     if (session.role === "HOD") {
-      const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
+      // course.departmentId is already explicit, so authorize against the
+      // HOD's FULL scope (every department they actually head), not just
+      // whichever one is currently active in the Working-as switcher -
+      // otherwise assigning an Incharge for a course in the HOD's OTHER
+      // department fails purely because the switcher happens to be parked
+      // elsewhere. See getHodDepartmentScope's activeOnly option.
+      const scope = await getHodDepartmentScope(db, session.collegeId, session.uid, { activeOnly: false });
       if (!canHodEditDepartmentId(scope, course.departmentId)) {
         return NextResponse.json({ error: "This course isn't in your department or one of your sub-departments" }, { status: 403 });
       }
@@ -182,8 +191,10 @@ export async function DELETE(request: Request) {
     if (!snap.exists) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
     if (session.role === "HOD") {
+      // Same activeOnly: false reasoning as POST above - the record's own
+      // departmentId is already explicit.
       const { departmentId } = snap.data() as TimetableIncharge;
-      const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
+      const scope = await getHodDepartmentScope(db, session.collegeId, session.uid, { activeOnly: false });
       if (!canHodEditDepartmentId(scope, departmentId)) {
         return NextResponse.json({ error: "This department isn't yours" }, { status: 403 });
       }

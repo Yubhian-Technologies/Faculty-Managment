@@ -105,7 +105,7 @@ export function TeachingAssignmentsEditor({ courseId, year, backHref }: Teaching
           // Timetable Incharge (PANEL_MEMBER/COLLEGE_STAFF) branch of
           // college/faculty/route.ts already restricts to just their own
           // department regardless.
-          fetch(`/api/college/faculty?department=${encodeURIComponent(deptName)}&status=ACTIVE`)
+          fetch(`/api/college/faculty?department=${encodeURIComponent(deptName)}&availableOnly=true`)
             .then((r) => r.json() as Promise<{ faculty: FacultyMember[] }>)
             .then((d) => setFaculty((d.faculty ?? []).map((f) => ({ ...f, name: facultyDisplayName(f) }))))
             .catch(() => toast({ variant: "destructive", title: "Failed to load faculty" }));

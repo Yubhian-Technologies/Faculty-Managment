@@ -15,7 +15,7 @@ import { mobileNoFromBody } from "@/lib/faculty/mobileNo";
 import { normalizeHighestQualification } from "@/lib/faculty/highestQualification";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import type { Designation, FacultyStatus, EmployeeCategory } from "@/types";
-import { EMPLOYEE_CATEGORY_VALUES, EMPLOYEE_CATEGORY_ERROR_MESSAGE } from "@/types";
+import { EMPLOYEE_CATEGORY_VALUES, EMPLOYEE_CATEGORY_ERROR_MESSAGE, SELECTABLE_FACULTY_STATUS_VALUES, FACULTY_STATUS_ERROR_MESSAGE, isFacultyAvailable } from "@/types";
 import { loadDepartmentIndex, stampDepartmentIds } from "@/lib/departments/stampIds";
 
 export async function GET(request: Request) {
@@ -24,6 +24,15 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const deptFilter = searchParams.get("department");
     const statusFilter = searchParams.get("status");
+    // "Available for work" (ACTIVE or RETAINERSHIP) - used by every real
+    // picker (Teaching Assignments, Sections' Faculty Incharge, Timetable,
+    // etc.) instead of the old status=ACTIVE-only literal, so Retainership
+    // faculty are offered everywhere Active ones are. Applied as a plain JS
+    // filter on the already department/scope-narrowed result below, not a
+    // second Firestore "in" clause - Firestore allows only one "in"/
+    // "array-contains-any" per query, and department filtering below already
+    // uses one (scope.ownDepartmentNames/relatedNames).
+    const availableOnly = searchParams.get("availableOnly") === "true";
     // Opt-in for a plain HOD's own Faculty roster (see hod/faculty/page.tsx) -
     // a parent/managing HOD's sub-departments' faculty were showing up
     // unannounced in what reads as "my department's roster", confusing an
@@ -54,9 +63,24 @@ export async function GET(request: Request) {
     // belong to that department (or a sub-department/managed branch it fully
     // owns).
     if (session.role === "HOD") {
-      const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
+      // A `department` param means a caller already knows exactly which
+      // department it needs (a picker - e.g. hod/timetable's Assign
+      // Timetable Incharge dialog, or TeachingAssignmentsEditor staffing a
+      // subject - both filter/trust the result down to that one department
+      // themselves). Use the HOD's FULL scope there (activeOnly: false), not
+      // just whichever department happens to be active in the Working-as
+      // switcher - otherwise the picker silently comes back empty for a
+      // department the HOD legitimately manages but isn't "working as" right
+      // now. The ambient roster (no `department` param, e.g. hod/faculty)
+      // keeps the Working-as narrowing so switching context actually
+      // isolates that view, as intended.
+      const scope = await getHodDepartmentScope(db, session.collegeId, session.uid, { activeOnly: !deptFilter });
       if (scope.ownDepartmentNames.length > 0) {
         primaryQuery = primaryQuery.where("department", "in", scope.ownDepartmentNames.slice(0, 30));
+      } else {
+      // An HOD with no department on file must see nothing - not the whole
+      // college, which is what leaving the query unfiltered would return.
+        primaryQuery = primaryQuery.where("department", "==", "__none__");
       }
 
       // Sub-departments only (facultyManageableDepartmentNames) - a managed/
@@ -121,7 +145,8 @@ export async function GET(request: Request) {
     // (Firestore only allows one inequality filter per query, already spent on
     // department/status) so the Faculty Register stays teaching-only even for
     // any pre-migration record still sitting in facultyMembers.
-    const teachingOnly = faculty.filter((f) => !LEGACY_TECHNICAL_DESIGNATIONS.includes(f.designation as string));
+    let teachingOnly = faculty.filter((f) => !LEGACY_TECHNICAL_DESIGNATIONS.includes(f.designation as string));
+    if (availableOnly) teachingOnly = teachingOnly.filter((f) => isFacultyAvailable(f.status as string));
 
     teachingOnly.sort((a, b) =>
       facultyDisplayName(a as { legalName?: string }).localeCompare(
@@ -158,6 +183,7 @@ export async function POST(request: Request) {
       joiningDate: string;
       aicteFacultyId?: string;
       department?: string;
+      status?: FacultyStatus;
       academicProfile?: Record<string, unknown>;
       technicalProfile?: Record<string, unknown>;
       profilePhotoUrl?: string;
@@ -181,6 +207,13 @@ export async function POST(request: Request) {
     // Category is set - enforced here, not just in the Add Faculty dropdown.
     if (!EMPLOYEE_CATEGORY_VALUES.includes(employeeCategory)) {
       return NextResponse.json({ error: EMPLOYEE_CATEGORY_ERROR_MESSAGE }, { status: 400 });
+    }
+    // Status is selectable on the Add Faculty wizard (defaults to ACTIVE when
+    // not sent, e.g. any external caller) - INTERVIEW_DONE is deliberately
+    // excluded, that's system-managed only (see SELECTABLE_FACULTY_STATUS_VALUES).
+    const status: FacultyStatus = body.status ?? "ACTIVE";
+    if (!(SELECTABLE_FACULTY_STATUS_VALUES as string[]).includes(status)) {
+      return NextResponse.json({ error: FACULTY_STATUS_ERROR_MESSAGE }, { status: 400 });
     }
     const degreeErr = degreeTypeError(body.academicProfile);
     if (degreeErr) return NextResponse.json({ error: degreeErr }, { status: 400 });
@@ -321,7 +354,7 @@ export async function POST(request: Request) {
       ).total,
       joiningDate: new Date(joiningDate),
       ...(body.aicteFacultyId?.trim() ? { aicteFacultyId: body.aicteFacultyId.trim() } : {}),
-      status: "ACTIVE" as FacultyStatus,
+      status,
       userUid: uid,
       ...(body.academicProfile ? { academicProfile: normalizeAcademicProfile(body.academicProfile) } : {}),
       ...(body.technicalProfile ? { technicalProfile: body.technicalProfile } : {}),

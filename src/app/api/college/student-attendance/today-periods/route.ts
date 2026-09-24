@@ -84,6 +84,7 @@ export async function GET() {
           session: sess,
           sessionStatus: sess?.status ?? null,
           isOpen,
+          labBatch: slot.labBatch ?? null,
         };
       })
     );

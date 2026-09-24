@@ -31,6 +31,9 @@ interface TodayPeriod {
   session: StudentAttendanceSession | null;
   sessionStatus: string | null;
   isOpen: boolean;
+  // Split lab period (see TimetableSlot.labBatch) - roster is only this batch,
+  // not the whole section, mirrors student-attendance/route.ts's own gate.
+  labBatch: string | null;
 }
 
 interface TodayPeriodsResponse {
@@ -316,6 +319,13 @@ export default function MarkAttendancePage() {
           {!isExpandedOpen && (
             <Card className="border-amber-200 bg-amber-50">
               <CardContent className="py-4 text-sm text-amber-900">This period is not open now ({expandedPeriod ? `${formatTime12h(expandedPeriod.startTime)} – ${formatTime12h(expandedPeriod.endTime)}` : ""}). Attendance open only in time — if not posted, contact Dept Office for office correction.</CardContent>
+            </Card>
+          )}
+          {expandedPeriod?.labBatch && (
+            <Card className="border-blue-200 bg-blue-50">
+              <CardContent className="py-3 text-sm text-blue-900">
+                Split lab period ({expandedPeriod.labBatch}) - roster is only this batch, not the whole section.
+              </CardContent>
             </Card>
           )}
           <div className="flex flex-col gap-3 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900 sm:flex-row sm:items-center sm:justify-between">

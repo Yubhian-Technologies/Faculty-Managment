@@ -58,6 +58,12 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [isHalfDay, setIsHalfDay] = useState(false);
+  // Only meaningful when isHalfDay is false: "ONE" shows a single Date input
+  // (To locked equal to From, same trick half-day already uses below) so a
+  // single-day request doesn't make someone fill in the same date twice;
+  // "RANGE" shows the separate From/To pair. Forced to "RANGE" for Summer
+  // Vacation and Extend below since those are inherently a span of days.
+  const [fullDayMode, setFullDayMode] = useState<"ONE" | "RANGE">("ONE");
   const [halfDaySession, setHalfDaySession] = useState<"FN" | "AN">("FN");
   const [reason, setReason] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -67,6 +73,11 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
   const [periods, setPeriods] = useState<PeriodCoverageEntry[]>([]);
   const [isLoadingPeriods, setIsLoadingPeriods] = useState(false);
   const [substituteByPeriod, setSubstituteByPeriod] = useState<Record<string, string>>({});
+  // "" = every department (today's default, own department already sorts
+  // first within that). Narrows every period's own candidate list at once -
+  // the API already returns candidates from every department (busy/on-leave
+  // people already excluded server-side), this just scopes what's shown.
+  const [substituteDeptFilter, setSubstituteDeptFilter] = useState("");
   // Optional handover/point-of-contact - any requester, teaching or not, can
   // name a same-department colleague to handle other responsibilities while
   // they're out. Separate from and in addition to period substitutes above -
@@ -99,13 +110,22 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
     setIsHalfDay(half);
     // Half day is a single day - From and To lock to the same date the
     // moment the mode switches (see handleFromDateChange for the reverse:
-    // keeping them locked as From changes afterwards).
+    // keeping them locked as From changes afterwards). Switching back to
+    // Full day falls back to "One day" (same locking) rather than reopening
+    // whatever To was left at from a prior Half day toggle.
     if (half && fromDate) setToDate(fromDate);
+    else if (!half) setFullDayMode("ONE");
+  }
+
+  function handleFullDayModeChange(mode: "ONE" | "RANGE") {
+    setFullDayMode(mode);
+    // Same lock as half-day: going to a single day snaps To back to From.
+    if (mode === "ONE" && fromDate) setToDate(fromDate);
   }
 
   function handleFromDateChange(value: string) {
     setFromDate(value);
-    if (isHalfDay) setToDate(value);
+    if (isHalfDay || fullDayMode === "ONE") setToDate(value);
   }
 
   useEffect(() => {
@@ -230,6 +250,10 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
   function handleLeaveTypeChange(value: string) {
     setLeaveTypeCode(value);
     if (!HALF_DAY_ELIGIBLE_TYPES.includes(value as LeaveTypeCode)) setIsHalfDay(false);
+    // Summer Vacation defaults From/To to the College Office's full declared
+    // range (see the effect below) - inherently a span, so the single-day
+    // toggle would just fight that default.
+    if (value === "SH") setFullDayMode("RANGE");
   }
 
   // Standard leave types only (never "Other" or "Summer Vacation" - see
@@ -244,6 +268,7 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
     if (!leaveTypeCode || leaveTypeCode === "OTHER" || leaveTypeCode === "SH" || !fromDate || !toDate || toDate < fromDate) {
       setPeriods([]);
       setSubstituteByPeriod({});
+      setSubstituteDeptFilter("");
       return;
     }
     let cancelled = false;
@@ -254,6 +279,7 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
         if (cancelled) return;
         setPeriods(data.periods ?? []);
         setSubstituteByPeriod({});
+        setSubstituteDeptFilter("");
       })
       .catch(() => {
         if (!cancelled) setPeriods([]);
@@ -263,6 +289,33 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
       });
     return () => { cancelled = true; };
   }, [leaveTypeCode, fromDate, toDate]);
+
+  // Every department any period's candidates actually belong to - not a
+  // fetched department list, so "All Departments" never offers a choice that
+  // would just show "None available" everywhere.
+  const substituteDepartments = Array.from(
+    new Set(periods.flatMap((p) => p.candidates.map((c) => c.facultyDepartment).filter((d): d is string => !!d)))
+  ).sort((a, b) => a.localeCompare(b));
+
+  // Narrowing the department filter can hide someone already picked for a
+  // period - clear just that pick rather than leave a Select showing a value
+  // that's no longer one of its rendered options.
+  useEffect(() => {
+    if (!substituteDeptFilter) return;
+    setSubstituteByPeriod((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const p of periods) {
+        const key = `${p.date}|${p.timetableSlotId}`;
+        const pickedId = next[key];
+        if (!pickedId) continue;
+        const stillVisible = p.candidates.some((c) => c.facultyId === pickedId && c.facultyDepartment === substituteDeptFilter);
+        if (!stillVisible) { delete next[key]; changed = true; }
+      }
+      return changed ? next : prev;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [substituteDeptFilter]);
 
   // Re-fetched whenever the dates change: the list is role-specific (see
   // lib/leave/handoverPool.ts) and, once a range is picked, leaves out anyone
@@ -298,6 +351,10 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
       .then((data) => {
         if (!data.request) { toast({ variant: "destructive", title: "Couldn't load the leave you're extending" }); return; }
         setExtendSource(data.request);
+        // Extend picks its own From (day after the original ends) and, for
+        // SH, its own To below - both independent of the one-day/range
+        // toggle, so show the pair rather than have the toggle collapse them.
+        setFullDayMode("RANGE");
         setLeaveTypeCode(data.request.isOtherRequest && !data.request.leaveTypeCode ? "OTHER" : data.request.leaveTypeCode ?? "OTHER");
         // Continues the day right after the original's last day - never
         // earlier than today, same "no backdating" rule as any other request.
@@ -452,11 +509,25 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
                 <span className="text-xs text-muted-foreground">Half day not available for this leave type</span>
               )}
             </div>
+            {/* Full day's own sub-choice: a single date, or a From/To span.
+                Summer Vacation and Extend force RANGE above since both pick
+                their own multi-day default (see handleLeaveTypeChange /
+                the extend-fetch effect). */}
+            {!isHalfDay && (
+              <SegmentedTabs
+                value={fullDayMode}
+                onChange={(v) => handleFullDayModeChange(v as "ONE" | "RANGE")}
+                options={[
+                  { key: "ONE", label: "One day" },
+                  { key: "RANGE", label: "More than one day" },
+                ]}
+              />
+            )}
           </div>
 
-          <div className={isHalfDay ? "grid grid-cols-1 gap-3" : "grid grid-cols-2 gap-3"}>
+          <div className={isHalfDay || fullDayMode === "ONE" ? "grid grid-cols-1 gap-3" : "grid grid-cols-2 gap-3"}>
             <div className="space-y-2">
-              <Label>From</Label>
+              <Label>{isHalfDay || fullDayMode === "ONE" ? "Date" : "From"}</Label>
               <Input
                 type="date"
                 value={fromDate}
@@ -465,11 +536,12 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
                 onChange={(e) => handleFromDateChange(e.target.value)}
               />
             </div>
-            {/* Half day is always that same single day - To stays locked equal
-                to From under the hood (see handleFromDateChange/
-                handleDurationModeChange) and is still sent as such on submit,
+            {/* Half day and Full day's "One day" mode are both that same
+                single date - To stays locked equal to From under the hood
+                (see handleFromDateChange/handleDurationModeChange/
+                handleFullDayModeChange) and is still sent as such on submit,
                 just not shown here since there's nothing to actually pick. */}
-            {!isHalfDay && (
+            {!isHalfDay && fullDayMode === "RANGE" && (
               <div className="space-y-2">
                 <Label>To</Label>
                 <Input
@@ -521,9 +593,24 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
               <p className="text-xs text-muted-foreground">
                 Pick a substitute for each period you&rsquo;d otherwise teach on this leave. Anyone free that period is listed, across departments - your own department comes first.
               </p>
+              {substituteDepartments.length > 1 && (
+                <div className="flex items-center gap-2">
+                  <Label className="text-xs text-muted-foreground shrink-0">Department</Label>
+                  <Select value={substituteDeptFilter || "ALL"} onValueChange={(v) => setSubstituteDeptFilter(v === "ALL" ? "" : v)}>
+                    <SelectTrigger className="w-56"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ALL">All Departments</SelectItem>
+                      {substituteDepartments.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               <div className="space-y-2 rounded-lg border p-3">
                 {periods.map((p) => {
                   const key = `${p.date}|${p.timetableSlotId}`;
+                  const candidates = substituteDeptFilter
+                    ? p.candidates.filter((c) => c.facultyDepartment === substituteDeptFilter)
+                    : p.candidates;
                   return (
                     <div key={key} className="flex items-center justify-between gap-3 flex-wrap">
                       <div className="text-sm min-w-0">
@@ -536,10 +623,10 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
                         onValueChange={(v) => setSubstituteByPeriod((prev) => ({ ...prev, [key]: v }))}
                       >
                         <SelectTrigger className="w-48">
-                          <SelectValue placeholder={p.candidates.length === 0 ? "None available" : "Select faculty"} />
+                          <SelectValue placeholder={candidates.length === 0 ? "None available" : "Select faculty"} />
                         </SelectTrigger>
                         <SelectContent>
-                          {p.candidates.map((c) => (
+                          {candidates.map((c) => (
                             <SelectItem key={c.facultyId} value={c.facultyId}>
                           {c.facultyName}
                           {c.facultyDepartment && (

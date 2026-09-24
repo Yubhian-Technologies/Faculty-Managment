@@ -19,6 +19,7 @@ const STATUS_VARIANTS: Record<FacultyStatus, "default" | "secondary" | "outline"
   ON_LEAVE: "outline",
   RESIGNED: "secondary",
   RETIRED: "secondary",
+  RETAINERSHIP: "default",
 };
 
 function Fact({ label, value }: { label: string; value: React.ReactNode }) {
@@ -79,12 +80,24 @@ export function SupportingStaffProfileHub({ staff, basePath, backHref, editHref 
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
             <Fact label="Employee ID" value={staff.employeeId} />
             <Fact label="College Email" value={staff.collegeEmail} />
-            <Fact label="Email" value={staff.email} />
-            <Fact label="Phone" value={staff.phone} />
+            <Fact label="Personal Email" value={staff.email} />
+            <Fact label="Mobile No" value={staff.mobileNo} />
             <Fact label="Department" value={staff.department || "Centrally managed"} />
             <Fact label="Designation" value={designationLabel} />
             <Fact label="Date of Joining" value={staff.joiningDate ? formatDate(staff.joiningDate) : undefined} />
-            <Fact label="Total Years of Experience" value={staff.experienceYears} />
+            <Fact label="Total Years of Experience" value={staff.totalYearsOfExperience} />
+            {(staff.additionalPhoneNumbers ?? []).length > 0 && (
+              <Fact
+                label="Additional Mobile Numbers"
+                value={
+                  <span className="flex flex-col gap-0.5">
+                    {staff.additionalPhoneNumbers?.map((p, i) => (
+                      <span key={i}>{p.number}{p.label ? ` (${p.label})` : ""}</span>
+                    ))}
+                  </span>
+                }
+              />
+            )}
           </div>
         </CardContent>
       </Card>

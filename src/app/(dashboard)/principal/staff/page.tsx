@@ -11,7 +11,7 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { CardSkeleton } from "@/components/shared/SkeletonLoader";
 import { toast } from "@/hooks/useToast";
 import { supportingStaffDisplayName } from "@/lib/supportingStaff/supportingStaffDisplayName";
-import { NON_TECHNICAL_STAFF_DESIGNATION_LABELS, ROLE_LABELS, STAFF_CATEGORY_LABELS } from "@/types";
+import { NON_TECHNICAL_STAFF_DESIGNATION_LABELS, ROLE_LABELS, STAFF_CATEGORY_LABELS, FACULTY_STATUS_LABELS } from "@/types";
 import type { Department, UserRole, SupportingStaffMember, SupportingStaffCategory, SupportingStaffDesignation } from "@/types";
 
 type StaffUser = {
@@ -88,7 +88,7 @@ export default function PrincipalStaffPage() {
   }
 
   // Group by role for a scannable layout — order roughly follows seniority/function.
-  const ROLE_ORDER: UserRole[] = ["VICE_PRINCIPAL", "COLLEGE_ADMIN", "HOD", "DEPARTMENT_OFFICE", "COLLEGE_OFFICE", "COLLEGE_ACCOUNTS", "COLLEGE_STAFF", "DEAN", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D", "WEBMASTER", "PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL"];
+  const ROLE_ORDER: UserRole[] = ["VICE_PRINCIPAL", "COLLEGE_ADMIN", "DIRECTOR", "HOD", "DEPARTMENT_OFFICE", "COLLEGE_OFFICE", "COLLEGE_ACCOUNTS", "COLLEGE_STAFF", "ACADEMICS", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D", "WEBMASTER", "PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL"];
   // Must match the roles PRINCIPAL/VICE_PRINCIPAL can edit in /api/college/users/[uid] (loadTargetInScope).
   const EDITABLE_ROLES: UserRole[] = ["HOD", "COLLEGE_OFFICE", "VICE_PRINCIPAL", "PANEL_MEMBER"];
   const grouped = ROLE_ORDER
@@ -240,7 +240,7 @@ export default function PrincipalStaffPage() {
                             </td>
                             <td className="px-4 py-2.5 text-muted-foreground">{m.department || "Centrally managed"}</td>
                             <td className="px-4 py-2.5">
-                              <Badge variant={m.status === "ACTIVE" ? "default" : "secondary"} className="text-xs">{m.status}</Badge>
+                              <Badge variant={m.status === "ACTIVE" ? "default" : "secondary"} className="text-xs">{FACULTY_STATUS_LABELS[m.status] ?? m.status}</Badge>
                             </td>
                             {g.category === "NON_TECHNICAL" && (
                               <td className="px-4 py-2.5 text-right">

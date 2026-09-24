@@ -170,8 +170,9 @@ export async function POST(request: Request) {
 
     const ref = batchRef;
 
-    // Notify Principal (and College Admin, who mirrors Principal's authority)
-    const principalsSnap = await findUsersSnapshot(db, session.collegeId, ["PRINCIPAL", "COLLEGE_ADMIN"]);
+    // Notify Principal and Vice Principal (both can decide the proposal) and
+    // College Admin, who mirrors Principal's authority
+    const principalsSnap = await findUsersSnapshot(db, session.collegeId, ["PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_ADMIN"]);
 
     const notifBatch = db.batch();
     for (const p of principalsSnap.docs) {

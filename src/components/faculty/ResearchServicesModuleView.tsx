@@ -6,6 +6,7 @@ import { Section, SubLabel, Field, TextInput, NumInput, DateInput, RepeatingGrou
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DocumentUploadField } from "@/components/shared/DocumentUploadField";
@@ -55,11 +56,11 @@ function ResearchServiceRow({
     <div className="rounded-md border bg-muted/20 shadow-sm p-2 space-y-2">
       {isOwnProfile && record.status !== "APPROVED" && (
         <div className="flex items-center gap-2">
-          {record.status === "PENDING" ? (
-            <Badge variant="pending" className="text-xs">Pending Verification</Badge>
+          {record.status === "PENDING" || record.status === "COORDINATOR_REVIEW" ? (
+            <Badge variant="pending" className="text-xs">{record.status === "COORDINATOR_REVIEW" ? "With R&D Coordinator" : "Pending Verification"}</Badge>
           ) : (
             <>
-              <Badge variant="rejected" className="text-xs">Rejected</Badge>
+              <Badge variant="rejected" className="text-xs">{record.status === "SENT_BACK" ? "Sent Back" : "Rejected"}</Badge>
               {onEdit && (
                 <button type="button" onClick={() => onEdit(record)} className="text-xs font-medium text-primary hover:underline inline-flex items-center gap-1">
                   <Pencil className="h-3 w-3" />Edit &amp; Resubmit
@@ -71,6 +72,9 @@ function ResearchServiceRow({
       )}
       {record.status === "REJECTED" && record.rejectionReason && (
         <p className="text-xs text-destructive">Reason: {record.rejectionReason}</p>
+      )}
+      {record.status === "SENT_BACK" && record.sentBackReason && (
+        <p className="text-xs text-destructive">Sent back: {record.sentBackReason}</p>
       )}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         <Field label="Type" value={SERVICE_TYPE_LABELS[record.serviceType]} />
@@ -100,7 +104,8 @@ function ResearchServiceRow({
           { url: record.brochureUrl, label: "Brochure" },
           { url: record.scheduleUrl, label: "Schedule" },
           { url: record.completionReportUrl, label: "Completion Report" },
-          { url: record.conferenceProceedingsUrl, label: "Conference Proceedings" },
+          { url: record.conferenceProceedingsUrl, label: "Conference Proceedings (PDF)" },
+          { url: /^https?:\/\//i.test(record.conferenceProceedingsLink ?? "") ? record.conferenceProceedingsLink : undefined, label: "Conference Proceedings/DOI Link" },
           { url: record.reviewerCertificateUrl, label: "Review Certificate" },
           { url: record.editorAppointmentLetterUrl, label: "Appointment Letter" },
         ].filter((d) => d.url).map((d) => (
@@ -142,6 +147,7 @@ interface RecordFormState {
   papersPublishedCount: string;
   papersIndexedCount: string;
   conferenceProceedingsUrl: string;
+  conferenceProceedingsLink: string;
   participantsRegisteredInternal: string;
   participantsRegisteredExternal: string;
   papersAttendedInternal: string;
@@ -177,7 +183,7 @@ function initialFormState(editing: ResearchServiceRequest | null): RecordFormSta
       academicYear: "", startDate: "", endDate: "", amountSanctioned: "", amountReceived: "", expenditureMade: "",
       sanctionedLetterUrl: "", brochureUrl: "", scheduleUrl: "", resourcePersonsCount: "", resourcePersons: [],
       completionReportUrl: "", papersReceived: "", papersAccepted: "", papersPublishedCount: "",
-      papersIndexedCount: "", conferenceProceedingsUrl: "", participantsRegisteredInternal: "",
+      papersIndexedCount: "", conferenceProceedingsUrl: "", conferenceProceedingsLink: "", participantsRegisteredInternal: "",
       participantsRegisteredExternal: "", papersAttendedInternal: "", papersAttendedExternal: "",
       reviewerType: "", reviewerPublicationName: "", reviewerPublisherName: "", reviewerPaperTitle: "",
       reviewerReviewDate: "", reviewerCertificateUrl: "", editorialRole: "", editorPublicationType: "",
@@ -199,6 +205,7 @@ function initialFormState(editing: ResearchServiceRequest | null): RecordFormSta
     completionReportUrl: s(editing.completionReportUrl), papersReceived: n(editing.papersReceived),
     papersAccepted: n(editing.papersAccepted), papersPublishedCount: n(editing.papersPublishedCount),
     papersIndexedCount: n(editing.papersIndexedCount), conferenceProceedingsUrl: s(editing.conferenceProceedingsUrl),
+    conferenceProceedingsLink: s(editing.conferenceProceedingsLink),
     participantsRegisteredInternal: n(editing.participantsRegisteredInternal),
     participantsRegisteredExternal: n(editing.participantsRegisteredExternal),
     papersAttendedInternal: n(editing.papersAttendedInternal), papersAttendedExternal: n(editing.papersAttendedExternal),
@@ -277,6 +284,7 @@ function RecordFormFields({
         papersPublishedCount: toNumberOrUndefined(form.papersPublishedCount),
         papersIndexedCount: toNumberOrUndefined(form.papersIndexedCount),
         conferenceProceedingsUrl: form.conferenceProceedingsUrl || undefined,
+        conferenceProceedingsLink: form.conferenceProceedingsLink.trim() || undefined,
         participantsRegisteredInternal: toNumberOrUndefined(form.participantsRegisteredInternal),
         participantsRegisteredExternal: toNumberOrUndefined(form.participantsRegisteredExternal),
         papersAttendedInternal: toNumberOrUndefined(form.papersAttendedInternal),
@@ -397,7 +405,7 @@ function RecordFormFields({
                     </SelectContent>
                   </Select>
                 </div>
-                <TextInput label={`Title of the ${isConference ? "Conference" : "Workshop"}`} value={form.title} onChange={(v) => set("title", v)} />
+                <TextInput label={isConference ? "Title of the Conference" : "Title of Research Workshop"} value={form.title} onChange={(v) => set("title", v)} />
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <NumInput label="No. of Days" value={toNumberOrUndefined(form.noOfDays)} onChange={(v) => set("noOfDays", String(v))} />
                   <TextInput label="A.Y." value={form.academicYear} onChange={(v) => set("academicYear", v)} placeholder="e.g. 2024-25" />
@@ -474,7 +482,7 @@ function RecordFormFields({
             </div>
 
             <div className="space-y-5">
-              <NumInput label="No. of Resource Person/Keynote Speakers/Session Chairs" value={toNumberOrUndefined(form.resourcePersonsCount)} onChange={(v) => set("resourcePersonsCount", String(v))} />
+              <NumInput label="No. of Resource Persons" value={toNumberOrUndefined(form.resourcePersonsCount)} onChange={(v) => set("resourcePersonsCount", String(v))} />
               <RepeatingGroup
                 title="Resource Persons"
                 items={form.resourcePersons}
@@ -485,7 +493,7 @@ function RecordFormFields({
                   <>
                     <TextInput label="Name of the Resource Person" value={item.name} onChange={(v) => update({ name: v })} />
                     <TextInput label="Affiliation of Resource Person" value={item.affiliation} onChange={(v) => update({ affiliation: v })} />
-                    <TextInput label="Phone Number of Resource Person" value={item.phone} onChange={(v) => update({ phone: v })} />
+                    <TextInput label="Phone Number of Resource Person" type="tel" value={item.phone} onChange={(v) => update({ phone: v })} />
                   </>
                 )}
               />
@@ -523,14 +531,25 @@ function RecordFormFields({
                   onRemoved={() => set("completionReportUrl", "")}
                 />
                 {isConference && (
-                  <DocumentUploadField
-                    label="Conference Proceedings"
-                    value={form.conferenceProceedingsUrl}
-                    uploadEndpoint="/api/upload/research-service-doc"
-                    extraFields={{ kind: "conference-proceedings" }}
-                    onUploaded={(url) => set("conferenceProceedingsUrl", url)}
-                    onRemoved={() => set("conferenceProceedingsUrl", "")}
-                  />
+                  <div className="space-y-3 rounded-lg border p-3">
+                    <p className="text-xs font-medium text-muted-foreground">Conference Proceedings/DOI Link</p>
+                    <DocumentUploadField
+                      label="Conference Proceedings (PDF)"
+                      value={form.conferenceProceedingsUrl}
+                      uploadEndpoint="/api/upload/research-service-doc"
+                      extraFields={{ kind: "conference-proceedings" }}
+                      onUploaded={(url) => set("conferenceProceedingsUrl", url)}
+                      onRemoved={() => set("conferenceProceedingsUrl", "")}
+                    />
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">DOI Link</Label>
+                      <Input
+                        value={form.conferenceProceedingsLink} inputMode="url"
+                        onChange={(e) => set("conferenceProceedingsLink", e.target.value)}
+                        placeholder="https://doi.org/..."
+                      />
+                    </div>
+                  </div>
                 )}
               </div>
             </div>

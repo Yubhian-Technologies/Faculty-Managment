@@ -1,4 +1,5 @@
 import type { DepartmentCourseScope } from "@/types";
+import { narrowToActiveHodDepartment } from "@/lib/roles/activeHodDepartment";
 import { resolveDepartmentCourseScope } from "@/lib/college/academicStructure";
 import { canHodEditDepartmentYear, type DepartmentYearRow } from "@/lib/departments/managedBranches";
 
@@ -171,20 +172,39 @@ const emptyScope: HodDepartmentScope = {
 export async function getHodDepartmentScope(
   db: FirebaseFirestore.Firestore,
   collegeId: string,
-  uid: string
+  uid: string,
+  // `activeOnly: false` skips the Working-as narrowing below, returning every
+  // department this HOD actually heads. Use it wherever the department is
+  // already explicit and the question is authorization ("do I have any
+  // authority here at all"), not "what should an ambient/ownerless listing
+  // show right now" - e.g. assigning a Timetable Incharge for one specific
+  // course-year. Narrowing that check to whichever department merely happens
+  // to be active in the switcher would reject an HOD acting on their OTHER,
+  // perfectly legitimate department. Defaults to true so every existing
+  // ambient-listing caller (Faculty/Sections/Students rosters, etc.) keeps
+  // today's ("Working as" scoped) behavior unchanged.
+  options: { activeOnly?: boolean } = {}
 ): Promise<HodDepartmentScope> {
+  const { activeOnly = true } = options;
   const userSnap = await db.collection("colleges").doc(collegeId).collection("users").doc(uid).get();
   const userData = userSnap.data() as { department?: string; departments?: string[] } | undefined;
   // `departments` is the source of truth once present; a doc that predates it
   // (or was only ever touched by the old single-field write path) falls back
   // to its one `department` string.
-  const ownDepartmentNames = Array.from(
+  const allOwnDepartmentNames = Array.from(
     new Set(
       (userData?.departments && userData.departments.length > 0 ? userData.departments : [userData?.department ?? ""])
         .map((n) => n.trim())
         .filter(Boolean)
     )
   ).slice(0, 30);
+  // An HOD of several departments works in one at a time (the "Working as"
+  // switcher); narrow to it so an ambient/ownerless listing only shows that
+  // department - unless the caller already knows exactly which department it
+  // needs (activeOnly: false above).
+  const ownDepartmentNames = activeOnly
+    ? await narrowToActiveHodDepartment(uid, allOwnDepartmentNames)
+    : allOwnDepartmentNames;
 
   if (ownDepartmentNames.length === 0) {
     return emptyScope;

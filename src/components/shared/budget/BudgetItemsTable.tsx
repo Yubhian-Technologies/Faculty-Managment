@@ -91,7 +91,7 @@ export function BudgetItemsTable({ items, onChange, readOnly = false, category, 
   useEffect(() => {
     if (!isStaffSalaries || readOnly) return;
     let cancelled = false;
-    const params = new URLSearchParams({ status: "ACTIVE" });
+    const params = new URLSearchParams({ availableOnly: "true" });
     if (department) params.set("department", department);
     fetch(`/api/college/faculty?${params.toString()}`)
       .then((r) => r.json() as Promise<{ faculty: FacultyMember[] }>)

@@ -1,3 +1,4 @@
+import { departmentOfContext, hodContextKey } from "@/lib/roles/activeHodDepartment";
 import type { UserRole } from "@/types";
 import { ROLE_LABELS } from "@/types";
 
@@ -78,7 +79,6 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Location Staff", href: "/administration/users", iconName: "Users", roles: ["ADMINISTRATION"], section: "Management" },
   { label: "Departments", href: "/administration/departments", iconName: "Settings2", roles: ["ADMINISTRATION"] },
   { label: "Colleges", href: "/administration/colleges", iconName: "Building2", roles: ["ADMINISTRATION"] },
-  { label: "Role Assignments", href: "/administration/role-assignments", iconName: "UserCog", roles: ["ADMINISTRATION"] },
   { label: "Hiring Requests", href: "/administration/vacancies", iconName: "ClipboardList", roles: ["ADMINISTRATION"], section: "Hiring" },
   { label: "Interview Plans", href: "/administration/interviews", iconName: "CalendarCheck", roles: ["ADMINISTRATION"] },
   { label: "Offer Letters", href: "/administration/offers", iconName: "FileText", roles: ["ADMINISTRATION"] },
@@ -123,6 +123,9 @@ export const NAV_ITEMS: NavItem[] = [
   // Exam Cell
   { label: "Dashboard", href: "/exam-cell", iconName: "LayoutDashboard", roles: ["EXAM_CELL"] },
   { label: "Exam Configuration", href: "/exam-cell/configure", iconName: "ClipboardList", roles: ["EXAM_CELL"] },
+  { label: "Exam Cell Guidelines", href: "/exam-cell/guidelines", iconName: "BookOpen", roles: ["EXAM_CELL"] },
+  { label: "Circulars", href: "/exam-cell/circulars", iconName: "ScrollText", roles: ["EXAM_CELL"] },
+  { label: "Attendance Reports", href: "/exam-cell/attendance-report", iconName: "BarChart3", roles: ["EXAM_CELL"] },
   { label: "Staff Attendance", href: "/exam-cell/staff-attendance", iconName: "ClipboardCheck", roles: ["EXAM_CELL"] },
   { label: "Import Attendance", href: "/exam-cell/attendance-import", iconName: "Upload", roles: ["EXAM_CELL"] },
   { label: "My Profile", href: "/exam-cell/profile", iconName: "UserCircle", roles: ["EXAM_CELL"], section: "Personal" },
@@ -152,9 +155,16 @@ export const NAV_ITEMS: NavItem[] = [
   // are folded into the Hiring Requests pipeline's own status badges/actions
   // (see PrincipalPipelineBoard.tsx) since they're just later stages of the
   // same hiring request, not independent destinations.
-  { label: "Hiring Requests", href: "/principal/vacancies", iconName: "ClipboardList", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Hiring Pipeline" },
+  // Vacancy/interview/candidate decisions live here end-to-end - College Admin
+  // enters data and settings but never decides, so the whole board is Principal/
+  // Vice Principal only (see NavItem.hideForRealRoles and the matching API
+  // guards in vacancy-requests, hiring-batches, and candidate-applications).
+  { label: "Hiring Requests", href: "/principal/vacancies", iconName: "ClipboardList", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Hiring Pipeline", hideForRealRoles: ["COLLEGE_ADMIN"] },
   { label: "Courses", href: "/principal/courses", iconName: "GraduationCap", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Academic Management" },
   { label: "Departments", href: "/principal/departments", iconName: "BookOpen", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
+  // College-wide, read-only view of every section. A College Admin reaches it
+  // too - that role normalizes to PRINCIPAL before any nav role is read.
+  { label: "Sections", href: "/principal/sections", iconName: "BookMarked", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Students", href: "/principal/students", iconName: "GraduationCap", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Faculty", href: "/principal/faculty", iconName: "UsersRound", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Student Promotion", href: "/principal/promotions", iconName: "GraduationCap", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
@@ -162,9 +172,11 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Timetable", href: "/principal/timetable", iconName: "CalendarDays", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Internal Marks", href: "/principal/internal-marks", iconName: "ClipboardCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Staff", href: "/principal/staff", iconName: "UsersRound", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Staff & HR Management" },
-  { label: "Leave Approvals", href: "/principal/leave-approvals", iconName: "CalendarClock", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
+  // Deciding a leave request is Principal/VP authority, not College Admin's -
+  // see the matching guard in api/leave/applications/[id]/route.ts.
+  { label: "Leave Approvals", href: "/principal/leave-approvals", iconName: "CalendarClock", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], hideForRealRoles: ["COLLEGE_ADMIN"] },
   { label: "Leave History", href: "/principal/leave-history", iconName: "History", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
-  // Arrange cover for someone below them (Vice Principal / Dean / HODs) who has
+  // Arrange cover for someone below them (Vice Principal / Academics / HODs) who has
   // other work on a date or range - see StaffAdjustmentsPage.
   { label: "Adjustments", href: "/principal/adjustments", iconName: "UserCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   // Was 7 separate sidebar items (Student Attendance History, Attendance
@@ -182,19 +194,30 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Attendance", href: "/principal/attendance-report", iconName: "ClipboardCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Attendance Reports", href: "/principal/attendance-reports", iconName: "CalendarRange", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Circulars", href: "/principal/circulars", iconName: "Megaphone", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
-  { label: "Budget", href: "/principal/budget", iconName: "PiggyBank", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Payroll & Budget" },
+  // Budget-cycle and budget-request approval is Principal/VP decision
+  // authority, not College Admin's - see the matching guards in
+  // api/college/budget-cycles/[id] and api/college/budget-requests/[id].
+  { label: "Budget", href: "/principal/budget", iconName: "PiggyBank", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Payroll & Budget", hideForRealRoles: ["COLLEGE_ADMIN"] },
   { label: "Budget Report", href: "/principal/budget/report", iconName: "FileText", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
-  { label: "Purchase Clearance", href: "/principal/purchase-clearance", iconName: "Receipt", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
+  // Only ever shows the Principal/VP's OWN emergency purchase requests - not
+  // something College Admin should be raising on the college's behalf either.
+  { label: "Purchase Clearance", href: "/principal/purchase-clearance", iconName: "Receipt", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], hideForRealRoles: ["COLLEGE_ADMIN"] },
   { label: "Budget History", href: "/principal/indents", iconName: "ClipboardList", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
-  { label: "My Profile", href: "/principal/profile", iconName: "UserCircle", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Personal" },
-  { label: "My Attendance", href: "/principal/attendance", iconName: "ClipboardCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
-  { label: "My Leave", href: "/principal/leave", iconName: "CalendarClock", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
+  // College Admin is a role-login, not one continuous employee (see
+  // administration/college-people): no personal HR profile, attendance, or
+  // leave to track, unlike every other seat here (a real Principal/VP is
+  // always an actual appointed person). Its Name/Phone/password live in
+  // CollegeAdminAccountMenu off the sidebar's account row instead. See
+  // NavItem.hideForRealRoles.
+  { label: "My Profile", href: "/principal/profile", iconName: "UserCircle", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Personal", hideForRealRoles: ["COLLEGE_ADMIN"] },
+  { label: "My Attendance", href: "/principal/attendance", iconName: "ClipboardCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], hideForRealRoles: ["COLLEGE_ADMIN"] },
+  { label: "My Leave", href: "/principal/leave", iconName: "CalendarClock", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], hideForRealRoles: ["COLLEGE_ADMIN"] },
   // The Principal is never named as anyone's substitute/handover, so only the
   // Vice Principal has requests to accept or decline here.
   { label: "Adjustment Requests", href: "/leave/adjustments", iconName: "UserCheck", roles: ["VICE_PRINCIPAL"] },
   { label: "Settings", href: "/principal/settings", iconName: "Settings2", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Audit Logs", href: "/principal/audit-logs", iconName: "History", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Administration" },
-  // Appoint people to seats (Principal, each HOD, Vice Principal, Dean, ...) -
+  // Appoint people to seats (Principal, each HOD, Vice Principal, Academics, ...) -
   // see types/roleSeats.ts.
   { label: "Role Assignments", href: "/principal/role-assignments", iconName: "UserCog", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Reset Member Password", href: "/principal/reset-password", iconName: "KeyRound", roles: ["PRINCIPAL"], showOnlyForRealRoles: ["COLLEGE_ADMIN"] },
@@ -218,6 +241,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Teaching Assignments", href: "/hod/teaching-assignments", iconName: "BookOpen", roles: ["HOD"] },
   { label: "Assignment Requests", href: "/hod/assignment-requests", iconName: "Send", roles: ["HOD"] },
   { label: "Internal Exam", href: "/hod/internal-exam", iconName: "ClipboardCheck", roles: ["HOD"] },
+  { label: "Mid Paper Setter", href: "/hod/mid-paper-setter", iconName: "UserCog", roles: ["HOD"] },
   // Sits directly below Teaching Assignments: subjects are assigned there first,
   // then scheduled here.
   { label: "Timetable", href: "/hod/timetable", iconName: "CalendarDays", roles: ["HOD"] },
@@ -273,10 +297,18 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Holidays", href: "/college-office/holidays", iconName: "CalendarDays", roles: ["COLLEGE_OFFICE"] },
   { label: "Staff Attendance", href: "/college-office/staff-attendance", iconName: "ClipboardCheck", roles: ["COLLEGE_OFFICE"] },
   { label: "Import Attendance", href: "/college-office/attendance-import", iconName: "Upload", roles: ["COLLEGE_OFFICE"] },
-  { label: "My Profile", href: "/college-office/profile", iconName: "UserCircle", roles: ["COLLEGE_OFFICE"], section: "Personal" },
-  { label: "My Leave", href: "/college-office/leave", iconName: "CalendarClock", roles: ["COLLEGE_OFFICE"] },
-  { label: "Adjustment Requests", href: "/leave/adjustments", iconName: "UserCheck", roles: ["COLLEGE_OFFICE"] },
-  { label: "My Attendance", href: "/college-office/attendance", iconName: "ClipboardCheck", roles: ["COLLEGE_OFFICE"], section: "My Work" },
+  // College Admin's login has COLLEGE_OFFICE as its primary role (the seat is
+  // layered on top - see api/administration/college-people), so it inherits
+  // this whole section too, including these personal items - same reasoning
+  // as the Principal-side My Profile/Leave/Attendance. See NavItem.hideForRealRoles.
+  { label: "My Profile", href: "/college-office/profile", iconName: "UserCircle", roles: ["COLLEGE_OFFICE"], section: "Personal", hideForRealRoles: ["COLLEGE_ADMIN"] },
+  { label: "My Leave", href: "/college-office/leave", iconName: "CalendarClock", roles: ["COLLEGE_OFFICE"], hideForRealRoles: ["COLLEGE_ADMIN"] },
+  // Same reasoning as the Principal-side omission of this item ("The
+  // Principal is never named as anyone's substitute/handover" - see the
+  // comment near PRINCIPAL's own nav block): College Admin normalizes to
+  // Principal, so it isn't named as anyone's substitute either.
+  { label: "Adjustment Requests", href: "/leave/adjustments", iconName: "UserCheck", roles: ["COLLEGE_OFFICE"], hideForRealRoles: ["COLLEGE_ADMIN"] },
+  { label: "My Attendance", href: "/college-office/attendance", iconName: "ClipboardCheck", roles: ["COLLEGE_OFFICE"], section: "My Work", hideForRealRoles: ["COLLEGE_ADMIN"] },
 
   // College Staff (generic fallback for titles that don't warrant their own role)
   { label: "Dashboard", href: "/college-staff", iconName: "LayoutDashboard", roles: ["COLLEGE_STAFF"] },
@@ -292,12 +324,12 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Adjustment Requests", href: "/leave/adjustments", iconName: "UserCheck", roles: ["COLLEGE_STAFF"] },
   { label: "My Attendance", href: "/college-staff/attendance", iconName: "ClipboardCheck", roles: ["COLLEGE_STAFF"], section: "My Work" },
 
-  // Dean
-  { label: "Dashboard", href: "/dean", iconName: "LayoutDashboard", roles: ["DEAN"] },
-  { label: "Subjects", href: "/dean/subjects", iconName: "Library", roles: ["DEAN"], section: "Academics" },
-  { label: "My Profile", href: "/dean/profile", iconName: "UserCircle", roles: ["DEAN"], section: "Personal" },
-  { label: "My Leave", href: "/dean/leave", iconName: "CalendarClock", roles: ["DEAN"] },
-  { label: "Adjustment Requests", href: "/leave/adjustments", iconName: "UserCheck", roles: ["DEAN"] },
+  // Academics
+  { label: "Dashboard", href: "/academics", iconName: "LayoutDashboard", roles: ["ACADEMICS"] },
+  { label: "Subjects", href: "/academics/subjects", iconName: "Library", roles: ["ACADEMICS"], section: "Academics" },
+  { label: "My Profile", href: "/academics/profile", iconName: "UserCircle", roles: ["ACADEMICS"], section: "Personal" },
+  { label: "My Leave", href: "/academics/leave", iconName: "CalendarClock", roles: ["ACADEMICS"] },
+  { label: "Adjustment Requests", href: "/leave/adjustments", iconName: "UserCheck", roles: ["ACADEMICS"] },
 
   // IQAC Coordinator
   { label: "Dashboard", href: "/iqac-coordinator", iconName: "LayoutDashboard", roles: ["IQAC_COORDINATOR"] },
@@ -331,6 +363,10 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "My Leave", href: "/r-and-d/leave", iconName: "CalendarClock", roles: ["R_AND_D"] },
   { label: "Adjustment Requests", href: "/leave/adjustments", iconName: "UserCheck", roles: ["R_AND_D"] },
 
+  // R&D Coordinator (seat, one per department) - the only position module; everything
+  // personal stays under the holder's own primary role.
+  { label: "Dashboard", href: "/rnd-coordinator", iconName: "LayoutDashboard", roles: ["RND_COORDINATOR"] },
+
   // Faculty (PANEL_MEMBER) — My Interviews is injected dynamically in Sidebar when assigned
   // Full module set — Super Admin controls which modules/items are actually
   // visible per college via the Nav Visibility settings (filterVisibleNavItems).
@@ -347,9 +383,17 @@ export const NAV_ITEMS: NavItem[] = [
   // like the entry above, same empty-state convention.
   { label: "Assignment Requests", href: "/panel/assignment-requests", iconName: "Send", roles: ["PANEL_MEMBER"] },
   { label: "Internal Exam", href: "/panel/internal-exam", iconName: "ClipboardList", roles: ["PANEL_MEMBER"] },
+  { label: "Add Mid Bank", href: "/panel/mid-bank", iconName: "BookOpen", roles: ["PANEL_MEMBER"] },
   { label: "Student Attendance", href: "/panel/mark-attendance", iconName: "CalendarCheck", roles: ["PANEL_MEMBER"] },
   { label: "Attendance Report", href: "/panel/monthly-records", iconName: "CalendarRange", roles: ["PANEL_MEMBER"] },
   { label: "Students", href: "/panel/students", iconName: "GraduationCap", roles: ["PANEL_MEMBER"] },
+  // Dividing a section's own roster into lab sub-groups (StudentRecord.
+  // labBatch) - only meaningful once this login is Faculty Incharge of at
+  // least one section (see Section.facultyInchargeUid); the page itself shows
+  // an empty state otherwise, same convention as the entries above. HOD-only
+  // by design elsewhere (hod/students' per-student Edit dialog) - this is the
+  // Faculty Incharge's own equivalent, not offered to HOD here.
+  { label: "Lab Batches", href: "/panel/students/batches", iconName: "Layers", roles: ["PANEL_MEMBER"] },
   { label: "My Feedback", href: "/panel/feedback", iconName: "MessageSquare", roles: ["PANEL_MEMBER"] },
   { label: "Circulars", href: "/panel/circulars", iconName: "Megaphone", roles: ["PANEL_MEMBER"] },
   { label: "Leave", href: "/panel/leave", iconName: "CalendarClock", roles: ["PANEL_MEMBER"], section: "Leave & Attendance" },
@@ -468,11 +512,11 @@ export function getNavItemsForRoles(primary: UserRole, roles: readonly UserRole[
 // A login that holds seats (Principal, HOD, ...) would otherwise see every
 // module of every seat in one long sidebar. Instead it works in ONE context at
 // a time: a seat ("Principal", "Head of Department") or "My Work" (its own
-// primary role). A seat's context shows that seat's position modules plus a
-// small "My Work" group (dashboard, profile, leave, attendance, teaching), so
-// personal things are always one click away. This only shapes the sidebar -
+// primary role). A seat's context shows only that seat's position modules;
+// everything personal (dashboard, profile, leave, attendance, teaching) lives
+// under "My Work" in the switcher. This only shapes the sidebar -
 // what a login may actually do is decided by its held roles on the server.
-export type WorkContextKey = "ME" | UserRole;
+export type WorkContextKey = "ME" | UserRole | `HOD:${string}`;
 export interface WorkContext { key: WorkContextKey; label: string }
 
 function seatRolesOf(primary: UserRole, roles: readonly UserRole[]): UserRole[] {
@@ -481,11 +525,16 @@ function seatRolesOf(primary: UserRole, roles: readonly UserRole[]): UserRole[] 
 
 // Empty for a login with no seats (nothing to switch between). `roles` lists
 // seat roles most senior first, so the first context is the default.
-export function getWorkContexts(primary: UserRole, roles: readonly UserRole[] = []): WorkContext[] {
+// A head of several departments gets one context per department ("HOD - CSE").
+export function getWorkContexts(primary: UserRole, roles: readonly UserRole[] = [], hodDepartments: readonly string[] = []): WorkContext[] {
   const seats = seatRolesOf(primary, roles);
   if (seats.length === 0) return [];
   return [
-    ...seats.map((r) => ({ key: r as WorkContextKey, label: ROLE_LABELS[r] })),
+    ...seats.flatMap((r): WorkContext[] =>
+      r === "HOD" && hodDepartments.length > 1
+        ? hodDepartments.map((d) => ({ key: hodContextKey(d) as WorkContextKey, label: `${ROLE_LABELS.HOD} - ${d}` }))
+        : [{ key: r as WorkContextKey, label: ROLE_LABELS[r] }]
+    ),
     { key: "ME" as WorkContextKey, label: "My Work" },
   ];
 }
@@ -493,28 +542,19 @@ export function getWorkContexts(primary: UserRole, roles: readonly UserRole[] = 
 export function getNavItemsForContext(primary: UserRole, roles: readonly UserRole[], context: WorkContextKey): NavItem[] {
   const seats = seatRolesOf(primary, roles);
   const own = getNavItemsForRole(primary);
-  if (seats.length === 0 || context === "ME" || !seats.includes(context as UserRole)) return [...own];
+  const seatRole = (departmentOfContext(context) !== null ? "HOD" : context) as UserRole;
+  if (seats.length === 0 || context === "ME" || !seats.includes(seatRole)) return [...own];
 
   const out: NavItem[] = [];
   const seen = new Set<string>();
   const push = (item: NavItem) => { if (!seen.has(item.href)) { seen.add(item.href); out.push(item); } };
 
   let first = true;
-  for (const item of getNavItemsForRole(context as UserRole)) {
+  for (const item of getNavItemsForRole(seatRole)) {
     if (isPersonalNavItem(item)) continue;
-    push({ ...item, ...(first ? { section: ROLE_LABELS[context as UserRole] } : {}) });
+    push({ ...item, ...(first ? { section: ROLE_LABELS[seatRole] } : {}) });
     first = false;
   }
-  let firstMine = true;
-  own.forEach((item, i) => {
-    if (i !== 0 && !isPersonalNavItem(item)) return;
-    push({
-      ...item,
-      ...(firstMine ? { section: "My Work" } : {}),
-      label: i === 0 ? "My Dashboard" : item.label,
-    });
-    firstMine = false;
-  });
   return out;
 }
 
@@ -523,9 +563,10 @@ export function getNavItemsForContext(primary: UserRole, roles: readonly UserRol
 // another context (a link, a notification, the back button), in which case
 // that context, so the sidebar always contains the page they're on.
 export function resolveWorkContext(
-  primary: UserRole, roles: readonly UserRole[], chosen: string | null | undefined, pathname: string
+  primary: UserRole, roles: readonly UserRole[], chosen: string | null | undefined, pathname: string,
+  hodDepartments: readonly string[] = []
 ): WorkContextKey | null {
-  const contexts = getWorkContexts(primary, roles);
+  const contexts = getWorkContexts(primary, roles, hodDepartments);
   if (contexts.length === 0) return null;
   const base = contexts.find((c) => c.key === chosen)?.key ?? contexts[0].key;
   const owns = (key: WorkContextKey) =>
@@ -714,7 +755,9 @@ export const BOTTOM_NAV_ITEMS: Record<UserRole, NavItem[]> = {
   ],
   PRINCIPAL: [
     { label: "Home", href: "/principal", iconName: "LayoutDashboard", roles: ["PRINCIPAL"] },
-    { label: "Vacancies", href: "/principal/vacancies", iconName: "ClipboardList", roles: ["PRINCIPAL"] },
+    // Deciding a hiring request is Principal/VP authority, not College
+    // Admin's - same exclusion as the sidebar's "Hiring Requests" item above.
+    { label: "Vacancies", href: "/principal/vacancies", iconName: "ClipboardList", roles: ["PRINCIPAL"], hideForRealRoles: ["COLLEGE_ADMIN"] },
     { label: "Faculty", href: "/principal/faculty", iconName: "UsersRound", roles: ["PRINCIPAL"] },
     { label: "Profile", href: "/principal/profile", iconName: "UserCircle", roles: ["PRINCIPAL"] },
     // { label: "Staff", href: "/principal/staff", iconName: "UsersRound", roles: ["PRINCIPAL"] },
@@ -730,6 +773,15 @@ export const BOTTOM_NAV_ITEMS: Record<UserRole, NavItem[]> = {
     { label: "Vacancies", href: "/principal/vacancies", iconName: "ClipboardList", roles: ["COLLEGE_ADMIN"] },
     { label: "Faculty", href: "/principal/faculty", iconName: "UsersRound", roles: ["COLLEGE_ADMIN"] },
     { label: "Profile", href: "/principal/profile", iconName: "UserCircle", roles: ["COLLEGE_ADMIN"] },
+  ],
+  // Same reasoning as COLLEGE_ADMIN just above - Director's session role is
+  // also normalized to PRINCIPAL, so this is dead at runtime too. Kept only
+  // to satisfy Record<UserRole, ...>.
+  DIRECTOR: [
+    { label: "Home", href: "/principal", iconName: "LayoutDashboard", roles: ["DIRECTOR"] },
+    { label: "Vacancies", href: "/principal/vacancies", iconName: "ClipboardList", roles: ["DIRECTOR"] },
+    { label: "Faculty", href: "/principal/faculty", iconName: "UsersRound", roles: ["DIRECTOR"] },
+    { label: "Profile", href: "/principal/profile", iconName: "UserCircle", roles: ["DIRECTOR"] },
   ],
   HOD: [
     { label: "Home", href: "/hod", iconName: "LayoutDashboard", roles: ["HOD"] },
@@ -768,10 +820,10 @@ export const BOTTOM_NAV_ITEMS: Record<UserRole, NavItem[]> = {
     { label: "Attendance", href: "/college-staff/attendance", iconName: "ClipboardCheck", roles: ["COLLEGE_STAFF"] },
     { label: "Profile", href: "/college-staff/profile", iconName: "UserCircle", roles: ["COLLEGE_STAFF"] },
   ],
-  DEAN: [
-    { label: "Home", href: "/dean", iconName: "LayoutDashboard", roles: ["DEAN"] },
-    { label: "Subjects", href: "/dean/subjects", iconName: "Library", roles: ["DEAN"] },
-    { label: "Profile", href: "/dean/profile", iconName: "UserCircle", roles: ["DEAN"] },
+  ACADEMICS: [
+    { label: "Home", href: "/academics", iconName: "LayoutDashboard", roles: ["ACADEMICS"] },
+    { label: "Subjects", href: "/academics/subjects", iconName: "Library", roles: ["ACADEMICS"] },
+    { label: "Profile", href: "/academics/profile", iconName: "UserCircle", roles: ["ACADEMICS"] },
   ],
   IQAC_COORDINATOR: [
     { label: "Home", href: "/iqac-coordinator", iconName: "LayoutDashboard", roles: ["IQAC_COORDINATOR"] },
@@ -797,6 +849,9 @@ export const BOTTOM_NAV_ITEMS: Record<UserRole, NavItem[]> = {
     { label: "Hackathons", href: "/r-and-d/hackathons", iconName: "Trophy", roles: ["R_AND_D"] },
     { label: "Innovations", href: "/r-and-d/innovations", iconName: "Sparkles", roles: ["R_AND_D"] },
     { label: "Profile", href: "/r-and-d/profile", iconName: "UserCircle", roles: ["R_AND_D"] },
+  ],
+  RND_COORDINATOR: [
+    { label: "Home", href: "/rnd-coordinator", iconName: "LayoutDashboard", roles: ["RND_COORDINATOR"] },
   ],
   PANEL_MEMBER: [
     { label: "Home", href: "/panel", iconName: "LayoutDashboard", roles: ["PANEL_MEMBER"] },

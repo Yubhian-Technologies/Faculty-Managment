@@ -32,6 +32,22 @@ export function calcDurationDays(from: string | undefined, to: string | undefine
   return Math.round((t - f) / 86400000) + 1;
 }
 
+// Participated (just attending) and NPTEL/MOOCs (a self-paced course, no one
+// to organize it for) never have a beneficiary audience or resource persons -
+// only someone who ran the program does. Exported so the read-only view
+// (ProfileFieldsView.tsx's MentorshipModule) hides the same fields the form
+// does for the same entry, instead of re-deciding the rule itself.
+export function trainingEntryHidesBeneficiaries(item: Pick<TrainingEntry, "participatedOrConducted" | "type">): boolean {
+  return item.participatedOrConducted === "PARTICIPATED" || item.type === "MOOC";
+}
+
+// MOOC/Certification report their duration in weeks; every other type reports
+// an actual From/To date range (and the day count between them). Exported for
+// the same reason as trainingEntryHidesBeneficiaries above.
+export function trainingEntryUsesWeeks(item: Pick<TrainingEntry, "type">): boolean {
+  return item.type === "MOOC" || item.type === "CERTIFICATION";
+}
+
 // A record saved before "Resource Persons - Details" became a per-person
 // list still has this stored as a single free-text string in Firestore even
 // though the type now says string[] - every reader normalizes through here
@@ -359,10 +375,7 @@ export function TrainingEntryFields({ item: rawItem, update, ownerFacultyId, own
   const beneficiaryDepartments = item.beneficiaryDepartments ?? [];
   const existingCourseYears = new Set(beneficiaryDepartments.map((d) => `${d.courseId}:${d.year}`));
 
-  // Participated (just attending) and NPTEL/MOOCs (a self-paced course, no
-  // one to organize it for) never have a beneficiary audience or resource
-  // persons - only someone who ran the program does.
-  const hideBeneficiariesAndResourcePersons = item.participatedOrConducted === "PARTICIPATED" || item.type === "MOOC";
+  const hideBeneficiariesAndResourcePersons = trainingEntryHidesBeneficiaries(item);
 
   // Placement Training and Alumni Talks are always Conducted - there's no
   // "Participated" role for either (see the Type Select below) - and only
@@ -476,7 +489,7 @@ export function TrainingEntryFields({ item: rawItem, update, ownerFacultyId, own
           </div>
         ) : null}
         <TextInput label="Title of the Program" value={item.titleOfTheProgram} onChange={(v) => update({ titleOfTheProgram: v })} />
-        {item.type === "MOOC" || item.type === "CERTIFICATION" ? (
+        {trainingEntryUsesWeeks(item) ? (
           <NumInput label="Number of Weeks" value={item.numberOfWeeks} onChange={(v) => update({ numberOfWeeks: v })} />
         ) : (
           <>

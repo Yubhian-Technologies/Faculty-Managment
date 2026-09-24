@@ -38,13 +38,14 @@ function computeRegulationBatches(startYear: number, numBatches: number, courseD
  * datalist); there is no separate registry to keep it in sync with.
  */
 function RegulationBatchesEditor({
-  draft, setDraft, courseDurationYears, knownCodes, listId,
+  draft, setDraft, courseDurationYears, knownCodes, listId, showHint = true,
 }: {
   draft: Draft;
   setDraft: (d: Draft) => void;
   courseDurationYears: number;
   knownCodes: string[];
   listId: string;
+  showHint?: boolean;
 }) {
   const [code, setCode] = useState("");
   const [startYear, setStartYear] = useState(String(currentAcademicStartYear()));
@@ -114,9 +115,11 @@ function RegulationBatchesEditor({
           <Plus className="h-3.5 w-3.5 mr-1" />Add
         </Button>
       </div>
-      <p className="text-[11px] text-muted-foreground">
-        E.g. Starting Year 2023, 3 batches - the 2023, 2024 and 2025 intakes all follow this regulation.
-      </p>
+      {showHint && (
+        <p className="text-[11px] text-muted-foreground">
+          E.g. Starting Year 2023, 3 batches - the 2023, 2024 and 2025 intakes all follow this regulation.
+        </p>
+      )}
     </div>
   );
 }
@@ -125,8 +128,8 @@ interface CourseCatalogSettingsCardProps {
   // Hides the add form and every per-item edit/delete/activate control and
   // shows courses + their assigned regulations only.
   readOnly?: boolean;
-  // The Dean's view: courses themselves are created/renamed/deleted by the
-  // Principal / VP / College Admin, but the Dean still maintains each
+  // The Academics' view: courses themselves are created/renamed/deleted by the
+  // Principal / VP / College Admin, but the Academics still maintains each
   // course's curriculum regulations - so only that part stays editable.
   regulationsOnly?: boolean;
   // Lists, under each course, the departments that offer it (a department
@@ -159,6 +162,13 @@ export function CourseCatalogSettingsCard({ readOnly = false, regulationsOnly = 
 
   const [deleteTarget, setDeleteTarget] = useState<CourseCatalogItem | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // Deactivating is as consequential as deleting - departments stop being able
+  // to pick the course - and it sat one stray click away, so it is confirmed
+  // the same way. Activating is confirmed too, so the button never acts
+  // silently in either direction.
+  const [toggleTarget, setToggleTarget] = useState<CourseCatalogItem | null>(null);
+  const [isToggling, setIsToggling] = useState(false);
 
   function load() {
     const departmentsLoad = showDepartments
@@ -278,7 +288,10 @@ export function CourseCatalogSettingsCard({ readOnly = false, regulationsOnly = 
     }
   }
 
-  async function toggleActive(item: CourseCatalogItem) {
+  async function confirmToggleActive() {
+    const item = toggleTarget;
+    if (!item) return;
+    setIsToggling(true);
     setBusyId(item.id);
     try {
       const res = await fetch(`/api/college/course-catalog/${item.id}`, {
@@ -287,10 +300,12 @@ export function CourseCatalogSettingsCard({ readOnly = false, regulationsOnly = 
         body: JSON.stringify({ isActive: !item.isActive }),
       });
       if (!res.ok) throw new Error();
+      setToggleTarget(null);
       load();
     } catch {
       toast({ variant: "destructive", title: "Failed to update status" });
     } finally {
+      setIsToggling(false);
       setBusyId(null);
     }
   }
@@ -320,12 +335,17 @@ export function CourseCatalogSettingsCard({ readOnly = false, regulationsOnly = 
         <CardTitle className="text-base flex items-center gap-2">
           <GraduationCap className="h-4 w-4" /> {showDepartments ? "Courses" : "Course Catalog"}
         </CardTitle>
-        <CardDescription>
-          The fixed list of courses for your entire college. Create a course here first - departments can only select
-          from these (a department needs at least one), which keeps course names and codes consistent and prevents
-          duplicates. Each course&apos;s curriculum regulations (e.g. R23) are created right here too - give one a
-          starting year and a duration and it covers those years automatically.
-        </CardDescription>
+        {/* The Courses page (Principal / VP / College Admin) is left to speak
+            for itself. The Academics' regulations-only view keeps the blurb -
+            the card is one of several there and has to say which part it owns. */}
+        {!showDepartments && (
+          <CardDescription>
+            The fixed list of courses for your entire college. Create a course here first - departments can only select
+            from these (a department needs at least one), which keeps course names and codes consistent and prevents
+            duplicates. Each course&apos;s curriculum regulations (e.g. R23) are created right here too - give one a
+            starting year and a duration and it covers those years automatically.
+          </CardDescription>
+        )}
       </CardHeader>
       <CardContent className="space-y-5">
         {/* Add new - course details, then its regulations. */}
@@ -375,6 +395,7 @@ export function CourseCatalogSettingsCard({ readOnly = false, regulationsOnly = 
                 courseDurationYears={Number(newDraft.durationYears) || 10}
                 knownCodes={knownRegulationCodes}
                 listId="new-course-regulations"
+                showHint={!showDepartments}
               />
             </div>
           </div>
@@ -452,7 +473,7 @@ export function CourseCatalogSettingsCard({ readOnly = false, regulationsOnly = 
                         {!readOnly && (
                           <div className="flex gap-1 ml-auto">
                             {canCreate && (
-                              <Button size="sm" variant="ghost" onClick={() => toggleActive(item)} disabled={busy}>
+                              <Button size="sm" variant="ghost" onClick={() => setToggleTarget(item)} disabled={busy}>
                                 {item.isActive ? "Deactivate" : "Activate"}
                               </Button>
                             )}
@@ -496,6 +517,7 @@ export function CourseCatalogSettingsCard({ readOnly = false, regulationsOnly = 
                         courseDurationYears={Number(editDraft.durationYears) || item.durationYears || 10}
                         knownCodes={knownRegulationCodes}
                         listId={`edit-course-regulations-${item.id}`}
+                        showHint={!showDepartments}
                       />
                     </div>
                   ) : (item.regulations ?? []).length === 0 ? (
@@ -528,6 +550,21 @@ export function CourseCatalogSettingsCard({ readOnly = false, regulationsOnly = 
           </ul>
         )}
       </CardContent>
+
+      <ConfirmDialog
+        open={toggleTarget !== null}
+        onOpenChange={(o) => { if (!o) setToggleTarget(null); }}
+        title={toggleTarget?.isActive ? `Deactivate "${toggleTarget.name}"?` : `Activate "${toggleTarget?.name ?? ""}"?`}
+        description={
+          toggleTarget?.isActive
+            ? "Departments won't be able to select it for new courses. Ones already using it are unaffected."
+            : "Departments will be able to select it again."
+        }
+        confirmLabel={toggleTarget?.isActive ? "Deactivate" : "Activate"}
+        variant={toggleTarget?.isActive ? "destructive" : "default"}
+        onConfirm={confirmToggleActive}
+        loading={isToggling}
+      />
 
       <ConfirmDialog
         open={deleteTarget !== null}

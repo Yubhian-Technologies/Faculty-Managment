@@ -54,6 +54,11 @@ export async function POST(request: Request) {
     // shows up as its own entry in staff lists.
     if (role === "COLLEGE_ADMIN") role = "PRINCIPAL";
 
+    // Director (Super Admin-provisioned, L3 · College Leadership) follows the
+    // exact same normalization for the exact same reason - full Principal
+    // authority, own real role preserved on the Firestore doc.
+    if (role === "DIRECTOR") role = "PRINCIPAL";
+
     // A department's own office head carries the same authority as that
     // department's HOD, so it normalizes the same way for exactly the same
     // reason: ~420 role==="HOD" checks across 154 files keep working untouched
@@ -122,6 +127,10 @@ export async function POST(request: Request) {
             realRole = "COLLEGE_ADMIN";
             profile.role = "PRINCIPAL";
           }
+          if (profile.role === "DIRECTOR") {
+            realRole = "DIRECTOR";
+            profile.role = "PRINCIPAL";
+          }
           if (profile.role === "DEPARTMENT_OFFICE") {
             realRole = "DEPARTMENT_OFFICE";
             profile.role = "HOD";
@@ -139,6 +148,12 @@ export async function POST(request: Request) {
     // things that tell it apart from a Principal (see SessionPayload.realRole),
     // exactly as a dedicated College Admin login always was.
     if (seatRoles.includes("COLLEGE_ADMIN")) realRole = "COLLEGE_ADMIN";
+    // Same for the Department Office seat, which an HOD hands to one of their
+    // own faculty (see api/college/department-office). Their `role` becomes
+    // "HOD" through orderHeldRoles below, exactly as a standalone
+    // DEPARTMENT_OFFICE login's does - and `realRole` is what stops them
+    // appointing, and so replacing, another office head.
+    if (seatRoles.includes("DEPARTMENT_OFFICE")) realRole = "DEPARTMENT_OFFICE";
     const roles = role === "UNKNOWN" ? [role] : orderHeldRoles(role, seatRoles);
 
     const sessionData = {

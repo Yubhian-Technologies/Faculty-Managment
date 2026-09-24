@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import { notifyRole } from "@/lib/notify";
+import { isVisibleToRnD, notifyReviewer, resolveSubmissionRoute, routeFields } from "@/lib/research/coordinatorReview";
 import { PUBLICATION_ELIGIBLE_ROLES } from "@/lib/publications/eligibleRoles";
 import { resolveOwnerDesignation } from "@/lib/publications/resolveOwnerDesignation";
 import { validateSponsoredProjectBody } from "@/lib/research/validateSponsoredProject";
@@ -33,6 +33,7 @@ export async function GET(request: Request) {
     const snap = await query.get();
     const projects = snap.docs
       .map((d) => ({ id: d.id, ...d.data() }))
+      .filter((r) => session.role !== "R_AND_D" || isVisibleToRnD((r as { status?: string }).status))
       .sort((a, b) => {
         const aTime = (a as { createdAt?: { toMillis?: () => number } }).createdAt?.toMillis?.() ?? 0;
         const bTime = (b as { createdAt?: { toMillis?: () => number } }).createdAt?.toMillis?.() ?? 0;
@@ -68,6 +69,9 @@ interface SponsoredProjectBody {
   dateProposalSubmitted?: string;
   amountApplied?: number;
   extendedToSeedFund?: "YES" | "NO";
+  seedFundTitle?: string;
+  seedFundAmountSanctioned?: number;
+  seedFundSanctionDate?: string;
   sanctionedStatus?: SponsoredProjectSanctionedStatus;
   dateProjectSanctioned?: string;
   dateOfStart?: string;
@@ -127,6 +131,7 @@ export async function POST(request: Request) {
 
     const ownerDesignation = await resolveOwnerDesignation(db, session.collegeId, uid, owner.role);
 
+    const route = await resolveSubmissionRoute(db, session.collegeId, uid, isRnD);
     const now = new Date();
     const docRef = await db.collection("colleges").doc(session.collegeId).collection("sponsoredProjects").add({
       collegeId: session.collegeId,
@@ -134,7 +139,8 @@ export async function POST(request: Request) {
       ownerName: owner.name ?? "Unknown",
       ownerRole: owner.role,
       ...(ownerDesignation ? { ownerDesignation } : {}),
-      status: (isRnD ? "APPROVED" : "PENDING") satisfies PublicationStatus,
+      status: route.status satisfies PublicationStatus,
+      ...routeFields(route),
       agencyName,
       schemeName,
       applicationNumber,
@@ -152,6 +158,9 @@ export async function POST(request: Request) {
       dateProposalSubmitted: body.dateProposalSubmitted ?? "",
       amountApplied: body.amountApplied ?? null,
       extendedToSeedFund: body.extendedToSeedFund ?? null,
+      seedFundTitle: body.extendedToSeedFund === "YES" ? body.seedFundTitle?.trim() ?? "" : "",
+      seedFundAmountSanctioned: body.extendedToSeedFund === "YES" ? body.seedFundAmountSanctioned ?? null : null,
+      seedFundSanctionDate: body.extendedToSeedFund === "YES" ? body.seedFundSanctionDate ?? "" : "",
       sanctionedStatus: body.sanctionedStatus ?? null,
       dateProjectSanctioned: body.dateProjectSanctioned ?? "",
       dateOfStart: body.dateOfStart ?? "",
@@ -186,15 +195,11 @@ export async function POST(request: Request) {
       timestamp: now,
     });
 
-    if (!isRnD) {
-      await notifyRole(
-        db, session.collegeId, "R_AND_D",
-        "SPONSORED_PROJECT_PENDING_VERIFICATION",
-        "New sponsored research project submitted for verification",
-        `${owner.name ?? "A staff member"} submitted "${title}" for verification`,
-        "/r-and-d/sponsored-projects"
-      );
-    }
+    await notifyReviewer(db, session.collegeId, route, {
+        type: "SPONSORED_PROJECT_PENDING_VERIFICATION", title: "New sponsored research project submitted for verification",
+        message: `${owner.name ?? "A staff member"} submitted "${title}" for verification`,
+        rndLink: "/r-and-d/sponsored-projects",
+      });
 
     return NextResponse.json({ id: docRef.id }, { status: 201 });
   } catch (err) {

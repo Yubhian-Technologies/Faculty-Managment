@@ -7,5 +7,5 @@ import { MyProfileModulePage } from "@/components/faculty/MyProfileModulePage";
 // Name (as per SSC) right after Employee ID (see FacultyIdentityFacts) - hidden
 // here so this Personal Details tab doesn't show it a second time.
 export default function PanelProfileModulePage() {
-  return <MyProfileModulePage basePath="/panel/profile" hideLegalName />;
+  return <MyProfileModulePage basePath="/panel/profile" hideLegalName ratificationHistory />;
 }

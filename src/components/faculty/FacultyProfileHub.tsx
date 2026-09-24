@@ -26,6 +26,7 @@ const STATUS_VARIANTS: Record<FacultyStatus, "default" | "secondary" | "outline"
   ON_LEAVE: "outline",
   RESIGNED: "secondary",
   RETIRED: "secondary",
+  RETAINERSHIP: "default",
 };
 
 function Fact({ label, value }: { label: string; value: React.ReactNode }) {
@@ -139,7 +140,7 @@ export function FacultyStatusBadge({ status }: { status?: FacultyStatus }) {
 
 interface FacultyProfileHubProps {
   // Also reused (see principal/staff/[uid]/page.tsx and its siblings) to view a
-  // bare login account (HOD/Principal/VP/College Office/Dean/...) that has no
+  // bare login account (HOD/Principal/VP/College Office/Academics/...) that has no
   // real FacultyMember record - those store Date of Joining as `dateOfJoining`
   // (FMSUser's own field name) rather than `joiningDate`, hence the extra field.
   faculty: Partial<FacultyMember> & { dateOfJoining?: Timestamp };

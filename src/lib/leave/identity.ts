@@ -1,6 +1,7 @@
 import type { Firestore } from "firebase-admin/firestore";
 import { LEGACY_TECHNICAL_DESIGNATIONS } from "@/lib/designations/config";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
+import { supportingStaffDisplayName } from "@/lib/supportingStaff/supportingStaffDisplayName";
 
 export interface ResolvedIdentity {
   name: string;
@@ -13,11 +14,11 @@ export interface ResolvedIdentity {
 //  - PANEL_MEMBER has a richer FacultyMember record (designation, joiningDate)
 //  - COLLEGE_STAFF backed by a SupportingStaffMember record (Non-Technical
 //    staff) - always non-teaching, uses its own joiningDate.
-//  - Everyone else (HOD/PRINCIPAL/VICE_PRINCIPAL/DEAN, ACCOUNTS/FINANCE/
+//  - Everyone else (HOD/PRINCIPAL/VICE_PRINCIPAL/ACADEMICS, ACCOUNTS/FINANCE/
 //    COLLEGE_OFFICE, IQAC_COORDINATOR/T_AND_P/R_AND_D, and any remaining
 //    label-only COLLEGE_STAFF logins) has no FacultyMember/SupportingStaff
 //    record - only a thin users/{uid} doc. isTeachingStaff is derived from
-//    that doc's stored role: true for HOD/PRINCIPAL/VICE_PRINCIPAL/DEAN -
+//    that doc's stored role: true for HOD/PRINCIPAL/VICE_PRINCIPAL/ACADEMICS -
 //    academic leadership gets the same "vacation" (teaching-staff)
 //    entitlement as the faculty they lead (CL/SL/SCL/EL-6/OD), same as HOD
 //    always has. Everyone else here (Accounts/Finance/College Office/IQAC/
@@ -97,12 +98,13 @@ export async function resolveEmployeeIdentity(
 
   if (!supportingStaffSnap.empty) {
     const s = supportingStaffSnap.docs[0].data() as {
-      name: string;
+      legalName?: string;
+      nameAsPerPan?: string;
       department?: string;
       joiningDate?: { toDate(): Date };
     };
     return {
-      name: s.name,
+      name: supportingStaffDisplayName(s) || "Unknown",
       department: s.department,
       isTeachingStaff: false,
       dateOfJoining: s.joiningDate?.toDate?.() ?? new Date(),
@@ -119,15 +121,15 @@ export async function resolveEmployeeIdentity(
     dateOfJoining?: { toDate(): Date };
     createdAt?: { toDate(): Date };
   };
-  const isAcademicLeadership = u.role === "HOD" || u.role === "PRINCIPAL" || u.role === "VICE_PRINCIPAL" || u.role === "COLLEGE_ADMIN" || u.role === "DEAN";
+  const isAcademicLeadership = u.role === "HOD" || u.role === "PRINCIPAL" || u.role === "VICE_PRINCIPAL" || u.role === "COLLEGE_ADMIN" || u.role === "DIRECTOR" || u.role === "ACADEMICS";
   return {
     name: u.name ?? "Unknown",
     department: u.department,
     isTeachingStaff: isAcademicLeadership,
-    // The Add Staff form (api/college/users, api/administration/college-staff)
-    // asks for this directly now - always the real answer when present. Only
+    // The Add Staff form (api/college/users) asks for this directly now -
+    // always the real answer when present. Only
     // falls back for older accounts created before that field existed:
-    // HOD/Principal/Vice Principal/Dean login accounts have no FacultyMember
+    // HOD/Principal/Vice Principal/Academics login accounts have no FacultyMember
     // record to source a real joining date from either, so falling back to
     // this login's own createdAt (as every other role here does) would
     // wrongly cycle a freshly-created account through the "new-joining" leave

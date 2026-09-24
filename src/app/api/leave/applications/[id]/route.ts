@@ -2,7 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { findUsersSnapshot } from "@/lib/roles/findUsersByRoles";
 import { NextResponse } from "next/server";
-import { requireCollegeMember } from "@/lib/auth/verifySession";
+import { isCollegeAdmin, requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { canAccessLeaveProfile } from "@/lib/leave/access";
 import { resolveHodDepartments } from "@/lib/budget/departmentScope";
@@ -33,7 +33,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     const session = await requireCollegeMember(
       "PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL",
       "COLLEGE_OFFICE", "ACCOUNTS", "FINANCE", "COLLEGE_STAFF",
-      "DEAN", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D",
+      "ACADEMICS", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D",
       "LIBRARY", "EXAM_CELL", "WEBMASTER", "PLACEMENT_DEPT", "PURCHASE_DEPT"
     );
     const db = getAdminDb();
@@ -62,7 +62,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const session = await requireCollegeMember(
       "PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL",
       "COLLEGE_OFFICE", "ACCOUNTS", "FINANCE", "COLLEGE_STAFF",
-      "DEAN", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D",
+      "ACADEMICS", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D",
       "LIBRARY", "EXAM_CELL", "WEBMASTER", "PLACEMENT_DEPT", "PURCHASE_DEPT"
     );
     const body = (await request.json()) as {
@@ -470,10 +470,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
           }
         } else if (session.role !== "PRINCIPAL" && session.role !== "VICE_PRINCIPAL") {
           return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+        } else if (isCollegeAdmin(session)) {
+          return NextResponse.json({ error: "Forbidden" }, { status: 403 });
         }
       } else if (session.role !== "PRINCIPAL" && session.role !== "VICE_PRINCIPAL") {
         // Approved at the Principal tier - or by Management, in which case it's
         // reviewed from the management route rather than here.
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      } else if (isCollegeAdmin(session)) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       }
 
@@ -630,6 +634,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (req.status === "PENDING_PRINCIPAL") {
       if (session.role !== "PRINCIPAL" && session.role !== "VICE_PRINCIPAL") {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+      // College Admin's login reads as "PRINCIPAL" too (see isCollegeAdmin),
+      // but deciding a leave request is Principal/VP decision authority, not
+      // College Admin's.
+      if (isCollegeAdmin(session)) {
+        return NextResponse.json({ error: "Only the Principal or Vice Principal can decide this leave request" }, { status: 403 });
       }
       // A Vice Principal's own leave request must be decided by the
       // Principal, not themselves - the approvals queue (GET .../

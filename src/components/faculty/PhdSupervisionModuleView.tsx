@@ -39,11 +39,11 @@ function PhdSupervisionRow({
     <div className="rounded-md border bg-muted/20 shadow-sm p-2 space-y-2">
       {isOwnProfile && record.status !== "APPROVED" && (
         <div className="flex items-center gap-2">
-          {record.status === "PENDING" ? (
-            <Badge variant="pending" className="text-xs">Pending Verification</Badge>
+          {record.status === "PENDING" || record.status === "COORDINATOR_REVIEW" ? (
+            <Badge variant="pending" className="text-xs">{record.status === "COORDINATOR_REVIEW" ? "With R&D Coordinator" : "Pending Verification"}</Badge>
           ) : (
             <>
-              <Badge variant="rejected" className="text-xs">Rejected</Badge>
+              <Badge variant="rejected" className="text-xs">{record.status === "SENT_BACK" ? "Sent Back" : "Rejected"}</Badge>
               {onEdit && (
                 <button type="button" onClick={() => onEdit(record)} className="text-xs font-medium text-primary hover:underline inline-flex items-center gap-1">
                   <Pencil className="h-3 w-3" />Edit &amp; Resubmit
@@ -55,6 +55,9 @@ function PhdSupervisionRow({
       )}
       {record.status === "REJECTED" && record.rejectionReason && (
         <p className="text-xs text-destructive">Reason: {record.rejectionReason}</p>
+      )}
+      {record.status === "SENT_BACK" && record.sentBackReason && (
+        <p className="text-xs text-destructive">Sent back: {record.sentBackReason}</p>
       )}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         <Field label="Name of the Scholar" value={record.scholarName} />
@@ -283,7 +286,7 @@ function RecordFormFields({
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <TextInput label="Affiliation of Scholar" value={form.scholarAffiliation} onChange={(v) => set("scholarAffiliation", v)} />
-            <TextInput label="Phone Number of Scholar" value={form.scholarPhone} onChange={(v) => set("scholarPhone", v)} />
+            <TextInput label="Phone Number of Scholar" type="tel" value={form.scholarPhone} onChange={(v) => set("scholarPhone", v)} />
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <TextInput label="Year of Scholar Allocation" value={form.yearOfAllocation} onChange={(v) => setAndCount("yearOfAllocation", v)} placeholder="e.g. 2022" />

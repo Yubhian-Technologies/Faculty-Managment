@@ -17,6 +17,7 @@ import { hasSupportingStaffSplit } from "@/lib/designations/config";
 import { isNavItemActive, filterVisibleNavItems, ROLES_WITH_EMBEDDED_PANEL_ACCESS, type NavItem } from "./navConfig";
 import { useIsTimetableIncharge } from "@/hooks/useIsTimetableIncharge";
 import { NavIcon } from "./NavIcon";
+import { CollegeAdminAccountMenu } from "./CollegeAdminAccountMenu";
 import { WorkContextSwitcher } from "./WorkContextSwitcher";
 import { useWorkContext } from "@/hooks/useWorkContext";
 import { OrgScopeTree } from "./OrgScopeTree";
@@ -197,6 +198,9 @@ export function Sidebar({ hiddenModules, hiddenItems }: SidebarProps) {
             <p className="text-sm font-medium truncate">{user.name}</p>
             <p className="text-xs text-muted-foreground truncate">{user.email}</p>
           </div>
+          {user.realRole === "COLLEGE_ADMIN" && (
+            <CollegeAdminAccountMenu uid={user.uid} name={user.name} phone={user.phone} />
+          )}
           <Button
             variant="ghost"
             size="icon"

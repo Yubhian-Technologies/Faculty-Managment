@@ -7,8 +7,8 @@ export default function HodDesignationsSettingsPage() {
   return (
     <div className="max-w-2xl space-y-6">
       <PageHeader
-        title="Technical Staff Designations"
-        description="The job titles your department's Technical Staff can be added under"
+        title="Supporting Staff Designations"
+        description="The job titles your department's Supporting Staff can be added under"
       />
       <DesignationCatalogCard category="TECHNICAL" />
     </div>

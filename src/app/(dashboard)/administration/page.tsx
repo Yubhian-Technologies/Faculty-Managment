@@ -6,13 +6,22 @@ import { Users, Building2, ClipboardList, Settings2, CalendarCheck, FileText } f
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { LocationCollegeSelect } from "@/components/shared/LocationCollegeSelect";
 import { useAuthStore } from "@/store/authStore";
+
+interface CollegeOption { id: string; name?: string; isActive?: boolean }
 
 export default function AdministrationDashboard() {
   const user = useAuthStore((s) => s.user);
   const [pendingVacancies, setPendingVacancies] = useState<number | null>(null);
   const [pendingInterviews, setPendingInterviews] = useState<number | null>(null);
   const [pendingOffers, setPendingOffers] = useState<number | null>(null);
+  // Which college's slice of the Hiring Approvals/Colleges tiles to jump
+  // into - a per-visit navigation aid (plain state, not persisted). "" means
+  // no filter, same as today's behavior for everyone who never touches it.
+  const [selectedCollegeId, setSelectedCollegeId] = useState("");
+  const [colleges, setColleges] = useState<CollegeOption[]>([]);
 
   useEffect(() => {
     // API already returns only PENDING_ADMIN requests for ADMINISTRATION role
@@ -30,15 +39,29 @@ export default function AdministrationDashboard() {
       .then((r) => r.json() as Promise<{ offers: unknown[] }>)
       .then((d) => setPendingOffers(d.offers?.length ?? 0))
       .catch(() => {});
+
+    fetch("/api/admin/colleges")
+      .then((r) => r.json() as Promise<{ colleges: CollegeOption[] }>)
+      .then((d) => setColleges(d.colleges ?? []))
+      .catch(() => {});
   }, []);
 
+  const selectedCollegeName = colleges.find((c) => c.id === selectedCollegeId)?.name ?? "";
+  // Appended to a tile's href once a college is picked - only Hiring
+  // Approvals + Colleges understand it (see collegeId/collegeName handling
+  // on their own pages); Location Staff/Departments stay location-wide by
+  // design, so their hrefs are left untouched below.
+  const collegeQuery = selectedCollegeId
+    ? `?collegeId=${selectedCollegeId}&collegeName=${encodeURIComponent(selectedCollegeName)}`
+    : "";
+
   const actions = [
-    { label: "Hiring Requests", href: "/administration/vacancies", icon: ClipboardList, desc: `${pendingVacancies ?? "…"} pending from HR Admin`, section: "Hiring Approvals" },
-    { label: "Interview Plans", href: "/administration/interviews", icon: CalendarCheck, desc: `${pendingInterviews ?? "…"} plans awaiting approval`, section: "" },
-    { label: "Offer Letters", href: "/administration/offers", icon: FileText, desc: `${pendingOffers ?? "…"} offer letters to approve`, section: "" },
+    { label: "Hiring Requests", href: `/administration/vacancies${collegeQuery}`, icon: ClipboardList, desc: `${pendingVacancies ?? "…"} pending from HR Admin`, section: "Hiring Approvals" },
+    { label: "Interview Plans", href: `/administration/interviews${collegeQuery}`, icon: CalendarCheck, desc: `${pendingInterviews ?? "…"} plans awaiting approval`, section: "" },
+    { label: "Offer Letters", href: `/administration/offers${collegeQuery}`, icon: FileText, desc: `${pendingOffers ?? "…"} offer letters to approve`, section: "" },
     { label: "Location Staff", href: "/administration/users", icon: Users, desc: "HR Admin, Admin Office, Accounts, Dept Heads", section: "Management" },
     { label: "Departments", href: "/administration/departments", icon: Settings2, desc: "Manage location-level departments", section: "" },
-    { label: "Colleges", href: "/administration/colleges", icon: Building2, desc: "View colleges & assign Principals", section: "" },
+    { label: "Colleges", href: `/administration/colleges${collegeQuery}`, icon: Building2, desc: "View colleges & assign Principals", section: "" },
   ];
 
   return (
@@ -47,6 +70,11 @@ export default function AdministrationDashboard() {
         title={`Welcome, ${user?.name ?? "Admin"}`}
         description="Location-level administration overview"
       />
+
+      <div className="flex flex-col gap-1.5 sm:max-w-xs">
+        <Label className="text-xs text-muted-foreground">Filter by college</Label>
+        <LocationCollegeSelect allowEmpty value={selectedCollegeId} onChange={setSelectedCollegeId} placeholder="All Colleges" />
+      </div>
 
       <div className="space-y-5">
         <div>

@@ -17,6 +17,7 @@ import { sectionDisplayLabel } from "@/lib/sections/sectionLabel";
 import { buildCourseGroups } from "@/lib/departments/hodScope";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { supportingStaffDisplayName } from "@/lib/supportingStaff/supportingStaffDisplayName";
+import { isFacultyAvailable } from "@/types";
 import type { Course, Department, FacultyMember, Section, SupportingStaffMember, TimetableIncharge } from "@/types";
 
 // One combined dropdown option, whichever roster it actually came from - see
@@ -127,12 +128,12 @@ export default function HODTimetableSectionsPage() {
       fetch(`/api/college/faculty?department=${encodeURIComponent(departmentName)}`)
         .then((r) => r.json() as Promise<{ faculty: FacultyMember[] }>)
         .then((d) => (d.faculty ?? [])
-          .filter((f) => f.status === "ACTIVE" && f.department === departmentName)
+          .filter((f) => isFacultyAvailable(f.status) && f.department === departmentName)
           .map((f): InchargeCandidate => ({ id: f.id, name: facultyDisplayName(f), userUid: f.userUid, personType: "FACULTY" }))),
-      fetch("/api/college/supporting-staff?staffCategory=TECHNICAL")
+      fetch(`/api/college/supporting-staff?staffCategory=TECHNICAL&department=${encodeURIComponent(departmentName)}`)
         .then((r) => r.json() as Promise<{ staff: SupportingStaffMember[] }>)
         .then((d) => (d.staff ?? [])
-          .filter((s) => s.status === "ACTIVE" && s.department === departmentName)
+          .filter((s) => isFacultyAvailable(s.status) && s.department === departmentName)
           .map((s): InchargeCandidate => ({ id: s.id, name: supportingStaffDisplayName(s), userUid: s.userUid, personType: "SUPPORTING_STAFF" }))),
     ])
       .then(([faculty, staff]) => {

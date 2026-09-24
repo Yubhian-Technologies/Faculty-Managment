@@ -20,6 +20,10 @@ export interface Column<T> {
   render?: (row: T) => React.ReactNode;
   className?: string;
   hideOnMobile?: boolean;
+  // CSV export reads the raw row value by default (e.g. a boolean isActive
+  // exports as "true"/"false") - set this to export a display-friendly string
+  // instead (e.g. "Active"/"Inactive"), matching what `render` shows on screen.
+  csvValue?: (row: T) => string;
 }
 
 interface DataTableProps<T extends Record<string, unknown>> {
@@ -97,8 +101,19 @@ export function DataTable<T extends Record<string, unknown>>({
 
   const handleExport = () => {
     if (!csvFilename) return;
+    // Columns with a csvValue override get their display string baked into a
+    // cloned row under the same key, so exportToCSV's plain row[key] read
+    // picks up the formatted value instead of the raw field.
+    const csvColumns = columns.filter((c) => c.csvValue);
+    const rows = csvColumns.length === 0
+      ? filtered
+      : filtered.map((row) => {
+          const clone = { ...row };
+          for (const c of csvColumns) (clone as Record<string, unknown>)[c.key] = c.csvValue!(row);
+          return clone;
+        });
     exportToCSV(
-      filtered,
+      rows,
       csvFilename,
       // A ReactNode header (e.g. a "select all" checkbox column) has no
       // sensible CSV text - falls back to the column key rather than

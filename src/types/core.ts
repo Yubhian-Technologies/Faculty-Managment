@@ -20,6 +20,13 @@ export type UserRole =
   // out of the ~130 file-by-file role===PRINCIPAL checks. Created by the
   // Principal via /principal/staff/new, alongside the non-technical/office roles.
   | "COLLEGE_ADMIN"
+  // Provisioned by Super Admin (Add User, L3 · College Leadership) rather
+  // than by the Principal, but authority-wise follows the exact same
+  // COLLEGE_ADMIN -> PRINCIPAL normalization pattern: same dashboard, same
+  // permissions, `role` always reads "PRINCIPAL" once logged in, and the
+  // Firestore doc keeps its real "DIRECTOR" role so it still shows up as its
+  // own entry in staff lists.
+  | "DIRECTOR"
   | "HOD"
   // A department's own office head, appointed by its HOD. Carries the SAME
   // authority as that HOD over that department, so it is normalized to "HOD"
@@ -32,10 +39,13 @@ export type UserRole =
   | "DEPARTMENT_OFFICE"
   | "COLLEGE_OFFICE"
   | "COLLEGE_STAFF"
-  | "DEAN"
+  | "ACADEMICS"
   | "IQAC_COORDINATOR"
   | "T_AND_P"
   | "R_AND_D"
+  // Per-department seat: first-level reviewer of that department's Research &
+  // Innovation submissions before they reach R&D. Held on top of a faculty login.
+  | "RND_COORDINATOR"
   | "PLACEMENT_DEPT"
   | "LIBRARY"
   | "EXAM_CELL"
@@ -58,14 +68,16 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   PRINCIPAL: "Principal",
   VICE_PRINCIPAL: "Vice Principal",
   COLLEGE_ADMIN: "College Admin",
+  DIRECTOR: "Director",
   HOD: "Head of Department",
   DEPARTMENT_OFFICE: "Department Office",
   COLLEGE_OFFICE: "College Office",
   COLLEGE_STAFF: "College Staff",
-  DEAN: "Dean",
+  ACADEMICS: "Academics",
   IQAC_COORDINATOR: "IQAC Coordinator",
   T_AND_P: "T&P",
   R_AND_D: "R&D",
+  RND_COORDINATOR: "R&D Coordinator",
   PLACEMENT_DEPT: "Placement Department",
   LIBRARY: "Library",
   EXAM_CELL: "Exam Cell",
@@ -84,11 +96,13 @@ export const ROLE_LABELS: Record<UserRole, string> = {
 // staff member can be PROMOTED into from the Staff tab on Promotions
 // (any-to-any, no fixed ladder). Exported here (rather than duplicated
 // client + server) since it's shared by that server route and the client
-// Staff Promotions panel. Deliberately excludes PRINCIPAL/SUPER_ADMIN - a
-// college has exactly one Principal, provisioned separately.
+// Staff Promotions panel. Deliberately excludes PRINCIPAL/SUPER_ADMIN/DIRECTOR
+// - Principal-tier accounts are provisioned by Super Admin, separately from
+// this Principal/VP-managed staff roster (COLLEGE_ADMIN stays included: it's
+// the one Principal-tier role a Principal itself appoints).
 export const MANAGEABLE_STAFF_ROLES: UserRole[] = [
   "HOD", "DEPARTMENT_OFFICE", "COLLEGE_OFFICE", "VICE_PRINCIPAL", "COLLEGE_ADMIN", "COLLEGE_STAFF",
-  "DEAN", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D", "PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL",
+  "ACADEMICS", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D", "RND_COORDINATOR", "PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL",
   "PANEL_MEMBER", "WEBMASTER", "COLLEGE_ACCOUNTS",
 ];
 
@@ -102,14 +116,16 @@ export const ROLE_DASHBOARD_PATHS: Record<UserRole, string> = {
   PRINCIPAL: "/principal",
   VICE_PRINCIPAL: "/vice-principal",
   COLLEGE_ADMIN: "/principal",
+  DIRECTOR: "/principal",
   HOD: "/hod",
   DEPARTMENT_OFFICE: "/hod",
   COLLEGE_OFFICE: "/college-office",
   COLLEGE_STAFF: "/college-staff",
-  DEAN: "/dean",
+  ACADEMICS: "/academics",
   IQAC_COORDINATOR: "/iqac-coordinator",
   T_AND_P: "/t-and-p",
   R_AND_D: "/r-and-d",
+  RND_COORDINATOR: "/rnd-coordinator",
   PLACEMENT_DEPT: "/placement-dept",
   LIBRARY: "/library",
   EXAM_CELL: "/exam-cell",
@@ -143,14 +159,16 @@ export const ROLE_LEVEL: Record<UserRole, 0 | 1 | 2 | 3 | 4 | 5 | 6> = {
   PRINCIPAL: 3,
   VICE_PRINCIPAL: 3,
   COLLEGE_ADMIN: 3,
+  DIRECTOR: 3,
   HOD: 4,
   DEPARTMENT_OFFICE: 4,
   COLLEGE_OFFICE: 4,
   COLLEGE_STAFF: 4,
-  DEAN: 4,
+  ACADEMICS: 4,
   IQAC_COORDINATOR: 4,
   T_AND_P: 4,
   R_AND_D: 4,
+  RND_COORDINATOR: 4,
   PLACEMENT_DEPT: 4,
   LIBRARY: 4,
   EXAM_CELL: 4,
@@ -190,14 +208,16 @@ export const ROLE_SCOPE: Record<UserRole, RoleScope> = {
   PRINCIPAL: "COLLEGE",
   VICE_PRINCIPAL: "COLLEGE",
   COLLEGE_ADMIN: "COLLEGE",
+  DIRECTOR: "COLLEGE",
   HOD: "COLLEGE",
   DEPARTMENT_OFFICE: "COLLEGE",
   COLLEGE_OFFICE: "COLLEGE",
   COLLEGE_STAFF: "COLLEGE",
-  DEAN: "COLLEGE",
+  ACADEMICS: "COLLEGE",
   IQAC_COORDINATOR: "COLLEGE",
   T_AND_P: "COLLEGE",
   R_AND_D: "COLLEGE",
+  RND_COORDINATOR: "COLLEGE",
   PLACEMENT_DEPT: "COLLEGE",
   LIBRARY: "COLLEGE",
   EXAM_CELL: "COLLEGE",
@@ -361,11 +381,12 @@ export interface FMSUser {
   phone?: string;
   role: UserRole;
   // The Firestore doc's real, un-normalized role - only ever differs from
-  // `role` for COLLEGE_ADMIN, which `role` always reports as "PRINCIPAL" (see
-  // useAuth.ts / api/auth/session). Exists solely so a specific feature can
-  // opt out College Admin from something Principal sees (e.g. navConfig's
-  // NavItem.hideForRealRoles) without disturbing the "College Admin behaves
-  // exactly like Principal" normalization everywhere else. Don't use this for
+  // `role` for COLLEGE_ADMIN or DIRECTOR, which `role` always reports as
+  // "PRINCIPAL" (see useAuth.ts / api/auth/session). Exists solely so a
+  // specific feature can opt out College Admin from something Principal sees
+  // (e.g. navConfig's NavItem.hideForRealRoles) without disturbing the
+  // "College Admin behaves exactly like Principal" normalization everywhere
+  // else. Don't use this for
   // anything other than that kind of narrow exclusion - `role` remains the
   // one source of truth for permissions.
   realRole?: UserRole;
@@ -394,7 +415,7 @@ export interface FMSUser {
   dateOfBirth?: Timestamp; // for PRINCIPAL / VICE_PRINCIPAL / HOD profile forms
   // Collected at account-creation time (see api/college/users, api/administration/
   // college-staff) so a role with no FacultyMember/SupportingStaff record of its
-  // own (HOD/PRINCIPAL/VICE_PRINCIPAL/DEAN/COLLEGE_OFFICE/ACCOUNTS/FINANCE/IQAC/
+  // own (HOD/PRINCIPAL/VICE_PRINCIPAL/ACADEMICS/COLLEGE_OFFICE/ACCOUNTS/FINANCE/IQAC/
   // T&P/R&D/Library/Exam Cell/Webmaster/Placement Dept, ...) doesn't wrongly
   // default into the leave module's "new joining" category from its login's own
   // createdAt - see resolveEmployeeIdentity in lib/leave/identity.ts.
@@ -625,7 +646,7 @@ export interface CourseCatalogItem {
   // Curriculum regulation codes (e.g. R20, R23) this course uses - a different
   // course can have an entirely different set. Created directly here (typing a
   // new code registers it, typing an existing one reuses it - no separate
-  // college-wide "declare a regulation" step). Empty/absent until the Dean
+  // college-wide "declare a regulation" step). Empty/absent until the Academics
   // (or Principal/Super Admin) assigns at least one here, which blocks
   // adding subjects to any Course created from this catalog entry (see
   // api/college/subjects POST) until it's set.
@@ -847,6 +868,10 @@ export interface FacultyNorms {
   // (see src/lib/leave/approvalRouting.ts). A role with no entry here uses the
   // built-in default for that role.
   leaveApprovalRouting?: Partial<Record<UserRole, "HOD" | "PRINCIPAL" | "MANAGEMENT">>;
+  // Per requester role: true = vacation staff (teaching-style leave), false =
+  // non-vacation (see src/lib/leave/staffCategoryRouting.ts). A role with no
+  // entry keeps its built-in default.
+  leaveVacationRoles?: Partial<Record<UserRole, boolean>>;
   updatedAt?: Timestamp;
   updatedByName?: string;
 }
@@ -946,12 +971,16 @@ export const EMPLOYMENT_TYPE_LABELS: Record<string, string> = {
 // is marked ACCEPTED (see offer-letters/[id]/route.ts PATCH). Faculty in this
 // status haven't joined yet, so their joiningDate is a proposed/expected date —
 // UI should read "Expected to join on <date>", not "Joined".
+// RETAINERSHIP — functionally equivalent to ACTIVE for availability/teaching
+// purposes (see isFacultyAvailable below); kept as its own status because it's
+// a distinct engagement type, but salary/HR rules for it aren't modeled yet.
 export type FacultyStatus =
   | "INTERVIEW_DONE"
   | "ACTIVE"
   | "ON_LEAVE"
   | "RESIGNED"
-  | "RETIRED";
+  | "RETIRED"
+  | "RETAINERSHIP";
 
 export const FACULTY_STATUS_LABELS: Record<FacultyStatus, string> = {
   INTERVIEW_DONE: "Interview Done",
@@ -959,7 +988,30 @@ export const FACULTY_STATUS_LABELS: Record<FacultyStatus, string> = {
   ON_LEAVE: "On Leave",
   RESIGNED: "Resigned",
   RETIRED: "Retired",
+  RETAINERSHIP: "Retainership",
 };
+
+// Statuses that count as "currently available to work" - the only ones that
+// should ever appear in a faculty picker/assignment/headcount (Teaching
+// Assignments, Sections' Faculty Incharge, Timetable, budget headcounts,
+// etc.). Everything else (ON_LEAVE/RESIGNED/RETIRED/INTERVIEW_DONE) stays
+// visible in the Faculty Register for historical/reference purposes but must
+// never be selectable as a working faculty member.
+export const AVAILABLE_FACULTY_STATUSES: FacultyStatus[] = ["ACTIVE", "RETAINERSHIP"];
+export function isFacultyAvailable(status: FacultyStatus | string | undefined): boolean {
+  return !!status && (AVAILABLE_FACULTY_STATUSES as string[]).includes(status);
+}
+
+// The statuses a human can pick from the Add/Edit Faculty status dropdown -
+// every status except INTERVIEW_DONE, which is system-managed only (set by
+// the hiring pipeline, see provisionFacultyFromOffer/applyOfferDecision -
+// never chosen directly). Single source of truth for both the form UI and
+// server-side validation (faculty POST/PATCH), so the accepted list can't
+// drift between routes - mirrors EMPLOYEE_CATEGORY_VALUES below.
+export const SELECTABLE_FACULTY_STATUS_VALUES = (Object.keys(FACULTY_STATUS_LABELS) as FacultyStatus[]).filter(
+  (s) => s !== "INTERVIEW_DONE"
+);
+export const FACULTY_STATUS_ERROR_MESSAGE = `Status must be one of ${SELECTABLE_FACULTY_STATUS_VALUES.map((s) => FACULTY_STATUS_LABELS[s]).join(", ")}`;
 
 export interface FacultyMember {
   id: string;
@@ -1034,8 +1086,16 @@ export interface FacultyMember {
   emergencyContactMobileNo?: string;
   collegeEmail: string; // required — this is the faculty member's login username
   ratificationStatus?: "Ratified" | "Not Ratified";
+  // Historical ratification record(s) - see RatificationRecord's own doc-comment
+  // below. A doc saved before this existed may still only carry the legacy flat
+  // fields right below with no `ratifications` array; ratificationRecordsFromDoc()
+  // (lib/faculty/ratificationHistory.ts) reads those as a single entry (Designation
+  // left blank) until the record is re-saved, which migrates it to this shape.
+  ratifications?: RatificationRecord[];
+  /** @deprecated superseded by `ratifications` above - still read for legacy docs, never written by current code. */
   ratificationProceedingsNumber?: string;
-  ratificationDate?: Timestamp; // Ratification Proceedings Date
+  /** @deprecated superseded by `ratifications` above - still read for legacy docs, never written by current code. */
+  ratificationDate?: Timestamp;
   maritalStatus?: "Single" | "Married";
   spouseName?: string;
   numberOfChildren?: number;
@@ -1045,8 +1105,12 @@ export interface FacultyMember {
   bloodGroup?: string;
   motherTongue?: string;
   languagesKnown?: string[];
-  heightFeet?: number;
-  heightInches?: number;
+  // Height as "<feet>.<inches>" - e.g. "5.7" = 5 ft 7 in, "5.11" = 5 ft 11 in
+  // (inches 0-11). A string, not a number, so two-digit inches (.10/.11)
+  // aren't silently collapsed by float parsing (5.10 === 5.1). See
+  // migrateHeight() in lib/faculty/fieldRenames.ts for the legacy
+  // heightFeet/heightInches -> height migration.
+  height?: string;
   weightKg?: number;
   pfNumber?: string; // Provident Fund number
   uanNumber?: string; // Universal Account Number (EPFO) - shown right after PF Number
@@ -1195,6 +1259,24 @@ export interface PromotionRecord {
   promotionOrderUrl?: string; // promotion order document (legacy key: orderUrl - see fieldRenames.ts)
 }
 
+// Personal Details — Ratification History. A faculty member's ratification (by
+// the state/university) may happen more than once across their career, once
+// per designation they held at the time (e.g. ratified as Assistant Professor,
+// then again years later as Associate Professor). Each entry's `designation`
+// is a plain historical fact captured at the time of THAT ratification - it
+// must NEVER be compared with, restricted by, or kept in sync with the faculty
+// member's current/ongoing `designation` field above. A later promotion or
+// demotion must never alter any existing ratification entry.
+//
+// Stored as a plain "YYYY-MM-DD" date string (like PromotionRecord above),
+// not a Firestore Timestamp, so array entries need no per-element Timestamp
+// conversion on read - see lib/faculty/ratificationHistory.ts.
+export interface RatificationRecord {
+  designation: string;
+  proceedingsNumber?: string;
+  date?: string; // "YYYY-MM-DD"
+}
+
 export interface Publication {
   title: string;
   coAuthors: string;
@@ -1210,7 +1292,10 @@ export interface Publication {
 // the owner (`uid`) can only read their own rows - see
 // src/app/api/college/publications/route.ts. Reuses Publication's field
 // names so it renders as a drop-in for the existing Research module UI.
-export type PublicationStatus = "PENDING" | "APPROVED" | "REJECTED";
+// COORDINATOR_REVIEW: waiting on the submitter's department R&D Coordinator.
+// PENDING: waiting on R&D (forwarded by the coordinator, or no coordinator).
+// SENT_BACK: returned to the submitter for changes; editing resubmits it.
+export type PublicationStatus = "COORDINATOR_REVIEW" | "PENDING" | "APPROVED" | "REJECTED" | "SENT_BACK";
 
 // Rich, type-specific publication details (Journal/Conference/Book Chapter/
 // Text Book), each institution's R&D policy field set - additive on top of
@@ -1282,7 +1367,7 @@ export interface ResearchPublication {
   ownerName: string;
   ownerRole: UserRole;
   // Resolved academic identity (e.g. "Professor", or generically "Faculty"
-  // for Principal/VP/HOD/Dean who have no separate FacultyMember record) -
+  // for Principal/VP/HOD/Academics who have no separate FacultyMember record) -
   // see src/lib/publications/resolveOwnerDesignation.ts. When present, this
   // is what's displayed instead of ownerRole: the record belongs to the
   // person's academic career, not whichever administrative role they
@@ -1298,6 +1383,7 @@ export interface ResearchPublication {
   reviewedByName?: string;
   reviewedAt?: Timestamp;
   rejectionReason?: string;
+  sentBackReason?: string; // set when an R&D Coordinator returns it for changes
   // Rich Journal/Conference/Book Chapter/Text Book breakdown - absent on
   // every record added before this shipped (CSV-imported or hand-added with
   // the old flat form), which still display fine off the flat fields below.
@@ -1368,6 +1454,7 @@ export interface ResearchProfileRequest {
   reviewedByName?: string;
   reviewedAt?: Timestamp;
   rejectionReason?: string;
+  sentBackReason?: string; // set when an R&D Coordinator returns it for changes
   createdAt: Timestamp;
   updatedAt?: Timestamp;
 }
@@ -1397,6 +1484,7 @@ export interface CitationMetricsRequest {
   reviewedByName?: string;
   reviewedAt?: Timestamp;
   rejectionReason?: string;
+  sentBackReason?: string; // set when an R&D Coordinator returns it for changes
   createdAt: Timestamp;
   updatedAt?: Timestamp;
 }
@@ -1411,6 +1499,11 @@ export type ConsultancyDeliverable = "REPORTS" | "SOFTWARE" | "PROTOTYPE" | "TES
 // CitationMetricsRequest), same PENDING/APPROVED/REJECTED verification flow
 // as ResearchPublication: self-submitted rows start PENDING and only count
 // as official once R&D approves them; R&D's own adds are auto-APPROVED.
+export interface ConsultancyFacultyConsultant {
+  facultyId: string; // Employee ID
+  name: string; // resolved from facultyMembers
+}
+
 export interface ConsultancyProjectRequest {
   id: string;
   collegeId: string;
@@ -1423,17 +1516,22 @@ export interface ConsultancyProjectRequest {
   reviewedByName?: string;
   reviewedAt?: Timestamp;
   rejectionReason?: string;
+  sentBackReason?: string; // set when an R&D Coordinator returns it for changes
 
   title: string;
   facultyConsultantsCount?: number;
-  facultyConsultantsNames: string; // free text - comma-separated names
+  facultyConsultantsNames: string; // comma-separated names - derived from facultyConsultants (free text on older records)
+  facultyConsultants?: ConsultancyFacultyConsultant[]; // by Faculty ID, names resolved server-side
   department?: string;
   clientName: string;
   clientType: ConsultancyClientType;
   consultancyCategory: ConsultancyCategory;
   problemStatement: string; // brief description of the work assigned
+  // Older records predate this. Ongoing => endDate/hours are tentative and no
+  // deliverables/reports are collected; Completed => actuals plus reports.
+  projectStatus?: "ONGOING" | "COMPLETED";
   startDate: string; // yyyy-mm-dd
-  endDate?: string; // yyyy-mm-dd
+  endDate?: string; // yyyy-mm-dd (tentative while Ongoing)
   durationMonths?: number;
   consultancyAmount?: number; // total sanctioned/agreed value
   amountReceived?: number; // actual amount received so far
@@ -1475,7 +1573,8 @@ export interface SeedFundingPaperItem {
   quartile?: string;
   impactFactor?: string;
   indexedScopusWos?: string;
-  citeAs?: string;
+  citeAs?: string; // Seed Funding asks for this in IEEE format
+  paperUrl?: string; // link or uploaded PDF of the paper (Seed Funding)
 }
 
 export interface SeedFundingPatentItem {
@@ -1484,6 +1583,7 @@ export interface SeedFundingPatentItem {
   patentTitle: string;
   inventorDetails: string;
   status: string; // Filed / Published / Granted
+  proofUrl?: string; // link or uploaded PDF of the proof for `status` (Seed Funding)
 }
 
 export type SeedFundingProjectStatus = "SANCTIONED" | "COMPLETED";
@@ -1504,6 +1604,7 @@ export interface SeedFundingProjectRequest {
   reviewedByName?: string;
   reviewedAt?: Timestamp;
   rejectionReason?: string;
+  sentBackReason?: string; // set when an R&D Coordinator returns it for changes
 
   title: string;
   durationMonths?: number;
@@ -1565,6 +1666,16 @@ export interface SponsoredProjectYearData {
   teachingStaffTrainedCount?: number;
   nonTeachingStaffTrainedCount?: number;
   externalPersonsTrainedCount?: number;
+  // Reporting to the sponsoring agency is per year: each year answers whether
+  // its documents were submitted and, if so, attaches them. Supersedes the
+  // project-level fields of the same names on SponsoredProjectRequest, which
+  // only older records still carry.
+  submittedRequiredDocs?: "YES" | "NO";
+  dateOfSubmission?: string;
+  progressReportUrl?: string; // Ongoing
+  completionReportUrl?: string; // Completed
+  utilizationCertificateUrl?: string;
+  statementOfExpenditureUrl?: string;
 }
 
 // A staff-submitted Sponsored Research Project record (Research & Innovation's
@@ -1584,6 +1695,7 @@ export interface SponsoredProjectRequest {
   reviewedByName?: string;
   reviewedAt?: Timestamp;
   rejectionReason?: string;
+  sentBackReason?: string; // set when an R&D Coordinator returns it for changes
 
   agencyName: string;
   schemeName: string;
@@ -1605,6 +1717,10 @@ export interface SponsoredProjectRequest {
   dateProposalSubmitted?: string;
   amountApplied?: number;
   extendedToSeedFund?: "YES" | "NO";
+  // Only when extendedToSeedFund === "YES". The date is stored as typed, DD-MM-YYYY.
+  seedFundTitle?: string;
+  seedFundAmountSanctioned?: number;
+  seedFundSanctionDate?: string;
 
   // Sanctioned branch
   sanctionedStatus?: SponsoredProjectSanctionedStatus; // Ongoing / Completed
@@ -1626,6 +1742,8 @@ export interface SponsoredProjectRequest {
   noOfYears?: number;
   yearlyData: SponsoredProjectYearData[];
 
+  // Legacy - records saved before these moved onto each year (see
+  // SponsoredProjectYearData). New submissions leave them empty.
   progressReportUrl?: string; // Ongoing
   completionReportUrl?: string; // Completed
   utilizationCertificateUrl?: string;
@@ -1684,6 +1802,7 @@ export interface DiscoveryInnovationRequest {
   reviewedByName?: string;
   reviewedAt?: Timestamp;
   rejectionReason?: string;
+  sentBackReason?: string; // set when an R&D Coordinator returns it for changes
 
   iprType: IprType;
   iprStatus: IprStatus; // Published / Granted
@@ -1700,6 +1819,10 @@ export interface DiscoveryInnovationRequest {
   inventors: IprInventor[];
 
   isStudentPatent?: "YES" | "NO";
+  // Only when isStudentPatent === "YES".
+  studentName?: string;
+  studentRegistrationNumber?: string;
+  studentDepartment?: string;
   publishedProofUrl?: string;
   grantedProofUrl?: string;
 
@@ -1742,6 +1865,7 @@ export interface PhdSupervisionRequest {
   reviewedByName?: string;
   reviewedAt?: Timestamp;
   rejectionReason?: string;
+  sentBackReason?: string; // set when an R&D Coordinator returns it for changes
 
   recognizedSupervisor: PhdRecognizedSupervisor;
   otherUniversityName?: string; // when recognizedSupervisor === OTHER
@@ -1824,6 +1948,7 @@ export interface ResearchServiceRequest {
   reviewedByName?: string;
   reviewedAt?: Timestamp;
   rejectionReason?: string;
+  sentBackReason?: string; // set when an R&D Coordinator returns it for changes
 
   serviceType: ResearchServiceType;
 
@@ -1856,7 +1981,8 @@ export interface ResearchServiceRequest {
   papersAccepted?: number;
   papersPublishedCount?: number;
   papersIndexedCount?: number;
-  conferenceProceedingsUrl?: string;
+  conferenceProceedingsUrl?: string; // uploaded PDF
+  conferenceProceedingsLink?: string; // proceedings / DOI link - may be given alongside the PDF
 
   // Workshop-only
   participantsRegisteredInternal?: number;
@@ -1932,6 +2058,7 @@ export interface HackathonRequest {
   reviewedByName?: string;
   reviewedAt?: Timestamp;
   rejectionReason?: string;
+  sentBackReason?: string; // set when an R&D Coordinator returns it for changes
 
   academicYear: string;
   eventTitle: string;
@@ -1997,6 +2124,7 @@ export interface InnovationRequest {
   reviewedByName?: string;
   reviewedAt?: Timestamp;
   rejectionReason?: string;
+  sentBackReason?: string; // set when an R&D Coordinator returns it for changes
 
   academicYear: string;
   innovatorType: InnovatorType;
@@ -2305,7 +2433,7 @@ export interface FacultyProfileFields {
   // UG/PG/PhD and the PhD-specific fields below don't apply to school teachers
   // (see College.type and src/lib/designations/config.ts).
   highestQualification: string;
-  researchAreasInterests?: string[]; // mandatory (at least one) in the Add/Edit form - see QualificationFields
+  researchAreasInterests?: string[]; // optional - see QualificationFields
   secondaryEducation?: DegreeDetail; // 10th
   intermediateDiplomaIti?: DegreeDetail; // 12th / Diploma / ITI
   ugDetails?: DegreeDetail;
@@ -2544,6 +2672,17 @@ export interface StudentRecord {
   // session 2025 gives "2025-2028", not "2024-2028". See
   // lib/college/academicSession.ts's lateralEntryBatch.
   batch?: string;
+  // Which lab sub-group this student sits in for their section's split
+  // PRACTICAL periods (see TimetableSlot.labBatch), e.g. "Batch 1" - free
+  // text, manually set per student by the HOD (hod/students page), matched
+  // case/whitespace-insensitively against the period's own labBatch label
+  // when a lab period's attendance roster is filtered (sectionRoster.ts).
+  // Unrelated to `batch` above (admission cohort). Absent for a student not
+  // yet assigned, or in a section with no split lab periods at all - such a
+  // student won't appear in ANY batch-filtered attendance session until
+  // assigned, so an unassigned student is a gap the HOD needs to notice and
+  // fill in, not something the system guesses.
+  labBatch?: string;
   // ─── Admission-detail fields ────────────────────────────────────────────
   // All optional, all set only via the College Office bulk import (see
   // src/lib/students/importRow.ts) - there is no per-student edit form for
@@ -2670,6 +2809,10 @@ export type NotificationType =
   | "LEAVE_APPROVED"
   | "LEAVE_REJECTED"
   | "LEAVE_OD_PROOF_PENDING_VERIFICATION"
+  // Late-attendance permission (see types/permission.ts)
+  | "PERMISSION_REQUESTED"
+  | "PERMISSION_APPROVED"
+  | "PERMISSION_REJECTED"
   | "LEAVE_OD_PROOF_VERIFIED"
   | "LEAVE_OD_PROOF_REJECTED"
   | "ATTENDANCE_MANUALLY_MARKED"

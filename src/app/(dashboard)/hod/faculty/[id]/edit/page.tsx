@@ -14,13 +14,13 @@ import { AvatarUploadField } from "@/components/shared/AvatarUploadField";
 import { TextInput } from "@/components/shared/ProfileFieldPrimitives";
 import { HIGHEST_QUALIFICATION_OPTIONS } from "@/lib/import/fieldConstraints";
 import { normalizeHighestQualification } from "@/lib/faculty/highestQualification";
-import { PHONE_REGEX } from "@/lib/validations";
+import { PHONE_REGEX, EMAIL_REGEX, APAAR_REGEX } from "@/lib/validations";
 import { toast } from "@/hooks/useToast";
 import { migrateFacultyDoc } from "@/lib/faculty/fieldRenames";
 import { toDateInputValue } from "@/lib/utils";
 import { designationLabel } from "@/lib/designations/config";
-import { EMPLOYEE_CATEGORY_LABELS } from "@/types";
-import type { DesignationCatalogItem, Designation, EmployeeCategory } from "@/types";
+import { EMPLOYEE_CATEGORY_LABELS, FACULTY_STATUS_LABELS, SELECTABLE_FACULTY_STATUS_VALUES } from "@/types";
+import type { DesignationCatalogItem, Designation, EmployeeCategory, FacultyStatus } from "@/types";
 
 // Sentinel for the "Others" row - matches hod/faculty/new/page.tsx's own
 // highest-qualification picker.
@@ -31,6 +31,7 @@ interface IdentityForm {
   apaarFacultyId: string;
   designation: Designation | "";
   employeeCategory: EmployeeCategory | "";
+  status: FacultyStatus;
   highestQualification: string;
   specialization: string;
   joiningDate: string;
@@ -40,7 +41,7 @@ interface IdentityForm {
 }
 
 const EMPTY_FORM: IdentityForm = {
-  legalName: "", apaarFacultyId: "", designation: "", employeeCategory: "",
+  legalName: "", apaarFacultyId: "", designation: "", employeeCategory: "", status: "ACTIVE",
   highestQualification: "", specialization: "", joiningDate: "", aicteFacultyId: "",
   email: "", mobileNo: "",
 };
@@ -67,6 +68,9 @@ export default function EditHodFacultyIdentityPage() {
   const [qualIsOther, setQualIsOther] = useState(false);
   const [extraPhones, setExtraPhones] = useState<{ label?: string; number: string }[]>([]);
   const [photoUrl, setPhotoUrl] = useState<string | undefined>(undefined);
+  // With a Promotion History on file, that history (College Office > Promotion & Salary) decides the
+  // current designation - the server rejects a different value here, so the field is read-only.
+  const [designationManaged, setDesignationManaged] = useState(false);
   const [designationOptions, setDesignationOptions] = useState<string[]>([]);
 
   useEffect(() => {
@@ -89,6 +93,7 @@ export default function EditHodFacultyIdentityPage() {
           apaarFacultyId: (m.apaarFacultyId as string) ?? "",
           designation: (m.designation as Designation) ?? "",
           employeeCategory: (m.employeeCategory as EmployeeCategory) ?? "",
+          status: (m.status as FacultyStatus) ?? "ACTIVE",
           highestQualification,
           specialization: (m.specialization as string) ?? "",
           joiningDate: toDateInputValue(m.joiningDate as never),
@@ -96,6 +101,8 @@ export default function EditHodFacultyIdentityPage() {
           email: (m.email as string) ?? "",
           mobileNo: (m.mobileNo as string) ?? "",
         });
+        const history = (m.academicProfile as { promotionHistory?: unknown[] } | undefined)?.promotionHistory;
+        setDesignationManaged(Array.isArray(history) && history.length > 0);
         setExtraPhones((m.additionalPhoneNumbers as { label?: string; number: string }[]) ?? []);
         setPhotoUrl((m.profilePhotoUrl as string) || undefined);
       })
@@ -143,7 +150,15 @@ export default function EditHodFacultyIdentityPage() {
       return;
     }
     if (!form.mobileNo.trim() || !PHONE_REGEX.test(form.mobileNo)) {
-      toast({ variant: "destructive", title: "Mobile No is required and must be a valid phone number" });
+      toast({ variant: "destructive", title: "Mobile No must be exactly 10 digits, starting with 6, 7, 8 or 9" });
+      return;
+    }
+    if (form.email.trim() && !EMAIL_REGEX.test(form.email.trim())) {
+      toast({ variant: "destructive", title: "Enter a valid email address" });
+      return;
+    }
+    if (form.apaarFacultyId.trim() && !APAAR_REGEX.test(form.apaarFacultyId.trim())) {
+      toast({ variant: "destructive", title: "APAAR Faculty ID must be exactly 12 digits" });
       return;
     }
 
@@ -157,6 +172,7 @@ export default function EditHodFacultyIdentityPage() {
           apaarFacultyId: form.apaarFacultyId.trim(),
           designation: form.designation,
           employeeCategory: form.employeeCategory,
+          status: form.status,
           highestQualification: form.highestQualification.trim(),
           specialization: form.specialization.trim(),
           joiningDate: form.joiningDate,
@@ -223,7 +239,15 @@ export default function EditHodFacultyIdentityPage() {
                 </div>
                 <div className="space-y-2">
                   <Label>APAAR Faculty ID</Label>
-                  <Input value={form.apaarFacultyId} onChange={(e) => set({ apaarFacultyId: e.target.value })} placeholder="NBA/AICTE APAAR ID" />
+                  <Input
+                    inputMode="numeric" maxLength={12}
+                    value={form.apaarFacultyId}
+                    onChange={(e) => set({ apaarFacultyId: e.target.value.replace(/\D/g, "").slice(0, 12) })}
+                    placeholder="123456789012"
+                  />
+                  {!!form.apaarFacultyId && !APAAR_REGEX.test(form.apaarFacultyId) && (
+                    <p className="text-xs text-destructive">Must be exactly 12 digits</p>
+                  )}
                 </div>
               </div>
             </div>
@@ -246,7 +270,7 @@ export default function EditHodFacultyIdentityPage() {
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label>Designation *</Label>
-                <Select value={form.designation} onValueChange={(v) => set({ designation: v as Designation })}>
+                <Select value={form.designation} onValueChange={(v) => set({ designation: v as Designation })} disabled={designationManaged}>
                   <SelectTrigger><SelectValue placeholder="Select designation" /></SelectTrigger>
                   <SelectContent>
                     {designationOptions.map((d) => <SelectItem key={d} value={d}>{designationLabel(d)}</SelectItem>)}
@@ -258,6 +282,11 @@ export default function EditHodFacultyIdentityPage() {
                     )}
                   </SelectContent>
                 </Select>
+                {designationManaged && (
+                  <p className="text-xs text-muted-foreground">
+                    Managed by this faculty member&apos;s Promotion History - College Office updates it under Promotion &amp; Salary.
+                  </p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label>Employee Category *</Label>
@@ -266,6 +295,17 @@ export default function EditHodFacultyIdentityPage() {
                   <SelectContent>
                     {Object.entries(EMPLOYEE_CATEGORY_LABELS).map(([k, label]) => (
                       <SelectItem key={k} value={k}>{label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Status *</Label>
+                <Select value={form.status} onValueChange={(v) => set({ status: v as FacultyStatus })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {SELECTABLE_FACULTY_STATUS_VALUES.map((s) => (
+                      <SelectItem key={s} value={s}>{FACULTY_STATUS_LABELS[s]}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -317,6 +357,9 @@ export default function EditHodFacultyIdentityPage() {
               <div className="space-y-2">
                 <Label>Personal Email</Label>
                 <Input type="email" value={form.email} onChange={(e) => set({ email: e.target.value })} placeholder="faculty@example.com" />
+                {!!form.email.trim() && !EMAIL_REGEX.test(form.email.trim()) && (
+                  <p className="text-xs text-destructive">Doesn&rsquo;t look like a valid email address</p>
+                )}
               </div>
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
@@ -331,7 +374,15 @@ export default function EditHodFacultyIdentityPage() {
                     + Add Number
                   </Button>
                 </div>
-                <Input type="tel" autoComplete="off" value={form.mobileNo} onChange={(e) => set({ mobileNo: e.target.value })} placeholder="+91 98765 43210" />
+                <Input
+                  type="tel" inputMode="numeric" autoComplete="off" maxLength={10}
+                  value={form.mobileNo}
+                  onChange={(e) => set({ mobileNo: e.target.value.replace(/\D/g, "").slice(0, 10) })}
+                  placeholder="9876543210"
+                />
+                {!!form.mobileNo && !PHONE_REGEX.test(form.mobileNo) && (
+                  <p className="text-xs text-destructive">Must be exactly 10 digits, starting with 6, 7, 8 or 9</p>
+                )}
               </div>
             </div>
 
@@ -348,9 +399,10 @@ export default function EditHodFacultyIdentityPage() {
                       />
                       <TextInput
                         label="Mobile Number"
+                        type="tel"
                         value={item.number}
                         onChange={(v) => setExtraPhones((prev) => prev.map((p, idx) => (idx === i ? { ...p, number: v } : p)))}
-                        placeholder="+91 98765 43210"
+                        placeholder="9876543210"
                       />
                     </div>
                     <Button

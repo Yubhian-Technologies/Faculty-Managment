@@ -160,6 +160,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       secondaryDepartment?: string | null;
       rollNumber?: string;
       status?: StudentStatus;
+      /** Which lab sub-group (e.g. "Batch 1") - see StudentRecord.labBatch. Empty string clears it. */
+      labBatch?: string;
       /** Admission details from the Office's per-student Edit form. */
       details?: Record<string, unknown>;
     };
@@ -326,15 +328,26 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       return NextResponse.json({ ok: true });
     }
 
-    // Field-only edit (no section move): assign/correct a student's roll number
-    // or status. Roll numbers are the department's responsibility - the assigned
-    // HOD (years 2-4) or sub-HOD (year 1) fills them in after sectioning - so
-    // this path is closed to the College Office and faculty.
+    // Field-only edit (no section move): assign/correct a student's roll number,
+    // status, or lab batch. Roll number and status are the department's
+    // responsibility - the assigned HOD (years 2-4) or sub-HOD (year 1) fills
+    // them in after sectioning - so those two stay closed to the College
+    // Office and faculty. Lab Batch (see StudentRecord.labBatch's own
+    // doc-comment) is different: dividing a section's own students into lab
+    // sub-groups is squarely the Faculty Incharge's own business, so it's also
+    // open to a PANEL_MEMBER, but ONLY for a lab-batch-only request (checked
+    // just below) and only for a student in a section they're actually in
+    // charge of (checked further down, once the student doc is loaded) - see
+    // panel/students/batches/page.tsx.
     if (!body.targetSectionId) {
-      if (body.rollNumber === undefined && body.status === undefined) {
+      if (body.rollNumber === undefined && body.status === undefined && body.labBatch === undefined) {
         return NextResponse.json({ error: "targetSectionId is required" }, { status: 400 });
       }
-      if (!["HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN"].includes(session.role)) {
+      const isLabBatchOnly = body.rollNumber === undefined && body.status === undefined && body.labBatch !== undefined;
+      if (
+        !["HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN"].includes(session.role)
+        && !(session.role === "PANEL_MEMBER" && isLabBatchOnly)
+      ) {
         return NextResponse.json(
           { error: "Only the department's HOD can set a student's roll number or status" },
           { status: 403 }
@@ -353,6 +366,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         const catalogId = await catalogIdForStudent(db, session.collegeId, student);
         if (!inHodScope(student.department, student.year, catalogId)) {
           return NextResponse.json({ error: "Outside your department" }, { status: 403 });
+        }
+      } else if (session.role === "PANEL_MEMBER") {
+        const candidateIds = await getFacultyIdCandidates(db, session.collegeId, session.uid);
+        const currentSectionDoc = await findCurrentSectionDoc(db, session.collegeId, student);
+        const currentInchargeUid = currentSectionDoc?.data().facultyInchargeUid;
+        if (!currentSectionDoc || !currentInchargeUid || !candidateIds.includes(currentInchargeUid)) {
+          return NextResponse.json({ error: "You are not in charge of this student's section" }, { status: 403 });
         }
       }
 
@@ -383,6 +403,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
           }
         }
         updates.rollNumber = roll;
+      }
+
+      if (body.labBatch !== undefined) {
+        updates.labBatch = body.labBatch.trim();
       }
 
       await studentRef.update(updates);

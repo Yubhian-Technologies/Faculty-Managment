@@ -20,7 +20,7 @@ import { isTimetableIncharge } from "@/lib/departments/timetableIncharge";
 export async function GET() {
   try {
     const session = await requireCollegeMember(
-      "HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "DEAN", "PANEL_MEMBER", "COLLEGE_STAFF",
+      "HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "ACADEMICS", "PANEL_MEMBER", "COLLEGE_STAFF",
     );
     const db = getAdminDb();
     const coll = db.collection("colleges").doc(session.collegeId).collection("facultyAssignmentRequests");

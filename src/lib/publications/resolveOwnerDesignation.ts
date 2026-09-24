@@ -3,11 +3,11 @@ import type { Firestore } from "firebase-admin/firestore";
 // Academic-leadership roles that resolveEmployeeIdentity (src/lib/leave/
 // identity.ts) already treats as teaching-equivalent when they have no
 // FacultyMember record of their own.
-const ACADEMIC_LEADERSHIP_ROLES: string[] = ["HOD", "PRINCIPAL", "VICE_PRINCIPAL", "DEAN"];
+const ACADEMIC_LEADERSHIP_ROLES: string[] = ["HOD", "PRINCIPAL", "VICE_PRINCIPAL", "ACADEMICS"];
 
 // A publication belongs to the person's academic career, not whichever
 // administrative role they happened to hold when it was added - Principal/
-// VP/HOD/Dean are fundamentally faculty serving in an administrative
+// VP/HOD/Academics are fundamentally faculty serving in an administrative
 // capacity, and that capacity can change while the record must stay theirs.
 // Resolves what to show INSTEAD of the raw functional role: their real
 // designation if they still have a linked FacultyMember record, else a

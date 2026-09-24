@@ -1,10 +1,26 @@
 import { z } from "zod";
 
-// A value typed into a phone field is unlikely to contain letters or an "@" -
-// catches "an email was typed into a phone field" and similar mistakes
-// without being strict enough to reject real phone formats (spaces, dashes,
-// parentheses, country code +).
-export const PHONE_REGEX = /^[+()\d\s-]{7,20}$/;
+// An Indian mobile number: exactly 10 digits, no spaces/dashes/country code,
+// starting with 6, 7, 8 or 9 - the only shape a mobile number field accepts
+// anywhere staff/candidate contact details are entered.
+export const PHONE_REGEX = /^[6-9]\d{9}$/;
+
+// "username@domain.extension" - requires an "@" and at least one "." after it,
+// so "user@localhost" (no extension) is rejected the same as a missing "@".
+export const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// PAN: 5 letters, 4 digits, 1 letter - e.g. ABCDE1234F. Always uppercase.
+export const PAN_REGEX = /^[A-Z]{5}\d{4}[A-Z]$/;
+
+// Aadhaar: exactly 12 digits, no letters or separators.
+export const AADHAR_REGEX = /^\d{12}$/;
+
+// APAAR Faculty ID: exactly 12 digits, no letters or separators.
+export const APAAR_REGEX = /^\d{12}$/;
+
+// Height as "<feet>.<inches>" - e.g. "5.7" (5 ft 7 in). Feet: 1-2 digits.
+// Inches: 0-11 (a real foot/inch value), written as 1 or 2 digits.
+export const HEIGHT_REGEX = /^\d{1,2}\.(?:[0-9]|1[01])$/;
 
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 
@@ -43,7 +59,7 @@ export const createUserSchema = z.object({
     "HOD",
     "COLLEGE_OFFICE",
     "COLLEGE_STAFF",
-    "DEAN",
+    "ACADEMICS",
     "IQAC_COORDINATOR",
     "T_AND_P",
     "R_AND_D",
@@ -128,10 +144,10 @@ export type PrincipalVacancyResponseData = z.infer<typeof principalVacancyRespon
 
 export const candidateSchema = z.object({
   name: z.string().min(2, "Name is required"),
-  email: z.string().email("Enter a valid email"),
+  email: z.string().regex(EMAIL_REGEX, "Enter a valid email"),
   phone: z
     .string()
-    .regex(/^[6-9]\d{9}$/, "Enter a valid 10-digit Indian mobile number"),
+    .regex(PHONE_REGEX, "Enter a valid 10-digit Indian mobile number"),
   department: z.string().min(1, "Department is required"),
   position: z.string().min(1, "Position is required"),
   source: z.enum(["REFERRAL", "CAREERS_PAGE"]),
@@ -142,10 +158,10 @@ export type CandidateFormData = z.infer<typeof candidateSchema>;
 
 export const publicApplicationSchema = z.object({
   name: z.string().min(2, "Name is required"),
-  email: z.string().email("Enter a valid email"),
+  email: z.string().regex(EMAIL_REGEX, "Enter a valid email"),
   phone: z
     .string()
-    .regex(/^[6-9]\d{9}$/, "Enter a valid 10-digit Indian mobile number"),
+    .regex(PHONE_REGEX, "Enter a valid 10-digit Indian mobile number"),
   coverLetter: z
     .string()
     .max(1000, "Cover letter must be under 1000 characters")

@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { LocationCollegeSelect } from "@/components/shared/LocationCollegeSelect";
 import { toast } from "@/hooks/useToast";
 import type { LocationDepartment } from "@/types";
 
@@ -15,6 +16,7 @@ export default function NewHRCandidatePage() {
   const router = useRouter();
   const [depts, setDepts] = useState<LocationDepartment[]>([]);
   const [saving, setSaving] = useState(false);
+  const [collegeId, setCollegeId] = useState("");
   const [form, setForm] = useState({
     name: "", email: "", phone: "", department: "", qualification: "", notes: "",
   });
@@ -26,7 +28,7 @@ export default function NewHRCandidatePage() {
       .catch(() => {});
   }, []);
 
-  const isValid = !!form.name && !!form.email && !!form.phone && !!form.department;
+  const isValid = !!form.name && !!form.email && !!form.phone && !!form.department && !!collegeId;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -36,7 +38,7 @@ export default function NewHRCandidatePage() {
       const res = await fetch("/api/location/candidates", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, collegeId }),
       });
       const json = await res.json() as { id?: string; error?: string };
       if (!res.ok) {
@@ -77,7 +79,7 @@ export default function NewHRCandidatePage() {
               </div>
               <div className="space-y-2">
                 <Label>Phone <span className="text-destructive">*</span></Label>
-                <Input value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} placeholder="9876543210" />
+                <Input type="tel" value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} placeholder="9876543210" />
               </div>
             </div>
 
@@ -89,6 +91,11 @@ export default function NewHRCandidatePage() {
                   {depts.map((d) => <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>)}
                 </SelectContent>
               </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>College <span className="text-destructive">*</span></Label>
+              <LocationCollegeSelect value={collegeId} onChange={setCollegeId} className="h-9 w-full text-sm" />
             </div>
 
             <div className="space-y-2">

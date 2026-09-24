@@ -22,15 +22,17 @@ import {
 import { TextInput } from "@/components/shared/ProfileFieldPrimitives";
 import { syncTeachingAssignments } from "@/lib/teaching/syncTeachingAssignments";
 import { experienceBreakdown, totalYearsOfExperience, formatDuration, allPreviousExperienceEntries } from "@/lib/faculty/experienceCalc";
-import { PHONE_REGEX } from "@/lib/validations";
+import { PHONE_REGEX, EMAIL_REGEX, APAAR_REGEX } from "@/lib/validations";
 import { AvatarUploadField } from "@/components/shared/AvatarUploadField";
 import { PROFILE_MODULES } from "@/lib/faculty/profileModules";
-import { EMPLOYEE_CATEGORY_LABELS } from "@/types";
-import type { DesignationCatalogItem, EmployeeCategory } from "@/types";
+import { EMPLOYEE_CATEGORY_LABELS, FACULTY_STATUS_LABELS, SELECTABLE_FACULTY_STATUS_VALUES } from "@/types";
+import type { DesignationCatalogItem, EmployeeCategory, FacultyStatus } from "@/types";
 import { useCollegeType } from "@/hooks/useCollegeType";
 import { designationLabel } from "@/lib/designations/config";
 import { useAuthStore } from "@/store/authStore";
 import { toast } from "@/hooks/useToast";
+import { useMyDepartments } from "@/hooks/useMyDepartments";
+import { facultyDepartmentOptions } from "@/lib/departments/facultyDepartmentOptions";
 import type { FacultyProfileFields } from "@/types";
 
 // Sentinel for the "Others" row - never stored, it just switches the field to
@@ -45,13 +47,14 @@ const OTHER_QUALIFICATION = "__OTHER__";
 // depends on which mode the page is in.
 const schema = z.object({
   employeeId: z.string().min(1, "Employee ID is required"),
-  apaarFacultyId: z.string().optional(),
-  email: z.string().email("Invalid email address").optional().or(z.literal("")),
-  collegeEmail: z.string().email("Invalid email address").optional().or(z.literal("")),
+  apaarFacultyId: z.string().regex(APAAR_REGEX, "APAAR Faculty ID must be exactly 12 digits").optional().or(z.literal("")),
+  email: z.string().regex(EMAIL_REGEX, "Invalid email address").optional().or(z.literal("")),
+  collegeEmail: z.string().regex(EMAIL_REGEX, "Invalid email address").optional().or(z.literal("")),
   password: z.string().min(8, "Password must be at least 8 characters").optional().or(z.literal("")),
-  mobileNo: z.string().min(1, "Mobile No is required").regex(PHONE_REGEX, "Doesn't look like a valid phone number"),
+  mobileNo: z.string().min(1, "Mobile No is required").regex(PHONE_REGEX, "Mobile No must be exactly 10 digits, starting with 6, 7, 8 or 9"),
   designation: z.string().min(1, "Designation is required"),
   employeeCategory: z.string().min(1, "Employee Category is required"),
+  status: z.string().min(1, "Status is required"),
   highestQualification: z.string().min(1, "Highest Qualification is required"),
   specialization: z.string().optional(),
   totalYearsOfExperience: z.number().min(0, "Cannot be negative").optional(),
@@ -97,22 +100,35 @@ export default function NewFacultyPage() {
   // recover from the UI otherwise (it 400s "You manage more than one
   // department - specify which" once departments.length > 1) - this picker
   // is what actually satisfies that requirement.
-  const ownDepartments = user?.departments && user.departments.length > 0 ? user.departments : (user?.department ? [user.department] : []);
+  const ownDepartments = useMyDepartments();
   // The Principal / Vice Principal (incl. a College Admin) add faculty too -
   // it is how a new college gets its first teaching staff before any HOD
   // exists. They belong to no department, so they always pick one from the
   // college's active departments; an HOD keeps their own list.
-  const isCollegeLevel = user?.role === "PRINCIPAL" || user?.role === "VICE_PRINCIPAL";
-  const [collegeDepartments, setCollegeDepartments] = useState<string[]>([]);
+  //
+  // "Owns no department" is the test rather than a list of role names: a
+  // College Admin reaches this page too, and their login does not always
+  // carry the literal PRINCIPAL role (a multi-seat account working as
+  // Principal keeps its own underlying role on the user doc). Matching on
+  // role alone skipped this whole block for them - no department fetch, no
+  // picker, and nothing to fall back on, so the new faculty member was filed
+  // under an empty department. Anyone with a department of their own (every
+  // HOD) is unaffected.
+  const isCollegeLevel =
+    user?.role === "PRINCIPAL" || user?.role === "VICE_PRINCIPAL" || ownDepartments.length === 0;
+  // Fetched for every HOD too now, not just college-level - see
+  // facultyDepartmentOptions' own doc-comment on why ownDepartments alone
+  // isn't enough to offer a parent HOD's sub-departments here.
+  const [allDepartments, setAllDepartments] = useState<{ id: string; name: string; code: string; parentDepartmentId?: string; isActive?: boolean }[]>([]);
   useEffect(() => {
-    if (!isCollegeLevel) return;
     fetch("/api/college/departments")
-      .then((r) => r.json() as Promise<{ departments?: { name: string; isActive?: boolean }[] }>)
-      .then((d) => setCollegeDepartments((d.departments ?? []).filter((dep) => dep.isActive !== false).map((dep) => dep.name)))
+      .then((r) => r.json() as Promise<{ departments?: { id: string; name: string; code: string; parentDepartmentId?: string; isActive?: boolean }[] }>)
+      .then((d) => setAllDepartments((d.departments ?? []).filter((dep) => dep.isActive !== false)))
       .catch(() => { /* picker stays empty */ });
-  }, [isCollegeLevel]);
-  const myDepartments = isCollegeLevel ? collegeDepartments : ownDepartments;
-  const mustPickDepartment = isCollegeLevel || ownDepartments.length > 1;
+  }, []);
+  const myDepartments = isCollegeLevel
+    ? allDepartments.map((d) => d.name)
+    : facultyDepartmentOptions(allDepartments, ownDepartments).map((d) => d.name);
   const listPath = isCollegeLevel ? "/principal/faculty" : "/hod/faculty";
 
   // Reached from the Faculty Register's "Sub-Department HODs" card when that
@@ -141,6 +157,13 @@ export default function NewFacultyPage() {
   // implicitly. Passed to TeachingAssignmentsEditor so its Year options are
   // scoped to THIS department's own Course Year Timings.
   const effectiveDepartment = isLinkMode ? linkDepartment : (department || myDepartments[0] || "");
+  // Pre-fills the now-always-visible Department picker once there's exactly
+  // one real choice, so a genuinely single-department HOD still sees it
+  // filled in without an extra click - only a real choice (more than one
+  // option) is left for them to actually make.
+  useEffect(() => {
+    if (!isLinkMode && !department && myDepartments.length === 1) setDepartment(myDepartments[0]);
+  }, [isLinkMode, department, myDepartments]);
   const [teachingRows, setTeachingRows] = useState<StagedTeachingRow[]>([]);
   // Extra contact numbers beyond the primary Mobile No below - each with an
   // optional freeform label (e.g. "Personal", or just whoever's number it
@@ -156,17 +179,20 @@ export default function NewFacultyPage() {
     handleSubmit,
     setValue,
     watch,
+    trigger,
+    getValues,
     formState: { errors },
   } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: {
-      totalYearsOfExperience: 0, designation: "", password: "",
+      totalYearsOfExperience: 0, designation: "", password: "", status: "ACTIVE",
     },
   });
   const [erroredSteps, setErroredSteps] = useState<Set<WizardStepKey>>(new Set());
 
   const designation = watch("designation");
   const employeeCategory = watch("employeeCategory");
+  const status = watch("status");
   const highestQualification = watch("highestQualification");
   // "Others" is a mode, not a stored value - it reveals a free-text box whose
   // contents become `highestQualification`. Needs its own state because once the user
@@ -221,18 +247,83 @@ export default function NewFacultyPage() {
 
   // Every validated/required field lives on the "core" step; map each to a
   // friendly label so a failed submit can say exactly what's missing and in
-  // which module (see onInvalid). Steps can be navigated freely - validation
-  // is deferred entirely to submit time.
+  // which module (see onInvalid). Next enforces the current step before
+  // advancing (findStepProblem); submit re-checks everything, since the step
+  // indicator can still jump straight to Review.
   const FIELD_LABELS: Record<string, string> = {
     employeeId: "Employee ID", collegeEmail: "College Email",
     password: "Login Password", mobileNo: "Mobile No", designation: "Designation",
-    employeeCategory: "Employee Category",
+    employeeCategory: "Employee Category", status: "Status",
     highestQualification: "Highest Qualification", totalYearsOfExperience: "Total Years of Experience",
     joiningDate: "Date of Joining",
     legalName: "Full Name (as per SSC)",
   };
 
+  // Every constraint the final submit enforces, grouped by the step whose
+  // fields it reads. Leaving a step checks that step's own fields, so a
+  // problem is raised where it can be fixed - rather than surfacing all at
+  // once at the very end, several steps away from the input at fault.
+  //
+  // A rule spanning two steps belongs to the LATER of them: Date of Birth
+  // (Personal Details) vs Date of Joining (Identity & Employment) can only be
+  // compared once both have been passed through.
+  function findStepProblem(key: WizardStepKey): { title: string; description: string } | null {
+    if (key === "core") {
+      // The zod schema covers this step alone, so its own messages are the
+      // complete list - each already reads as a full sentence ("Employee ID
+      // is required", "Mobile No must be exactly 10 digits, ...").
+      const problems = schema.safeParse(getValues()).error?.issues.map((i) => i.message) ?? [];
+      // Not in the schema (they don't apply in link mode) - same checks
+      // onSubmit makes, just raised a step earlier.
+      if (!isLinkMode && !department) problems.push("Department is required");
+      if (!isLinkMode && !getValues("collegeEmail")?.trim()) problems.push("College Email is required");
+      if (!isLinkMode && !getValues("password")?.trim()) problems.push("Login Password is required");
+      if (!personalDetails.legalName?.trim()) problems.push("Full Name (as per SSC) is required");
+      if (problems.length > 0) {
+        return {
+          title: "Identity & Employment is incomplete",
+          description: Array.from(new Set(problems)).join(" · "),
+        };
+      }
+      return null;
+    }
+
+    if (key === "personal") {
+      const missing = getMissingRequiredPersonalFields(personalDetails, FACULTY_REQUIRED_PERSONAL_FIELDS);
+      if (missing.length > 0) {
+        return { title: "Personal Details is incomplete", description: `Required: ${missing.join(", ")}` };
+      }
+      const joiningDate = getValues("joiningDate");
+      if (personalDetails.dateOfBirth && joiningDate && personalDetails.dateOfBirth >= joiningDate) {
+        return {
+          title: "Date of Birth must be before Date of Joining",
+          description: "Check the Date of Birth on this step and the Date of Joining on Identity & Employment.",
+        };
+      }
+      return null;
+    }
+
+    // The remaining steps carry no required fields - everything on them is
+    // optional profile detail.
+    return null;
+  }
+
   function goNext() {
+    const problem = findStepProblem(step.key);
+    if (problem) {
+      // trigger() in parallel so the offending inputs are marked inline too,
+      // not just named in the toast.
+      if (step.key === "core") void trigger();
+      setErroredSteps((prev) => new Set(prev).add(step.key));
+      toast({ variant: "destructive", title: problem.title, description: problem.description });
+      return;
+    }
+    setErroredSteps((prev) => {
+      if (!prev.has(step.key)) return prev;
+      const next = new Set(prev);
+      next.delete(step.key);
+      return next;
+    });
     setStepIndex((i) => Math.min(i + 1, steps.length - 1));
   }
 
@@ -253,10 +344,10 @@ export default function NewFacultyPage() {
     // Which department this faculty member belongs to isn't in the zod
     // schema (link mode ignores it entirely - the department is already
     // fixed to linkDepartment) - checked here instead, same pattern as
-    // College Email/Password below. Only actually required once this HOD
-    // heads more than one department; a single-department HOD never sees
-    // the picker and the server falls back to their one department itself.
-    if (!isLinkMode && mustPickDepartment && !department) {
+    // College Email/Password below. Auto-filled above once there's exactly
+    // one real choice, so this only actually blocks submission when there's
+    // more than one department to pick from and none has been picked yet.
+    if (!isLinkMode && !department) {
       setErroredSteps(new Set<WizardStepKey>(["core"]));
       setStepIndex(steps.findIndex((s) => s.key === "core"));
       toast({ variant: "destructive", title: "Some required fields are missing", description: "Identity & Employment: Department" });
@@ -293,12 +384,24 @@ export default function NewFacultyPage() {
       toast({ variant: "destructive", title: "Some required fields are missing", description: `Personal Details: ${missingPersonal.join(", ")}` });
       return;
     }
-    // Research Areas/Interests isn't zod-validated (academicProfile is plain
-    // React state) - checked here instead, same pattern as Personal Details above.
-    if (!academicProfile.researchAreasInterests || academicProfile.researchAreasInterests.length === 0) {
-      setErroredSteps(new Set<WizardStepKey>(["qualification"]));
-      setStepIndex(steps.findIndex((s) => s.key === "qualification"));
-      toast({ variant: "destructive", title: "Some required fields are missing", description: "Academic Qualification: Research Areas/Interests" });
+    // Date of Birth must come before Date of Joining - nobody joins on or
+    // before the day they were born. The two live on different steps (DOB in
+    // Personal Details, joining date on Identity & Employment) and in
+    // different state, so neither field can catch this on its own; compared
+    // here, once both are known to be filled in. Plain string compare is
+    // enough - both inputs are type="date", so both are YYYY-MM-DD.
+    if (
+      personalDetails.dateOfBirth &&
+      data.joiningDate &&
+      personalDetails.dateOfBirth >= data.joiningDate
+    ) {
+      setErroredSteps(new Set<WizardStepKey>(["personal"]));
+      setStepIndex(steps.findIndex((s) => s.key === "personal"));
+      toast({
+        variant: "destructive",
+        title: "Date of Birth must be before Date of Joining",
+        description: "Check the Date of Birth on Personal Details and the Date of Joining on Identity & Employment.",
+      });
       return;
     }
     // Full Name (as per SSC) is the only display name - used everywhere this
@@ -363,7 +466,8 @@ export default function NewFacultyPage() {
       />
 
       {/* Step indicator - click any step to jump to it; steps with missing
-          required fields (after a submit attempt) are outlined in red. */}
+          required fields are outlined in red. Jumping stays free (it is how
+          you go back to fix something); it is Next that enforces the step. */}
       <div className="flex flex-wrap gap-2 mb-4">
         {steps.map((s, i) => (
           <button
@@ -411,7 +515,16 @@ export default function NewFacultyPage() {
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="apaarFacultyId">APAAR Faculty ID</Label>
-                      <Input id="apaarFacultyId" {...register("apaarFacultyId")} placeholder="NBA/AICTE APAAR ID" />
+                      <Input
+                        id="apaarFacultyId" inputMode="numeric" maxLength={12}
+                        {...register("apaarFacultyId")}
+                        onChange={(e) => {
+                          e.target.value = e.target.value.replace(/\D/g, "").slice(0, 12);
+                          void register("apaarFacultyId").onChange(e);
+                        }}
+                        placeholder="123456789012"
+                      />
+                      {errors.apaarFacultyId && <p className="text-sm text-destructive">{errors.apaarFacultyId.message}</p>}
                     </div>
                   </div>
                 </div>
@@ -426,14 +539,16 @@ export default function NewFacultyPage() {
                   </div>
                 )}
 
-                {/* Only shown when this HOD heads more than one department at
-                    once - a single-department HOD's own department is always
-                    implicit, same as before. Placed right after identity,
-                    before Role/Employment Details, since it decides which
-                    department's register this faculty member is filed under -
-                    the same slot the read-only version above shows for a
-                    Sub-HOD link. */}
-                {!isLinkMode && mustPickDepartment && (
+                {/* Always shown (outside link mode) so there's always a real
+                    way to say which department a new faculty member belongs
+                    to - including a sub-department, which a parent HOD who
+                    owns only one top-level department still fully manages
+                    the faculty roster of (see facultyDepartmentOptions).
+                    Placed right after identity, before Role/Employment
+                    Details, since it decides which department's register
+                    this faculty member is filed under - the same slot the
+                    read-only version above shows for a Sub-HOD link. */}
+                {!isLinkMode && (
                   <div className="space-y-2">
                     <Label>Department *</Label>
                     <Select value={department} onValueChange={setDepartment}>
@@ -442,7 +557,13 @@ export default function NewFacultyPage() {
                         {myDepartments.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
                       </SelectContent>
                     </Select>
-                    <p className="text-xs text-muted-foreground">{isCollegeLevel ? "Choose the department this faculty member belongs to." : "You manage more than one department - choose which one this faculty member belongs to."}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {isCollegeLevel
+                        ? "Choose the department this faculty member belongs to."
+                        : myDepartments.length > 1
+                        ? "You manage more than one department (including sub-departments) - choose which one this faculty member belongs to."
+                        : "This faculty member's department."}
+                    </p>
                   </div>
                 )}
 
@@ -497,6 +618,22 @@ export default function NewFacultyPage() {
                       </SelectContent>
                     </Select>
                     {errors.employeeCategory && <p className="text-sm text-destructive">{errors.employeeCategory.message}</p>}
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Status *</Label>
+                    <Select
+                      value={status ?? "ACTIVE"}
+                      onValueChange={(v) => setValue("status", v as FacultyStatus)}
+                    >
+                      <SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger>
+                      <SelectContent>
+                        {SELECTABLE_FACULTY_STATUS_VALUES.map((s) => (
+                          <SelectItem key={s} value={s}>{FACULTY_STATUS_LABELS[s]}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {errors.status && <p className="text-sm text-destructive">{errors.status.message}</p>}
+                    <p className="text-xs text-muted-foreground">Defaults to Active for a faculty member who has already joined.</p>
                   </div>
                   <div className="space-y-2">
                     <Label>Highest Qualification *</Label>
@@ -582,7 +719,15 @@ export default function NewFacultyPage() {
                         + Add Number
                       </Button>
                     </div>
-                    <Input id="mobileNo" type="tel" autoComplete="off" {...register("mobileNo")} placeholder="+91 98765 43210" />
+                    <Input
+                      id="mobileNo" type="tel" inputMode="numeric" autoComplete="off" maxLength={10}
+                      {...register("mobileNo")}
+                      onChange={(e) => {
+                        e.target.value = e.target.value.replace(/\D/g, "").slice(0, 10);
+                        void register("mobileNo").onChange(e);
+                      }}
+                      placeholder="9876543210"
+                    />
                     {errors.mobileNo && <p className="text-sm text-destructive">{errors.mobileNo.message}</p>}
                   </div>
                 </div>
@@ -600,9 +745,10 @@ export default function NewFacultyPage() {
                           />
                           <TextInput
                             label="Mobile Number"
+                            type="tel"
                             value={item.number}
                             onChange={(v) => setExtraPhones((prev) => prev.map((p, idx) => (idx === i ? { ...p, number: v } : p)))}
-                            placeholder="+91 98765 43210"
+                            placeholder="9876543210"
                           />
                         </div>
                         <Button
@@ -628,6 +774,7 @@ export default function NewFacultyPage() {
                 requiredFields={FACULTY_REQUIRED_PERSONAL_FIELDS}
                 hiddenFields={["legalName", "esiNumber"]}
                 showNameAsPerPan
+                ratificationHistory
               />
             )}
             {step.key === "qualification" && <QualificationFields value={academicProfile} onChange={setAcademicProfile} collegeType={collegeType} />}
