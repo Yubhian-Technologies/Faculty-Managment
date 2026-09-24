@@ -156,7 +156,7 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
         fetch(`/api/college/hiring-batches/${id}`).then((r) => r.json() as Promise<{ batch: HiringBatch }>),
         fetch(`/api/college/candidate-applications?batchId=${id}`).then((r) => r.json() as Promise<{ applications: CandidateApplication[] }>),
         fetch(`/api/college/candidates`).then((r) => r.json() as Promise<{ candidates: Candidate[] }>),
-        fetch("/api/college/faculty?status=ACTIVE").then((r) => r.json() as Promise<{ faculty: FacultyMember[] }>),
+        fetch("/api/college/faculty?availableOnly=true").then((r) => r.json() as Promise<{ faculty: FacultyMember[] }>),
         fetch("/api/college/users?allDepts=true&includeAll=true").then((r) => r.json() as Promise<{ users: FMSUser[] }>),
         fetch("/api/college/info").then((r) => r.json() as Promise<{ name?: string }>),
       ]);

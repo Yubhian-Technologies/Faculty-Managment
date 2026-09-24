@@ -54,7 +54,7 @@ export default function HodFacultyModuleEditPage() {
         const academicProfile = (m.academicProfile as FacultyEditRecord["academicProfile"]) ?? {};
         setOriginalAcademicProfile(academicProfile);
         setRecord({
-          ...personalRecordFromDoc(m),
+          ...personalRecordFromDoc(m, { ratificationHistory: true }),
           academicProfile,
           joiningLetterUrl: (m.joiningLetterUrl as string) ?? "",
           appointmentLetterUrl: (m.appointmentLetterUrl as string) ?? "",
@@ -128,7 +128,7 @@ export default function HodFacultyModuleEditPage() {
           return;
         }
         const body: Record<string, unknown> =
-          moduleKey === "personal" ? personalPatchBody(record) : { academicProfileChanges };
+          moduleKey === "personal" ? personalPatchBody(record, { ratificationHistory: true }) : { academicProfileChanges };
 
         const res = await fetch(`/api/college/faculty/${facultyId}`, {
           method: "PATCH",
@@ -177,6 +177,7 @@ export default function HodFacultyModuleEditPage() {
               collegeType={collegeType}
               requiredPersonalFields={FACULTY_REQUIRED_PERSONAL_FIELDS}
               hideLegalName
+              ratificationHistory
             />
             <div className="flex justify-end gap-3 pt-4 border-t">
               <Button variant="outline" onClick={() => router.push(`/hod/faculty/${facultyId}/${moduleKey}`)}>Cancel</Button>

@@ -12,6 +12,7 @@ import { getActiveSubstitutionsForDates, currentWeekDateKeys } from "@/lib/leave
 import { resolveSectionCurrentSemester, resolveRequestedSemester, matchesCurrentSemester } from "@/lib/college/semester";
 import { resolveTimetableAcademicYear, matchesCurrentAcademicYear } from "@/lib/college/academicSession";
 import { isTimetableIncharge } from "@/lib/departments/timetableIncharge";
+import { isFacultyAvailable } from "@/types";
 import type { Department, TeachingAssignment, TimetableSlot } from "@/types";
 import { loadDepartmentIndex, stampDepartmentIds } from "@/lib/departments/stampIds";
 
@@ -125,7 +126,15 @@ export async function GET(request: Request) {
       allDepartmentsForYearGate = deptsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as (DepartmentYearRow & Pick<Department, "name">)[];
       catalogIdByCourseId = new Map(coursesSnap.docs.map((d) => [d.id, (d.data() as { catalogId?: string }).catalogId]));
       if (rosterFacultySnap) {
-        const rosterIds = rosterFacultySnap.docs.map((d) => d.id);
+        // Only faculty currently available for work count as "my roster" for
+        // the purposes of finding assignments they hold elsewhere (lent out)
+        // - a Resigned/Retired/On Leave faculty member isn't being lent
+        // anywhere. Filtered in JS, not a second Firestore "in" clause -
+        // Firestore allows only one "in"/"array-contains-any" per query, and
+        // the department filter above already uses one.
+        const rosterIds = rosterFacultySnap.docs
+          .filter((d) => isFacultyAvailable((d.data() as { status?: string }).status))
+          .map((d) => d.id);
         for (let i = 0; i < rosterIds.length; i += 30) {
           rosterAssignmentQueries.push(
             collegeRef.collection("teachingAssignments").where("facultyId", "in", rosterIds.slice(i, i + 30))
@@ -353,6 +362,13 @@ export async function POST(request: Request) {
       const facultyMemberSnap = await collegeRef.collection("facultyMembers").doc(facultyId).get();
       if (!facultyMemberSnap.exists) return NextResponse.json({ error: "Faculty not found" }, { status: 404 });
       const resolvedFacultyName = facultyDisplayName(facultyMemberSnap.data() as { legalName?: string });
+      // Defense-in-depth: every picker already filters to available faculty
+      // client-side, but a facultyId is still trusted input - re-check here
+      // too. Past/historical records (isPast) are exempt - those may
+      // legitimately name someone who has since resigned/retired.
+      if (!body.isPast && !isFacultyAvailable((facultyMemberSnap.data() as { status?: string }).status)) {
+        return NextResponse.json({ error: "This faculty member is not currently available for teaching assignments" }, { status: 409 });
+      }
 
       // A parent department's HOD has full control over their own department and
       // every sub-department beneath it, so both the section and the faculty may

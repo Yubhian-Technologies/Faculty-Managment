@@ -33,6 +33,7 @@ const STATUS_VARIANTS: Record<FacultyStatus, "default" | "secondary" | "outline"
   ON_LEAVE: "outline",
   RESIGNED: "secondary",
   RETIRED: "secondary",
+  RETAINERSHIP: "default",
 };
 
 function designationLabel(designation: SupportingStaffDesignation): string {
@@ -199,7 +200,7 @@ export default function HODSupportingStaffPage() {
         keyExtractor={(r) => r.id}
         onRowClick={(row) => router.push(`/hod/supporting-staff/${row.id}`)}
         searchPlaceholder="Search by name, email, employee ID..."
-        searchKeys={["name", "email", "employeeId"] as (keyof StaffRow)[]}
+        searchKeys={["legalName", "nameAsPerPan", "email", "employeeId"] as (keyof StaffRow)[]}
         emptyTitle="No Supporting Staff records yet"
         emptyDescription="Add Technical staff to build your department's Supporting Staff register"
         emptyAction={<Button onClick={() => router.push("/hod/supporting-staff/new")}><UserPlus className="h-4 w-4 mr-2" />Add Staff</Button>}

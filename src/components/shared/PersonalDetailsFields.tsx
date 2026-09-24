@@ -6,10 +6,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { RELIGION_LABELS, CASTE_LABELS, SUB_CASTES_BY_CASTE } from "@/types";
-import { PHONE_REGEX, AADHAR_REGEX, PAN_REGEX } from "@/lib/validations";
-import { StringListInput } from "@/components/shared/ProfileFieldPrimitives";
+import { PHONE_REGEX, AADHAR_REGEX, PAN_REGEX, HEIGHT_REGEX } from "@/lib/validations";
+import { StringListInput, RepeatingGroup } from "@/components/shared/ProfileFieldPrimitives";
 import { migratePersonalFlat } from "@/lib/faculty/fieldRenames";
+import { DesignationSelect } from "@/components/faculty/DesignationOptions";
 import type { Religion, Caste } from "@/types";
+import type { RatificationRecord } from "@/types";
 
 const BLOOD_GROUPS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"] as const;
 const GENDER_OPTIONS = ["Male", "Female"];
@@ -40,8 +42,11 @@ export interface PersonalDetailsValue {
   emergencyContactRelation?: string;
   emergencyContactMobileNo?: string;
   ratificationStatus?: string;
-  ratificationProceedingsNumber?: string;
-  ratificationDate?: string;   // yyyy-mm-dd
+  ratificationProceedingsNumber?: string; // ignored when `ratificationHistory` is true - see `ratifications` below
+  ratificationDate?: string;   // yyyy-mm-dd; ignored when `ratificationHistory` is true
+  // Faculty-only multi-entry ratification history (see lib/faculty/ratificationHistory.ts).
+  // Only read/rendered when the `ratificationHistory` prop is true.
+  ratifications?: RatificationRecord[];
   maritalStatus?: string;
   spouseName?: string;
   numberOfChildren?: number;
@@ -51,8 +56,7 @@ export interface PersonalDetailsValue {
   bloodGroup?: string;
   motherTongue?: string;
   languagesKnown?: string[];
-  heightFeet?: number;
-  heightInches?: number;
+  height?: string; // "<feet>.<inches>" e.g. "5.7" = 5 ft 7 in - see HEIGHT_REGEX
   weightKg?: number;
   pfNumber?: string; // Provident Fund number - shown for every caller
   uanNumber?: string; // Universal Account Number (EPFO) - shown for every caller, right after PF Number
@@ -75,6 +79,14 @@ interface Props {
   // nameAsPerAadhar). Opt-in so Supporting Staff / user-record callers, whose
   // own `name` field is a different thing, keep exactly the form they have.
   showNameAsPerPan?: boolean;
+  // Faculty-only (a genuine facultyMembers record, not a bare login doc) -
+  // renders Ratification as a repeatable Designation + Proceedings Number +
+  // Date list (`ratifications`, "Add More") instead of the single Proceedings
+  // Number/Date pair every other caller (Supporting/Non-Technical Staff,
+  // Users) still uses. The Designation on each entry is purely historical -
+  // deliberately never compared with, restricted by, or synced to the
+  // record's own current Designation field.
+  ratificationHistory?: boolean;
 }
 
 // The mandatory set shared by every consumer - Name (as per Aadhar) is
@@ -120,7 +132,7 @@ export function getMissingRequiredPersonalFields(
     .map((key) => PERSONAL_FIELD_LABELS[key] ?? key);
 }
 
-export function PersonalDetailsFields({ value: rawValue, onChange, requiredFields = STAFF_REQUIRED_PERSONAL_FIELDS, hiddenFields = [], showNameAsPerPan = false }: Props) {
+export function PersonalDetailsFields({ value: rawValue, onChange, requiredFields = STAFF_REQUIRED_PERSONAL_FIELDS, hiddenFields = [], showNameAsPerPan = false, ratificationHistory = false }: Props) {
   // Lift a record still carrying the legacy key names (passportNumber, bankAccountNo, ...)
   // so this form only ever reads - and emits, via set()/onChange - the current key names.
   const value = migratePersonalFlat(rawValue as Record<string, unknown>) as PersonalDetailsValue;
@@ -367,20 +379,15 @@ export function PersonalDetailsFields({ value: rawValue, onChange, requiredField
         />
         <div className="space-y-2">
           <Label>Height</Label>
-          <div className="flex items-center gap-2">
-            <Input
-              type="number" min={0} placeholder="Feet" className="w-20"
-              value={value.heightFeet ?? ""}
-              onChange={(e) => set("heightFeet", e.target.value === "" ? undefined : Number(e.target.value))}
-            />
-            <span className="text-xs text-muted-foreground">ft</span>
-            <Input
-              type="number" min={0} max={11} placeholder="Inches" className="w-20"
-              value={value.heightInches ?? ""}
-              onChange={(e) => set("heightInches", e.target.value === "" ? undefined : Number(e.target.value))}
-            />
-            <span className="text-xs text-muted-foreground">in</span>
-          </div>
+          <Input
+            placeholder="e.g. 5.7" className="w-28"
+            value={value.height ?? ""}
+            onChange={(e) => set("height", e.target.value)}
+          />
+          <p className="text-xs text-muted-foreground">Feet.Inches - e.g. 5.7 = 5 ft 7 in, 5.11 = 5 ft 11 in</p>
+          {!!value.height && !HEIGHT_REGEX.test(value.height) && (
+            <p className="text-xs text-destructive">Enter as feet.inches, e.g. 5.7 (inches 0-11)</p>
+          )}
         </div>
         <div className="space-y-2">
           <Label>Weight</Label>
@@ -524,6 +531,7 @@ export function PersonalDetailsFields({ value: rawValue, onChange, requiredField
         <div className="space-y-2">
           <Label>Emergency Contact Mobile No</Label>
           <Input
+            type="tel"
             value={value.emergencyContactMobileNo ?? ""}
             onChange={(e) => set("emergencyContactMobileNo", e.target.value.replace(/\D/g, "").slice(0, 10))}
             placeholder="9876543210"
@@ -545,11 +553,12 @@ export function PersonalDetailsFields({ value: rawValue, onChange, requiredField
           <Select
             value={value.ratificationStatus ?? ""}
             onValueChange={(v) => {
-              // Proceedings Number/Date only make sense once Ratified - cleared
-              // the moment status moves away from it, so a later Save can never
-              // resend (and re-persist) a stale value from before this switch.
+              // Proceedings Number/Date (or the ratification history list)
+              // only make sense once Ratified - cleared the moment status
+              // moves away from it, so a later Save can never resend (and
+              // re-persist) a stale value from before this switch.
               if (v !== "Ratified") {
-                onChange({ ...value, ratificationStatus: v, ratificationProceedingsNumber: "", ratificationDate: "" });
+                onChange({ ...value, ratificationStatus: v, ratificationProceedingsNumber: "", ratificationDate: "", ratifications: [] });
               } else {
                 set("ratificationStatus", v);
               }
@@ -562,7 +571,7 @@ export function PersonalDetailsFields({ value: rawValue, onChange, requiredField
             </SelectContent>
           </Select>
         </div>
-        {value.ratificationStatus === "Ratified" && (
+        {value.ratificationStatus === "Ratified" && !ratificationHistory && (
           <>
             <div className="space-y-2">
               <Label>Ratification Proceedings Number</Label>
@@ -575,6 +584,37 @@ export function PersonalDetailsFields({ value: rawValue, onChange, requiredField
           </>
         )}
       </div>
+      {value.ratificationStatus === "Ratified" && ratificationHistory && (
+        <RepeatingGroup
+          title="Ratification Records"
+          items={value.ratifications}
+          empty={() => ({ designation: "", proceedingsNumber: "", date: "" })}
+          onChange={(v) => set("ratifications", v)}
+          renderRow={(item, update) => (
+            <>
+              {/* The designation this ratification was granted at - a purely
+                  historical fact, independent of (and never synced with) this
+                  record's own current Designation field above. Drawn from the
+                  same teaching designation catalogue, with "Other" allowed so
+                  a designation the catalogue no longer lists isn't lost. */}
+              <DesignationSelect
+                label="Designation"
+                value={item.designation}
+                onChange={(v) => update({ designation: v })}
+                kind="teaching"
+              />
+              <div className="space-y-2">
+                <Label>Ratification Proceedings Number</Label>
+                <Input value={item.proceedingsNumber ?? ""} onChange={(e) => update({ proceedingsNumber: e.target.value })} placeholder="Proceedings number" />
+              </div>
+              <div className="space-y-2">
+                <Label>Ratification Date</Label>
+                <Input type="date" value={item.date ?? ""} onChange={(e) => update({ date: e.target.value })} />
+              </div>
+            </>
+          )}
+        />
+      )}
     </div>
   );
 }

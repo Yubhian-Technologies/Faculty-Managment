@@ -313,8 +313,7 @@ export default function FacultyImportPage() {
               ))}
             </div>
             <p className="text-xs text-muted-foreground">
-              Enter one of these codes in each row&rsquo;s Dept Code column - a single file can cover more than one department at once.
-              {isHod && importableDepartments.length === 1 && " Leave it blank to default to your own department."}
+              Enter one of these codes in <strong>every</strong> row&rsquo;s Dept Code column - a single file can cover more than one department at once, and a blank cell is rejected rather than guessed.
             </p>
           </CardContent>
         </Card>

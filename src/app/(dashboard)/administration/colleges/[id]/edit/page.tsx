@@ -153,9 +153,10 @@ export default function EditAdministrationCollegePage() {
                 <Label htmlFor="edit-phone">Contact Phone</Label>
                 <Input
                   id="edit-phone"
+                  type="tel"
                   value={form.contactPhone}
                   onChange={(e) => set({ contactPhone: e.target.value })}
-                  placeholder="+91 98765 43210"
+                  placeholder="9876543210"
                 />
               </div>
             </div>

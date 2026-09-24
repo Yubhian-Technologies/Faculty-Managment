@@ -1,6 +1,7 @@
 import type { Firestore } from "firebase-admin/firestore";
 import { LEGACY_TECHNICAL_DESIGNATIONS } from "@/lib/designations/config";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
+import { supportingStaffDisplayName } from "@/lib/supportingStaff/supportingStaffDisplayName";
 
 export interface ResolvedIdentity {
   name: string;
@@ -97,12 +98,13 @@ export async function resolveEmployeeIdentity(
 
   if (!supportingStaffSnap.empty) {
     const s = supportingStaffSnap.docs[0].data() as {
-      name: string;
+      legalName?: string;
+      nameAsPerPan?: string;
       department?: string;
       joiningDate?: { toDate(): Date };
     };
     return {
-      name: s.name,
+      name: supportingStaffDisplayName(s) || "Unknown",
       department: s.department,
       isTeachingStaff: false,
       dateOfJoining: s.joiningDate?.toDate?.() ?? new Date(),

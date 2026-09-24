@@ -105,7 +105,7 @@ export default function EditSectionPage() {
   }, []);
 
   useEffect(() => {
-    fetch("/api/college/faculty?status=ACTIVE")
+    fetch("/api/college/faculty?availableOnly=true")
       .then((r) => r.json())
       .then((d: { faculty?: (FacultyOption & { legalName?: string })[] }) => {
         setFacultyList((d.faculty ?? []).map((f) => ({

@@ -64,7 +64,11 @@ export async function GET(request: Request) {
     // faculty member who is the current HOD - see types/roleSeats.ts), not just
     // accounts whose own primary role matches.
     let docs = snap.docs;
-    if (roleFilter && isSeatRole(roleFilter)) {
+    // DEPARTMENT_OFFICE is not in SEAT_ROLES - it is the HOD's own appointment
+    // rather than one of the Principal's Role Assignments seats - but it is
+    // held the same way, on the faculty member's `seatRoles`, so it is looked
+    // up the same way too.
+    if (roleFilter && (isSeatRole(roleFilter) || roleFilter === "DEPARTMENT_OFFICE")) {
       const seatHolders = await coll.where("seatRoles", "array-contains", roleFilter).get();
       const seen = new Set(docs.map((d) => d.id));
       docs = [...docs, ...seatHolders.docs.filter((d) => !seen.has(d.id))];

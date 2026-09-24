@@ -30,7 +30,7 @@ export default function NewEmailRequestPage() {
     void (async () => {
       try {
         const [facultyRes, requestsRes] = await Promise.all([
-          fetch("/api/college/faculty?status=ACTIVE").then((r) => r.json() as Promise<{ faculty: FacultyMember[] }>),
+          fetch("/api/college/faculty?availableOnly=true").then((r) => r.json() as Promise<{ faculty: FacultyMember[] }>),
           fetch("/api/college/email-requests").then((r) => r.json() as Promise<{ requests: EmailCreationRequest[] }>),
         ]);
         setFaculty(facultyRes.faculty ?? []);

@@ -153,9 +153,9 @@ export default function DepartmentsPage() {
                       ) : (
                         <p className="text-xs text-orange-500">No HOD assigned</p>
                       )}
-                      <Link href="/principal/role-assignments" className="text-xs text-primary hover:underline">
-                        Change in Role Assignments
-                      </Link>
+                      <Button asChild variant="outline" size="sm" className="mt-1.5 h-7 px-2 text-xs">
+                        <Link href="/principal/role-assignments">Change in Role Assignments</Link>
+                      </Button>
                     </div>
                     {(() => {
                       const deptCourses = coursesOf(dept.id);
@@ -227,23 +227,35 @@ export default function DepartmentsPage() {
                   <div className="flex gap-1 shrink-0">
                     <Button
                       variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
+                      size="sm"
                       onClick={(e) => { e.stopPropagation(); router.push(`/principal/departments/${dept.id}/edit`); }}
                     >
-                      <Pencil className="h-3.5 w-3.5" />
+                      <Pencil className="h-3.5 w-3.5 mr-1" />
+                      Edit
                     </Button>
                     <Button
                       variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-destructive hover:text-destructive"
+                      size="sm"
+                      className="text-destructive hover:text-destructive"
                       onClick={(e) => { e.stopPropagation(); setDeletingDept(dept); }}
                     >
-                      <Trash2 className="h-3.5 w-3.5" />
+                      <Trash2 className="h-3.5 w-3.5 mr-1" />
+                      Delete
                     </Button>
                   </div>
                 </div>
-                <p className="text-xs text-primary mt-3">Manage courses &amp; timings →</p>
+                {/* Same destination the card itself opens - given a button's
+                    affordance so it reads as the action it is, rather than as a
+                    bare line of blue text. */}
+                <Button
+                  asChild
+                  variant="outline"
+                  size="sm"
+                  className="mt-3 h-8 w-full text-xs"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <Link href={`/principal/departments/${dept.id}`}>Manage courses &amp; timings →</Link>
+                </Button>
               </CardContent>
             </Card>
           ))}

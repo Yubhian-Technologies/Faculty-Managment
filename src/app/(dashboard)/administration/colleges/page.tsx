@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { UserPlus, ChevronDown, ChevronUp, Plus, Pencil, Trash2, Building } from "lucide-react";
+import { UserPlus, ChevronDown, ChevronUp, Plus, Pencil, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -164,6 +164,12 @@ export default function AdministrationCollegesPage() {
         {colleges.map((college) => {
           const isExpanded = expandedId === college.id;
           const principalList = principalMap[college.id];
+          // A college only ever has one College Admin (enforced server-side
+          // by api/administration/college-people's singleton check) - the
+          // button offering to add one is hidden once that seat is already
+          // held, instead of staying clickable and only failing with a 409
+          // after the fact.
+          const hasCollegeAdmin = (principalList ?? []).some((p) => p.roles.includes("COLLEGE_ADMIN"));
 
           return (
             <div
@@ -173,11 +179,12 @@ export default function AdministrationCollegesPage() {
             >
               {/* College row */}
               <div className="flex items-center justify-between p-4">
-                <div className="flex items-center gap-3 min-w-0">
-                  <div
-                    className="min-w-0 cursor-pointer"
-                    onClick={() => router.push(`/administration/colleges/${college.id}/departments`)}
-                  >
+                <div
+                  className="flex items-center gap-3 min-w-0 cursor-pointer"
+                  title="View departments"
+                  onClick={() => router.push(`/administration/colleges/${college.id}/departments`)}
+                >
+                  <div className="min-w-0">
                     <p className="font-medium truncate hover:underline">{college.name}</p>
                     <p className="text-xs text-muted-foreground truncate">{college.contactEmail ?? college.address ?? "-"}</p>
                   </div>
@@ -193,31 +200,36 @@ export default function AdministrationCollegesPage() {
                 <div className="flex items-center gap-2 shrink-0 ml-3">
                   <Button
                     size="sm"
-                    variant="outline"
-                    onClick={() => router.push(`/administration/colleges/${college.id}/departments`)}
-                  >
-                    <Building className="h-3.5 w-3.5 mr-1.5" />
-                    Departments
-                  </Button>
-                  <Button
-                    size="sm"
                     variant="ghost"
                     onClick={() => router.push(`/administration/colleges/${college.id}/edit`)}
                   >
                     <Pencil className="h-3.5 w-3.5 mr-1.5" />
                     Edit
                   </Button>
-                  {/* A college starts with no people at all: add the first ones here,
-                      then appoint them to seats (College Admin, Principal, ...) in
-                      Role Assignments - the seat holders take it from there. */}
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => router.push(`/administration/colleges/${college.id}/people/new`)}
-                  >
-                    <UserPlus className="h-3.5 w-3.5 mr-1.5" />
-                    Add College Admin
-                  </Button>
+                  {/* A college starts with no people at all: add the first one
+                      here, then appoint them to seats (College Admin, Principal,
+                      ...) in Role Assignments - the seat holders take it from
+                      there. Once the College Admin seat is held, this action is
+                      replaced by a status badge - there's only ever one, and a
+                      different person takes over via that seat's own Edit/Delete
+                      below (or Role Assignments), never by adding a second one. */}
+                  {!principalsLoaded ? (
+                    <Button size="sm" variant="outline" disabled>
+                      <UserPlus className="h-3.5 w-3.5 mr-1.5" />
+                      Add College Admin
+                    </Button>
+                  ) : hasCollegeAdmin ? (
+                    <Badge variant="secondary" className="shrink-0">College Admin assigned</Badge>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => router.push(`/administration/colleges/${college.id}/people/new`)}
+                    >
+                      <UserPlus className="h-3.5 w-3.5 mr-1.5" />
+                      Add College Admin
+                    </Button>
+                  )}
                   <Button
                     size="sm"
                     variant="ghost"
@@ -228,26 +240,28 @@ export default function AdministrationCollegesPage() {
                 </div>
               </div>
 
-              {/* Expanded principals list */}
+              {/* Expanded panel - College Admin only. Principal/Vice Principal
+                  are appointed from inside the college (via its own Role
+                  Assignments), never by Location Admin, so they're left out
+                  here rather than shown alongside a seat this page doesn't
+                  manage. */}
               {isExpanded && (
                 <div className="border-t px-4 pb-4 pt-3 bg-muted/30">
-                  <p className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide">College Admin, Principal & Vice Principal</p>
+                  <p className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide">College Admin</p>
                   {!principalsLoaded ? (
                     <div className="h-8 w-32 bg-muted animate-pulse rounded" />
-                  ) : (principalList ?? []).length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No College Admin, Principal or Vice Principal yet.</p>
+                  ) : !hasCollegeAdmin ? (
+                    <p className="text-sm text-muted-foreground">No College Admin yet.</p>
                   ) : (
                     <div className="space-y-2">
-                      {(principalList ?? []).map((p) => (
+                      {(principalList ?? []).filter((p) => p.roles.includes("COLLEGE_ADMIN")).map((p) => (
                         <div key={p.uid} className="flex items-center justify-between rounded-lg border bg-card p-3">
                           <div>
                             <p className="text-sm font-medium">{p.name}</p>
                             <p className="text-xs text-muted-foreground">{p.email}</p>
                           </div>
                           <div className="flex items-center gap-2 shrink-0">
-                            {p.roles.map((r) => (
-                              <Badge key={r} variant="outline" className="text-xs">{ROLE_NAMES[r] ?? r}</Badge>
-                            ))}
+                            <Badge variant="outline" className="text-xs">{ROLE_NAMES.COLLEGE_ADMIN}</Badge>
                             <Button size="sm" variant="ghost" onClick={() => openEdit(college.id, p)}>
                               <Pencil className="h-3.5 w-3.5 mr-1.5" />Edit
                             </Button>
@@ -274,7 +288,7 @@ export default function AdministrationCollegesPage() {
           <div className="space-y-3">
             <div className="space-y-1.5"><Label>Name</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
             <div className="space-y-1.5"><Label>Login email</Label><Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
-            <div className="space-y-1.5"><Label>Phone</Label><Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></div>
+            <div className="space-y-1.5"><Label>Phone</Label><Input type="tel" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></div>
             <div className="space-y-1.5"><Label>New password</Label><Input type="password" autoComplete="new-password" placeholder="Leave blank to keep current" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} /></div>
           </div>
           <DialogFooter>

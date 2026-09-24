@@ -285,7 +285,7 @@ export default function NewCandidatePage() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="phone">Phone *</Label>
-                <Input id="phone" type="tel" autoComplete="off" {...register("phone")} placeholder="+91 98765 43210" />
+                <Input id="phone" type="tel" autoComplete="off" {...register("phone")} placeholder="9876543210" />
                 {errors.phone && <p className="text-sm text-destructive">{errors.phone.message}</p>}
               </div>
 
@@ -349,8 +349,9 @@ export default function NewCandidatePage() {
                     <Label htmlFor="referralPhone">Referrer Phone</Label>
                     <Input
                       id="referralPhone"
+                      type="tel"
                       {...register("referralPhone")}
-                      placeholder="+91 98765 43210"
+                      placeholder="9876543210"
                     />
                   </div>
                 </div>

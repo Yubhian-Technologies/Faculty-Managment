@@ -60,7 +60,7 @@ export function AssignmentRequestsPanel({ timetableHrefFor }: AssignmentRequests
         // branch's - see college/faculty/route.ts. Harmless no-op for a
         // Timetable Incharge caller, which is already restricted to its own
         // department regardless of this param.
-        fetch("/api/college/faculty?status=ACTIVE&scope=own"),
+        fetch("/api/college/faculty?availableOnly=true&scope=own"),
       ]);
       const reqData = await reqRes.json() as { requests: FacultyAssignmentRequest[] };
       const facData = await facRes.json() as { faculty: FacultyMember[] };

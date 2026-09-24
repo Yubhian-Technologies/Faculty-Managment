@@ -9,7 +9,12 @@ import { Button } from "@/components/ui/button";
 import { FacultyProfileModuleContent } from "@/components/faculty/FacultyProfileModuleContent";
 import { PROFILE_MODULES, type ProfileModuleKey } from "@/lib/faculty/profileModules";
 import { toast } from "@/hooks/useToast";
-import type { College, CollegeType, FacultyMember } from "@/types";
+import type { College, CollegeType, FacultyMember, UserRole } from "@/types";
+
+// PANEL_MEMBER (Faculty) reaches this page from the read-only hub view (see
+// [uid]/page.tsx's VIEW_ONLY_ROLES) - Super Admin can look, not edit, so the
+// Edit button is skipped for it same as for the "research"/"financial" modules.
+const VIEW_ONLY_ROLES: UserRole[] = ["PANEL_MEMBER"];
 
 export default function SuperAdminUserModulePage() {
   const router = useRouter();
@@ -18,7 +23,7 @@ export default function SuperAdminUserModulePage() {
   const moduleKey = params.module as ProfileModuleKey;
   const moduleDef = PROFILE_MODULES[moduleKey];
 
-  const [staff, setStaff] = useState<Partial<FacultyMember> & { name?: string } | null>(null);
+  const [staff, setStaff] = useState<Partial<FacultyMember> & { name?: string; role?: string } | null>(null);
   const [collegeType, setCollegeType] = useState<CollegeType | undefined>(undefined);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -54,9 +59,9 @@ export default function SuperAdminUserModulePage() {
         actions={
           <div className="flex gap-2">
             <Button variant="outline" asChild>
-              <Link href={`/super-admin/users/${uid}?role=PRINCIPAL`}><ArrowLeft className="h-4 w-4 mr-2" />Back</Link>
+              <Link href={`/super-admin/users/${uid}?role=${staff?.role ?? "PRINCIPAL"}`}><ArrowLeft className="h-4 w-4 mr-2" />Back</Link>
             </Button>
-            {moduleKey !== "research" && moduleKey !== "financial" && (
+            {moduleKey !== "research" && moduleKey !== "financial" && !VIEW_ONLY_ROLES.includes(staff?.role as UserRole) && (
               <Button asChild>
                 <Link href={`/super-admin/users/${uid}/${moduleKey}/edit`}><Pencil className="h-4 w-4 mr-2" />Edit</Link>
               </Button>

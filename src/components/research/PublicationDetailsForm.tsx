@@ -89,13 +89,37 @@ async function fetchDoiMetadata(doi: string, type: PublicationType): Promise<Par
     ...(venueName && type === "JOURNAL" ? { journalName: venueName } : {}),
     ...(venueName && type === "CONFERENCE" ? { conferenceName: venueName } : {}),
     ...(venueName && type === "BOOK_CHAPTER" ? { bookName: venueName } : {}),
-    ...((m.ISSN as string[] | undefined)?.[0] ? { issnNumber: (m.ISSN as string[])[0] } : {}),
+    // Through the same formatter the field uses - a DOI lookup can hand back
+    // an ISSN without its hyphen, which would prefill a value the form then
+    // refuses to submit.
+    ...((m.ISSN as string[] | undefined)?.[0] ? { issnNumber: formatIssn((m.ISSN as string[])[0]) } : {}),
     ...((m.ISBN as string[] | undefined)?.[0] ? { isbnNumber: (m.ISBN as string[])[0] } : {}),
     ...(year ? { monthYearOfPublication: `${year}-${String(month ?? 1).padStart(2, "0")}` } : {}),
     ...(m.URL ? { publishedPaperLink: m.URL as string } : {}),
     ...(authors.length > 0 ? { authors } : {}),
   };
   return patch;
+}
+
+// An ISSN is eight characters, always printed as two groups of four
+// ("1234-5678"). The eighth is a check digit that can be X (its stand-in for
+// 10), so digits alone would make one ISSN in eleven impossible to enter.
+const ISSN_REGEX = /^\d{4}-\d{3}[\dX]$/;
+
+// Normalises whatever was typed or pasted into that shape: anything that
+// isn't part of an ISSN is dropped, an X anywhere but the last position is
+// ignored, and the hyphen is inserted after the fourth character. Applied on
+// every keystroke, so the stored value carries the hyphen however it was
+// keyed - and backspacing past the hyphen still works, since "1234-" cleans
+// back to "1234".
+export function formatIssn(raw: string): string {
+  let out = "";
+  for (const ch of raw.toUpperCase().replace(/[^0-9X]/g, "")) {
+    if (out.length >= 8) break;
+    if (ch === "X" && out.length !== 7) continue;
+    out += ch;
+  }
+  return out.length > 4 ? `${out.slice(0, 4)}-${out.slice(4)}` : out;
 }
 
 export function isPublicationDetailsValid(details: PublicationDetails): boolean {
@@ -105,7 +129,9 @@ export function isPublicationDetailsValid(details: PublicationDetails): boolean 
   if (!details.sdgGoals || details.sdgGoals.length === 0) return false;
   if (!details.indexedIn || details.indexedIn.length === 0) return false;
   if (details.hasInternationalCollaboration === undefined || details.hasIndustryCollaboration === undefined) return false;
-  if (details.type === "JOURNAL" && !details.issnNumber?.trim()) return false;
+  // Present AND well-formed - a half-typed "1234-56" is as unusable to
+  // whoever verifies this record as an empty box.
+  if (details.type === "JOURNAL" && !ISSN_REGEX.test(details.issnNumber?.trim() ?? "")) return false;
   if ((details.type === "CONFERENCE" || details.type === "BOOK_CHAPTER") && !details.isbnNumber?.trim()) return false;
   // Scopus/WoS Link and Published Paper Link are compulsory for every type
   // except Text Book (which has its own separate "Provide link of the Book"
@@ -480,7 +506,19 @@ export function PublicationDetailsForm({
           </div>
           <div className="space-y-1.5">
             <Label>ISSN Number <span className="text-destructive">*</span></Label>
-            <Input type="number" value={value.issnNumber ?? ""} onChange={(e) => set("issnNumber", e.target.value)} />
+            {/* Text, not number: an ISSN carries a hyphen, and a number input
+                would also strip the leading zero off one like 0028-0836. */}
+            <Input
+              value={value.issnNumber ?? ""}
+              onChange={(e) => set("issnNumber", formatIssn(e.target.value))}
+              placeholder="1234-5678"
+              inputMode="numeric"
+              maxLength={9}
+              aria-invalid={!!value.issnNumber && !ISSN_REGEX.test(value.issnNumber)}
+            />
+            {!!value.issnNumber && !ISSN_REGEX.test(value.issnNumber) && (
+              <p className="text-xs text-destructive">Enter all 8 digits, e.g. 1234-5678.</p>
+            )}
           </div>
         </div>
       )}
