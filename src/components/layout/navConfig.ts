@@ -21,10 +21,12 @@ export interface NavItem {
   hideForRealRoles?: UserRole[];
   // The inverse of hideForRealRoles: shows this item ONLY for a login whose
   // real, un-normalized role (FMSUser.realRole) is one of these, even though
-  // `roles` above matches its normalized `role` more broadly. Exists for
-  // COLLEGE_ADMIN-only items (e.g. resetting another member's password) that
-  // must stay invisible to an ordinary Principal, who shares the same
-  // normalized "PRINCIPAL" role. Leave unset for every ordinary item.
+  // `roles` above matches its normalized `role` more broadly - for an item
+  // that must stay invisible to an ordinary Principal, say, who shares the
+  // same normalized "PRINCIPAL" role as a College Admin. No item uses it at
+  // present: the one that did, College Admin's "Reset Member Password", was
+  // removed when resetting passwords became the Webmaster's alone (see
+  // webmaster/users). Leave unset for every ordinary item.
   showOnlyForRealRoles?: UserRole[];
 }
 
@@ -213,7 +215,6 @@ export const NAV_ITEMS: NavItem[] = [
   // Appoint people to seats (Principal, each HOD, Vice Principal, Academics, ...) -
   // see types/roleSeats.ts.
   { label: "Role Assignments", href: "/principal/role-assignments", iconName: "UserCog", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
-  { label: "Reset Member Password", href: "/principal/reset-password", iconName: "KeyRound", roles: ["PRINCIPAL"], showOnlyForRealRoles: ["COLLEGE_ADMIN"] },
 
   // HOD
   // Full module set — Super Admin controls which modules/items are actually
