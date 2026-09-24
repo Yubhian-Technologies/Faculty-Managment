@@ -347,3 +347,107 @@ export async function PATCH(
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 }
+
+/**
+ * Permanently removes a staff account - the Firestore user doc, the
+ * systemUsers pointer, the Firebase Auth login and that uid's own
+ * notifications. Mirrors the Super Admin's own delete (api/admin/users/[uid]),
+ * scoped to one college.
+ *
+ * Principal tier only, even though PATCH above also serves HOD and College
+ * Office: deactivating is reversible and delete is not, so the narrower guard
+ * is deliberate rather than inherited.
+ *
+ * Two refusals rather than dangling references. A login that still holds a
+ * role seat, or is still named as a department's HOD, is left alone and the
+ * caller is told what to clear first - the same order Role Assignments already
+ * insists on ("vacate this role first, then delete it"). Deleting through
+ * either of those leaves a seat pointing at a uid that no longer exists.
+ */
+export async function DELETE(
+  _request: Request,
+  { params }: { params: Promise<{ uid: string }> }
+) {
+  try {
+    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL");
+    const { uid } = await params;
+
+    if (uid === session.uid) {
+      return NextResponse.json({ error: "You cannot delete your own account" }, { status: 400 });
+    }
+
+    const db = getAdminDb();
+    const { targetSnap, error, status } = await loadTargetInScope(db, session, uid);
+    if (!targetSnap) return NextResponse.json({ error }, { status });
+    const target = targetSnap.data() as { name?: string; role?: string; email?: string; collegeEmail?: string };
+    const who = target.name ?? "This account";
+
+    const collegeRef = db.collection("colleges").doc(session.collegeId);
+
+    const [seatsSnap, deptsSnap] = await Promise.all([
+      collegeRef.collection("roleSeats").where("holderUid", "==", uid).get(),
+      collegeRef.collection("departments").where("hodUid", "==", uid).get(),
+    ]);
+    const heldSeats = seatsSnap.docs.filter((d) => (d.data() as { isActive?: boolean }).isActive !== false);
+    if (heldSeats.length > 0) {
+      const labels = heldSeats.map((d) => (d.data() as { label?: string }).label ?? "a role").join(", ");
+      return NextResponse.json(
+        { error: `${who} still holds ${labels}. Vacate that from Role Assignments first, then delete.` },
+        { status: 409 }
+      );
+    }
+    if (!deptsSnap.empty) {
+      const names = deptsSnap.docs.map((d) => (d.data() as { name?: string }).name ?? "a department").join(", ");
+      return NextResponse.json(
+        { error: `${who} is still the HOD of ${names}. Assign a new HOD there first, then delete.` },
+        { status: 409 }
+      );
+    }
+
+    await collegeRef.collection("users").doc(uid).delete();
+
+    // This uid's own notifications, left as dead data otherwise.
+    const notifSnap = await collegeRef.collection("notifications").where("toUid", "==", uid).get();
+    if (!notifSnap.empty) {
+      const batch = db.batch();
+      notifSnap.docs.forEach((d) => batch.delete(d.ref));
+      await batch.commit();
+    }
+
+    await db.collection("systemUsers").doc(uid).delete().catch(() => {});
+
+    // Best-effort, same as the Super Admin's delete: the Firestore record is
+    // already gone, so a login that outlives it has nothing left to sign in to.
+    try {
+      const { getAdminAuth } = await import("@/lib/firebase/admin");
+      const auth = await getAdminAuth();
+      await auth.deleteUser(uid);
+    } catch (authErr) {
+      console.warn("[college/users/[uid] DELETE] Auth deletion failed (non-fatal):", authErr);
+    }
+
+    let actorName = "Unknown";
+    try {
+      const actorSnap = await collegeRef.collection("users").doc(session.uid).get();
+      actorName = (actorSnap.data() as { name?: string } | undefined)?.name ?? "Unknown";
+    } catch { /* best-effort */ }
+
+    await collegeRef.collection("auditLogs").add({
+      collegeId: session.collegeId,
+      action: "USER_DELETED",
+      performedBy: session.uid,
+      performedByName: actorName,
+      targetId: uid,
+      details: { name: target.name ?? "", role: target.role ?? "", email: target.collegeEmail || target.email || "" },
+      timestamp: new Date(),
+    });
+
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    console.error("[college/users/[uid] DELETE]", err);
+    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+  }
+}

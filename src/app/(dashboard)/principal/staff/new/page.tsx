@@ -15,15 +15,22 @@ import type { UserRole } from "@/types";
 // Every position of authority - College Admin, Academics, IQAC Coordinator, T&P,
 // R&D, Placement Dept, Exam Cell, Library, HOD, Vice Principal - is a SEAT,
 // not an account: create the person here with a plain login, then appoint
-// them to the seat from Role Assignments (see types/roleSeats.ts). This form
-// only ever creates the two roles that are genuinely just accounts.
+// them to the seat from Role Assignments (see types/roleSeats.ts).
+//
+// Webmaster is the one that works both ways. It is a seat like the rest, but
+// it is also still created here directly, as it was before the seats existed -
+// a college often has nobody on the books to appoint, and with no Webmaster
+// nothing fulfils Stage 14 of hiring (faculty-account-requests notifies
+// `role == "WEBMASTER"` and finds no one). Creating the login here also fills
+// the seat, via the convertLegacyAccounts call at the end of users POST, so
+// the two routes cannot drift apart.
 // COLLEGE_STAFF is deliberately NOT here: a generic "College Staff" login
 // (e.g. a Lab Assistant) created this way is only an account - it never gets
 // a Supporting Staff profile record, so it never shows in the Supporting
 // Staff lists. Non-teaching staff must be added via the Supporting Staff
 // modules (HOD for Technical, "Add Non-Technical Staff" for Non-Technical),
 // which create both the login and the profile record.
-const CREATABLE_ROLES: UserRole[] = ["COLLEGE_OFFICE", "COLLEGE_ACCOUNTS"];
+const CREATABLE_ROLES: UserRole[] = ["COLLEGE_OFFICE", "COLLEGE_ACCOUNTS", "WEBMASTER"];
 
 export default function NewStaffPage() {
   const router = useRouter();
