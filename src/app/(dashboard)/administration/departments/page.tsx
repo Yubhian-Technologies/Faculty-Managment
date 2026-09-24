@@ -141,6 +141,7 @@ export default function LocationDeptsPage() {
               badge={<Badge variant={d.isActive ? "default" : "secondary"}>{d.isActive ? "Active" : "Inactive"}</Badge>}
               fields={[{ label: "Dept Head", value: d.deptHeadName ?? "-" }]}
               actions={actionButtons(d)}
+              onClick={() => router.push(`/administration/departments/${d.id}`)}
             />
           ))}
         </div>
@@ -152,6 +153,7 @@ export default function LocationDeptsPage() {
           searchPlaceholder="Search departments..."
           searchKeys={["name"]}
           csvFilename="location-depts"
+          onRowClick={(r) => router.push(`/administration/departments/${(r as unknown as LocationDepartment).id}`)}
           columns={[
             { key: "name", header: "Department" },
             { key: "deptHeadName", header: "Dept Head", render: (r) => (r as unknown as LocationDepartment).deptHeadName ?? <span className="text-muted-foreground italic">Not assigned</span> },

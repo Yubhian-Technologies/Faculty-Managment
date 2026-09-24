@@ -14,7 +14,8 @@ import { Plus, Trash2, Info } from "lucide-react";
 import { formatDate, stripLeadingZeros } from "@/lib/utils";
 import type { FacultyNorms, PositionNorm, RegulatoryBody, College, UserRole, NavVisibilitySettings } from "@/types";
 import { ROLE_LABELS } from "@/types";
-import { getNavItemsForRole, groupNavItemsByModule, getRolesWithNavModules } from "@/components/layout/navConfig";
+import { getNavItemsForRole, groupNavItemsByModule, getRolesWithNavModules, isPersonalNavItem } from "@/components/layout/navConfig";
+import { isSeatRole } from "@/lib/roles/seatRoles";
 
 const REGULATORY_BODIES: { value: RegulatoryBody; label: string }[] = [
   { value: "UGC", label: "UGC - University Grants Commission" },
@@ -452,7 +453,16 @@ function NavVisibilitySection() {
       .finally(() => setIsLoading(false));
   }, [collegeId, role]);
 
-  const modules = groupNavItemsByModule(getNavItemsForRole(role));
+  // A seat (Principal, HOD, ...) is a position held by someone whose own login
+  // carries their profile / leave / attendance - those come from that person's
+  // primary role, not the seat. So a seat's modules are its position items only;
+  // the personal ones are split into their own group below, shown for the rare
+  // login whose primary role IS this seat. Primary roles (Faculty, Office, ...)
+  // have no seats to separate, so everything stays in one list.
+  const roleItems = getNavItemsForRole(role);
+  const splitPersonal = isSeatRole(role);
+  const modules = groupNavItemsByModule(splitPersonal ? roleItems.filter((i) => !isPersonalNavItem(i)) : roleItems);
+  const personalItems = splitPersonal ? roleItems.filter((i) => isPersonalNavItem(i)) : [];
 
   function toggleModule(moduleName: string, hide: boolean) {
     setHiddenModules((prev) => (hide ? [...prev, moduleName] : prev.filter((m) => m !== moduleName)));
@@ -567,6 +577,29 @@ function NavVisibilitySection() {
                 </div>
               );
             })}
+            {personalItems.length > 0 && (
+              <div className="rounded-lg border border-dashed p-4 space-y-3">
+                <div>
+                  <span className="text-sm font-semibold">Personal items</span>
+                  <p className="text-xs text-muted-foreground">
+                    Profile, leave and attendance belong to the person&apos;s own login (Faculty, Office, ...), not to the {ROLE_LABELS[role]} seat.
+                    These apply only to an account whose own role is {ROLE_LABELS[role]}.
+                  </p>
+                </div>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {personalItems.map((item) => (
+                    <label key={item.href} className="flex items-center gap-2 text-sm px-2 py-1.5 rounded-md cursor-pointer hover:bg-muted/50">
+                      <Checkbox
+                        checked={hiddenItems.includes(item.href)}
+                        onCheckedChange={(checked) => toggleItem(item.href, checked === true)}
+                      />
+                      {item.label}
+                      <code className="text-[10px] text-muted-foreground ml-auto">{item.href}</code>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 

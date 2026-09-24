@@ -29,8 +29,14 @@ const FIREBASE_ERROR_MESSAGES: Record<string, string> = {
   "auth/network-request-failed": "Network error. Please check your connection.",
 };
 
-export function ChangePasswordDialog() {
-  const [open, setOpen] = useState(false);
+// Uncontrolled by default (renders its own "Change Password" button). Pass
+// open/onOpenChange to drive it from elsewhere, e.g. the top-bar settings menu,
+// in which case no trigger button is rendered.
+export function ChangePasswordDialog({ open: controlledOpen, onOpenChange }: { open?: boolean; onOpenChange?: (open: boolean) => void } = {}) {
+  const [internalOpen, setInternalOpen] = useState(false);
+  const controlled = controlledOpen !== undefined;
+  const open = controlled ? controlledOpen : internalOpen;
+  const setOpen = (v: boolean) => { if (!controlled) setInternalOpen(v); onOpenChange?.(v); };
 
   const {
     register,
@@ -67,14 +73,14 @@ export function ChangePasswordDialog() {
 
   return (
     <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) reset(); }}>
-      <DialogTrigger asChild>
+      {!controlled && <DialogTrigger asChild>
         {/* Default size, matching the other actions it sits beside in every
             profile header (Download Resume, Copy Public Profile Link) - it
             was the only one rendering small, so the row looked uneven. */}
         <Button type="button" variant="outline">
           <KeyRound className="mr-2 h-4 w-4" />Change Password
         </Button>
-      </DialogTrigger>
+      </DialogTrigger>}
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Change Password</DialogTitle>

@@ -407,7 +407,15 @@ export interface FMSUser {
   // Departments page; see src/lib/departments/scope.ts). Falls back to
   // `[department]` wherever a doc predates this field.
   departments?: string[];
-  locationDeptId?: string; // for LOCATION_DEPT_HEAD
+  locationDeptId?: string; // for LOCATION_DEPT_HEAD - exactly one department they head
+  // For HR_ADMIN / ADMIN_OFFICE / ACCOUNTS only - which location department(s)
+  // this staff member covers. `allLocationDepts` (when true) takes precedence
+  // over `locationDeptIds` and is resolved dynamically against whatever
+  // departments exist at read time - never a denormalized snapshot, so a
+  // department created after this was set is still covered, unlike freezing
+  // today's department id list into the doc.
+  locationDeptIds?: string[];
+  allLocationDepts?: boolean;
   sectionId?: string; // for CLASS_LEADER - the one Section this login is bound to
   sectionName?: string; // for CLASS_LEADER - denormalized Section.name
   employeeId?: string; // for PRINCIPAL / VICE_PRINCIPAL / HOD profile forms
@@ -1013,6 +1021,28 @@ export const SELECTABLE_FACULTY_STATUS_VALUES = (Object.keys(FACULTY_STATUS_LABE
 );
 export const FACULTY_STATUS_ERROR_MESSAGE = `Status must be one of ${SELECTABLE_FACULTY_STATUS_VALUES.map((s) => FACULTY_STATUS_LABELS[s]).join(", ")}`;
 
+// Which stored date field records "when" a faculty member's status changed to
+// this value - only the three that mark leaving/entering a distinct
+// engagement phase carry one; ACTIVE/ON_LEAVE/INTERVIEW_DONE don't. Each date
+// stays on record even if status later changes again (e.g. resigned, later
+// rehired, later retired) - nothing here is ever auto-cleared, so a faculty
+// member's full history of these transitions is never lost to a later one
+// overwriting it. Single source of truth for the Add/Edit forms' conditional
+// date field, their required-if-status-matches validation, and the Faculty
+// Register's Duration filter (see facultyActiveDuringRange in
+// lib/faculty/activeDuration.ts).
+export type FacultyStatusDateField = "resignedDate" | "retiredDate" | "retainershipDate";
+export const FACULTY_STATUS_DATE_FIELD: Partial<Record<FacultyStatus, FacultyStatusDateField>> = {
+  RESIGNED: "resignedDate",
+  RETIRED: "retiredDate",
+  RETAINERSHIP: "retainershipDate",
+};
+export const FACULTY_STATUS_DATE_LABELS: Record<FacultyStatusDateField, string> = {
+  resignedDate: "Resignation Date",
+  retiredDate: "Retirement Date",
+  retainershipDate: "Retainership Date",
+};
+
 export interface FacultyMember {
   id: string;
   collegeId: string;
@@ -1039,6 +1069,12 @@ export interface FacultyMember {
   employeeCategory?: EmployeeCategory;
   aicteFacultyId?: string;
   status: FacultyStatus;
+  // Set when status is (or was ever) changed to RESIGNED/RETIRED/RETAINERSHIP
+  // respectively - see FACULTY_STATUS_DATE_FIELD's own doc-comment above for
+  // why these are three separate, never-auto-cleared fields rather than one.
+  resignedDate?: Timestamp;
+  retiredDate?: Timestamp;
+  retainershipDate?: Timestamp;
   userUid?: string; // links to users/{uid} if they have a system login
   profilePhotoUrl?: string;
 

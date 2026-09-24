@@ -22,7 +22,10 @@ import { normalizeHighestQualification } from "@/lib/faculty/highestQualificatio
 import { FieldValue } from "firebase-admin/firestore";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import type { Designation, EmployeeCategory, FacultyStatus, TrainingEntry } from "@/types";
-import { EMPLOYEE_CATEGORY_VALUES, EMPLOYEE_CATEGORY_ERROR_MESSAGE, SELECTABLE_FACULTY_STATUS_VALUES, FACULTY_STATUS_ERROR_MESSAGE } from "@/types";
+import {
+  EMPLOYEE_CATEGORY_VALUES, EMPLOYEE_CATEGORY_ERROR_MESSAGE, SELECTABLE_FACULTY_STATUS_VALUES, FACULTY_STATUS_ERROR_MESSAGE,
+  FACULTY_STATUS_DATE_FIELD, FACULTY_STATUS_DATE_LABELS,
+} from "@/types";
 
 export async function GET(
   _request: Request,
@@ -88,6 +91,9 @@ export async function PATCH(
       employeeCategory: EmployeeCategory;
       aicteFacultyId: string;
       status: FacultyStatus;
+      resignedDate: string;
+      retiredDate: string;
+      retainershipDate: string;
       userUid: string;
       academicProfile: Record<string, unknown>;
       // Section-scoped alternative to `academicProfile`: only the keys that changed
@@ -159,6 +165,17 @@ export async function PATCH(
     // provisionFacultyFromOffer/applyOfferDecision), never hand-set via Edit.
     if (body.status !== undefined && !(SELECTABLE_FACULTY_STATUS_VALUES as string[]).includes(body.status)) {
       return NextResponse.json({ error: FACULTY_STATUS_ERROR_MESSAGE }, { status: 400 });
+    }
+    // Resigned/Retired/Retainership each need their own date on record -
+    // whichever field applies to the status this PATCH is setting (see
+    // FACULTY_STATUS_DATE_FIELD's own doc-comment in types/core.ts). The Edit
+    // page always resends the current status (and its date, if already on
+    // file) on every save, so this only ever fires on a genuinely missing date.
+    if (body.status !== undefined) {
+      const statusDateField = FACULTY_STATUS_DATE_FIELD[body.status];
+      if (statusDateField && !body[statusDateField]?.trim()) {
+        return NextResponse.json({ error: `${FACULTY_STATUS_DATE_LABELS[statusDateField]} is required` }, { status: 400 });
+      }
     }
 
     const updates: Record<string, unknown> = { updatedAt: new Date() };
@@ -257,6 +274,11 @@ export async function PATCH(
 
     // Date fields
     if (body.joiningDate) updates.joiningDate = new Date(body.joiningDate);
+    // Never auto-cleared once set - see FACULTY_STATUS_DATE_FIELD's own
+    // doc-comment in types/core.ts.
+    if (body.resignedDate) updates.resignedDate = new Date(body.resignedDate);
+    if (body.retiredDate) updates.retiredDate = new Date(body.retiredDate);
+    if (body.retainershipDate) updates.retainershipDate = new Date(body.retainershipDate);
 
     // Total Years of Experience (Internal since Date of Joining + External
     // from the Academic/Industry/Research Experience entries) - always

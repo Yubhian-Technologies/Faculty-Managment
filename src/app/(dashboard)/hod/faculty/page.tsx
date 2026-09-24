@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
-import { UserPlus, Eye, Upload, Trash2, LogIn, FileDown, UserCog } from "lucide-react";
+import { UserPlus, Eye, Upload, Trash2, LogIn, FileDown, UserCog, History } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Button } from "@/components/ui/button";
@@ -587,6 +587,17 @@ export default function HODFacultyPage() {
         onRowClick={(row) => router.push(`/hod/faculty/${row.id}`)}
         searchPlaceholder="Search by name, email, employee ID..."
         searchKeys={["legalName", "nameAsPerPan", "email", "employeeId", "specialization"] as (keyof FacultyRow)[]}
+        // A separate historical view (date-range filters over Date of
+        // Joining/Resignation/Retirement/Retainership dates), not another
+        // Faculty status filter - kept beside the search box via DataTable's
+        // own filterComponent slot rather than a tab next to Teaching
+        // Faculty/Supporting Staff above, so it doesn't read as a third
+        // staff category.
+        filterComponent={
+          <Button variant="outline" size="sm" onClick={() => router.push("/hod/faculty/timeline")}>
+            <History className="h-4 w-4 mr-1" />Faculty Timeline
+          </Button>
+        }
         emptyTitle="No teaching faculty records yet"
         emptyDescription="Add faculty members to build your department's staff register"
         // Only shown for the "All"/"Active" filters - the button reads as "Add

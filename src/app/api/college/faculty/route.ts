@@ -17,7 +17,10 @@ import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { loadCollegeSettings } from "@/lib/firestore/collegeSettings";
 import { isQualificationSufficient } from "@/lib/faculty/minQualificationCheck";
 import type { Designation, FacultyStatus, EmployeeCategory } from "@/types";
-import { EMPLOYEE_CATEGORY_VALUES, EMPLOYEE_CATEGORY_ERROR_MESSAGE, SELECTABLE_FACULTY_STATUS_VALUES, FACULTY_STATUS_ERROR_MESSAGE, isFacultyAvailable } from "@/types";
+import {
+  EMPLOYEE_CATEGORY_VALUES, EMPLOYEE_CATEGORY_ERROR_MESSAGE, SELECTABLE_FACULTY_STATUS_VALUES, FACULTY_STATUS_ERROR_MESSAGE,
+  isFacultyAvailable, FACULTY_STATUS_DATE_FIELD, FACULTY_STATUS_DATE_LABELS,
+} from "@/types";
 import { loadDepartmentIndex, stampDepartmentIds } from "@/lib/departments/stampIds";
 
 export async function GET(request: Request) {
@@ -186,6 +189,9 @@ export async function POST(request: Request) {
       aicteFacultyId?: string;
       department?: string;
       status?: FacultyStatus;
+      resignedDate?: string;
+      retiredDate?: string;
+      retainershipDate?: string;
       academicProfile?: Record<string, unknown>;
       technicalProfile?: Record<string, unknown>;
       profilePhotoUrl?: string;
@@ -216,6 +222,13 @@ export async function POST(request: Request) {
     const status: FacultyStatus = body.status ?? "ACTIVE";
     if (!(SELECTABLE_FACULTY_STATUS_VALUES as string[]).includes(status)) {
       return NextResponse.json({ error: FACULTY_STATUS_ERROR_MESSAGE }, { status: 400 });
+    }
+    // Resigned/Retired/Retainership each need their own date on record (which
+    // field depends on the status just picked - see FACULTY_STATUS_DATE_FIELD's
+    // own doc-comment in types/core.ts).
+    const statusDateField = FACULTY_STATUS_DATE_FIELD[status];
+    if (statusDateField && !body[statusDateField]?.trim()) {
+      return NextResponse.json({ error: `${FACULTY_STATUS_DATE_LABELS[statusDateField]} is required` }, { status: 400 });
     }
     const degreeErr = degreeTypeError(body.academicProfile);
     if (degreeErr) return NextResponse.json({ error: degreeErr }, { status: 400 });
@@ -386,6 +399,9 @@ export async function POST(request: Request) {
       joiningDate: new Date(joiningDate),
       ...(body.aicteFacultyId?.trim() ? { aicteFacultyId: body.aicteFacultyId.trim() } : {}),
       status,
+      ...(body.resignedDate?.trim() ? { resignedDate: new Date(body.resignedDate) } : {}),
+      ...(body.retiredDate?.trim() ? { retiredDate: new Date(body.retiredDate) } : {}),
+      ...(body.retainershipDate?.trim() ? { retainershipDate: new Date(body.retainershipDate) } : {}),
       userUid: uid,
       ...(body.academicProfile ? { academicProfile: normalizeAcademicProfile(body.academicProfile) } : {}),
       ...(body.technicalProfile ? { technicalProfile: body.technicalProfile } : {}),
