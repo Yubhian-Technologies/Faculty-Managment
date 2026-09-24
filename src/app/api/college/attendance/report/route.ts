@@ -145,6 +145,16 @@ export async function GET(request: Request) {
       }
 
       const todayStart = istMidnightUTC(new Date());
+      // Working-day override for this date — if the role is named, Sunday is treated as working day
+      let overriddenRoles: Set<string> = new Set();
+      if (isSunday(start)) {
+        const endExclusive = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+        const wdSnap = await collegeRef.collection("workingDays").where("date", ">=", start).where("date", "<", endExclusive).get();
+        for (const doc of wdSnap.docs) {
+          const roles = (doc.data() as { roles?: string[] }).roles ?? [];
+          for (const r of roles) overriddenRoles.add(r);
+        }
+      }
       for (const entry of roster) {
         if (entry.status !== "NOT_MARKED") continue;
         if (!entry.registered) {
@@ -154,7 +164,7 @@ export async function GET(request: Request) {
         const registeredAt = uidToRegisteredAt.get(entry.uid) ?? null;
         const regStart = registeredAt ? istMidnightUTC(registeredAt) : null;
         if (start < todayStart && regStart && start >= regStart) {
-          const holiday = isSunday(start);
+          const holiday = isSunday(start) && !overriddenRoles.has(entry.role);
           entry.status = holiday ? "HOLIDAY" : "ABSENT";
           if (!holiday) entry.remarks = "No check-in recorded";
         }
@@ -287,7 +297,17 @@ export async function GET(request: Request) {
     //   - A past date, on/after their registration date -> ABSENT (or
     //     HOLIDAY if that date is a Sunday) - they could have checked in
     //     and didn't. Before registration, or today, stays NOT_MARKED.
+    //   Working-day override on a Sunday flips it to ABSENT (same as check-in gate).
     const todayStart = istMidnightUTC(new Date());
+    let overriddenRolesMain: Set<string> = new Set();
+    if (isSunday(start)) {
+      const endExclusive = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+      const wdSnap = await collegeRef.collection("workingDays").where("date", ">=", start).where("date", "<", endExclusive).get();
+      for (const doc of wdSnap.docs) {
+        const roles = (doc.data() as { roles?: string[] }).roles ?? [];
+        for (const r of roles) overriddenRolesMain.add(r);
+      }
+    }
     for (const entry of roster) {
       if (entry.status !== "NOT_MARKED") continue;
       if (!entry.registered) {
@@ -297,7 +317,7 @@ export async function GET(request: Request) {
       const registeredAt = uidToRegisteredAt.get(entry.uid) ?? null;
       const regStart = registeredAt ? istMidnightUTC(registeredAt) : null;
       if (start < todayStart && regStart && start >= regStart) {
-        const holiday = isSunday(start);
+        const holiday = isSunday(start) && !overriddenRolesMain.has(entry.role);
         entry.status = holiday ? "HOLIDAY" : "ABSENT";
         if (!holiday) entry.remarks = "No check-in recorded";
       }

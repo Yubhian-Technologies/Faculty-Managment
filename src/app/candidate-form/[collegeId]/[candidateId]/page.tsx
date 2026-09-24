@@ -313,7 +313,7 @@ export default function CandidateFormPage() {
       const experiences_ = experiences.filter((r) => r.organization.trim() || r.designation.trim());
       const relatives_ = hasRelatives ? relatives.filter((r) => r.name.trim() || r.workingLocation.trim()) : [];
 
-      const res = await fetch(`/api/public/candidate-form/${collegeId}/${candidateId}`, {
+      const res = await fetch(`/api/public/candidate-form/${collegeId}/${candidateId}?applicationId=${applicationId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

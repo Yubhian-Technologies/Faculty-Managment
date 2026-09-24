@@ -37,6 +37,8 @@ interface DataTableProps<T extends Record<string, unknown>> {
   emptyAction?: React.ReactNode;
   csvFilename?: string;
   filterComponent?: React.ReactNode;
+  /** Render the filter control before the search box (default: after). */
+  filterFirst?: boolean;
   onRowClick?: (row: T) => void;
   keyExtractor: (row: T) => string;
   // When set, rows are grouped under a header row per returned label (e.g.
@@ -63,6 +65,7 @@ export function DataTable<T extends Record<string, unknown>>({
   emptyAction,
   csvFilename,
   filterComponent,
+  filterFirst = false,
   onRowClick,
   keyExtractor,
   groupBy,
@@ -162,7 +165,7 @@ export function DataTable<T extends Record<string, unknown>>({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className={`flex flex-col gap-3 sm:flex-row sm:items-center ${filterFirst ? "" : "sm:justify-between"}`}>
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
@@ -177,7 +180,7 @@ export function DataTable<T extends Record<string, unknown>>({
             autoComplete="off"
           />
         </div>
-        <div className="flex items-center gap-2">
+        <div className={`flex items-center gap-2 ${filterFirst ? "sm:order-first" : ""}`}>
           {filterComponent && (
             <div className="flex items-center gap-2">
               <Filter className="h-4 w-4 text-muted-foreground" />

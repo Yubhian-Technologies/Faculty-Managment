@@ -218,8 +218,7 @@ export default function SuperAdminSettingsPage() {
       {/* Core Ratios */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Core Norms</CardTitle>
-          <CardDescription>Fundamental ratios and requirements</CardDescription>
+          <CardTitle className="text-base">Fundamental Ratios</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid gap-5 sm:grid-cols-3">

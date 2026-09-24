@@ -4,6 +4,9 @@ import { findUsersSnapshot } from "@/lib/roles/findUsersByRoles";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { loadCollegeSettings } from "@/lib/firestore/collegeSettings";
+import { isQualificationSufficient } from "@/lib/faculty/minQualificationCheck";
+import { matchOption } from "@/lib/import/fieldConstraints";
 import type { Firestore } from "firebase-admin/firestore";
 
 async function getUserName(db: Firestore, collegeId: string, uid: string): Promise<string> {
@@ -82,6 +85,42 @@ export async function POST(request: Request) {
     }
 
     const db = getAdminDb();
+
+    // Minimum qualifications enforcement (BLOCK mode for vacancy).
+    try {
+      const settings = await loadCollegeSettings(db, session.collegeId);
+      const designationSnap = await db
+        .collection("colleges")
+        .doc(session.collegeId)
+        .collection("designations")
+        .where("isActive", "==", true)
+        .get();
+      const names = designationSnap.docs
+        .map((d) => (d.data() as { name?: string }).name)
+        .filter((n): n is string => !!n);
+      const matched = matchOption(position, names);
+      if (matched) {
+        const matchedDoc = designationSnap.docs.find((d) => (d.data() as { name?: string }).name === matched);
+        const cadre = (matchedDoc?.data() as { cadre?: string } | undefined)?.cadre;
+        let required = "";
+        if (cadre === "PROFESSOR") required = settings.minimumQualifications.professor;
+        else if (cadre === "ASSOCIATE_PROFESSOR") required = settings.minimumQualifications.associateProfessor;
+        else if (cadre === "ASSISTANT_PROFESSOR") required = settings.minimumQualifications.assistantProfessor;
+        if (required && !isQualificationSufficient(qualification || "", required)) {
+          return NextResponse.json(
+            { error: `Qualification "${(qualification || "").trim()}" does not meet minimum for ${position}: requires ${required}` },
+            { status: 400 }
+          );
+        }
+      }
+    } catch (e) {
+      // If the settings/designation fetch fails for non-validation reasons,
+      // log and continue — don't block the request. Only the explicit
+      // isQualificationSufficient failure above should block.
+      if (e instanceof Error && (e as unknown as { status?: number }).status === 400) throw e;
+      console.warn("[college/vacancy-requests POST] Failed to check minimum qualifications", e);
+    }
+
     const hodName = await getUserName(db, session.collegeId, session.uid);
     const now = new Date();
 

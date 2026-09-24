@@ -1,8 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\(Object.keys\\(p.dependencies\\).join\\(', '\\)\\)\")",
-      "Bash(node _tmp-test-stats.mjs)"
-    ]
-  }
-}

@@ -12,7 +12,8 @@ import { useAssignedInterviews } from "@/hooks/useAssignedInterviews";
 import { useAssignedCoordinator } from "@/hooks/useAssignedCoordinator";
 import { useIsSubDepartmentHod } from "@/hooks/useIsSubDepartmentHod";
 import { usePrincipalPendingHiring } from "@/hooks/usePrincipalPendingHiring";
-import { isNavItemActive, filterVisibleNavItems, ROLES_WITH_EMBEDDED_PANEL_ACCESS, type NavItem } from "./navConfig";
+import { isNavItemActive, filterVisibleNavItems, isPathHidden, ROLES_WITH_EMBEDDED_PANEL_ACCESS, type NavItem } from "./navConfig";
+import { useIsTimetableIncharge } from "@/hooks/useIsTimetableIncharge";
 import { NavIcon } from "./NavIcon";
 import { WorkContextSwitcher } from "./WorkContextSwitcher";
 import { useWorkContext } from "@/hooks/useWorkContext";
@@ -43,6 +44,7 @@ export function MobileDrawer({ hiddenModules, hiddenItems }: MobileDrawerProps) 
   const { hideSubDepartmentsLink } = useIsSubDepartmentHod();
   const { pendingCount: pendingHiringCount } = usePrincipalPendingHiring();
   const { items: contextItems, contexts } = useWorkContext();
+  const { isIncharge } = useIsTimetableIncharge();
 
   useEffect(() => {
     setSidebarOpen(false);
@@ -51,14 +53,22 @@ export function MobileDrawer({ hiddenModules, hiddenItems }: MobileDrawerProps) 
   if (!user) return null;
 
   const baseNavItems = filterVisibleNavItems(contextItems, hiddenModules, hiddenItems, user.realRole, true)
-    .filter((item) => !hideSubDepartmentsLink || item.href !== "/hod/settings/sub-departments");
+    .filter((item) => !hideSubDepartmentsLink || item.href !== "/hod/settings/sub-departments")
+    .filter((item) => {
+      const isInchargeNav = item.href === "/panel/timetable-incharge" || item.href === "/college-staff/timetable-incharge";
+      if (!isInchargeNav) return true;
+      if (isIncharge === null) return true;
+      return isIncharge === true;
+    });
   let navItems = baseNavItems;
   {
     const injected: NavItem[] = [];
     // Skip roles that already have a static "Panel Scoring" tab in navConfig,
     // and roles whose own hiring-pipeline board already links into panel scoring.
+    const isInterviewHidden = isPathHidden(INTERVIEW_NAV_ITEM.href, user.role, hiddenModules, hiddenItems);
     if (
       hasInterviews &&
+      !isInterviewHidden &&
       !ROLES_WITH_EMBEDDED_PANEL_ACCESS.has(user.role) &&
       !baseNavItems.some((i) => i.href === INTERVIEW_NAV_ITEM.href)
     ) {

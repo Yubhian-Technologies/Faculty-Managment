@@ -9,11 +9,15 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { LocationCollegeSelect } from "@/components/shared/LocationCollegeSelect";
 import { useAuthStore } from "@/store/authStore";
+import { useNavVisibility } from "@/hooks/useNavVisibility";
+import { isPathHidden } from "@/components/layout/navConfig";
 
 interface CollegeOption { id: string; name?: string; isActive?: boolean }
 
 export default function AdministrationDashboard() {
   const user = useAuthStore((s) => s.user);
+  const { hiddenModules, hiddenItems } = useNavVisibility();
+  const isHidden = (href: string) => !!user?.role && isPathHidden(href, user.role, hiddenModules, hiddenItems);
   const [pendingVacancies, setPendingVacancies] = useState<number | null>(null);
   const [pendingInterviews, setPendingInterviews] = useState<number | null>(null);
   const [pendingOffers, setPendingOffers] = useState<number | null>(null);
@@ -55,14 +59,15 @@ export default function AdministrationDashboard() {
     ? `?collegeId=${selectedCollegeId}&collegeName=${encodeURIComponent(selectedCollegeName)}`
     : "";
 
-  const actions = [
-    { label: "Hiring Requests", href: `/administration/vacancies${collegeQuery}`, icon: ClipboardList, desc: `${pendingVacancies ?? "…"} pending from HR Admin`, section: "Hiring Approvals" },
-    { label: "Interview Plans", href: `/administration/interviews${collegeQuery}`, icon: CalendarCheck, desc: `${pendingInterviews ?? "…"} plans awaiting approval`, section: "" },
-    { label: "Offer Letters", href: `/administration/offers${collegeQuery}`, icon: FileText, desc: `${pendingOffers ?? "…"} offer letters to approve`, section: "" },
-    { label: "Location Staff", href: "/administration/users", icon: Users, desc: "HR Admin, Admin Office, Accounts, Dept Heads", section: "Management" },
-    { label: "Departments", href: "/administration/departments", icon: Settings2, desc: "Manage location-level departments", section: "" },
-    { label: "Colleges", href: `/administration/colleges${collegeQuery}`, icon: Building2, desc: "View colleges & assign Principals", section: "" },
+  const baseActions = [
+    { label: "Hiring Requests", href: `/administration/vacancies${collegeQuery}`, baseHref: "/administration/vacancies", icon: ClipboardList, desc: `${pendingVacancies ?? "…"} pending from HR Admin`, section: "Hiring Approvals" },
+    { label: "Interview Plans", href: `/administration/interviews${collegeQuery}`, baseHref: "/administration/interviews", icon: CalendarCheck, desc: `${pendingInterviews ?? "…"} plans awaiting approval`, section: "" },
+    { label: "Offer Letters", href: `/administration/offers${collegeQuery}`, baseHref: "/administration/offers", icon: FileText, desc: `${pendingOffers ?? "…"} offer letters to approve`, section: "" },
+    { label: "Location Staff", href: "/administration/users", baseHref: "/administration/users", icon: Users, desc: "HR Admin, Admin Office, Accounts, Dept Heads", section: "Management" },
+    { label: "Departments", href: "/administration/departments", baseHref: "/administration/departments", icon: Settings2, desc: "Manage location-level departments", section: "" },
+    { label: "Colleges", href: `/administration/colleges${collegeQuery}`, baseHref: "/administration/colleges", icon: Building2, desc: "View colleges & assign Principals", section: "" },
   ];
+  const actions = baseActions.filter((a) => !isHidden(a.baseHref));
 
   return (
     <div className="space-y-6">

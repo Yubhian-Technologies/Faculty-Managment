@@ -8,6 +8,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { RESEARCH_MODULES } from "@/lib/research/modules";
 import { useAuthStore } from "@/store/authStore";
+import { useNavVisibility } from "@/hooks/useNavVisibility";
+import { isPathHidden } from "@/components/layout/navConfig";
 import { ROLE_LABELS } from "@/types";
 
 // R&D's landing page. Its job is to answer "what is waiting on me": every
@@ -23,6 +25,8 @@ const MODULES = Object.values(RESEARCH_MODULES);
 
 export default function RAndDDashboard() {
   const user = useAuthStore((s) => s.user);
+  const { hiddenModules, hiddenItems } = useNavVisibility();
+  const isHidden = (href: string) => !!user?.role && isPathHidden(href, user.role, hiddenModules, hiddenItems);
 
   const results = useQueries({
     queries: MODULES.map((m) => ({
@@ -44,6 +48,7 @@ export default function RAndDDashboard() {
   const total = counts.reduce((sum, n) => sum + n, 0);
 
   const rows = MODULES.map((m, i) => ({ ...m, pending: counts[i], failed: results[i].isError }))
+    .filter((m) => !isHidden(`/r-and-d/${m.slug}`))
     // Only what actually needs verifying. A module with nothing outstanding is
     // not information a reviewer needs on this page - it just buries the ones
     // that do. A module whose fetch FAILED is kept, because "up to date" is

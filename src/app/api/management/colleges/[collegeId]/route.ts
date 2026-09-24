@@ -16,7 +16,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ col
       return NextResponse.json({ error: "College not found" }, { status: 404 });
     }
 
-    return NextResponse.json({ college: { id: snap.id, ...snap.data() } });
+    return NextResponse.json({ college: { ...snap.data(), id: snap.id } });
   } catch (err) {
     if (err instanceof Error && err.message === "UNAUTHORIZED") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

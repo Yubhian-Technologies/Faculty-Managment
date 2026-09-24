@@ -95,6 +95,7 @@ export const NAV_ITEMS: NavItem[] = [
 
   // Admin Office
   { label: "Dashboard", href: "/admin-office", iconName: "LayoutDashboard", roles: ["ADMIN_OFFICE"] },
+  { label: "Vacancies", href: "/admin-office/vacancies", iconName: "ClipboardList", roles: ["ADMIN_OFFICE"] },
   { label: "My Profile", href: "/admin-office/profile", iconName: "UserCircle", roles: ["ADMIN_OFFICE"], section: "Personal" },
 
   // Placement Department
@@ -159,7 +160,6 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Student Promotion", href: "/principal/promotions", iconName: "GraduationCap", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Graduated Students", href: "/principal/graduates", iconName: "Award", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Timetable", href: "/principal/timetable", iconName: "CalendarDays", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
-  { label: "Student Attendance History", href: "/principal/attendance-history", iconName: "CalendarCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Internal Marks", href: "/principal/internal-marks", iconName: "ClipboardCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Staff", href: "/principal/staff", iconName: "UsersRound", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Staff & HR Management" },
   // Deciding a leave request is Principal/VP authority, not College Admin's -
@@ -169,14 +169,21 @@ export const NAV_ITEMS: NavItem[] = [
   // Arrange cover for someone below them (Vice Principal / Academics / HODs) who has
   // other work on a date or range - see StaffAdjustmentsPage.
   { label: "Adjustments", href: "/principal/adjustments", iconName: "UserCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
-  { label: "Attendance Report", href: "/principal/attendance-report", iconName: "ClipboardCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
-  // Views whether faculty submitted student attendance for their scheduled
-  // periods, and whether it was on time - distinct from "Attendance Report"
-  // above (staff self check-in/out). College Admin needs this to chase
-  // whoever hasn't logged it yet, so unlike the other Principal-decision
-  // items on this page it stays visible to them (see NavItem.hideForRealRoles).
-  { label: "Attendance Completion", href: "/principal/attendance-completion", iconName: "ClipboardCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
-  { label: "Import Attendance", href: "/principal/attendance-import", iconName: "Upload", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
+  // Was 7 separate sidebar items (Student Attendance History, Attendance
+  // Report, Attendance Completion, Absent Report, Shortage Report, Faculty
+  // Not Posted, Import Attendance), all ungrouped. Now split into two:
+  // "Attendance" is daily check-in/out marking (see
+  // principal/attendance-report/page.tsx, Import reached via its own
+  // internal link); "Attendance Reports" is every report/history/completion
+  // view (see principal/attendance-reports/page.tsx). Attendance Completion
+  // is no longer its own nav item, but FacultyAttendanceCompletionView still
+  // redirects a COLLEGE_ADMIN login away client-side (and the API still
+  // 403s them) regardless of how the tab is reached - see that component's
+  // own guard. The old routes still work standalone (unlinked, not deleted)
+  // for any existing notification links/bookmarks.
+  { label: "Attendance", href: "/principal/attendance-report", iconName: "ClipboardCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
+  { label: "Attendance Reports", href: "/principal/attendance-reports", iconName: "CalendarRange", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
+  { label: "Circulars", href: "/principal/circulars", iconName: "Megaphone", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   // Panel Scoring and Appointment Letters are no longer separate tabs - both
   // are folded into the Hiring Requests pipeline's own status badges/actions
   // (see PrincipalPipelineBoard.tsx) since they're just later stages of the
@@ -238,18 +245,23 @@ export const NAV_ITEMS: NavItem[] = [
   // Sits directly below Teaching Assignments: subjects are assigned there first,
   // then scheduled here.
   { label: "Timetable", href: "/hod/timetable", iconName: "CalendarDays", roles: ["HOD"] },
-  { label: "Attendance Reports", href: "/hod/monthly-records", iconName: "CalendarRange", roles: ["HOD"] },
-  { label: "Attendance History", href: "/hod/attendance-history", iconName: "CalendarCheck", roles: ["HOD"] },
   { label: "Leave Approvals", href: "/hod/leave-approvals", iconName: "CalendarClock", roles: ["HOD"], section: "Approvals" },
   { label: "Leave History", href: "/hod/leave-history", iconName: "History", roles: ["HOD"] },
   // Arrange cover for their department's faculty / supporting staff who have
   // other work on a date or range - see StaffAdjustmentsPage.
   { label: "Adjustments", href: "/hod/adjustments", iconName: "UserCheck", roles: ["HOD"] },
-  { label: "Faculty Attendance", href: "/hod/faculty-attendance", iconName: "ClipboardCheck", roles: ["HOD"] },
-  // Same view as Principal's "Attendance Completion" - own department's
-  // faculty only (see faculty-attendance-completion/route.ts's HOD scoping).
-  { label: "Attendance Completion", href: "/hod/attendance-completion", iconName: "ClipboardCheck", roles: ["HOD"] },
-  { label: "Import Attendance", href: "/hod/attendance-import", iconName: "Upload", roles: ["HOD"] },
+  // Was 8 separate sidebar items (Attendance Reports, Attendance History,
+  // Faculty Attendance, Attendance Completion, Absent Report, Shortage
+  // Report, Faculty Not Posted, Import Attendance), all ungrouped and, on
+  // mobile, buried in one long drawer list. Now split into two: "Attendance"
+  // is daily check-in/out marking (see hod/faculty-attendance/page.tsx,
+  // Import reached via its own internal link); "Attendance Reports" is
+  // every report/history/completion view (see
+  // hod/attendance-reports/page.tsx). The old routes still work standalone
+  // (unlinked, not deleted) for any existing notification links/bookmarks.
+  { label: "Attendance", href: "/hod/faculty-attendance", iconName: "ClipboardCheck", roles: ["HOD"] },
+  { label: "Attendance Reports", href: "/hod/attendance-reports", iconName: "CalendarRange", roles: ["HOD"] },
+  { label: "Circulars", href: "/hod/circulars", iconName: "Megaphone", roles: ["HOD"] },
   { label: "Leave Profiles", href: "/hod/leave/profiles", iconName: "ClipboardList", roles: ["HOD"] },
   { label: "Budget", href: "/hod/budget", iconName: "PiggyBank", roles: ["HOD"], section: "Budget & Purchase" },
   { label: "Indents", href: "/hod/indents", iconName: "ShoppingCart", roles: ["HOD"] },
@@ -384,6 +396,7 @@ export const NAV_ITEMS: NavItem[] = [
   // Faculty Incharge's own equivalent, not offered to HOD here.
   { label: "Lab Batches", href: "/panel/students/batches", iconName: "Layers", roles: ["PANEL_MEMBER"] },
   { label: "My Feedback", href: "/panel/feedback", iconName: "MessageSquare", roles: ["PANEL_MEMBER"] },
+  { label: "Circulars", href: "/panel/circulars", iconName: "Megaphone", roles: ["PANEL_MEMBER"] },
   { label: "Leave", href: "/panel/leave", iconName: "CalendarClock", roles: ["PANEL_MEMBER"], section: "Leave & Attendance" },
   { label: "Adjustment Requests", href: "/leave/adjustments", iconName: "UserCheck", roles: ["PANEL_MEMBER"] },
   { label: "My Attendance", href: "/panel/attendance", iconName: "ClipboardCheck", roles: ["PANEL_MEMBER"] },
@@ -749,6 +762,7 @@ export const BOTTOM_NAV_ITEMS: Record<UserRole, NavItem[]> = {
   ],
   ADMIN_OFFICE: [
     { label: "Home", href: "/admin-office", iconName: "LayoutDashboard", roles: ["ADMIN_OFFICE"] },
+    { label: "Vacancies", href: "/admin-office/vacancies", iconName: "ClipboardList", roles: ["ADMIN_OFFICE"] },
     { label: "Profile", href: "/admin-office/profile", iconName: "UserCircle", roles: ["ADMIN_OFFICE"] },
   ],
   PLACEMENT_DEPT: [

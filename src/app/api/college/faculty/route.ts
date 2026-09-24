@@ -14,6 +14,8 @@ import { migrateFacultyDoc } from "@/lib/faculty/fieldRenames";
 import { mobileNoFromBody } from "@/lib/faculty/mobileNo";
 import { normalizeHighestQualification } from "@/lib/faculty/highestQualification";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
+import { loadCollegeSettings } from "@/lib/firestore/collegeSettings";
+import { isQualificationSufficient } from "@/lib/faculty/minQualificationCheck";
 import type { Designation, FacultyStatus, EmployeeCategory } from "@/types";
 import { EMPLOYEE_CATEGORY_VALUES, EMPLOYEE_CATEGORY_ERROR_MESSAGE, SELECTABLE_FACULTY_STATUS_VALUES, FACULTY_STATUS_ERROR_MESSAGE, isFacultyAvailable } from "@/types";
 import { loadDepartmentIndex, stampDepartmentIds } from "@/lib/departments/stampIds";
@@ -238,6 +240,35 @@ export async function POST(request: Request) {
     const db = getAdminDb();
     const collegeId = session.collegeId;
 
+    // Minimum qualifications enforcement (WARN mode — does not block creation).
+    let qualificationWarning: string | undefined;
+    try {
+      const settings = await loadCollegeSettings(db, collegeId);
+      const desigSnap = await db
+        .collection("colleges")
+        .doc(collegeId)
+        .collection("designations")
+        .where("category", "==", "FACULTY")
+        .where("isActive", "==", true)
+        .get();
+      const cadreByDesignation = new Map<string, string>();
+      for (const doc of desigSnap.docs) {
+        const d = doc.data() as { name?: string; cadre?: string };
+        if (d.name && d.cadre) cadreByDesignation.set(d.name, d.cadre);
+      }
+      const cadre = cadreByDesignation.get(designation);
+      let required = "";
+      if (cadre === "PROFESSOR") required = settings.minimumQualifications.professor;
+      else if (cadre === "ASSOCIATE_PROFESSOR") required = settings.minimumQualifications.associateProfessor;
+      else if (cadre === "ASSISTANT_PROFESSOR") required = settings.minimumQualifications.assistantProfessor;
+      if (required && !isQualificationSufficient(highestQualification || "", required)) {
+        qualificationWarning = `Highest Qualification "${(highestQualification || "").trim()}" does not meet minimum for ${designation}: requires ${required}`;
+        console.warn(`[college/faculty POST] Qualification warning: ${qualificationWarning}`);
+      }
+    } catch (e) {
+      console.warn("[college/faculty POST] Failed to check minimum qualifications", e);
+    }
+
     // Resolve the owning department. A parent HOD may add faculty straight into
     // one of their sub-departments by naming it; anything else falls back to
     // their own department. A sub-HOD has no children, so they always land on
@@ -370,6 +401,9 @@ export async function POST(request: Request) {
       ...(profilePhotoUrl ? { profilePhotoUrl } : {}),
     });
 
+    if (qualificationWarning) {
+      return NextResponse.json({ id: docRef.id, uid, warning: qualificationWarning }, { status: 201 });
+    }
     return NextResponse.json({ id: docRef.id, uid }, { status: 201 });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
