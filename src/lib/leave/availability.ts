@@ -16,7 +16,7 @@ import type { LeaveRequest, PeriodSubstitution, StaffAdjustment } from "@/types/
 //    substitutions or another active adjustment - so the same person can't be
 //    double-booked into one slot by two different requests.
 
-const LIVE_LEAVE_STATUSES = ["PENDING_ACCEPTANCE", "PENDING_HOD", "PENDING_PRINCIPAL", "PENDING_MANAGEMENT", "APPROVED"] as const;
+const LIVE_LEAVE_STATUSES = ["PENDING_ACCEPTANCE", "PENDING_HOD", "PENDING_PRINCIPAL", "PENDING_VICE_PRINCIPAL", "PENDING_MANAGEMENT", "APPROVED"] as const;
 
 function toISODate(value: unknown): string | null {
   if (!value) return null;

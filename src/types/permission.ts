@@ -19,6 +19,9 @@ import type { Timestamp } from "firebase/firestore";
 export type PermissionRequestStatus =
   | "PENDING_HOD"
   | "PENDING_PRINCIPAL"
+  // See LeaveRequestStatus's own PENDING_VICE_PRINCIPAL comment (types/leave.ts) -
+  // same split, same reasoning, kept in step per this file's own header comment.
+  | "PENDING_VICE_PRINCIPAL"
   | "PENDING_MANAGEMENT"
   | "APPROVED"
   | "REJECTED"
@@ -27,6 +30,7 @@ export type PermissionRequestStatus =
 export const PERMISSION_STATUS_LABELS: Record<PermissionRequestStatus, string> = {
   PENDING_HOD: "Pending HOD",
   PENDING_PRINCIPAL: "Pending Principal",
+  PENDING_VICE_PRINCIPAL: "Pending Vice Principal",
   PENDING_MANAGEMENT: "Pending Management",
   APPROVED: "Approved",
   REJECTED: "Rejected",
@@ -36,6 +40,7 @@ export const PERMISSION_STATUS_LABELS: Record<PermissionRequestStatus, string> =
 export const PENDING_PERMISSION_STATUSES: PermissionRequestStatus[] = [
   "PENDING_HOD",
   "PENDING_PRINCIPAL",
+  "PENDING_VICE_PRINCIPAL",
   "PENDING_MANAGEMENT",
 ];
 
@@ -67,7 +72,7 @@ export interface PermissionRequest {
   /** Which tier this was routed to when raised - kept so the approval guard
    *  doesn't have to re-derive it from a routing map that may have changed
    *  since. */
-  approverStage: "HOD" | "PRINCIPAL" | "MANAGEMENT";
+  approverStage: "HOD" | "PRINCIPAL" | "VICE_PRINCIPAL" | "MANAGEMENT";
 
   decidedByUid?: string;
   decidedByName?: string;

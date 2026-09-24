@@ -5,7 +5,7 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { loadCollegeSettings } from "@/lib/firestore/collegeSettings";
 import { resolveEmployeeIdentity } from "@/lib/leave/identity";
-import { resolveApproverStage } from "@/lib/leave/approvalRouting";
+import { resolveApproverStage, approverStageToStatus } from "@/lib/leave/approvalRouting";
 import { notifyPermissionRequested } from "@/lib/leave/permissionNotify";
 import { PENDING_PERMISSION_STATUSES, type PermissionRequest, type PermissionRequestStatus } from "@/types/permission";
 
@@ -55,8 +55,11 @@ export async function GET(request: Request) {
         // routed to the HOD tier.
         const mine = await resolveEmployeeIdentity(db, session.collegeId, session.uid);
         rows = rows.filter((r) => r.status === "PENDING_HOD" && !!r.department && r.department === mine?.department);
-      } else if (session.role === "PRINCIPAL" || session.role === "VICE_PRINCIPAL") {
-        rows = rows.filter((r) => r.status === "PENDING_PRINCIPAL");
+      } else if (session.role === "PRINCIPAL") {
+        // Principal sees both - senior override on VP-routed requests too.
+        rows = rows.filter((r) => r.status === "PENDING_PRINCIPAL" || r.status === "PENDING_VICE_PRINCIPAL");
+      } else if (session.role === "VICE_PRINCIPAL") {
+        rows = rows.filter((r) => r.status === "PENDING_VICE_PRINCIPAL");
       } else {
         rows = [];
       }
@@ -114,8 +117,7 @@ export async function POST(request: Request) {
     // here too rather than being second-guessed.
     const settings = await loadCollegeSettings(db, session.collegeId);
     const stage = resolveApproverStage(settings.leaveApprovalRouting, session.role, !!identity.department);
-    const status: PermissionRequestStatus =
-      stage === "HOD" ? "PENDING_HOD" : stage === "MANAGEMENT" ? "PENDING_MANAGEMENT" : "PENDING_PRINCIPAL";
+    const status: PermissionRequestStatus = approverStageToStatus(stage);
 
     const now = new Date();
     const doc = {

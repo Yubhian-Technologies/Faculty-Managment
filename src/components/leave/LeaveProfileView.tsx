@@ -45,6 +45,7 @@ const STATUS_VARIANT: Record<LeaveRequestStatus, "pending" | "approved" | "rejec
   PENDING_ACCEPTANCE: "pending",
   PENDING_HOD: "pending",
   PENDING_PRINCIPAL: "pending",
+  PENDING_VICE_PRINCIPAL: "pending",
   PENDING_MANAGEMENT: "pending",
   APPROVED: "approved",
   REJECTED: "rejected",
@@ -142,7 +143,7 @@ export function LeaveProfileView({ uid, applyHref, historyBaseHref }: LeaveProfi
   })();
   const pendingRequest = requests.find(
     (r) => r.status === "PENDING_ACCEPTANCE" || r.status === "PENDING_HOD" ||
-      r.status === "PENDING_PRINCIPAL" || r.status === "PENDING_MANAGEMENT"
+      r.status === "PENDING_PRINCIPAL" || r.status === "PENDING_VICE_PRINCIPAL" || r.status === "PENDING_MANAGEMENT"
   );
   const applyBlockedReason = unfinishedApprovedLeave
     ? isOngoingLeave
@@ -339,7 +340,7 @@ function CountBadge({ count, title }: { count: number; title: string }) {
   );
 }
 
-const PENDING_STATUSES: LeaveRequestStatus[] = ["PENDING_ACCEPTANCE", "PENDING_HOD", "PENDING_PRINCIPAL", "PENDING_MANAGEMENT"];
+const PENDING_STATUSES: LeaveRequestStatus[] = ["PENDING_ACCEPTANCE", "PENDING_HOD", "PENDING_PRINCIPAL", "PENDING_VICE_PRINCIPAL", "PENDING_MANAGEMENT"];
 
 // An APPROVED request is only cancellable up until its own leave period ends
 // - cancelling something already lived through doesn't make sense. Pending

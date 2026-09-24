@@ -41,7 +41,7 @@ export async function GET() {
     // moot.
     const snap = await REQUESTS_COL(session.collegeId, db)
       .where("status", "in", [
-        "PENDING_ACCEPTANCE", "PENDING_HOD", "PENDING_PRINCIPAL", "PENDING_MANAGEMENT", "APPROVED",
+        "PENDING_ACCEPTANCE", "PENDING_HOD", "PENDING_PRINCIPAL", "PENDING_VICE_PRINCIPAL", "PENDING_MANAGEMENT", "APPROVED",
       ])
       .get();
 
