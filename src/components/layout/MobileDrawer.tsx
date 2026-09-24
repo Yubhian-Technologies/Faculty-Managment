@@ -14,7 +14,6 @@ import { useIsSubDepartmentHod } from "@/hooks/useIsSubDepartmentHod";
 import { usePrincipalPendingHiring } from "@/hooks/usePrincipalPendingHiring";
 import { isNavItemActive, filterVisibleNavItems, ROLES_WITH_EMBEDDED_PANEL_ACCESS, type NavItem } from "./navConfig";
 import { NavIcon } from "./NavIcon";
-import { CollegeAdminAccountMenu } from "./CollegeAdminAccountMenu";
 import { WorkContextSwitcher } from "./WorkContextSwitcher";
 import { useWorkContext } from "@/hooks/useWorkContext";
 import { ROLE_LABELS } from "@/types";
@@ -51,7 +50,7 @@ export function MobileDrawer({ hiddenModules, hiddenItems }: MobileDrawerProps) 
 
   if (!user) return null;
 
-  const baseNavItems = filterVisibleNavItems(contextItems, hiddenModules, hiddenItems, user.realRole)
+  const baseNavItems = filterVisibleNavItems(contextItems, hiddenModules, hiddenItems, user.realRole, true)
     .filter((item) => !hideSubDepartmentsLink || item.href !== "/hod/settings/sub-departments");
   let navItems = baseNavItems;
   {
@@ -156,9 +155,6 @@ export function MobileDrawer({ hiddenModules, hiddenItems }: MobileDrawerProps) 
               <p className="text-xs text-muted-foreground truncate">{user.email}</p>
             </div>
           </div>
-          {user.realRole === "COLLEGE_ADMIN" && (
-            <CollegeAdminAccountMenu uid={user.uid} name={user.name} phone={user.phone} fullWidth />
-          )}
           <button
             onClick={logout}
             className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors w-full px-2 py-2 rounded-lg hover:bg-muted"

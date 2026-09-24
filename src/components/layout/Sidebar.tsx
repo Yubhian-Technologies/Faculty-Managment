@@ -2,11 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bell, LogOut, ChevronRight } from "lucide-react";
+import { LogOut, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/store/authStore";
-import { useUIStore } from "@/store/uiStore";
-import { useNotifications } from "@/hooks/useNotifications";
 import { useAuth } from "@/hooks/useAuth";
 import { useAssignedInterviews } from "@/hooks/useAssignedInterviews";
 import { useAssignedCoordinator } from "@/hooks/useAssignedCoordinator";
@@ -16,7 +14,6 @@ import { useCollegeType } from "@/hooks/useCollegeType";
 import { hasSupportingStaffSplit } from "@/lib/designations/config";
 import { isNavItemActive, filterVisibleNavItems, ROLES_WITH_EMBEDDED_PANEL_ACCESS, type NavItem } from "./navConfig";
 import { NavIcon } from "./NavIcon";
-import { CollegeAdminAccountMenu } from "./CollegeAdminAccountMenu";
 import { WorkContextSwitcher } from "./WorkContextSwitcher";
 import { useWorkContext } from "@/hooks/useWorkContext";
 import { OrgScopeTree } from "./OrgScopeTree";
@@ -45,8 +42,6 @@ interface SidebarProps {
 export function Sidebar({ hiddenModules, hiddenItems }: SidebarProps) {
   const user = useAuthStore((s) => s.user);
   const { logout } = useAuth();
-  const { unreadCount } = useNotifications();
-  const { setNotificationDrawerOpen } = useUIStore();
   const pathname = usePathname();
   const { hasInterviews } = useAssignedInterviews();
   const { coordinatorBatchId } = useAssignedCoordinator();
@@ -63,7 +58,7 @@ export function Sidebar({ hiddenModules, hiddenItems }: SidebarProps) {
   // "Supporting Staff" is hidden for college types with no Technical/Non-
   // Technical split (School) - HOD has nothing to manage there, it's all
   // centrally owned by Principal (see hasSupportingStaffSplit).
-  const baseNavItems = filterVisibleNavItems(contextItems, hiddenModules, hiddenItems, user.realRole)
+  const baseNavItems = filterVisibleNavItems(contextItems, hiddenModules, hiddenItems, user.realRole, true)
     .filter((item) => !hideSubDepartmentsLink || item.href !== "/hod/settings/sub-departments")
     .filter((item) => hasSupportingStaffSplit(collegeType) || (item.href !== "/hod/supporting-staff" && item.href !== "/hod/settings/designations"));
 
@@ -161,19 +156,6 @@ export function Sidebar({ hiddenModules, hiddenItems }: SidebarProps) {
 
       {/* Bottom section */}
       <div className="border-t p-3 space-y-1 shrink-0">
-        <button
-          onClick={() => setNotificationDrawerOpen(true)}
-          className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground w-full transition-colors relative"
-        >
-          <Bell className="h-4 w-4 shrink-0" />
-          Notifications
-          {unreadCount > 0 && (
-            <span className="ml-auto bg-primary text-primary-foreground text-xs rounded-full h-5 w-5 flex items-center justify-center">
-              {unreadCount > 9 ? "9+" : unreadCount}
-            </span>
-          )}
-        </button>
-
         <div className="flex items-center gap-3 px-3 py-2 rounded-lg">
           <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary text-sm font-semibold shrink-0 overflow-hidden">
             {user.profilePhotoUrl ? (
@@ -186,9 +168,6 @@ export function Sidebar({ hiddenModules, hiddenItems }: SidebarProps) {
             <p className="text-sm font-medium truncate">{user.name}</p>
             <p className="text-xs text-muted-foreground truncate">{user.email}</p>
           </div>
-          {user.realRole === "COLLEGE_ADMIN" && (
-            <CollegeAdminAccountMenu uid={user.uid} name={user.name} phone={user.phone} />
-          )}
           <Button
             variant="ghost"
             size="icon"
