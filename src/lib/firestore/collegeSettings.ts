@@ -15,9 +15,9 @@ export const DEFAULT_COLLEGE_SETTINGS: Omit<FacultyNorms, "updatedAt" | "updated
     professor: "Ph.D with 10 years experience",
   },
   positionNorms: [
-    { designation: "Professor", minQualification: "Ph.D", minExperienceYears: 10, requiredPerDept: 1 },
-    { designation: "Associate Professor", minQualification: "Ph.D", minExperienceYears: 5, requiredPerDept: 2 },
-    { designation: "Assistant Professor", minQualification: "M.Phil / NET", minExperienceYears: 0, requiredPerDept: 3 },
+    { designation: "Professor", requiredPerDept: 1 },
+    { designation: "Associate Professor", requiredPerDept: 2 },
+    { designation: "Assistant Professor", requiredPerDept: 3 },
   ],
   newJoiningYears: 1,
 };

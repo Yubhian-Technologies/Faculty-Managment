@@ -74,7 +74,6 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Role Assignments", href: "/super-admin/role-assignments", iconName: "UserCog", roles: ["SUPER_ADMIN"] },
   { label: "Audit Logs", href: "/super-admin/audit-logs", iconName: "ScrollText", roles: ["SUPER_ADMIN"], section: "System" },
   { label: "Settings", href: "/super-admin/settings", iconName: "Settings2", roles: ["SUPER_ADMIN"] },
-  { label: "My Profile", href: "/super-admin/profile", iconName: "UserCircle", roles: ["SUPER_ADMIN"], section: "Personal" },
 
   // Administration
   { label: "Dashboard", href: "/administration", iconName: "LayoutDashboard", roles: ["ADMINISTRATION"] },
@@ -737,7 +736,6 @@ export const BOTTOM_NAV_ITEMS: Record<UserRole, NavItem[]> = {
     { label: "Locations", href: "/super-admin/locations", iconName: "MapPin", roles: ["SUPER_ADMIN"] },
     { label: "Colleges", href: "/super-admin/colleges", iconName: "Building2", roles: ["SUPER_ADMIN"] },
     { label: "Settings", href: "/super-admin/settings", iconName: "Settings2", roles: ["SUPER_ADMIN"] },
-    { label: "Profile", href: "/super-admin/profile", iconName: "UserCircle", roles: ["SUPER_ADMIN"] },
   ],
   VICE_PRINCIPAL: [
     { label: "Home", href: "/vice-principal", iconName: "LayoutDashboard", roles: ["VICE_PRINCIPAL"] },

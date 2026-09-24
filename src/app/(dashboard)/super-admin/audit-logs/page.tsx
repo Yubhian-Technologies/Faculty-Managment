@@ -17,6 +17,7 @@ export default function AuditLogsPage() {
   const [selectedCollegeId, setSelectedCollegeId] = useState("");
   const [logs, setLogs] = useState<LogRow[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [hasLoaded, setHasLoaded] = useState(false);
   const [fromDate, setFromDate] = useState("");
   const [toDateStr, setToDateStr] = useState("");
 
@@ -31,17 +32,29 @@ export default function AuditLogsPage() {
       .catch(() => toast({ variant: "destructive", title: "Failed to load colleges" }));
   }, []);
 
+  // Reset loaded state when college changes - require explicit Load again
   useEffect(() => {
-    if (!selectedCollegeId) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setIsLoading(true);
+    setLogs([]);
+    setHasLoaded(false);
+  }, [selectedCollegeId]);
 
+  function handleLoad() {
+    if (!selectedCollegeId) {
+      toast({ variant: "destructive", title: "Select a college first" });
+      return;
+    }
+    if (fromDate && toDateStr && fromDate > toDateStr) {
+      toast({ variant: "destructive", title: "Invalid date range", description: "From date cannot be after To date." });
+      return;
+    }
+    setIsLoading(true);
+    setHasLoaded(true);
     fetch(`/api/admin/audit-logs?collegeId=${encodeURIComponent(selectedCollegeId)}`)
       .then((r) => r.json() as Promise<{ logs: LogRow[] }>)
       .then((data) => setLogs(data.logs ?? []))
       .catch(() => toast({ variant: "destructive", title: "Failed to load audit logs" }))
       .finally(() => setIsLoading(false));
-  }, [selectedCollegeId]);
+  }
 
   const filteredLogs = useMemo(() => {
     if (!fromDate && !toDateStr) return logs;
@@ -66,6 +79,7 @@ export default function AuditLogsPage() {
     {
       key: "timestamp",
       header: "Time",
+      csvValue: (row) => formatDateTime(row.timestamp as Parameters<typeof formatDateTime>[0]),
       render: (row) => (
         <span className="text-xs text-muted-foreground whitespace-nowrap">
           {formatDateTime(row.timestamp as Parameters<typeof formatDateTime>[0])}
@@ -94,6 +108,7 @@ export default function AuditLogsPage() {
     {
       key: "details",
       header: "Details",
+      csvValue: (row) => (row.details ? JSON.stringify(row.details) : ""),
       hideOnMobile: true,
       render: (row) => (
         <span className="text-xs text-muted-foreground">
@@ -141,25 +156,33 @@ export default function AuditLogsPage() {
           <Input id="audit-to" type="date" value={toDateStr} onChange={(e) => setToDateStr(e.target.value)} className="w-[160px]" />
         </div>
         <div className="flex items-center gap-2 sm:ml-2">
-          <Button variant="default" size="sm" disabled={!fromDate && !toDateStr}>Apply</Button>
+          <Button variant="default" size="sm" onClick={handleLoad} loading={isLoading} disabled={!selectedCollegeId}>Load</Button>
           <Button variant="outline" size="sm" onClick={() => { setFromDate(""); setToDateStr(""); }} disabled={!fromDate && !toDateStr}>Clear</Button>
         </div>
-        {(fromDate || toDateStr) && (
+        {hasLoaded ? (
           <span className="text-xs text-muted-foreground sm:ml-auto">Showing {filteredLogs.length} of {logs.length} logs</span>
+        ) : (
+          <span className="text-xs text-muted-foreground sm:ml-auto">Select dates (optional) and click Load</span>
         )}
       </div>
 
-      <DataTable
-        data={filteredLogs}
-        columns={columns}
-        isLoading={isLoading}
-        keyExtractor={(r) => r.id as string}
-        searchPlaceholder="Search actions..."
-        searchKeys={["action", "performedByName"] as (keyof LogRow)[]}
-        emptyTitle="No audit logs yet"
-        emptyDescription="Actions will appear here as staff use the system"
-        csvFilename={csvFilename}
-      />
+      {!hasLoaded ? (
+        <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
+          Select a college, optionally pick From/To dates, then click <span className="font-medium">Load</span> to view audit logs.
+        </div>
+      ) : (
+        <DataTable
+          data={filteredLogs}
+          columns={columns}
+          isLoading={isLoading}
+          keyExtractor={(r) => r.id as string}
+          searchPlaceholder="Search actions..."
+          searchKeys={["action", "performedByName"] as (keyof LogRow)[]}
+          emptyTitle="No audit logs yet"
+          emptyDescription="Actions will appear here as staff use the system"
+          csvFilename={csvFilename}
+        />
+      )}
     </div>
   );
 }

@@ -86,17 +86,16 @@ export async function GET(request: Request) {
   }
 }
 
-// Roles a Super Admin can create - the level L1–L2 set plus DIRECTOR (L3).
-// Each role's write target (systemUsers / locationUsers / college users) is
-// derived from ROLE_SCOPE, so the single source of truth stays in core.ts.
-// Principal and the rest of L3 and below are seats - a college's own College
-// Admin appoints them via Role Assignments, never Super Admin directly (same
-// reasoning as removing it from Location Admin). Must match CREATABLE_ROLES in
+// Roles a Super Admin can create - the level L1–L2 set (GLOBAL + LOCATION).
+// Each role's write target (systemUsers / locationUsers) is derived from
+// ROLE_SCOPE, so the single source of truth stays in core.ts. Principal and
+// the rest of L3 and below are seats - a college's own College Admin appoints
+// them via Role Assignments, never Super Admin directly (same reasoning as
+// removing it from Location Admin). Must match CREATABLE_ROLES in
 // super-admin/users/new/page.tsx.
 const SUPER_ADMIN_CREATABLE: UserRole[] = [
   "MANAGEMENT", "FINANCE", "PURCHASE_DEPT",   // L1 · GLOBAL
   "ADMINISTRATION", "ACCOUNTS",               // L2 · LOCATION
-  "DIRECTOR",                                 // L3 · COLLEGE
 ];
 // Global-scoped subset - used by the GET ?scope=global (System-Wide) listing.
 const GLOBAL_ROLES: UserRole[] = SUPER_ADMIN_CREATABLE.filter((r) => ROLE_SCOPE[r] === "GLOBAL");
@@ -189,7 +188,7 @@ export async function POST(request: Request) {
       // ADMINISTRATION / ACCOUNTS: location subcollection.
       uid = await provisionLocationUser(db, locationId, role, { name, email, password, phone, academicProfile, profilePhotoUrl });
     } else if (scope === "COLLEGE" && collegeId) {
-      // DIRECTOR: college subcollection.
+      // COLLEGE scope (no creatable role remains after DIRECTOR removal - kept for validation completeness): college subcollection.
       uid = await provisionCollegeUser(
         db, collegeId, role,
         { ...body, name, email, password, phone, department, academicProfile, profilePhotoUrl },

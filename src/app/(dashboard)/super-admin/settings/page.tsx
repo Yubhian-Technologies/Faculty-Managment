@@ -10,8 +10,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "@/hooks/useToast";
-import { Plus, Trash2, Info } from "lucide-react";
+import { Plus, Trash2, Info, KeyRound } from "lucide-react";
 import { formatDate, stripLeadingZeros } from "@/lib/utils";
+import { EmailAuthProvider, reauthenticateWithCredential, updatePassword } from "firebase/auth";
+import { auth } from "@/lib/firebase/client";
 import type { FacultyNorms, PositionNorm, RegulatoryBody, College, UserRole, NavVisibilitySettings } from "@/types";
 import { ROLE_LABELS } from "@/types";
 import { getNavItemsForRole, groupNavItemsByModule, getRolesWithNavModules, isPersonalNavItem } from "@/components/layout/navConfig";
@@ -24,6 +26,8 @@ const REGULATORY_BODIES: { value: RegulatoryBody; label: string }[] = [
   { value: "STATE", label: "State Regulatory Body" },
 ];
 
+// kept for potential future cadre/qualification lookups; not rendered after Jobs 3+4
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const QUALIFICATION_OPTIONS = [
   "B.E / B.Tech",
   "M.E / M.Tech",
@@ -38,8 +42,6 @@ const QUALIFICATION_OPTIONS = [
 
 const emptyPosition = (): PositionNorm => ({
   designation: "",
-  minQualification: "Ph.D",
-  minExperienceYears: 0,
   requiredPerDept: 1,
 });
 
@@ -58,9 +60,6 @@ export default function SuperAdminSettingsPage() {
   const [studentFacultyRatio, setStudentFacultyRatio] = useState("15");
   const [teachingHoursPerWeek, setTeachingHoursPerWeek] = useState("16");
   const [defaultMinFacultyPerDept, setDefaultMinFacultyPerDept] = useState("3");
-  const [minQualAP, setMinQualAP] = useState("M.Phil / NET / Ph.D");
-  const [minQualAssocP, setMinQualAssocP] = useState("Ph.D with NET");
-  const [minQualProf, setMinQualProf] = useState("Ph.D with 10 years experience");
   const [positionNorms, setPositionNorms] = useState<PositionNorm[]>([]);
 
   useEffect(() => {
@@ -84,9 +83,6 @@ export default function SuperAdminSettingsPage() {
         setStudentFacultyRatio(String(n.studentFacultyRatio));
         setTeachingHoursPerWeek(String(n.teachingHoursPerWeek));
         setDefaultMinFacultyPerDept(String(n.defaultMinFacultyPerDept));
-        setMinQualAP(n.minimumQualifications.assistantProfessor);
-        setMinQualAssocP(n.minimumQualifications.associateProfessor);
-        setMinQualProf(n.minimumQualifications.professor);
         setPositionNorms(n.positionNorms ?? []);
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load settings" }))
@@ -133,11 +129,6 @@ export default function SuperAdminSettingsPage() {
           studentFacultyRatio: sfr,
           teachingHoursPerWeek: thw,
           defaultMinFacultyPerDept: dmf,
-          minimumQualifications: {
-            assistantProfessor: minQualAP,
-            associateProfessor: minQualAssocP,
-            professor: minQualProf,
-          },
           positionNorms,
         } satisfies Partial<FacultyNorms> & { collegeId: string }),
       });
@@ -273,44 +264,13 @@ export default function SuperAdminSettingsPage() {
         </CardContent>
       </Card>
 
-      {/* Minimum Qualifications */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Minimum Qualifications</CardTitle>
-          <CardDescription>Eligibility criteria per designation level</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {(
-            [
-              ["Assistant Professor", minQualAP, setMinQualAP] as const,
-              ["Associate Professor", minQualAssocP, setMinQualAssocP] as const,
-              ["Professor", minQualProf, setMinQualProf] as const,
-            ] as [string, string, (v: string) => void][]
-          ).map(([label, value, setter]) => (
-            <div key={label} className="grid gap-2 sm:grid-cols-[180px_1fr] items-center">
-              <Label className="text-sm font-medium">{label}</Label>
-              <Select value={value} onValueChange={setter}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {QUALIFICATION_OPTIONS.map((q) => (
-                    <SelectItem key={q} value={q}>{q}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          ))}
-        </CardContent>
-      </Card>
-
-      {/* Position-wise Norms */}
+      {/* Cadre-wise Ratio */}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle className="text-base">Position-wise Requirements</CardTitle>
-              <CardDescription className="mt-1">Required count and qualifications per designation per department</CardDescription>
+              <CardTitle className="text-base">Cadre-wise Ratio</CardTitle>
+              <CardDescription className="mt-1">Required count per designation per department</CardDescription>
             </div>
             <Button
               size="sm"
@@ -353,34 +313,6 @@ export default function SuperAdminSettingsPage() {
                   </div>
 
                   <div className="space-y-1.5">
-                    <Label className="text-xs">Minimum Qualification *</Label>
-                    <Select
-                      value={pos.minQualification}
-                      onValueChange={(v) => updatePosition(i, "minQualification", v)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {QUALIFICATION_OPTIONS.map((q) => (
-                          <SelectItem key={q} value={q}>{q}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">Min. Experience (years)</Label>
-                    <Input
-                      type="number"
-                      min={0}
-                      max={40}
-                      value={pos.minExperienceYears}
-                      onChange={(e) => updatePosition(i, "minExperienceYears", Number(e.target.value))}
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
                     <Label className="text-xs">Required per Department</Label>
                     <Input
                       type="number"
@@ -404,8 +336,123 @@ export default function SuperAdminSettingsPage() {
         </Button>
       </div>
 
+      <SuperAdminChangePasswordCard />
+
       <NavVisibilitySection />
     </div>
+  );
+}
+
+// ─── Change Password (Super Admin self-service, moved from /super-admin/profile) ─
+
+const FIREBASE_CHANGE_PW_ERRORS: Record<string, string> = {
+  "auth/wrong-password": "Current password is incorrect.",
+  "auth/invalid-credential": "Current password is incorrect.",
+  "auth/weak-password": "New password is too weak - use at least 8 characters.",
+  "auth/requires-recent-login": "Please log out and log back in, then try again.",
+  "auth/too-many-requests": "Too many attempts. Please try again later.",
+  "auth/network-request-failed": "Network error. Please check your connection.",
+};
+
+function SuperAdminChangePasswordCard() {
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [isChanging, setIsChanging] = useState(false);
+
+  async function handleChangePassword() {
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      toast({ variant: "destructive", title: "All fields are required" });
+      return;
+    }
+    if (newPassword.length < 8) {
+      toast({ variant: "destructive", title: "New password must be at least 8 characters" });
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      toast({ variant: "destructive", title: "Passwords do not match" });
+      return;
+    }
+    if (newPassword === currentPassword) {
+      toast({ variant: "destructive", title: "New password must be different from current password" });
+      return;
+    }
+    const currentUser = auth.currentUser;
+    if (!currentUser?.email) {
+      toast({ variant: "destructive", title: "No active session", description: "Please log in again." });
+      return;
+    }
+    setIsChanging(true);
+    try {
+      const credential = EmailAuthProvider.credential(currentUser.email, currentPassword);
+      await reauthenticateWithCredential(currentUser, credential);
+      await updatePassword(currentUser, newPassword);
+      toast({ variant: "success", title: "Password changed" });
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+    } catch (err: unknown) {
+      const code = (err as { code?: string }).code ?? "";
+      toast({
+        variant: "destructive",
+        title: "Failed to change password",
+        description: FIREBASE_CHANGE_PW_ERRORS[code] ?? "Please try again.",
+      });
+    } finally {
+      setIsChanging(false);
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base flex items-center gap-2">
+          <KeyRound className="h-4 w-4" />
+          Change Password
+        </CardTitle>
+        <CardDescription>Update your Super Admin login password</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="space-y-2">
+          <Label htmlFor="sa-current-password">Current Password *</Label>
+          <Input
+            id="sa-current-password"
+            type="password"
+            autoComplete="current-password"
+            value={currentPassword}
+            onChange={(e) => setCurrentPassword(e.target.value)}
+            placeholder="Enter current password"
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="sa-new-password">New Password *</Label>
+          <Input
+            id="sa-new-password"
+            type="password"
+            autoComplete="new-password"
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            placeholder="Min 8 characters"
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="sa-confirm-password">Confirm New Password *</Label>
+          <Input
+            id="sa-confirm-password"
+            type="password"
+            autoComplete="new-password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            placeholder="Confirm new password"
+          />
+        </div>
+        <div className="flex justify-end">
+          <Button onClick={handleChangePassword} loading={isChanging}>
+            Change Password
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
