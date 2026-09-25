@@ -50,6 +50,11 @@ describe("periodAttendanceStatus", () => {
   });
 
   it("marks a non-submitted session before the period ends as PENDING", () => {
-    expect(resolvePeriodCompletionStatus({ dateISO: "2026-09-25", endTime: "17:00", session: null })).toBe("PENDING");
+    // Fixed `now` (10:00 IST, same date) rather than the real wall clock -
+    // relying on `new Date()` here made this test start failing the moment
+    // real time passed 17:00 IST on 2026-09-25, same as every other case in
+    // this file already avoids by injecting its own timestamp.
+    const now = new Date(Date.UTC(2026, 8, 25, 0, 10 * 60, 0));
+    expect(resolvePeriodCompletionStatus({ dateISO: "2026-09-25", endTime: "17:00", session: null, now })).toBe("PENDING");
   });
 });
