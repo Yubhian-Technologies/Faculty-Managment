@@ -8,7 +8,7 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { SupportingStaffModuleEditor, type SupportingStaffEditRecord } from "@/components/supportingStaff/SupportingStaffModuleEditor";
-import { getMissingRequiredPersonalFields } from "@/components/shared/PersonalDetailsFields";
+import { getMissingRequiredPersonalFields, SUPPORTING_STAFF_REQUIRED_PERSONAL_FIELDS } from "@/components/shared/PersonalDetailsFields";
 import { SUPPORTING_STAFF_MODULES, type SupportingStaffModuleKey } from "@/lib/supportingStaff/profileModules";
 import { supportingStaffDisplayName } from "@/lib/supportingStaff/supportingStaffDisplayName";
 import { useCollegeType } from "@/hooks/useCollegeType";
@@ -89,7 +89,7 @@ export default function PrincipalNonTechnicalStaffModuleEditPage() {
 
   async function handleSave() {
     if (moduleKey === "personal") {
-      const missing = getMissingRequiredPersonalFields(record);
+      const missing = getMissingRequiredPersonalFields(record, SUPPORTING_STAFF_REQUIRED_PERSONAL_FIELDS);
       if (missing.length > 0) {
         toast({ variant: "destructive", title: "Some required fields are missing", description: missing.join(", ") });
         return;

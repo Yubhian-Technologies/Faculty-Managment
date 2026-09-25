@@ -49,8 +49,7 @@ export async function POST(request: Request) {
       const substituted = await resolveSubstituteSlotsForDate(db, session.collegeId, facultyMemberId, date);
       if (substituted.size > 0) {
         const assignmentSlotsSnap = await collegeRef.collection("timetableSlots")
-          .where("assignmentId", "==", assignmentId)
-          .get();
+          .where("assignmentId", "==", assignmentId).get();
         const matched = assignmentSlotsSnap.docs.find((d) => substituted.has(d.id));
         if (matched) substituteFor = substituted.get(matched.id) ?? null;
       }
@@ -124,45 +123,22 @@ export async function POST(request: Request) {
     const id = `${assignmentId}_${date}_${periodNumber}`;
     const ref = collegeRef.collection("studentAttendance").doc(id);
 
-    const existingSnap = await ref.get();
+    // Resolve the roster BEFORE starting the transaction: the DRAFT-reconcile
+    // branch (existing status === DRAFT) merges the incoming student list into
+    // the stored entries, and the shape below also maps over it, so both have
+    // to see it outside the transaction (tx.get cannot query).
+    const students = await fetchSectionStudents(collegeRef, {
+      department,
+      sectionName,
+      year,
+      courseId,
+    });
 
-    // A submitted session is a locked historical record - safe to just read
-    // back (e.g. faculty re-polling mid-period after already submitting)
-    // without redoing the roster fetch below.
-    if (existingSnap.exists) {
-      const existing = existingSnap.data() as StudentAttendanceSession;
-      if (existing.status === "SUBMITTED") {
-        return NextResponse.json({ session: { ...existing, id } });
-      }
-    }
-
-    // Current roster, ordered for a stable S.No. column. Section-scoped
-    // assignments resolve to a real section (department+section+year); the
-    // semester-scoped shape has no course "year" to filter by, so it matches
-    // on department+section name alone (best-effort until this college's data
-    // has been migrated to real sections). A shared-first-year student in
-    // this section stays filed under their common department (preserved
-    // until promotion) with secondaryDepartment naming this section's real
-    // branch instead - fetchSectionStudents matches both and merges them, or
-    // the roster (and therefore attendance for the whole class) would come
-    // up empty. Also scoped by `courseId` when this is a section-scoped
-    // assignment (a department can run a same-named section under more than
-    // one course - see StudentRecord.courseId's doc-comment - without this,
-    // attendance could be taken against the wrong course's roster entirely).
-    // A split lab period (TimetableSlot.labBatch set) only ever rosters the
-    // students carrying the matching StudentRecord.labBatch - each batch's own
-    // faculty marks only their own half of the section (see sectionRoster.ts).
-    // An ordinary period has no labBatch, so this is a no-op and the roster
-    // is the whole section, exactly as before this existed.
-    const labBatch = windowCheck.slot.labBatch ?? undefined;
-    const students = (await fetchSectionStudents(collegeRef, { department, sectionName, year, courseId, labBatch }))
-      .sort((a, b) => a.rollNumber.localeCompare(b.rollNumber, undefined, { numeric: true }));
-
-    // Wrap existing-doc read + roster-merge + write in a transaction so a
-    // concurrent PATCH landing between the read and the write doesn't silently
-    // discard marks. The roster itself is fetched outside the transaction
-    // (two collection queries via fetchSectionStudents cannot be done via
-    // tx.get), but the merge + write of the studentAttendance doc is atomic.
+    // Wrap the whole DRAFT-create in a transaction so a concurrent
+    // submission can't silently discard an in-flight roster merge. The
+    // roster itself is fetched outside the transaction (two collection
+    // queries via fetchSectionStudents cannot be done via tx.get), but the
+    // read + merge + write of the studentAttendance doc is atomic.
     let resultSession: StudentAttendanceSession & { id: string };
     let resultStatus: number | undefined;
     await db.runTransaction(async (tx) => {
@@ -220,7 +196,6 @@ export async function POST(request: Request) {
         ...(substituteFor ? { substituteForFacultyId: substituteFor.originalFacultyId, substituteForFacultyName: substituteFor.originalFacultyName } : {}),
         date,
         periodNumber: windowCheck.slot.periodNumber,
-        ...(labBatch ? { labBatch } : {}),
         status: "DRAFT" as const,
         entries,
         totalStudents: entries.length,

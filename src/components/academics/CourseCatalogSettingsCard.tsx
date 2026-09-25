@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -541,11 +540,9 @@ export function CourseCatalogSettingsCard({ readOnly = false, regulationsOnly = 
                         <span className="text-muted-foreground">none yet</span>
                       ) : (
                         (departmentsByCatalogId.get(item.id) ?? []).map((d) => (
-                          <Link key={d.id} href={`/principal/departments/${d.id}`}>
-                            <Badge variant="outline" className="text-xs hover:border-primary/50">
-                              {d.name} <span className="ml-1 font-mono text-muted-foreground">{d.code}</span>
-                            </Badge>
-                          </Link>
+                          <Badge key={d.id} variant="outline" className="text-xs">
+                            {d.name} <span className="ml-1 font-mono text-muted-foreground">{d.code}</span>
+                          </Badge>
                         ))
                       )}
                     </div>

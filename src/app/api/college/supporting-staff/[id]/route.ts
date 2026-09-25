@@ -104,9 +104,6 @@ export async function PATCH(
       emergencyContactName: string;
       emergencyContactRelation: string;
       emergencyContactMobileNo: string;
-      ratificationStatus: string;
-      ratificationProceedingsNumber: string;
-      ratificationDate: string;
       maritalStatus: string;
       spouseName: string;
       numberOfChildren: number;
@@ -184,8 +181,8 @@ export async function PATCH(
       "department", "highestQualification", "employmentType", "status", "gender", "legalName", "nameAsPerAadhar",
       "fatherName", "motherName", "religion", "caste", "subCaste", "aadharNo", "passportNo",
       "bankAccountNumber", "bankName", "bankBranch", "bankOtherDetails",
-      "emergencyContactName", "emergencyContactRelation", "emergencyContactMobileNo", "ratificationStatus",
-      "ratificationProceedingsNumber", "userUid",
+      "emergencyContactName", "emergencyContactRelation", "emergencyContactMobileNo",
+      "userUid",
       "maritalStatus", "spouseName", "temporaryAddress", "permanentAddress", "bloodGroup",
     ] as const;
 
@@ -195,7 +192,7 @@ export async function PATCH(
     // Name (as per Aadhar) are deliberately excluded - both are optional.
     const REQUIRED_IF_PRESENT = [
       "collegeEmail", "mobileNo", "designation", "highestQualification", "employmentType",
-      "gender", "legalName", "aadharNo", "panNo", "ratificationStatus",
+      "gender", "legalName", "aadharNo", "panNo",
     ] as const;
     for (const key of REQUIRED_IF_PRESENT) {
       if (body[key] !== undefined && !body[key].trim()) {
@@ -234,7 +231,6 @@ export async function PATCH(
       updates.totalYearsOfExperience = experienceBreakdown(undefined, new Date(body.joiningDate)).total;
     }
     if (body.dateOfBirth) updates.dateOfBirth = new Date(body.dateOfBirth);
-    if (body.ratificationDate) updates.ratificationDate = new Date(body.ratificationDate);
 
     if (body.profilePhotoUrl !== undefined) updates.profilePhotoUrl = body.profilePhotoUrl;
 

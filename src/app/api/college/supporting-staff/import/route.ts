@@ -12,7 +12,7 @@ import { hasSupportingStaffSplit } from "@/lib/designations/config";
 import { NON_TECHNICAL_STAFF_DESIGNATION_LABELS } from "@/types";
 import {
   matchOption, normalizeDigits, isScientificNotation,
-  GENDER_OPTIONS, RATIFICATION_STATUS_OPTIONS,
+  GENDER_OPTIONS,
 } from "@/lib/import/fieldConstraints";
 import { PHONE_REGEX, EMAIL_REGEX, PAN_REGEX, AADHAR_REGEX } from "@/lib/validations";
 import type {
@@ -89,7 +89,6 @@ type ImportRow = {
   nameAsPerAadhar: string;
   aadharNo: string;
   panNo: string;
-  ratificationStatus: string;
   otherInformation?: string;
   [key: string]: string | undefined;
 };
@@ -348,7 +347,6 @@ export async function POST(request: Request) {
       if (!row.dateOfBirth?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Date of Birth is required" }); continue; }
       if (!row.aadharNo?.trim() || !AADHAR_REGEX.test(normalizeDigits(row.aadharNo) ?? "")) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Aadhar No must be exactly 12 digits" }); continue; }
       if (!row.panNo?.trim() || !PAN_REGEX.test(row.panNo.trim().toUpperCase())) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "PAN No must be 5 letters, 4 digits, then 1 letter (e.g. ABCDE1234F)" }); continue; }
-      if (!row.ratificationStatus?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Ratification Status is required" }); continue; }
 
       const empId = row.employeeId.trim();
       if (existingIds.has(empId)) {
@@ -386,7 +384,6 @@ export async function POST(request: Request) {
       // dropped and the record imported with it blank.
       const vPhone = checkPhone(row.mobileNo, "Phone");
       const vGender = checkOption(row.gender, GENDER_OPTIONS, "Gender");
-      const vRatification = checkOption(row.ratificationStatus, RATIFICATION_STATUS_OPTIONS, "Ratification Status");
 
       // Every constraint the template states has now been checked. Anything
       // that failed one rejects the row here - before the login below, so a
@@ -447,7 +444,6 @@ export async function POST(request: Request) {
         aadharNo: normalizeDigits(row.aadharNo),
         panNo: row.panNo.trim().toUpperCase(),
         collegeEmail: loginEmail,
-        ratificationStatus: vRatification,
         supportingStaffProfile: buildSupportingStaffProfile(row, empId, dropped),
         createdAt: now,
         updatedAt: now,
