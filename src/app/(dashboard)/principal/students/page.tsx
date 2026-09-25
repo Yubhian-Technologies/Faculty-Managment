@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Search, Users } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Pagination } from "@/components/shared/Pagination";
@@ -16,7 +17,6 @@ import { GraduatedStudentsView } from "@/components/students/GraduatedStudentsVi
 import type { StudentListItem, Department, AcademicYear, Course } from "@/types";
 
 const DEFAULT_PAGE_SIZE = 20;
-const SEARCH_DEBOUNCE_MS = 350;
 
 // Promotion and Graduated Students used to be separate sidebar tabs; they now
 // live here as sub-tabs (top-right pills, next to the page title) so all
@@ -51,8 +51,9 @@ export default function PrincipalStudentsPage() {
   const [years, setYears] = useState<number[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
   const [courseNames, setCourseNames] = useState<string[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isMetadataLoading, setIsMetadataLoading] = useState(true);
   const [isFetching, setIsFetching] = useState(false);
+  const [hasLoaded, setHasLoaded] = useState(false);
 
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -84,15 +85,17 @@ export default function PrincipalStudentsPage() {
       setYears(capped.length > 0 ? capped : [1, 2, 3, 4]);
     } catch {
       toast({ variant: "destructive", title: "Failed to load filter options" });
+    } finally {
+      setIsMetadataLoading(false);
     }
   }, []);
 
-  const loadStudents = useCallback(async () => {
+  const executeLoad = useCallback(async (targetPage = page, targetPageSize = pageSize) => {
     setIsFetching(true);
     try {
       const params = new URLSearchParams();
-      params.set("page", String(page));
-      params.set("pageSize", String(pageSize));
+      params.set("page", String(targetPage));
+      params.set("pageSize", String(targetPageSize));
       if (debouncedSearch) params.set("search", debouncedSearch);
       if (deptFilter !== "all") params.set("department", deptFilter);
       if (courseFilter !== "all") params.set("course", courseFilter);
@@ -106,29 +109,31 @@ export default function PrincipalStudentsPage() {
       }
       const data = json.students ?? [];
       const grandTotal = json.total ?? 0;
-      if (data.length === 0 && page > 1 && grandTotal > 0) {
-        setPage(Math.max(1, Math.ceil(grandTotal / pageSize)));
+      if (data.length === 0 && targetPage > 1 && grandTotal > 0) {
+        const lastPage = Math.max(1, Math.ceil(grandTotal / targetPageSize));
+        setPage(lastPage);
         return;
       }
       setStudents(data);
       setTotal(grandTotal);
+      setHasLoaded(true);
     } catch {
       toast({ variant: "destructive", title: "Failed to load students" });
     } finally {
       setIsFetching(false);
-      setIsLoading(false);
     }
   }, [page, pageSize, debouncedSearch, deptFilter, courseFilter, yearFilter]);
 
-  // Wrapped so the loaders' setState calls aren't reachable synchronously from
-  // the effect body (react-hooks/set-state-in-effect).
+  // Load filter metadata once on mount
   useEffect(() => {
     void (async () => { await loadMetadata(); })();
   }, [loadMetadata]);
 
+  // Once loaded, automatically re-fetch when page, pageSize, search or any filter changes
   useEffect(() => {
-    void (async () => { await loadStudents(); })();
-  }, [loadStudents]);
+    if (!hasLoaded) return;
+    void executeLoad(page, pageSize);
+  }, [hasLoaded, page, pageSize, debouncedSearch, deptFilter, courseFilter, yearFilter, executeLoad]);
 
   const activeDepartments = useMemo(
     () => departments.filter((d) => d.isActive).sort((a, b) => a.name.localeCompare(b.name)),
@@ -154,7 +159,7 @@ export default function PrincipalStudentsPage() {
     searchDebounceRef.current = setTimeout(() => {
       setDebouncedSearch(value.trim().toLowerCase());
       setPage(1);
-    }, SEARCH_DEBOUNCE_MS);
+    }, 350);
   }
 
   function onCourseFilterChange(value: string) {
@@ -186,9 +191,23 @@ export default function PrincipalStudentsPage() {
     setPage(1);
   }
 
-  function onPageSizeChange(value: number) {
-    setPageSize(value);
+  function handlePageChange(newPage: number) {
+    setPage(newPage);
+  }
+
+  function handlePageSizeChange(newPageSize: number) {
+    setPageSize(newPageSize);
     setPage(1);
+  }
+
+  function handleLoad() {
+    setDebouncedSearch(search.trim().toLowerCase());
+    setPage(1);
+    if (!hasLoaded) {
+      setHasLoaded(true);
+    } else {
+      void executeLoad(1, pageSize);
+    }
   }
 
   return (
@@ -226,10 +245,12 @@ export default function PrincipalStudentsPage() {
         <GraduatedStudentsView showHeader={false} />
       ) : (
         <>
-          <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-            <Users className="h-4 w-4" />
-            <span><strong className="text-foreground">{total}</strong> students total</span>
-          </div>
+          {hasLoaded && (
+            <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+              <Users className="h-4 w-4" />
+              <span><strong className="text-foreground">{total}</strong> students total</span>
+            </div>
+          )}
 
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
             <div className="relative flex-1">
@@ -237,43 +258,64 @@ export default function PrincipalStudentsPage() {
               <Input
                 value={search}
                 onChange={(e) => onSearchChange(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    handleLoad();
+                  }
+                }}
                 placeholder="Search by name, roll number or email"
                 className="pl-9"
               />
             </div>
             <Select value={courseFilter} onValueChange={onCourseFilterChange}>
-              <SelectTrigger className="sm:w-56"><SelectValue placeholder="All courses" /></SelectTrigger>
+              <SelectTrigger className="sm:w-48"><SelectValue placeholder="All courses" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All courses</SelectItem>
                 {courseNames.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
               </SelectContent>
             </Select>
             <Select value={deptFilter} onValueChange={onDeptFilterChange}>
-              <SelectTrigger className="sm:w-56"><SelectValue placeholder="All departments" /></SelectTrigger>
+              <SelectTrigger className="sm:w-48"><SelectValue placeholder="All departments" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All departments</SelectItem>
                 {departmentFilterOptions.map((d) => <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>)}
               </SelectContent>
             </Select>
             <Select value={yearFilter} onValueChange={onYearFilterChange}>
-              <SelectTrigger className="sm:w-40"><SelectValue placeholder="All years" /></SelectTrigger>
+              <SelectTrigger className="sm:w-36"><SelectValue placeholder="All years" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All years</SelectItem>
                 {yearFilterOptions.map((y) => <SelectItem key={y} value={String(y)}>{ordinalYear(y)}</SelectItem>)}
               </SelectContent>
             </Select>
+            <Button
+              type="button"
+              onClick={handleLoad}
+              disabled={isFetching || isMetadataLoading}
+              className="whitespace-nowrap"
+            >
+              {isFetching ? "Loading…" : hasLoaded ? "Refresh" : "Load"}
+            </Button>
           </div>
 
-          {isLoading ? (
+          {!hasLoaded ? (
+            <div className="flex flex-col items-center justify-center py-20 text-center border rounded-lg bg-card">
+              <Users className="h-10 w-10 text-muted-foreground mb-3" />
+              <p className="font-medium text-base">Click Load to view students</p>
+              <p className="text-sm text-muted-foreground mt-1 max-w-sm">
+                Select your filters above (or leave as all) and click Load to fetch the student roster with pagination.
+              </p>
+            </div>
+          ) : isFetching && students.length === 0 ? (
             <div className="space-y-2">
               {[1, 2, 3, 4, 5].map((i) => <div key={i} className="h-12 rounded-lg border bg-muted/30 animate-pulse" />)}
             </div>
           ) : students.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-20 text-center">
+            <div className="flex flex-col items-center justify-center py-20 text-center border rounded-lg bg-card">
               <Users className="h-10 w-10 text-muted-foreground mb-3" />
-              <p className="font-medium">{total === 0 ? "No students yet" : "No students match your filters"}</p>
+              <p className="font-medium">{total === 0 ? "No students found" : "No students match your filters"}</p>
               <p className="text-sm text-muted-foreground mt-1">
-                {total === 0 ? "Nothing has been added to the roster yet." : "Try clearing the search or filters."}
+                {total === 0 ? "Nothing has been added to the roster yet." : "Try adjusting your search or filters."}
               </p>
             </div>
           ) : (
@@ -314,13 +356,13 @@ export default function PrincipalStudentsPage() {
             </Card>
           )}
 
-          {!isLoading && total > 0 && (
+          {hasLoaded && total > 0 && (
             <Pagination
               page={page}
               pageSize={pageSize}
               total={total}
-              onPageChange={setPage}
-              onPageSizeChange={onPageSizeChange}
+              onPageChange={handlePageChange}
+              onPageSizeChange={handlePageSizeChange}
               disabled={isFetching}
             />
           )}

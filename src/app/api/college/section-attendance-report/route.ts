@@ -24,8 +24,7 @@ async function currentSectionSubjects(
   sectionId: string
 ): Promise<{ subjectId: string; subjectName: string; subjectCode: string }[]> {
   const assignmentsSnap = await collegeRef.collection("teachingAssignments")
-    .where("sectionId", "==", sectionId)
-    .get();
+    .where("sectionId", "==", sectionId).get();
   const bySubject = new Map<string, TeachingAssignment>();
   for (const doc of assignmentsSnap.docs) {
     const a = doc.data() as TeachingAssignment;
@@ -114,6 +113,12 @@ export async function GET(request: Request) {
     const thresholdRaw = searchParams.get("threshold");
     const threshold = thresholdRaw != null ? Math.max(0, Math.min(100, Number(thresholdRaw) || 75)) : 75;
     const dailyPercent = searchParams.get("dailyPercent") === "true";
+    const hostellerParam = searchParams.get("hosteller") as "yes" | "no" | null;
+    const filterByHosteller = <T extends { hosteller?: boolean }>(list: T[]): T[] => {
+      if (hostellerParam === "yes") return list.filter((s) => s.hosteller === true);
+      if (hostellerParam === "no") return list.filter((s) => s.hosteller !== true);
+      return list;
+    };
 
     if (!sectionId) {
       return NextResponse.json({ error: "sectionId is required" }, { status: 400 });
@@ -125,6 +130,15 @@ export async function GET(request: Request) {
     // validates this, since this route is reachable directly by URL too.
     if (fromParam && toParam && fromParam > toParam) {
       return NextResponse.json({ error: "From date must be before the To date" }, { status: 400 });
+    }
+    // From/to without a valid bound must never reach an unbounded
+    // Firebase `.where("date", ...).get()` scan - be explicit and fail
+    // closed instead.
+    if (fromParam && !DATE_RE.test(fromParam)) {
+      return NextResponse.json({ error: "from must be a valid date (YYYY-MM-DD)" }, { status: 400 });
+    }
+    if (toParam && !DATE_RE.test(toParam)) {
+      return NextResponse.json({ error: "to must be a valid date (YYYY-MM-DD)" }, { status: 400 });
     }
 
     const db = getAdminDb();
@@ -146,6 +160,9 @@ export async function GET(request: Request) {
       }
     }
 
+    // Bounds (if any) are applied at query time with .where();
+    // unbounded paths keep the same shape so the response contract is
+    // stable and callers don't need to special-case "no filter".
     const sessionsSnap = await collegeRef.collection("studentAttendance")
       .where("sectionId", "==", sectionId)
       .where("status", "==", "SUBMITTED")
@@ -275,12 +292,13 @@ export async function GET(request: Request) {
         sessionsBySubject.get(r.subjectId)!.push(r);
       }
 
-      const roster = await fetchSectionStudents(collegeRef, {
+      let roster = await fetchSectionStudents(collegeRef, {
         department: section.department,
         sectionName: section.name,
         year: section.year,
         courseId: section.courseId,
       });
+      roster = filterByHosteller(roster as unknown as { hosteller?: boolean }[]) as typeof roster;
 
       let students = roster
         .map((stu) => {
@@ -309,7 +327,10 @@ export async function GET(request: Request) {
         .sort((a, b) => a.rollNumber.localeCompare(b.rollNumber, undefined, { numeric: true }));
 
       if (absentOnly) {
-        students = students.filter((s: { bySubject: Record<string, { held: number; attended: number; percentage: number | null }>; overall: { held: number; attended: number; percentage: number | null } }) => {
+        students = students.filter((s: {
+          bySubject: Record<string, { held: number; attended: number; percentage: number | null }>;
+          overall: { held: number; attended: number; percentage: number | null };
+        }) => {
           const keys = subjectFilter ? [subjectFilter] : Object.keys(s.bySubject);
           return keys.some((k) => {
             const v = s.bySubject[k];
@@ -318,7 +339,10 @@ export async function GET(request: Request) {
         }) as typeof students;
       }
       if (shortage) {
-        students = students.filter((s: { bySubject: Record<string, { held: number; attended: number; percentage: number | null }>; overall: { held: number; attended: number; percentage: number | null } }) => {
+        students = students.filter((s: {
+          bySubject: Record<string, { held: number; attended: number; percentage: number | null }>;
+          overall: { held: number; attended: number; percentage: number | null };
+        }) => {
           if (consolidated) return isShortageByPercent(s.overall.percentage, threshold);
           const keys = subjectFilter ? [subjectFilter] : Object.keys(s.bySubject);
           return keys.some((k) => {
@@ -396,12 +420,13 @@ export async function GET(request: Request) {
         sessionsBySubject.set(r.subjectId, arr);
       }
 
-      const roster = await fetchSectionStudents(collegeRef, {
+      let roster = await fetchSectionStudents(collegeRef, {
         department: section.department,
         sectionName: section.name,
         year: section.year,
         courseId: section.courseId,
       });
+      roster = filterByHosteller(roster as unknown as { hosteller?: boolean }[]) as typeof roster;
 
       let students = roster
         .map((stu) => {
@@ -428,7 +453,9 @@ export async function GET(request: Request) {
 
       // Apply absentOnly / shortage filters for month view
       if (absentOnly) {
-        students = students.filter((s: { bySubject: Record<string, { weeks: (number | null)[]; monthPresent: number; monthTotal: number; monthPercent: number | null }> }) => {
+        students = students.filter((s: {
+          bySubject: Record<string, { weeks: (number | null)[]; monthPresent: number; monthTotal: number; monthPercent: number | null }>;
+        }) => {
           const keys = subjectFilter ? [subjectFilter] : Object.keys(s.bySubject);
           return keys.some((k) => {
             const v = s.bySubject[k];
@@ -437,7 +464,9 @@ export async function GET(request: Request) {
         }) as typeof students;
       }
       if (shortage) {
-        students = students.filter((s: { bySubject: Record<string, { monthPercent: number | null }> }) => {
+        students = students.filter((s: {
+          bySubject: Record<string, { monthPercent: number | null }>;
+        }) => {
           if (consolidated) {
             let cHeld = 0, cAtt = 0;
             for (const v of Object.values(s.bySubject) as unknown as { monthPresent: number; monthTotal: number }[]) { cHeld += (v as { monthTotal: number }).monthTotal; cAtt += (v as { monthPresent: number }).monthPresent; }
@@ -476,14 +505,15 @@ export async function GET(request: Request) {
         return { subjectId: s.subjectId, subjectName: s.subjectName, classNotes: r.classNotes ?? "" };
       });
 
-    const roster = await fetchSectionStudents(collegeRef, {
-      department: section.department,
-      sectionName: section.name,
-      year: section.year,
-      courseId: section.courseId,
-    });
+      let roster = await fetchSectionStudents(collegeRef, {
+        department: section.department,
+        sectionName: section.name,
+        year: section.year,
+        courseId: section.courseId,
+      });
+      roster = filterByHosteller(roster as unknown as { hosteller?: boolean }[]) as typeof roster;
 
-    let students = roster
+      let students = roster
       .map((stu) => {
         const statusBySubject: Record<string, StudentAttendanceMark | null> = {};
         for (const s of subjects) {

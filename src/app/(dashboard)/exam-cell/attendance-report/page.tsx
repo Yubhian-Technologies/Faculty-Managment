@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "@/hooks/useToast";
 import { cn } from "@/lib/utils";
 import { renderHtmlToPdf } from "@/lib/pdf/htmlToPdf";
+import { formatPercent } from "@/lib/studentAttendance/percentage";
 import ExcelJS from "exceljs";
 import type { Course, Department } from "@/types";
 
@@ -27,7 +28,23 @@ interface ReportRow {
   sectionName: string;
   held: number;
   attended: number;
-  percentage: number;
+  // null when `held` is 0 - no periods recorded yet, distinct from a real
+  // 0% (see lib/studentAttendance/percentage.ts's calcPercent) - never
+  // rendered as "0%" or flagged with the shortage badge.
+  percentage: number | null;
+}
+
+// The PDF export builds its table by interpolating raw student names/roll
+// numbers into an HTML string (see downloadPdf) - a name containing "&",
+// "<" or similar HTML-significant characters would otherwise render as
+// broken markup (a stray dangling tag) or the wrong text entirely.
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 interface SectionOption { id: string; name: string }
@@ -179,12 +196,14 @@ export default function ExamCellAttendanceReportPage() {
     }
   }
 
-  // Values are rounded whole percentages, so "below 75%" is exactly <=74 -
-  // matches the inclusive To-% filter the API already applies.
+  // Percentages are 2-decimal rounded (see calcPercent), not whole numbers -
+  // "below 75%" needs the largest value strictly less than 75.00 (74.99), not
+  // 74, or a student at e.g. 74.5% would be wrongly excluded by the API's
+  // inclusive To-% filter (`percentage > maxPct`).
   function applyBelow75Filter() {
     setMinPct("");
-    setMaxPct("74");
-    void runReport({ minPct: "", maxPct: "74" });
+    setMaxPct("74.99");
+    void runReport({ minPct: "", maxPct: "74.99" });
   }
 
   const reportLabel = useMemo(() => {
@@ -199,15 +218,15 @@ export default function ExamCellAttendanceReportPage() {
 
   function downloadPdf() {
     if (!rows || rows.length === 0) return;
-    const tableHead = `<tr>${["Roll No", "Name", "Section", "Attendance %"]
+    const tableHead = `<tr>${["Roll No", "Name", "Section", "Held", "Attended", "Attendance %"]
       .map((h) => `<th style="border:1px solid #999;background:#0a0a7a;color:#fff;padding:4px 6px;font-size:11px;white-space:nowrap;">${h}</th>`)
       .join("")}</tr>`;
     const tableBody = rows
-      .map((r) => `<tr>${[r.rollNumber, r.name, r.sectionName, `${r.percentage}%`]
-        .map((v) => `<td style="border:1px solid #ccc;padding:4px 6px;font-size:11px;">${v}</td>`)
+      .map((r) => `<tr>${[r.rollNumber, r.name, r.sectionName, String(r.held), String(r.attended), formatPercent(r.percentage)]
+        .map((v) => `<td style="border:1px solid #ccc;padding:4px 6px;font-size:11px;">${escapeHtml(v)}</td>`)
         .join("")}</tr>`)
       .join("");
-    const html = `<!doctype html><html><head><meta charset="utf-8"><style>body{font-family:Arial,Helvetica,sans-serif;margin:16px;}table{border-collapse:collapse;width:100%;}</style></head><body><h3 style="margin:0 0 4px;text-align:center;">${reportLabel}</h3><p style="margin:0 0 12px;text-align:center;font-size:11px;color:#666;">${rows.length} student(s)</p><table>${tableHead}${tableBody}</table></body></html>`;
+    const html = `<!doctype html><html><head><meta charset="utf-8"><style>body{font-family:Arial,Helvetica,sans-serif;margin:16px;}table{border-collapse:collapse;width:100%;}</style></head><body><h3 style="margin:0 0 4px;text-align:center;">${escapeHtml(reportLabel)}</h3><p style="margin:0 0 12px;text-align:center;font-size:11px;color:#666;">${rows.length} student(s)</p><table>${tableHead}${tableBody}</table></body></html>`;
     void renderHtmlToPdf(html, `${reportLabel.replace(/[^a-zA-Z0-9]+/g, "-")}.pdf`);
   }
 
@@ -219,9 +238,11 @@ export default function ExamCellAttendanceReportPage() {
       { header: "Roll No", key: "rollNumber", width: 15 },
       { header: "Name", key: "name", width: 28 },
       { header: "Section", key: "sectionName", width: 12 },
-      { header: "Attendance %", key: "percentage", width: 14 },
+      { header: "Held", key: "held", width: 10 },
+      { header: "Attended", key: "attended", width: 10 },
+      { header: "Attendance %", key: "percentageDisplay", width: 14 },
     ];
-    sheet.addRows(rows);
+    sheet.addRows(rows.map((r) => ({ ...r, percentageDisplay: formatPercent(r.percentage) })));
     sheet.getRow(1).font = { bold: true };
 
     const buffer = await workbook.xlsx.writeBuffer();
@@ -345,6 +366,8 @@ export default function ExamCellAttendanceReportPage() {
                       <th className="pb-2 pr-3">Roll No</th>
                       <th className="pb-2 pr-3">Name</th>
                       <th className="pb-2 pr-3">Section</th>
+                      <th className="pb-2 pr-3">Held</th>
+                      <th className="pb-2 pr-3">Attended</th>
                       <th className="pb-2">Attendance %</th>
                     </tr>
                   </thead>
@@ -354,15 +377,17 @@ export default function ExamCellAttendanceReportPage() {
                         <td className="py-2 pr-3">{r.rollNumber}</td>
                         <td className="py-2 pr-3">{r.name}</td>
                         <td className="py-2 pr-3">{r.sectionName}</td>
+                        <td className="py-2 pr-3">{r.held}</td>
+                        <td className="py-2 pr-3">{r.attended}</td>
                         <td className="py-2">
                           <Badge
                             variant="outline"
                             className={cn(
                               "text-[11px]",
-                              r.percentage < LOW_ATTENDANCE_THRESHOLD && "border-destructive/40 bg-destructive/10 text-destructive"
+                              r.percentage != null && r.percentage < LOW_ATTENDANCE_THRESHOLD && "border-destructive/40 bg-destructive/10 text-destructive"
                             )}
                           >
-                            {r.percentage}%
+                            {formatPercent(r.percentage)}
                           </Badge>
                         </td>
                       </tr>

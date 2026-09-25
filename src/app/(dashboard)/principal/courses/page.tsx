@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { CourseCatalogSettingsCard } from "@/components/academics/CourseCatalogSettingsCard";
@@ -15,12 +15,25 @@ const TABS = [
 type TabKey = (typeof TABS)[number]["key"];
 
 // One page for the whole academic structure. The active toggle lives in
-// `?tab=` so the old /principal/departments and /principal/sections links (and
-// the Back links on their detail pages) land on the right toggle.
+// local state for instant switching and syncs with `?tab=` in the URL.
 function CoursesTabs() {
   const router = useRouter();
-  const param = useSearchParams().get("tab");
-  const active: TabKey = TABS.some((t) => t.key === param) ? (param as TabKey) : "courses";
+  const searchParams = useSearchParams();
+  const param = searchParams.get("tab");
+  const [active, setActive] = useState<TabKey>(() =>
+    TABS.some((t) => t.key === param) ? (param as TabKey) : "courses"
+  );
+
+  useEffect(() => {
+    if (param && TABS.some((t) => t.key === param)) {
+      setActive(param as TabKey);
+    }
+  }, [param]);
+
+  const handleTabChange = (key: TabKey) => {
+    setActive(key);
+    router.replace(`/principal/courses?tab=${key}`, { scroll: false });
+  };
 
   return (
     <div className="space-y-6">
@@ -30,7 +43,7 @@ function CoursesTabs() {
             key={t.key}
             role="tab"
             aria-selected={active === t.key}
-            onClick={() => router.replace(`/principal/courses?tab=${t.key}`, { scroll: false })}
+            onClick={() => handleTabChange(t.key)}
             className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
               active === t.key ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
             }`}
