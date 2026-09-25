@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { CalendarClock, Info, Lock, Pencil, RefreshCw, Clock } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
@@ -124,9 +124,17 @@ export default function MarkAttendancePage() {
     }
   }
 
+  // Load the first report without touching state synchronously, then keep the
+  // view current with a 30s poll.
   useEffect(() => {
-    void fetchTodayPeriods();
-    const id = setInterval(() => void fetchTodayPeriods(), PERIOD_POLL_MS);
+    void (async () => {
+      await fetchTodayPeriods();
+    })();
+    const id = setInterval(() => {
+      void (async () => {
+        await fetchTodayPeriods();
+      })();
+    }, PERIOD_POLL_MS);
     return () => clearInterval(id);
   }, []);
 
@@ -256,7 +264,41 @@ export default function MarkAttendancePage() {
         </Card>
       ) : (
         <Card className="overflow-hidden">
-          <div className="overflow-x-auto">
+          {/* Card list below sm - a 6-column table forced into a narrow phone
+              screen is unreadable even with horizontal scroll; each period
+              becomes its own tappable card instead. */}
+          <div className="divide-y sm:hidden">
+            {periods.map((p) => {
+              const s = p.session;
+              const isSubmitted = s?.status === "SUBMITTED";
+              const label = p.isOpen ? (isSubmitted ? "Submitted" : "Open — tap to mark") : s ? (isSubmitted ? "Posted" : "Closed — Contact Dept Office") : "Closed — Contact Dept Office";
+              const badge = p.isOpen ? "bg-emerald-100 text-emerald-800 border-emerald-200" : isSubmitted ? "bg-green-100 text-green-800 border-green-200" : "bg-amber-100 text-amber-800 border-amber-200";
+              const isExpanded = expandedId === p.sessionId;
+              return (
+                <div key={p.sessionId} className={`p-4 space-y-2 ${isExpanded ? "bg-blue-50/60" : ""}`}>
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="font-medium">P{p.periodNumber} · {formatTime12h(p.startTime)} – {formatTime12h(p.endTime)}</p>
+                      <p className="text-muted-foreground">{p.subjectName} ({p.courseName} {ordinalYear(p.year)})</p>
+                      <p className="text-muted-foreground">Section {p.sectionName}</p>
+                    </div>
+                    <span className={`inline-flex shrink-0 items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${badge}`}>
+                      {isSubmitted ? "Submitted" : p.isOpen ? "Open" : "Closed"}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">{label}</p>
+                  {p.isOpen ? (
+                    <Button size="sm" variant={isSubmitted ? "outline" : "default"} className="w-full" onClick={() => void handleOpenPeriod(p)}>
+                      {isSubmitted ? "View" : isExpanded ? "Opened" : "Mark Attendance"}
+                    </Button>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground"><Clock className="h-3.5 w-3.5" /> Not open</span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          <div className="hidden overflow-x-auto sm:block">
             <table className="w-full text-sm">
               <thead className="bg-muted/50 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
                 <tr>
@@ -375,7 +417,24 @@ export default function MarkAttendancePage() {
               {!isReadOnly && isExpandedOpen && !mode && (
                 <p className="border-b bg-muted/30 px-4 py-2 text-xs text-muted-foreground">Pick one option above to mark the whole class — the roster controls unlock once you do.</p>
               )}
-              <div className="overflow-x-auto">
+              {/* Card list below sm - same roster data, one row per student
+                  stacked instead of a cramped 4-column table. */}
+              <div className="divide-y sm:hidden">
+                {attendanceSession.entries.map((entry, i) => {
+                  const value = draft[entry.studentId] ?? null;
+                  const meaning = checkedMeaningFor(mode);
+                  return (
+                    <div key={entry.studentId} className="flex items-center justify-between gap-3 px-4 py-2.5">
+                      <div>
+                        <p className="font-medium text-foreground">{i + 1}. {entry.name}</p>
+                        <p className="text-muted-foreground">Reg No. {entry.rollNumber}</p>
+                      </div>
+                      <Switch checked={value === meaning} disabled={isReadOnly || !isExpandedOpen || !mode} onCheckedChange={(c) => handleRowCheck(entry.studentId, c)} aria-label={`Mark ${entry.name} ${meaning === "PRESENT" ? "present" : "absent"}`} />
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="hidden overflow-x-auto sm:block">
                 <table className="w-full text-sm">
                   <thead className="bg-muted/50 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
                     <tr>

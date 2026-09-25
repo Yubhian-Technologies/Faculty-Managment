@@ -312,13 +312,13 @@ export function DepartmentsPanel() {
                               const scope = resolveDepartmentCourseScope(dept, c.catalogId);
                               return (
                                 <div key={c.id} className="text-xs text-muted-foreground">
-                                  <span className="text-foreground font-medium">{c.name}:</span>{" "}
+                                  <span className="text-foreground font-medium line-clamp-1">{c.name}:</span>{" "}
                                   {scope.assignedYears.length > 0
                                     ? scope.assignedYears.map(yearOrdinalLabel).join(", ")
                                     : "No years assigned yet"}
                                   {scope.secondaryDepartments.length > 0 && (
                                     <DepartmentChipList
-                                      names={replaceNoOwnSectionsParents(departments as DepartmentWithId[], scope.secondaryDepartments)}
+                                      names={replaceNoOwnSectionsParents(departments as DepartmentWithId[], scope.secondaryDepartments).slice(0, 3)}
                                       className="mt-1"
                                     />
                                   )}
@@ -367,40 +367,43 @@ export function DepartmentsPanel() {
                   <div className="flex gap-1 shrink-0">
                     <Button
                       variant="ghost"
-                      size="sm"
+                      size="icon"
+                      className="h-7 w-7"
+                      title="Edit department"
                       onClick={(e) => { e.stopPropagation(); router.push(`/principal/departments/${dept.id}/edit`); }}
                     >
-                      <Pencil className="h-3.5 w-3.5 mr-1" />
-                      Edit
+                      <Pencil className="h-3.5 w-3.5" />
                     </Button>
                     <Button
                       variant="ghost"
-                      size="sm"
-                      className="text-destructive hover:text-destructive"
+                      size="icon"
+                      className="h-7 w-7 text-destructive hover:text-destructive"
+                      title="Delete department"
                       onClick={(e) => { e.stopPropagation(); setDeletingDept(dept); }}
                     >
-                      <Trash2 className="h-3.5 w-3.5 mr-1" />
-                      Delete
+                      <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   </div>
                 </div>
-                <Button
-                  asChild
-                  variant="outline"
-                  size="sm"
-                  className="mt-3 h-8 w-full text-xs"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <Link href={`/principal/departments/${dept.id}`}>Manage courses &amp; timings →</Link>
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="mt-2 h-8 w-full text-xs"
-                  onClick={(e) => { e.stopPropagation(); setShowRoles(true); }}
-                >
-                  Change in Role Assignments
-                </Button>
+                <div className="grid grid-cols-2 gap-2 mt-3">
+                  <Button
+                    asChild
+                    variant="outline"
+                    size="sm"
+                    className="h-8 text-xs"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <Link href={`/principal/departments/${dept.id}`}>Manage courses &amp; timings</Link>
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 text-xs"
+                    onClick={(e) => { e.stopPropagation(); setShowRoles(true); }}
+                  >
+                    Role Assignments
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           ))}

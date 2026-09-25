@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { BookMarked, GraduationCap, UserRound, Users } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
-import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { CardSkeleton } from "@/components/shared/SkeletonLoader";
 import { toast } from "@/hooks/useToast";
@@ -36,21 +35,7 @@ function ordinalYear(year: number) {
   return `${year}${suffix} Year`;
 }
 const STUDENT_FACULTY_RATIO = 15;
-
 const ALL = "all";
-
-function Chip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
-  return (
-    <button
-      onClick={onClick}
-      className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
-        active ? "bg-primary text-primary-foreground border-primary" : "bg-background border-border hover:bg-muted"
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
 
 // One section tile - shared by the Sections toggle and the Departments drill-down.
 export function SectionCard({ sec, onOpen }: { sec: Section; onOpen: () => void }) {
@@ -62,18 +47,13 @@ export function SectionCard({ sec, onOpen }: { sec: Section; onOpen: () => void 
     >
       <div className="flex items-center gap-2 flex-wrap">
         <p className="text-2xl font-bold tracking-tight">{sec.name}</p>
-        {sec.department && <Badge variant="secondary" className="text-xs">{sec.department}</Badge>}
       </div>
-
       <p className="text-sm opacity-80">
         {sec.batch}
         {sec.regulation && <span> · {sec.regulation}</span>}
-        {/* The branch a shared-first-year section feeds -
-            stored plural for legacy shape, but a section
-            commits to exactly one. */}
+        {/* The branch a shared-first-year section feeds - stored plural for legacy shape, but a section commits to exactly one. */}
         {!!sec.secondaryDepartments?.length && <span> · → {sec.secondaryDepartments[0]}</span>}
       </p>
-
       <div className="flex items-center gap-2">
         <UserRound className="h-4 w-4 opacity-50 shrink-0" />
         <span className="text-sm">
@@ -82,12 +62,10 @@ export function SectionCard({ sec, onOpen }: { sec: Section; onOpen: () => void 
             : <span className="opacity-50 italic">No incharge assigned</span>}
         </span>
       </div>
-
       <div className="flex items-center gap-2">
         <Users className="h-4 w-4 opacity-50 shrink-0" />
         <span className="text-sm"><strong>{sec.studentCount ?? 0}</strong> students</span>
       </div>
-
       {(sec.studentCount ?? 0) > 0 && (
         <div className="flex items-center gap-2 mt-0.5">
           <GraduationCap className="h-4 w-4 opacity-50 shrink-0" />
@@ -101,22 +79,15 @@ export function SectionCard({ sec, onOpen }: { sec: Section; onOpen: () => void 
   );
 }
 
-// College-wide Sections, for Principal / Vice Principal / College Admin -
-// presented exactly like the HOD's own page (same year colours, grouping and
-// per-group counts) but across every department rather than one.
-//
-// Read-only by necessity, not by preference: creating, editing and deleting a
-// section are all HOD/Super Admin on the server (see api/college/sections),
-// so an Add or Edit control here would only ever produce a 403.
-//
-// The sections API already returns the whole college for these roles - its
-// department scoping applies to an HOD only - so every filter below works in
-// memory over a single fetch.
+// College-wide Sections, for Principal / Vice Principal / College Admin.
+// Read-only by necessity: sections are HOD/Super Admin writes on the server.
+// Data loads on explicit "Load" button click - filter options are populated on mount.
 export function SectionsPanel() {
   const [sections, setSections] = useState<Section[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-
+  const [departments, setDepartments] = useState<{ id: string; name: string; isActive?: boolean }[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [hasLoaded, setHasLoaded] = useState(false);
   const [courseKey, setCourseKey] = useState(ALL);
   const [deptFilter, setDeptFilter] = useState(ALL);
   const [yearFilter, setYearFilter] = useState<number | typeof ALL>(ALL);
@@ -125,23 +96,32 @@ export function SectionsPanel() {
   useEffect(() => {
     void (async () => {
       try {
-        const [secRes, courseRes] = await Promise.all([
-          fetch("/api/college/sections").then((r) => r.json() as Promise<{ sections?: Section[] }>),
+        const [courseRes, deptRes] = await Promise.all([
           fetch("/api/college/courses").then((r) => r.json() as Promise<{ courses?: Course[] }>),
+          fetch("/api/college/departments").then((r) => r.json() as Promise<{ departments?: { id: string; name: string; isActive?: boolean }[] }>),
         ]);
-        setSections(secRes.sections ?? []);
         setCourses(courseRes.courses ?? []);
+        setDepartments(deptRes.departments ?? []);
       } catch {
-        toast({ variant: "destructive", title: "Failed to load sections" });
-      } finally {
-        setIsLoading(false);
+        // silent
       }
     })();
   }, []);
 
-  // One chip per programme, not one per department's own Course doc - the
-  // same collapse the HOD page makes, or "Bachelor of Technology" appears
-  // once for every department that offers it.
+  async function loadData() {
+    setIsLoading(true);
+    try {
+      const secRes = await fetch("/api/college/sections").then((r) => r.json() as Promise<{ sections?: Section[] }>);
+      setSections(secRes.sections ?? []);
+      setHasLoaded(true);
+    } catch {
+      toast({ variant: "destructive", title: "Failed to load sections" });
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  // One group per programme name, not per department's Course doc.
   const courseGroups = useMemo(() => buildCourseGroups(courses), [courses]);
   const courseIdsByKey = useMemo(
     () => new Map(courseGroups.map((g) => [g.key, new Set(g.courseIds)])),
@@ -149,32 +129,33 @@ export function SectionsPanel() {
   );
 
   const byCourse = useMemo(
-    () => (courseKey === ALL
-      ? sections
-      : sections.filter((s) => courseIdsByKey.get(courseKey)?.has(s.courseId) ?? false)),
+    () => (courseKey === ALL ? sections : sections.filter((s) => courseIdsByKey.get(courseKey)?.has(s.courseId) ?? false)),
     [sections, courseKey, courseIdsByKey]
   );
+  // Derived from sections when loaded, or college departments when awaiting load.
+  const deptOptions = useMemo(() => {
+    if (sections.length > 0) {
+      return Array.from(new Set(byCourse.map((s) => s.department).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+    }
+    return departments.filter((d) => d.isActive !== false).map((d) => d.name).sort((a, b) => a.localeCompare(b));
+  }, [sections, byCourse, departments]);
 
-  // Each chip row is built from what the rows BEFORE it already narrowed to,
-  // so a chip never offers a combination that yields nothing.
-  const deptOptions = useMemo(
-    () => Array.from(new Set(byCourse.map((s) => s.department).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
-    [byCourse]
-  );
   const byDept = useMemo(
     () => (deptFilter === ALL ? byCourse : byCourse.filter((s) => s.department === deptFilter)),
     [byCourse, deptFilter]
   );
-  const yearOptions = useMemo(
-    () => Array.from(new Set(byDept.map((s) => s.year))).sort((a, b) => a - b),
-    [byDept]
-  );
+  const yearOptions = useMemo(() => {
+    if (sections.length > 0) {
+      return Array.from(new Set(byDept.map((s) => s.year))).sort((a, b) => a - b);
+    }
+    return [1, 2, 3, 4];
+  }, [sections, byDept]);
+
   const visible = useMemo(
     () => (yearFilter === ALL ? byDept : byDept.filter((s) => s.year === yearFilter)),
     [byDept, yearFilter]
   );
 
-  // Grouped by course + year, the same shape the HOD page renders.
   const groups = useMemo(() => {
     const map = new Map<string, { key: string; courseName: string; year: number; sections: Section[] }>();
     for (const s of visible) {
@@ -200,13 +181,65 @@ export function SectionsPanel() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Sections"
-        description="Every section in the college - open one to see its students"
-      />
+      <PageHeader title="Sections" description="Every section in the college - open one to see its students" />
 
+      {/* ── Single-line filter bar with Load-on-demand ── */}
+      <div className="flex flex-wrap items-end gap-3 rounded-lg border bg-muted/30 p-3">
+        <div className="flex flex-col gap-1 min-w-[160px] flex-1">
+          <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Course</label>
+          <select
+            value={courseKey}
+            onChange={(e) => { setCourseKey(e.target.value); setDeptFilter(ALL); setYearFilter(ALL); }}
+            className="h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            disabled={isLoading}
+          >
+            <option value={ALL}>All Courses</option>
+            {courseGroups.map((g) => <option key={g.key} value={g.key}>{g.name}</option>)}
+          </select>
+        </div>
+        <div className="flex flex-col gap-1 min-w-[160px] flex-1">
+          <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Department</label>
+          <select
+            value={deptFilter}
+            onChange={(e) => { setDeptFilter(e.target.value); setYearFilter(ALL); }}
+            className="h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            disabled={isLoading}
+          >
+            <option value={ALL}>All Departments</option>
+            {deptOptions.map((d) => <option key={d} value={d}>{d}</option>)}
+          </select>
+        </div>
+        <div className="flex flex-col gap-1 min-w-[120px]">
+          <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Year</label>
+          <select
+            value={yearFilter === ALL ? ALL : String(yearFilter)}
+            onChange={(e) => setYearFilter(e.target.value === ALL ? ALL : Number(e.target.value))}
+            className="h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            disabled={isLoading}
+          >
+            <option value={ALL}>All Years</option>
+            {yearOptions.map((y) => <option key={y} value={String(y)}>{ordinalYear(y)}</option>)}
+          </select>
+        </div>
+        <button
+          type="button"
+          onClick={() => void loadData()}
+          disabled={isLoading}
+          className="h-9 px-4 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-60 transition-colors whitespace-nowrap"
+        >
+          {isLoading ? "Loading…" : hasLoaded ? "Refresh" : "Load"}
+        </button>
+      </div>
+
+      {/* ── Content ── */}
       {isLoading ? (
         <div className="space-y-2">{[1, 2, 3].map((i) => <CardSkeleton key={i} />)}</div>
+      ) : !hasLoaded ? (
+        <EmptyState
+          icon={<BookMarked className="h-10 w-10 text-muted-foreground" />}
+          title="Click Load to view sections"
+          description="Select your filters above, then click Load to fetch section data."
+        />
       ) : sections.length === 0 ? (
         <EmptyState
           icon={<BookMarked className="h-10 w-10 text-muted-foreground" />}
@@ -232,42 +265,6 @@ export function SectionsPanel() {
               </span>
             )}
           </div>
-
-          <div className="flex gap-2 flex-wrap">
-            <Chip active={courseKey === ALL} onClick={() => { setCourseKey(ALL); setDeptFilter(ALL); setYearFilter(ALL); }}>
-              All Courses
-            </Chip>
-            {courseGroups.map((g) => (
-              <Chip
-                key={g.key}
-                active={courseKey === g.key}
-                onClick={() => { setCourseKey(g.key); setDeptFilter(ALL); setYearFilter(ALL); }}
-              >
-                {g.name}
-              </Chip>
-            ))}
-          </div>
-
-          <div className="flex gap-2 flex-wrap">
-            <Chip active={deptFilter === ALL} onClick={() => { setDeptFilter(ALL); setYearFilter(ALL); }}>
-              All Departments
-            </Chip>
-            {deptOptions.map((d) => (
-              <Chip key={d} active={deptFilter === d} onClick={() => { setDeptFilter(d); setYearFilter(ALL); }}>
-                {d}
-              </Chip>
-            ))}
-          </div>
-
-          {yearOptions.length > 1 && (
-            <div className="flex gap-2 flex-wrap">
-              <Chip active={yearFilter === ALL} onClick={() => setYearFilter(ALL)}>All Years</Chip>
-              {yearOptions.map((y) => (
-                <Chip key={y} active={yearFilter === y} onClick={() => setYearFilter(y)}>{ordinalYear(y)}</Chip>
-              ))}
-            </div>
-          )}
-
           {groups.length === 0 ? (
             <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
               No sections match these filters.
@@ -288,7 +285,6 @@ export function SectionsPanel() {
                         {req > 0 && <span className="ml-1 opacity-75">· {req} faculty needed</span>}
                       </span>
                     </div>
-
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                       {g.sections.map((sec) => (
                         <SectionCard key={sec.id} sec={sec} onOpen={() => setOpenSectionId(sec.id)} />

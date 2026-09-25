@@ -1,5 +1,6 @@
 "use client";
 
+import { CollegeDepartmentSelect } from "@/components/shared/CollegeDepartmentSelect";
 import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -311,7 +312,7 @@ ${institution}`;
                       </div>
                       <div className="space-y-1.5">
                         <Label className="text-xs">Department</Label>
-                        <Input value={form.department} onChange={(e) => setForms((p) => ({ ...p, [candidate.id]: { ...p[candidate.id], department: e.target.value } }))} />
+                        <CollegeDepartmentSelect value={form.department} onChange={(v) => setForms((p) => ({ ...p, [candidate.id]: { ...p[candidate.id], department: v } }))} />
                       </div>
                       <div className="space-y-1.5">
                         <Label className="text-xs">Joining Date</Label>

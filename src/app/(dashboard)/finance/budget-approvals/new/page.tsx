@@ -1,5 +1,6 @@
 "use client";
 
+import { CollegeDepartmentSelect } from "@/components/shared/CollegeDepartmentSelect";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -58,7 +59,7 @@ export default function NewBudgetRequestPage() {
           <form onSubmit={handleSubmit} className="space-y-5">
             <div className="space-y-2">
               <Label>Department *</Label>
-              <Input value={department} onChange={(e) => setDepartment(e.target.value)} placeholder="e.g. Mechanical Engineering" />
+              <CollegeDepartmentSelect value={department} onChange={setDepartment} />
             </div>
 
             <div className="space-y-2">
