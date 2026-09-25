@@ -14,7 +14,7 @@ export interface SupportingStaffCsvColumn {
   aliases?: string[];
 }
 
-// The import is intentionally limited to exactly these 15 columns - every one
+// The import is intentionally limited to exactly these 14 columns - every one
 // mandatory except Name (as per PAN) and Name (as per Aadhar), which are
 // optional. No other optional structural extras (Personal Email, Designation
 // Title, Department, Status, Total Years of Experience are no longer
@@ -23,7 +23,8 @@ export interface SupportingStaffCsvColumn {
 // import route, which rejects it with a message pointing at manual Add
 // Staff instead. Otherwise mirrors Faculty's trimmed getFacultyImportColumns
 // (src/lib/faculty/csvColumns.ts) field for field, including the
-// two-name-fields ordering (SSC name, then PAN name).
+// two-name-fields ordering (SSC name, then PAN name). No Ratification column -
+// Ratification is a Teaching Faculty-only concept, never applicable here.
 const PERSONAL_COLUMNS: SupportingStaffCsvColumn[] = [
   { key: "employeeId",        label: "Employee ID",                  required: true,  sample: "Required; any text; unique", aliases: ["Emp ID", "Employee Code", "Employee No", "Staff ID"] },
   { key: "legalName",         label: "Full Name (as per SSC)",       required: true,  sample: "Required; text", aliases: ["Legal Name (as per SSC)"] },
@@ -43,7 +44,6 @@ const PERSONAL_COLUMNS: SupportingStaffCsvColumn[] = [
   { key: "nameAsPerAadhar",   label: "Name (as per Aadhar)",         required: false, sample: "Optional; text" },
   { key: "aadharNo",          label: "Aadhar No",                    required: true,  sample: "Required; exactly 12 digits" },
   { key: "panNo",             label: "PAN No",                       required: true,  sample: "Required; 5 letters + 4 digits + 1 letter, e.g. ABCDE1234F" },
-  { key: "ratificationStatus",label: "Ratification Status",          required: true,  sample: "Required: Ratified / Not Ratified" },
 ];
 
 // CSV import/export is intentionally limited to identity + personal/statutory
@@ -106,7 +106,6 @@ const SAMPLE_ROWS_BASE: Record<string, string>[] = [
     gender: "Male", dateOfBirth: "1988-04-17",
     nameAsPerAadhar: "Ravi Teja",
     aadharNo: "123456789012", panNo: "ABCDE1234F",
-    ratificationStatus: "Ratified",
   },
   {
     employeeId: "STF002", legalName: "LAKSHMI PRASANNA", nameAsPerPan: "Lakshmi Prasanna",
@@ -116,7 +115,6 @@ const SAMPLE_ROWS_BASE: Record<string, string>[] = [
     gender: "Female", dateOfBirth: "1993-12-02",
     nameAsPerAadhar: "Lakshmi Prasanna",
     aadharNo: "234567890123", panNo: "BCDEF2345G",
-    ratificationStatus: "Not Ratified",
   },
   {
     employeeId: "STF003", legalName: "MOHAMMED RAFI", nameAsPerPan: "Mohammed Rafi",
@@ -126,7 +124,6 @@ const SAMPLE_ROWS_BASE: Record<string, string>[] = [
     gender: "Male", dateOfBirth: "1983-08-25",
     nameAsPerAadhar: "Mohammed Rafi",
     aadharNo: "345678901234", panNo: "CDEFG3456H",
-    ratificationStatus: "Ratified",
   },
   {
     employeeId: "STF004", legalName: "SUNITHA RANI", nameAsPerPan: "Sunitha Rani",
@@ -136,7 +133,6 @@ const SAMPLE_ROWS_BASE: Record<string, string>[] = [
     gender: "Female", dateOfBirth: "1997-05-11",
     nameAsPerAadhar: "Sunitha Rani",
     aadharNo: "456789012345", panNo: "DEFGH4567I",
-    ratificationStatus: "Not Ratified",
   },
   {
     employeeId: "STF005", legalName: "VENKAT RAO", nameAsPerPan: "Venkat Rao",
@@ -146,7 +142,6 @@ const SAMPLE_ROWS_BASE: Record<string, string>[] = [
     gender: "Male", dateOfBirth: "1976-01-09",
     nameAsPerAadhar: "Venkat Rao",
     aadharNo: "567890123456", panNo: "EFGHI5678J",
-    ratificationStatus: "Ratified",
   },
 ];
 
@@ -175,7 +170,6 @@ export function getSupportingStaffHints(
       ? `Designation: ${designationOptions.join(" / ")} - added under Settings${kind === "non-technical" ? "" : " > Designations"}. Common abbreviations are recognized too, case-insensitively.`
       : `Designation: add at least one under Settings${kind === "non-technical" ? "" : " > Designations"} before importing - a row can only use a title that's been added there.`,
     "Gender: Male, Female, Other",
-    "Ratification Status: Ratified, Not Ratified",
     "Dates must be in YYYY-MM-DD format (e.g. 2020-06-01)",
     "Login Password is mandatory: it creates this staff member's login account automatically during import, using their College Email as the login ID - must be at least 8 characters. Use a real, unique password per person - never reuse the sample column's placeholder values.",
     "Every column in the template is required except Name (as per PAN) and Name (as per Aadhar) - a row missing a required column, or with an invalid value, is rejected and reported back so it can be corrected and re-imported.",

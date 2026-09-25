@@ -3,7 +3,7 @@
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { NumInput, TextInput, QualificationsFields, CheckboxGroup, StringListInput } from "@/components/shared/ProfileFieldPrimitives";
-import { PersonalDetailsFields, type PersonalDetailsValue } from "@/components/shared/PersonalDetailsFields";
+import { PersonalDetailsFields, SUPPORTING_STAFF_REQUIRED_PERSONAL_FIELDS, type PersonalDetailsValue } from "@/components/shared/PersonalDetailsFields";
 import { TrainingGroup, AchievementsGroup } from "@/components/shared/TrainingAchievementsFields";
 import { getSupportingQualificationLevels } from "@/lib/designations/config";
 import { NON_TECHNICAL_RESPONSIBILITY_LABELS, COMPUTER_SKILL_LABELS } from "@/types";
@@ -52,7 +52,17 @@ export function SupportingStaffModuleEditor({ moduleKey, record, onChange, colle
       // Full Name (as per SSC) is edited on Identity & Employment instead
       // (hidden here); Name (as per PAN) lives here, mirroring Faculty's own
       // PersonalDetailsFields usage (FacultyProfileModuleEditor.tsx).
-      return <PersonalDetailsFields value={record} onChange={(v) => onChange(v)} hiddenFields={["legalName"]} showNameAsPerPan />;
+      // Ratification is a Teaching Faculty-only concept - Supporting Staff has
+      // no such field, so it's hidden (and excluded from required fields) here.
+      return (
+        <PersonalDetailsFields
+          value={record}
+          onChange={(v) => onChange(v)}
+          hiddenFields={["legalName", "ratificationStatus", "ratificationProceedingsNumber", "ratificationDate"]}
+          requiredFields={SUPPORTING_STAFF_REQUIRED_PERSONAL_FIELDS}
+          showNameAsPerPan
+        />
+      );
 
     case "qualifications":
       return (
