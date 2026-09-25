@@ -13,6 +13,7 @@ import { isNameOrChildAmong } from "@/lib/departments/codeOrNameResolver";
 import { isTimetableIncharge } from "@/lib/departments/timetableIncharge";
 import type { Department, DepartmentCourseScope } from "@/types";
 import { loadDepartmentIndex, stampDepartmentIds } from "@/lib/departments/stampIds";
+import { resolveCollegeAcademicYear } from "@/lib/college/collegeAcademicYear";
 
 export async function GET(request: Request) {
   try {
@@ -405,10 +406,10 @@ export async function POST(request: Request) {
       if (parsedBatchStart != null) {
         allowed = regulationsForBatchStartYear(catalogItem?.regulationBatches ?? {}, parsedBatchStart, catalogItem?.regulations);
       } else {
-        const sessionSnap = await db.collection("colleges").doc(session.collegeId)
-          .collection("academicSessions").where("isCurrent", "==", true).limit(1).get();
+        // Resolved centrally so this honours the college's own academic-year
+        // start day, not the April cutoff this used to assume.
         const asOfStartYear = parseAcademicYearStart(
-          sessionSnap.empty ? undefined : (sessionSnap.docs[0].data() as { label?: string }).label
+          await resolveCollegeAcademicYear(db, session.collegeId)
         ) ?? currentAcademicStartYear();
         allowed = regulationsForCourseYearByBatch(catalogItem?.regulationBatches ?? {}, Number(body.year), asOfStartYear, catalogItem?.regulations);
       }
