@@ -71,7 +71,7 @@ export function PrincipalDashboardHome({ fallbackName }: { fallbackName: string 
         {[
           { label: "Pending Vacancies", value: isLoading ? "—" : pendingVacancies.length, icon: ClipboardList, color: "text-yellow-600 bg-yellow-50", href: "/principal/vacancies", hiddenHref: "/principal/vacancies" },
           { label: "Interviews & Decisions", value: isLoading ? "—" : pendingBatches.length, icon: CalendarCheck, color: "text-blue-600 bg-blue-50", href: "/principal/interviews", hiddenHref: "/principal/vacancies" },
-          { label: "Departments", value: isLoading ? "—" : topLevelDepartmentCount, icon: BookOpen, color: "text-purple-600 bg-purple-50", href: "/principal/departments", hiddenHref: "/principal/departments" },
+          { label: "Departments", value: isLoading ? "—" : topLevelDepartmentCount, icon: BookOpen, color: "text-purple-600 bg-purple-50", href: "/principal/courses?tab=departments", hiddenHref: "/principal/courses" },
         ].filter((stat) => !isHidden(stat.hiddenHref)).map((stat) => (
           <Link key={stat.label} href={stat.href}>
             <Card className="hover:shadow-md transition-shadow cursor-pointer">
