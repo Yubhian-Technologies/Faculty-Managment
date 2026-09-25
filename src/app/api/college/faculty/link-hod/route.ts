@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
-import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
+import { getHodDepartmentScope, canHodManageFacultyDepartment } from "@/lib/departments/scope";
 import { forgetHeldRoles } from "@/lib/auth/liveRoles";
 import { experienceBreakdown, allPreviousExperienceEntries } from "@/lib/faculty/experienceCalc";
 import { mobileNoFromBody } from "@/lib/faculty/mobileNo";
@@ -85,7 +85,7 @@ export async function POST(request: Request) {
 
     if (session.role === "HOD") {
       const scope = await getHodDepartmentScope(db, collegeId, session.uid);
-      if (!canHodEditDepartment(scope, department)) {
+      if (!canHodManageFacultyDepartment(scope, department)) {
         return NextResponse.json(
           { error: "That department is not yours or one of your sub-departments" },
           { status: 403 },

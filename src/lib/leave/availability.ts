@@ -42,6 +42,8 @@ export interface Unavailability {
   isCoveringAt(facultyId: string, dateISO: string, periodNumber: number): boolean;
   /** uids unavailable on ANY day within [fromISO, toISO]. */
   unavailableUidsBetween(fromISO: string, toISO: string): Set<string>;
+  /** FacultyMember ids already committed (live leave sub, or active adjustment) to cover ANY period within [fromISO, toISO] - so a covering commitment can be checked against the applicant themselves, not just the pool of candidates. */
+  coveringFacultyIdsBetween(fromISO: string, toISO: string): Set<string>;
 }
 
 export async function loadUnavailability(
@@ -96,6 +98,18 @@ export async function loadUnavailability(
       const out = new Set<string>();
       for (const l of leaves) if (l.toISO >= from && l.fromISO <= to) out.add(l.uid);
       for (const a of adjustments) if (a.toDate >= from && a.fromDate <= to) out.add(a.subjectUid);
+      return out;
+    },
+    coveringFacultyIdsBetween(from, to) {
+      const out = new Set<string>();
+      for (const l of leaves) {
+        if (l.toISO < from || l.fromISO > to) continue;
+        for (const p of l.substitutions) out.add(p.substituteFacultyId);
+      }
+      for (const a of adjustments) {
+        if (a.toDate < from || a.fromDate > to) continue;
+        for (const p of a.periodSubstitutions ?? []) out.add(p.substituteFacultyId);
+      }
       return out;
     },
   };

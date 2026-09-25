@@ -573,10 +573,15 @@ service cloud.firestore {
       match /studentAttendance/{sessionId} {
         allow read: if isStaff(collegeId);
         allow create: if isPanelMember(collegeId) && request.resource.data.facultyId == request.auth.uid;
-        allow update: if isHODorAbove(collegeId) ||
-          (isPanelMember(collegeId) && resource.data.facultyId == request.auth.uid
-            && resource.data.status == 'DRAFT');
-        allow delete: if isHODorAbove(collegeId);
+        // Update/delete are server-only: every real edit (faculty save/submit,
+        // and "Post on Behalf" office corrections) goes through the Admin SDK
+        // API routes, which enforce department scope, the manual-edit window,
+        // future-date rejection, and an audit log - none of which this rules
+        // layer can express. `isHODorAbove` used to let any HOD bypass all of
+        // that via a direct client write; no client code ever legitimately
+        // writes here, so this is now a hard no rather than a weaker backstop.
+        allow update: if false;
+        allow delete: if false;
       }
 
       match /workloadSummaries/{summaryId} {

@@ -20,16 +20,25 @@ const OPTIONAL_L2_ROLES: UserRole[] = ["ACCOUNTS"];
 // populate their Location → College → Department browse views. ADMINISTRATION
 // is also read-only, but scoped to only its own location (its Settings page's
 // Location Information card) - never the full org-wide list.
-export async function GET() {
+export async function GET(request?: Request) {
   try {
     const session = await requireRole("SUPER_ADMIN", "MANAGEMENT", "PURCHASE_DEPT", "FINANCE", "ADMINISTRATION");
     const db = getAdminDb();
+    // Optional pagination/projection — additive; no limit = return all (existing callers unchanged)
+    const searchParams = request ? new URL(request.url).searchParams : null;
+    const limitParam = searchParams?.get("limit");
+    const limitNum = limitParam ? Math.min(Math.max(parseInt(limitParam, 10) || 0, 1), 100) : 0;
+
     if (session.role === "ADMINISTRATION") {
       if (!session.locationId) return NextResponse.json({ locations: [] });
       const doc = await db.collection("locations").doc(session.locationId).get();
       return NextResponse.json({ locations: doc.exists ? [{ id: doc.id, ...doc.data() }] : [] });
     }
-    const snap = await db.collection("locations").orderBy("name").get();
+    let query: FirebaseFirestore.Query = db.collection("locations").orderBy("name");
+    if (limitNum > 0) {
+      query = query.select("name", "city", "state", "isActive").limit(limitNum);
+    }
+    const snap = await query.get();
     const locations = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     return NextResponse.json({ locations });
   } catch (err) {

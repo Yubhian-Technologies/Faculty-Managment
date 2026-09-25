@@ -96,10 +96,11 @@ export async function GET(request: Request) {
   }
 }
 
-// Two independent creation shapes share this collection: course/year-scoped subjects
-// (HOD Subjects page - courseId + year, validated against the course) and
-// semester-scoped subjects (HOD Teaching Assignments page - semester + department,
-// no course link). Branch on which fields the caller sent.
+// Two independent creation shapes share this collection: course/year-scoped
+// subjects (Academics/Principal/VP/Super Admin - courseId + year, validated
+// against the course) and semester-scoped subjects (HOD Teaching Assignments
+// page - semester + department, no course link). Branch on which fields the
+// caller sent.
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "ACADEMICS");
@@ -205,37 +206,21 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "L, T and P are required" }, { status: 400 });
       }
 
-      let dept = "";
+      // Course/year-scoped creation is Academics/Principal/VP/Super Admin only.
+      // HOD's own path to this shape (an "Add Subject" button on the HOD
+      // Subjects page) was never built, so the department-scoped HOD branch
+      // that used to live here was validated but unreachable dead code. HOD
+      // still creates subjects via the semester-scoped shape below (Teaching
+      // Assignments page).
       if (session.role === "HOD") {
-        // A parent HOD may file the subject under their own department or any
-        // sub-department; body.department names which. A sub-HOD has no children,
-        // so this collapses to their own department either way.
-        const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
-        if (!body.department?.trim() && scope.ownDepartmentNames.length > 1) {
-          return NextResponse.json(
-            { error: "You manage more than one department - specify which department this subject belongs to" },
-            { status: 400 },
-          );
-        }
-        dept = body.department?.trim() || scope.ownDepartmentNames[0] || "";
-        if (!canHodEditDepartment(scope, dept)) {
-          return NextResponse.json(
-            { error: "That department is not yours or one of your sub-departments" },
-            { status: 403 },
-          );
-        }
-        // A sub-department borrows its parent's courses (it never has its own),
-        // so the course may belong to the target department itself or its parent.
-        const deptSnap = await db.collection("colleges").doc(session.collegeId).collection("departments")
-          .where("name", "==", dept).limit(1).get();
-        const deptDoc = deptSnap.empty ? null : (deptSnap.docs[0].data() as { parentDepartmentId?: string });
-        const deptId = deptSnap.empty ? null : deptSnap.docs[0].id;
-        const ownsDirectly = deptId === course.departmentId;
-        const ownsViaParent = !!deptDoc?.parentDepartmentId && deptDoc.parentDepartmentId === course.departmentId;
-        if (!ownsDirectly && !ownsViaParent) {
-          return NextResponse.json({ error: "Course does not belong to your department" }, { status: 403 });
-        }
-      } else {
+        return NextResponse.json(
+          { error: "Add this subject from Teaching Assignments instead - the course/year Subjects form isn't available to HOD." },
+          { status: 403 },
+        );
+      }
+
+      let dept: string;
+      {
         // Non-HOD callers (Principal/VP/Super Admin/Academics) aren't scoped to one
         // department, so the client may name which one it's targeting - but
         // only the course's own department or one of the departments it feeds
