@@ -14,6 +14,7 @@ import { AcademicYearSettingsCard } from "@/components/academics/AcademicYearSet
 import { DesignationCatalogCard } from "@/components/academics/DesignationCatalogCard";
 import { LeaveApprovalRoutingCard } from "@/components/leave/LeaveApprovalRoutingCard";
 import { LeaveVacationStaffCard } from "@/components/leave/LeaveVacationStaffCard";
+import { AttendanceNotPostedSettingsCard } from "@/components/attendance/AttendanceNotPostedSettingsCard";
 import type { FacultyNorms } from "@/types/core";
 
 interface CollegeInfo {
@@ -211,6 +212,8 @@ export default function PrincipalSettingsPage() {
       <LeaveApprovalRoutingCard />
 
       <LeaveVacationStaffCard />
+
+      <AttendanceNotPostedSettingsCard />
 
       <DesignationCatalogCard category="FACULTY" />
       {/* Supporting Staff splits into Technical and Non-Technical (see

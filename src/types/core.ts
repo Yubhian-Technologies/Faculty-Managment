@@ -2852,6 +2852,11 @@ export type NotificationType =
   | "LEAVE_OD_PROOF_VERIFIED"
   | "LEAVE_OD_PROOF_REJECTED"
   | "ATTENDANCE_MANUALLY_MARKED"
+  // Fired by the scheduled not-posted-attendance sweep (see
+  // lib/attendance/notPostedSettings.ts + api/cron/attendance-not-posted) -
+  // one per faculty per day, once the college's configured cutoff time has
+  // passed with at least one of their periods still unsubmitted.
+  | "ATTENDANCE_NOT_POSTED"
   // Permission & On-Duty
   | "PERMISSION_APPROVED"
   | "PERMISSION_REJECTED"

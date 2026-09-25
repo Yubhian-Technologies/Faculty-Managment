@@ -2,6 +2,9 @@
 
 # dependencies
 /node_modules
+# functions/ is a separate deploy target with its own npm install + tsc build
+functions/node_modules
+functions/lib
 /.pnp
 .pnp.*
 .yarn/*
