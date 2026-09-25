@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
-import { Plus, Pencil, Trash2, Check, X, GraduationCap, AlertTriangle } from "lucide-react";
+import { Plus, Pencil, Trash2, Check, X, GraduationCap, AlertTriangle, ChevronDown } from "lucide-react";
 import { toast } from "@/hooks/useToast";
 import { stripLeadingZeros } from "@/lib/utils";
 import { currentAcademicStartYear, deriveBatch } from "@/lib/college/academicSession";
@@ -155,6 +155,7 @@ export function CourseCatalogSettingsCard({ readOnly = false, regulationsOnly = 
 
   const [newDraft, setNewDraft] = useState<Draft>(EMPTY_DRAFT);
   const [isAdding, setIsAdding] = useState(false);
+  const [showAddForm, setShowAddForm] = useState(false);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState<Draft>(EMPTY_DRAFT);
@@ -234,6 +235,7 @@ export function CourseCatalogSettingsCard({ readOnly = false, regulationsOnly = 
         throw new Error(j.error ?? "Failed to add course");
       }
       setNewDraft(EMPTY_DRAFT);
+      setShowAddForm(false);
       toast({ variant: "success", title: "Course added to catalog" });
       load();
     } catch (e) {
@@ -348,56 +350,97 @@ export function CourseCatalogSettingsCard({ readOnly = false, regulationsOnly = 
         )}
       </CardHeader>
       <CardContent className="space-y-5">
-        {/* Add new - course details, then its regulations. */}
+        {/* Add new - hidden behind a CTA button, expands inline. */}
         {canCreate && (
-          <div className="space-y-4 rounded-lg border bg-muted/30 p-3">
-            <div className="space-y-1.5">
-              <Label className="text-xs font-semibold text-foreground">1. Course details</Label>
-              <div className="grid gap-3 sm:grid-cols-[1fr_140px_120px_auto] sm:items-end">
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Course Name</Label>
-                  <Input
-                    value={newDraft.name}
-                    onChange={(e) => setNewDraft((d) => ({ ...d, name: e.target.value }))}
-                    placeholder="e.g. Bachelor of Technology"
-                  />
+          <div className="space-y-3">
+            {!showAddForm ? (
+              <Button
+                variant="outline"
+                className="w-full border-dashed gap-2"
+                onClick={() => setShowAddForm(true)}
+              >
+                <Plus className="h-4 w-4" />
+                Add a Course
+                <ChevronDown className="h-4 w-4 ml-auto" />
+              </Button>
+            ) : (
+              <div className="space-y-4 rounded-lg border bg-muted/30 p-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-semibold">New Course</p>
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    className="h-7 w-7"
+                    onClick={() => { setShowAddForm(false); setNewDraft(EMPTY_DRAFT); }}
+                    aria-label="Close"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs">Short Code</Label>
-                  <Input
-                    value={newDraft.code}
-                    onChange={(e) => setNewDraft((d) => ({ ...d, code: e.target.value.toUpperCase() }))}
-                    placeholder="BTECH"
-                    className="uppercase"
-                    maxLength={10}
-                  />
+                  <Label className="text-xs font-semibold text-foreground">1. Course details</Label>
+                  <div className="grid gap-3 sm:grid-cols-[1fr_140px_120px] sm:items-end">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Course Name</Label>
+                      <Input
+                        value={newDraft.name}
+                        onChange={(e) => setNewDraft((d) => ({ ...d, name: e.target.value }))}
+                        placeholder="e.g. Bachelor of Technology"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Short Code</Label>
+                      <Input
+                        value={newDraft.code}
+                        onChange={(e) => setNewDraft((d) => ({ ...d, code: e.target.value.toUpperCase() }))}
+                        placeholder="BTECH"
+                        className="uppercase"
+                        maxLength={10}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Duration (years)</Label>
+                      <Input
+                        type="number"
+                        min={1}
+                        max={10}
+                        value={newDraft.durationYears}
+                        onChange={(e) => setNewDraft((d) => ({ ...d, durationYears: stripLeadingZeros(e.target.value) }))}
+                      />
+                    </div>
+                  </div>
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs">Duration (years)</Label>
-                  <Input
-                    type="number"
-                    min={1}
-                    max={10}
-                    value={newDraft.durationYears}
-                    onChange={(e) => setNewDraft((d) => ({ ...d, durationYears: stripLeadingZeros(e.target.value) }))}
+                  <Label className="text-xs font-semibold text-foreground">2. Regulations (optional - can add after too)</Label>
+                  <RegulationBatchesEditor
+                    draft={newDraft}
+                    setDraft={setNewDraft}
+                    courseDurationYears={Number(newDraft.durationYears) || 10}
+                    knownCodes={knownRegulationCodes}
+                    listId="new-course-regulations"
+                    showHint={!showDepartments}
                   />
                 </div>
-                <Button onClick={addItem} loading={isAdding} className="sm:mb-0.5">
-                  <Plus className="h-4 w-4 mr-1" /> Add
-                </Button>
+                <div className="flex justify-end gap-2 pt-1 border-t">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => { setShowAddForm(false); setNewDraft(EMPTY_DRAFT); }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={() => void addItem()}
+                    loading={isAdding}
+                  >
+                    <Plus className="h-3.5 w-3.5 mr-1" /> Add Course
+                  </Button>
+                </div>
               </div>
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs font-semibold text-foreground">2. Regulations (optional - can add after too)</Label>
-              <RegulationBatchesEditor
-                draft={newDraft}
-                setDraft={setNewDraft}
-                courseDurationYears={Number(newDraft.durationYears) || 10}
-                knownCodes={knownRegulationCodes}
-                listId="new-course-regulations"
-                showHint={!showDepartments}
-              />
-            </div>
+            )}
           </div>
         )}
 

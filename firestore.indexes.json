@@ -71,14 +71,42 @@
     { "collectionGroup": "leaveRequests", "queryScope": "COLLECTION_GROUP", "fields": [{ "fieldPath": "status", "order": "ASCENDING" }] },
     { "collectionGroup": "budgetRequests", "queryScope": "COLLECTION_GROUP", "fields": [{ "fieldPath": "status", "order": "ASCENDING" }] },
 
-    { "collectionGroup": "studentAttendance", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "sectionId", "order": "ASCENDING" }] },
-    { "collectionGroup": "studentAttendance", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "sectionId", "order": "ASCENDING" }, { "fieldPath": "date", "order": "ASCENDING" }] },
-    { "collectionGroup": "studentAttendance", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "facultyId", "order": "ASCENDING" }] },
-    { "collectionGroup": "studentAttendance", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "facultyId", "order": "ASCENDING" }, { "fieldPath": "date", "order": "ASCENDING" }] },
-    { "collectionGroup": "studentAttendance", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "subjectId", "order": "ASCENDING" }] },
-    { "collectionGroup": "studentAttendance", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "subjectId", "order": "ASCENDING" }, { "fieldPath": "date", "order": "ASCENDING" }] },
-    { "collectionGroup": "studentAttendance", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "department", "order": "ASCENDING" }, { "fieldPath": "date", "order": "ASCENDING" }] },
-    { "collectionGroup": "studentAttendance", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "date", "order": "ASCENDING" }] }
+    {
+      "collectionGroup": "studentAttendance",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "sectionId", "order": "ASCENDING" },
+        { "fieldPath": "date", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "studentAttendance",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "facultyId", "order": "ASCENDING" },
+        { "fieldPath": "date", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "studentAttendance",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "subjectId", "order": "ASCENDING" },
+        { "fieldPath": "date", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "studentAttendance",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "department", "order": "ASCENDING" },
+        { "fieldPath": "date", "order": "ASCENDING" }
+      ]
+    }
   ],
   "fieldOverrides": []
 }
