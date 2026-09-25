@@ -52,6 +52,17 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Department, Course and Semester are required" }, { status: 400 });
     }
     const year = Number(yearParam);
+    if (!Number.isFinite(year)) {
+      return NextResponse.json({ error: "Semester must be a valid number" }, { status: 400 });
+    }
+    // Never let a garbage minPct/maxPct silently no-op the filter (NaN
+    // comparisons are always false) - fail closed on a bad param instead.
+    if (minPctParam != null && !Number.isFinite(Number(minPctParam))) {
+      return NextResponse.json({ error: "minPct must be a valid number" }, { status: 400 });
+    }
+    if (maxPctParam != null && !Number.isFinite(Number(maxPctParam))) {
+      return NextResponse.json({ error: "maxPct must be a valid number" }, { status: 400 });
+    }
 
     const db = getAdminDb();
     const collegeRef = db.collection("colleges").doc(session.collegeId);
