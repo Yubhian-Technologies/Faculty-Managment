@@ -11,11 +11,12 @@ import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { getActiveSubstitutionsForDates, currentWeekDateKeys } from "@/lib/leave/periodCoverage";
 import { resolveSectionCurrentSemester, resolveRequestedSemester, matchesCurrentSemester } from "@/lib/college/semester";
-import { resolveTimetableAcademicYear, matchesCurrentAcademicYear } from "@/lib/college/academicSession";
+import { matchesCurrentAcademicYear } from "@/lib/college/academicSession";
 import { isTimetableIncharge } from "@/lib/departments/timetableIncharge";
 import { isFacultyAvailable } from "@/types";
 import type { Department, SubjectType, TeachingAssignment, TimetableSlot } from "@/types";
 import { loadDepartmentIndex, stampDepartmentIds } from "@/lib/departments/stampIds";
+import { resolveCollegeAcademicYear } from "@/lib/college/collegeAcademicYear";
 
 export async function GET(request: Request) {
   try {
@@ -440,10 +441,7 @@ export async function POST(request: Request) {
       // booked here has to be tagged and conflict-checked against the SAME
       // session's own slots, never a past cohort's - see
       // lib/college/academicSession.ts's own doc-comment.
-      const sessionSnap = await collegeRef.collection("academicSessions").where("isCurrent", "==", true).limit(1).get();
-      const currentAcademicYear = resolveTimetableAcademicYear(
-        sessionSnap.empty ? undefined : (sessionSnap.docs[0].data() as { label?: string }).label
-      );
+      const currentAcademicYear = await resolveCollegeAcademicYear(db, session.collegeId);
 
       // Conflict check: this faculty already teaching this exact section+subject
       // IN THIS SAME SEMESTER? Only applies to current assignments - past ones

@@ -60,6 +60,10 @@ export async function PUT(request: Request) {
       minimumQualifications: body.minimumQualifications ?? current.minimumQualifications,
       positionNorms: body.positionNorms ?? current.positionNorms,
       newJoiningYears: Number(body.newJoiningYears ?? current.newJoiningYears),
+      academicYearStartMonth: Number(body.academicYearStartMonth ?? current.academicYearStartMonth ?? 4),
+      academicYearStartDay: Number(body.academicYearStartDay ?? current.academicYearStartDay ?? 1),
+      academicYearEndMonth: Number(body.academicYearEndMonth ?? current.academicYearEndMonth ?? 3),
+      academicYearEndDay: Number(body.academicYearEndDay ?? current.academicYearEndDay ?? 31),
       updatedAt: new Date() as unknown as FacultyNorms["updatedAt"],
       updatedByName: session.email || "Unknown",
     };
@@ -77,6 +81,31 @@ export async function PUT(request: Request) {
     }
     if (!Number.isFinite(settings.newJoiningYears) || settings.newJoiningYears < 0 || settings.newJoiningYears > 100) {
       issues.push("newJoiningYears must be a finite number between 0 and 100");
+    }
+    // The day the academic year begins. The YEAR is never stored - it is
+    // derived from today against this cutoff (see currentAcademicStartYear),
+    // which is what lets it roll over on its own.
+    const m = settings.academicYearStartMonth ?? NaN;
+    const d = settings.academicYearStartDay ?? NaN;
+    if (!Number.isInteger(m) || m < 1 || m > 12) {
+      issues.push("academicYearStartMonth must be a month number between 1 and 12");
+    }
+    // 1-31 regardless of the month: a 31st cutoff in a 30-day month is the
+    // caller's problem to avoid, and rejecting it here would mean encoding a
+    // month-length table for a field nobody sets to 31 in practice.
+    if (!Number.isInteger(d) || d < 1 || d > 31) {
+      issues.push("academicYearStartDay must be a day between 1 and 31");
+    }
+    const em = settings.academicYearEndMonth ?? NaN;
+    const ed = settings.academicYearEndDay ?? NaN;
+    if (!Number.isInteger(em) || em < 1 || em > 12) {
+      issues.push("academicYearEndMonth must be a month number between 1 and 12");
+    }
+    if (!Number.isInteger(ed) || ed < 1 || ed > 31) {
+      issues.push("academicYearEndDay must be a day between 1 and 31");
+    }
+    if (em === m && ed === d) {
+      issues.push("The academic year cannot start and end on the same day");
     }
     if (issues.length > 0) {
       return NextResponse.json({ error: "Invalid settings", issues }, { status: 400 });
@@ -142,6 +171,8 @@ export async function PUT(request: Request) {
       details: {
         newJoiningYears: settings.newJoiningYears,
         studentFacultyRatio: settings.studentFacultyRatio,
+        academicYearStart: `${settings.academicYearStartDay}/${settings.academicYearStartMonth}`,
+        academicYearEnd: `${settings.academicYearEndDay}/${settings.academicYearEndMonth}`,
         ...(leaveApprovalRouting ? { leaveApprovalRouting } : {}),
         ...(leaveVacationRoles ? { leaveVacationRoles } : {}),
       },

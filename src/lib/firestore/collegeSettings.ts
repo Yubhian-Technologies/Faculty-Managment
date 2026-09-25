@@ -20,6 +20,11 @@ export const DEFAULT_COLLEGE_SETTINGS: Omit<FacultyNorms, "updatedAt" | "updated
     { designation: "Assistant Professor", requiredPerDept: 3 },
   ],
   newJoiningYears: 1,
+  // April 1 - the cutoff hardcoded everywhere before this became a setting.
+  academicYearStartMonth: 4,
+  academicYearStartDay: 1,
+  academicYearEndMonth: 3,
+  academicYearEndDay: 31,
 };
 
 export function collegeSettingsRef(db: Firestore, collegeId: string) {
