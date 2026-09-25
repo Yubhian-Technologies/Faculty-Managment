@@ -526,13 +526,31 @@ function seatRolesOf(primary: UserRole, roles: readonly UserRole[]): UserRole[] 
 // Empty for a login with no seats (nothing to switch between). `roles` lists
 // seat roles most senior first, so the first context is the default.
 // A head of several departments gets one context per department ("HOD - CSE").
+//
+// An HOD context's key always carries its department (`HOD:<dept>`), even
+// with exactly one department - only the LABEL collapses to plain "Head of
+// Department" when there's just one, to keep the switcher uncluttered. The
+// key has to carry it regardless: useWorkContext's syncActiveHodCookie reads
+// the department straight out of this key via departmentOfContext(), and the
+// server-side "Working as HOD" override in requireRole (verifySession.ts)
+// depends on that cookie being set to tell an HOD seat apart from a more
+// senior role/seat the same login also holds (e.g. a College Admin who is
+// also one department's HOD). A bare "HOD" key made departmentOfContext()
+// return null, so the cookie was never set for a single-department HOD, and
+// such a login's API calls silently resolved as their senior role instead -
+// e.g. a College-Admin-and-HOD's Faculty Register call hit no HOD branch at
+// all and came back with the WHOLE college's roster instead of just their
+// department's.
 export function getWorkContexts(primary: UserRole, roles: readonly UserRole[] = [], hodDepartments: readonly string[] = []): WorkContext[] {
   const seats = seatRolesOf(primary, roles);
   if (seats.length === 0) return [];
   return [
     ...seats.flatMap((r): WorkContext[] =>
-      r === "HOD" && hodDepartments.length > 1
-        ? hodDepartments.map((d) => ({ key: hodContextKey(d) as WorkContextKey, label: `${ROLE_LABELS.HOD} - ${d}` }))
+      r === "HOD" && hodDepartments.length > 0
+        ? hodDepartments.map((d) => ({
+            key: hodContextKey(d) as WorkContextKey,
+            label: hodDepartments.length > 1 ? `${ROLE_LABELS.HOD} - ${d}` : ROLE_LABELS.HOD,
+          }))
         : [{ key: r as WorkContextKey, label: ROLE_LABELS[r] }]
     ),
     { key: "ME" as WorkContextKey, label: "My Work" },

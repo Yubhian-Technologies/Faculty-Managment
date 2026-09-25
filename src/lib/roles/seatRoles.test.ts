@@ -142,7 +142,15 @@ describe("working-as contexts", () => {
     const ctx = getWorkContexts("PANEL_MEMBER", ["HOD", "PANEL_MEMBER"] as never, ["CSE", "ECE"]);
     expect(ctx.map((c) => c.key)).toEqual(["HOD:CSE", "HOD:ECE", "ME"]);
     expect(ctx[0].label).toBe("Head of Department - CSE");
-    expect(getWorkContexts("PANEL_MEMBER", ["HOD", "PANEL_MEMBER"] as never, ["CSE"]).map((c) => c.key)).toEqual(["HOD", "ME"]);
+    // A single-department HOD still gets a department-qualified key ("HOD:CSE", not
+    // bare "HOD") - syncActiveHodCookie/departmentOfContext needs it to set the
+    // "Working as HOD" cookie, or a login who also holds a more senior seat/role
+    // (e.g. College Admin) never gets the server-side HOD override in requireRole
+    // and their API calls silently resolve as that senior role instead. Only the
+    // LABEL collapses for a single department, to keep the switcher uncluttered.
+    const single = getWorkContexts("PANEL_MEMBER", ["HOD", "PANEL_MEMBER"] as never, ["CSE"]);
+    expect(single.map((c) => c.key)).toEqual(["HOD:CSE", "ME"]);
+    expect(single[0].label).toBe("Head of Department");
     const hrefs = getNavItemsForContext("PANEL_MEMBER", ["HOD", "PANEL_MEMBER"] as never, "HOD:ECE").map((i) => i.href);
     expect(hrefs).toContain("/hod/leave-approvals");
     expect(resolveWorkContext("PANEL_MEMBER", ["HOD", "PANEL_MEMBER"] as never, "HOD:ECE", "/hod/students", ["CSE", "ECE"])).toBe("HOD:ECE");
