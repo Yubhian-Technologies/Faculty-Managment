@@ -45,6 +45,9 @@
     { "collectionGroup": "students", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "department", "order": "ASCENDING" }, { "fieldPath": "year", "order": "ASCENDING" }] },
     { "collectionGroup": "students", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "secondaryDepartment", "order": "ASCENDING" }, { "fieldPath": "section", "order": "ASCENDING" }, { "fieldPath": "year", "order": "ASCENDING" }] },
     { "collectionGroup": "students", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "secondaryDepartment", "order": "ASCENDING" }, { "fieldPath": "year", "order": "ASCENDING" }] },
+    { "collectionGroup": "students", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "department", "order": "ASCENDING" }, { "fieldPath": "courseId", "order": "ASCENDING" }, { "fieldPath": "section", "order": "ASCENDING" }, { "fieldPath": "year", "order": "ASCENDING" }] },
+    { "collectionGroup": "students", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "secondaryDepartment", "order": "ASCENDING" }, { "fieldPath": "courseId", "order": "ASCENDING" }, { "fieldPath": "section", "order": "ASCENDING" }, { "fieldPath": "year", "order": "ASCENDING" }] },
+    { "collectionGroup": "students", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "department", "order": "ASCENDING" }, { "fieldPath": "year", "order": "ASCENDING" }, { "fieldPath": "rollNumber", "order": "ASCENDING" }, { "fieldPath": "section", "order": "ASCENDING" }] },
 
     { "collectionGroup": "salaryRecords", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "facultyId", "order": "ASCENDING" }, { "fieldPath": "year", "order": "DESCENDING" }, { "fieldPath": "month", "order": "DESCENDING" }] },
     { "collectionGroup": "salaryRecords", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "department", "order": "ASCENDING" }, { "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "year", "order": "DESCENDING" }] },
