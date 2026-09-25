@@ -24,6 +24,11 @@ export interface Column<T> {
   // exports as "true"/"false") - set this to export a display-friendly string
   // instead (e.g. "Active"/"Inactive"), matching what `render` shows on screen.
   csvValue?: (row: T) => string;
+  // For a display-only column with no corresponding row field (e.g. an
+  // actions column of buttons/links) - without this, CSV export would emit
+  // a spurious column with an empty header and empty cells in every row,
+  // since there's no real value at row[col.key] to read.
+  excludeFromCsv?: boolean;
 }
 
 interface DataTableProps<T extends Record<string, unknown>> {
@@ -118,10 +123,11 @@ export function DataTable<T extends Record<string, unknown>>({
 
   const handleExport = () => {
     if (!csvFilename) return;
+    const exportColumns = columns.filter((c) => !c.excludeFromCsv);
     // Columns with a csvValue override get their display string baked into a
     // cloned row under the same key, so exportToCSV's plain row[key] read
     // picks up the formatted value instead of the raw field.
-    const csvColumns = columns.filter((c) => c.csvValue);
+    const csvColumns = exportColumns.filter((c) => c.csvValue);
     const rows = csvColumns.length === 0
       ? filtered
       : filtered.map((row) => {
@@ -135,7 +141,7 @@ export function DataTable<T extends Record<string, unknown>>({
       // A ReactNode header (e.g. a "select all" checkbox column) has no
       // sensible CSV text - falls back to the column key rather than
       // producing a blank header cell.
-      columns.map((c) => ({ key: c.key, header: typeof c.header === "string" ? c.header : c.key }))
+      exportColumns.map((c) => ({ key: c.key, header: typeof c.header === "string" ? c.header : c.key }))
     );
   };
 
