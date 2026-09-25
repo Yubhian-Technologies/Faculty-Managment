@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { FileText, Printer, Download } from "lucide-react";
 import type { Circular } from "@/types/circular";
+import { audienceSummary } from "@/lib/circular/audienceSummary";
 
 function fmtDate(d: unknown): string {
   try {
@@ -39,8 +40,7 @@ export function CircularViewer({ circularId }: { circularId?: string }) {
         <div className="whitespace-pre-wrap leading-relaxed text-sm">{circular.body}</div>
 
         <div className="flex flex-wrap gap-2 text-xs text-muted-foreground border-t pt-4">
-          <span>Audience: {circular.audience.employeeType}</span>
-          <span>· Departments: {circular.audience.departmentNames?.join(", ") || circular.audience.departmentIds.join(", ") || "All"}</span>
+          <span>Audience: {audienceSummary(circular.audience)}</span>
         </div>
 
         {circular.attachments?.length > 0 && (

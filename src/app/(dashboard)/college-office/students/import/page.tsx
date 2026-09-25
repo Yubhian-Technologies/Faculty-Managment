@@ -22,9 +22,7 @@ import type { Department, Course, AcademicYear } from "@/types";
 // When arriving from a section card's "Add Students" button, the section is
 // already known - those 3 columns are fixed for the whole file instead of
 // being asked of every row.
-const LOCKED_KEYS = ["department", "section", "year"];
-
-// ─── Template definition ───────────────────────────────────────────────────────
+// ─── Template definition ───────────────────────────────────────────────
 // S.No is a convenience column for the sheet author only (not stored) - every
 // other required column is required so a single file can cover the whole
 // college's intake, across every department, in one go.
@@ -32,8 +30,7 @@ const LOCKED_KEYS = ["department", "section", "year"];
 // The Office only knows a fresh student's basic details and which branch
 // (department) they're admitted into - section is still assigned later by the
 // department (the sub-HOD divides students into sections), so it's
-// deliberately NOT a column here (see LOCKED_KEYS above for the one case
-// where it's already known). Roll Number IS accepted, but only as an
+// deliberately NOT a column here. Roll Number IS accepted, but only as an
 // optional admission-office reference (e.g. a provisional number from the
 // admissions sheet) - it's not validated for department/section uniqueness
 // until the department later assigns the real one.
@@ -61,16 +58,27 @@ const COLUMNS = ROSTER_FIELDS.map((f) => ({
   ...(f.aliases ? { aliases: f.aliases } : {}),
 }));
 
-// Course/Department/Academic Year are picked once via dropdown, for the whole
-// file, instead of typed per-row - a misspelled or differently-worded value
+// Course/Department/Academic Year are picked once via a mandatory dropdown, for the whole
+// file — never typed per-row. A misspelled or differently-worded value
 // for one of these three (e.g. "CSE" vs "Computer Science and Engineering")
 // was the most common way a row failed to resolve. Reuses the exact same
 // field defs (and FieldInput's own narrowing/validation) as the Add/Edit form.
-const PICKER_KEYS = ["course", "department", "year"];
+const PICKER_KEYS = ["course", "department", "year"] as const;
 const PICKER_FIELDS = PICKER_KEYS.map((k) => ROSTER_FIELDS.find((f) => f.key === k)!);
 
+// These fields are always supplied via the mandatory dropdown, never per-row.
+const PICKER_KEY_SET = new Set<string>(PICKER_KEYS);
+const TEMPLATE_COLUMNS = COLUMNS.filter((c) => !PICKER_KEY_SET.has(c.key));
+
+// Section-locked mode (arriving from a section card's own "Add Students"
+// button) only ever supplies Department/Section/Year via the URL - it has no
+// Course picker, so Course must stay a per-row template column there, unlike
+// the dropdown-driven mode above which supplies all three.
+const LOCKED_KEY_SET = new Set(["department", "year"]);
+const LOCKED_TEMPLATE_COLUMNS = COLUMNS.filter((c) => !LOCKED_KEY_SET.has(c.key));
+
 const HINTS = [
-  "Only the basic details you know at admission are needed - Name, Course, Department (branch) and Academic Year are required; everything else is optional. The Template sheet's row 2 states each column's own Required/Optional rule.",
+  "Course, Department and Academic Year are selected once above — they are not columns in the file. Name is the only required field in the file.",
   "Name (as per SSC): enter the name exactly as it appears on the student's SSC (10th) certificate - this is the name used on statutory/academic paperwork.",
   "Section is NOT collected here - the department assigns it later (the sub-HOD divides students into sections). Every student is imported as \"unassigned\" until then. Roll No, if you already have a provisional one, is accepted but not checked for uniqueness until the department assigns the real one.",
   "Department accepts the full AICTE-standard department name (e.g. \"Computer Science and Engineering\", not \"CSE\") or the short Code, as added on your college - a \"Branch\" column in your sheet is read the same way.",
@@ -103,19 +111,16 @@ export default function OfficeStudentImportPage() {
   const isLocked = !!(sectionId && lockedSection && lockedDepartment && lockedYear);
   const backHref = "/college-office";
 
-  // General-purpose counterpart to the section-locked (URL) mode above: the
-  // office picks Course/Department/Academic Year once via dropdown instead of
-  // per row. dropdownLocked only applies when the section context isn't
-  // already known - the two locking modes are mutually exclusive.
+  // Course/Department/Academic Year are picked once via a mandatory dropdown, for the whole
+  // file — never typed per-row.
   const [pickValues, setPickValues] = useState<Record<string, string>>({ course: "", department: "", year: "" });
-  const dropdownLocked = !isLocked && !!(pickValues.course && pickValues.department && pickValues.year);
-  const locked = isLocked || dropdownLocked;
+  const dropdownComplete = !!(pickValues.course && pickValues.department && pickValues.year);
+  const locked = isLocked || dropdownComplete;
 
-  const columns = isLocked
-    ? COLUMNS.filter((c) => !LOCKED_KEYS.includes(c.key))
-    : dropdownLocked
-      ? COLUMNS.filter((c) => !PICKER_KEYS.includes(c.key))
-      : COLUMNS;
+  // Locked mode supplies Department/Year via the URL but has no Course
+  // picker (Course stays a per-row column there); dropdown mode supplies
+  // all three via the mandatory dropdown above.
+  const columns = isLocked ? LOCKED_TEMPLATE_COLUMNS : TEMPLATE_COLUMNS;
 
   const fileRef = useRef<HTMLInputElement>(null);
   const [rows, setRows] = useState<ParsedRow[]>([]);
@@ -183,7 +188,7 @@ export default function OfficeStudentImportPage() {
     // seed the fix form from whatever context supplied them, so the office
     // isn't asked to re-pick values it already gave once for the whole file.
     if (isLocked) { form.department = lockedDepartment; form.year = lockedYear; }
-    if (dropdownLocked) { form.department = pickValues.department; form.course = pickValues.course; form.year = pickValues.year; }
+    else { form.department = pickValues.department; form.course = pickValues.course; form.year = pickValues.year; }
     // Best-effort pre-resolve: a short code (or a genuinely wrong value)
     // won't match any real name, in which case the Select is simply left
     // blank for the office to pick correctly - same as a fresh Add.
@@ -396,7 +401,7 @@ export default function OfficeStudentImportPage() {
         title="Import Students"
         description={isLocked
           ? `Bulk upload students directly into Section ${lockedSection} - from a CSV/Excel file`
-          : "Bulk upload the student roster - from a CSV/Excel file, into the Course, Department and Academic Year you select below"}
+          : "Select Course, Department & Academic Year below, then upload the student roster"}
         actions={
           <Button variant="outline" asChild>
             <Link href={backHref}><ArrowLeft className="h-4 w-4 mr-1" />Back to Dashboard</Link>
@@ -404,14 +409,12 @@ export default function OfficeStudentImportPage() {
         }
       />
 
-
-
       {!isLocked && (
         <Card>
           <CardHeader><CardTitle className="text-base flex items-center gap-2"><span className="h-6 w-6 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center font-bold">1</span>Select Course, Department &amp; Academic Year</CardTitle></CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              Every row in the file will be imported under this Course, Department and Academic Year - the file itself no longer needs its own columns for them, so a misspelled or differently-worded department/course name can&apos;t break the import.
+              Course, Department and Academic Year are required for the whole file — set them once here instead of typing them per row. Every student in this import will belong to these values.
             </p>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               {PICKER_FIELDS.map((field) => (
@@ -427,8 +430,8 @@ export default function OfficeStudentImportPage() {
                 />
               ))}
             </div>
-            {!dropdownLocked && (
-              <p className="text-xs text-amber-700">Select all three to continue.</p>
+            {!dropdownComplete && (
+              <p className="text-xs text-amber-700">Select all three above to continue.</p>
             )}
           </CardContent>
         </Card>

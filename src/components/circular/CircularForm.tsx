@@ -8,12 +8,16 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/useToast";
 import { FileUpload } from "@/components/shared/FileUpload";
-import type { EmployeeScope } from "@/types/circular";
+import type { EmployeeScope, CircularRecipientKind } from "@/types/circular";
+
+const STUDENT_YEARS = [1, 2, 3, 4];
 
 export function CircularForm({ onCreated }: { onCreated?: (id: string) => void }) {
   const [departments, setDepartments] = useState<{ id: string; name: string }[]>([]);
   const [messageFromOptions, setMessageFromOptions] = useState<string[]>(["Management", "Principal", "Dean", "HOD"]);
+  const [recipientKind, setRecipientKind] = useState<CircularRecipientKind>("STAFF");
   const [employeeType, setEmployeeType] = useState<EmployeeScope>("ALL");
+  const [targetYears, setTargetYears] = useState<number[]>([]);
   const [deptIds, setDeptIds] = useState<string[]>([]);
   const [date, setDate] = useState<string>(new Date().toISOString().slice(0, 10));
   const [subject, setSubject] = useState("");
@@ -55,6 +59,7 @@ export function CircularForm({ onCreated }: { onCreated?: (id: string) => void }
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           subject, body, date, employeeType, departmentIds: deptIds, departmentNames: selectedDeptNames, messageFrom,
+          recipientKind, targetYears: recipientKind === "STUDENTS" ? targetYears : [],
           attachments: uploaded ? [uploaded] : [],
         }),
       });
@@ -81,12 +86,33 @@ export function CircularForm({ onCreated }: { onCreated?: (id: string) => void }
       <CardContent className="space-y-4">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <div>
-            <Label>Employee type</Label>
-            <Select value={employeeType} onValueChange={(v) => setEmployeeType(v as EmployeeScope)}>
+            <Label>Recipients</Label>
+            <Select value={recipientKind} onValueChange={(v) => setRecipientKind(v as CircularRecipientKind)}>
               <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent><SelectItem value="ALL">All</SelectItem><SelectItem value="TEACHING">Teaching</SelectItem><SelectItem value="NON_TEACHING">Non-Teaching</SelectItem></SelectContent>
+              <SelectContent><SelectItem value="STAFF">Faculty / Staff</SelectItem><SelectItem value="STUDENTS">Students</SelectItem></SelectContent>
             </Select>
           </div>
+          {recipientKind === "STAFF" ? (
+            <div>
+              <Label>Employee type</Label>
+              <Select value={employeeType} onValueChange={(v) => setEmployeeType(v as EmployeeScope)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent><SelectItem value="ALL">All</SelectItem><SelectItem value="TEACHING">Teaching</SelectItem><SelectItem value="NON_TEACHING">Non-Teaching</SelectItem></SelectContent>
+              </Select>
+            </div>
+          ) : (
+            <div>
+              <Label>Academic year (empty = all)</Label>
+              <div className="mt-1 flex flex-wrap gap-2">
+                {STUDENT_YEARS.map((y) => (
+                  <label key={y} className="flex items-center gap-1.5 rounded border px-2 py-1 text-sm">
+                    <input type="checkbox" checked={targetYears.includes(y)} onChange={(e) => setTargetYears((prev) => e.target.checked ? [...prev, y] : prev.filter((x) => x !== y))} />
+                    Year {y}
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
           <div>
             <Label>Date</Label>
             <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
@@ -99,6 +125,12 @@ export function CircularForm({ onCreated }: { onCreated?: (id: string) => void }
             </Select>
           </div>
         </div>
+
+        {recipientKind === "STUDENTS" && (
+          <p className="text-xs text-muted-foreground -mt-2">
+            Students have no login - this will be emailed directly to each matched student&apos;s email on file. A student with no email recorded won&apos;t receive it.
+          </p>
+        )}
 
         <div>
           <Label>Departments (empty = all)</Label>

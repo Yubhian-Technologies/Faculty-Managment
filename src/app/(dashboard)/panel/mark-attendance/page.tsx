@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { CalendarClock, Info, Lock, Pencil, RefreshCw, Clock } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { CalendarClock, Info, Lock, Pencil, RefreshCw, Clock, CloudOff, CloudUpload } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/useToast";
+import { enqueueSubmission, getQueue, trySyncQueue, type QueuedSubmission } from "@/lib/attendance/offlineSubmitQueue";
 import type { StudentAttendanceMark, StudentAttendanceSession } from "@/types";
 
 const PERIOD_POLL_MS = 30_000;
@@ -101,6 +102,11 @@ export default function MarkAttendancePage() {
   const [dateStr, setDateStr] = useState<string>(todayStr());
   const [isLoadingPeriods, setIsLoadingPeriods] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  // Mirrors expandedId for syncPendingSubmissions below, which needs to read
+  // the current value without depending on it (its own useCallback is
+  // intentionally kept stable across renders - see that comment).
+  const expandedIdRef = useRef<string | null>(null);
+  useEffect(() => { expandedIdRef.current = expandedId; }, [expandedId]);
 
   const [attendanceSession, setAttendanceSession] = useState<StudentAttendanceSession | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -110,15 +116,71 @@ export default function MarkAttendancePage() {
   const [classNotes, setClassNotes] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  async function fetchTodayPeriods() {
+  // Sessions with a submission saved locally, not yet confirmed synced to
+  // the server (see lib/attendance/offlineSubmitQueue.ts) - read from
+  // localStorage on mount so a page reload while still offline immediately
+  // shows what's actually pending, not a stale "not submitted" state.
+  const [queuedIds, setQueuedIds] = useState<Set<string>>(() => new Set(getQueue().map((q) => q.sessionId)));
+  const [isSyncingQueue, setIsSyncingQueue] = useState(false);
+
+  const syncPendingSubmissions = useCallback(async () => {
+    if (getQueue().length === 0) return;
+    setIsSyncingQueue(true);
+    try {
+      const outcomes = await trySyncQueue();
+      setQueuedIds(new Set(getQueue().map((q) => q.sessionId)));
+      const synced = outcomes.filter((o) => o.result === "synced").length;
+      if (synced > 0) {
+        toast({ variant: "success", title: `${synced} saved attendance record${synced === 1 ? "" : "s"} submitted` });
+        const fresh = await fetchTodayPeriods();
+        // If the period that just synced is the one still expanded on
+        // screen, its `attendanceSession` copy is otherwise stuck showing
+        // the stale pre-sync DRAFT - `isReadOnly` would briefly read false
+        // again (queuedIds no longer has it, but attendanceSession.status
+        // hasn't caught up), letting the faculty try to re-mark a session
+        // that's actually already SUBMITTED. Pull the fresh copy in.
+        const currentExpandedId = expandedIdRef.current;
+        const match = currentExpandedId ? fresh.find((p) => p.sessionId === currentExpandedId) : null;
+        if (match?.session) {
+          setAttendanceSession(match.session);
+          setDraft(Object.fromEntries(match.session.entries.map((e) => [e.studentId, e.status])));
+          setClassNotes(match.session.classNotes ?? "");
+        }
+      }
+      for (const o of outcomes) {
+        if (o.result === "conflict") {
+          toast({ variant: "destructive", title: "A locally saved submission couldn't sync", description: `${o.error} - contact your Department Office.` });
+        } else if (o.result === "rejected") {
+          toast({ variant: "destructive", title: "A locally saved submission was rejected", description: o.error });
+        }
+      }
+    } finally {
+      setIsSyncingQueue(false);
+    }
+  }, []);
+
+  // Retry as soon as the browser reports connectivity again, in addition to
+  // the mount-time attempt below - covers "opened this page while offline,
+  // it comes back while they're still sitting on it" without waiting for a
+  // manual refresh.
+  useEffect(() => {
+    const handler = () => void syncPendingSubmissions();
+    window.addEventListener("online", handler);
+    return () => window.removeEventListener("online", handler);
+  }, [syncPendingSubmissions]);
+
+  async function fetchTodayPeriods(): Promise<TodayPeriod[]> {
     try {
       const res = await fetch("/api/college/student-attendance/today-periods");
       if (!res.ok) throw new Error("Failed to load periods");
       const json = (await res.json()) as TodayPeriodsResponse;
-      setPeriods(json.periods ?? []);
+      const fetched = json.periods ?? [];
+      setPeriods(fetched);
       setDateStr(json.date ?? todayStr());
+      return fetched;
     } catch {
       setPeriods([]);
+      return [];
     } finally {
       setIsLoadingPeriods(false);
     }
@@ -129,6 +191,9 @@ export default function MarkAttendancePage() {
   useEffect(() => {
     void (async () => {
       await fetchTodayPeriods();
+      // Anything queued from a previous offline session (this device, any
+      // time before now) gets one sync attempt as soon as the page opens.
+      await syncPendingSubmissions();
     })();
     const id = setInterval(() => {
       void (async () => {
@@ -136,7 +201,24 @@ export default function MarkAttendancePage() {
       })();
     }, PERIOD_POLL_MS);
     return () => clearInterval(id);
-  }, []);
+    // syncPendingSubmissions is a stable useCallback (empty deps) - adding
+    // it here doesn't cause extra re-runs, just satisfies the linter.
+  }, [syncPendingSubmissions]);
+
+  // A queued-but-not-yet-synced submission for this session is what will
+  // actually reach the server once connectivity returns - if one exists,
+  // that's what re-opening the period should show, not the server's own
+  // (necessarily stale, since the sync hasn't landed yet) DRAFT entries.
+  function overlayQueued(session: StudentAttendanceSession): { draft: Record<string, StudentAttendanceMark | null>; classNotes: string } {
+    const queued = getQueue().find((q: QueuedSubmission) => q.sessionId === session.id);
+    if (queued) {
+      const draft: Record<string, StudentAttendanceMark | null> = {};
+      for (const e of session.entries) draft[e.studentId] = null;
+      for (const e of queued.entries) draft[e.studentId] = e.status as StudentAttendanceMark | null;
+      return { draft, classNotes: queued.classNotes };
+    }
+    return { draft: Object.fromEntries(session.entries.map((e) => [e.studentId, e.status])), classNotes: session.classNotes ?? "" };
+  }
 
   async function handleOpenPeriod(p: TodayPeriod) {
     if (!p.isOpen) return;
@@ -144,9 +226,10 @@ export default function MarkAttendancePage() {
     if (p.session && p.session.entries?.length) {
       setExpandedId(p.sessionId);
       setAttendanceSession(p.session as StudentAttendanceSession);
-      setDraft(Object.fromEntries(p.session.entries.map((e) => [e.studentId, e.status])));
+      const { draft, classNotes } = overlayQueued(p.session as StudentAttendanceSession);
+      setDraft(draft);
+      setClassNotes(classNotes);
       setMode(null);
-      setClassNotes(p.session.classNotes ?? "");
       setLoadError(null);
       return;
     }
@@ -165,9 +248,10 @@ export default function MarkAttendancePage() {
         return;
       }
       setAttendanceSession(json.session);
-      setDraft(Object.fromEntries(json.session.entries.map((e) => [e.studentId, e.status])));
+      const { draft, classNotes } = overlayQueued(json.session);
+      setDraft(draft);
+      setClassNotes(classNotes);
       setMode(null);
-      setClassNotes(json.session.classNotes ?? "");
       // refresh periods list to reflect newly created DRAFT
       void fetchTodayPeriods();
     } catch {
@@ -193,9 +277,15 @@ export default function MarkAttendancePage() {
     setDraft((prev) => ({ ...prev, [studentId]: checked ? meaning : opposite }));
   }
 
+  const isQueuedPending = !!attendanceSession && queuedIds.has(attendanceSession.id);
   const markedCount = attendanceSession ? attendanceSession.entries.filter((e) => draft[e.studentId] != null).length : 0;
   const allMarked = !!attendanceSession && (attendanceSession.totalStudents === 0 || markedCount === attendanceSession.totalStudents);
-  const isReadOnly = attendanceSession?.status === "SUBMITTED";
+  // A queued-pending submission is treated the same as a real SUBMITTED one
+  // - it represents the faculty's finished, locked-in marks, just not
+  // confirmed synced yet. Re-opening it and editing further would blur
+  // "did I already submit this" in a way the existing "once submitted,
+  // cannot be edited" rule is designed to avoid.
+  const isReadOnly = attendanceSession?.status === "SUBMITTED" || isQueuedPending;
   const expandedPeriod = periods.find((p) => p.sessionId === expandedId) ?? null;
   const isExpandedOpen = expandedPeriod?.isOpen ?? false;
   const hasClassWorkRecord = classNotes.trim().length > 0;
@@ -205,12 +295,38 @@ export default function MarkAttendancePage() {
   async function handleSubmit() {
     if (!attendanceSession || !canSubmit) return;
     setIsSubmitting(true);
+    const entries = attendanceSession.entries.map((e) => ({
+      studentId: e.studentId,
+      status: draft[e.studentId] ?? null,
+    }));
+    const expectedUpdatedAt = updatedAtIso(attendanceSession);
+
+    function queueLocally() {
+      enqueueSubmission({
+        sessionId: attendanceSession!.id,
+        assignmentId: attendanceSession!.assignmentId,
+        date: attendanceSession!.date,
+        periodNumber: attendanceSession!.periodNumber ?? expandedPeriod?.periodNumber ?? null,
+        subjectName: attendanceSession!.subjectName,
+        sectionName: attendanceSession!.sectionName,
+        entries,
+        classNotes,
+        expectedUpdatedAt,
+      });
+      setQueuedIds((prev) => new Set(prev).add(attendanceSession!.id));
+      toast({ variant: "success", title: "Saved on this device", description: "No network right now - this will submit automatically once you're back online." });
+    }
+
+    // Already known offline - skip the round-trip/timeout entirely and
+    // queue straight away, same outcome as the catch block below but
+    // without waiting on a fetch that can only fail.
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      queueLocally();
+      setIsSubmitting(false);
+      return;
+    }
+
     try {
-      const entries = attendanceSession.entries.map((e) => ({
-        studentId: e.studentId,
-        status: draft[e.studentId] ?? null,
-      }));
-      const expectedUpdatedAt = updatedAtIso(attendanceSession);
       const res = await fetch(`/api/college/student-attendance/${attendanceSession.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -233,7 +349,16 @@ export default function MarkAttendancePage() {
       toast({ variant: "success", title: "Attendance submitted successfully" });
       void fetchTodayPeriods();
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to submit attendance" });
+      // A thrown fetch (network unreachable - TypeError, "Failed to fetch"
+      // in Chrome / "NetworkError..." in Firefox) is indistinguishable by
+      // shape from the plain Error thrown above for a real server rejection,
+      // but only the former actually means "we're offline" - that's the one
+      // case worth queuing instead of just failing.
+      if (err instanceof TypeError) {
+        queueLocally();
+      } else {
+        toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to submit attendance" });
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -253,6 +378,18 @@ export default function MarkAttendancePage() {
         <span className="text-xs text-muted-foreground">Date: {formatDateDDMMYYYY(dateStr)} (IST)</span>
       </div>
 
+      {queuedIds.size > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <span className="flex items-center gap-1.5">
+            <CloudOff className="h-4 w-4 shrink-0" />
+            {`${queuedIds.size} attendance record${queuedIds.size === 1 ? "" : "s"} saved on this device — no network when ${queuedIds.size === 1 ? "it was" : "they were"} submitted. Syncs automatically once you're back online.`}
+          </span>
+          <Button size="sm" variant="outline" onClick={() => void syncPendingSubmissions()} loading={isSyncingQueue}>
+            <CloudUpload className="h-3.5 w-3.5" /> Sync Now
+          </Button>
+        </div>
+      )}
+
       {isLoadingPeriods ? (
         <div className="h-40 rounded-lg border bg-muted/30 animate-pulse" />
       ) : periods.length === 0 ? (
@@ -271,8 +408,9 @@ export default function MarkAttendancePage() {
             {periods.map((p) => {
               const s = p.session;
               const isSubmitted = s?.status === "SUBMITTED";
-              const label = p.isOpen ? (isSubmitted ? "Submitted" : "Open — tap to mark") : s ? (isSubmitted ? "Posted" : "Closed — Contact Dept Office") : "Closed — Contact Dept Office";
-              const badge = p.isOpen ? "bg-emerald-100 text-emerald-800 border-emerald-200" : isSubmitted ? "bg-green-100 text-green-800 border-green-200" : "bg-amber-100 text-amber-800 border-amber-200";
+              const isPending = queuedIds.has(p.sessionId);
+              const label = isPending ? "Saved on this device — pending sync" : p.isOpen ? (isSubmitted ? "Submitted" : "Open — tap to mark") : s ? (isSubmitted ? "Posted" : "Closed — Contact Dept Office") : "Closed — Contact Dept Office";
+              const badge = isPending ? "bg-amber-100 text-amber-800 border-amber-200" : p.isOpen ? "bg-emerald-100 text-emerald-800 border-emerald-200" : isSubmitted ? "bg-green-100 text-green-800 border-green-200" : "bg-amber-100 text-amber-800 border-amber-200";
               const isExpanded = expandedId === p.sessionId;
               return (
                 <div key={p.sessionId} className={`p-4 space-y-2 ${isExpanded ? "bg-blue-50/60" : ""}`}>
@@ -283,13 +421,13 @@ export default function MarkAttendancePage() {
                       <p className="text-muted-foreground">Section {p.sectionName}</p>
                     </div>
                     <span className={`inline-flex shrink-0 items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${badge}`}>
-                      {isSubmitted ? "Submitted" : p.isOpen ? "Open" : "Closed"}
+                      {isPending ? "Pending Sync" : isSubmitted ? "Submitted" : p.isOpen ? "Open" : "Closed"}
                     </span>
                   </div>
                   <p className="text-xs text-muted-foreground">{label}</p>
                   {p.isOpen ? (
-                    <Button size="sm" variant={isSubmitted ? "outline" : "default"} className="w-full" onClick={() => void handleOpenPeriod(p)}>
-                      {isSubmitted ? "View" : isExpanded ? "Opened" : "Mark Attendance"}
+                    <Button size="sm" variant={isSubmitted || isPending ? "outline" : "default"} className="w-full" onClick={() => void handleOpenPeriod(p)}>
+                      {isSubmitted || isPending ? "View" : isExpanded ? "Opened" : "Mark Attendance"}
                     </Button>
                   ) : (
                     <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground"><Clock className="h-3.5 w-3.5" /> Not open</span>
@@ -314,8 +452,9 @@ export default function MarkAttendancePage() {
                 {periods.map((p) => {
                   const s = p.session;
                   const isSubmitted = s?.status === "SUBMITTED";
-                  const label = p.isOpen ? (isSubmitted ? "Submitted" : "Open — tap to mark") : s ? (isSubmitted ? "Posted" : "Closed — Contact Dept Office") : "Closed — Contact Dept Office";
-                  const badge = p.isOpen ? "bg-emerald-100 text-emerald-800 border-emerald-200" : isSubmitted ? "bg-green-100 text-green-800 border-green-200" : "bg-amber-100 text-amber-800 border-amber-200";
+                  const isPending = queuedIds.has(p.sessionId);
+                  const label = isPending ? "Saved on this device — pending sync" : p.isOpen ? (isSubmitted ? "Submitted" : "Open — tap to mark") : s ? (isSubmitted ? "Posted" : "Closed — Contact Dept Office") : "Closed — Contact Dept Office";
+                  const badge = isPending ? "bg-amber-100 text-amber-800 border-amber-200" : p.isOpen ? "bg-emerald-100 text-emerald-800 border-emerald-200" : isSubmitted ? "bg-green-100 text-green-800 border-green-200" : "bg-amber-100 text-amber-800 border-amber-200";
                   const isExpanded = expandedId === p.sessionId;
                   return (
                     <tr key={p.sessionId} className={isExpanded ? "bg-blue-50/60" : ""}>
@@ -325,14 +464,14 @@ export default function MarkAttendancePage() {
                       <td className="px-4 py-3">{p.sectionName}</td>
                       <td className="px-4 py-3">
                         <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${badge}`}>
-                          {isSubmitted ? "Submitted" : p.isOpen ? "Open" : "Closed"}
+                          {isPending ? "Pending Sync" : isSubmitted ? "Submitted" : p.isOpen ? "Open" : "Closed"}
                         </span>
                         <span className="ml-2 text-xs text-muted-foreground">{label}</span>
                       </td>
                       <td className="px-4 py-3 text-right">
                         {p.isOpen ? (
-                          <Button size="sm" variant={isSubmitted ? "outline" : "default"} onClick={() => void handleOpenPeriod(p)}>
-                            {isSubmitted ? "View" : isExpanded ? "Opened" : "Mark Attendance"}
+                          <Button size="sm" variant={isSubmitted || isPending ? "outline" : "default"} onClick={() => void handleOpenPeriod(p)}>
+                            {isSubmitted || isPending ? "View" : isExpanded ? "Opened" : "Mark Attendance"}
                           </Button>
                         ) : (
                           <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground"><Clock className="h-3.5 w-3.5" /> Not open</span>
@@ -381,7 +520,11 @@ export default function MarkAttendancePage() {
                 Absent: <strong>{markedCount - presentCount}</strong>
               </span>
             </div>
-            {isReadOnly ? (
+            {isQueuedPending ? (
+              <span className="flex items-center gap-1.5 font-medium text-amber-700">
+                <CloudOff className="h-4 w-4" /> Saved on this device — pending sync (read-only)
+              </span>
+            ) : isReadOnly ? (
               <span className="flex items-center gap-1.5 font-medium text-emerald-700">
                 <Lock className="h-4 w-4" /> Submitted (Read-only)
               </span>
@@ -494,7 +637,7 @@ export default function MarkAttendancePage() {
               <CardContent className="space-y-4 py-5">
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                   <div className="text-sm text-muted-foreground">
-                    <p>{isReadOnly ? "This attendance has been submitted and is locked." : isExpandedOpen ? "Please review the attendance before submitting." : "Period closed — contact Dept Office for correction."}</p>
+                    <p>{isQueuedPending ? "Saved on this device — no network when you hit Submit. Will reach the server automatically once you're back online." : isReadOnly ? "This attendance has been submitted and is locked." : isExpandedOpen ? "Please review the attendance before submitting." : "Period closed — contact Dept Office for correction."}</p>
                     <p>Once submitted, attendance cannot be edited or modified.</p>
                   </div>
                   <p className="text-sm font-medium shrink-0">You have marked {markedCount} out of {attendanceSession.totalStudents} students</p>
