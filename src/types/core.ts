@@ -2677,12 +2677,26 @@ export interface StudentRecord {
   status: StudentStatus;
   gender?: string;
   dateOfBirth?: string; // yyyy-mm-dd, kept as string (no statutory-date math needed)
+  // Parent/guardian block - all optional free text. Father/Mother are the
+  // default point of contact; Guardian Name/Contact is only for the (less
+  // common) case where someone else altogether holds that role. Not part of
+  // the College Office's bulk-import template (Course/Department/Academic
+  // Year are already picked once for the whole file there, and these are
+  // equally per-student-only detail) - set via the Add/Edit form instead,
+  // same as every other admission-detail field below.
+  fatherName?: string;
+  fatherContactNo?: string;
+  motherName?: string;
+  motherContactNo?: string;
+  guardianName?: string;
   guardianContact?: string;
   email?: string;
   // Secondary — view-only access, for a student pre-registered to a core
   // branch (e.g. CSE) while physically enrolled under Basic Science in 1st
-  // year. Only ever set by the College Office bulk import for exactly this
-  // case; cleared automatically when the student is promoted into that
+  // year. Set via the Add/Edit form (not the College Office's bulk-import
+  // template - Department is already fixed for the whole file there, and a
+  // freshman needs this set individually anyway); cleared automatically when
+  // the student is promoted into that
   // department (see students/promote/route.ts), at which point it becomes
   // their primary `department` instead.
   secondaryDepartment?: string;
@@ -2720,10 +2734,12 @@ export interface StudentRecord {
   // fill in, not something the system guesses.
   labBatch?: string;
   // ─── Admission-detail fields ────────────────────────────────────────────
-  // All optional, all set only via the College Office bulk import (see
-  // src/lib/students/importRow.ts) - there is no per-student edit form for
-  // any of these today, same as the older gender/dateOfBirth/etc. fields
-  // above. Photo is intentionally not collected via CSV import at all.
+  // All optional, set either via the College Office bulk import (see
+  // src/lib/students/importRow.ts and rosterFields.ts's ROSTER_FIELDS - the
+  // one definition shared by the template, the Add/Edit form and the detail
+  // view) or by hand afterward through the Add/Edit form, same as the older
+  // gender/dateOfBirth/etc. fields above. Photo is intentionally not
+  // collected via CSV import at all.
   //
   // The programme the student is admitted into (B.Tech, M.Tech …). Validated
   // against the college's `courses` collection when set (name or short Code,
@@ -2752,7 +2768,6 @@ export interface StudentRecord {
   // route.ts's findCurrentSectionDoc, student-attendance and
   // internal-exam-marks routes' roster queries.
   courseId?: string;
-  semester?: number;
   dateOfAdmission?: string; // yyyy-mm-dd
   admissionNo?: string;
   hallTicketNo?: string;
@@ -2761,7 +2776,6 @@ export interface StudentRecord {
   entranceRank?: string;
   jeeRank?: string;
   jeePercentage?: string;
-  seatType?: string; // e.g. Convenor, Management
   scholarship?: boolean;
   caste?: Caste;
   subCaste?: string;
@@ -2774,6 +2788,8 @@ export interface StudentRecord {
   aadharNo?: string;
   rationCardNo?: string;
   bankAccountNo?: string;
+  bankName?: string;
+  ifscCode?: string;
   lastAttendedInstitution?: string;
   distanceFromResidenceKm?: number;
   hosteller?: boolean;

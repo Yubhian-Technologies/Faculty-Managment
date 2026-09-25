@@ -13,6 +13,11 @@ export interface StudentImportRow {
   status?: string;
   gender?: string;
   dateOfBirth?: string;
+  fatherName?: string;
+  fatherContactNo?: string;
+  motherName?: string;
+  motherContactNo?: string;
+  guardianName?: string;
   guardianContact?: string;
   email?: string;
   // View-only department (e.g. a 1st-year's registered core branch while
@@ -30,7 +35,6 @@ export interface StudentImportRow {
   // department's own courses - never raw/unvalidated text. Photo is not
   // collected via CSV.
   course?: string;
-  semester?: string;
   dateOfAdmission?: string;
   admissionNo?: string;
   hallTicketNo?: string;
@@ -39,7 +43,6 @@ export interface StudentImportRow {
   entranceRank?: string;
   jeeRank?: string;
   jeePercentage?: string;
-  seatType?: string;
   scholarship?: string;
   caste?: string;
   subCaste?: string;
@@ -52,6 +55,8 @@ export interface StudentImportRow {
   aadharNo?: string;
   rationCardNo?: string;
   bankAccountNo?: string;
+  bankName?: string;
+  ifscCode?: string;
   lastAttendedInstitution?: string;
   distanceFromResidenceKm?: string;
   hosteller?: string;
@@ -77,19 +82,12 @@ function parseYesNo(v: string | undefined): boolean | undefined {
 }
 
 // Distance is the only free-form numeric field that's meaningfully
-// fractional (e.g. "5.5" km) - kept separate from parseSemester, which only
-// ever wants the leading whole number out of a label like "1st Semester".
+// fractional (e.g. "5.5" km).
 function parseNumberOrUndefined(v: string | undefined): number | undefined {
   const t = v?.trim();
   if (!t) return undefined;
   const n = Number(t);
   return Number.isFinite(n) ? n : undefined;
-}
-
-// "1st Semester", "Semester 1", "1" all reduce to the same stored value.
-function parseSemester(v: string | undefined): number | undefined {
-  const m = v?.match(/\d+/);
-  return m ? Number(m[0]) : undefined;
 }
 
 function parseHandicappedType(v: string | undefined): "H" | "V" | "O" | undefined {
@@ -138,11 +136,15 @@ export function buildStudentDoc(
     status: parseStudentStatus(row.status),
     ...(row.gender?.trim() ? { gender: row.gender.trim() } : {}),
     ...(row.dateOfBirth?.trim() ? { dateOfBirth: row.dateOfBirth.trim() } : {}),
+    ...(row.fatherName?.trim() ? { fatherName: row.fatherName.trim() } : {}),
+    ...(row.fatherContactNo?.trim() ? { fatherContactNo: row.fatherContactNo.trim() } : {}),
+    ...(row.motherName?.trim() ? { motherName: row.motherName.trim() } : {}),
+    ...(row.motherContactNo?.trim() ? { motherContactNo: row.motherContactNo.trim() } : {}),
+    ...(row.guardianName?.trim() ? { guardianName: row.guardianName.trim() } : {}),
     ...(row.guardianContact?.trim() ? { guardianContact: row.guardianContact.trim() } : {}),
     ...(row.email?.trim() ? { email: row.email.trim().toLowerCase() } : {}),
     ...(row.secondaryDepartment?.trim() ? { secondaryDepartment: row.secondaryDepartment.trim() } : {}),
     ...(row.course?.trim() ? { course: row.course.trim() } : {}),
-    ...(parseSemester(row.semester) !== undefined ? { semester: parseSemester(row.semester) } : {}),
     ...(row.dateOfAdmission?.trim() ? { dateOfAdmission: row.dateOfAdmission.trim() } : {}),
     ...(row.admissionNo?.trim() ? { admissionNo: row.admissionNo.trim() } : {}),
     ...(row.hallTicketNo?.trim() ? { hallTicketNo: row.hallTicketNo.trim() } : {}),
@@ -151,7 +153,6 @@ export function buildStudentDoc(
     ...(row.entranceRank?.trim() ? { entranceRank: row.entranceRank.trim() } : {}),
     ...(row.jeeRank?.trim() ? { jeeRank: row.jeeRank.trim() } : {}),
     ...(row.jeePercentage?.trim() ? { jeePercentage: row.jeePercentage.trim() } : {}),
-    ...(row.seatType?.trim() ? { seatType: row.seatType.trim() } : {}),
     ...(parseYesNo(row.scholarship) !== undefined ? { scholarship: parseYesNo(row.scholarship) } : {}),
     ...(row.caste?.trim() ? { caste: row.caste.trim() } : {}),
     ...(row.subCaste?.trim() ? { subCaste: row.subCaste.trim() } : {}),
@@ -164,6 +165,8 @@ export function buildStudentDoc(
     ...(row.aadharNo?.trim() ? { aadharNo: row.aadharNo.trim() } : {}),
     ...(row.rationCardNo?.trim() ? { rationCardNo: row.rationCardNo.trim() } : {}),
     ...(row.bankAccountNo?.trim() ? { bankAccountNo: row.bankAccountNo.trim() } : {}),
+    ...(row.bankName?.trim() ? { bankName: row.bankName.trim() } : {}),
+    ...(row.ifscCode?.trim() ? { ifscCode: row.ifscCode.trim() } : {}),
     ...(row.lastAttendedInstitution?.trim() ? { lastAttendedInstitution: row.lastAttendedInstitution.trim() } : {}),
     ...(parseNumberOrUndefined(row.distanceFromResidenceKm) !== undefined ? { distanceFromResidenceKm: parseNumberOrUndefined(row.distanceFromResidenceKm) } : {}),
     ...(parseYesNo(row.hosteller) !== undefined ? { hosteller: parseYesNo(row.hosteller) } : {}),

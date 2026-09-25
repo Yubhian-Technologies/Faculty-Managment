@@ -708,14 +708,6 @@ export default function HodStudentsPage() {
     },
     { key: "year", header: "Year", hideOnMobile: true, render: (r) => <span>{r.year}</span> },
     {
-      key: "semester",
-      header: "Semester",
-      hideOnMobile: true,
-      render: (r) => r.semester
-        ? <span className="text-sm text-muted-foreground">{r.semester}</span>
-        : <span className="text-sm text-muted-foreground/40">—</span>,
-    },
-    {
       key: "status",
       header: "Status",
       render: (r) => <Badge variant={STATUS_VARIANTS[r.status] ?? "secondary"}>{r.status}</Badge>,

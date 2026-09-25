@@ -25,7 +25,6 @@ interface StudentInfo {
   course: string | null;
   year: number;
   section: string;
-  semester: number | null;
 }
 interface SubjectRow {
   subjectId: string;
@@ -292,9 +291,6 @@ export function StudentAttendanceHistoryReport({
                 <div><span className="text-muted-foreground">Branch</span> <span className="font-medium">{student.department}</span></div>
                 <div><span className="text-muted-foreground">Year</span> <span className="font-medium">{student.year}</span></div>
                 <div><span className="text-muted-foreground">Section</span> <span className="font-medium">{student.section || "—"}</span></div>
-                {student.semester != null && (
-                  <div><span className="text-muted-foreground">Semester</span> <span className="font-medium">{student.semester}</span></div>
-                )}
               </div>
             )}
             <div className="overflow-x-auto">

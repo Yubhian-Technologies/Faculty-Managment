@@ -15,7 +15,7 @@
  * Aadhar number matching too is a much stronger signal.
  */
 export const STRONG_IDENTITY_FIELDS = [
-  "email", "mobileNo", "guardianContact", "aadharNo",
+  "email", "mobileNo", "guardianContact", "fatherContactNo", "motherContactNo", "aadharNo",
   "admissionNo", "hallTicketNo", "dateOfBirth", "rationCardNo",
   "bankAccountNo", "entranceRank",
 ] as const;
