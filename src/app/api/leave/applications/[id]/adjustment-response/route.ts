@@ -5,8 +5,9 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { REQUESTS_COL } from "@/lib/leave/balanceEngine";
 import { allAdjustmentsAccepted, deriveSubstituteStatus } from "@/lib/leave/adjustmentRequests";
+import { loadUnavailability, findSubstituteConflicts, describeSubstituteConflict } from "@/lib/leave/availability";
 import { notify } from "@/lib/notify";
-import type { LeaveRequest } from "@/types/leave";
+import type { LeaveRequest, PeriodSubstitution } from "@/types/leave";
 
 // The named substitute/handover person's own accept/decline on ONE
 // LeaveRequest - see types/leave.ts's AdjustmentRequest and PENDING_ACCEPTANCE.
@@ -97,6 +98,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     // needs the HOD/Principal to propose someone else for that period.
     let periodSubstitutions = req.periodSubstitutions;
     let pendingPeriodSubstitutions = req.pendingPeriodSubstitutions;
+    // Everything this acceptance is about to move from "proposed" to "really
+    // covering" - re-checked against live data below before it is written.
+    const committing: PeriodSubstitution[] = [];
     if (entry.kind === "SUBSTITUTE" && pendingPeriodSubstitutions?.length) {
       const thisEntryKeys = new Set((entry.periods ?? []).map((p) => `${p.date}|${p.timetableSlotId}`));
       const acceptedKeys = new Set(
@@ -109,11 +113,36 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         const key = `${p.date}|${p.timetableSlotId}`;
         if (!thisEntryKeys.has(key)) { remainingPending.push(p); continue; }
         touched = true;
-        if (acceptedKeys.has(key)) currentByKey.set(key, p);
+        if (acceptedKeys.has(key)) { currentByKey.set(key, p); committing.push(p); }
       }
       if (touched) {
         periodSubstitutions = Array.from(currentByKey.values());
         pendingPeriodSubstitutions = remainingPending;
+      }
+    }
+
+    // The proposal was checked for clashes when it was MADE. Between then and
+    // now the same person can have been given this exact period by a different
+    // leave request or adjustment - and accepting used to commit it regardless,
+    // leaving two people booked for one class. Re-check against live data, with
+    // this request excluded so its own pending picks don't look like a clash.
+    if (committing.length > 0) {
+      const dates = committing.map((p) => p.date).sort();
+      const unavailability = await loadUnavailability(
+        db, session.collegeId, dates[0], dates[dates.length - 1], { excludeRequestId: id }
+      );
+      const conflicts = findSubstituteConflicts(
+        committing.map((p) => ({
+          substituteFacultyId: p.substituteFacultyId,
+          substituteFacultyName: p.substituteFacultyName,
+          date: p.date,
+          periodNumber: p.periodNumber,
+          subjectName: p.subjectName,
+        })),
+        { isCoveringAt: unavailability.isCoveringAt }
+      );
+      if (conflicts.length > 0) {
+        return NextResponse.json({ error: describeSubstituteConflict(conflicts[0]) }, { status: 409 });
       }
     }
 

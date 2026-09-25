@@ -5,6 +5,7 @@
 import type { Firestore } from "firebase-admin/firestore";
 import type { Circular, CircularAudience, EmployeeScope } from "@/types/circular";
 import { notify } from "@/lib/notify";
+import { sendMail } from "@/lib/email/mailer";
 
 function circularsCol(db: Firestore, collegeId: string) {
   return db.collection("colleges").doc(collegeId).collection("circulars");
@@ -66,6 +67,8 @@ export async function createCircular(db: Firestore, input: CreateCircularInput):
       employeeType: input.audience.employeeType,
       departmentIds: [...(input.audience.departmentIds ?? [])],
       departmentNames: input.audience.departmentNames ?? [],
+      recipientKind: input.audience.recipientKind ?? "STAFF",
+      targetYears: input.audience.targetYears ?? [],
     },
     messageFrom: input.messageFrom.trim(),
     attachments: input.attachments ?? [],
@@ -130,6 +133,11 @@ export async function publishCircular(
 }
 
 async function notifyCircularAudience(db: Firestore, collegeId: string, circular: Circular): Promise<void> {
+  if (circular.audience.recipientKind === "STUDENTS") {
+    await notifyCircularStudents(db, collegeId, circular);
+    return;
+  }
+
   const collegeRef = db.collection("colleges").doc(collegeId);
   // Determine departments filter: empty = all
   const deptIds = circular.audience.departmentIds ?? [];
@@ -158,6 +166,47 @@ async function notifyCircularAudience(db: Firestore, collegeId: string, circular
     }
     await notify(db, collegeId, doc.id, "CIRCULAR_PUBLISHED", title, message, link);
   }
+}
+
+// Students have no login/notification box (see CircularAudience's own
+// doc-comment) - delivered by email instead, to whichever matched students
+// actually have one on file. A student with no email recorded is simply
+// skipped, same as the staff path silently skips a user doc with no role.
+async function notifyCircularStudents(db: Firestore, collegeId: string, circular: Circular): Promise<void> {
+  const collegeRef = db.collection("colleges").doc(collegeId);
+  const years = circular.audience.targetYears ?? [];
+  const deptIds = circular.audience.departmentIds ?? [];
+  const deptNames = circular.audience.departmentNames ?? [];
+
+  // Firestore "in" caps at 30 values - academic years are always a handful
+  // (1..durationYears), nowhere close to that limit.
+  let query: FirebaseFirestore.Query = collegeRef.collection("students").where("status", "==", "REGULAR");
+  if (years.length > 0) query = query.where("year", "in", years);
+  const snap = await query.get();
+
+  const subject = circular.subject;
+  const html = `
+    <div style="font-family:Arial,Helvetica,sans-serif;line-height:1.6;color:#111">
+      <p style="color:#555;font-size:13px;margin:0 0 12px">From: ${circular.messageFrom}</p>
+      <h2 style="margin:0 0 12px">${circular.subject}</h2>
+      <div style="white-space:pre-wrap">${circular.body}</div>
+    </div>`;
+
+  const sends: Promise<void>[] = [];
+  for (const doc of snap.docs) {
+    const s = doc.data() as { department?: string; email?: string };
+    if (deptIds.length > 0 || deptNames.length > 0) {
+      const inDept = deptIds.includes(s.department ?? "") || deptNames.includes(s.department ?? "");
+      if (!inDept) continue;
+    }
+    const email = s.email?.trim();
+    if (!email) continue;
+    // Best-effort, one bad address must never block the rest of the batch.
+    sends.push(sendMail({ to: email, subject, html }).catch((err) => {
+      console.error(`[circular/notifyCircularStudents] Failed for ${doc.id}:`, err);
+    }));
+  }
+  await Promise.all(sends);
 }
 
 // Download/print payload shape — keeps view and download in one schema.

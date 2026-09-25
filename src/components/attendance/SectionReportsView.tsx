@@ -323,7 +323,7 @@ export function SectionReportsView({ sectionId, title }: { sectionId?: string; t
               </Select>
             </div>
             <div>
-              <Label>Kind</Label>
+              <Label>Category</Label>
               <Select value={reportKind} onValueChange={(v) => setReportKind(v as typeof reportKind)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent><SelectItem value="all">All</SelectItem><SelectItem value="absent">Absent</SelectItem><SelectItem value="shortage">Shortage</SelectItem></SelectContent>

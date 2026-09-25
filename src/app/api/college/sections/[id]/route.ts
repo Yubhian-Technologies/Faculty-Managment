@@ -13,6 +13,7 @@ import { parseBatchStartYear, deriveBatch, parseAcademicYearStart, currentAcadem
 import { isNameOrChildAmong } from "@/lib/departments/codeOrNameResolver";
 import type { DepartmentCourseScope } from "@/types";
 import { loadDepartmentIndex, stampDepartmentIds } from "@/lib/departments/stampIds";
+import { resolveCollegeAcademicYear } from "@/lib/college/collegeAcademicYear";
 
 // A parent department's HOD has full (not just view-only) access to their own
 // sub-departments' sections, and a sub-HOD has the same over every branch
@@ -222,10 +223,10 @@ export async function PATCH(
         if (effectiveBatchStart != null) {
           allowed = regulationsForBatchStartYear(catalogItem?.regulationBatches ?? {}, effectiveBatchStart, catalogItem?.regulations);
         } else {
-          const sessionSnap = await db.collection("colleges").doc(session.collegeId)
-            .collection("academicSessions").where("isCurrent", "==", true).limit(1).get();
+          // Resolved centrally so this honours the college's own academic-year
+          // start day, not the April cutoff this used to assume.
           const asOfStartYear = parseAcademicYearStart(
-            sessionSnap.empty ? undefined : (sessionSnap.docs[0].data() as { label?: string }).label
+            await resolveCollegeAcademicYear(db, session.collegeId)
           ) ?? currentAcademicStartYear();
           allowed = regulationsForCourseYearByBatch(catalogItem?.regulationBatches ?? {}, targetYear ?? sectionYear, asOfStartYear, catalogItem?.regulations);
         }

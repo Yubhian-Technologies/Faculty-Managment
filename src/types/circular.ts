@@ -28,10 +28,27 @@ export const CIRCULAR_STATUS_LABELS: Record<CircularStatus, string> = {
 export type CircularMessageFrom = string;
 export const DEFAULT_MESSAGE_FROM_OPTIONS: CircularMessageFrom[] = ["Management", "Principal", "Dean", "HOD"];
 
+// Students have no login/session of their own (see StudentRecord's own
+// doc-comment - "independent of any login account") - there is no in-app
+// notification box to fan a circular out to the way STAFF gets one via
+// notify(). A STUDENTS-targeted circular is instead emailed directly to
+// each matched student's StudentRecord.email (see notifyCircularStudents in
+// lib/circular/service.ts) - a genuinely different delivery pathway, not
+// just a filter on the existing one.
+export type CircularRecipientKind = "STAFF" | "STUDENTS";
+
 export interface CircularAudience {
+  // Meaningful only when recipientKind is STAFF (or absent, for every
+  // circular created before this field existed - both read the same way).
   employeeType: EmployeeScope; // teaching / non-teaching / all
   departmentIds: string[]; // [] = all departments in college
   departmentNames?: string[]; // denormalized for display
+  // Defaults to STAFF when absent - every circular created before this field
+  // existed is a STAFF circular, and stays one.
+  recipientKind?: CircularRecipientKind;
+  // Meaningful only when recipientKind is STUDENTS. Academic year(s) - 1..N
+  // (see StudentRecord.year) - [] or absent = every year.
+  targetYears?: number[];
 }
 
 export interface CircularAttachment {

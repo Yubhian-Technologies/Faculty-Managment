@@ -872,6 +872,18 @@ export interface FacultyNorms {
   // must complete before converting into their vacation/non-vacation leave
   // category - see src/lib/leave/categoryEngine.ts.
   newJoiningYears: number;
+  // The day the college's academic year BEGINS - month 1-12, day 1-31 (e.g.
+  // 6 and 1 for June 1). The year itself is never stored: it is worked out
+  // from today against this cutoff, so it rolls over on its own each cycle
+  // (see currentAcademicStartYear). Absent means April 1, which is what the
+  // app assumed for every college before this was configurable.
+  academicYearStartMonth?: number;
+  academicYearStartDay?: number;
+  // The day it ENDS, same shape. Absent means March 31 - i.e. the day before
+  // an April 1 start comes round again. An end that falls before the start in
+  // the calendar (June 1 -> May 31) is taken as the following year.
+  academicYearEndMonth?: number;
+  academicYearEndDay?: number;
   // Which approval tier each requester role's leave request goes to first
   // (see src/lib/leave/approvalRouting.ts). A role with no entry here uses the
   // built-in default for that role.
@@ -2599,6 +2611,18 @@ export interface AcademicSession {
   collegeId: string;
   label: string; // e.g. "2025-26"
   isCurrent: boolean;
+  // The dates the session actually runs between, "YYYY-MM-DD", as the
+  // Principal entered them. Optional because every session created before
+  // these existed has only a label - such a session is still displayed, just
+  // with the April-March range the rest of the app assumes.
+  //
+  // Recorded and displayed; NOT what anything compares on. `label` remains
+  // the interop key every consumer stamps and matches against (timetable
+  // slots, teaching assignments, leave period coverage, section regulations),
+  // so a college whose year runs June-May gets an honest range on screen
+  // without re-deriving a comparison used in seven places.
+  startDate?: string;
+  endDate?: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
@@ -2868,6 +2892,11 @@ export type NotificationType =
   | "LEAVE_OD_PROOF_VERIFIED"
   | "LEAVE_OD_PROOF_REJECTED"
   | "ATTENDANCE_MANUALLY_MARKED"
+  // Fired by the scheduled not-posted-attendance sweep (see
+  // lib/attendance/notPostedSettings.ts + api/cron/attendance-not-posted) -
+  // one per faculty per day, once the college's configured cutoff time has
+  // passed with at least one of their periods still unsubmitted.
+  | "ATTENDANCE_NOT_POSTED"
   // Permission & On-Duty
   | "PERMISSION_APPROVED"
   | "PERMISSION_REJECTED"

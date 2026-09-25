@@ -1,20 +1,10 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
-import nodemailer from "nodemailer";
 import { verifyFirebaseToken } from "@/lib/auth/verifyFirebaseToken";
 import { interviewInvitationEmail, offerLetterEmail, appointmentLetterEmail } from "@/lib/email/templates";
 import { getOfferLetterHTML, getAppointmentLetterHTML, type OfferLetterData } from "@/lib/pdf/offerLetterTemplate";
-
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
-  port: Number(process.env.SMTP_PORT ?? 587),
-  secure: Number(process.env.SMTP_PORT) === 465,
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-});
+import { sendMail } from "@/lib/email/mailer";
 
 async function verifyToken(request: Request): Promise<string | null> {
   const auth = request.headers.get("Authorization");
@@ -78,14 +68,8 @@ export async function POST(request: Request) {
     }
 
     // Send asynchronously - don't await in prod for faster API response
-    transporter.sendMail({
-      from: `"${process.env.EMAIL_FROM_NAME ?? "Vishnu People"}" <${process.env.EMAIL_FROM}>`,
-      to: body.to,
-      ...(body.cc?.length ? { cc: body.cc } : {}),
-      subject,
-      html,
-      attachments,
-    }).catch((err) => console.error("[email/send] Failed:", err));
+    sendMail({ to: body.to, cc: body.cc, subject, html, attachments })
+      .catch((err) => console.error("[email/send] Failed:", err));
 
     return NextResponse.json({ ok: true });
   } catch (err) {

@@ -1,0 +1,18 @@
+{
+  "name": "functions",
+  "description": "Scheduled jobs for Faculty-Managment - deployed independently of the Next.js app (separate `npm install`/deploy target, see README.md in this folder)",
+  "private": true,
+  "engines": { "node": "20" },
+  "main": "lib/index.js",
+  "scripts": {
+    "build": "tsc",
+    "deploy": "npm run build && firebase deploy --only functions"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.6.0",
+    "firebase-functions": "^6.0.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4"
+  }
+}

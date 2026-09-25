@@ -32,6 +32,7 @@ export async function POST(request: Request) {
     if (!ok) return NextResponse.json({ error: "Not allowed to send circulars. Contact Principal." }, { status: 403 });
     const body = (await request.json()) as {
       subject?: string; body?: string; date?: string; employeeType?: string; departmentIds?: string[]; departmentNames?: string[]; messageFrom?: string; attachments?: { fileName: string; fileUrl: string; fileType?: string; fileSize?: number }[];
+      recipientKind?: string; targetYears?: number[];
     };
     const date = body.date ? new Date(body.date) : new Date();
     const circular = await createCircular(db, {
@@ -43,6 +44,8 @@ export async function POST(request: Request) {
         employeeType: (body.employeeType as never) ?? "ALL",
         departmentIds: body.departmentIds ?? [],
         departmentNames: body.departmentNames ?? [],
+        recipientKind: (body.recipientKind as never) ?? "STAFF",
+        targetYears: body.targetYears ?? [],
       },
       messageFrom: body.messageFrom ?? "Principal",
       attachments: body.attachments ?? [],
