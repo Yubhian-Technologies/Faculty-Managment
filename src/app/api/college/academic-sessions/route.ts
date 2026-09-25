@@ -4,10 +4,10 @@ import { NextResponse } from "next/server";
 import { requireCollegeContext } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 
-// PRINCIPAL/VICE_PRINCIPAL/HOD manage this for their own college; COLLEGE_OFFICE
-// reads it (read-only) to auto-fill a section's admission batch; SUPER_ADMIN
+// PRINCIPAL/VICE_PRINCIPAL manage this for their own college; HOD/COLLEGE_OFFICE
+// read it (read-only) to auto-fill a section's admission batch; SUPER_ADMIN
 // for any college (via `?collegeId=`). requireCollegeContext resolves collegeId
-// from the session (Principal) or the query param (Super Admin).
+// from the session (Principal/VP) or the query param (Super Admin).
 export async function GET(request: Request) {
   try {
     const session = await requireCollegeContext(request, "SUPER_ADMIN", "PRINCIPAL", "VICE_PRINCIPAL", "HOD", "COLLEGE_OFFICE");
@@ -33,7 +33,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeContext(request, "SUPER_ADMIN", "PRINCIPAL");
+    const session = await requireCollegeContext(request, "SUPER_ADMIN", "PRINCIPAL", "VICE_PRINCIPAL");
     const body = (await request.json()) as { label?: string; isCurrent?: boolean };
     const label = body.label?.trim();
 
@@ -42,35 +42,41 @@ export async function POST(request: Request) {
     }
 
     const db = getAdminDb();
-
     const collection = db.collection("colleges").doc(session.collegeId).collection("academicSessions");
-    const existing = await collection.where("label", "==", label).limit(1).get();
-    if (!existing.empty) {
-      return NextResponse.json({ error: `Academic session "${label}" already exists` }, { status: 409 });
-    }
-
     const now = new Date();
     const isCurrent = body.isCurrent ?? false;
 
-    if (isCurrent) {
-      const current = await collection.where("isCurrent", "==", true).get();
-      const batch = db.batch();
-      for (const d of current.docs) batch.update(d.ref, { isCurrent: false, updatedAt: now });
-      await batch.commit();
-    }
-
-    const ref = await collection.add({
-      collegeId: session.collegeId,
-      label,
-      isCurrent,
-      createdAt: now,
-      updatedAt: now,
+    // Transactional: the duplicate-label check and the single-isCurrent
+    // invariant both need to read-then-write atomically, otherwise two
+    // concurrent requests can each pass the pre-write check and both commit
+    // (e.g. two `isCurrent:true` sessions ending up live at once).
+    const newId = await db.runTransaction(async (tx) => {
+      const existing = await tx.get(collection.where("label", "==", label).limit(1));
+      if (!existing.empty) {
+        throw new Error("DUPLICATE_LABEL");
+      }
+      if (isCurrent) {
+        const current = await tx.get(collection.where("isCurrent", "==", true));
+        for (const d of current.docs) tx.update(d.ref, { isCurrent: false, updatedAt: now });
+      }
+      const ref = collection.doc();
+      tx.set(ref, {
+        collegeId: session.collegeId,
+        label,
+        isCurrent,
+        createdAt: now,
+        updatedAt: now,
+      });
+      return ref.id;
     });
 
-    return NextResponse.json({ id: ref.id }, { status: 201 });
+    return NextResponse.json({ id: newId }, { status: 201 });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    if (err instanceof Error && err.message === "DUPLICATE_LABEL") {
+      return NextResponse.json({ error: "Academic session already exists" }, { status: 409 });
     }
     console.error("[college/academic-sessions POST]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
@@ -79,7 +85,7 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
-    const session = await requireCollegeContext(request, "SUPER_ADMIN", "PRINCIPAL");
+    const session = await requireCollegeContext(request, "SUPER_ADMIN", "PRINCIPAL", "VICE_PRINCIPAL");
     const body = (await request.json()) as { id?: string; isCurrent?: boolean };
 
     if (!body.id) {
@@ -87,32 +93,35 @@ export async function PATCH(request: Request) {
     }
 
     const db = getAdminDb();
-
     const collection = db.collection("colleges").doc(session.collegeId).collection("academicSessions");
     const ref = collection.doc(body.id);
-    const snap = await ref.get();
-    if (!snap.exists) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
-    }
-
     const now = new Date();
 
-    if (body.isCurrent) {
-      const current = await collection.where("isCurrent", "==", true).get();
-      const batch = db.batch();
-      for (const d of current.docs) {
-        if (d.id !== body.id) batch.update(d.ref, { isCurrent: false, updatedAt: now });
+    // Transactional for the same reason as POST — the "unset every other
+    // isCurrent doc, set this one" sequence must be atomic.
+    await db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      if (!snap.exists) {
+        throw new Error("NOT_FOUND");
       }
-      batch.update(ref, { isCurrent: true, updatedAt: now });
-      await batch.commit();
-    } else {
-      await ref.update({ isCurrent: false, updatedAt: now });
-    }
+      if (body.isCurrent) {
+        const current = await tx.get(collection.where("isCurrent", "==", true));
+        for (const d of current.docs) {
+          if (d.id !== body.id) tx.update(d.ref, { isCurrent: false, updatedAt: now });
+        }
+        tx.update(ref, { isCurrent: true, updatedAt: now });
+      } else {
+        tx.update(ref, { isCurrent: false, updatedAt: now });
+      }
+    });
 
     return NextResponse.json({ ok: true });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    if (err instanceof Error && err.message === "NOT_FOUND") {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
     console.error("[college/academic-sessions PATCH]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
@@ -121,7 +130,7 @@ export async function PATCH(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
-    const session = await requireCollegeContext(request, "SUPER_ADMIN", "PRINCIPAL");
+    const session = await requireCollegeContext(request, "SUPER_ADMIN", "PRINCIPAL", "VICE_PRINCIPAL");
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
     if (!id) {

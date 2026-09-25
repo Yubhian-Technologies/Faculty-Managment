@@ -35,8 +35,17 @@ export function SupportingStaffModuleContent({ moduleKey, staff }: Props) {
       <CardContent className="pt-6">
         {/* Full Name (as per SSC) is shown on Identity & Employment instead
             (hideLegalName); Name (as per PAN) shows here, mirroring Faculty's
-            own PersonalDetailsView usage (FacultyProfileModuleContent.tsx). */}
-        {moduleKey === "personal" && <PersonalDetailsView value={staff} hideLegalName showNameAsPerPan />}
+            own PersonalDetailsView usage (FacultyProfileModuleContent.tsx).
+            Ratification is a Teaching Faculty-only concept - Supporting Staff
+            has no such field, so it's hidden here too. */}
+        {moduleKey === "personal" && (
+          <PersonalDetailsView
+            value={staff}
+            hideLegalName
+            showNameAsPerPan
+            hiddenFields={["ratificationStatus"]}
+          />
+        )}
 
         {moduleKey === "qualifications" && <QualificationsView items={profile.qualifications} />}
 

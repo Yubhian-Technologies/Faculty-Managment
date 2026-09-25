@@ -5,7 +5,7 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { createFirebaseUser } from "@/lib/firebase/authRest";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
-import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
+import { getHodDepartmentScope, canHodManageFacultyDepartment } from "@/lib/departments/scope";
 import { SUPPORTING_STAFF_ROLE_CATEGORY, canRolePostCategory, supportingStaffCategoryLabel } from "@/lib/supportingStaff/roleCategory";
 import { hasSupportingStaffSplit } from "@/lib/designations/config";
 import { normalizeSupportingStaffProfile } from "@/lib/faculty/academicProfileCompat";
@@ -118,8 +118,10 @@ export async function POST(request: Request) {
     // Matches the mandatory field set the bulk-import template and Add Staff
     // wizard's Personal Details step now both enforce. Name (as per PAN) and
     // Name (as per Aadhar) are deliberately excluded - both are optional.
-    if (!body.mobileNo || !body.legalName || !body.gender || !body.dateOfBirth || !body.aadharNo || !body.panNo || !body.ratificationStatus) {
-      return NextResponse.json({ error: "Missing required personal details - Mobile No, Full Name (as per SSC), Gender, Date of Birth, Aadhar No, PAN No, and Ratification Status are all required" }, { status: 400 });
+    // Ratification Status is deliberately excluded too - Ratification is a
+    // Teaching Faculty-only concept, never applicable to Supporting Staff.
+    if (!body.mobileNo || !body.legalName || !body.gender || !body.dateOfBirth || !body.aadharNo || !body.panNo) {
+      return NextResponse.json({ error: "Missing required personal details - Mobile No, Full Name (as per SSC), Gender, Date of Birth, Aadhar No, and PAN No are all required" }, { status: 400 });
     }
     if (!canRolePostCategory(session.role, staffCategory)) {
       return NextResponse.json(
@@ -160,7 +162,7 @@ export async function POST(request: Request) {
 
       const scope = await getHodDepartmentScope(db, collegeId, session.uid);
       const requested = body.department?.trim();
-      if (requested && !canHodEditDepartment(scope, requested)) {
+      if (requested && !canHodManageFacultyDepartment(scope, requested)) {
         return NextResponse.json(
           { error: "That department is not yours or one of your sub-departments" },
           { status: 403 },

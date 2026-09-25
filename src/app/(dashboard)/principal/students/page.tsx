@@ -11,10 +11,22 @@ import { Pagination } from "@/components/shared/Pagination";
 import { toast } from "@/hooks/useToast";
 import { departmentsOfferingCourse, yearOptionsForDepartment, yearOptionsForCourse } from "@/components/students/RosterFieldInputs";
 import { LIST_ROSTER_FIELDS, rosterFieldDisplay } from "@/lib/students/rosterFields";
+import { StudentPromotionsPanel } from "@/components/students/StudentPromotionsPanel";
+import { GraduatedStudentsView } from "@/components/students/GraduatedStudentsView";
 import type { StudentListItem, Department, AcademicYear, Course } from "@/types";
 
 const DEFAULT_PAGE_SIZE = 20;
 const SEARCH_DEBOUNCE_MS = 350;
+
+// Promotion and Graduated Students used to be separate sidebar tabs; they now
+// live here as sub-tabs (top-right pills, next to the page title) so all
+// student-lifecycle actions sit under one "Students" entry in the nav.
+const STUDENT_TABS = [
+  { key: "roster", label: "All Students" },
+  { key: "promotion", label: "Promotion" },
+  { key: "graduates", label: "Graduated" },
+] as const;
+type StudentTabKey = (typeof STUDENT_TABS)[number]["key"];
 
 function ordinalYear(year: number) {
   const suffix = year === 1 ? "st" : year === 2 ? "nd" : year === 3 ? "rd" : "th";
@@ -32,6 +44,7 @@ function ordinalYear(year: number) {
 // the department (HOD) and Office own the roster itself.
 export default function PrincipalStudentsPage() {
   const router = useRouter();
+  const [activeTab, setActiveTab] = useState<StudentTabKey>("roster");
   const [students, setStudents] = useState<StudentListItem[]>([]);
   const [total, setTotal] = useState(0);
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -180,105 +193,138 @@ export default function PrincipalStudentsPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Students" description="Every student across the college" />
+      <PageHeader
+        title="Students"
+        description={
+          activeTab === "promotion"
+            ? "Move a cohort to the next year"
+            : activeTab === "graduates"
+            ? "Every student who has completed their programme"
+            : "Every student across the college"
+        }
+        actions={
+          <div className="flex items-center gap-1.5">
+            {STUDENT_TABS.map((t) => (
+              <button
+                key={t.key}
+                type="button"
+                onClick={() => setActiveTab(t.key)}
+                className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                  activeTab === t.key ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/70"
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+        }
+      />
 
-      <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-        <Users className="h-4 w-4" />
-        <span><strong className="text-foreground">{total}</strong> students total</span>
-      </div>
-
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            value={search}
-            onChange={(e) => onSearchChange(e.target.value)}
-            placeholder="Search by name, roll number or email"
-            className="pl-9"
-          />
-        </div>
-        <Select value={courseFilter} onValueChange={onCourseFilterChange}>
-          <SelectTrigger className="sm:w-56"><SelectValue placeholder="All courses" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All courses</SelectItem>
-            {courseNames.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-          </SelectContent>
-        </Select>
-        <Select value={deptFilter} onValueChange={onDeptFilterChange}>
-          <SelectTrigger className="sm:w-56"><SelectValue placeholder="All departments" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All departments</SelectItem>
-            {departmentFilterOptions.map((d) => <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>)}
-          </SelectContent>
-        </Select>
-        <Select value={yearFilter} onValueChange={onYearFilterChange}>
-          <SelectTrigger className="sm:w-40"><SelectValue placeholder="All years" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All years</SelectItem>
-            {yearFilterOptions.map((y) => <SelectItem key={y} value={String(y)}>{ordinalYear(y)}</SelectItem>)}
-          </SelectContent>
-        </Select>
-      </div>
-
-      {isLoading ? (
-        <div className="space-y-2">
-          {[1, 2, 3, 4, 5].map((i) => <div key={i} className="h-12 rounded-lg border bg-muted/30 animate-pulse" />)}
-        </div>
-      ) : students.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20 text-center">
-          <Users className="h-10 w-10 text-muted-foreground mb-3" />
-          <p className="font-medium">{total === 0 ? "No students yet" : "No students match your filters"}</p>
-          <p className="text-sm text-muted-foreground mt-1">
-            {total === 0 ? "Nothing has been added to the roster yet." : "Try clearing the search or filters."}
-          </p>
-        </div>
+      {activeTab === "promotion" ? (
+        <StudentPromotionsPanel showHeader={false} />
+      ) : activeTab === "graduates" ? (
+        <GraduatedStudentsView showHeader={false} />
       ) : (
-        <Card>
-          <CardContent className={`p-0 transition-opacity ${isFetching ? "opacity-60" : ""}`}>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b bg-muted/40 text-left text-xs text-muted-foreground">
-                    <th className="p-3 font-medium">S.No</th>
-                    {LIST_ROSTER_FIELDS.map((f) => (
-                      <th key={f.key} className="p-3 font-medium whitespace-nowrap">{f.label}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {students.map((s, i) => (
-                    <tr
-                      key={s.id}
-                      onClick={() => router.push(`/principal/students/${s.id}`)}
-                      className={`border-b last:border-0 cursor-pointer hover:bg-muted/40 transition-colors ${i % 2 === 0 ? "" : "bg-muted/20"}`}
-                    >
-                      <td className="p-3 text-muted-foreground whitespace-nowrap">{(page - 1) * pageSize + i + 1}</td>
-                      {LIST_ROSTER_FIELDS.map((f) => {
-                        const value = rosterFieldDisplay(f, s);
-                        return (
-                          <td key={f.key} className={`p-3 whitespace-nowrap ${f.key === "name" ? "font-medium" : ""}`}>
-                            {value || <span className="text-muted-foreground/50">—</span>}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+        <>
+          <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+            <Users className="h-4 w-4" />
+            <span><strong className="text-foreground">{total}</strong> students total</span>
+          </div>
 
-      {!isLoading && total > 0 && (
-        <Pagination
-          page={page}
-          pageSize={pageSize}
-          total={total}
-          onPageChange={setPage}
-          onPageSizeChange={onPageSizeChange}
-          disabled={isFetching}
-        />
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                value={search}
+                onChange={(e) => onSearchChange(e.target.value)}
+                placeholder="Search by name, roll number or email"
+                className="pl-9"
+              />
+            </div>
+            <Select value={courseFilter} onValueChange={onCourseFilterChange}>
+              <SelectTrigger className="sm:w-56"><SelectValue placeholder="All courses" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All courses</SelectItem>
+                {courseNames.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={deptFilter} onValueChange={onDeptFilterChange}>
+              <SelectTrigger className="sm:w-56"><SelectValue placeholder="All departments" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All departments</SelectItem>
+                {departmentFilterOptions.map((d) => <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={yearFilter} onValueChange={onYearFilterChange}>
+              <SelectTrigger className="sm:w-40"><SelectValue placeholder="All years" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All years</SelectItem>
+                {yearFilterOptions.map((y) => <SelectItem key={y} value={String(y)}>{ordinalYear(y)}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {isLoading ? (
+            <div className="space-y-2">
+              {[1, 2, 3, 4, 5].map((i) => <div key={i} className="h-12 rounded-lg border bg-muted/30 animate-pulse" />)}
+            </div>
+          ) : students.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 text-center">
+              <Users className="h-10 w-10 text-muted-foreground mb-3" />
+              <p className="font-medium">{total === 0 ? "No students yet" : "No students match your filters"}</p>
+              <p className="text-sm text-muted-foreground mt-1">
+                {total === 0 ? "Nothing has been added to the roster yet." : "Try clearing the search or filters."}
+              </p>
+            </div>
+          ) : (
+            <Card>
+              <CardContent className={`p-0 transition-opacity ${isFetching ? "opacity-60" : ""}`}>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b bg-muted/40 text-left text-xs text-muted-foreground">
+                        <th className="p-3 font-medium">S.No</th>
+                        {LIST_ROSTER_FIELDS.map((f) => (
+                          <th key={f.key} className="p-3 font-medium whitespace-nowrap">{f.label}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {students.map((s, i) => (
+                        <tr
+                          key={s.id}
+                          onClick={() => router.push(`/principal/students/${s.id}`)}
+                          className={`border-b last:border-0 cursor-pointer hover:bg-muted/40 transition-colors ${i % 2 === 0 ? "" : "bg-muted/20"}`}
+                        >
+                          <td className="p-3 text-muted-foreground whitespace-nowrap">{(page - 1) * pageSize + i + 1}</td>
+                          {LIST_ROSTER_FIELDS.map((f) => {
+                            const value = rosterFieldDisplay(f, s);
+                            return (
+                              <td key={f.key} className={`p-3 whitespace-nowrap ${f.key === "name" ? "font-medium" : ""}`}>
+                                {value || <span className="text-muted-foreground/50">—</span>}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {!isLoading && total > 0 && (
+            <Pagination
+              page={page}
+              pageSize={pageSize}
+              total={total}
+              onPageChange={setPage}
+              onPageSizeChange={onPageSizeChange}
+              disabled={isFetching}
+            />
+          )}
+        </>
       )}
     </div>
   );

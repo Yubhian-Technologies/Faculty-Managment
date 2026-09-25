@@ -5,6 +5,7 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { createFirebaseUser } from "@/lib/firebase/authRest";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
+import { getHodDepartmentScope, canHodManageFacultyDepartment } from "@/lib/departments/scope";
 
 export async function POST(
   request: Request,
@@ -37,6 +38,16 @@ export async function POST(
     }
 
     const data = snap.data() as { userUid?: string; legalName?: string; department?: string; profilePhotoUrl?: string };
+
+    if (session.role === "HOD") {
+      const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
+      if (!data.department || !canHodManageFacultyDepartment(scope, data.department)) {
+        return NextResponse.json(
+          { error: "That faculty member is not in your department" },
+          { status: 403 },
+        );
+      }
+    }
 
     if (data.userUid) {
       return NextResponse.json(

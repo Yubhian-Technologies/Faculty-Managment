@@ -58,6 +58,16 @@ export async function POST(request: Request) {
     if (durationYears < 1 || durationYears > 10) {
       return NextResponse.json({ error: "durationYears must be between 1 and 10" }, { status: 400 });
     }
+    if (body.regulationBatches) {
+      for (const [reg, ranges] of Object.entries(body.regulationBatches)) {
+        if (!/^\d{4}-\d{4}(,\d{4}-\d{4})*$/.test(ranges.trim())) {
+          return NextResponse.json(
+            { error: `Invalid batch range for regulation "${reg}" - expected "YYYY-YYYY" comma-separated` },
+            { status: 400 }
+          );
+        }
+      }
+    }
 
     const db = getAdminDb();
 

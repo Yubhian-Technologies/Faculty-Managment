@@ -203,7 +203,7 @@ export function PersonalDetailsView({ value, hideLegalName = false, hiddenFields
         </div>
       )}
 
-      {(ratificationHistory
+      {!hiddenFields.includes("ratificationStatus") && (ratificationHistory
         ? hasAnyValue(p.ratificationStatus, ratificationRecords.length ? "x" : undefined)
         : hasAnyValue(p.ratificationStatus, p.ratificationProceedingsNumber, p.ratificationDate)
       ) && (

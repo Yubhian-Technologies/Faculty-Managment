@@ -15,7 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AvatarUploadField } from "@/components/shared/AvatarUploadField";
 import { TextInput } from "@/components/shared/ProfileFieldPrimitives";
-import { getMissingRequiredPersonalFields } from "@/components/shared/PersonalDetailsFields";
+import { getMissingRequiredPersonalFields, SUPPORTING_STAFF_REQUIRED_PERSONAL_FIELDS } from "@/components/shared/PersonalDetailsFields";
 import { SupportingStaffModuleEditor, type SupportingStaffEditRecord } from "@/components/supportingStaff/SupportingStaffModuleEditor";
 import { getSupportingStaffProfileModules } from "@/lib/supportingStaff/profileModules";
 import { useCollegeType } from "@/hooks/useCollegeType";
@@ -133,7 +133,7 @@ export default function NewHodSupportingStaffPage() {
     // Remaining Personal Details isn't zod-validated (SupportingStaffModuleEditor's
     // "personal" step is plain React state) - checked here instead, same
     // pattern as Add Faculty's equivalent check.
-    const missingPersonal = getMissingRequiredPersonalFields(record);
+    const missingPersonal = getMissingRequiredPersonalFields(record, SUPPORTING_STAFF_REQUIRED_PERSONAL_FIELDS);
     if (missingPersonal.length > 0) {
       setErroredSteps(new Set<WizardStepKey>(["personal"]));
       setStepIndex(steps.findIndex((s) => s.key === "personal"));

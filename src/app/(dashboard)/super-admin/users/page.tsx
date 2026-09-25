@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { UserPlus, UserX, UserCheck, Eye, KeyRound, Trash2, Globe, FileDown } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -72,6 +72,10 @@ export default function UsersPage() {
   const [resetSaving, setResetSaving] = useState(false);
   const [downloadingResumeUid, setDownloadingResumeUid] = useState<string | null>(null);
 
+  // Batch 2: AbortController for users fetch — aborts previous before new, cleanup on unmount
+  const usersAbortRef = useRef<AbortController | null>(null);
+  useEffect(() => () => { usersAbortRef.current?.abort(); }, []);
+
   useEffect(() => {
     fetch("/api/admin/colleges")
       .then((r) => r.json() as Promise<{ colleges: College[] }>)
@@ -100,6 +104,16 @@ export default function UsersPage() {
     return `/api/admin/users?collegeId=${selectedCollegeId}`;
   }
 
+  function usersUrlWithDept() {
+    const base = usersUrl();
+    // Server-aware department prune — additive optimization, keeps client filter as fallback
+    if (isCollegeScopedId(selectedCollegeId) && selectedDeptName && selectedDeptName !== ALL_DEPTS) {
+      const sep = base.includes("?") ? "&" : "?";
+      return `${base}${sep}department=${encodeURIComponent(selectedDeptName)}`;
+    }
+    return base;
+  }
+
   // Reset state when scope changes
   useEffect(() => {
     if (!selectedCollegeId) return;
@@ -111,13 +125,19 @@ export default function UsersPage() {
     if (!isCollegeScopedId(selectedCollegeId)) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setIsLoading(true);
-      fetch(usersUrl())
+      usersAbortRef.current?.abort();
+      const ctrl = new AbortController();
+      usersAbortRef.current = ctrl;
+      fetch(usersUrl(), { signal: ctrl.signal })
         .then((r) => r.json())
         .then((data: { users: UserRow[] }) => {
           setUsers(data.users ?? []);
           setHasUsersLoaded(true);
         })
-        .catch(() => toast({ variant: "destructive", title: "Failed to load users" }))
+        .catch((err) => {
+          if ((err as Error)?.name === "AbortError") return;
+          toast({ variant: "destructive", title: "Failed to load users" });
+        })
         .finally(() => setIsLoading(false));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -132,15 +152,20 @@ export default function UsersPage() {
       toast({ variant: "destructive", title: "Select a department", description: "Choose a department or ALL before loading." });
       return;
     }
+    // Abort previous in-flight load before starting a new one
+    usersAbortRef.current?.abort();
+    const ctrl = new AbortController();
+    usersAbortRef.current = ctrl;
     setIsLoading(true);
     setHasUsersLoaded(false);
     try {
-      const res = await fetch(usersUrl());
+      const res = await fetch(usersUrlWithDept(), { signal: ctrl.signal });
       const data = (await res.json()) as { users: UserRow[] };
       setUsers(data.users ?? []);
       setHasUsersLoaded(true);
       setHasDeptLoaded(true);
-    } catch {
+    } catch (err) {
+      if ((err as Error)?.name === "AbortError") return;
       toast({ variant: "destructive", title: "Failed to load users" });
     } finally {
       setIsLoading(false);
@@ -242,168 +267,171 @@ export default function UsersPage() {
     }
   }
 
-  const columns: Column<UserRow>[] = [
-    {
-      key: "name",
-      header: "Name",
-      render: (row) => {
-        const isSystemWide = !(row.collegeId as string) && !(row.locationId as string);
-        const depts = row.departments && row.departments.length > 0 ? row.departments : [row.department].filter(Boolean) as string[];
-        return (
-          <div className="flex items-center gap-3">
-            <Avatar name={facultyDisplayName(row) || (row.name as string)} photoUrl={row.profilePhotoUrl as string | undefined} size="sm" />
-            <div>
-              <p className="font-medium">{facultyDisplayName(row) || (row.name as string)}</p>
-              <p className="text-xs text-muted-foreground">{row.email as string}</p>
-              {isSystemWide ? (
-                <p className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                  <Globe className="h-3 w-3" />System-Wide
-                </p>
-              ) : depts.length > 0 && (
-                <p className="text-xs text-muted-foreground">{depts.join(", ")}</p>
-              )}
-            </div>
-          </div>
-        );
-      },
-    },
-    {
-      key: "role",
-      header: "Role",
-      render: (row) => (
-        <Badge variant="outline">
-          {ROLE_LABELS[row.role as keyof typeof ROLE_LABELS] ?? (row.role as string)}
-        </Badge>
-      ),
-    },
-    {
-      key: "designation",
-      header: "Designation",
-      hideOnMobile: true,
-      // PANEL_MEMBER (faculty) / COLLEGE_STAFF (supporting staff) logins are
-      // linked to a facultyMembers/supportingStaff record - the API merges
-      // that record's details (designation, employeeId, ...) into the row
-      // (see /api/admin/users). Every other role has neither field.
-      render: (row) => {
-        const rawDesignation = row.designation as string | undefined;
-        const label = rawDesignation
-          ? row.role === "PANEL_MEMBER"
-            ? DESIGNATION_LABELS[rawDesignation as Designation] ?? rawDesignation
-            : rawDesignation
-          : null;
-        const employeeId = row.employeeId as string | undefined;
-        if (!label && !employeeId) return <span className="text-muted-foreground">-</span>;
-        return (
-          <div>
-            {label && <p>{label}</p>}
-            {employeeId && <p className="text-xs text-muted-foreground">{employeeId}</p>}
-          </div>
-        );
-      },
-    },
-    {
-      key: "isActive",
-      header: "Status",
-      render: (row) => (
-        <Badge variant={(row.isActive as boolean) ? "default" : "secondary"}>
-          {(row.isActive as boolean) ? "Active" : "Inactive"}
-        </Badge>
-      ),
-    },
-    {
-      key: "actions",
-      header: "",
-      render: (row) => {
-        // Edit (including the photo) is available for the 6 roles Super Admin
-        // administers. Reset/Activate/Deactivate only exist for college-scoped
-        // users today. Delete also works for global (Management) users - but not
-        // location-scoped (Administration) ones, since the delete route doesn't
-        // know how to clean up a locationUsers doc yet.
-        const isCollegeScoped = !!(row.collegeId as string);
-        const isLocationScoped = !isCollegeScoped && !!(row.locationId as string);
-        const canEdit = PHOTO_EDITABLE_ROLES.includes(row.role);
-        // Faculty isn't Super-Admin-editable (their HOD/Principal owns that),
-        // but Super Admin can still view the profile - same hub view PRINCIPAL/
-        // DIRECTOR get, just without an Edit button (see [uid]/page.tsx's
-        // HUB_ROLES and the module page's own read-only check for that role).
-        const canView = row.role === "PANEL_MEMBER";
-        const editHref = `/super-admin/users/${row.uid}?role=${row.role}` +
-          (row.collegeId ? `&collegeId=${row.collegeId}` : "") +
-          (row.locationId ? `&locationId=${row.locationId}` : "");
-        // Never wraps to a second line - a college with a longer role label
-        // (e.g. "Head of Department") had enough buttons here to wrap onto
-        // two lines while a shorter-label college's row stayed on one, so
-        // the action column's height varied row to row. Kept on one line
-        // always now; if the row genuinely doesn't fit, the table's own
-        // horizontal scroll (DataTable's existing responsive fallback, same
-        // as every other list in this app) takes over instead of an
-        // inconsistent wrap.
-        return (
-          <div className="flex items-center gap-1 whitespace-nowrap">
-            {canEdit || canView ? (
-              <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); router.push(editHref); }}>
-                <Eye className="h-3.5 w-3.5" />
-                <span className="ml-1 hidden lg:inline">{row.role === "PRINCIPAL" || canView ? "View" : "Edit"}</span>
-              </Button>
-            ) : (
-              <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); setViewUser(row); }}>
-                <Eye className="h-3.5 w-3.5" />
-                <span className="ml-1 hidden lg:inline">View</span>
-              </Button>
-            )}
-            <Button
-              variant="ghost"
-              size="sm"
-              title="Download resume PDF"
-              loading={downloadingResumeUid === (row.uid as string)}
-              onClick={(e) => { e.stopPropagation(); void handleDownloadResume(row); }}
-            >
-              <FileDown className="h-3.5 w-3.5" />
-              <span className="ml-1 hidden lg:inline">Download</span>
-            </Button>
-            {isCollegeScoped && (
-              <>
-                <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); setResetUser(row); setNewPassword(""); }}>
-                  <KeyRound className="h-3.5 w-3.5" />
-                  <span className="ml-1 hidden lg:inline">Reset</span>
-                </Button>
-                {(row.isActive as boolean) ? (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    loading={actionUid === (row.uid as string)}
-                    onClick={(e) => { e.stopPropagation(); setConfirmUser({ user: row, action: "deactivate" }); }}
-                  >
-                    <UserX className="h-3.5 w-3.5 text-destructive" />
-                    <span className="ml-1 hidden lg:inline text-destructive">Deactivate</span>
-                  </Button>
-                ) : (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    loading={actionUid === (row.uid as string)}
-                    onClick={(e) => { e.stopPropagation(); setConfirmUser({ user: row, action: "activate" }); }}
-                  >
-                    <UserCheck className="h-3.5 w-3.5 text-green-600" />
-                    <span className="ml-1 hidden lg:inline text-green-600">Activate</span>
-                  </Button>
+  const columns: Column<UserRow>[] = useMemo(
+    () => [
+      {
+        key: "name",
+        header: "Name",
+        render: (row) => {
+          const isSystemWide = !(row.collegeId as string) && !(row.locationId as string);
+          const depts = row.departments && row.departments.length > 0 ? row.departments : [row.department].filter(Boolean) as string[];
+          return (
+            <div className="flex items-center gap-3">
+              <Avatar name={facultyDisplayName(row) || (row.name as string)} photoUrl={row.profilePhotoUrl as string | undefined} size="sm" />
+              <div>
+                <p className="font-medium">{facultyDisplayName(row) || (row.name as string)}</p>
+                <p className="text-xs text-muted-foreground">{row.email as string}</p>
+                {isSystemWide ? (
+                  <p className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                    <Globe className="h-3 w-3" />System-Wide
+                  </p>
+                ) : depts.length > 0 && (
+                  <p className="text-xs text-muted-foreground">{depts.join(", ")}</p>
                 )}
-              </>
-            )}
-            {!isLocationScoped && (
+              </div>
+            </div>
+          );
+        },
+      },
+      {
+        key: "role",
+        header: "Role",
+        render: (row) => (
+          <Badge variant="outline">
+            {ROLE_LABELS[row.role as keyof typeof ROLE_LABELS] ?? (row.role as string)}
+          </Badge>
+        ),
+      },
+      {
+        key: "designation",
+        header: "Designation",
+        hideOnMobile: true,
+        // PANEL_MEMBER (faculty) / COLLEGE_STAFF (supporting staff) logins are
+        // linked to a facultyMembers/supportingStaff record - the API merges
+        // that record's details (designation, employeeId, ...) into the row
+        // (see /api/admin/users). Every other role has neither field.
+        render: (row) => {
+          const rawDesignation = row.designation as string | undefined;
+          const label = rawDesignation
+            ? row.role === "PANEL_MEMBER"
+              ? DESIGNATION_LABELS[rawDesignation as Designation] ?? rawDesignation
+              : rawDesignation
+            : null;
+          const employeeId = row.employeeId as string | undefined;
+          if (!label && !employeeId) return <span className="text-muted-foreground">-</span>;
+          return (
+            <div>
+              {label && <p>{label}</p>}
+              {employeeId && <p className="text-xs text-muted-foreground">{employeeId}</p>}
+            </div>
+          );
+        },
+      },
+      {
+        key: "isActive",
+        header: "Status",
+        render: (row) => (
+          <Badge variant={(row.isActive as boolean) ? "default" : "secondary"}>
+            {(row.isActive as boolean) ? "Active" : "Inactive"}
+          </Badge>
+        ),
+      },
+      {
+        key: "actions",
+        header: "",
+        render: (row) => {
+          // Edit (including the photo) is available for the 6 roles Super Admin
+          // administers. Reset/Activate/Deactivate only exist for college-scoped
+          // users today. Delete also works for global (Management) users - but not
+          // location-scoped (Administration) ones, since the delete route doesn't
+          // know how to clean up a locationUsers doc yet.
+          const isCollegeScoped = !!(row.collegeId as string);
+          const isLocationScoped = !isCollegeScoped && !!(row.locationId as string);
+          const canEdit = PHOTO_EDITABLE_ROLES.includes(row.role);
+          // Faculty isn't Super-Admin-editable (their HOD/Principal owns that),
+          // but Super Admin can still view the profile - same hub view PRINCIPAL/
+          // DIRECTOR get, just without an Edit button (see [uid]/page.tsx's
+          // HUB_ROLES and the module page's own read-only check for that role).
+          const canView = row.role === "PANEL_MEMBER";
+          const editHref = `/super-admin/users/${row.uid}?role=${row.role}` +
+            (row.collegeId ? `&collegeId=${row.collegeId}` : "") +
+            (row.locationId ? `&locationId=${row.locationId}` : "");
+          // Never wraps to a second line - a college with a longer role label
+          // (e.g. "Head of Department") had enough buttons here to wrap onto
+          // two lines while a shorter-label college's row stayed on one, so
+          // the action column's height varied row to row. Kept on one line
+          // always now; if the row genuinely doesn't fit, the table's own
+          // horizontal scroll (DataTable's existing responsive fallback, same
+          // as every other list in this app) takes over instead of an
+          // inconsistent wrap.
+          return (
+            <div className="flex items-center gap-1 whitespace-nowrap">
+              {canEdit || canView ? (
+                <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); router.push(editHref); }}>
+                  <Eye className="h-3.5 w-3.5" />
+                  <span className="ml-1 hidden lg:inline">{row.role === "PRINCIPAL" || canView ? "View" : "Edit"}</span>
+                </Button>
+              ) : (
+                <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); setViewUser(row); }}>
+                  <Eye className="h-3.5 w-3.5" />
+                  <span className="ml-1 hidden lg:inline">View</span>
+                </Button>
+              )}
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={(e) => { e.stopPropagation(); setConfirmUser({ user: row, action: "delete" }); }}
+                title="Download resume PDF"
+                loading={downloadingResumeUid === (row.uid as string)}
+                onClick={(e) => { e.stopPropagation(); void handleDownloadResume(row); }}
               >
-                <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                <FileDown className="h-3.5 w-3.5" />
+                <span className="ml-1 hidden lg:inline">Download</span>
               </Button>
-            )}
-          </div>
-        );
+              {isCollegeScoped && (
+                <>
+                  <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); setResetUser(row); setNewPassword(""); }}>
+                    <KeyRound className="h-3.5 w-3.5" />
+                    <span className="ml-1 hidden lg:inline">Reset</span>
+                  </Button>
+                  {(row.isActive as boolean) ? (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      loading={actionUid === (row.uid as string)}
+                      onClick={(e) => { e.stopPropagation(); setConfirmUser({ user: row, action: "deactivate" }); }}
+                    >
+                      <UserX className="h-3.5 w-3.5 text-destructive" />
+                      <span className="ml-1 hidden lg:inline text-destructive">Deactivate</span>
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      loading={actionUid === (row.uid as string)}
+                      onClick={(e) => { e.stopPropagation(); setConfirmUser({ user: row, action: "activate" }); }}
+                    >
+                      <UserCheck className="h-3.5 w-3.5 text-green-600" />
+                      <span className="ml-1 hidden lg:inline text-green-600">Activate</span>
+                    </Button>
+                  )}
+                </>
+              )}
+              {!isLocationScoped && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={(e) => { e.stopPropagation(); setConfirmUser({ user: row, action: "delete" }); }}
+                >
+                  <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                </Button>
+              )}
+            </div>
+          );
+        },
       },
-    },
-  ];
+    ],
+    [actionUid, downloadingResumeUid, router, ROLE_LABELS]
+  );
 
   const collegeLabel = selectedCollegeId === GLOBAL_SCOPE
     ? "System-Wide Users"
@@ -412,7 +440,7 @@ export default function UsersPage() {
     : colleges.find((c) => c.id === selectedCollegeId)?.name ?? "All Users";
 
   const isCollegeScope = isCollegeScopedId(selectedCollegeId);
-  const displayedUsers = (() => {
+  const displayedUsers = useMemo(() => {
     if (!isCollegeScope) return users;
     if (!hasUsersLoaded) return [] as UserRow[];
     if (selectedDeptName === ALL_DEPTS) return users;
@@ -425,7 +453,7 @@ export default function UsersPage() {
       });
     }
     return users;
-  })();
+  }, [users, hasUsersLoaded, selectedDeptName, isCollegeScope]);
 
   const isAllFilter = selectedDeptName === ALL_DEPTS;
   const deptEmptyTitle = hasUsersLoaded && isCollegeScope && selectedDeptName && displayedUsers.length === 0

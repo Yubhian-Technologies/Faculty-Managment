@@ -9,9 +9,10 @@ import { type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
 import { provisionCollegeUser, provisionLocationUser } from "@/lib/firestore/userProvisioning";
 import { normalizeAcademicProfile } from "@/lib/faculty/academicProfileCompat";
 import { migrateUserDoc, migrateFacultyDoc, migrateSupportingStaffDoc } from "@/lib/faculty/fieldRenames";
-import { PHONE_REGEX } from "@/lib/validations";
+import { PHONE_REGEX, EMAIL_REGEX } from "@/lib/validations";
 import type { UserRole } from "@/types";
 import { ROLE_SCOPE } from "@/types";
+import { SUPER_ADMIN_CREATABLE, GLOBAL_ROLES } from "@/lib/roles/superAdminCreatable";
 
 export async function GET(request: Request) {
   try {
@@ -52,21 +53,85 @@ export async function GET(request: Request) {
     // here so this list (and the "Download resume" button, which just sends
     // the row as-is) has the full picture instead of only login-account fields.
     const usersRaw = snap.docs.map((d) => ({ uid: d.id, ...migrateUserDoc(d.data()) })) as (Record<string, unknown> & { uid: string; role?: string })[];
-    const users = await Promise.all(
-      usersRaw.map(async (u) => {
-        let linkedCollection: string | null = null;
-        if (u.role === "PANEL_MEMBER") linkedCollection = "facultyMembers";
-        else if (u.role === "COLLEGE_STAFF") linkedCollection = "supportingStaff";
-        if (!linkedCollection) return u;
 
-        const linkedSnap = await db.collection("colleges").doc(collegeId).collection(linkedCollection)
-          .where("userUid", "==", u.uid).limit(1).get();
-        if (linkedSnap.empty) return u;
-        const linkedData = linkedSnap.docs[0].data();
-        const linkedLifted = linkedCollection === "facultyMembers" ? migrateFacultyDoc(linkedData) : migrateSupportingStaffDoc(linkedData);
-        return { ...linkedLifted, ...u, recordId: linkedSnap.docs[0].id };
-      })
-    );
+    // — Batched N+1 optimization: chunk userUid "in" queries (Firestore limit = 30) —
+    // Builds Maps per linked collection, then maps back onto usersRaw preserving order.
+    // Falls back to the original per-doc queries if any batched query fails (missing
+    // index / permission / transient error) so the response shape never breaks.
+    function chunk<T>(arr: T[], size: number): T[][] {
+      const out: T[][] = [];
+      for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+      return out;
+    }
+
+    const panelUids = usersRaw.filter((u) => u.role === "PANEL_MEMBER").map((u) => u.uid);
+    const staffUids = usersRaw.filter((u) => u.role === "COLLEGE_STAFF").map((u) => u.uid);
+
+    let users: (Record<string, unknown> & { uid: string; role?: string })[];
+
+    try {
+      const panelMap = new Map<string, { data: Record<string, unknown>; id: string }>();
+      const staffMap = new Map<string, { data: Record<string, unknown>; id: string }>();
+
+      const fetchBatched = async (
+        uids: string[],
+        collection: string,
+        targetMap: Map<string, { data: Record<string, unknown>; id: string }>,
+      ) => {
+        if (uids.length === 0) return;
+        const chunks = chunk(uids, 30);
+        const results = await Promise.all(
+          chunks.map((c) =>
+            db.collection("colleges").doc(collegeId).collection(collection).where("userUid", "in", c).get(),
+          ),
+        );
+        for (const snap2 of results) {
+          for (const doc of snap2.docs) {
+            const d = doc.data() as Record<string, unknown> & { userUid?: string };
+            const key = (d.userUid as string) ?? doc.id;
+            // Keep first hit per userUid; there should be at most one.
+            if (!targetMap.has(key)) targetMap.set(key, { data: d, id: doc.id });
+          }
+        }
+      };
+
+      await Promise.all([
+        fetchBatched(panelUids, "facultyMembers", panelMap),
+        fetchBatched(staffUids, "supportingStaff", staffMap),
+      ]);
+
+      users = usersRaw.map((u) => {
+        let hit: { data: Record<string, unknown>; id: string } | undefined;
+        if (u.role === "PANEL_MEMBER") hit = panelMap.get(u.uid);
+        else if (u.role === "COLLEGE_STAFF") hit = staffMap.get(u.uid);
+        if (!hit) return u;
+        const lifted = u.role === "PANEL_MEMBER" ? migrateFacultyDoc(hit.data) : migrateSupportingStaffDoc(hit.data);
+        return { ...lifted, ...u, recordId: hit.id };
+      });
+    } catch (e) {
+      console.warn("[admin/users GET] batched fetch failed, falling back to N+1:", e);
+      // Fallback: original per-doc N+1 (preserves behavior if "in" query/index unavailable)
+      users = await Promise.all(
+        usersRaw.map(async (u) => {
+          let linkedCollection: string | null = null;
+          if (u.role === "PANEL_MEMBER") linkedCollection = "facultyMembers";
+          else if (u.role === "COLLEGE_STAFF") linkedCollection = "supportingStaff";
+          if (!linkedCollection) return u;
+          const linkedSnap = await db
+            .collection("colleges")
+            .doc(collegeId)
+            .collection(linkedCollection)
+            .where("userUid", "==", u.uid)
+            .limit(1)
+            .get();
+          if (linkedSnap.empty) return u;
+          const linkedData = linkedSnap.docs[0].data();
+          const linkedLifted =
+            linkedCollection === "facultyMembers" ? migrateFacultyDoc(linkedData) : migrateSupportingStaffDoc(linkedData);
+          return { ...linkedLifted, ...u, recordId: linkedSnap.docs[0].id };
+        }),
+      );
+    }
     let filteredUsers = users;
     if (departmentFilter) {
       filteredUsers = users.filter((u) => {
@@ -86,19 +151,14 @@ export async function GET(request: Request) {
   }
 }
 
-// Roles a Super Admin can create - the level L1–L2 set (GLOBAL + LOCATION).
+// Roles a Super Admin can create - single source is SUPER_ADMIN_CREATABLE (src/lib/roles/superAdminCreatable.ts).
 // Each role's write target (systemUsers / locationUsers) is derived from
 // ROLE_SCOPE, so the single source of truth stays in core.ts. Principal and
 // the rest of L3 and below are seats - a college's own College Admin appoints
 // them via Role Assignments, never Super Admin directly (same reasoning as
 // removing it from Location Admin). Must match CREATABLE_ROLES in
-// super-admin/users/new/page.tsx.
-const SUPER_ADMIN_CREATABLE: UserRole[] = [
-  "MANAGEMENT", "FINANCE", "PURCHASE_DEPT",   // L1 · GLOBAL
-  "ADMINISTRATION", "ACCOUNTS",               // L2 · LOCATION
-];
-// Global-scoped subset - used by the GET ?scope=global (System-Wide) listing.
-const GLOBAL_ROLES: UserRole[] = SUPER_ADMIN_CREATABLE.filter((r) => ROLE_SCOPE[r] === "GLOBAL");
+// super-admin/users/new/page.tsx (now shared via the imported constant).
+// SUPER_ADMIN_CREATABLE and GLOBAL_ROLES are imported from @/lib/roles/superAdminCreatable.
 
 // MANAGEMENT (L1) can appoint Administrators/Accounts to a location - the
 // LOCATION-scoped slice of SUPER_ADMIN_CREATABLE.
@@ -126,6 +186,11 @@ export async function POST(request: Request) {
 
     if (!name || !email || !password || !role) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    }
+    // Validate email shape via shared EMAIL_REGEX (trim + lower before check) - 400 guard before any write.
+    const normalizedEmail = typeof email === "string" ? email.trim().toLowerCase() : "";
+    if (!EMAIL_REGEX.test(normalizedEmail)) {
+      return NextResponse.json({ error: "Invalid email address" }, { status: 400 });
     }
     // Optional, but a filled-in value must be a real 10-digit mobile number -
     // the client already enforces this (super-admin/users/new/page.tsx), this
@@ -177,21 +242,21 @@ export async function POST(request: Request) {
 
     if (scope === "GLOBAL") {
       // MANAGEMENT / FINANCE / PURCHASE_DEPT: no college/location scope - systemUsers only.
-      uid = await createFirebaseUser(email, password, name);
+      uid = await createFirebaseUser(normalizedEmail, password, name);
       await db.collection("systemUsers").doc(uid).set({
-        uid, role, email, name, phone: phone ?? "", collegeId: "",
+        uid, role, email: normalizedEmail, name, phone: phone ?? "", collegeId: "",
         ...(academicProfile ? { academicProfile: normalizeAcademicProfile(academicProfile) } : {}),
         ...(profilePhotoUrl ? { profilePhotoUrl } : {}),
         isActive: true, createdAt: new Date(),
       });
     } else if (scope === "LOCATION" && locationId) {
       // ADMINISTRATION / ACCOUNTS: location subcollection.
-      uid = await provisionLocationUser(db, locationId, role, { name, email, password, phone, academicProfile, profilePhotoUrl });
+      uid = await provisionLocationUser(db, locationId, role, { name, email: normalizedEmail, password, phone, academicProfile, profilePhotoUrl });
     } else if (scope === "COLLEGE" && collegeId) {
       // COLLEGE scope (no creatable role remains after DIRECTOR removal - kept for validation completeness): college subcollection.
       uid = await provisionCollegeUser(
         db, collegeId, role,
-        { ...body, name, email, password, phone, department, academicProfile, profilePhotoUrl },
+        { ...body, name, email: normalizedEmail, password, phone, department, academicProfile, profilePhotoUrl },
         { locationId: collegeLocationId, performedBy: session.uid, performedByRole: session.role }
       );
     } else {
