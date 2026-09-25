@@ -7,9 +7,12 @@ import type { StudentRecord } from "@/types";
 // Add/Edit forms.
 //
 // Kept in one place because those four had no way to stay in step otherwise:
-// the importer already collected all 35 columns while the Add form asked for
-// 7 of them, so a manually-added student silently carried less than an
-// imported one. Adding a column here now flows to every surface at once.
+// the importer used to collect every column while the Add form asked for
+// only a handful of them, so a manually-added student silently carried less
+// than an imported one. Adding a column here now flows to every surface at
+// once - though Course/Department/Academic Year/Core Department are picked
+// via other means in the bulk-import template specifically (see that page's
+// own PICKER_KEYS/ALWAYS_SKIPPED_IN_TEMPLATE), never typed per row.
 //
 // `sample` is a per-column RULE/INSTRUCTION string (e.g. "Required; full
 // student name", "Optional: Male / Female / Other") - not literal example
@@ -21,7 +24,7 @@ import type { StudentRecord } from "@/types";
 export type RosterFieldKind = "text" | "date" | "number" | "yesno" | "select";
 
 export interface RosterField {
-  /** Key on StudentRecord, or "sno" for the sheet-only serial column. */
+  /** Key on StudentRecord. */
   key: string;
   /** Exact CSV header - also the form label and detail-view caption. */
   label: string;
@@ -39,11 +42,6 @@ export interface RosterField {
    * detail. These are what a roster row is recognised by.
    */
   primary?: boolean;
-  /**
-   * A convenience column for the sheet's author that isn't stored on the
-   * student (the row's serial number). Skipped by the forms and detail view.
-   */
-  sheetOnly?: boolean;
   /** Placeholder for the Add/Edit form input. */
   placeholder?: string;
   /**
@@ -56,16 +54,28 @@ export interface RosterField {
 }
 
 export const ROSTER_FIELDS: RosterField[] = [
-  { key: "sno", label: "S.No", kind: "text", sample: "Sheet-only; serial number, not stored", primary: true, sheetOnly: true },
+  // Roll No leads - it's what a physical roster/attendance sheet is
+  // organised by, and (unlike Name) it's usually unique enough on its own to
+  // recognise a row by at a glance. Still optional here: a provisional
+  // number if the office already has one, not checked for uniqueness until
+  // the department assigns the real one.
+  { key: "rollNumber", label: "Roll No", kind: "text", sample: "Optional; a provisional roll number if you already have one - not checked for uniqueness until the department assigns the real one", primary: true, aliases: ["Roll Number"] },
   { key: "name", label: "Name (as per SSC)", kind: "text", sample: "Required; full name exactly as on SSC (10th) certificate", required: true, primary: true, aliases: ["Name", "Student Name", "Full Name"], placeholder: "P. Sai Kumar" },
   { key: "studentType", label: "Student Type", kind: "select", sample: "Optional: Regular / Lateral - defaults to Regular when left blank", primary: true, options: ["Regular", "Lateral"] },
+  // Course/Department/Academic Year are always primary identity fields (the
+  // Add/Edit form and detail view always show them, and every student is
+  // scoped/queried by department+year) but are picked ONCE, via a dropdown,
+  // for the whole file in the College Office's bulk-import template rather
+  // than typed per row - see that page's own PICKER_KEYS/ALWAYS_SKIPPED_IN_TEMPLATE.
   { key: "course", label: "Course", kind: "text", sample: "Required; the programme (e.g. Bachelor of Technology) or its short Code - must be a course the row's Department actually offers", required: true, primary: true, aliases: ["Programme", "Program"], placeholder: "B.Tech" },
   { key: "department", label: "Department", kind: "select", sample: "Required; full AICTE department name (e.g. \"Computer Science and Engineering\", not \"CSE\") or the short Code, as added on your college", required: true, primary: true, aliases: ["Dept", "Department Code", "Branch"] },
+  // Core Department is likewise never a per-row template column - it's
+  // picked once, the same way as Department, via that same Step 1 picker
+  // (college-office/students/import/page.tsx's STEP1_FIELDS), or set
+  // per-student via the Add/Edit form.
   { key: "secondaryDepartment", label: "Core Department", kind: "select", sample: "Optional; same name/Code rules as Department - only for a 1st-year pre-registered to a core branch while enrolled under a shared/Basic Science department", primary: true,
     aliases: ["Secondary Department", "Secondary Dept", "Core Branch"] },
   { key: "year", label: "Academic Year", kind: "select", sample: "Required; the academic year number (1-4)", required: true, primary: true, aliases: ["Year"] },
-  { key: "semester", label: "Semester", kind: "text", sample: "Optional; e.g. \"1\" or \"1st Semester\"", primary: true, aliases: ["Sem"], placeholder: "1st Semester" },
-  { key: "rollNumber", label: "Roll No", kind: "text", sample: "Optional; a provisional roll number if you already have one - not checked for uniqueness until the department assigns the real one", primary: true, aliases: ["Roll Number"] },
 
   { key: "admissionNo", label: "Admission No", kind: "text", sample: "Optional; text" },
   { key: "hallTicketNo", label: "Hall Ticket No", kind: "text", sample: "Optional; text" },
@@ -75,7 +85,6 @@ export const ROSTER_FIELDS: RosterField[] = [
   { key: "entranceRank", label: "Entrance Rank", kind: "text", sample: "Optional; text/number" },
   { key: "jeeRank", label: "JEE Rank", kind: "text", sample: "Optional; text/number" },
   { key: "jeePercentage", label: "JEE %", kind: "text", sample: "Optional; number, e.g. 95.5" },
-  { key: "seatType", label: "Seat Type", kind: "text", sample: "Optional; e.g. Convenor, Management", placeholder: "Convenor" },
   { key: "scholarship", label: "Scholarship (Yes/No)", kind: "yesno", sample: "Optional: Yes / No" },
   { key: "gender", label: "Gender", kind: "select", sample: "Optional: Male / Female / Other", options: ["Male", "Female", "Other"] },
   { key: "dateOfBirth", label: "Date of Birth (YYYY-MM-DD)", kind: "date", sample: "Optional; YYYY-MM-DD", aliases: ["DOB", "Date of Birth"] },
@@ -85,13 +94,23 @@ export const ROSTER_FIELDS: RosterField[] = [
   { key: "religion", label: "Religion", kind: "text", sample: "Optional; e.g. Hindu, Muslim, Christian, Sikh, Jain, Parsi, Buddhist, Other" },
   { key: "nationality", label: "Nationality", kind: "text", sample: "Optional; text", placeholder: "Indian" },
   { key: "motherTongue", label: "Mother Tongue", kind: "text", sample: "Optional; text" },
-  { key: "guardianContact", label: "Guardian Contact", kind: "text", sample: "Optional; phone/text", aliases: ["Parent Contact", "Guardian Phone", "Parent Phone"], placeholder: "9876543210" },
+  // Father/Mother are the default parent contacts; Guardian Name/Contact is
+  // only for the (less common) case where someone else altogether holds
+  // that role - "if any", left blank otherwise.
+  { key: "fatherName", label: "Father Name", kind: "text", sample: "Optional; text", aliases: ["Father's Name"] },
+  { key: "fatherContactNo", label: "Father Contact Number", kind: "text", sample: "Optional; phone/text", aliases: ["Father Phone", "Father Mobile", "Father Contact"], placeholder: "9876543210" },
+  { key: "motherName", label: "Mother Name", kind: "text", sample: "Optional; text", aliases: ["Mother's Name"] },
+  { key: "motherContactNo", label: "Mother Contact Number", kind: "text", sample: "Optional; phone/text", aliases: ["Mother Phone", "Mother Mobile", "Mother Contact"], placeholder: "9876543211" },
+  { key: "guardianName", label: "Guardian Name (if any)", kind: "text", sample: "Optional; only when someone other than a parent is this student's guardian", aliases: ["Guardian"] },
+  { key: "guardianContact", label: "Guardian Contact Number", kind: "text", sample: "Optional; phone/text", aliases: ["Guardian Contact", "Parent Contact", "Guardian Phone", "Parent Phone"], placeholder: "9876543212" },
   { key: "mobileNo", label: "Student Mobile No", kind: "text", sample: "Optional; phone/text" },
   { key: "landLineNo", label: "Land Line No", kind: "text", sample: "Optional; text" },
   { key: "email", label: "Email", kind: "text", sample: "Optional; must contain @", aliases: ["Email ID"], placeholder: "student@example.com" },
   { key: "aadharNo", label: "Aadhar Card No.", kind: "text", sample: "Optional; text", aliases: ["Aadhar No"] },
   { key: "rationCardNo", label: "Ration Card No", kind: "text", sample: "Optional; text" },
   { key: "bankAccountNo", label: "Student Bank A/C No.", kind: "text", sample: "Optional; text" },
+  { key: "bankName", label: "Bank Name", kind: "text", sample: "Optional; text" },
+  { key: "ifscCode", label: "IFSC Code", kind: "text", sample: "Optional; text", placeholder: "SBIN0001234" },
   { key: "lastAttendedInstitution", label: "Last Attended Institution", kind: "text", sample: "Optional; text" },
   { key: "distanceFromResidenceKm", label: "Distance From Res. To College (km)", kind: "number", sample: "Optional; number" },
   { key: "hosteller", label: "Hosteller (Yes/No)", kind: "yesno", sample: "Optional: Yes / No" },
@@ -110,78 +129,93 @@ export const ROSTER_FIELDS: RosterField[] = [
 // IMPORT_SAMPLE_ROWS (src/lib/faculty/csvColumns.ts).
 export const ROSTER_SAMPLE_ROWS: Record<string, string>[] = [
   {
-    sno: "1", name: "P. Sai Kumar", studentType: "Regular", course: "Bachelor of Technology", department: "Computer Science and Engineering",
-    secondaryDepartment: "", year: "2", semester: "3", rollNumber: "22A91A0501",
+    rollNumber: "22A91A0501", name: "P. Sai Kumar", studentType: "Regular", course: "Bachelor of Technology", department: "Computer Science and Engineering",
+    secondaryDepartment: "", year: "2",
     admissionNo: "ADM2022001", hallTicketNo: "1234567890", dateOfAdmission: "2022-06-01",
     admissionType: "Convenor", entranceType: "EAMCET", entranceRank: "4521", jeeRank: "", jeePercentage: "",
-    seatType: "Convenor", scholarship: "No", gender: "Male", dateOfBirth: "2004-08-12", bloodGroup: "O+",
+    scholarship: "No", gender: "Male", dateOfBirth: "2004-08-12", bloodGroup: "O+",
     caste: "OC", subCaste: "", religion: "Hindu", nationality: "Indian", motherTongue: "Telugu",
-    guardianContact: "9876543210", mobileNo: "9876543211", landLineNo: "",
+    fatherName: "P. Ramesh Kumar", fatherContactNo: "9876543210", motherName: "P. Lakshmi", motherContactNo: "9876543220",
+    guardianName: "", guardianContact: "",
+    mobileNo: "9876543211", landLineNo: "",
     email: "saikumar@gmail.com", aadharNo: "123456789012", rationCardNo: "", bankAccountNo: "62345671234",
+    bankName: "State Bank of India", ifscCode: "SBIN0001234",
     lastAttendedInstitution: "Sri Chaitanya Junior College", distanceFromResidenceKm: "12",
     hosteller: "No", physicallyHandicapped: "No", handicappedType: "", identificationMarks: "Mole on left cheek", remarks: "",
   },
   {
-    sno: "2", name: "K. Divya Sree", studentType: "Regular", course: "Bachelor of Technology", department: "Information Technology",
-    secondaryDepartment: "", year: "1", semester: "1", rollNumber: "",
+    rollNumber: "", name: "K. Divya Sree", studentType: "Regular", course: "Bachelor of Technology", department: "Information Technology",
+    secondaryDepartment: "", year: "1",
     admissionNo: "ADM2026014", hallTicketNo: "2345678901", dateOfAdmission: "2026-06-01",
     admissionType: "Management", entranceType: "JEE", entranceRank: "", jeeRank: "18452", jeePercentage: "95.5",
-    seatType: "Management", scholarship: "Yes", gender: "Female", dateOfBirth: "2008-01-30", bloodGroup: "B+",
+    scholarship: "Yes", gender: "Female", dateOfBirth: "2008-01-30", bloodGroup: "B+",
     caste: "BC-B", subCaste: "Yadava", religion: "Hindu", nationality: "Indian", motherTongue: "Telugu",
-    guardianContact: "9876543212", mobileNo: "9876543213", landLineNo: "08832451234",
+    fatherName: "K. Srinivasa Rao", fatherContactNo: "9876543212", motherName: "K. Padmavathi", motherContactNo: "9876543222",
+    guardianName: "", guardianContact: "",
+    mobileNo: "9876543213", landLineNo: "08832451234",
     email: "divyasree.k@gmail.com", aadharNo: "234567890123", rationCardNo: "RC1234567", bankAccountNo: "62345672345",
+    bankName: "Andhra Bank", ifscCode: "ANDB0001234",
     lastAttendedInstitution: "Narayana Junior College", distanceFromResidenceKm: "5.5",
     hosteller: "Yes", physicallyHandicapped: "No", handicappedType: "", identificationMarks: "", remarks: "Hostel room 214",
   },
   {
-    sno: "3", name: "M. Rahul Varma", studentType: "Regular", course: "Bachelor of Technology", department: "Basic Science",
-    secondaryDepartment: "Electronics and Communication Engineering", year: "1", semester: "1", rollNumber: "",
+    rollNumber: "", name: "M. Rahul Varma", studentType: "Regular", course: "Bachelor of Technology", department: "Basic Science",
+    secondaryDepartment: "Electronics and Communication Engineering", year: "1",
     admissionNo: "ADM2026028", hallTicketNo: "3456789012", dateOfAdmission: "2026-06-01",
     admissionType: "Direct", entranceType: "ECET", entranceRank: "902", jeeRank: "", jeePercentage: "",
-    seatType: "Convenor", scholarship: "No", gender: "Male", dateOfBirth: "2008-03-19", bloodGroup: "A+",
+    scholarship: "No", gender: "Male", dateOfBirth: "2008-03-19", bloodGroup: "A+",
     caste: "EBC", subCaste: "", religion: "Muslim", nationality: "Indian", motherTongue: "Urdu",
-    guardianContact: "9876543214", mobileNo: "", landLineNo: "",
+    fatherName: "M. Abdul Varma", fatherContactNo: "9876543214", motherName: "", motherContactNo: "",
+    guardianName: "M. Naseer (Uncle)", guardianContact: "9876543215",
+    mobileNo: "", landLineNo: "",
     email: "", aadharNo: "", rationCardNo: "", bankAccountNo: "",
+    bankName: "", ifscCode: "",
     lastAttendedInstitution: "", distanceFromResidenceKm: "",
     hosteller: "No", physicallyHandicapped: "No", handicappedType: "", identificationMarks: "", remarks: "",
   },
   {
-    sno: "4", name: "S. Anjali", studentType: "Lateral", course: "Bachelor of Technology", department: "Electronics and Communication Engineering",
-    secondaryDepartment: "", year: "3", semester: "5", rollNumber: "24A91A0442",
+    rollNumber: "24A91A0442", name: "S. Anjali", studentType: "Lateral", course: "Bachelor of Technology", department: "Electronics and Communication Engineering",
+    secondaryDepartment: "", year: "3",
     admissionNo: "ADM2024037", hallTicketNo: "4567890123", dateOfAdmission: "2024-06-03",
     admissionType: "Convenor", entranceType: "EAMCET", entranceRank: "11023", jeeRank: "", jeePercentage: "",
-    seatType: "Convenor", scholarship: "Yes", gender: "Female", dateOfBirth: "2006-11-05", bloodGroup: "AB+",
+    scholarship: "Yes", gender: "Female", dateOfBirth: "2006-11-05", bloodGroup: "AB+",
     caste: "SC", subCaste: "Mala", religion: "Christian", nationality: "Indian", motherTongue: "Telugu",
-    guardianContact: "9876543216", mobileNo: "9876543217", landLineNo: "",
+    fatherName: "S. David", fatherContactNo: "9876543216", motherName: "S. Mary", motherContactNo: "9876543226",
+    guardianName: "", guardianContact: "",
+    mobileNo: "9876543217", landLineNo: "",
     email: "anjali.s@gmail.com", aadharNo: "456789012345", rationCardNo: "", bankAccountNo: "62345674567",
+    bankName: "Union Bank of India", ifscCode: "UBIN0812345",
     lastAttendedInstitution: "Sri Gayatri Junior College", distanceFromResidenceKm: "20",
     hosteller: "Yes", physicallyHandicapped: "Yes", handicappedType: "H", identificationMarks: "", remarks: "Needs front-row seating",
   },
   {
-    sno: "5", name: "T. Bhargav", studentType: "Regular", course: "Bachelor of Technology", department: "Mechanical Engineering",
-    secondaryDepartment: "", year: "4", semester: "7", rollNumber: "23A91A0318",
+    rollNumber: "23A91A0318", name: "T. Bhargav", studentType: "Regular", course: "Bachelor of Technology", department: "Mechanical Engineering",
+    secondaryDepartment: "", year: "4",
     admissionNo: "ADM2023052", hallTicketNo: "5678901234", dateOfAdmission: "2023-06-05",
     admissionType: "Convenor", entranceType: "EAMCET", entranceRank: "7788", jeeRank: "", jeePercentage: "",
-    seatType: "Convenor", scholarship: "No", gender: "Male", dateOfBirth: "2005-05-27", bloodGroup: "O-",
+    scholarship: "No", gender: "Male", dateOfBirth: "2005-05-27", bloodGroup: "O-",
     caste: "ST", subCaste: "Koya", religion: "Hindu", nationality: "Indian", motherTongue: "Telugu",
-    guardianContact: "9876543218", mobileNo: "9876543219", landLineNo: "",
+    fatherName: "T. Venkatesh", fatherContactNo: "9876543218", motherName: "T. Saraswathi", motherContactNo: "9876543228",
+    guardianName: "", guardianContact: "",
+    mobileNo: "9876543219", landLineNo: "",
     email: "bhargav.t@gmail.com", aadharNo: "567890123456", rationCardNo: "RC7654321", bankAccountNo: "62345675678",
+    bankName: "Canara Bank", ifscCode: "CNRB0001234",
     lastAttendedInstitution: "Vignan Junior College", distanceFromResidenceKm: "8",
     hosteller: "No", physicallyHandicapped: "No", handicappedType: "", identificationMarks: "", remarks: "",
   },
 ];
 
 /** The identity fields, in template order - shown before everything else. */
-export const PRIMARY_ROSTER_FIELDS = ROSTER_FIELDS.filter((f) => f.primary && !f.sheetOnly);
+export const PRIMARY_ROSTER_FIELDS = ROSTER_FIELDS.filter((f) => f.primary);
 
 /** The identity fields the students list shows as columns. */
 export const LIST_ROSTER_FIELDS = PRIMARY_ROSTER_FIELDS.filter((f) => !f.hideInList);
 
 /** Everything after the identity block, in template order. */
-export const DETAIL_ROSTER_FIELDS = ROSTER_FIELDS.filter((f) => !f.primary && !f.sheetOnly);
+export const DETAIL_ROSTER_FIELDS = ROSTER_FIELDS.filter((f) => !f.primary);
 
-/** Fields the Add/Edit forms collect - every stored one, template order. */
-export const EDITABLE_ROSTER_FIELDS = ROSTER_FIELDS.filter((f) => !f.sheetOnly);
+/** Fields the Add/Edit forms collect - every stored roster field, template order. */
+export const EDITABLE_ROSTER_FIELDS = ROSTER_FIELDS;
 
 /**
  * The roster keys a student's *details* live under - everything the forms
@@ -203,7 +237,7 @@ const ROSTER_FIELD_BY_KEY = new Map(ROSTER_FIELDS.map((f) => [f.key, f]));
  *
  * Shared by the students POST and PATCH so a student added or edited by hand
  * ends up with the same document shape as an imported one; before this, POST
- * hand-wrote four of these fields and ignored the other 28.
+ * hand-wrote a handful of these fields and ignored the rest.
  */
 export function normalizeRosterDetails(input: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {};
@@ -226,7 +260,7 @@ export function normalizeRosterDetails(input: Record<string, unknown>): Record<s
       continue;
     }
 
-    if (field?.kind === "number" || key === "semester") {
+    if (field?.kind === "number") {
       const m = typeof raw === "number" ? raw : Number(String(raw).match(/\d+(\.\d+)?/)?.[0]);
       if (Number.isFinite(m)) out[key] = m;
       continue;
@@ -259,7 +293,6 @@ export function rosterFieldDisplay(field: RosterField, student: Partial<StudentR
   if (raw === undefined || raw === null || raw === "") return "";
   if (field.kind === "yesno") return raw ? "Yes" : "No";
   if (field.key === "year" && typeof raw === "number") return ordinalYear(raw);
-  if (field.key === "semester" && typeof raw === "number") return `Semester ${raw}`;
   return String(raw);
 }
 
@@ -305,11 +338,6 @@ export function rosterFormToPayload(
     } else if (f.key === "year") {
       const n = Number(v);
       if (Number.isFinite(n)) out[f.key] = n;
-    } else if (f.key === "semester") {
-      // "1st Semester", "Semester 1" and "1" all reduce to the same number,
-      // matching the importer's parseSemester.
-      const m = v.match(/\d+/);
-      if (m) out[f.key] = Number(m[0]);
     } else if (f.key === "email") {
       out[f.key] = v.toLowerCase();
     } else {

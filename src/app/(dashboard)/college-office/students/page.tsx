@@ -27,6 +27,7 @@ import {
   rosterFieldDisplay, rosterFieldFormValue, rosterFormToPayload,
 } from "@/lib/students/rosterFields";
 import { toCSV, downloadCSV } from "@/lib/utils/csv";
+import { GraduatedStudentsView } from "@/components/students/GraduatedStudentsView";
 import type { StudentListItem, Department, AcademicYear, Course } from "@/types";
 
 // The Add and Edit forms collect every field the roster import collects, in the
@@ -48,12 +49,23 @@ const EMPTY_FORM: RosterForm = Object.fromEntries(
 const DEFAULT_PAGE_SIZE = 20;
 const SEARCH_DEBOUNCE_MS = 350;
 
+// Graduated Students used to be its own sidebar entry (/college-office/graduates);
+// it now lives here as a sub-tab (top-right pill), matching the pattern
+// principal/students already uses - see PrincipalStudentsPage. The old route
+// still works standalone for any existing bookmarks/links.
+const STUDENT_TABS = [
+  { key: "roster", label: "All Students" },
+  { key: "graduates", label: "Graduated" },
+] as const;
+type StudentTabKey = (typeof STUDENT_TABS)[number]["key"];
+
 function ordinalYear(year: number) {
   const suffix = year === 1 ? "st" : year === 2 ? "nd" : year === 3 ? "rd" : "th";
   return `${year}${suffix} Year`;
 }
 
 export default function OfficeStudentsPage() {
+  const [activeTab, setActiveTab] = useState<StudentTabKey>("roster");
   const [students, setStudents] = useState<StudentListItem[]>([]);
   const [total, setTotal] = useState(0);
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -572,19 +584,42 @@ export default function OfficeStudentsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Students"
+        description={activeTab === "graduates" ? "Every student who has completed their programme" : undefined}
         actions={
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={() => setExportOpen(true)}>
-              <Download className="h-4 w-4 mr-2" />Export
-            </Button>
-            <Button variant="outline" asChild>
-              <Link href="/college-office/students/import"><Upload className="h-4 w-4 mr-2" />Import</Link>
-            </Button>
-            <Button onClick={openAdd}><Plus className="h-4 w-4 mr-2" />Add Student</Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-1.5">
+              {STUDENT_TABS.map((t) => (
+                <button
+                  key={t.key}
+                  type="button"
+                  onClick={() => setActiveTab(t.key)}
+                  className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                    activeTab === t.key ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/70"
+                  }`}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+            {activeTab === "roster" && (
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => setExportOpen(true)}>
+                  <Download className="h-4 w-4 mr-2" />Export
+                </Button>
+                <Button variant="outline" asChild>
+                  <Link href="/college-office/students/import"><Upload className="h-4 w-4 mr-2" />Import</Link>
+                </Button>
+                <Button onClick={openAdd}><Plus className="h-4 w-4 mr-2" />Add Student</Button>
+              </div>
+            )}
           </div>
         }
       />
 
+      {activeTab === "graduates" ? (
+        <GraduatedStudentsView showHeader={false} />
+      ) : (
+        <>
       {/* Summary */}
       <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
         <Users className="h-4 w-4" />
@@ -761,6 +796,8 @@ export default function OfficeStudentsPage() {
           onPageSizeChange={onPageSizeChange}
           disabled={isFetching}
         />
+      )}
+        </>
       )}
 
       {/* ── Export ── */}

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Eye, Pencil, Trash2, UsersRound } from "lucide-react";
+import { ArrowLeft, Eye, Pencil, Trash2, UsersRound, History } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Button } from "@/components/ui/button";
@@ -217,6 +217,14 @@ export default function PrincipalDepartmentFacultyPage() {
         keyExtractor={(f) => f.id}
         searchPlaceholder="Search by name, employee ID, or email..."
         searchKeys={["legalName", "nameAsPerPan", "employeeId", "email"] as (keyof FacultyRow)[]}
+        // Same historical date-range view as hod/faculty's own Faculty
+        // Timeline, scoped to this department - kept beside the search box
+        // via DataTable's own filterComponent slot, same placement as hod/faculty.
+        filterComponent={
+          <Button variant="outline" size="sm" onClick={() => router.push(`/principal/faculty/${deptId}/timeline`)}>
+            <History className="h-4 w-4 mr-1" />Faculty Timeline
+          </Button>
+        }
         emptyTitle="No faculty in this department"
         emptyDescription="Faculty added by the HOD for this department will appear here."
         onRowClick={(f) => router.push(`/principal/faculty/${deptId}/${f.id}`)}
