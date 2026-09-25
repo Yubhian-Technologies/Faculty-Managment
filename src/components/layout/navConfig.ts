@@ -165,10 +165,12 @@ export const NAV_ITEMS: NavItem[] = [
   // College-wide, read-only view of every section. A College Admin reaches it
   // too - that role normalizes to PRINCIPAL before any nav role is read.
   { label: "Sections", href: "/principal/sections", iconName: "BookMarked", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
+  // Promotion and Graduated Students live as sub-tabs (top-right pills) inside
+  // the Students page itself now, rather than as separate sidebar entries -
+  // see PrincipalStudentsPage. /principal/promotions and /principal/graduates
+  // still work as direct routes for any existing bookmarks/links.
   { label: "Students", href: "/principal/students", iconName: "GraduationCap", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Faculty", href: "/principal/faculty", iconName: "UsersRound", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
-  { label: "Student Promotion", href: "/principal/promotions", iconName: "GraduationCap", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
-  { label: "Graduated Students", href: "/principal/graduates", iconName: "Award", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Timetable", href: "/principal/timetable", iconName: "CalendarDays", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Internal Marks", href: "/principal/internal-marks", iconName: "ClipboardCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Staff", href: "/principal/staff", iconName: "UsersRound", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Staff & HR Management" },

@@ -27,7 +27,9 @@ const UNSPECIFIED_BATCH = "Unspecified batch";
 // students/promote/route.ts) - stable even if the section they graduated out
 // of is later renamed or removed. Shared between Principal and College
 // Office: both read the same college-wide roster, neither can edit here.
-export function GraduatedStudentsView() {
+// showHeader=false when embedded as a sub-tab of the Students page, which
+// already renders its own header for all tabs.
+export function GraduatedStudentsView({ showHeader = true }: { showHeader?: boolean } = {}) {
   const [students, setStudents] = useState<StudentListItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -107,10 +109,12 @@ export function GraduatedStudentsView() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Graduated Students"
-        description="Every student who has completed their programme, grouped by course and batch"
-      />
+      {showHeader && (
+        <PageHeader
+          title="Graduated Students"
+          description="Every student who has completed their programme, grouped by course and batch"
+        />
+      )}
 
       <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
         <GraduationCap className="h-4 w-4" />
