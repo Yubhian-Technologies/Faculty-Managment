@@ -1,5 +1,6 @@
 "use client";
 
+import { CollegeDepartmentSelect } from "@/components/shared/CollegeDepartmentSelect";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -317,7 +318,7 @@ ${institution}`;
               </div>
               <div className="space-y-1.5">
                 <Label>Department *</Label>
-                <Input value={form.department} onChange={(e) => setForm((f) => ({ ...f, department: e.target.value }))} placeholder="e.g. Computer Science" />
+                <CollegeDepartmentSelect value={form.department} onChange={(v) => setForm((f) => ({ ...f, department: v }))} />
               </div>
             </div>
 

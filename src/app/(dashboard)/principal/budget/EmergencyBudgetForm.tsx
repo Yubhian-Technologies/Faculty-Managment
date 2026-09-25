@@ -1,5 +1,6 @@
 "use client";
 
+import { CollegeDepartmentSelect } from "@/components/shared/CollegeDepartmentSelect";
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -155,7 +156,7 @@ export function EmergencyBudgetForm({ editingRequest, onCancel, onSaved }: Emerg
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Department <span className="text-destructive">*</span></Label>
-              <Input value={department} onChange={(e) => setDepartment(e.target.value)} placeholder="e.g. Mechanical Engineering" />
+              <CollegeDepartmentSelect value={department} onChange={setDepartment} />
             </div>
             <div className="space-y-2">
               <Label>Academic Year <span className="text-destructive">*</span></Label>
