@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { BookOpen, Plus, Pencil, Trash2, Upload } from "lucide-react";
+import { BookOpen, Plus, Pencil, Trash2, Upload, History } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,7 @@ import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
 import type { Course, CourseCatalogItem, Department, Subject } from "@/types";
 import { SUBJECT_TYPE_LABELS } from "@/types";
-import { academicSessionLabel, currentAcademicStartYear, parseAcademicYearStart } from "@/lib/college/academicSession";
+import { academicSessionLabel, currentAcademicStartYear, parseAcademicYearStart, recentAcademicSessions } from "@/lib/college/academicSession";
 import { resolveDepartmentCourseScope, regulationsForCourseYearByBatch } from "@/lib/college/academicStructure";
 
 function ordinalYear(year: number) {
@@ -90,6 +90,7 @@ export default function AcademicsSubjectsPage() {
   // default, once it loads - but never fight a URL-restored session (see
   // hasRestoredRef below), and never override a session the Academics has since
   // picked by hand.
+  const [showHistory, setShowHistory] = useState(false);
   const hasAppliedSessionRef = useRef(false);
   useEffect(() => {
     if (hasAppliedSessionRef.current || !currentSessionLabel || searchParams.get("academicYear")) return;
@@ -202,16 +203,17 @@ export default function AcademicsSubjectsPage() {
     }
   }, []);
 
-  // Scoped by Academic Year session, not regulation - each session (e.g.
-  // "2026-27") gets its own independent, persisted subject list per
-  // course-year, filled in fresh by the Academics every year rather than carried
-  // over or auto-reset when a different regulation happens to resolve.
+  // A session's list = the core (non-elective) subjects of the regulation(s)
+  // governing this course-year in that session, plus the electives offered
+  // in that session only - so past sessions stay browsable as history.
+  // Regulations come from a ref (kept current below) so callers needn't pass them.
+  const regulationsRef = useRef<string[]>([]);
   const loadSubjects = useCallback(async (departmentName: string, courseId: string, year: string, academicYear: string) => {
     if (!departmentName || !courseId || !year) { setSubjects([]); return; }
     setIsLoadingSubjects(true);
     try {
       const res = await fetch(
-        `/api/college/subjects?department=${encodeURIComponent(departmentName)}&courseId=${encodeURIComponent(courseId)}&year=${encodeURIComponent(year)}${academicYear ? `&academicYear=${encodeURIComponent(academicYear)}` : ""}`
+        `/api/college/subjects?department=${encodeURIComponent(departmentName)}&courseId=${encodeURIComponent(courseId)}&year=${encodeURIComponent(year)}${regulationsRef.current.length ? `&regulations=${encodeURIComponent(regulationsRef.current.join(","))}` : ""}${academicYear ? `&academicYear=${encodeURIComponent(academicYear)}` : ""}`
       );
       const data = await res.json() as { subjects: Subject[] };
       // The API also returns a feeder's shared subjects for a fed department
@@ -226,6 +228,17 @@ export default function AcademicsSubjectsPage() {
       setIsLoadingSubjects(false);
     }
   }, []);
+
+  regulationsRef.current = allowedRegulations;
+  const regulationsKey = allowedRegulations.join(",");
+  // Reload whenever the selection, the session, or the regulation resolved for
+  // it changes (the catalog can land after the year is picked).
+  useEffect(() => {
+    if (selectedDepartment && selectedCourseId && selectedYear) {
+      void loadSubjects(selectedDepartment.name, selectedCourseId, selectedYear, selectedAcademicYear);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDepartment?.name, selectedCourseId, selectedYear, selectedAcademicYear, regulationsKey, loadSubjects]);
 
   // Coming back from "Add Subject"/"Edit" (see their departmentId/courseId/
   // year/academicYear query params on success) should land right back on the
@@ -250,10 +263,7 @@ export default function AcademicsSubjectsPage() {
       const list = await loadCourses(departmentId);
       if (courseId && list.some((c) => c.id === courseId)) {
         setSelectedCourseId(courseId);
-        if (year) {
-          setSelectedYear(year);
-          await loadSubjects(dept.name, courseId, year, academicYear);
-        }
+        if (year) setSelectedYear(year);
       }
     })();
     // hasRestoredRef guards this to run at most once - selectedAcademicYear
@@ -278,7 +288,6 @@ export default function AcademicsSubjectsPage() {
 
   function selectYear(year: string) {
     setSelectedYear(year);
-    if (selectedDepartment) void loadSubjects(selectedDepartment.name, selectedCourseId, year, selectedAcademicYear);
   }
 
   async function handleDelete() {
@@ -381,7 +390,27 @@ export default function AcademicsSubjectsPage() {
                     <BookOpen className="h-4 w-4" />
                     {selectedDepartment.name} · {selectedCourse.name} · {ordinalYear(Number(selectedYear))}
                   </h2>
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    {showHistory && (
+                      <Select value={selectedAcademicYear} onValueChange={setSelectedAcademicYear}>
+                        <SelectTrigger className="h-8 w-28"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {Array.from(new Set([...recentAcademicSessions(), selectedAcademicYear])).sort().reverse().map((y) => (
+                            <SelectItem key={y} value={y}>{y}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                    <Button
+                      size="sm"
+                      variant={showHistory ? "secondary" : "outline"}
+                      onClick={() => {
+                        setShowHistory((v) => !v);
+                        setSelectedAcademicYear(academicSessionLabel(currentAcademicStartYear()));
+                      }}
+                    >
+                      <History className="h-4 w-4 mr-2" />History
+                    </Button>
                     <Button
                       size="sm"
                       variant="outline"

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,6 +12,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/useToast";
 import { collegeFetch } from "@/lib/api/collegeFetch";
+import { financialYearContaining, type FinancialYearItem } from "@/lib/college/financialYear";
 import { BUDGET_TYPE_LABELS, type BudgetType } from "@/types";
 
 function defaultFinancialYear(): string {
@@ -24,6 +25,20 @@ export default function NewBudgetCyclePage() {
   const router = useRouter();
   const [title, setTitle] = useState("");
   const [financialYear, setFinancialYear] = useState(defaultFinancialYear());
+  // Financial years the Principal has set up; with none, the field stays a
+  // plain text box as before.
+  const [financialYears, setFinancialYears] = useState<FinancialYearItem[]>([]);
+  useEffect(() => {
+    collegeFetch("/api/college/financial-years")
+      .then((r) => r.json() as Promise<{ financialYears?: FinancialYearItem[] }>)
+      .then((d) => {
+        const list = d.financialYears ?? [];
+        setFinancialYears(list);
+        const now = financialYearContaining(list, new Date().toISOString().slice(0, 10)) ?? list[0];
+        if (now) setFinancialYear(now.label);
+      })
+      .catch(() => {});
+  }, []);
   const [budgetType, setBudgetType] = useState<BudgetType>("ANNUAL");
   const [submissionStartDate, setSubmissionStartDate] = useState("");
   const [submissionDeadline, setSubmissionDeadline] = useState("");
@@ -91,7 +106,16 @@ export default function NewBudgetCyclePage() {
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label>Financial Year *</Label>
-                <Input value={financialYear} onChange={(e) => setFinancialYear(e.target.value)} placeholder="2026-27" />
+                {financialYears.length > 0 ? (
+                  <Select value={financialYear} onValueChange={setFinancialYear}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {financialYears.map((f) => <SelectItem key={f.id} value={f.label}>{f.label}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Input value={financialYear} onChange={(e) => setFinancialYear(e.target.value)} placeholder="2026-27" />
+                )}
               </div>
               <div className="space-y-2">
                 <Label>Budget Type *</Label>

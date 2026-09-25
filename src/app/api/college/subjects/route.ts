@@ -20,6 +20,7 @@ export async function GET(request: Request) {
     const deptFilter = searchParams.get("department");
     const academicYear = searchParams.get("academicYear");
     const regulation = searchParams.get("regulation");
+    const sessionRegulations = (searchParams.get("regulations") ?? "").split(",").map((r) => r.trim()).filter(Boolean);
 
     const db = getAdminDb();
     let query: FirebaseFirestore.Query = db.collection("colleges").doc(session.collegeId).collection("subjects");
@@ -70,8 +71,22 @@ export async function GET(request: Request) {
     // HOD's own Subjects page, which doesn't set it) still matches any
     // session rather than silently disappearing.
     if (academicYear) {
+      // With `regulations` (the ones governing this course-year in that
+      // session), a core subject belongs to its REGULATION's curriculum and
+      // shows in every session that regulation covers; only electives
+      // (PEC/OEC) are per-session, since each year's offering can differ.
+      // Core subjects re-entered per session under one regulation collapse by code.
+      const seenCore = new Set<string>();
       subjects = subjects.filter((s) => {
-        const sy = (s as { academicYear?: string }).academicYear;
+        const { academicYear: sy, regulation: sr, category, code } = s as { academicYear?: string; regulation?: string; category?: string; code?: string };
+        const isElective = category === "PEC" || category === "OEC";
+        if (!isElective && sr && sessionRegulations.length > 0) {
+          if (!sessionRegulations.includes(sr)) return false;
+          const key = `${sr}|${(code ?? "").trim().toLowerCase()}`;
+          if (code && seenCore.has(key)) return false;
+          seenCore.add(key);
+          return true;
+        }
         return !sy || sy === academicYear;
       });
     }
