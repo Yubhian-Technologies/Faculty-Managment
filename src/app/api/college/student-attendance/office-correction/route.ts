@@ -10,7 +10,7 @@ import { resolvePeriodCompletionStatus } from "@/lib/attendance/periodAttendance
 import { istDateFromParts, istMidnightUTC } from "@/lib/attendance/istTime";
 import { fetchSectionStudents } from "@/lib/students/sectionRoster";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
-import type { FacultyMember, Section, StudentAttendanceEntry, StudentAttendanceSession, TeachingAssignment } from "@/types";
+import type { FacultyMember, Section, StudentAttendanceSession, TeachingAssignment } from "@/types";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -24,11 +24,9 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 // normalized to role "HOD" in the session (see UserRole's own doc-comment in
 // src/types/core.ts) - no separate role branch needed. PRINCIPAL/VICE_PRINCIPAL
 // get every department, same convention as faculty-attendance-completion.
-//
-// Deliberately reuses this collection's existing two-step shape (POST loads/
-// creates a DRAFT + roster, PATCH at .../office-correction/[id] edits and
-// submits) rather than one do-everything call, matching the faculty-facing
-// student-attendance route this mirrors.
+// Reuses this collection's existing two-step shape (POST loads/creates a
+// DRAFT + roster, PATCH at .../office-correction/[id] edits and submits) -
+// matching the faculty-facing student-attendance route this mirrors.
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL");
@@ -136,23 +134,37 @@ export async function POST(request: Request) {
 
     const id = `${assignmentId}_${date}_${periodNumber}`;
     const ref = collegeRef.collection("studentAttendance").doc(id);
+
+    // A submitted session is a locked historical record - safe to just read
+    // back (e.g. a prior office attempt landing after the faculty already
+    // submitted) without clobbering. If we land on an existing DRAFT, hand
+    // it back rather than overwriting the marks already entered.
     const existingSnap = await ref.get();
     if (existingSnap.exists) {
       const existing = existingSnap.data() as StudentAttendanceSession;
       if (existing.status === "SUBMITTED") {
         return NextResponse.json({ error: "Attendance for this period has already been submitted" }, { status: 409 });
       }
-      // Already a DRAFT (faculty started it, or a prior office attempt) -
-      // just hand it back, same as the faculty-facing route's own re-poll
-      // behavior, rather than clobbering marks already entered.
       return NextResponse.json({ session: { ...existing, id } });
     }
 
-    const students = (await fetchSectionStudents(collegeRef, { department, sectionName, year, courseId }))
-      .sort((a, b) => a.rollNumber.localeCompare(b.rollNumber, undefined, { numeric: true }));
-    const entries: StudentAttendanceEntry[] = students.map((s) => ({
-      studentId: s.id, rollNumber: s.rollNumber, name: s.name, status: null,
-    }));
+    let students: { id: string; rollNumber: string; name: string }[];
+    if (assignment.sectionId) {
+      const sectionSnap = await collegeRef.collection("sections").doc(assignment.sectionId).get();
+      if (!sectionSnap.exists) {
+        return NextResponse.json({ error: "Section not found" }, { status: 404 });
+      }
+      // Section has no sectionId property — resolve it off the assignment and
+      // leave the rest of the typed Section fields intact.
+      const section = sectionSnap.data() as Section;
+      students = (await fetchSectionStudents(collegeRef, { department: section.department, sectionName: section.name, year: section.year, courseId: section.courseId }))
+        .sort((a, b) => a.rollNumber.localeCompare(b.rollNumber, undefined, { numeric: true }));
+    } else {
+      const departmentVal = assignment.department;
+      const sectionNameVal = assignment.section?.trim() || "Section";
+      students = (await fetchSectionStudents(collegeRef, { department: departmentVal, sectionName: sectionNameVal, year, courseId }))
+        .sort((a, b) => a.rollNumber.localeCompare(b.rollNumber, undefined, { numeric: true }));
+    }
 
     const markerSnap = await collegeRef.collection("users").doc(session.uid).get();
     const markerName = (markerSnap.data() as { name?: string } | undefined)?.name ?? "";
@@ -179,8 +191,8 @@ export async function POST(request: Request) {
       date,
       periodNumber,
       status: "DRAFT" as const,
-      entries,
-      totalStudents: entries.length,
+      entries: students.map((s) => ({ studentId: s.id, rollNumber: s.rollNumber, name: s.name, status: null })),
+      totalStudents: students.length,
       presentCount: 0,
       classNotes: "",
       submittedAt: null,
@@ -191,7 +203,23 @@ export async function POST(request: Request) {
       createdAt: now,
       updatedAt: now,
     };
-    await ref.set(attendanceSession);
+
+    const conflictSession = await db.runTransaction(async (tx) => {
+      const freshSnap = await tx.get(ref);
+      if (freshSnap.exists) {
+        return freshSnap.data() as StudentAttendanceSession;
+      }
+      tx.set(ref, attendanceSession);
+      return null;
+    });
+
+    if (conflictSession) {
+      if (conflictSession.status === "SUBMITTED") {
+        return NextResponse.json({ error: "Attendance for this period has already been submitted" }, { status: 409 });
+      }
+      return NextResponse.json({ session: { ...conflictSession, id } });
+    }
+
     return NextResponse.json({ session: { id, ...attendanceSession } }, { status: 201 });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
