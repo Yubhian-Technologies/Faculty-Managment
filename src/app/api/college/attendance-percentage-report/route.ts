@@ -6,13 +6,15 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { fetchSectionStudents } from "@/lib/students/sectionRoster";
 import type { Section, StudentAttendanceSession, TeachingAssignment } from "@/types";
 
-// New territory for EXAM_CELL (no prior access to students/studentAttendance) -
-// added here only, not to the existing HOD/Principal attendance routes.
+// Cross-section attendance-percentage report: Department + Course + Semester
+// (year), optionally narrowed to one Section, with a percentage range filter -
+// for finding students below (or above) a threshold, e.g. exam-eligibility
+// defaulters. Reuses the exact same roster (lib/students/sectionRoster.ts)
+// and per-student Held/Attended/% math as section-attendance-report's own
+// "till now" mode, just looped across every section in scope instead of one -
+// there's no cross-section report like this today.
 const READ_ROLES = ["EXAM_CELL", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN"];
 
-// Same query/dedupe shape as section-attendance-report's own (unexported)
-// currentSectionSubjects - kept local rather than importing a private helper
-// from another route file.
 async function sectionSubjectIds(
   collegeRef: FirebaseFirestore.DocumentReference,
   sectionId: string
@@ -27,16 +29,16 @@ async function sectionSubjectIds(
   return Array.from(ids);
 }
 
-// Cross-section attendance-percentage report: Department + Course + Semester
-// (year), optionally narrowed to one Section, with a percentage range filter -
-// for finding students below (or above) a threshold, e.g. exam-eligibility
-// defaulters. Reuses the exact same roster (lib/students/sectionRoster.ts)
-// and per-student Held/Attended/% math as section-attendance-report's own
-// "till now" mode, just looped across every section in scope instead of one -
-// there's no cross-section report like this today.
 export async function GET(request: Request) {
   try {
     const session = await requireCollegeMember(...READ_ROLES);
+    // Guard: requireCollegeMember only guarantees a member and a role present
+    // in READ_ROLES. If the role list changes, an unknown role would otherwise
+    // fall through to the section-scoped scan below - reject closed instead.
+    if (!READ_ROLES.includes(session.role)) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const { searchParams } = new URL(request.url);
     const department = searchParams.get("department");
     const courseId = searchParams.get("courseId");

@@ -83,6 +83,15 @@ export async function GET(request: Request) {
     if (fromParam && toParam && fromParam > toParam) {
       return NextResponse.json({ error: "From date must be before the To date" }, { status: 400 });
     }
+    // From/to without a valid bound must never reach an unbounded
+    // Firebase `.where("date", ...).get()` scan - be explicit and fail
+    // closed instead.
+    if (fromParam && !/^\d{4}-\d{2}-\d{2}$/.test(fromParam)) {
+      return NextResponse.json({ error: "from must be a valid date (YYYY-MM-DD)" }, { status: 400 });
+    }
+    if (toParam && !/^\d{4}-\d{2}-\d{2}$/.test(toParam)) {
+      return NextResponse.json({ error: "to must be a valid date (YYYY-MM-DD)" }, { status: 400 });
+    }
 
     const db = getAdminDb();
     const collegeRef = db.collection("colleges").doc(session.collegeId);
@@ -107,8 +116,7 @@ export async function GET(request: Request) {
       if (section.courseId) {
         const timingSnap = await collegeRef
           .collection("courseYearTimings")
-          .doc(`${section.courseId}_year${section.year}`)
-          .get();
+          .doc(`${section.courseId}_year${section.year}`).get();
         const timing = timingSnap.exists ? (timingSnap.data() as CourseYearTiming) : null;
         semesterOptions = (timing?.semesters ?? []).map((s) => s.semester).sort((a, b) => a - b);
         if (semesterParam) {
@@ -148,6 +156,9 @@ export async function GET(request: Request) {
       facultyId = session.uid;
     }
 
+    // Bounds (if any) are applied at query time with .where();
+    // unbounded paths keep the same shape so the response contract is
+    // stable and callers don't need to special-case "no filter".
     const recordsSnap = await collegeRef.collection("studentAttendance")
       .where("facultyId", "==", facultyId)
       .where("status", "==", "SUBMITTED")
@@ -240,8 +251,7 @@ export async function GET(request: Request) {
     if (needsPeriodLookup) {
       const facultyMemberId = await resolveFacultyMemberId(db, session.collegeId, facultyId);
       const slotsSnap = await collegeRef.collection("timetableSlots")
-        .where("facultyId", "==", facultyMemberId)
-        .get();
+        .where("facultyId", "==", facultyMemberId).get();
       for (const d of slotsSnap.docs) {
         const s = d.data() as TimetableSlot;
         const key = `${s.assignmentId}:${s.day}`;
@@ -307,8 +317,8 @@ export async function GET(request: Request) {
       // (`all`, loaded above before any year/month/date filtering was
       // applied), not just this date/month - "classes conducted" for a
       // subject is every SUBMITTED session doc for its assignmentId (doc id
-      // `${assignmentId}_${date}_${periodNumber}`, one per class PERIOD - two
-      // consecutive periods of the same assignment on one day are two
+      // `${assignmentId}_${date}_${periodNumber}`, one per class PERIOD -
+      // two consecutive periods of the same assignment on one day are two
       // separate classes, each independently attended/absent), matching what
       // the Faculty actually taught, never a hard-coded period count.
       const assignmentIds = Array.from(new Set(periods.map((p) => byPeriod.get(p)!.assignmentId)));
