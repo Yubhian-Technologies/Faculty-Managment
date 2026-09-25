@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { CalendarClock, Info, Lock, Pencil, RefreshCw, Clock } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
@@ -124,9 +124,17 @@ export default function MarkAttendancePage() {
     }
   }
 
+  // Load the first report without touching state synchronously, then keep the
+  // view current with a 30s poll.
   useEffect(() => {
-    void fetchTodayPeriods();
-    const id = setInterval(() => void fetchTodayPeriods(), PERIOD_POLL_MS);
+    void (async () => {
+      await fetchTodayPeriods();
+    })();
+    const id = setInterval(() => {
+      void (async () => {
+        await fetchTodayPeriods();
+      })();
+    }, PERIOD_POLL_MS);
     return () => clearInterval(id);
   }, []);
 

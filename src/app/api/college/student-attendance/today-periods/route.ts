@@ -7,6 +7,12 @@ import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 import { getFacultyPeriodsForDate } from "@/lib/timetable/currentPeriod";
 import type { StudentAttendanceSession, TeachingAssignment } from "@/types";
 
+// "Today" for attendance purposes is the college's calendar day (IST, Asia/Kolkata),
+// not the UTC day the deployment host happens to run in. `todayStrIST()` is the
+// date that must be compared against the stored `date` field and passed to
+// getFacultyPeriodsForDate - a UTC-based "today" would silently return an empty
+// list for hours in the IST morning/evening boundary and would also produce a
+// false "no periods" result for the day the host crosses midnight UTC.
 function todayStrIST(): string {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Kolkata",
@@ -17,10 +23,12 @@ function todayStrIST(): string {
   const v = (t: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === t)!.value;
   return `${v("year")}-${v("month")}-${v("day")}`;
 }
+
 function toMinutes(hhmm: string): number {
   const [h, m] = hhmm.split(":").map(Number);
   return h * 60 + m;
 }
+
 function collegeNowMinutes(): number {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Kolkata",

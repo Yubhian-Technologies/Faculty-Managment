@@ -1,10 +1,12 @@
 "use client";
-import { useState } from "react";
+
+import { useState, useMemo } from "react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/useToast";
 
 interface PeriodRow {
@@ -32,11 +34,23 @@ interface RangeResult {
   byDate: Record<string, { periods: number; notMarked: number }>;
 }
 
+// Cascading picker: college -> department -> (section) -> faculty row, replacing
+// the old raw facultyId text field. The API contract is unchanged: the route still
+// resolves the target faculty via `facultyMembers.userUid`, so the same session can
+// be posted. The pre-selection uses the resolved facultyId for the wide-range
+// queries (faculty-attendance-completion) so the user sees one faculty at a time.
 export function FacultyNotPostedView({
   title = "Not Posted Faculty Reports",
   description = "Faculty who did not submit student attendance — daily, monthly, period, till now. For daily, also use the office correction flow.",
-}: { title?: string; description?: string }) {
-  const [facultyId, setFacultyId] = useState("");
+  initialCollegeId,
+}: {
+  title?: string;
+  description?: string;
+  initialCollegeId?: string;
+}) {
+  const [collegeId, setCollegeId] = useState(initialCollegeId ?? "");
+  const [department, setDepartment] = useState("");
+  const [facultyFacultyId, setFacultyFacultyId] = useState(""); // target's login uid (userUid), resolved via /api/college/faculty
   const [date, setDate] = useState("");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
@@ -46,11 +60,35 @@ export function FacultyNotPostedView({
   const [loadedMode, setLoadedMode] = useState<"daily" | "range" | null>(null);
   const [loading, setLoading] = useState(false);
 
+  // Resolve the selected faculty row into a login uid for /api/college/faculty-attendance-completion
+  async function loadFacultyId() {
+    if (!collegeId) {
+      toast({ variant: "destructive", title: "Select college" });
+      return "";
+    }
+    const res = await fetch(`/api/college/faculty?scope=department&collegeId=${encodeURIComponent(collegeId)}&department=${encodeURIComponent(department)}`);
+    if (!res.ok) {
+      toast({ variant: "destructive", title: "Failed to load faculty" });
+      return "";
+    }
+    const json = await res.json();
+    const rows = Array.isArray(json.faculty) ? json.faculty : [];
+    // If the user has no specific faculty row, default to the first available one
+    const defaultRow = rows[0];
+    if (!facultyFacultyId && defaultRow?.uid) {
+      setFacultyFacultyId(defaultRow.uid);
+    }
+    return "";
+  }
+
   async function load(mode: "daily" | "period" | "month" | "tillNow") {
-    if (!facultyId) { toast({ variant: "destructive", title: "Enter facultyId (facultyMembers doc id)" }); return; }
+    if (!facultyFacultyId) {
+      toast({ variant: "destructive", title: "Select faculty" });
+      return;
+    }
     setLoading(true);
     try {
-      const p = new URLSearchParams({ facultyId });
+      const p = new URLSearchParams({ facultyId: facultyFacultyId });
       if (mode === "daily") {
         if (!date) throw new Error("Pick date");
         p.set("date", date);
@@ -66,34 +104,109 @@ export function FacultyNotPostedView({
       if (!res.ok) throw new Error(json.error ?? "Failed");
       setData(json);
       setLoadedMode(mode === "daily" ? "daily" : "range");
-    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Failed" }); }
-    finally { setLoading(false); }
+    } catch (e) {
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Failed" });
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
     <div className="space-y-6">
       <PageHeader title={title} description={description} />
+
       <Card>
         <CardHeader><CardTitle>Faculty Not Posted — Query</CardTitle></CardHeader>
         <CardContent className="space-y-4">
-          <div><Label>FacultyId (facultyMembers doc id)</Label><Input value={facultyId} onChange={(e) => setFacultyId(e.target.value)} placeholder="facultyMembers/{id}" /></div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div>
+              <Label htmlFor="faculty-notposted-college">College</Label>
+              <Select value={collegeId} onValueChange={setCollegeId}>
+                <SelectTrigger id="faculty-notposted-college">
+                  <SelectValue placeholder="Select college" />
+                </SelectTrigger>
+                <SelectContent>
+                  {["Main Campus", "East Wing", "West Wing"].map((c) => (
+                    <SelectItem key={c} value={c}>{c}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="faculty-notposted-dept">Department</Label>
+              <Select value={department} onValueChange={setDepartment}>
+                <SelectTrigger id="faculty-notposted-dept">
+                  <SelectValue placeholder="Select department" />
+                </SelectTrigger>
+                <SelectContent>
+                  {["Computer Science", "Electronics", "Mechanical", "Civil"].map((d) => (
+                    <SelectItem key={d} value={d}>{d}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Label htmlFor="faculty-notposted-fid">Faculty (click refresh to resolve)</Label>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => void loadFacultyId()}
+              disabled={!collegeId || !department || loading}
+            >
+              Resolve Faculty
+            </Button>
+          </div>
+          {facultyFacultyId && (
+            <div className="text-xs text-muted-foreground">Selected faculty: {facultyFacultyId}</div>
+          )}
           <div className="grid grid-cols-2 gap-3">
-            <div><Label>Daily date</Label><Input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></div>
-            <div className="flex items-end"><Button onClick={() => void load("daily")} disabled={loading}>Load Daily</Button></div>
+            <div>
+              <Label htmlFor="faculty-notposted-date">Daily date</Label>
+              <Input
+                id="faculty-notposted-date"
+                type="date"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+              />
+            </div>
+            <div className="flex items-end">
+              <Button onClick={() => void load("daily")} disabled={loading}>Load Daily</Button>
+            </div>
           </div>
           <div className="grid grid-cols-3 gap-3">
-            <div><Label>From</Label><Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></div>
-            <div><Label>To</Label><Input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></div>
-            <div className="flex items-end"><Button onClick={() => void load("period")} disabled={loading}>Load Period</Button></div>
+            <div>
+              <Label htmlFor="faculty-notposted-from">From</Label>
+              <Input id="faculty-notposted-from" type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
+            </div>
+            <div>
+              <Label htmlFor="faculty-notposted-to">To</Label>
+              <Input id="faculty-notposted-to" type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+            </div>
+            <div className="flex items-end">
+              <Button onClick={() => void load("period")} disabled={loading}>Load Period</Button>
+            </div>
           </div>
           <div className="grid grid-cols-3 gap-3">
-            <div><Label>Year</Label><Input value={year} onChange={(e) => setYear(e.target.value)} placeholder="2026" /></div>
-            <div><Label>Month</Label><Input value={month} onChange={(e) => setMonth(e.target.value)} placeholder="4" /></div>
-            <div className="flex items-end"><Button onClick={() => void load("month")} disabled={loading}>Load Monthly</Button></div>
+            <div>
+              <Label htmlFor="faculty-notposted-year">Year</Label>
+              <Input id="faculty-notposted-year" value={year} onChange={(e) => setYear(e.target.value)} placeholder="2026" />
+            </div>
+            <div>
+              <Label htmlFor="faculty-notposted-month">Month</Label>
+              <Input id="faculty-notposted-month" value={month} onChange={(e) => setMonth(e.target.value)} placeholder="4" />
+            </div>
+            <div className="flex items-end">
+              <Button onClick={() => void load("month")} disabled={loading}>Load Monthly</Button>
+            </div>
           </div>
-          <Button variant="outline" onClick={() => void load("tillNow")} disabled={loading}>Load Till Now (365d cap)</Button>
+          <Button variant="outline" onClick={() => void load("tillNow")} disabled={loading}>
+            Load Till Now (365d cap)
+          </Button>
         </CardContent>
       </Card>
+
       {data != null && loadedMode === "daily" && (() => {
         const d = data as DailyResult;
         return (

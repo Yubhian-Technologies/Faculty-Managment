@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { BookOpen, Plus, Pencil, Trash2, Upload } from "lucide-react";
+import { BookOpen, Plus, Pencil, Trash2, Upload, FileDown, FileSpreadsheet, FileText } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -296,15 +296,153 @@ export default function AcademicsSubjectsPage() {
     }
   }
 
+  async function handleExportXlsx() {
+    if (!selectedDepartment || !selectedCourse || !selectedYear) {
+      toast({ variant: "destructive", title: "Select Department, Course and Year first" });
+      return;
+    }
+    if (sortedSubjects.length === 0) {
+      toast({ variant: "destructive", title: "No subjects to export" });
+      return;
+    }
+    try {
+      const ExcelJS = (await import("exceljs")).default;
+      const workbook = new ExcelJS.Workbook();
+      const sheet = workbook.addWorksheet("Subjects");
+      sheet.columns = [
+        { header: "S.No.", key: "serialNumber", width: 8 },
+        { header: "Category", key: "category", width: 14 },
+        { header: "Name of the Subject", key: "name", width: 32 },
+        { header: "Code", key: "code", width: 14 },
+        { header: "Type", key: "type", width: 12 },
+        { header: "L", key: "lectureHours", width: 6 },
+        { header: "T", key: "tutorialHours", width: 6 },
+        { header: "P", key: "practicalHours", width: 6 },
+        { header: "Credits", key: "credits", width: 10 },
+        { header: "Regulation", key: "regulation", width: 14 },
+        { header: "Academic Year", key: "academicYear", width: 14 },
+        { header: "Hours/Week", key: "hoursPerWeek", width: 12 },
+      ];
+      sortedSubjects.forEach((s) => {
+        sheet.addRow({
+          serialNumber: s.serialNumber ?? "",
+          category: s.category === "OTHER" ? (s.customCategory || "Other") : (s.category ?? ""),
+          name: s.name,
+          code: s.code,
+          type: s.type ? SUBJECT_TYPE_LABELS[s.type] ?? s.type : "",
+          lectureHours: s.lectureHours ?? "",
+          tutorialHours: s.tutorialHours ?? "",
+          practicalHours: s.practicalHours ?? "",
+          credits: s.credits ?? "",
+          regulation: s.regulation ?? "",
+          academicYear: s.academicYear ?? "",
+          hoursPerWeek: s.hoursPerWeek ?? "",
+        });
+      });
+      sheet.getRow(1).font = { bold: true };
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const safeName = `${selectedDepartment.name}-${selectedCourse.name}-${ordinalYear(Number(selectedYear))}`.replace(/[^a-zA-Z0-9]+/g, "-");
+      a.download = `${safeName}-subjects.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast({ variant: "success", title: "XLSX exported" });
+    } catch (err) {
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "XLSX export failed" });
+    }
+  }
+
+  async function handleExportDocx() {
+    if (!selectedDepartment || !selectedCourse || !selectedYear) {
+      toast({ variant: "destructive", title: "Select Department, Course and Year first" });
+      return;
+    }
+    if (sortedSubjects.length === 0) {
+      toast({ variant: "destructive", title: "No subjects to export" });
+      return;
+    }
+    try {
+      // Try real docx, fallback to HTML-based .doc if package not available
+      let blob: Blob;
+      let filename = `${selectedDepartment.name}-${selectedCourse.name}-${ordinalYear(Number(selectedYear))}`.replace(/[^a-zA-Z0-9]+/g, "-");
+      try {
+        const docx: any = await (eval('import("docx")') as Promise<any>);
+        const { Document, Packer, Paragraph, Table, TableRow, TableCell, WidthType, TextRun, HeadingLevel, AlignmentType } = docx as any;
+        const headerCells = ["S.No.", "Category", "Name", "Code", "Type", "L", "T", "P", "Credits"].map(
+          (h) => new TableCell({ width: { size: 100 / 9, type: WidthType.PERCENTAGE }, children: [new Paragraph({ children: [new TextRun({ text: h, bold: true, size: 16 })] })] }) as InstanceType<typeof TableCell>
+        );
+        const dataRows = sortedSubjects.map(
+          (s) =>
+            new TableRow({
+              children: [
+                new TableCell({ children: [new Paragraph(String(s.serialNumber ?? ""))] }),
+                new TableCell({ children: [new Paragraph(s.category === "OTHER" ? (s.customCategory || "Other") : (s.category ?? ""))] }),
+                new TableCell({ children: [new Paragraph(s.name)] }),
+                new TableCell({ children: [new Paragraph(s.code)] }),
+                new TableCell({ children: [new Paragraph(s.type ? SUBJECT_TYPE_LABELS[s.type] ?? s.type : "")] }),
+                new TableCell({ children: [new Paragraph(String(s.lectureHours ?? ""))] }),
+                new TableCell({ children: [new Paragraph(String(s.tutorialHours ?? ""))] }),
+                new TableCell({ children: [new Paragraph(String(s.practicalHours ?? ""))] }),
+                new TableCell({ children: [new Paragraph(String(s.credits ?? ""))] }),
+              ],
+            })
+        );
+        const table = new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: [new TableRow({ children: headerCells }), ...dataRows] });
+        const doc = new Document({
+          sections: [
+            {
+              children: [
+                new Paragraph({ text: `${selectedDepartment.name} · ${selectedCourse.name} · ${ordinalYear(Number(selectedYear))}`, heading: HeadingLevel.HEADING_2, alignment: AlignmentType.CENTER }),
+                new Paragraph({ text: `Regulation: ${allowedRegulations.join(", ") || "None"} · Academic Year: ${selectedAcademicYear}`, alignment: AlignmentType.CENTER }),
+                new Paragraph({ text: "" }),
+                table,
+              ],
+            },
+          ],
+        });
+        const buffer = await Packer.toBlob(doc);
+        blob = buffer;
+        filename += ".docx";
+      } catch {
+        const rowsHtml = sortedSubjects
+          .map(
+            (s) =>
+              `<tr><td>${s.serialNumber ?? ""}</td><td>${s.category === "OTHER" ? (s.customCategory || "Other") : (s.category ?? "")}</td><td>${s.name}</td><td>${s.code}</td><td>${s.type ? SUBJECT_TYPE_LABELS[s.type] ?? s.type : ""}</td><td>${s.lectureHours ?? ""}</td><td>${s.tutorialHours ?? ""}</td><td>${s.practicalHours ?? ""}</td><td>${s.credits ?? ""}</td></tr>`
+          )
+          .join("");
+        const html = `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body><h2 style="text-align:center">${selectedDepartment.name} · ${selectedCourse.name} · ${ordinalYear(Number(selectedYear))}</h2><table border="1" cellpadding="4" cellspacing="0" style="border-collapse:collapse;width:100%"><thead><tr><th>S.No.</th><th>Category</th><th>Name</th><th>Code</th><th>Type</th><th>L</th><th>T</th><th>P</th><th>Credits</th></tr></thead><tbody>${rowsHtml}</tbody></table></body></html>`;
+        blob = new Blob([html], { type: "application/msword" });
+        filename += ".doc";
+      }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast({ variant: "success", title: filename.endsWith(".docx") ? "DOCX exported" : "DOC exported" });
+    } catch (err) {
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Export failed" });
+    }
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
         title="Subjects"
         description="Manage subjects offered for each year of every department's courses"
         actions={
-          <Button variant="outline" onClick={() => router.push("/academics/subjects/import")}>
-            <Upload className="h-4 w-4 mr-2" />Import Subjects
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => void handleExportXlsx()} disabled={!selectedDepartmentId || !selectedCourseId || !selectedYear}>
+              <FileSpreadsheet className="h-4 w-4 mr-2" />Export XLSX
+            </Button>
+            <Button variant="outline" onClick={() => void handleExportDocx()} disabled={!selectedDepartmentId || !selectedCourseId || !selectedYear}>
+              <FileText className="h-4 w-4 mr-2" />Export DOCX
+            </Button>
+          </div>
         }
       />
 

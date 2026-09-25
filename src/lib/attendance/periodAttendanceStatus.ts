@@ -1,5 +1,5 @@
-import type { Timestamp } from "firebase-admin/firestore";
-import type { StudentAttendanceSession } from "@/types/studentAttendance";
+import type { StudentAttendanceSession, StudentAttendanceEntry, StudentAttendanceSessionStatus } from "@/types/studentAttendance";
+import type { Timestamp } from "firebase/firestore";
 
 // Purely a display-time derivation, same convention as lateStatus.ts's
 // isLateCheckIn - never written to Firestore, never affects the underlying
@@ -35,7 +35,20 @@ function periodEndInstant(dateISO: string, endTime: string): Date {
 export function resolvePeriodCompletionStatus(params: {
   dateISO: string;
   endTime: string; // "HH:MM", the period's own scheduled end
-  session: Pick<StudentAttendanceSession, "status" | "submittedAt" | "entries" | "totalStudents" | "presentCount"> | null | undefined;
+  // Relaxed constraint so callers can pass plain test doubles with a
+  // `.toDate()`-able `submittedAt`; the production code only ever reads
+  // `status`, `submittedAt?.toDate()`, `entries`, `totalStudents` and
+  // `presentCount`.
+  session:
+    | {
+        status: StudentAttendanceSessionStatus;
+        submittedAt?: Timestamp | { toDate(): Date } | null;
+        entries?: StudentAttendanceEntry[];
+        totalStudents?: number;
+        presentCount?: number;
+      }
+    | null
+    | undefined;
   now?: Date;
 }): PeriodAttendanceStatus {
   const { dateISO, endTime, session, now = new Date() } = params;

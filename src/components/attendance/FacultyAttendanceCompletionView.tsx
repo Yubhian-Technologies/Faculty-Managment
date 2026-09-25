@@ -185,9 +185,12 @@ export function FacultyAttendanceCompletionView({ title, description, hodScoped 
     })();
   }, [selectedDepartment, selectedCourseId, date]);
 
+  // Refetch the periods list when the selected faculty/date changes.
+  // The async refetch drives the loader; no synchronous setState here.
   useEffect(() => {
-    setPeriods([]);
-    void refetchPeriods();
+    void (async () => {
+      await refetchPeriods();
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedFacultyId, date]);
 
