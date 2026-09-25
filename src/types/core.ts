@@ -655,9 +655,11 @@ export interface CourseCatalogItem {
   // course can have an entirely different set. Created directly here (typing a
   // new code registers it, typing an existing one reuses it - no separate
   // college-wide "declare a regulation" step). Empty/absent until the Academics
-  // (or Principal/Super Admin) assigns at least one here, which blocks
-  // adding subjects to any Course created from this catalog entry (see
-  // api/college/subjects POST) until it's set.
+  // (or Principal/Super Admin) assigns at least one here - regulation is
+  // OPTIONAL though, never a gate: a subject can still be added to a Course
+  // from this catalog entry even with no regulation resolved for it (see
+  // api/college/subjects POST, which tags the subject with whatever
+  // regulation resolves, or none).
   regulations?: string[];
   // Every intake batch each of the above `regulations` covers, as a
   // comma-separated list of "start-end" ranges (e.g. R23 ->
@@ -852,8 +854,6 @@ export type RegulatoryBody = "UGC" | "AICTE" | "STATE" | "NAAC";
 
 export interface PositionNorm {
   designation: string;
-  minQualification: string;
-  minExperienceYears: number;
   requiredPerDept: number;
 }
 
@@ -875,7 +875,7 @@ export interface FacultyNorms {
   // Which approval tier each requester role's leave request goes to first
   // (see src/lib/leave/approvalRouting.ts). A role with no entry here uses the
   // built-in default for that role.
-  leaveApprovalRouting?: Partial<Record<UserRole, "HOD" | "PRINCIPAL" | "MANAGEMENT">>;
+  leaveApprovalRouting?: Partial<Record<UserRole, "HOD" | "PRINCIPAL" | "VICE_PRINCIPAL" | "MANAGEMENT">>;
   // Per requester role: true = vacation staff (teaching-style leave), false =
   // non-vacation (see src/lib/leave/staffCategoryRouting.ts). A role with no
   // entry keeps its built-in default.

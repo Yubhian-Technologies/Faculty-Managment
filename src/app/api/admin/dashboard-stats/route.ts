@@ -18,7 +18,7 @@ const AUDIT_WINDOW_DAYS = 30;
 // simpler "how many roles are currently being recruited for" headline number.
 export async function GET() {
   try {
-    await requireSuperAdmin();
+    const session = await requireSuperAdmin();
     const db = getAdminDb();
 
     // listDocuments() returns bare DocumentReferences (ids only, no field
@@ -75,7 +75,17 @@ export async function GET() {
     // doesn't hide the other two's real status.
     const [firestoreOk, authOk, storageOk] = await Promise.all([
       db.collection("colleges").limit(1).get().then(() => true).catch(() => false),
-      getAdminAuth().then((auth) => auth.listUsers(1)).then(() => true).catch(() => false),
+      // getUser on the caller's own uid needs only basic Auth read access
+      // (listUsers needs the broader users.list permission and reported a false
+      // "Authentication" failure). "user-not-found" still proves Auth answered.
+      getAdminAuth()
+        .then((auth) => auth.getUser(session.uid))
+        .then(() => true)
+        .catch((err: { code?: string }) => {
+          if (err?.code === "auth/user-not-found") return true;
+          console.error("[admin/dashboard-stats] Auth health check failed:", err);
+          return false;
+        }),
       getAdminStorage().bucket().exists().then(([exists]) => exists).catch(() => false),
     ]);
 

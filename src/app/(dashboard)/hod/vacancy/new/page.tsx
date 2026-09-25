@@ -171,7 +171,7 @@ export default function NewVacancyPage() {
           patch.justification =
             `Based on department student strength of ${requirement.totalStudents} students, ` +
             `the 1:${requirement.studentFacultyRatio} ratio requires ${requirement.totalRequired} faculty total. ` +
-            `Applying the 1:2:6 cadre ratio, ${cadreRow.required} ${cadreRow.label} position(s) are required. ` +
+            `Applying the ${requirement.cadreRatio} cadre ratio, ${cadreRow.required} ${cadreRow.label} position(s) are required. ` +
             `Currently ${cadreRow.current} active. Shortage: ${cadreRow.gap} position(s).`;
         }
       }

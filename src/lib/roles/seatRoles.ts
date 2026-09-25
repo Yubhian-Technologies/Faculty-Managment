@@ -8,6 +8,7 @@ import type { UserRole } from "@/types/core";
 export const SEAT_ROLES: UserRole[] = [
   "PRINCIPAL", "COLLEGE_ADMIN", "VICE_PRINCIPAL", "ACADEMICS", "HOD",
   "IQAC_COORDINATOR", "T_AND_P", "R_AND_D", "RND_COORDINATOR", "PLACEMENT_DEPT", "EXAM_CELL", "LIBRARY",
+  "WEBMASTER",
 ];
 
 // What someone's primary role can be set to when they step out of a legacy

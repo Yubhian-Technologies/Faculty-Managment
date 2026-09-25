@@ -5,7 +5,7 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { createFirebaseUser } from "@/lib/firebase/authRest";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
-import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
+import { getHodDepartmentScope, canHodManageFacultyDepartment } from "@/lib/departments/scope";
 import { SUPPORTING_STAFF_ROLE_CATEGORY, canRolePostCategory, supportingStaffCategoryLabel } from "@/lib/supportingStaff/roleCategory";
 import { hasSupportingStaffSplit } from "@/lib/designations/config";
 import { normalizeSupportingStaffProfile } from "@/lib/faculty/academicProfileCompat";
@@ -162,7 +162,7 @@ export async function POST(request: Request) {
 
       const scope = await getHodDepartmentScope(db, collegeId, session.uid);
       const requested = body.department?.trim();
-      if (requested && !canHodEditDepartment(scope, requested)) {
+      if (requested && !canHodManageFacultyDepartment(scope, requested)) {
         return NextResponse.json(
           { error: "That department is not yours or one of your sub-departments" },
           { status: 403 },

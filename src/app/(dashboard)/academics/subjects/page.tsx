@@ -449,11 +449,12 @@ export default function AcademicsSubjectsPage() {
                                     variant="ghost"
                                     size="icon"
                                     className="h-8 w-8"
+                                    aria-label={`Edit ${s.name}`}
                                     onClick={() => router.push(`/academics/subjects/${s.id}/edit?departmentId=${selectedDepartmentId}&courseId=${selectedCourseId}&year=${selectedYear}&academicYear=${encodeURIComponent(selectedAcademicYear)}&regulation=${encodeURIComponent(singleRegulation)}`)}
                                   >
                                     <Pencil className="h-3.5 w-3.5" />
                                   </Button>
-                                  <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => setDeleteTarget(s)}>
+                                  <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" aria-label={`Delete ${s.name}`} onClick={() => setDeleteTarget(s)}>
                                     <Trash2 className="h-3.5 w-3.5" />
                                   </Button>
                                 </div>

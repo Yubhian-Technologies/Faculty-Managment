@@ -25,7 +25,7 @@ export default function FinanceAuditPage() {
   }, []);
 
   const columns: Column<Row>[] = [
-    { key: "timestamp", header: "Timestamp", render: (row) => formatDateTime(row.timestamp) },
+    { key: "timestamp", header: "Timestamp", csvValue: (row) => formatDateTime(row.timestamp as Parameters<typeof formatDateTime>[0]), render: (row) => formatDateTime(row.timestamp) },
     {
       key: "action", header: "Action",
       render: (row) => <Badge variant="secondary">{FINANCE_AUDIT_ACTION_LABELS[row.action] ?? row.action}</Badge>,

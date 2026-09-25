@@ -138,6 +138,13 @@ export type LeaveRequestStatus =
   | "PENDING_ACCEPTANCE"
   | "PENDING_HOD"
   | "PENDING_PRINCIPAL"
+  // Split out from PENDING_PRINCIPAL so a request can be routed specifically
+  // to the Vice Principal instead of the shared Principal/VP queue (see
+  // Settings > Leave Approval Routing, lib/leave/approvalRouting.ts). The
+  // Principal can still decide a PENDING_VICE_PRINCIPAL request (senior
+  // override), but a Vice Principal can NOT decide a PENDING_PRINCIPAL one -
+  // once routed to Principal specifically, it's the Principal's alone.
+  | "PENDING_VICE_PRINCIPAL"
   | "PENDING_MANAGEMENT"
   | "APPROVED"
   | "REJECTED"
@@ -147,6 +154,7 @@ export const LEAVE_REQUEST_STATUS_LABELS: Record<LeaveRequestStatus, string> = {
   PENDING_ACCEPTANCE: "Awaiting Acceptance",
   PENDING_HOD: "Pending HOD",
   PENDING_PRINCIPAL: "Pending Principal",
+  PENDING_VICE_PRINCIPAL: "Pending Vice Principal",
   PENDING_MANAGEMENT: "Pending Management",
   APPROVED: "Approved",
   REJECTED: "Rejected",
@@ -262,14 +270,17 @@ export interface PeriodSubstitution {
 // ─── Leave approval routing ───────────────────────────────────────────────
 // Which approval tier a requester's leave request lands on first - configured
 // per requester role in the college's Settings (see LeaveApprovalRoutingCard
-// and lib/leave/approvalRouting.ts). The three tiers map 1:1 onto the existing
-// PENDING_HOD / PENDING_PRINCIPAL / PENDING_MANAGEMENT statuses, so every
-// downstream approval path is unchanged.
-export type LeaveApproverStage = "HOD" | "PRINCIPAL" | "MANAGEMENT";
+// and lib/leave/approvalRouting.ts). The four tiers map 1:1 onto the existing
+// PENDING_HOD / PENDING_PRINCIPAL / PENDING_VICE_PRINCIPAL / PENDING_MANAGEMENT
+// statuses, so every downstream approval path is unchanged. PRINCIPAL and
+// VICE_PRINCIPAL are deliberately separate stages, not one shared "Principal
+// / Vice Principal" option - see PENDING_VICE_PRINCIPAL's own comment above.
+export type LeaveApproverStage = "HOD" | "PRINCIPAL" | "VICE_PRINCIPAL" | "MANAGEMENT";
 
 export const LEAVE_APPROVER_STAGE_LABELS: Record<LeaveApproverStage, string> = {
   HOD: "Head of Department",
-  PRINCIPAL: "Principal / Vice Principal",
+  PRINCIPAL: "Principal",
+  VICE_PRINCIPAL: "Vice Principal",
   MANAGEMENT: "Management",
 };
 

@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { collegeSettingsRef, loadCollegeSettings } from "@/lib/firestore/collegeSettings";
-import { sanitizeLeaveApprovalRouting } from "@/lib/leave/approvalRouting";
+import { sanitizeLeaveApprovalRouting, defaultApproverStage, ROUTABLE_REQUESTER_ROLES } from "@/lib/leave/approvalRouting";
 import { sanitizeLeaveVacationRoles } from "@/lib/leave/staffCategoryRouting";
 import type { FacultyNorms } from "@/types/core";
 
@@ -64,8 +64,49 @@ export async function PUT(request: Request) {
       updatedByName: session.email || "Unknown",
     };
 
-    if (settings.newJoiningYears < 0) {
-      return NextResponse.json({ error: "newJoiningYears must be 0 or more" }, { status: 400 });
+    // Guard numeric fields — 400 before any write, keeps success path unchanged
+    const issues: string[] = [];
+    if (!Number.isFinite(settings.studentFacultyRatio) || settings.studentFacultyRatio < 1 || settings.studentFacultyRatio > 100) {
+      issues.push("studentFacultyRatio must be a finite number between 1 and 100");
+    }
+    if (!Number.isFinite(settings.teachingHoursPerWeek) || settings.teachingHoursPerWeek < 1 || settings.teachingHoursPerWeek > 100) {
+      issues.push("teachingHoursPerWeek must be a finite number between 1 and 100");
+    }
+    if (!Number.isFinite(settings.defaultMinFacultyPerDept) || !Number.isInteger(settings.defaultMinFacultyPerDept) || settings.defaultMinFacultyPerDept < 1 || settings.defaultMinFacultyPerDept > 100) {
+      issues.push("defaultMinFacultyPerDept must be an integer between 1 and 100");
+    }
+    if (!Number.isFinite(settings.newJoiningYears) || settings.newJoiningYears < 0 || settings.newJoiningYears > 100) {
+      issues.push("newJoiningYears must be a finite number between 0 and 100");
+    }
+    if (issues.length > 0) {
+      return NextResponse.json({ error: "Invalid settings", issues }, { status: 400 });
+    }
+
+    // Validate positionNorms if caller sent it — no duplicate designation (case-insensitive) and requiredPerDept 1-20 integer
+    if (body.positionNorms !== undefined) {
+      if (!Array.isArray(body.positionNorms)) {
+        return NextResponse.json({ error: "Invalid positionNorms", issues: ["positionNorms must be an array"] }, { status: 400 });
+      }
+      const seen = new Set<string>();
+      const pnIssues: string[] = [];
+      for (let i = 0; i < (body.positionNorms as unknown[]).length; i++) {
+        const pn = (body.positionNorms as unknown as { designation?: unknown; requiredPerDept?: unknown }[])[i];
+        const desig = typeof pn.designation === "string" ? pn.designation.trim() : "";
+        if (!desig) {
+          pnIssues.push(`positionNorms[${i}].designation is required`);
+        } else {
+          const lower = desig.toLowerCase();
+          if (seen.has(lower)) pnIssues.push(`positionNorms[${i}].designation duplicate: ${desig}`);
+          else seen.add(lower);
+        }
+        const req = Number(pn.requiredPerDept);
+        if (!Number.isInteger(req) || req < 1 || req > 20) {
+          pnIssues.push(`positionNorms[${i}].requiredPerDept must be an integer between 1 and 20`);
+        }
+      }
+      if (pnIssues.length > 0) {
+        return NextResponse.json({ error: "Invalid positionNorms", issues: pnIssues }, { status: 400 });
+      }
     }
 
     // Sent whole (one entry per role) by the Leave Approval Routing card, so a
@@ -106,6 +147,46 @@ export async function PUT(request: Request) {
       },
       timestamp: new Date(),
     });
+
+    // A separate, dedicated entry (rather than relying on whoever reads
+    // COLLEGE_SETTINGS_UPDATED to notice a leaveApprovalRouting key buried in
+    // its details) - LeaveApprovalRoutingCard's own History section filters
+    // on this action specifically, so it shows only routing changes, not
+    // every unrelated settings edit (ratio, teaching hours, ...) that also
+    // goes through this same PUT. performedByRole is recorded alongside the
+    // name so the history reads "changed by Principal - X" / "Vice Principal
+    // - Y", not just an email, which is what actually answers "who".
+    if (leaveApprovalRouting) {
+      // Per-role diff against what was saved before this write - answers
+      // "for which role did the routing change, and from what to what",
+      // not just "the routing was touched". A role the client sent
+      // unchanged (same resolved stage before and after, accounting for the
+      // same default-fill the card itself uses) produces no entry, so a
+      // save that only touched one role's dropdown shows exactly that one
+      // role here, not all sixteen.
+      const changes = ROUTABLE_REQUESTER_ROLES
+        .map((role) => {
+          const from = current.leaveApprovalRouting?.[role] ?? defaultApproverStage(role);
+          const to = leaveApprovalRouting?.[role] ?? defaultApproverStage(role);
+          return { role, from, to };
+        })
+        .filter((c) => c.from !== c.to);
+
+      if (changes.length > 0) {
+        await db.collection("colleges").doc(collegeId).collection("auditLogs").add({
+          collegeId,
+          action: "LEAVE_ROUTING_UPDATED",
+          performedBy: session.uid,
+          performedByName: settings.updatedByName,
+          // realRole (not the normalized role) so a College Admin's save is
+          // recorded as "College Admin", not indistinguishable from "Principal" -
+          // see isCollegeAdmin in verifySession.ts.
+          performedByRole: session.realRole || session.role,
+          details: { leaveApprovalRouting, changes },
+          timestamp: new Date(),
+        });
+      }
+    }
 
     return NextResponse.json({ success: true });
   } catch (err) {

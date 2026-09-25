@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -38,6 +39,7 @@ export function Pagination({ page, pageSize, total, onPageChange, onPageSizeChan
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const from = total === 0 ? 0 : (page - 1) * pageSize + 1;
   const to = Math.min(page * pageSize, total);
+  const pages = useMemo(() => pageList(page, totalPages), [page, totalPages]);
 
   return (
     <div className={cn("flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between", className)}>
@@ -67,7 +69,7 @@ export function Pagination({ page, pageSize, total, onPageChange, onPageSizeChan
             <ChevronLeft className="h-4 w-4" />
             <span className="hidden sm:inline">Previous</span>
           </Button>
-          {pageList(page, totalPages).map((p, i) =>
+          {pages.map((p, i) =>
             p === "ellipsis" ? (
               <span key={`e-${i}`} className="px-1.5 text-sm text-muted-foreground">…</span>
             ) : (

@@ -3,7 +3,8 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import { STUDENT_FACULTY_RATIO, CADRE_PARTS, CADRE_TOTAL_PARTS, requiredFacultyCount } from "@/lib/college/facultyRatio";
+import { STUDENT_FACULTY_RATIO, CADRE_PARTS as DEFAULT_CADRE_PARTS, CADRE_TOTAL_PARTS as DEFAULT_CADRE_TOTAL, requiredFacultyCount } from "@/lib/college/facultyRatio";
+import { loadCollegeSettings } from "@/lib/firestore/collegeSettings";
 import { AVAILABLE_FACULTY_STATUSES } from "@/types";
 
 export type CadreEntry = {
@@ -71,10 +72,39 @@ export async function GET(request: Request) {
     for (const d of studentsSecondarySnap.docs) countedIds.add(d.id);
     const totalStudents = countedIds.size;
 
-    // ── Total faculty required (1:15) ─────────────────────────────────────────
-    const totalRequired = requiredFacultyCount(totalStudents);
+    // ── College settings (faculty norms) — single source for ratio + cadre split
+    // Falls back to DEFAULT_COLLEGE_SETTINGS if college has no custom doc, keeping
+    // existing behavior for unconfigured colleges.
+    const settings = await loadCollegeSettings(db, session.collegeId);
 
-    // ── Cadre split (1:2:6) ────────────────────────────────────────────────────
+    // ── Total faculty required — cadre-coupled to settings.studentFacultyRatio (fallback 15)
+    const effectiveRatio = (settings.studentFacultyRatio && Number.isFinite(settings.studentFacultyRatio) && settings.studentFacultyRatio > 0)
+      ? settings.studentFacultyRatio
+      : STUDENT_FACULTY_RATIO;
+    const totalRequired = totalStudents > 0 ? Math.ceil(totalStudents / effectiveRatio) : 0;
+
+    // ── Cadre split: driven by Cadre-wise Ratio (PositionNorms) ──────────────
+    // Settings > Cadre-wise Ratio (positionNorms[].requiredPerDept) defines the
+    // ratio parts. e.g. Professor 1, Associate 2, Assistant 6 → 1:2:6.
+    // Falls back to DEFAULT_CADRE_PARTS (1:2:6) if college has no custom ratio.
+    const positionNorms = (settings.positionNorms ?? []) as { designation: string; requiredPerDept: number }[];
+    // Map by label matching: Professor / Associate Professor / Assistant Professor
+    const findRequired = (keywords: string[], exclude: string[] = []) => {
+      const match = positionNorms.find((p) => {
+        const lower = p.designation.toLowerCase();
+        return keywords.every((k) => lower.includes(k)) && exclude.every((k) => !lower.includes(k));
+      });
+      return match?.requiredPerDept;
+    };
+    const profPartRaw = findRequired(["professor"], ["associate", "assistant"]) ?? findRequired(["prof"], ["associate", "assistant"]) ?? DEFAULT_CADRE_PARTS.prof;
+    const assocPartRaw = findRequired(["associate"]) ?? DEFAULT_CADRE_PARTS.assoc;
+    const asstPartRaw = findRequired(["assistant"]) ?? DEFAULT_CADRE_PARTS.asst;
+    const CADRE_PARTS = {
+      prof: Math.max(1, Number(profPartRaw) || DEFAULT_CADRE_PARTS.prof),
+      assoc: Math.max(1, Number(assocPartRaw) || DEFAULT_CADRE_PARTS.assoc),
+      asst: Math.max(1, Number(asstPartRaw) || DEFAULT_CADRE_PARTS.asst),
+    } as const;
+    const CADRE_TOTAL_PARTS = CADRE_PARTS.prof + CADRE_PARTS.assoc + CADRE_PARTS.asst;
     // Largest-remainder apportionment: floor each share, then hand out the
     // leftover seats to whichever cadre has the biggest fractional part. Using
     // independent Math.ceil() per cadre (the old approach) can round Professor
@@ -143,7 +173,7 @@ export async function GET(request: Request) {
       {
         key: "PROFESSOR",
         label: "Professor",
-        cadreRatioPart: 1,
+        cadreRatioPart: CADRE_PARTS.prof,
         required: profRequired,
         current: profCurrent,
         gap: Math.max(0, profRequired - profCurrent),
@@ -152,7 +182,7 @@ export async function GET(request: Request) {
       {
         key: "ASSOCIATE_PROFESSOR",
         label: "Associate Professor",
-        cadreRatioPart: 2,
+        cadreRatioPart: CADRE_PARTS.assoc,
         required: assocRequired,
         current: assocCurrent,
         gap: Math.max(0, assocRequired - assocCurrent),
@@ -161,7 +191,7 @@ export async function GET(request: Request) {
       {
         key: "ASSISTANT_PROFESSOR",
         label: "Asst. Professor / Lecturer",
-        cadreRatioPart: 6,
+        cadreRatioPart: CADRE_PARTS.asst,
         required: asstRequired,
         current: asstCurrent,
         gap: Math.max(0, asstRequired - asstCurrent),
@@ -169,11 +199,12 @@ export async function GET(request: Request) {
       },
     ];
 
+    const cadreRatio = `${CADRE_PARTS.prof}:${CADRE_PARTS.assoc}:${CADRE_PARTS.asst}`;
     const result: FacultyRequirementResult = {
       department: dept,
       totalStudents,
-      studentFacultyRatio: STUDENT_FACULTY_RATIO,
-      cadreRatio: "1:2:6",
+      studentFacultyRatio: effectiveRatio,
+      cadreRatio,
       totalRequired,
       totalCurrent,
       // Sum of per-cadre shortfalls, not (totalRequired - totalCurrent) - a

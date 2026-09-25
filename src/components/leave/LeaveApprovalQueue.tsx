@@ -214,11 +214,11 @@ export function LeaveApprovalQueue() {
   async function act(r: LeaveRequest, action: "APPROVE" | "REJECT") {
     const isPendingHod = r.status === "PENDING_HOD";
     const isHodOtherDecision = isPendingHod && !!r.isOtherRequest;
-    const isPrincipalOtherDecision = r.status === "PENDING_PRINCIPAL" && !!r.isOtherRequest;
-    // Normally an HOD already tagged paid/unpaid before forwarding here. A
-    // Vice Principal's own Other leave skips the HOD stage entirely though,
-    // reaching PENDING_PRINCIPAL still untagged - the Principal decides it
-    // themselves, in the same Approve action.
+    // PENDING_PRINCIPAL: a Vice Principal's own Other leave, which skips the
+    // HOD stage entirely and reaches here still untagged - the Principal
+    // decides it themselves, in the same Approve action. PENDING_VICE_PRINCIPAL:
+    // an HOD-forwarded Other request (already tagged paid/unpaid by the HOD).
+    const isPrincipalOtherDecision = (r.status === "PENDING_PRINCIPAL" || r.status === "PENDING_VICE_PRINCIPAL") && !!r.isOtherRequest;
     const needsPaidLeaveDecision = !!r.isOtherRequest && r.isPaidLeave === undefined && (isHodOtherDecision || isPrincipalOtherDecision);
     if (action === "APPROVE" && needsPaidLeaveDecision && (paidById[r.id] ?? r.isPaidLeave) === undefined) {
       toast({ variant: "destructive", title: "Select whether this is paid or unpaid leave" });
@@ -352,7 +352,7 @@ export function LeaveApprovalQueue() {
             const isOtherRequest = !!r.isOtherRequest;
             const isPendingHod = r.status === "PENDING_HOD";
             const isHodOtherDecision = isPendingHod && isOtherRequest;
-            const isPrincipalOtherDecision = r.status === "PENDING_PRINCIPAL" && isOtherRequest;
+            const isPrincipalOtherDecision = (r.status === "PENDING_PRINCIPAL" || r.status === "PENDING_VICE_PRINCIPAL") && isOtherRequest;
             const isExpanded = expandedId === r.id;
             return (
               <Card key={r.id} className={cn("transition-colors", isExpanded && "ring-1 ring-primary/20")}>

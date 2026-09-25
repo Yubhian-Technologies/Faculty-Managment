@@ -374,10 +374,10 @@ export default function HODSubjectsPage() {
                                 <td className="px-4 py-2.5 text-right">
                                   {isOwnDepartment && (
                                     <div className="flex justify-end gap-1">
-                                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => router.push(`/hod/subjects/${s.id}/edit?courseId=${selectedCourseId}&year=${selectedYear}`)}>
+                                      <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={`Edit ${s.name}`} onClick={() => router.push(`/hod/subjects/${s.id}/edit?courseId=${selectedCourseId}&year=${selectedYear}`)}>
                                         <Pencil className="h-3.5 w-3.5" />
                                       </Button>
-                                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => setDeleteTarget(s)}>
+                                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" aria-label={`Delete ${s.name}`} onClick={() => setDeleteTarget(s)}>
                                         <Trash2 className="h-3.5 w-3.5" />
                                       </Button>
                                     </div>

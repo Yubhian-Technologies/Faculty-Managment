@@ -3,20 +3,8 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireSuperAdmin } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { resolveNavVisibility } from "@/lib/navVisibilityDefaults";
 import type { NavVisibilitySettings, UserRole } from "@/types";
-
-const DEFAULT_SETTINGS: NavVisibilitySettings = {
-  hiddenModules: {},
-  hiddenItems: {
-    // These pages are still placeholder ("coming soon") screens across every
-    // role that has one — keep them hidden by default until each is actually
-    // built out, per college.
-    HOD: ["/hod/payslips", "/hod/appraisal", "/hod/training", "/hod/grievance", "/hod/documents"],
-    PRINCIPAL: ["/principal/attendance", "/principal/training", "/principal/grievance", "/principal/payslips"],
-    VICE_PRINCIPAL: ["/principal/attendance", "/principal/training", "/principal/grievance", "/principal/payslips"],
-    PANEL_MEMBER: ["/panel/attendance", "/panel/payslips", "/panel/appraisal", "/panel/training", "/panel/grievance", "/panel/documents"],
-  },
-};
 
 export async function GET(request: Request) {
   try {
@@ -33,9 +21,12 @@ export async function GET(request: Request) {
       .collection("settings").doc("navVisibility")
       .get();
 
-    const settings: NavVisibilitySettings = snap.exists
-      ? { ...DEFAULT_SETTINGS, ...(snap.data() as NavVisibilitySettings) }
-      : DEFAULT_SETTINGS;
+    const stored = snap.exists ? (snap.data() as NavVisibilitySettings) : undefined;
+    const settings: NavVisibilitySettings = {
+      ...resolveNavVisibility(stored),
+      updatedAt: stored?.updatedAt,
+      updatedByName: stored?.updatedByName,
+    };
 
     return NextResponse.json({ settings });
   } catch (err) {

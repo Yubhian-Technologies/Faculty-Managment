@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodEditDepartment, getRelatedDepartmentNames } from "@/lib/departments/scope";
+import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 import type { MidNumber, Subject, TeachingAssignment } from "@/types";
 
 const READ_ROLES = ["HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "PANEL_MEMBER"];
@@ -37,7 +38,11 @@ export async function GET(request: Request) {
 
     let query: FirebaseFirestore.Query = collegeRef.collection("midPaperAssignments");
     if (session.role === "PANEL_MEMBER") {
-      query = query.where("facultyId", "==", session.uid);
+      // MidPaperAssignment.facultyId is the FacultyMember doc id, not the
+      // login uid - filtering by session.uid directly matched nothing for
+      // almost any real faculty login, silently showing "no duties assigned".
+      const facultyMemberId = await resolveFacultyMemberId(db, session.collegeId, session.uid);
+      query = query.where("facultyId", "==", facultyMemberId);
     } else if (session.role === "HOD") {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
       const relatedNameLists = await Promise.all(

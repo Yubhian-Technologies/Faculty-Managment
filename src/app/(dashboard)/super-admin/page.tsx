@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Building2, Users, ScrollText, TrendingUp } from "lucide-react";
 import Link from "next/link";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/store/authStore";
 import { useNavVisibility } from "@/hooks/useNavVisibility";
 import { isPathHidden } from "@/components/layout/navConfig";
-import type { College } from "@/types";
+import { useAdminColleges } from "@/hooks/useAdminColleges";
 
 interface Stats {
   colleges: number;
@@ -27,68 +27,75 @@ interface DashboardStats {
 export default function SuperAdminDashboard() {
   const user = useAuthStore((s) => s.user);
   const { hiddenModules, hiddenItems } = useNavVisibility();
-  const isHidden = (href: string) => !!user?.role && isPathHidden(href, user.role, hiddenModules, hiddenItems);
-  const [stats, setStats] = useState<Stats | null>(null);
+  const isHidden = useCallback(
+    (href: string) => !!user?.role && isPathHidden(href, user.role, hiddenModules, hiddenItems),
+    [user, hiddenModules, hiddenItems]
+  );
+  // Batch 2 example: shared hook with staleTime 5m — cached across admin pages
+  const { data: collegesData } = useAdminColleges();
+  const stats: Stats | null = useMemo(() => {
+    if (!collegesData) return null;
+    return {
+      colleges: collegesData.length,
+      activeColleges: collegesData.filter((c) => c.isActive).length,
+    };
+  }, [collegesData]);
   const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
 
   useEffect(() => {
-    fetch("/api/admin/colleges")
-      .then((r) => r.json() as Promise<{ colleges: College[] }>)
-      .then((data) => {
-        const colleges = data.colleges ?? [];
-        setStats({
-          colleges: colleges.length,
-          activeColleges: colleges.filter((c) => c.isActive).length,
-        });
-      })
-      .catch(() => {});
-
     fetch("/api/admin/dashboard-stats")
       .then((r) => r.json() as Promise<DashboardStats>)
       .then(setDashboardStats)
       .catch(() => {});
   }, []);
 
-  const statCards = [
-    {
-      label: "Total Colleges",
-      value: stats ? String(stats.colleges) : "-",
-      sub: stats ? `${stats.activeColleges} active` : undefined,
-      icon: Building2,
-      color: "text-blue-600 bg-blue-50",
-    },
-    {
-      label: "Active Users",
-      value: dashboardStats ? String(dashboardStats.activeUsers) : "-",
-      icon: Users,
-      color: "text-green-600 bg-green-50",
-    },
-    {
-      label: "Ongoing Hirings",
-      value: dashboardStats ? String(dashboardStats.ongoingHirings) : "-",
-      icon: TrendingUp,
-      color: "text-orange-600 bg-orange-50",
-    },
-    {
-      label: "Audit Events",
-      value: dashboardStats ? String(dashboardStats.auditEvents) : "-",
-      sub: dashboardStats ? `last ${dashboardStats.auditWindowDays} days` : undefined,
-      icon: ScrollText,
-      color: "text-purple-600 bg-purple-50",
-    },
-  ];
+  const statCards = useMemo(
+    () => [
+      {
+        label: "Total Colleges",
+        value: stats ? String(stats.colleges) : "-",
+        sub: stats ? `${stats.activeColleges} active` : undefined,
+        icon: Building2,
+        color: "text-blue-600 bg-blue-50",
+      },
+      {
+        label: "Active Users",
+        value: dashboardStats ? String(dashboardStats.activeUsers) : "-",
+        icon: Users,
+        color: "text-green-600 bg-green-50",
+      },
+      {
+        label: "Ongoing Hirings",
+        value: dashboardStats ? String(dashboardStats.ongoingHirings) : "-",
+        icon: TrendingUp,
+        color: "text-orange-600 bg-orange-50",
+      },
+      {
+        label: "Audit Events",
+        value: dashboardStats ? String(dashboardStats.auditEvents) : "-",
+        sub: dashboardStats ? `last ${dashboardStats.auditWindowDays} days` : undefined,
+        icon: ScrollText,
+        color: "text-purple-600 bg-purple-50",
+      },
+    ],
+    [stats, dashboardStats]
+  );
 
-  const healthChecks = dashboardStats
-    ? [
-        { label: "Firestore", ok: dashboardStats.systemHealth.firestore },
-        { label: "Authentication", ok: dashboardStats.systemHealth.authentication },
-        { label: "Storage", ok: dashboardStats.systemHealth.storage },
-      ]
-    : [
-        { label: "Firestore", ok: undefined },
-        { label: "Authentication", ok: undefined },
-        { label: "Storage", ok: undefined },
-      ];
+  const healthChecks = useMemo(
+    () =>
+      dashboardStats
+        ? [
+            { label: "Firestore", ok: dashboardStats.systemHealth.firestore },
+            { label: "Authentication", ok: dashboardStats.systemHealth.authentication },
+            { label: "Storage", ok: dashboardStats.systemHealth.storage },
+          ]
+        : [
+            { label: "Firestore", ok: undefined },
+            { label: "Authentication", ok: undefined },
+            { label: "Storage", ok: undefined },
+          ],
+    [dashboardStats]
+  );
 
   return (
     <div className="space-y-6">

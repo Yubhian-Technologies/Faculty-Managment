@@ -61,7 +61,7 @@ describe("evaluateODProof - what it does NOT apply to", () => {
     expect(e.isUnprovenLop).toBe(false);
   });
 
-  it.each(["PENDING_HOD", "PENDING_PRINCIPAL", "REJECTED", "CANCELLED"] as const)(
+  it.each(["PENDING_HOD", "PENDING_PRINCIPAL", "PENDING_VICE_PRINCIPAL", "REJECTED", "CANCELLED"] as const)(
     "ignores an OD in status %s",
     (status) => {
       expect(evaluateODProof(req({ status, to: daysBefore(60) }), NOW).applicable).toBe(false);

@@ -42,11 +42,18 @@ export async function GET(request: Request) {
 
     const { searchParams } = new URL(request.url);
     const filterLocationId = searchParams.get("locationId") ?? (session.role !== "SUPER_ADMIN" ? session.locationId : "");
+    // Optional pagination/projection — additive, defaults to existing behavior (return all, full docs)
+    const limitParam = searchParams.get("limit");
+    const limitNum = limitParam ? Math.min(Math.max(parseInt(limitParam, 10) || 0, 1), 100) : 0;
 
     const db = getAdminDb();
     let query: FirebaseFirestore.Query = db.collection("colleges");
     if (filterLocationId) {
       query = query.where("locationId", "==", filterLocationId);
+    }
+    if (limitNum > 0) {
+      // Projection for list views — reduces read payload; only when caller opts in via ?limit
+      query = query.select("name", "locationId", "isActive", "type").limit(limitNum);
     }
     const snap = await query.get();
     const colleges = snap.docs

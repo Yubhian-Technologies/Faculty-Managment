@@ -51,6 +51,7 @@ export default function CollegeAuditLogsPage() {
     {
       key: "timestamp",
       header: "Time",
+      csvValue: (row) => formatDateTime(row.timestamp as Parameters<typeof formatDateTime>[0]),
       render: (row) => (
         <span className="text-xs text-muted-foreground whitespace-nowrap">
           {formatDateTime(row.timestamp as Parameters<typeof formatDateTime>[0])}
@@ -79,6 +80,7 @@ export default function CollegeAuditLogsPage() {
     {
       key: "details",
       header: "Details",
+      csvValue: (row) => (row.details ? JSON.stringify(row.details) : ""),
       hideOnMobile: true,
       render: (row) => (
         <span className="text-xs text-muted-foreground">

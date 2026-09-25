@@ -8,28 +8,22 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
-import { AcademicProfileFields } from "@/components/faculty/AcademicProfileFields";
-import { PersonalDetailsFields, type PersonalDetailsValue } from "@/components/shared/PersonalDetailsFields";
 import { AvatarUploadField } from "@/components/shared/AvatarUploadField";
 import { Textarea } from "@/components/ui/textarea";
 import { ROLE_LABELS, ROLE_LEVEL, ROLE_SCOPE, LEVEL_LABELS } from "@/types";
 import { PHONE_REGEX } from "@/lib/validations";
+import { SUPER_ADMIN_CREATABLE } from "@/lib/roles/superAdminCreatable";
 import { toast } from "@/hooks/useToast";
 import type { College, Location, FacultyProfileFields, UserRole } from "@/types";
 
-// Roles a Super Admin creates - the level L1–L2 set plus DIRECTOR (L3).
-// Scope (GLOBAL/LOCATION/COLLEGE) is read from ROLE_SCOPE, which drives which
+// Roles a Super Admin creates - single source is SUPER_ADMIN_CREATABLE (src/lib/roles/superAdminCreatable.ts).
+// Scope (GLOBAL/LOCATION) is read from ROLE_SCOPE, which drives which
 // tenant picker is shown and what the provisioning route (api/admin/users)
 // writes. Principal is deliberately not here any more: it's a SEAT, appointed
 // by a college's own College Admin via Role Assignments, not handed out
 // directly - same reasoning as removing it from Location Admin. Must match
-// SUPER_ADMIN_CREATABLE in api/admin/users/route.ts.
-const CREATABLE_ROLES: UserRole[] = [
-  "MANAGEMENT", "FINANCE", "PURCHASE_DEPT",   // L1 · GLOBAL
-  "ADMINISTRATION", "ACCOUNTS",               // L2 · LOCATION
-  "DIRECTOR",                                 // L3 · COLLEGE
-];
+// SUPER_ADMIN_CREATABLE in api/admin/users/route.ts (now imported from the shared constant).
+const CREATABLE_ROLES: UserRole[] = SUPER_ADMIN_CREATABLE;
 
 // Creatable roles grouped by their L0–L6 level, so the role picker is level-scoped.
 const ROLE_LEVELS_PRESENT = Array.from(
@@ -43,19 +37,15 @@ export default function NewUserPage() {
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [collegeEmail, setCollegeEmail] = useState("");
-  const [employeeId, setEmployeeId] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("12345678");
   const [role, setRole] = useState<UserRole>("MANAGEMENT");
   const [collegeId, setCollegeId] = useState("");
   const [locationId, setLocationId] = useState("");
   const [academicProfile, setAcademicProfile] = useState<Partial<FacultyProfileFields>>({});
-  const [personalDetails, setPersonalDetails] = useState<PersonalDetailsValue>({});
   const [photoUrl, setPhotoUrl] = useState<string | undefined>(undefined);
   const [tempPhotoId] = useState(() => crypto.randomUUID());
   const [saving, setSaving] = useState(false);
-  const collegeType = colleges.find((c) => c.id === collegeId)?.type;
 
   useEffect(() => {
     fetch("/api/admin/colleges")
@@ -73,9 +63,6 @@ export default function NewUserPage() {
   // College picker cascades off the chosen location (multiple colleges per location).
   const collegesForLocation = colleges.filter((c) => c.locationId === locationId);
 
-  // Employee ID is mandatory when manually adding a college-scoped person -
-  // there's no import/bulk flow behind this form to backfill it later.
-  const employeeIdRequired = role === "DIRECTOR";
   // Phone stays optional (not every seat needs one on file), but a filled-in
   // value has to actually be a usable 10-digit Indian mobile number - same
   // PHONE_REGEX every other phone field in the app (faculty import, Add
@@ -85,7 +72,7 @@ export default function NewUserPage() {
     : "";
   const isValid = !!name && !!email && !!password && !!role &&
     (scope === "GLOBAL" ? true : scope === "LOCATION" ? !!locationId : !!locationId && !!collegeId) &&
-    (!employeeIdRequired || !!employeeId.trim()) && !phoneError;
+    !phoneError;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -98,7 +85,6 @@ export default function NewUserPage() {
         body: JSON.stringify({
           name, email, password, role, collegeId, locationId, phone,
           academicProfile,
-          ...(role === "DIRECTOR" ? { ...personalDetails, collegeEmail, employeeId } : {}),
           ...(photoUrl ? { profilePhotoUrl: photoUrl } : {}),
         }),
       });
@@ -141,18 +127,6 @@ export default function NewUserPage() {
                   <Label>Personal Email <span className="text-destructive">*</span></Label>
                   <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="user@example.com" />
                 </div>
-                {role === "DIRECTOR" && (
-                  <>
-                    <div className="space-y-2">
-                      <Label>College Email</Label>
-                      <Input type="email" value={collegeEmail} onChange={(e) => setCollegeEmail(e.target.value)} placeholder="name@example.com" />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Employee ID <span className="text-destructive">*</span></Label>
-                      <Input value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} placeholder="EMP-001" />
-                    </div>
-                  </>
-                )}
               </div>
             </div>
 
@@ -161,7 +135,7 @@ export default function NewUserPage() {
               <Input value={password} onChange={(e) => setPassword(e.target.value)} />
             </div>
 
-            {/* Role - grouped by level (L1–L3) */}
+            {/* Role - grouped by level (L1–L2) */}
             <div className="space-y-2">
               <Label>Role <span className="text-destructive">*</span></Label>
               <Select value={role} onValueChange={(v) => { setRole(v as UserRole); setCollegeId(""); setLocationId(""); }}>
@@ -260,43 +234,20 @@ export default function NewUserPage() {
         </CardContent>
       </Card>
 
-      {role === "DIRECTOR" ? (
-        // Collapsed by default (no defaultValue) - Personal Details and
-        // Academic Profile are both long forms, and having both permanently
-        // expanded stacked below the main form was most of what made this
-        // page so scrolly. Each section's fields now only appear once its
-        // own header is clicked; "multiple" (not "single") still lets both
-        // be open at once if the person wants that.
-        <Accordion type="multiple" className="mt-6 space-y-3">
-          <AccordionItem value="personal" className="border rounded-lg bg-card px-4">
-            <AccordionTrigger className="text-base font-semibold hover:no-underline">Personal Details</AccordionTrigger>
-            <AccordionContent>
-              <PersonalDetailsFields value={personalDetails} onChange={setPersonalDetails} />
-            </AccordionContent>
-          </AccordionItem>
-          <AccordionItem value="academic" className="border rounded-lg bg-card px-4">
-            <AccordionTrigger className="text-base font-semibold hover:no-underline">Academic Profile</AccordionTrigger>
-            <AccordionContent>
-              <AcademicProfileFields value={academicProfile} onChange={setAcademicProfile} includeTeachingAssignment={false} collegeType={collegeType} />
-            </AccordionContent>
-          </AccordionItem>
-        </Accordion>
-      ) : (
-        <Card className="mt-6">
-          <CardHeader><CardTitle className="text-base">Module 6 - Others</CardTitle></CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              <Label>Other Information</Label>
-              <Textarea
-                value={academicProfile.otherInformation ?? ""}
-                onChange={(e) => setAcademicProfile({ ...academicProfile, otherInformation: e.target.value })}
-                placeholder="Anything not covered above - add it here"
-                rows={4}
-              />
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      <Card className="mt-6">
+        <CardHeader><CardTitle className="text-base">Module 6 - Others</CardTitle></CardHeader>
+        <CardContent>
+          <div className="space-y-2">
+            <Label>Other Information</Label>
+            <Textarea
+              value={academicProfile.otherInformation ?? ""}
+              onChange={(e) => setAcademicProfile({ ...academicProfile, otherInformation: e.target.value })}
+              placeholder="Anything not covered above - add it here"
+              rows={4}
+            />
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

@@ -88,7 +88,7 @@ function RegulationBatchesEditor({
           {draft.regulations.map((r) => (
             <span key={r} className="inline-flex items-center gap-1 rounded-full bg-secondary px-2 py-0.5 text-xs">
               {r}{draft.regulationBatches[r] ? ` — ${draft.regulationBatches[r]}` : ""}
-              <button type="button" onClick={() => removeRegulation(r)} className="rounded-full hover:bg-muted-foreground/20" title={`Remove ${r}`}>
+              <button type="button" onClick={() => removeRegulation(r)} className="rounded-full hover:bg-muted-foreground/20" title={`Remove ${r}`} aria-label={`Remove ${r}`}>
                 <X className="h-3 w-3" />
               </button>
             </span>
@@ -97,19 +97,19 @@ function RegulationBatchesEditor({
       )}
       <div className="flex flex-wrap items-end gap-2">
         <div className="space-y-1">
-          <Label className="text-[11px]">Code</Label>
-          <Input value={code} onChange={(e) => setCode(e.target.value)} placeholder="e.g. R23" className="w-24 uppercase" list={listId} />
+          <Label htmlFor={`${listId}-code`} className="text-[11px]">Code</Label>
+          <Input id={`${listId}-code`} value={code} onChange={(e) => setCode(e.target.value)} placeholder="e.g. R23" className="w-24 uppercase" list={listId} />
           <datalist id={listId}>
             {knownCodes.map((c) => <option key={c} value={c} />)}
           </datalist>
         </div>
         <div className="space-y-1">
-          <Label className="text-[11px]">Starting Year</Label>
-          <Input value={startYear} onChange={(e) => setStartYear(stripLeadingZeros(e.target.value))} placeholder="2023" className="w-24" maxLength={4} />
+          <Label htmlFor={`${listId}-start-year`} className="text-[11px]">Starting Year</Label>
+          <Input id={`${listId}-start-year`} value={startYear} onChange={(e) => setStartYear(stripLeadingZeros(e.target.value))} placeholder="2023" className="w-24" maxLength={4} />
         </div>
         <div className="space-y-1">
-          <Label className="text-[11px]">No. of Batches</Label>
-          <Input type="number" min={1} value={numBatches} onChange={(e) => setNumBatches(stripLeadingZeros(e.target.value))} className="w-24" />
+          <Label htmlFor={`${listId}-num-batches`} className="text-[11px]">No. of Batches</Label>
+          <Input id={`${listId}-num-batches`} type="number" min={1} value={numBatches} onChange={(e) => setNumBatches(stripLeadingZeros(e.target.value))} className="w-24" />
         </div>
         <Button type="button" size="sm" variant="outline" onClick={addRegulation}>
           <Plus className="h-3.5 w-3.5 mr-1" />Add
@@ -522,7 +522,7 @@ export function CourseCatalogSettingsCard({ readOnly = false, regulationsOnly = 
                     </div>
                   ) : (item.regulations ?? []).length === 0 ? (
                     <p className="flex items-center gap-1 text-xs text-amber-600">
-                      <AlertTriangle className="h-3 w-3" /> No regulations assigned yet - subjects can&apos;t be added to this course until you add at least one.
+                      <AlertTriangle className="h-3 w-3" /> No regulations assigned yet - subjects can still be added without one, but won&apos;t be tagged with a curriculum regulation until you add one here.
                     </p>
                   ) : (
                     <div className="space-y-1">

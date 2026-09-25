@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { createFirebaseUser } from "@/lib/firebase/authRest";
-import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
+import { getHodDepartmentScope, canHodManageFacultyDepartment } from "@/lib/departments/scope";
 import { SUPPORTING_STAFF_ROLE_CATEGORY } from "@/lib/supportingStaff/roleCategory";
 import { migrateSupportingStaffDoc } from "@/lib/faculty/fieldRenames";
 import { NON_TECHNICAL_STAFF_DESIGNATION_LABELS } from "@/types";
@@ -61,7 +61,7 @@ export async function POST(
     }
     if (session.role === "HOD") {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
-      if (!canHodEditDepartment(scope, data.department ?? "")) {
+      if (!canHodManageFacultyDepartment(scope, data.department ?? "")) {
         return NextResponse.json({ error: "Staff record not found" }, { status: 404 });
       }
     }

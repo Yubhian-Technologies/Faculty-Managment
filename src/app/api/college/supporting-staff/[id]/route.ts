@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
+import { getHodDepartmentScope, canHodManageFacultyDepartment } from "@/lib/departments/scope";
 import { SUPPORTING_STAFF_ROLE_CATEGORY, canRolePostCategory } from "@/lib/supportingStaff/roleCategory";
 import { supportingStaffDisplayName } from "@/lib/supportingStaff/supportingStaffDisplayName";
 import { normalizeSupportingStaffProfile } from "@/lib/faculty/academicProfileCompat";
@@ -14,12 +14,14 @@ import { FieldValue } from "firebase-admin/firestore";
 import type { SupportingStaffCategory, SupportingStaffDesignation, EmploymentType, FacultyStatus } from "@/types";
 
 // HOD may only reach Technical-staff records within their own (or owned
-// sub-) department - mirrors canHodEditDepartment's use in faculty/[id]/route.ts.
+// child) department, never a managed/grouped branch - mirrors
+// canHodManageFacultyDepartment's use in faculty/[id]/route.ts (a sub-HOD
+// managing a shared branch never owns that branch's staff roster either).
 async function hodCanAccessStaff(
   db: FirebaseFirestore.Firestore, collegeId: string, uid: string, staffDepartment: string | undefined,
 ): Promise<boolean> {
   const scope = await getHodDepartmentScope(db, collegeId, uid);
-  return !!staffDepartment && canHodEditDepartment(scope, staffDepartment);
+  return !!staffDepartment && canHodManageFacultyDepartment(scope, staffDepartment);
 }
 
 export async function GET(
@@ -139,7 +141,7 @@ export async function PATCH(
       }
       if (body.department !== undefined) {
         const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
-        if (!canHodEditDepartment(scope, body.department)) {
+        if (!canHodManageFacultyDepartment(scope, body.department)) {
           return NextResponse.json({ error: "That department is not yours or one of your sub-departments" }, { status: 403 });
         }
       }

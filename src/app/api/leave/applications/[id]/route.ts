@@ -116,7 +116,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       const wasApproved = req.status === "APPROVED";
       if (
         req.status !== "PENDING_ACCEPTANCE" && req.status !== "PENDING_HOD" && req.status !== "PENDING_PRINCIPAL" &&
-        req.status !== "PENDING_MANAGEMENT" && !wasApproved
+        req.status !== "PENDING_VICE_PRINCIPAL" && req.status !== "PENDING_MANAGEMENT" && !wasApproved
       ) {
         return NextResponse.json({ error: "Only a pending or approved request can be cancelled" }, { status: 400 });
       }
@@ -167,9 +167,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         }
       } else if (approverStage === "MANAGEMENT") {
         await notifyRole(db, session.collegeId, "MANAGEMENT", "LEAVE_CANCELLED", "Leave Request Cancelled", message);
-      } else {
-        await notifyRole(db, session.collegeId, "PRINCIPAL", "LEAVE_CANCELLED", "Leave Request Cancelled", message, "/principal/leave-approvals");
+      } else if (approverStage === "VICE_PRINCIPAL") {
+        // VP-routed - Principal can also decide these (senior override), so
+        // both are told, same as before this stage existed.
         await notifyRole(db, session.collegeId, "VICE_PRINCIPAL", "LEAVE_CANCELLED", "Leave Request Cancelled", message, "/principal/leave-approvals");
+        await notifyRole(db, session.collegeId, "PRINCIPAL", "LEAVE_CANCELLED", "Leave Request Cancelled", message, "/principal/leave-approvals");
+      } else {
+        // PRINCIPAL stage - routed specifically to the Principal, not VP.
+        await notifyRole(db, session.collegeId, "PRINCIPAL", "LEAVE_CANCELLED", "Leave Request Cancelled", message, "/principal/leave-approvals");
       }
 
       return NextResponse.json({ ok: true });
@@ -314,6 +319,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       if (req.status !== "PENDING_HOD" && req.status !== "APPROVED") {
         return NextResponse.json({ error: "Coverage can only be proposed while pending HOD decision or already approved" }, { status: 400 });
       }
+      // Authorization is against the leave-taker's OWN department only - the
+      // proposed substitute's candidate pool (buildPeriodCoverage, below) is
+      // deliberately college-wide, not narrowed to the HOD's own department.
+      // Confirmed intentional (not a gap to close): a cross-department pick
+      // still has to accept the assignment same as any other pick - see
+      // pendingPeriodSubstitutions above - so this isn't a silent grant.
       if (session.role === "HOD") {
         const hodDepts = await resolveHodDepartments(db, session.collegeId, session.uid);
         if (!req.department || !hodDepts.includes(req.department)) {
@@ -556,8 +567,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         }
         actionRecord.isPaidLeave = body.isPaidLeave;
 
+        // PENDING_VICE_PRINCIPAL, not PENDING_PRINCIPAL - this forward isn't
+        // driven by the requester's own routing choice, and either the
+        // Principal or the Vice Principal has always been able to decide it
+        // (see the notify loop below, unchanged). PENDING_VICE_PRINCIPAL is
+        // the status that keeps both of them eligible; PENDING_PRINCIPAL is
+        // now Principal-only (see its comment in types/leave.ts).
         await ref.update({
-          status: "PENDING_PRINCIPAL", isPaidLeave: body.isPaidLeave, hodAction: actionRecord, updatedAt: now,
+          status: "PENDING_VICE_PRINCIPAL", isPaidLeave: body.isPaidLeave, hodAction: actionRecord, updatedAt: now,
         });
         await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
           collegeId: session.collegeId, action: "LEAVE_HOD_FORWARDED", performedBy: session.uid,
@@ -631,9 +648,23 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     // own leave never lands here at all - it starts at PENDING_MANAGEMENT
     // instead (see applications/route.ts POST) and is decided via
     // /api/management/leave-approvals, not this route.
-    if (req.status === "PENDING_PRINCIPAL") {
-      if (session.role !== "PRINCIPAL" && session.role !== "VICE_PRINCIPAL") {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    //
+    // PENDING_PRINCIPAL and PENDING_VICE_PRINCIPAL are two distinct routing
+    // destinations (Settings > Leave Approval Routing) sharing this one
+    // decision path: a request routed specifically to the Principal can only
+    // be decided by the Principal; one routed to the Vice Principal can be
+    // decided by either (Principal keeps a senior override) - see
+    // PENDING_VICE_PRINCIPAL's comment in types/leave.ts.
+    if (req.status === "PENDING_PRINCIPAL" || req.status === "PENDING_VICE_PRINCIPAL") {
+      const isVPStage = req.status === "PENDING_VICE_PRINCIPAL";
+      const roleAllowed = isVPStage
+        ? session.role === "PRINCIPAL" || session.role === "VICE_PRINCIPAL"
+        : session.role === "PRINCIPAL";
+      if (!roleAllowed) {
+        return NextResponse.json(
+          { error: isVPStage ? "Forbidden" : "This request is routed to the Principal specifically" },
+          { status: 403 }
+        );
       }
       // College Admin's login reads as "PRINCIPAL" too (see isCollegeAdmin),
       // but deciding a leave request is Principal/VP decision authority, not
@@ -641,10 +672,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       if (isCollegeAdmin(session)) {
         return NextResponse.json({ error: "Only the Principal or Vice Principal can decide this leave request" }, { status: 403 });
       }
-      // A Vice Principal's own leave request must be decided by the
-      // Principal, not themselves - the approvals queue (GET .../
-      // applications?scope=approvals) already hides it from their own list,
-      // this is the server-side backstop for that.
+      // A Vice Principal's own leave request can never actually reach
+      // PENDING_VICE_PRINCIPAL through normal routing (allowedStagesForRole
+      // excludes it for their own role - see approvalRouting.ts), but this
+      // stays as a server-side backstop against self-approval regardless.
       if (session.role === "VICE_PRINCIPAL" && req.uid === session.uid) {
         return NextResponse.json(
           { error: "Your own leave request must be approved by the Principal" },
