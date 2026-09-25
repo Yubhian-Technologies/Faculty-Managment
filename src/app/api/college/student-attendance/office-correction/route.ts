@@ -148,23 +148,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ session: { ...existing, id } });
     }
 
-    let students: { id: string; rollNumber: string; name: string }[];
-    if (assignment.sectionId) {
-      const sectionSnap = await collegeRef.collection("sections").doc(assignment.sectionId).get();
-      if (!sectionSnap.exists) {
-        return NextResponse.json({ error: "Section not found" }, { status: 404 });
-      }
-      // Section has no sectionId property — resolve it off the assignment and
-      // leave the rest of the typed Section fields intact.
-      const section = sectionSnap.data() as Section;
-      students = (await fetchSectionStudents(collegeRef, { department: section.department, sectionName: section.name, year: section.year, courseId: section.courseId }))
-        .sort((a, b) => a.rollNumber.localeCompare(b.rollNumber, undefined, { numeric: true }));
-    } else {
-      const departmentVal = assignment.department;
-      const sectionNameVal = assignment.section?.trim() || "Section";
-      students = (await fetchSectionStudents(collegeRef, { department: departmentVal, sectionName: sectionNameVal, year, courseId }))
-        .sort((a, b) => a.rollNumber.localeCompare(b.rollNumber, undefined, { numeric: true }));
-    }
+    // department/sectionName/year/courseId were already resolved off the
+    // assignment (and its Section doc, when it has one) above - reuse them
+    // rather than re-fetching the same Section doc a second time. Also
+    // narrows to the matched period's own labBatch (split lab period, see
+    // TimetableSlot.labBatch) so an office-corrected roster is never wider
+    // than the roster the faculty's own live session would have used (see
+    // student-attendance/route.ts's own POST).
+    const labBatch = matchedPeriod.slot.labBatch ?? undefined;
+    const students = (await fetchSectionStudents(collegeRef, { department, sectionName, year, courseId, labBatch }))
+      .sort((a, b) => a.rollNumber.localeCompare(b.rollNumber, undefined, { numeric: true }));
 
     const markerSnap = await collegeRef.collection("users").doc(session.uid).get();
     const markerName = (markerSnap.data() as { name?: string } | undefined)?.name ?? "";
@@ -190,6 +183,7 @@ export async function POST(request: Request) {
       facultyName: assignment.facultyName ?? facultyDisplayName(faculty),
       date,
       periodNumber,
+      ...(labBatch ? { labBatch } : {}),
       status: "DRAFT" as const,
       entries: students.map((s) => ({ studentId: s.id, rollNumber: s.rollNumber, name: s.name, status: null })),
       totalStudents: students.length,

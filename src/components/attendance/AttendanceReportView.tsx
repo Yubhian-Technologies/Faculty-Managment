@@ -384,7 +384,15 @@ export function AttendanceReportView({ title, description, groupByDepartmentAndC
   const columns: Column<RosterEntry>[] = [
     { key: "name", header: "Faculty" },
     { key: "department", header: "Department", hideOnMobile: true },
-    { key: "status", header: "Status", render: (row) => <StatusCell row={row} /> },
+    {
+      key: "status",
+      header: "Status",
+      render: (row) => <StatusCell row={row} />,
+      // The on-screen "Late" badge (see StatusCell) is a derived fact, not a
+      // stored field - fold it into the exported status text or it silently
+      // disappears from CSV even though it's shown right next to Status.
+      csvValue: (row) => statusLabel(row.status) + (row.status === "PRESENT" && isLateCheckIn(row.checkIn, row.permittedCheckInTime) ? " (Late)" : ""),
+    },
     { key: "checkIn", header: "Check In", render: (row) => <CheckInCell row={row} /> },
     { key: "checkOut", header: "Check Out", render: (row) => <CheckOutCell row={row} /> },
     { key: "remarks", header: "Reason", render: (row) => <ReasonCell row={row} /> },
@@ -392,6 +400,7 @@ export function AttendanceReportView({ title, description, groupByDepartmentAndC
       ? [{
           key: "actions",
           header: "",
+          excludeFromCsv: true,
           render: (row: RosterEntry) =>
             row.role === "PANEL_MEMBER" || row.role === "COLLEGE_STAFF" ? (
               <div className="flex items-center gap-2">
@@ -463,8 +472,26 @@ export function AttendanceReportView({ title, description, groupByDepartmentAndC
     : facultyEntries;
 
   function handleGroupedExport() {
-    const rows = [...(searchedHod ? [searchedHod] : []), ...searchedFaculty];
-    exportToCSV(rows, `attendance-${date}`, columns.map((c) => ({ key: c.key, header: typeof c.header === "string" ? c.header : c.key })));
+    // Built explicitly rather than dumping the raw RosterEntry objects (or
+    // reusing `columns` verbatim) - the display-only "actions" column has no
+    // real row field, so mapping columns 1:1 would emit a spurious blank
+    // column, and the raw `status` enum loses the on-screen "Late" badge.
+    const rows = [...(searchedHod ? [searchedHod] : []), ...searchedFaculty].map((r) => ({
+      name: r.name,
+      department: r.department,
+      status: statusLabel(r.status) + (r.status === "PRESENT" && isLateCheckIn(r.checkIn, r.permittedCheckInTime) ? " (Late)" : ""),
+      checkIn: r.checkIn ?? "",
+      checkOut: r.checkOut ?? "",
+      reason: r.remarks ?? "",
+    }));
+    exportToCSV(rows, `attendance-${date}`, [
+      { key: "name", header: "Faculty" },
+      { key: "department", header: "Department" },
+      { key: "status", header: "Status" },
+      { key: "checkIn", header: "Check In" },
+      { key: "checkOut", header: "Check Out" },
+      { key: "reason", header: "Reason" },
+    ]);
   }
 
   async function handleExportMonth(scope: "department" | "college") {

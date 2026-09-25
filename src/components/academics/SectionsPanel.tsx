@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { BookMarked, GraduationCap, UserRound, Users } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -81,10 +81,11 @@ export function SectionCard({ sec, onOpen }: { sec: Section; onOpen: () => void 
 
 // College-wide Sections, for Principal / Vice Principal / College Admin.
 // Read-only by necessity: sections are HOD/Super Admin writes on the server.
-// Data loads only on explicit "Load" button click - no auto-fetch on mount.
+// Data loads on explicit "Load" button click - filter options are populated on mount.
 export function SectionsPanel() {
   const [sections, setSections] = useState<Section[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
+  const [departments, setDepartments] = useState<{ id: string; name: string; isActive?: boolean }[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [hasLoaded, setHasLoaded] = useState(false);
   const [courseKey, setCourseKey] = useState(ALL);
@@ -92,19 +93,27 @@ export function SectionsPanel() {
   const [yearFilter, setYearFilter] = useState<number | typeof ALL>(ALL);
   const [openSectionId, setOpenSectionId] = useState<string | null>(null);
 
+  useEffect(() => {
+    void (async () => {
+      try {
+        const [courseRes, deptRes] = await Promise.all([
+          fetch("/api/college/courses").then((r) => r.json() as Promise<{ courses?: Course[] }>),
+          fetch("/api/college/departments").then((r) => r.json() as Promise<{ departments?: { id: string; name: string; isActive?: boolean }[] }>),
+        ]);
+        setCourses(courseRes.courses ?? []);
+        setDepartments(deptRes.departments ?? []);
+      } catch {
+        // silent
+      }
+    })();
+  }, []);
+
   async function loadData() {
     setIsLoading(true);
     try {
-      const [secRes, courseRes] = await Promise.all([
-        fetch("/api/college/sections").then((r) => r.json() as Promise<{ sections?: Section[] }>),
-        fetch("/api/college/courses").then((r) => r.json() as Promise<{ courses?: Course[] }>),
-      ]);
+      const secRes = await fetch("/api/college/sections").then((r) => r.json() as Promise<{ sections?: Section[] }>);
       setSections(secRes.sections ?? []);
-      setCourses(courseRes.courses ?? []);
       setHasLoaded(true);
-      setCourseKey(ALL);
-      setDeptFilter(ALL);
-      setYearFilter(ALL);
     } catch {
       toast({ variant: "destructive", title: "Failed to load sections" });
     } finally {
@@ -123,20 +132,25 @@ export function SectionsPanel() {
     () => (courseKey === ALL ? sections : sections.filter((s) => courseIdsByKey.get(courseKey)?.has(s.courseId) ?? false)),
     [sections, courseKey, courseIdsByKey]
   );
-  // Each filter is derived from what the preceding filter already narrowed,
-  // so a select never offers a combination that yields zero results.
-  const deptOptions = useMemo(
-    () => Array.from(new Set(byCourse.map((s) => s.department).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
-    [byCourse]
-  );
+  // Derived from sections when loaded, or college departments when awaiting load.
+  const deptOptions = useMemo(() => {
+    if (sections.length > 0) {
+      return Array.from(new Set(byCourse.map((s) => s.department).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+    }
+    return departments.filter((d) => d.isActive !== false).map((d) => d.name).sort((a, b) => a.localeCompare(b));
+  }, [sections, byCourse, departments]);
+
   const byDept = useMemo(
     () => (deptFilter === ALL ? byCourse : byCourse.filter((s) => s.department === deptFilter)),
     [byCourse, deptFilter]
   );
-  const yearOptions = useMemo(
-    () => Array.from(new Set(byDept.map((s) => s.year))).sort((a, b) => a - b),
-    [byDept]
-  );
+  const yearOptions = useMemo(() => {
+    if (sections.length > 0) {
+      return Array.from(new Set(byDept.map((s) => s.year))).sort((a, b) => a - b);
+    }
+    return [1, 2, 3, 4];
+  }, [sections, byDept]);
+
   const visible = useMemo(
     () => (yearFilter === ALL ? byDept : byDept.filter((s) => s.year === yearFilter)),
     [byDept, yearFilter]
@@ -177,7 +191,7 @@ export function SectionsPanel() {
             value={courseKey}
             onChange={(e) => { setCourseKey(e.target.value); setDeptFilter(ALL); setYearFilter(ALL); }}
             className="h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-            disabled={!hasLoaded}
+            disabled={isLoading}
           >
             <option value={ALL}>All Courses</option>
             {courseGroups.map((g) => <option key={g.key} value={g.key}>{g.name}</option>)}
@@ -189,7 +203,7 @@ export function SectionsPanel() {
             value={deptFilter}
             onChange={(e) => { setDeptFilter(e.target.value); setYearFilter(ALL); }}
             className="h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-            disabled={!hasLoaded}
+            disabled={isLoading}
           >
             <option value={ALL}>All Departments</option>
             {deptOptions.map((d) => <option key={d} value={d}>{d}</option>)}
@@ -201,7 +215,7 @@ export function SectionsPanel() {
             value={yearFilter === ALL ? ALL : String(yearFilter)}
             onChange={(e) => setYearFilter(e.target.value === ALL ? ALL : Number(e.target.value))}
             className="h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-            disabled={!hasLoaded}
+            disabled={isLoading}
           >
             <option value={ALL}>All Years</option>
             {yearOptions.map((y) => <option key={y} value={String(y)}>{ordinalYear(y)}</option>)}

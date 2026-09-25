@@ -654,4 +654,4 @@ export function RosterDetailView({ student }: { student: Partial<StudentRecord> 
   );
 }
 
-export { EDITABLE_ROSTER_FIELDS };
+export { EDITABLE_ROSTER_FIELDS, FieldInput };

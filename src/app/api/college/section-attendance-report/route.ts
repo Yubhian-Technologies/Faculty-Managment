@@ -113,6 +113,12 @@ export async function GET(request: Request) {
     const thresholdRaw = searchParams.get("threshold");
     const threshold = thresholdRaw != null ? Math.max(0, Math.min(100, Number(thresholdRaw) || 75)) : 75;
     const dailyPercent = searchParams.get("dailyPercent") === "true";
+    const hostellerParam = searchParams.get("hosteller") as "yes" | "no" | null;
+    const filterByHosteller = <T extends { hosteller?: boolean }>(list: T[]): T[] => {
+      if (hostellerParam === "yes") return list.filter((s) => s.hosteller === true);
+      if (hostellerParam === "no") return list.filter((s) => s.hosteller !== true);
+      return list;
+    };
 
     if (!sectionId) {
       return NextResponse.json({ error: "sectionId is required" }, { status: 400 });
@@ -286,12 +292,13 @@ export async function GET(request: Request) {
         sessionsBySubject.get(r.subjectId)!.push(r);
       }
 
-      const roster = await fetchSectionStudents(collegeRef, {
+      let roster = await fetchSectionStudents(collegeRef, {
         department: section.department,
         sectionName: section.name,
         year: section.year,
         courseId: section.courseId,
       });
+      roster = filterByHosteller(roster as unknown as { hosteller?: boolean }[]) as typeof roster;
 
       let students = roster
         .map((stu) => {
@@ -413,12 +420,13 @@ export async function GET(request: Request) {
         sessionsBySubject.set(r.subjectId, arr);
       }
 
-      const roster = await fetchSectionStudents(collegeRef, {
+      let roster = await fetchSectionStudents(collegeRef, {
         department: section.department,
         sectionName: section.name,
         year: section.year,
         courseId: section.courseId,
       });
+      roster = filterByHosteller(roster as unknown as { hosteller?: boolean }[]) as typeof roster;
 
       let students = roster
         .map((stu) => {
@@ -497,14 +505,15 @@ export async function GET(request: Request) {
         return { subjectId: s.subjectId, subjectName: s.subjectName, classNotes: r.classNotes ?? "" };
       });
 
-    const roster = await fetchSectionStudents(collegeRef, {
-      department: section.department,
-      sectionName: section.name,
-      year: section.year,
-      courseId: section.courseId,
-    });
+      let roster = await fetchSectionStudents(collegeRef, {
+        department: section.department,
+        sectionName: section.name,
+        year: section.year,
+        courseId: section.courseId,
+      });
+      roster = filterByHosteller(roster as unknown as { hosteller?: boolean }[]) as typeof roster;
 
-    let students = roster
+      let students = roster
       .map((stu) => {
         const statusBySubject: Record<string, StudentAttendanceMark | null> = {};
         for (const s of subjects) {

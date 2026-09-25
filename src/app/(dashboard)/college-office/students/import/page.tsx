@@ -14,7 +14,7 @@ import { toast } from "@/hooks/useToast";
 import { Download, Upload, CheckCircle2, XCircle, FileSpreadsheet, ArrowLeft, AlertTriangle, Pencil } from "lucide-react";
 import { parseCSV, matchHeaders, getUnmatchedHeaders, parseExcelFile, readFileAsText } from "@/lib/utils/csv";
 import { ROSTER_FIELDS, ROSTER_SAMPLE_ROWS, EDITABLE_ROSTER_FIELDS, rosterFormToPayload } from "@/lib/students/rosterFields";
-import { RosterFormFields } from "@/components/students/RosterFieldInputs";
+import { RosterFormFields, FieldInput } from "@/components/students/RosterFieldInputs";
 import { resolveDepartmentByNameOrCode, resolveCourseByNameOrCode } from "@/lib/departments/codeOrNameResolver";
 import { freshmanLandingDepartmentNames, type DepartmentWithId } from "@/lib/college/academicStructure";
 import type { Department, Course, AcademicYear } from "@/types";
@@ -61,6 +61,14 @@ const COLUMNS = ROSTER_FIELDS.map((f) => ({
   ...(f.aliases ? { aliases: f.aliases } : {}),
 }));
 
+// Course/Department/Academic Year are picked once via dropdown, for the whole
+// file, instead of typed per-row - a misspelled or differently-worded value
+// for one of these three (e.g. "CSE" vs "Computer Science and Engineering")
+// was the most common way a row failed to resolve. Reuses the exact same
+// field defs (and FieldInput's own narrowing/validation) as the Add/Edit form.
+const PICKER_KEYS = ["course", "department", "year"];
+const PICKER_FIELDS = PICKER_KEYS.map((k) => ROSTER_FIELDS.find((f) => f.key === k)!);
+
 const HINTS = [
   "Only the basic details you know at admission are needed - Name, Course, Department (branch) and Academic Year are required; everything else is optional. The Template sheet's row 2 states each column's own Required/Optional rule.",
   "Name (as per SSC): enter the name exactly as it appears on the student's SSC (10th) certificate - this is the name used on statutory/academic paperwork.",
@@ -95,7 +103,19 @@ export default function OfficeStudentImportPage() {
   const isLocked = !!(sectionId && lockedSection && lockedDepartment && lockedYear);
   const backHref = "/college-office";
 
-  const columns = isLocked ? COLUMNS.filter((c) => !LOCKED_KEYS.includes(c.key)) : COLUMNS;
+  // General-purpose counterpart to the section-locked (URL) mode above: the
+  // office picks Course/Department/Academic Year once via dropdown instead of
+  // per row. dropdownLocked only applies when the section context isn't
+  // already known - the two locking modes are mutually exclusive.
+  const [pickValues, setPickValues] = useState<Record<string, string>>({ course: "", department: "", year: "" });
+  const dropdownLocked = !isLocked && !!(pickValues.course && pickValues.department && pickValues.year);
+  const locked = isLocked || dropdownLocked;
+
+  const columns = isLocked
+    ? COLUMNS.filter((c) => !LOCKED_KEYS.includes(c.key))
+    : dropdownLocked
+      ? COLUMNS.filter((c) => !PICKER_KEYS.includes(c.key))
+      : COLUMNS;
 
   const fileRef = useRef<HTMLInputElement>(null);
   const [rows, setRows] = useState<ParsedRow[]>([]);
@@ -148,8 +168,22 @@ export default function OfficeStudentImportPage() {
   const [fixSaving, setFixSaving] = useState(false);
   const [fixError, setFixError] = useState("");
 
+  function setPickField(key: string, value: string) {
+    setPickValues((prev) => ({ ...prev, [key]: value }));
+    // Values already parsed against the old selection no longer apply.
+    setRows([]);
+    setResult(null);
+    setFailedRows([]);
+    setParseError("");
+  }
+
   function openFix(f: FailedRow) {
     const form: ParsedRow = Object.fromEntries(EDITABLE_ROSTER_FIELDS.map((field) => [field.key, f.data[field.key] ?? ""]));
+    // Locked-mode imports carry no Department/Course/Year columns at all -
+    // seed the fix form from whatever context supplied them, so the office
+    // isn't asked to re-pick values it already gave once for the whole file.
+    if (isLocked) { form.department = lockedDepartment; form.year = lockedYear; }
+    if (dropdownLocked) { form.department = pickValues.department; form.course = pickValues.course; form.year = pickValues.year; }
     // Best-effort pre-resolve: a short code (or a genuinely wrong value)
     // won't match any real name, in which case the Select is simply left
     // blank for the office to pick correctly - same as a fresh Add.
@@ -317,8 +351,9 @@ export default function OfficeStudentImportPage() {
     try {
       const records = rows.map((r) => ({
         ...r,
-        ...(isLocked ? { section: lockedSection, department: lockedDepartment, year: lockedYear } : {}),
-        year: r.year || isLocked ? Number(isLocked ? lockedYear : r.year) : undefined,
+        ...(isLocked
+          ? { section: lockedSection, department: lockedDepartment, year: Number(lockedYear) }
+          : { department: pickValues.department, course: pickValues.course, year: Number(pickValues.year) }),
       }));
       const res = await fetch("/api/college/students/import-excel", {
         method: "POST",
@@ -348,13 +383,20 @@ export default function OfficeStudentImportPage() {
     ? rows.some((r) => requiredKeys.some((k) => !r[k]?.trim()))
     : false;
 
+  // Step numbering shifts by one whenever the dropdown picker card (step 1)
+  // is showing - i.e. whenever the section context isn't already known.
+  const templateStep = isLocked ? 1 : 2;
+  const uploadStep = templateStep + 1;
+  const previewStep = uploadStep + 1;
+  const importStep = previewStep + 1;
+
   return (
     <div className="max-w-5xl space-y-6">
       <PageHeader
         title="Import Students"
         description={isLocked
           ? `Bulk upload students directly into Section ${lockedSection} - from a CSV/Excel file`
-          : "Bulk upload the student roster - across every department - from a CSV/Excel file"}
+          : "Bulk upload the student roster - from a CSV/Excel file, into the Course, Department and Academic Year you select below"}
         actions={
           <Button variant="outline" asChild>
             <Link href={backHref}><ArrowLeft className="h-4 w-4 mr-1" />Back to Dashboard</Link>
@@ -362,16 +404,46 @@ export default function OfficeStudentImportPage() {
         }
       />
 
-    
 
+
+      {!isLocked && (
+        <Card>
+          <CardHeader><CardTitle className="text-base flex items-center gap-2"><span className="h-6 w-6 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center font-bold">1</span>Select Course, Department &amp; Academic Year</CardTitle></CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Every row in the file will be imported under this Course, Department and Academic Year - the file itself no longer needs its own columns for them, so a misspelled or differently-worded department/course name can&apos;t break the import.
+            </p>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              {PICKER_FIELDS.map((field) => (
+                <FieldInput
+                  key={field.key}
+                  field={field}
+                  values={pickValues}
+                  onChange={setPickField}
+                  departments={departments.filter((d) => d.isActive)}
+                  courseNames={courseNames}
+                  courses={courses}
+                  years={years}
+                />
+              ))}
+            </div>
+            {!dropdownLocked && (
+              <p className="text-xs text-amber-700">Select all three to continue.</p>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {locked && (
+      <>
       <Card>
-        <CardHeader><CardTitle className="text-base flex items-center gap-2"><span className="h-6 w-6 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center font-bold">1</span>Download Template</CardTitle></CardHeader>
+        <CardHeader><CardTitle className="text-base flex items-center gap-2"><span className="h-6 w-6 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center font-bold">{templateStep}</span>Download Template</CardTitle></CardHeader>
         <CardContent className="space-y-4">
           <p className="text-sm text-muted-foreground">
             Download the template, fill in the student roster, and upload it below.
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-muted-foreground bg-muted/40 rounded-lg p-3">
-            {HINTS.filter((h) => !isLocked || (!h.startsWith("Department and Section") && !h.startsWith("A single file"))).map((h) => (
+            {HINTS.filter((h) => !locked || (!h.startsWith("Department accepts") && !h.startsWith("Course is the programme") && !h.startsWith("A single file"))).map((h) => (
               <p key={h} className="flex items-start gap-1"><span className="text-primary mt-0.5">•</span>{h}</p>
             ))}
           </div>
@@ -383,7 +455,7 @@ export default function OfficeStudentImportPage() {
       </Card>
 
       <Card>
-        <CardHeader><CardTitle className="text-base flex items-center gap-2"><span className="h-6 w-6 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center font-bold">2</span>Upload Filled File</CardTitle></CardHeader>
+        <CardHeader><CardTitle className="text-base flex items-center gap-2"><span className="h-6 w-6 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center font-bold">{uploadStep}</span>Upload Filled File</CardTitle></CardHeader>
         <CardContent className="space-y-4">
           <input ref={fileRef} type="file" accept=".csv,.xlsx" className="hidden" onChange={(e) => void handleFile(e)} />
           <button
@@ -410,13 +482,15 @@ export default function OfficeStudentImportPage() {
           )}
         </CardContent>
       </Card>
+      </>
+      )}
 
       {rows.length > 0 && (
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
               <CardTitle className="text-base flex items-center gap-2">
-                <span className="h-6 w-6 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center font-bold">3</span>
+                <span className="h-6 w-6 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center font-bold">{previewStep}</span>
                 Preview ({rows.length} records)
               </CardTitle>
               {missingRequired && (
@@ -465,7 +539,7 @@ export default function OfficeStudentImportPage() {
 
       {rows.length > 0 && (
         <Card>
-          <CardHeader><CardTitle className="text-base flex items-center gap-2"><span className="h-6 w-6 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center font-bold">4</span>Import</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="text-base flex items-center gap-2"><span className="h-6 w-6 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center font-bold">{importStep}</span>Import</CardTitle></CardHeader>
           <CardContent className="space-y-4">
             {missingRequired && (
               <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-sm">

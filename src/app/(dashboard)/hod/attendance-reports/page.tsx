@@ -55,7 +55,7 @@ export default function HodAttendanceReportsPage() {
               hodScoped
             />
           )}
-          {facultySub === "notposted" && <FacultyNotPostedView />}
+          {facultySub === "notposted" && <FacultyNotPostedView hodScoped />}
         </>
       ) : (
         <>
