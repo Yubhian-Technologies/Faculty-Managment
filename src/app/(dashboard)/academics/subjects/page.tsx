@@ -13,7 +13,7 @@ import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
 import type { Course, CourseCatalogItem, Department, Subject } from "@/types";
 import { SUBJECT_TYPE_LABELS } from "@/types";
-import { academicSessionLabel, currentAcademicStartYear, parseAcademicYearStart, recentAcademicSessions } from "@/lib/college/academicSession";
+import { academicSessionLabel, currentAcademicStartYear, parseAcademicYearStart } from "@/lib/college/academicSession";
 import { resolveDepartmentCourseScope, regulationsForCourseYearByBatch } from "@/lib/college/academicStructure";
 
 function ordinalYear(year: number) {
@@ -91,6 +91,8 @@ export default function AcademicsSubjectsPage() {
   // hasRestoredRef below), and never override a session the Academics has since
   // picked by hand.
   const [showHistory, setShowHistory] = useState(false);
+  // Sessions that have subjects for the selected course-year (from the API).
+  const [sessionsWithSubjects, setSessionsWithSubjects] = useState<string[]>([]);
   const hasAppliedSessionRef = useRef(false);
   useEffect(() => {
     if (hasAppliedSessionRef.current || !currentSessionLabel || searchParams.get("academicYear")) return;
@@ -215,7 +217,8 @@ export default function AcademicsSubjectsPage() {
       const res = await fetch(
         `/api/college/subjects?department=${encodeURIComponent(departmentName)}&courseId=${encodeURIComponent(courseId)}&year=${encodeURIComponent(year)}${regulationsRef.current.length ? `&regulations=${encodeURIComponent(regulationsRef.current.join(","))}` : ""}${academicYear ? `&academicYear=${encodeURIComponent(academicYear)}` : ""}`
       );
-      const data = await res.json() as { subjects: Subject[] };
+      const data = await res.json() as { subjects: Subject[]; academicYears?: string[] };
+      setSessionsWithSubjects(data.academicYears ?? []);
       // The API also returns a feeder's shared subjects for a fed department
       // (e.g. Basic Science's 1st-year subjects under CSE/ECE/IT/CIVIL) so an
       // HOD can staff them - the Academics browses departments one at a time
@@ -533,7 +536,7 @@ export default function AcademicsSubjectsPage() {
                       <Select value={selectedAcademicYear} onValueChange={setSelectedAcademicYear}>
                         <SelectTrigger className="h-8 w-28"><SelectValue /></SelectTrigger>
                         <SelectContent>
-                          {Array.from(new Set([...recentAcademicSessions(), selectedAcademicYear])).sort().reverse().map((y) => (
+                          {Array.from(new Set([...sessionsWithSubjects, selectedAcademicYear])).sort().reverse().map((y) => (
                             <SelectItem key={y} value={y}>{y}</SelectItem>
                           ))}
                         </SelectContent>

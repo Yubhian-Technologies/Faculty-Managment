@@ -66,6 +66,15 @@ export async function GET(request: Request) {
       .map((d) => ({ id: d.id, ...d.data() }))
       .sort((a, b) => ((a as { name?: string }).name ?? "").localeCompare((b as { name?: string }).name ?? ""));
 
+    // Every session that actually has a subject for this selection - feeds the
+    // History dropdown, so it lists real data rather than a fixed window.
+    const academicYears = Array.from(new Set(
+      subjects
+        .filter((s) => !deptFilter || (s as { department?: string }).department === deptFilter)
+        .map((s) => (s as { academicYear?: string }).academicYear)
+        .filter((y): y is string => !!y)
+    )).sort().reverse();
+
     // Academics-only filter (see academics/subjects/page.tsx) - a subject with no
     // academicYear at all (created before this field existed, or via the
     // HOD's own Subjects page, which doesn't set it) still matches any
@@ -101,7 +110,7 @@ export async function GET(request: Request) {
       });
     }
 
-    return NextResponse.json({ subjects });
+    return NextResponse.json({ subjects, academicYears });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
