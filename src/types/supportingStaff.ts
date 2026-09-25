@@ -135,9 +135,8 @@ export interface SupportingStaffMember {
   emergencyContactName?: string;
   emergencyContactRelation?: string; // relation of the emergency contact to this person
   emergencyContactMobileNo?: string;
-  ratificationStatus?: "Ratified" | "Not Ratified";
-  ratificationProceedingsNumber?: string;
-  ratificationDate?: Timestamp; // Ratification Proceedings Date
+  // No ratification field - Ratification is a Teaching Faculty-only concept
+  // (see FacultyMember), never applicable to Supporting Staff.
   maritalStatus?: "Single" | "Married";
   spouseName?: string;
   numberOfChildren?: number;

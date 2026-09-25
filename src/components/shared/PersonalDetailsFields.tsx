@@ -101,6 +101,12 @@ export const STAFF_REQUIRED_PERSONAL_FIELDS: (keyof PersonalDetailsValue)[] = [
   "legalName", "gender", "dateOfBirth", "aadharNo", "panNo", "ratificationStatus",
 ];
 export const FACULTY_REQUIRED_PERSONAL_FIELDS: (keyof PersonalDetailsValue)[] = STAFF_REQUIRED_PERSONAL_FIELDS;
+// Ratification is a Teaching Faculty concept only (see RATIFICATION_DESIGNATIONS
+// above) - Supporting/Non-Technical Staff have no such field at all, so their
+// callers use this set (and pass the matching hiddenFields, see below) instead
+// of STAFF_REQUIRED_PERSONAL_FIELDS.
+export const SUPPORTING_STAFF_REQUIRED_PERSONAL_FIELDS: (keyof PersonalDetailsValue)[] =
+  STAFF_REQUIRED_PERSONAL_FIELDS.filter((f) => f !== "ratificationStatus");
 
 const PERSONAL_FIELD_LABELS: Record<string, string> = {
   legalName: "Full Name (as per SSC)",
@@ -549,77 +555,81 @@ export function PersonalDetailsFields({ value: rawValue, onChange, requiredField
         </div>
       </div>
 
-      <div className="pt-2 pb-1 border-t">
-        <p className="text-sm font-medium text-muted-foreground">Ratification</p>
-      </div>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <div className="space-y-2">
-          <Label>Ratification Status{mark("ratificationStatus")}</Label>
-          <Select
-            value={value.ratificationStatus ?? ""}
-            onValueChange={(v) => {
-              // Proceedings Number/Date (or the ratification history list)
-              // only make sense once Ratified - cleared the moment status
-              // moves away from it, so a later Save can never resend (and
-              // re-persist) a stale value from before this switch.
-              if (v !== "Ratified") {
-                onChange({ ...value, ratificationStatus: v, ratificationProceedingsNumber: "", ratificationDate: "", ratifications: [] });
-              } else {
-                set("ratificationStatus", v);
-              }
-            }}
-          >
-            <SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="Ratified">Ratified</SelectItem>
-              <SelectItem value="Not Ratified">Not Ratified</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        {value.ratificationStatus === "Ratified" && !ratificationHistory && (
-          <>
+      {!hidden("ratificationStatus") && (
+        <>
+          <div className="pt-2 pb-1 border-t">
+            <p className="text-sm font-medium text-muted-foreground">Ratification</p>
+          </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label>Ratification Proceedings Number</Label>
-              <Input value={value.ratificationProceedingsNumber ?? ""} onChange={(e) => set("ratificationProceedingsNumber", e.target.value)} placeholder="Proceedings number" />
+              <Label>Ratification Status{mark("ratificationStatus")}</Label>
+              <Select
+                value={value.ratificationStatus ?? ""}
+                onValueChange={(v) => {
+                  // Proceedings Number/Date (or the ratification history list)
+                  // only make sense once Ratified - cleared the moment status
+                  // moves away from it, so a later Save can never resend (and
+                  // re-persist) a stale value from before this switch.
+                  if (v !== "Ratified") {
+                    onChange({ ...value, ratificationStatus: v, ratificationProceedingsNumber: "", ratificationDate: "", ratifications: [] });
+                  } else {
+                    set("ratificationStatus", v);
+                  }
+                }}
+              >
+                <SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Ratified">Ratified</SelectItem>
+                  <SelectItem value="Not Ratified">Not Ratified</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-            <div className="space-y-2">
-              <Label>Ratification Date</Label>
-              <Input type="date" value={value.ratificationDate ?? ""} onChange={(e) => set("ratificationDate", e.target.value)} />
-            </div>
-          </>
-        )}
-      </div>
-      {value.ratificationStatus === "Ratified" && ratificationHistory && (
-        <RepeatingGroup
-          title="Ratification Records"
-          items={value.ratifications}
-          empty={() => ({ designation: "", proceedingsNumber: "", date: "" })}
-          onChange={(v) => set("ratifications", v)}
-          renderRow={(item, update) => (
-            <>
-              {/* The designation this ratification was granted at - a purely
-                  historical fact, independent of (and never synced with) this
-                  record's own current Designation field above. Drawn from the
-                  same teaching designation catalogue, with "Other" allowed so
-                  a designation the catalogue no longer lists isn't lost. */}
-              <DesignationSelect
-                label="Designation"
-                value={item.designation}
-                onChange={(v) => update({ designation: v })}
-                kind="teaching"
-                allowedNames={RATIFICATION_DESIGNATIONS}
-              />
-              <div className="space-y-2">
-                <Label>Ratification Proceedings Number</Label>
-                <Input value={item.proceedingsNumber ?? ""} onChange={(e) => update({ proceedingsNumber: e.target.value })} placeholder="Proceedings number" />
-              </div>
-              <div className="space-y-2">
-                <Label>Ratification Date</Label>
-                <Input type="date" value={item.date ?? ""} onChange={(e) => update({ date: e.target.value })} />
-              </div>
-            </>
+            {value.ratificationStatus === "Ratified" && !ratificationHistory && (
+              <>
+                <div className="space-y-2">
+                  <Label>Ratification Proceedings Number</Label>
+                  <Input value={value.ratificationProceedingsNumber ?? ""} onChange={(e) => set("ratificationProceedingsNumber", e.target.value)} placeholder="Proceedings number" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Ratification Date</Label>
+                  <Input type="date" value={value.ratificationDate ?? ""} onChange={(e) => set("ratificationDate", e.target.value)} />
+                </div>
+              </>
+            )}
+          </div>
+          {value.ratificationStatus === "Ratified" && ratificationHistory && (
+            <RepeatingGroup
+              title="Ratification Records"
+              items={value.ratifications}
+              empty={() => ({ designation: "", proceedingsNumber: "", date: "" })}
+              onChange={(v) => set("ratifications", v)}
+              renderRow={(item, update) => (
+                <>
+                  {/* The designation this ratification was granted at - a purely
+                      historical fact, independent of (and never synced with) this
+                      record's own current Designation field above. Drawn from the
+                      same teaching designation catalogue, with "Other" allowed so
+                      a designation the catalogue no longer lists isn't lost. */}
+                  <DesignationSelect
+                    label="Designation"
+                    value={item.designation}
+                    onChange={(v) => update({ designation: v })}
+                    kind="teaching"
+                    allowedNames={RATIFICATION_DESIGNATIONS}
+                  />
+                  <div className="space-y-2">
+                    <Label>Ratification Proceedings Number</Label>
+                    <Input value={item.proceedingsNumber ?? ""} onChange={(e) => update({ proceedingsNumber: e.target.value })} placeholder="Proceedings number" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Ratification Date</Label>
+                    <Input type="date" value={item.date ?? ""} onChange={(e) => update({ date: e.target.value })} />
+                  </div>
+                </>
+              )}
+            />
           )}
-        />
+        </>
       )}
     </div>
   );

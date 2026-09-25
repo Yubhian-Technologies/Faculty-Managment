@@ -118,8 +118,10 @@ export async function POST(request: Request) {
     // Matches the mandatory field set the bulk-import template and Add Staff
     // wizard's Personal Details step now both enforce. Name (as per PAN) and
     // Name (as per Aadhar) are deliberately excluded - both are optional.
-    if (!body.mobileNo || !body.legalName || !body.gender || !body.dateOfBirth || !body.aadharNo || !body.panNo || !body.ratificationStatus) {
-      return NextResponse.json({ error: "Missing required personal details - Mobile No, Full Name (as per SSC), Gender, Date of Birth, Aadhar No, PAN No, and Ratification Status are all required" }, { status: 400 });
+    // Ratification Status is deliberately excluded too - Ratification is a
+    // Teaching Faculty-only concept, never applicable to Supporting Staff.
+    if (!body.mobileNo || !body.legalName || !body.gender || !body.dateOfBirth || !body.aadharNo || !body.panNo) {
+      return NextResponse.json({ error: "Missing required personal details - Mobile No, Full Name (as per SSC), Gender, Date of Birth, Aadhar No, and PAN No are all required" }, { status: 400 });
     }
     if (!canRolePostCategory(session.role, staffCategory)) {
       return NextResponse.json(
