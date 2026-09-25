@@ -4,7 +4,7 @@ import { resolveLoginUidForFacultyMember } from "@/lib/faculty/resolveFacultyMem
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { notify } from "@/lib/notify";
 import { enumerateWorkingDates, isoDateKey, todayISODate } from "@/lib/leave/dayCounter";
-import { loadUnavailability } from "@/lib/leave/availability";
+import { loadUnavailability, findSubstituteConflicts, describeSubstituteConflict } from "@/lib/leave/availability";
 import { resolveSectionCurrentSemester, matchesCurrentSemester as slotMatchesCurrentSemester } from "@/lib/college/semester";
 import { resolveTimetableAcademicYear, matchesCurrentAcademicYear } from "@/lib/college/academicSession";
 import { isFacultyAvailable } from "@/types";
@@ -335,6 +335,18 @@ export async function validatePeriodSubstitutions(params: {
 
   if (mode === "FULL" && resolved.length !== coverage.length) {
     return { ok: false, error: "Select a substitute for every affected period before submitting." };
+  }
+
+  // The picks are each individually valid by here - every one came from its own
+  // period's candidate list, which already excludes anyone teaching then, on
+  // leave, or covering that slot for another request. What that cannot see is
+  // the picks colliding with EACH OTHER: two periods sharing a (date,
+  // periodNumber) resolve their candidates independently, so the same free
+  // person is offered for both, and the de-duplication above is keyed on
+  // `date|timetableSlotId`, which those two periods do not share.
+  const conflicts = findSubstituteConflicts(resolved);
+  if (conflicts.length > 0) {
+    return { ok: false, error: describeSubstituteConflict(conflicts[0]) };
   }
 
   return { ok: true, resolved };
