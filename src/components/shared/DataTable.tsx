@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Search, Download, Filter } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -73,16 +73,23 @@ export function DataTable<T extends Record<string, unknown>>({
   defaultPageSize,
 }: DataTableProps<T>) {
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(defaultPageSize ?? DEFAULT_PAGE_SIZE);
 
-  const filtered = search
-    ? data.filter((row) =>
-        searchKeys.some((key) =>
-          String(row[key] ?? "").toLowerCase().includes(search.toLowerCase())
-        )
-      )
-    : data;
+  // Debounce search input (150ms) so filter computation does not run on every keystroke
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 150);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  const filtered = useMemo(() => {
+    const q = debouncedSearch.trim().toLowerCase();
+    if (!q) return data;
+    return data.filter((row) =>
+      searchKeys.some((key) => String(row[key] ?? "").toLowerCase().includes(q))
+    );
+  }, [data, debouncedSearch, searchKeys]);
 
   // Clamped rather than reset via an effect - if an external filter (e.g. the
   // host page's own Department/Course/Year selects) shrinks `data` while
@@ -90,17 +97,24 @@ export function DataTable<T extends Record<string, unknown>>({
   // very next render instead of showing a blank table.
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const effectivePage = Math.min(page, totalPages);
-  const pageRows = paginate ? filtered.slice((effectivePage - 1) * pageSize, effectivePage * pageSize) : filtered;
+  const pageRows = useMemo(
+    () => (paginate ? filtered.slice((effectivePage - 1) * pageSize, effectivePage * pageSize) : filtered),
+    [filtered, paginate, effectivePage, pageSize]
+  );
 
-  const groups = groupBy
-    ? Object.entries(
-        pageRows.reduce<Record<string, T[]>>((acc, row) => {
-          const label = groupBy(row) || "—";
-          (acc[label] ??= []).push(row);
-          return acc;
-        }, {})
-      ).sort(([a], [b]) => a.localeCompare(b))
-    : null;
+  const groups = useMemo(
+    () =>
+      groupBy
+        ? Object.entries(
+            pageRows.reduce<Record<string, T[]>>((acc, row) => {
+              const label = groupBy(row) || "—";
+              (acc[label] ??= []).push(row);
+              return acc;
+            }, {})
+          ).sort(([a], [b]) => a.localeCompare(b))
+        : null,
+    [pageRows, groupBy]
+  );
 
   const handleExport = () => {
     if (!csvFilename) return;

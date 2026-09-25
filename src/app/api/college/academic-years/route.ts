@@ -10,7 +10,7 @@ import { ensureAcademicYear, yearOrdinalLabel } from "@/lib/college/academicYear
 // session (Principal) or the query param (Super Admin, who carries no collegeId).
 export async function GET(request: Request) {
   try {
-    const session = await requireCollegeContext(request, "SUPER_ADMIN", "PRINCIPAL", "HOD", "COLLEGE_OFFICE");
+    const session = await requireCollegeContext(request, "SUPER_ADMIN", "PRINCIPAL", "VICE_PRINCIPAL", "HOD", "COLLEGE_OFFICE");
     const db = getAdminDb();
 
     const snap = await db
@@ -36,7 +36,7 @@ export async function GET(request: Request) {
 // appends the next one, keeping the sequence gap-free.
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeContext(request, "SUPER_ADMIN", "PRINCIPAL");
+    const session = await requireCollegeContext(request, "SUPER_ADMIN", "PRINCIPAL", "VICE_PRINCIPAL");
     const db = getAdminDb();
 
     const existingSnap = await db
@@ -62,7 +62,7 @@ export async function POST(request: Request) {
 // sequence gap-free - blocked if any Section already exists for that year.
 export async function DELETE(request: Request) {
   try {
-    const session = await requireCollegeContext(request, "SUPER_ADMIN", "PRINCIPAL");
+    const session = await requireCollegeContext(request, "SUPER_ADMIN", "PRINCIPAL", "VICE_PRINCIPAL");
     const db = getAdminDb();
 
     const collegeRef = db.collection("colleges").doc(session.collegeId);

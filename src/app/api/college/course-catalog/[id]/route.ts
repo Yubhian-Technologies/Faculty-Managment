@@ -76,6 +76,14 @@ export async function PATCH(
     }
 
     if (body.regulationBatches != null) {
+      for (const [reg, ranges] of Object.entries(body.regulationBatches)) {
+        if (!/^\d{4}-\d{4}(,\d{4}-\d{4})*$/.test(ranges.trim())) {
+          return NextResponse.json(
+            { error: `Invalid batch range for regulation "${reg}" - expected "YYYY-YYYY" comma-separated` },
+            { status: 400 }
+          );
+        }
+      }
       updates.regulationBatches = body.regulationBatches;
     }
 

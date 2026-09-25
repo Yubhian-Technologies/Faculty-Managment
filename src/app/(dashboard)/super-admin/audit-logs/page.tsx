@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/useToast";
 import { formatDateTime, toDate } from "@/lib/utils";
+import { istDateKey } from "@/lib/attendance/istTime";
 import type { AuditLog, College } from "@/types";
 
 type LogRow = Record<string, unknown> & AuditLog;
@@ -20,6 +21,10 @@ export default function AuditLogsPage() {
   const [hasLoaded, setHasLoaded] = useState(false);
   const [fromDate, setFromDate] = useState("");
   const [toDateStr, setToDateStr] = useState("");
+
+  // Batch 2: AbortController for audit-logs fetch — aborts previous before new
+  const logsAbortRef = useRef<AbortController | null>(null);
+  useEffect(() => () => { logsAbortRef.current?.abort(); }, []);
 
   useEffect(() => {
     fetch("/api/admin/colleges")
@@ -43,16 +48,40 @@ export default function AuditLogsPage() {
       toast({ variant: "destructive", title: "Select a college first" });
       return;
     }
-    if (fromDate && toDateStr && fromDate > toDateStr) {
-      toast({ variant: "destructive", title: "Invalid date range", description: "From date cannot be after To date." });
-      return;
+    if (fromDate && toDateStr) {
+      const from = new Date(fromDate);
+      const to = new Date(toDateStr);
+      const fromValid = !isNaN(from.getTime());
+      const toValid = !isNaN(to.getTime());
+      if (fromValid && toValid && from > to) {
+        toast({ variant: "destructive", title: "Invalid date range", description: "From date cannot be after To date." });
+        return;
+      }
+      // Fallback string compare if either date is unparsable (should not happen for <input type="date">)
+      if (!fromValid || !toValid) {
+        if (fromDate > toDateStr) {
+          toast({ variant: "destructive", title: "Invalid date range", description: "From date cannot be after To date." });
+          return;
+        }
+      }
     }
+    logsAbortRef.current?.abort();
+    const ctrl = new AbortController();
+    logsAbortRef.current = ctrl;
     setIsLoading(true);
     setHasLoaded(true);
-    fetch(`/api/admin/audit-logs?collegeId=${encodeURIComponent(selectedCollegeId)}`)
+    // Forward from/to to server as optional params — additive; server prunes if index exists,
+    // client filteredLogs remains fallback so behavior is unchanged.
+    const params = new URLSearchParams({ collegeId: selectedCollegeId });
+    if (fromDate) params.set("from", fromDate);
+    if (toDateStr) params.set("to", toDateStr);
+    fetch(`/api/admin/audit-logs?${params.toString()}`, { signal: ctrl.signal })
       .then((r) => r.json() as Promise<{ logs: LogRow[] }>)
       .then((data) => setLogs(data.logs ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load audit logs" }))
+      .catch((err) => {
+        if ((err as Error)?.name === "AbortError") return;
+        toast({ variant: "destructive", title: "Failed to load audit logs" });
+      })
       .finally(() => setIsLoading(false));
   }
 
@@ -61,7 +90,7 @@ export default function AuditLogsPage() {
     return logs.filter((row) => {
       const d = toDate(row.timestamp as Parameters<typeof toDate>[0]);
       if (!d) return false;
-      const day = d.toISOString().split("T")[0];
+      const day = istDateKey(d);
       if (fromDate && day < fromDate) return false;
       if (toDateStr && day > toDateStr) return false;
       return true;

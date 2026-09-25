@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "@/hooks/useToast";
 import { Plus, Trash2, Info, KeyRound } from "lucide-react";
 import { formatDate, stripLeadingZeros } from "@/lib/utils";
+import { Skeleton } from "@/components/shared/SkeletonLoader";
 import { EmailAuthProvider, reauthenticateWithCredential, updatePassword } from "firebase/auth";
 import { auth } from "@/lib/firebase/client";
 import type { FacultyNorms, PositionNorm, RegulatoryBody, College, UserRole, NavVisibilitySettings } from "@/types";
@@ -62,20 +63,35 @@ export default function SuperAdminSettingsPage() {
   const [defaultMinFacultyPerDept, setDefaultMinFacultyPerDept] = useState("3");
   const [positionNorms, setPositionNorms] = useState<PositionNorm[]>([]);
 
+  // Batch 2: AbortControllers for settings fetches — abort previous before new, cleanup on unmount
+  const normsCollegesAbortRef = useRef<AbortController | null>(null);
+  const normsFetchAbortRef = useRef<AbortController | null>(null);
+  useEffect(() => () => { normsCollegesAbortRef.current?.abort(); normsFetchAbortRef.current?.abort(); }, []);
+
   useEffect(() => {
-    fetch("/api/admin/colleges")
+    normsCollegesAbortRef.current?.abort();
+    const ctrl = new AbortController();
+    normsCollegesAbortRef.current = ctrl;
+    fetch("/api/admin/colleges", { signal: ctrl.signal })
       .then((r) => r.json() as Promise<{ colleges: College[] }>)
       .then(({ colleges: c }) => {
         setNormsColleges(c);
         if (c.length > 0) setNormsCollegeId((prev) => prev || c[0].id);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load colleges" }));
+      .catch((err) => {
+        if ((err as Error)?.name === "AbortError") return;
+        toast({ variant: "destructive", title: "Failed to load colleges" });
+      });
   }, []);
 
   useEffect(() => {
     if (!normsCollegeId) return;
+    normsFetchAbortRef.current?.abort();
+    const ctrl = new AbortController();
+    normsFetchAbortRef.current = ctrl;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsLoading(true);
-    fetch(`/api/college/settings/general?collegeId=${normsCollegeId}`)
+    fetch(`/api/college/settings/general?collegeId=${normsCollegeId}`, { signal: ctrl.signal })
       .then((r) => r.json() as Promise<{ settings: FacultyNorms }>)
       .then(({ settings: n }) => {
         setNorms(n);
@@ -85,7 +101,10 @@ export default function SuperAdminSettingsPage() {
         setDefaultMinFacultyPerDept(String(n.defaultMinFacultyPerDept));
         setPositionNorms(n.positionNorms ?? []);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load settings" }))
+      .catch((err) => {
+        if ((err as Error)?.name === "AbortError") return;
+        toast({ variant: "destructive", title: "Failed to load settings" });
+      })
       .finally(() => setIsLoading(false));
   }, [normsCollegeId]);
 
@@ -141,17 +160,6 @@ export default function SuperAdminSettingsPage() {
     }
   }
 
-  if (isLoading) {
-    return (
-      <div className="space-y-6">
-        <PageHeader title="Settings" description="Loading..." />
-        <div className="space-y-4">
-          {[1, 2, 3].map((i) => <div key={i} className="h-32 bg-muted animate-pulse rounded-lg" />)}
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="max-w-3xl space-y-6">
       <PageHeader
@@ -173,168 +181,179 @@ export default function SuperAdminSettingsPage() {
         </Select>
       </div>
 
-      {/* Last updated banner */}
-      {norms?.updatedAt && (
-        <div className="flex items-center gap-2 text-xs text-muted-foreground rounded-lg border bg-muted/40 px-3 py-2">
-          <Info className="h-3.5 w-3.5 shrink-0" />
-          Last updated {formatDate(norms.updatedAt)} by {norms.updatedByName ?? "Super Admin"}
+      {isLoading ? (
+        <div className="space-y-4">
+          <Skeleton className="h-6 w-64" />
+          <Skeleton className="h-32 w-full" />
+          <Skeleton className="h-48 w-full" />
+          <Skeleton className="h-40 w-full" />
         </div>
-      )}
+      ) : (
+        <>
+          {/* Last updated banner */}
+          {norms?.updatedAt && (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground rounded-lg border bg-muted/40 px-3 py-2">
+              <Info className="h-3.5 w-3.5 shrink-0" />
+              Last updated {formatDate(norms.updatedAt)} by {norms.updatedByName ?? "Super Admin"}
+            </div>
+          )}
 
-      {/* Regulatory Body */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Regulatory Authority</CardTitle>
-          <CardDescription>The body whose norms govern faculty requirements for your institutions</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="max-w-sm space-y-2">
-            <Label htmlFor="reg-body">Regulatory Body</Label>
-            <Select value={regulatoryBody} onValueChange={(v) => setRegulatoryBody(v as RegulatoryBody)}>
-              <SelectTrigger id="reg-body">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {REGULATORY_BODIES.map((b) => (
-                  <SelectItem key={b.value} value={b.value}>
-                    {b.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Core Ratios */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Fundamental Ratios</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-5 sm:grid-cols-3">
-            <div className="space-y-2">
-              <Label htmlFor="sfr">Student : Faculty Ratio</Label>
-              <div className="flex items-center gap-2">
-                <Input
-                  id="sfr"
-                  type="number"
-                  min={1}
-                  max={100}
-                  value={studentFacultyRatio}
-                  onChange={(e) => setStudentFacultyRatio(stripLeadingZeros(e.target.value))}
-                  className="w-24"
-                />
-                <span className="text-sm text-muted-foreground">: 1</span>
+          {/* Regulatory Body */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Regulatory Authority</CardTitle>
+              <CardDescription>The body whose norms govern faculty requirements for your institutions</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="max-w-sm space-y-2">
+                <Label htmlFor="reg-body">Regulatory Body</Label>
+                <Select value={regulatoryBody} onValueChange={(v) => setRegulatoryBody(v as RegulatoryBody)}>
+                  <SelectTrigger id="reg-body">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {REGULATORY_BODIES.map((b) => (
+                      <SelectItem key={b.value} value={b.value}>
+                        {b.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
-              <p className="text-xs text-muted-foreground">Students per faculty member</p>
-            </div>
+            </CardContent>
+          </Card>
 
-            <div className="space-y-2">
-              <Label htmlFor="thw">Teaching Hours / Week</Label>
-              <div className="flex items-center gap-2">
-                <Input
-                  id="thw"
-                  type="number"
-                  min={1}
-                  max={40}
-                  value={teachingHoursPerWeek}
-                  onChange={(e) => setTeachingHoursPerWeek(stripLeadingZeros(e.target.value))}
-                  className="w-24"
-                />
-                <span className="text-sm text-muted-foreground">hrs</span>
-              </div>
-              <p className="text-xs text-muted-foreground">Required contact hours per week</p>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="dmf">Min. Faculty per Department</Label>
-              <Input
-                id="dmf"
-                type="number"
-                min={1}
-                max={50}
-                value={defaultMinFacultyPerDept}
-                onChange={(e) => setDefaultMinFacultyPerDept(stripLeadingZeros(e.target.value))}
-                className="w-24"
-              />
-              <p className="text-xs text-muted-foreground">Default minimum headcount</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Cadre-wise Ratio */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="text-base">Cadre-wise Ratio</CardTitle>
-              <CardDescription className="mt-1">Required count per designation per department</CardDescription>
-            </div>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setPositionNorms((prev) => [...prev, emptyPosition()])}
-            >
-              <Plus className="h-4 w-4 mr-1" />
-              Add Position
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {positionNorms.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-4">
-              No positions configured. Click "Add Position" to define position norms.
-            </p>
-          ) : (
-            positionNorms.map((pos, i) => (
-              <div key={i} className="rounded-lg border p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <Badge variant="secondary">Position {i + 1}</Badge>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className="h-7 w-7 text-destructive hover:text-destructive"
-                    onClick={() => removePosition(i)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">Designation *</Label>
+          {/* Core Ratios */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Fundamental Ratios</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-5 sm:grid-cols-3">
+                <div className="space-y-2">
+                  <Label htmlFor="sfr">Student : Faculty Ratio</Label>
+                  <div className="flex items-center gap-2">
                     <Input
-                      value={pos.designation}
-                      onChange={(e) => updatePosition(i, "designation", e.target.value)}
-                      placeholder="e.g. Assistant Professor"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">Required per Department</Label>
-                    <Input
+                      id="sfr"
                       type="number"
                       min={1}
-                      max={20}
-                      value={pos.requiredPerDept}
-                      onChange={(e) => updatePosition(i, "requiredPerDept", Number(e.target.value))}
+                      max={100}
+                      value={studentFacultyRatio}
+                      onChange={(e) => setStudentFacultyRatio(stripLeadingZeros(e.target.value))}
+                      className="w-24"
                     />
+                    <span className="text-sm text-muted-foreground">: 1</span>
                   </div>
+                  <p className="text-xs text-muted-foreground">Students per faculty member</p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="thw">Teaching Hours / Week</Label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      id="thw"
+                      type="number"
+                      min={1}
+                      max={40}
+                      value={teachingHoursPerWeek}
+                      onChange={(e) => setTeachingHoursPerWeek(stripLeadingZeros(e.target.value))}
+                      className="w-24"
+                    />
+                    <span className="text-sm text-muted-foreground">hrs</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">Required contact hours per week</p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="dmf">Min. Faculty per Department</Label>
+                  <Input
+                    id="dmf"
+                    type="number"
+                    min={1}
+                    max={50}
+                    value={defaultMinFacultyPerDept}
+                    onChange={(e) => setDefaultMinFacultyPerDept(stripLeadingZeros(e.target.value))}
+                    className="w-24"
+                  />
+                  <p className="text-xs text-muted-foreground">Default minimum headcount</p>
                 </div>
               </div>
-            ))
-          )}
-        </CardContent>
-      </Card>
+            </CardContent>
+          </Card>
 
-      {/* Save */}
-      <div className="flex justify-end">
-        <Button size="lg" onClick={handleSave} loading={isSaving}>
-          Save Faculty Norms
-        </Button>
-      </div>
+          {/* Cadre-wise Ratio */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-base">Cadre-wise Ratio</CardTitle>
+                  <CardDescription className="mt-1">Required count per designation per department</CardDescription>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setPositionNorms((prev) => [...prev, emptyPosition()])}
+                >
+                  <Plus className="h-4 w-4 mr-1" />
+                  Add Position
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {positionNorms.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  No positions configured. Click "Add Position" to define position norms.
+                </p>
+              ) : (
+                positionNorms.map((pos, i) => (
+                  <div key={i} className="rounded-lg border p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <Badge variant="secondary">Position {i + 1}</Badge>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-7 w-7 text-destructive hover:text-destructive"
+                        onClick={() => removePosition(i)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="space-y-1.5">
+                        <Label className="text-xs">Designation *</Label>
+                        <Input
+                          value={pos.designation}
+                          onChange={(e) => updatePosition(i, "designation", e.target.value)}
+                          placeholder="e.g. Assistant Professor"
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label className="text-xs">Required per Department</Label>
+                        <Input
+                          type="number"
+                          min={1}
+                          max={20}
+                          value={pos.requiredPerDept}
+                          onChange={(e) => updatePosition(i, "requiredPerDept", Number(e.target.value))}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Save */}
+          <div className="flex justify-end">
+            <Button size="lg" onClick={handleSave} loading={isSaving}>
+              Save Faculty Norms
+            </Button>
+          </div>
+        </>
+      )}
 
       <SuperAdminChangePasswordCard />
 
@@ -476,27 +495,45 @@ function NavVisibilitySection() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
+  // Batch 2: AbortControllers for nav-visibility fetches
+  const navCollegesAbortRef = useRef<AbortController | null>(null);
+  const navSettingsAbortRef = useRef<AbortController | null>(null);
+  useEffect(() => () => { navCollegesAbortRef.current?.abort(); navSettingsAbortRef.current?.abort(); }, []);
+
   useEffect(() => {
-    fetch("/api/admin/colleges")
+    navCollegesAbortRef.current?.abort();
+    const ctrl = new AbortController();
+    navCollegesAbortRef.current = ctrl;
+    fetch("/api/admin/colleges", { signal: ctrl.signal })
       .then((r) => r.json() as Promise<{ colleges: College[] }>)
       .then(({ colleges: c }) => {
         setColleges(c);
         if (c.length > 0) setCollegeId((prev) => prev || c[0].id);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load colleges" }));
+      .catch((err) => {
+        if ((err as Error)?.name === "AbortError") return;
+        toast({ variant: "destructive", title: "Failed to load colleges" });
+      });
   }, []);
 
   useEffect(() => {
     if (!collegeId) return;
+    navSettingsAbortRef.current?.abort();
+    const ctrl = new AbortController();
+    navSettingsAbortRef.current = ctrl;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsLoading(true);
-    fetch(`/api/admin/settings/nav-visibility?collegeId=${collegeId}`)
+    fetch(`/api/admin/settings/nav-visibility?collegeId=${collegeId}`, { signal: ctrl.signal })
       .then((r) => r.json() as Promise<{ settings: NavVisibilitySettings }>)
       .then(({ settings }) => {
         setHiddenModules(settings.hiddenModules?.[role] ?? []);
         setHiddenItems(settings.hiddenItems?.[role] ?? []);
         setUpdatedMeta({ updatedAt: settings.updatedAt, updatedByName: settings.updatedByName });
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load navigation visibility" }))
+      .catch((err) => {
+        if ((err as Error)?.name === "AbortError") return;
+        toast({ variant: "destructive", title: "Failed to load navigation visibility" });
+      })
       .finally(() => setIsLoading(false));
   }, [collegeId, role]);
 

@@ -72,14 +72,21 @@ export async function GET(request: Request) {
     for (const d of studentsSecondarySnap.docs) countedIds.add(d.id);
     const totalStudents = countedIds.size;
 
-    // ── Total faculty required (1:15) ─────────────────────────────────────────
-    const totalRequired = requiredFacultyCount(totalStudents);
+    // ── College settings (faculty norms) — single source for ratio + cadre split
+    // Falls back to DEFAULT_COLLEGE_SETTINGS if college has no custom doc, keeping
+    // existing behavior for unconfigured colleges.
+    const settings = await loadCollegeSettings(db, session.collegeId);
+
+    // ── Total faculty required — cadre-coupled to settings.studentFacultyRatio (fallback 15)
+    const effectiveRatio = (settings.studentFacultyRatio && Number.isFinite(settings.studentFacultyRatio) && settings.studentFacultyRatio > 0)
+      ? settings.studentFacultyRatio
+      : STUDENT_FACULTY_RATIO;
+    const totalRequired = totalStudents > 0 ? Math.ceil(totalStudents / effectiveRatio) : 0;
 
     // ── Cadre split: driven by Cadre-wise Ratio (PositionNorms) ──────────────
     // Settings > Cadre-wise Ratio (positionNorms[].requiredPerDept) defines the
     // ratio parts. e.g. Professor 1, Associate 2, Assistant 6 → 1:2:6.
     // Falls back to DEFAULT_CADRE_PARTS (1:2:6) if college has no custom ratio.
-    const settings = await loadCollegeSettings(db, session.collegeId);
     const positionNorms = (settings.positionNorms ?? []) as { designation: string; requiredPerDept: number }[];
     // Map by label matching: Professor / Associate Professor / Assistant Professor
     const findRequired = (keywords: string[], exclude: string[] = []) => {
@@ -196,7 +203,7 @@ export async function GET(request: Request) {
     const result: FacultyRequirementResult = {
       department: dept,
       totalStudents,
-      studentFacultyRatio: STUDENT_FACULTY_RATIO,
+      studentFacultyRatio: effectiveRatio,
       cadreRatio,
       totalRequired,
       totalCurrent,

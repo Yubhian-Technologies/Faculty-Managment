@@ -12,20 +12,18 @@ import { AvatarUploadField } from "@/components/shared/AvatarUploadField";
 import { Textarea } from "@/components/ui/textarea";
 import { ROLE_LABELS, ROLE_LEVEL, ROLE_SCOPE, LEVEL_LABELS } from "@/types";
 import { PHONE_REGEX } from "@/lib/validations";
+import { SUPER_ADMIN_CREATABLE } from "@/lib/roles/superAdminCreatable";
 import { toast } from "@/hooks/useToast";
 import type { College, Location, FacultyProfileFields, UserRole } from "@/types";
 
-// Roles a Super Admin creates - the level L1–L2 set (GLOBAL + LOCATION).
+// Roles a Super Admin creates - single source is SUPER_ADMIN_CREATABLE (src/lib/roles/superAdminCreatable.ts).
 // Scope (GLOBAL/LOCATION) is read from ROLE_SCOPE, which drives which
 // tenant picker is shown and what the provisioning route (api/admin/users)
 // writes. Principal is deliberately not here any more: it's a SEAT, appointed
 // by a college's own College Admin via Role Assignments, not handed out
 // directly - same reasoning as removing it from Location Admin. Must match
-// SUPER_ADMIN_CREATABLE in api/admin/users/route.ts.
-const CREATABLE_ROLES: UserRole[] = [
-  "MANAGEMENT", "FINANCE", "PURCHASE_DEPT",   // L1 · GLOBAL
-  "ADMINISTRATION", "ACCOUNTS",               // L2 · LOCATION
-];
+// SUPER_ADMIN_CREATABLE in api/admin/users/route.ts (now imported from the shared constant).
+const CREATABLE_ROLES: UserRole[] = SUPER_ADMIN_CREATABLE;
 
 // Creatable roles grouped by their L0–L6 level, so the role picker is level-scoped.
 const ROLE_LEVELS_PRESENT = Array.from(

@@ -319,6 +319,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       if (req.status !== "PENDING_HOD" && req.status !== "APPROVED") {
         return NextResponse.json({ error: "Coverage can only be proposed while pending HOD decision or already approved" }, { status: 400 });
       }
+      // Authorization is against the leave-taker's OWN department only - the
+      // proposed substitute's candidate pool (buildPeriodCoverage, below) is
+      // deliberately college-wide, not narrowed to the HOD's own department.
+      // Confirmed intentional (not a gap to close): a cross-department pick
+      // still has to accept the assignment same as any other pick - see
+      // pendingPeriodSubstitutions above - so this isn't a silent grant.
       if (session.role === "HOD") {
         const hodDepts = await resolveHodDepartments(db, session.collegeId, session.uid);
         if (!req.department || !hodDepts.includes(req.department)) {
