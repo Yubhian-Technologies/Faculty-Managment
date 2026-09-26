@@ -296,7 +296,16 @@ function AssignDialog({
         <div className="space-y-3">
           <div className="space-y-2">
             <Label>Person</Label>
-            <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
+            {/* `modal` because this picker lives inside a Dialog. A Radix
+                Dialog is modal and locks scrolling everywhere outside its own
+                content, and PopoverContent portals to <body> - outside it - so
+                the wheel over this list was being swallowed and a list longer
+                than its max height could not be reached. Marking the Popover
+                modal gives it its own scroll lock with the list as the allowed
+                area. The two other comboboxes in the app (DocumentTypeCombobox,
+                StudentPromotionsPanel) are not inside a Dialog and so are not
+                affected. */}
+            <Popover modal open={popoverOpen} onOpenChange={setPopoverOpen}>
               <PopoverTrigger asChild>
                 <Button
                   type="button"
