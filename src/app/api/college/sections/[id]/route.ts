@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodEditDepartment, canHodEditDepartmentId } from "@/lib/departments/scope";
-import { canHodEditDepartmentYear, type DepartmentYearRow } from "@/lib/departments/managedBranches";
+import { canHodExclusivelyOwnDepartmentYear, type DepartmentYearRow } from "@/lib/departments/managedBranches";
 import { departmentHistoryEntry } from "@/lib/students/departmentHistory";
 import { ChunkedBatch } from "@/lib/firestore/chunkedBatch";
 import { resolveLoginUidForFacultyMember } from "@/lib/faculty/resolveFacultyMemberId";
@@ -49,18 +49,18 @@ async function assertHodOwnsSection(
   // A manager can run more than one course with different years, so ownership
   // must resolve against THIS section's own course, not just its department.
   const catalogId = courseSnap?.exists ? (courseSnap.data() as { catalogId?: string } | undefined)?.catalogId : undefined;
-  // The canonical rule (managedBranches.ts), shared with the students routes -
-  // NOT a second copy of it. This used to resolve the year-owner inline and
-  // require it to be one of the HOD's own/child departments, which silently
-  // dropped the rule's first clause: a true sub-department is owned OUTRIGHT,
-  // no year check, because only a MANAGED branch is year-scoped. That omission
-  // made editing fail where creating and listing both succeed - an HOD whose
-  // own department is grouped under some shared-year manager could create a
-  // section in their own sub-department, see it listed with full access, and
-  // then be refused on save, because the year-owner resolved to that manager
-  // rather than to them. college/sections GET already carries this carve-out
-  // explicitly; now both sides answer with the same function.
-  return canHodEditDepartmentYear(scope, departments, sectionDepartment, sectionYear, catalogId);
+  // Sections deliberately uses the STRICTER sibling here, not the shared
+  // `canHodEditDepartmentYear` Teaching Assignments/Students rely on: a branch
+  // that is simultaneously a true child of one department AND grouped under a
+  // different department's `managedDepartments` for the shared first year
+  // (e.g. "data science" is Artificial Intelligence's own child but Year 1
+  // runs under "BASIC SCIENCE ENGLISH") must be edited/deleted ONLY by the
+  // shared-year manager for that year - the branch's own permanent HOD gets
+  // view-only there (see college/sections GET's matching accessLevel tag),
+  // full ownership resuming once their own dedicated years start. See
+  // canHodExclusivelyOwnDepartmentYear's own doc-comment for why this can't
+  // just be the shared function.
+  return canHodExclusivelyOwnDepartmentYear(scope, departments, sectionDepartment, sectionYear, catalogId);
 }
 
 export async function PATCH(
