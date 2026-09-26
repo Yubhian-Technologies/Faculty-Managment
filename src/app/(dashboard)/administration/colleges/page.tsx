@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { UserPlus, UserCog, ChevronDown, ChevronUp, Plus, Pencil, Trash2 } from "lucide-react";
+import { UserPlus, ChevronDown, ChevronUp, Plus, Pencil, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -230,20 +230,6 @@ export default function AdministrationCollegesPage() {
                       Add College Admin
                     </Button>
                   )}
-                  {/* Hands the College Admin seat to a DIFFERENT existing person
-                      (or back to a previous one) - the singleton check above
-                      only ever offers "Add College Admin" for creating a brand-new
-                      login, which correctly refuses an email that already has an
-                      account. Reassigning without creating anything new happens
-                      here instead. */}
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => router.push(`/administration/role-assignments?collegeId=${college.id}`)}
-                  >
-                    <UserCog className="h-3.5 w-3.5 mr-1.5" />
-                    Role Assignments
-                  </Button>
                   <Button
                     size="sm"
                     variant="ghost"
