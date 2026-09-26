@@ -32,7 +32,7 @@ import { designationLabel } from "@/lib/designations/config";
 import { useAuthStore } from "@/store/authStore";
 import { toast } from "@/hooks/useToast";
 import { useMyDepartments } from "@/hooks/useMyDepartments";
-import { facultyDepartmentOptions } from "@/lib/departments/facultyDepartmentOptions";
+import { facultyDepartmentOptions, isFacultyDestination, type FacultyDepartmentLike } from "@/lib/departments/facultyDepartmentOptions";
 import type { FacultyProfileFields } from "@/types";
 
 // Sentinel for the "Others" row - never stored, it just switches the field to
@@ -122,15 +122,19 @@ export default function NewFacultyPage() {
   // Fetched for every HOD too now, not just college-level - see
   // facultyDepartmentOptions' own doc-comment on why ownDepartments alone
   // isn't enough to offer a parent HOD's sub-departments here.
-  const [allDepartments, setAllDepartments] = useState<{ id: string; name: string; code: string; parentDepartmentId?: string; isActive?: boolean }[]>([]);
+  type DeptRow = FacultyDepartmentLike & { isActive?: boolean };
+  const [allDepartments, setAllDepartments] = useState<DeptRow[]>([]);
   useEffect(() => {
     fetch("/api/college/departments")
-      .then((r) => r.json() as Promise<{ departments?: { id: string; name: string; code: string; parentDepartmentId?: string; isActive?: boolean }[] }>)
+      .then((r) => r.json() as Promise<{ departments?: DeptRow[] }>)
       .then((d) => setAllDepartments((d.departments ?? []).filter((dep) => dep.isActive !== false)))
       .catch(() => { /* picker stays empty */ });
   }, []);
+  // Both lists drop a department that only organises its sub-departments
+  // (isFacultyDestination) - a Principal picking from the whole college needs
+  // that just as much as an HOD picking from their own.
   const myDepartments = isCollegeLevel
-    ? allDepartments.map((d) => d.name)
+    ? allDepartments.filter((d) => isFacultyDestination(d, allDepartments)).map((d) => d.name)
     : facultyDepartmentOptions(allDepartments, ownDepartments).map((d) => d.name);
   const listPath = isCollegeLevel ? "/principal/faculty" : "/hod/faculty";
 
