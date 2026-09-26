@@ -46,6 +46,67 @@ export interface Unavailability {
   coveringFacultyIdsBetween(fromISO: string, toISO: string): Set<string>;
 }
 
+export interface SubstitutePick {
+  substituteFacultyId: string;
+  substituteFacultyName?: string;
+  date: string;
+  periodNumber: number;
+  subjectName?: string;
+}
+
+export interface SubstituteConflict extends SubstitutePick {
+  /** ALREADY_COVERING - some OTHER live request already has them in this slot.
+   *  DUPLICATE_IN_SUBMISSION - two picks in THIS submission put them in it. */
+  reason: "ALREADY_COVERING" | "DUPLICATE_IN_SUBMISSION";
+}
+
+/**
+ * Every way a set of proposed picks can double-book someone, in one place.
+ *
+ * Keyed on (facultyId, date, periodNumber) and NOT on timetableSlotId, which
+ * is the hole this closes: two slots can share a period - merged sections, an
+ * elective split, a lab running against a theory class - and one person cannot
+ * teach both. buildPeriodCoverage resolves each period's candidates
+ * independently from the same snapshot, so the same free person is legitimately
+ * offered for both, and the caller's only de-duplication was on
+ * `date|timetableSlotId`, which those two periods do not share.
+ *
+ * `isCoveringAt` is optional because the two callers need different halves.
+ * validatePeriodSubstitutions omits it - a pick that is already covering was
+ * never in the period's candidate list, so that half is already enforced one
+ * step earlier and re-reading Firestore for it would be waste. The acceptance
+ * path passes it, because that check ran when the proposal was MADE and
+ * anything could have changed since.
+ */
+export function findSubstituteConflicts(
+  picks: SubstitutePick[],
+  opts: { isCoveringAt?: (facultyId: string, dateISO: string, periodNumber: number) => boolean } = {}
+): SubstituteConflict[] {
+  const conflicts: SubstituteConflict[] = [];
+  const seen = new Set<string>();
+  for (const pick of picks) {
+    const key = `${pick.substituteFacultyId}|${pick.date}|${pick.periodNumber}`;
+    if (seen.has(key)) {
+      conflicts.push({ ...pick, reason: "DUPLICATE_IN_SUBMISSION" });
+      continue;
+    }
+    seen.add(key);
+    if (opts.isCoveringAt?.(pick.substituteFacultyId, pick.date, pick.periodNumber)) {
+      conflicts.push({ ...pick, reason: "ALREADY_COVERING" });
+    }
+  }
+  return conflicts;
+}
+
+/** One conflict, worded for the person who has to act on it. */
+export function describeSubstituteConflict(c: SubstituteConflict): string {
+  const who = c.substituteFacultyName ?? "That faculty member";
+  const where = c.subjectName ? `${c.subjectName} on ${c.date}` : c.date;
+  return c.reason === "DUPLICATE_IN_SUBMISSION"
+    ? `${who} is picked twice for period ${c.periodNumber} on ${c.date} - one person can't cover two classes in the same period. Pick someone else for ${where}.`
+    : `${who} was just assigned to cover period ${c.periodNumber} on ${c.date} by another request. Pick someone else for ${where}.`;
+}
+
 export async function loadUnavailability(
   db: Firestore,
   collegeId: string,

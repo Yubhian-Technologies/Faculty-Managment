@@ -525,6 +525,72 @@
       ]
     },
     {
+      "collectionGroup": "students",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "department",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "courseId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "section",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "year",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "students",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "secondaryDepartment",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "courseId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "section",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "year",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "students",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "department",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "year",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "rollNumber",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "section",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "salaryRecords",
       "queryScope": "COLLECTION",
       "fields": [
@@ -780,78 +846,6 @@
       "fields": [
         {
           "fieldPath": "status",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "studentAttendance",
-      "queryScope": "COLLECTION_GROUP",
-      "fields": [
-        {
-          "fieldPath": "status",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "sectionId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "date",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "studentAttendance",
-      "queryScope": "COLLECTION_GROUP",
-      "fields": [
-        {
-          "fieldPath": "status",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "facultyId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "date",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "studentAttendance",
-      "queryScope": "COLLECTION_GROUP",
-      "fields": [
-        {
-          "fieldPath": "status",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "subjectId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "date",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "studentAttendance",
-      "queryScope": "COLLECTION_GROUP",
-      "fields": [
-        {
-          "fieldPath": "status",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "department",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "date",
           "order": "ASCENDING"
         }
       ]

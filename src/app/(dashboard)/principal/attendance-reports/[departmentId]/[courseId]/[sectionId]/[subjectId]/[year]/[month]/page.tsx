@@ -187,6 +187,7 @@ export default function PrincipalAttendanceReportPage() {
               size="icon"
               className="h-7 w-7 text-primary-foreground hover:bg-primary-foreground/20 hover:text-primary-foreground"
               onClick={() => goToMonth(-1)}
+              aria-label="Previous month"
             >
               <ChevronLeft className="h-4 w-4" />
             </Button>
@@ -197,6 +198,7 @@ export default function PrincipalAttendanceReportPage() {
               size="icon"
               className="h-7 w-7 text-primary-foreground hover:bg-primary-foreground/20 hover:text-primary-foreground"
               onClick={() => goToMonth(1)}
+              aria-label="Next month"
             >
               <ChevronRight className="h-4 w-4" />
             </Button>

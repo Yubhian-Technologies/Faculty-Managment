@@ -4,12 +4,13 @@ import { resolveLoginUidForFacultyMember } from "@/lib/faculty/resolveFacultyMem
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { notify } from "@/lib/notify";
 import { enumerateWorkingDates, isoDateKey, todayISODate } from "@/lib/leave/dayCounter";
-import { loadUnavailability } from "@/lib/leave/availability";
+import { loadUnavailability, findSubstituteConflicts, describeSubstituteConflict } from "@/lib/leave/availability";
 import { resolveSectionCurrentSemester, matchesCurrentSemester as slotMatchesCurrentSemester } from "@/lib/college/semester";
-import { resolveTimetableAcademicYear, matchesCurrentAcademicYear } from "@/lib/college/academicSession";
+import { matchesCurrentAcademicYear } from "@/lib/college/academicSession";
 import { isFacultyAvailable } from "@/types";
 import type { DayOfWeek, FacultyMember, TimetableSlot } from "@/types";
 import type { LeaveRequest, PeriodSubstitution, StaffAdjustment } from "@/types/leave";
+import { resolveCollegeAcademicYear } from "@/lib/college/collegeAcademicYear";
 
 // Resolves, for a batch of TimetableSlots spanning possibly many course-years,
 // which ones belong to the currently-live semester/session - the same "no
@@ -22,10 +23,7 @@ async function filterToCurrentSlots(
   collegeId: string,
   slots: (TimetableSlot & { id: string })[]
 ): Promise<(TimetableSlot & { id: string })[]> {
-  const sessionSnap = await db.collection("colleges").doc(collegeId).collection("academicSessions").where("isCurrent", "==", true).limit(1).get();
-  const currentAcademicYear = resolveTimetableAcademicYear(
-    sessionSnap.empty ? undefined : (sessionSnap.docs[0].data() as { label?: string }).label
-  );
+  const currentAcademicYear = await resolveCollegeAcademicYear(db, collegeId);
   const distinctCourseYears = new Map<string, { courseId: string; year: number }>();
   for (const s of slots) distinctCourseYears.set(`${s.courseId} ${s.year}`, { courseId: s.courseId, year: s.year });
   const semesterByCourseYear = new Map<string, number | null>();
@@ -335,6 +333,18 @@ export async function validatePeriodSubstitutions(params: {
 
   if (mode === "FULL" && resolved.length !== coverage.length) {
     return { ok: false, error: "Select a substitute for every affected period before submitting." };
+  }
+
+  // The picks are each individually valid by here - every one came from its own
+  // period's candidate list, which already excludes anyone teaching then, on
+  // leave, or covering that slot for another request. What that cannot see is
+  // the picks colliding with EACH OTHER: two periods sharing a (date,
+  // periodNumber) resolve their candidates independently, so the same free
+  // person is offered for both, and the de-duplication above is keyed on
+  // `date|timetableSlotId`, which those two periods do not share.
+  const conflicts = findSubstituteConflicts(resolved);
+  if (conflicts.length > 0) {
+    return { ok: false, error: describeSubstituteConflict(conflicts[0]) };
   }
 
   return { ok: true, resolved };

@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "@/hooks/useToast";
 import { exportToCSV } from "@/lib/utils";
 import { calcPercent, formatPercent } from "@/lib/studentAttendance/percentage";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
 type RangeMode = "daily" | "monthly" | "period" | "tillNow";
 type ViewMode = "subject" | "consolidated";
@@ -67,6 +68,7 @@ export function SectionReportsView({ sectionId, title }: { sectionId?: string; t
   const [viewMode, setViewMode] = useState<ViewMode>("subject");
   const [reportKind, setReportKind] = useState<"all" | "absent" | "shortage">("all");
   const [threshold, setThreshold] = useState(75);
+  const [hosteller, setHosteller] = useState<"all" | "yes" | "no">("all");
   const [subjectId, setSubjectId] = useState("");
   const [date, setDate] = useState("");
   const [year, setYear] = useState("");
@@ -110,6 +112,7 @@ export function SectionReportsView({ sectionId, title }: { sectionId?: string; t
       }
       if (reportKind === "absent") params.set("absentOnly", "true");
       if (reportKind === "shortage") { params.set("shortage", "true"); params.set("threshold", String(threshold)); }
+      if (hosteller !== "all") params.set("hosteller", hosteller);
       if (viewMode === "consolidated") params.set("consolidated", "true");
       if (subjectId) params.set("subjectId", subjectId);
       const res = await fetch(`/api/college/section-attendance-report?${params.toString()}`);
@@ -320,7 +323,7 @@ export function SectionReportsView({ sectionId, title }: { sectionId?: string; t
               </Select>
             </div>
             <div>
-              <Label>Kind</Label>
+              <Label>Category</Label>
               <Select value={reportKind} onValueChange={(v) => setReportKind(v as typeof reportKind)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent><SelectItem value="all">All</SelectItem><SelectItem value="absent">Absent</SelectItem><SelectItem value="shortage">Shortage</SelectItem></SelectContent>
@@ -332,6 +335,23 @@ export function SectionReportsView({ sectionId, title }: { sectionId?: string; t
                 <Input type="number" min={0} max={100} value={threshold} onChange={(e) => setThreshold(Number(e.target.value))} />
               </div>
             )}
+          </div>
+          <div className="space-y-2">
+            <Label>Hosteller</Label>
+            <RadioGroup value={hosteller} onValueChange={(v) => setHosteller(v as typeof hosteller)} className="flex flex-row gap-4">
+              <div className="flex items-center gap-2">
+                <RadioGroupItem value="all" id="hosteller-all" />
+                <Label htmlFor="hosteller-all" className="font-normal cursor-pointer">All</Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <RadioGroupItem value="yes" id="hosteller-yes" />
+                <Label htmlFor="hosteller-yes" className="font-normal cursor-pointer">Hosteller</Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <RadioGroupItem value="no" id="hosteller-no" />
+                <Label htmlFor="hosteller-no" className="font-normal cursor-pointer">Day Scholar</Label>
+              </div>
+            </RadioGroup>
           </div>
 
           {rangeMode === "daily" && (<div><Label>Date (YYYY-MM-DD)</Label><Input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></div>)}

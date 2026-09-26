@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Search, Users } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -56,6 +56,9 @@ export default function PrincipalStudentsPage() {
   const [hasLoaded, setHasLoaded] = useState(false);
 
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const [deptFilter, setDeptFilter] = useState("all");
   const [yearFilter, setYearFilter] = useState<string>("all");
   const [courseFilter, setCourseFilter] = useState<string>("all");
@@ -93,8 +96,7 @@ export default function PrincipalStudentsPage() {
       const params = new URLSearchParams();
       params.set("page", String(targetPage));
       params.set("pageSize", String(targetPageSize));
-      const s = search.trim().toLowerCase();
-      if (s) params.set("search", s);
+      if (debouncedSearch) params.set("search", debouncedSearch);
       if (deptFilter !== "all") params.set("department", deptFilter);
       if (courseFilter !== "all") params.set("course", courseFilter);
       if (yearFilter !== "all") params.set("year", yearFilter);
@@ -110,7 +112,6 @@ export default function PrincipalStudentsPage() {
       if (data.length === 0 && targetPage > 1 && grandTotal > 0) {
         const lastPage = Math.max(1, Math.ceil(grandTotal / targetPageSize));
         setPage(lastPage);
-        void executeLoad(lastPage, targetPageSize);
         return;
       }
       setStudents(data);
@@ -121,12 +122,18 @@ export default function PrincipalStudentsPage() {
     } finally {
       setIsFetching(false);
     }
-  }, [page, pageSize, search, deptFilter, courseFilter, yearFilter]);
+  }, [page, pageSize, debouncedSearch, deptFilter, courseFilter, yearFilter]);
 
-  // Load filter metadata once on mount; student data is loaded on-demand via the Load button
+  // Load filter metadata once on mount
   useEffect(() => {
     void (async () => { await loadMetadata(); })();
   }, [loadMetadata]);
+
+  // Once loaded, automatically re-fetch when page, pageSize, search or any filter changes
+  useEffect(() => {
+    if (!hasLoaded) return;
+    void executeLoad(page, pageSize);
+  }, [hasLoaded, page, pageSize, debouncedSearch, deptFilter, courseFilter, yearFilter, executeLoad]);
 
   const activeDepartments = useMemo(
     () => departments.filter((d) => d.isActive).sort((a, b) => a.name.localeCompare(b.name)),
@@ -145,6 +152,15 @@ export default function PrincipalStudentsPage() {
     }
     return yearOptionsForCourse(courses, courseFilter === "all" ? undefined : courseFilter, years);
   }, [deptFilter, courseFilter, departments, courses, years]);
+
+  function onSearchChange(value: string) {
+    setSearch(value);
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    searchDebounceRef.current = setTimeout(() => {
+      setDebouncedSearch(value.trim().toLowerCase());
+      setPage(1);
+    }, 350);
+  }
 
   function onCourseFilterChange(value: string) {
     const nextDeptOptions = value === "all"
@@ -177,16 +193,20 @@ export default function PrincipalStudentsPage() {
 
   function handlePageChange(newPage: number) {
     setPage(newPage);
-    if (hasLoaded) {
-      void executeLoad(newPage, pageSize);
-    }
   }
 
   function handlePageSizeChange(newPageSize: number) {
     setPageSize(newPageSize);
     setPage(1);
-    if (hasLoaded) {
-      void executeLoad(1, newPageSize);
+  }
+
+  function handleLoad() {
+    setDebouncedSearch(search.trim().toLowerCase());
+    setPage(1);
+    if (!hasLoaded) {
+      setHasLoaded(true);
+    } else {
+      void executeLoad(1, pageSize);
     }
   }
 
@@ -237,11 +257,10 @@ export default function PrincipalStudentsPage() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => onSearchChange(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
-                    setPage(1);
-                    void executeLoad(1, pageSize);
+                    handleLoad();
                   }
                 }}
                 placeholder="Search by name, roll number or email"
@@ -271,7 +290,7 @@ export default function PrincipalStudentsPage() {
             </Select>
             <Button
               type="button"
-              onClick={() => { setPage(1); void executeLoad(1, pageSize); }}
+              onClick={handleLoad}
               disabled={isFetching || isMetadataLoading}
               className="whitespace-nowrap"
             >

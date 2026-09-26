@@ -381,12 +381,22 @@ export async function getRelatedDepartmentNames(
 
 /** Id-keyed counterpart of getRelatedDepartmentNames, for callers (course
  * lookups) that filter by departmentId rather than department name - own id,
- * parent (if this department is itself a child), and feeder (if this
- * department is fed by another). Deliberately NOT children: a true
- * sub-department always borrows its parent's course rather than owning one
- * of its own, so there's nothing for a parent to gain by reaching down into a
- * child's own course row - doing so previously surfaced an unrelated stray
- * course under the parent's own dropdown and broke subject creation there. */
+ * PLUS EITHER the parent (if this department is itself a true academic child,
+ * Department.parentDepartmentId) OR any feeder that cross-lists this
+ * department by name (Department.secondaryDepartments) - never both. The two
+ * relationships are mutually exclusive: a true sub-department already
+ * inherits its whole course list from its real parent, so a Common First
+ * Year feeder's unrelated course (e.g. a "Basic Science" that cross-lists
+ * this department as a shared-first-year target) must not also be merged in
+ * just because the feeder happens to name this department - that previously
+ * surfaced the feeder's course as a second, confusingly-labeled "duplicate"
+ * entry (e.g. a "Data Science" whose real parent is "Artificial Intelligence"
+ * but whom "Basic Science" also lists as a Common First Year feeder).
+ * Deliberately NOT children: a true sub-department always borrows its
+ * parent's course rather than owning one of its own, so there's nothing for a
+ * parent to gain by reaching down into a child's own course row - doing so
+ * previously surfaced an unrelated stray course under the parent's own
+ * dropdown and broke subject creation there. */
 export async function getRelatedDepartmentIds(
   db: FirebaseFirestore.Firestore,
   collegeId: string,
@@ -399,9 +409,9 @@ export async function getRelatedDepartmentIds(
   const dept = deptSnap.data() as { name?: string; parentDepartmentId?: string };
   const ids = new Set<string>([departmentId]);
 
-  if (dept.parentDepartmentId) ids.add(dept.parentDepartmentId);
-
-  if (dept.name) {
+  if (dept.parentDepartmentId) {
+    ids.add(dept.parentDepartmentId);
+  } else if (dept.name) {
     const feederSnap = await deptsColl.where("secondaryDepartments", "array-contains", dept.name).get();
     for (const d of feederSnap.docs) ids.add(d.id);
   }

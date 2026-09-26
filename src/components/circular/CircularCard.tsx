@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { FileText, CalendarDays, UserCircle } from "lucide-react";
 import type { Circular } from "@/types/circular";
+import { audienceSummary } from "@/lib/circular/audienceSummary";
 
 function fmtDate(d: unknown): string {
   try {
@@ -34,7 +35,7 @@ export function CircularCard({
         <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
           <span className="inline-flex items-center gap-1"><UserCircle className="h-3.5 w-3.5" />{circular.messageFrom}</span>
           <span className="inline-flex items-center gap-1"><CalendarDays className="h-3.5 w-3.5" />{fmtDate(circular.date)}</span>
-          <span>{circular.audience.employeeType} {circular.audience.departmentNames?.length ? `· ${circular.audience.departmentNames?.join(", ")}` : "· All departments"}</span>
+          <span>{audienceSummary(circular.audience)}</span>
         </div>
       </CardHeader>
       <CardContent className="space-y-3">

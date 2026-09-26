@@ -6,11 +6,12 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
 import { getActiveSubstitutionsForDates, currentWeekDateKeys } from "@/lib/leave/periodCoverage";
 import { resolveSectionCurrentSemester, resolveRequestedSemester, matchesCurrentSemester } from "@/lib/college/semester";
-import { resolveTimetableAcademicYear, matchesCurrentAcademicYear } from "@/lib/college/academicSession";
+import { matchesCurrentAcademicYear } from "@/lib/college/academicSession";
 import { isTimetableIncharge } from "@/lib/departments/timetableIncharge";
 import type { DayOfWeek, SubjectType, TimetableRules, TimetableSlot } from "@/types";
 import { DEFAULT_TIMETABLE_RULES } from "@/types";
 import { loadDepartmentIndex, stampDepartmentIds } from "@/lib/departments/stampIds";
+import { resolveCollegeAcademicYear } from "@/lib/college/collegeAcademicYear";
 
 export async function GET(request: Request) {
   try {
@@ -46,10 +47,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: semesterResult.error }, { status: 400 });
     }
     const currentSemester = semesterResult.semester;
-    const currentSessionSnap = await collegeRef.collection("academicSessions").where("isCurrent", "==", true).limit(1).get();
-    const currentAcademicYear = resolveTimetableAcademicYear(
-      currentSessionSnap.empty ? undefined : (currentSessionSnap.docs[0].data() as { label?: string }).label
-    );
+    const currentAcademicYear = await resolveCollegeAcademicYear(db, session.collegeId);
     const requestedAcademicYear = academicYearParam || currentAcademicYear;
     // Explicitly browsing an OLDER session (Timetable History) needs strict
     // equality, not the usual null-tolerant match - an untagged/legacy slot
@@ -176,10 +174,7 @@ export async function POST(request: Request) {
     const assignmentSemester = assignment.timetableSemester
       ?? await resolveSectionCurrentSemester(db, session.collegeId, assignment.courseId, assignment.year);
     // This session - same reasoning as teaching-assignments/route.ts POST.
-    const sessionSnap = await collegeRef.collection("academicSessions").where("isCurrent", "==", true).limit(1).get();
-    const currentAcademicYear = resolveTimetableAcademicYear(
-      sessionSnap.empty ? undefined : (sessionSnap.docs[0].data() as { label?: string }).label
-    );
+    const currentAcademicYear = await resolveCollegeAcademicYear(db, session.collegeId);
 
     // This route backs the manual per-faculty pin (see `source: "MANUAL"`
     // below) and previously skipped the college's own TimetableRules

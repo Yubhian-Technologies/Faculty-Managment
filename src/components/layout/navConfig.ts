@@ -278,8 +278,11 @@ export const NAV_ITEMS: NavItem[] = [
 
   // College Office
   { label: "Dashboard", href: "/college-office", iconName: "LayoutDashboard", roles: ["COLLEGE_OFFICE"] },
+  // Graduated Students lives as a sub-tab (top-right pill) inside the Students
+  // page itself now, rather than its own sidebar entry - see
+  // OfficeStudentsPage. /college-office/graduates still works as a direct
+  // route for any existing bookmarks/links.
   { label: "Students", href: "/college-office/students", iconName: "GraduationCap", roles: ["COLLEGE_OFFICE"], section: "Students" },
-  { label: "Graduated Students", href: "/college-office/graduates", iconName: "Award", roles: ["COLLEGE_OFFICE"] },
   { label: "Semester Timings", href: "/college-office/timings", iconName: "Clock", roles: ["COLLEGE_OFFICE"] },
   { label: "Non-Technical Staff", href: "/college-office/non-technical-staff", iconName: "UsersRound", roles: ["COLLEGE_OFFICE"], section: "Staff" },
   // Only the first item of a group carries `section` - the sidebar renders a

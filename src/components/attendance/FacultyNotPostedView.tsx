@@ -1,13 +1,16 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { EmptyState } from "@/components/shared/EmptyState";
 import { toast } from "@/hooks/useToast";
+import { useMyDepartments } from "@/hooks/useMyDepartments";
+import type { Department, Course } from "@/types";
 
 interface PeriodRow {
   assignmentId: string;
@@ -33,25 +36,45 @@ interface RangeResult {
   pending: number;
   byDate: Record<string, { periods: number; notMarked: number }>;
 }
+interface FacultyOption {
+  facultyId: string;
+  name: string;
+  designation: string;
+}
 
-// Cascading picker: college -> department -> (section) -> faculty row, replacing
-// the old raw facultyId text field. The API contract is unchanged: the route still
-// resolves the target faculty via `facultyMembers.userUid`, so the same session can
-// be posted. The pre-selection uses the resolved facultyId for the wide-range
-// queries (faculty-attendance-completion) so the user sees one faculty at a time.
+function todayISO(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+// Cascading picker: Department -> Course -> Faculty, same real APIs and
+// pattern as FacultyAttendanceCompletionView's own picker (department scoped
+// to an HOD's own department(s) when hodScoped, course narrowed to that
+// department, faculty narrowed to who actually teaches that course) -
+// replacing the old raw facultyId text field. `facultyId` here is always the
+// facultyMembers doc id (see /api/college/faculty-attendance-completion's own
+// doc-comment), matching what /api/college/faculty-attendance-completion
+// itself expects for both the daily and range queries below.
 export function FacultyNotPostedView({
   title = "Not Posted Faculty Reports",
   description = "Faculty who did not submit student attendance — daily, monthly, period, till now. For daily, also use the office correction flow.",
-  initialCollegeId,
+  hodScoped,
 }: {
   title?: string;
   description?: string;
-  initialCollegeId?: string;
+  hodScoped?: boolean;
 }) {
-  const [collegeId, setCollegeId] = useState(initialCollegeId ?? "");
-  const [department, setDepartment] = useState("");
-  const [facultyFacultyId, setFacultyFacultyId] = useState(""); // target's login uid (userUid), resolved via /api/college/faculty
-  const [date, setDate] = useState("");
+  const [date, setDate] = useState(todayISO());
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [selectedDepartmentId, setSelectedDepartmentId] = useState("");
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [isLoadingCourses, setIsLoadingCourses] = useState(false);
+  const [selectedCourseId, setSelectedCourseId] = useState("");
+
+  const [faculty, setFaculty] = useState<FacultyOption[]>([]);
+  const [isLoadingFaculty, setIsLoadingFaculty] = useState(false);
+  const [selectedFacultyId, setSelectedFacultyId] = useState("");
+
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [year, setYear] = useState("");
@@ -60,35 +83,76 @@ export function FacultyNotPostedView({
   const [loadedMode, setLoadedMode] = useState<"daily" | "range" | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // Resolve the selected faculty row into a login uid for /api/college/faculty-attendance-completion
-  async function loadFacultyId() {
-    if (!collegeId) {
-      toast({ variant: "destructive", title: "Select college" });
-      return "";
-    }
-    const res = await fetch(`/api/college/faculty?scope=department&collegeId=${encodeURIComponent(collegeId)}&department=${encodeURIComponent(department)}`);
-    if (!res.ok) {
-      toast({ variant: "destructive", title: "Failed to load faculty" });
-      return "";
-    }
-    const json = await res.json();
-    const rows = Array.isArray(json.faculty) ? json.faculty : [];
-    // If the user has no specific faculty row, default to the first available one
-    const defaultRow = rows[0];
-    if (!facultyFacultyId && defaultRow?.uid) {
-      setFacultyFacultyId(defaultRow.uid);
-    }
-    return "";
-  }
+  const myDepartments = useMyDepartments();
+  const hodOwnDepartments = hodScoped ? myDepartments.filter(Boolean) : null;
+
+  useEffect(() => {
+    fetch("/api/college/departments")
+      .then((r) => r.json() as Promise<{ departments: Department[] }>)
+      .then((d) => {
+        const active = (d.departments ?? []).filter((dep) => dep.isActive);
+        const scoped = hodOwnDepartments ? active.filter((dep) => hodOwnDepartments.includes(dep.name)) : active;
+        setDepartments(scoped.sort((a, b) => a.name.localeCompare(b.name)));
+      })
+      .catch(() => toast({ variant: "destructive", title: "Failed to load departments" }));
+    // hodOwnDepartments is derived fresh from the user every render - depend
+    // on the user identity fields it's built from instead, so this doesn't
+    // re-fetch on every render (same convention as FacultyAttendanceCompletionView).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [myDepartments.join(",")]);
+
+  useEffect(() => {
+    void (async () => {
+      setSelectedCourseId("");
+      setCourses([]);
+      if (!selectedDepartmentId) return;
+      setIsLoadingCourses(true);
+      try {
+        const res = await fetch(`/api/college/courses?departmentId=${selectedDepartmentId}`);
+        const d = await res.json() as { courses: Course[] };
+        const ownOnly = (d.courses ?? []).filter((c) => c.isActive && c.departmentId === selectedDepartmentId);
+        setCourses(ownOnly.sort((a, b) => a.name.localeCompare(b.name)));
+      } catch {
+        toast({ variant: "destructive", title: "Failed to load courses" });
+      } finally {
+        setIsLoadingCourses(false);
+      }
+    })();
+  }, [selectedDepartmentId]);
+
+  const selectedDepartment = departments.find((d) => d.id === selectedDepartmentId) ?? null;
+
+  useEffect(() => {
+    void (async () => {
+      setSelectedFacultyId("");
+      setFaculty([]);
+      setData(null);
+      setLoadedMode(null);
+      if (!selectedDepartment || !selectedCourseId || !date) return;
+      setIsLoadingFaculty(true);
+      try {
+        const params = new URLSearchParams({ date, department: selectedDepartment.name, courseId: selectedCourseId });
+        const res = await fetch(`/api/college/faculty-attendance-completion?${params.toString()}`);
+        const d = await res.json() as { faculty?: FacultyOption[]; error?: string };
+        setFaculty(d.faculty ?? []);
+      } catch {
+        toast({ variant: "destructive", title: "Failed to load faculty" });
+      } finally {
+        setIsLoadingFaculty(false);
+      }
+    })();
+  }, [selectedDepartment, selectedCourseId, date]);
+
+  const selectedFaculty = faculty.find((f) => f.facultyId === selectedFacultyId) ?? null;
 
   async function load(mode: "daily" | "period" | "month" | "tillNow") {
-    if (!facultyFacultyId) {
+    if (!selectedFacultyId) {
       toast({ variant: "destructive", title: "Select faculty" });
       return;
     }
     setLoading(true);
     try {
-      const p = new URLSearchParams({ facultyId: facultyFacultyId });
+      const p = new URLSearchParams({ facultyId: selectedFacultyId });
       if (mode === "daily") {
         if (!date) throw new Error("Pick date");
         p.set("date", date);
@@ -118,49 +182,55 @@ export function FacultyNotPostedView({
       <Card>
         <CardHeader><CardTitle>Faculty Not Posted — Query</CardTitle></CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div>
-              <Label htmlFor="faculty-notposted-college">College</Label>
-              <Select value={collegeId} onValueChange={setCollegeId}>
-                <SelectTrigger id="faculty-notposted-college">
-                  <SelectValue placeholder="Select college" />
-                </SelectTrigger>
-                <SelectContent>
-                  {["Main Campus", "East Wing", "West Wing"].map((c) => (
-                    <SelectItem key={c} value={c}>{c}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label htmlFor="faculty-notposted-dept">Department</Label>
-              <Select value={department} onValueChange={setDepartment}>
-                <SelectTrigger id="faculty-notposted-dept">
+              <Label htmlFor="faculty-notposted-department">Department</Label>
+              <Select value={selectedDepartmentId} onValueChange={setSelectedDepartmentId}>
+                <SelectTrigger id="faculty-notposted-department">
                   <SelectValue placeholder="Select department" />
                 </SelectTrigger>
                 <SelectContent>
-                  {["Computer Science", "Electronics", "Mechanical", "Civil"].map((d) => (
-                    <SelectItem key={d} value={d}>{d}</SelectItem>
+                  {departments.map((d) => (
+                    <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
+            {selectedDepartmentId && (
+              <div>
+                <Label htmlFor="faculty-notposted-course">Course</Label>
+                <Select value={selectedCourseId} onValueChange={setSelectedCourseId} disabled={isLoadingCourses}>
+                  <SelectTrigger id="faculty-notposted-course">
+                    <SelectValue placeholder={isLoadingCourses ? "Loading courses…" : "Select course"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {courses.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            {selectedCourseId && (
+              <div>
+                <Label htmlFor="faculty-notposted-faculty">Faculty</Label>
+                <Select value={selectedFacultyId} onValueChange={setSelectedFacultyId} disabled={isLoadingFaculty}>
+                  <SelectTrigger id="faculty-notposted-faculty">
+                    <SelectValue placeholder={isLoadingFaculty ? "Loading faculty…" : "Select faculty"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {faculty.map((f) => (
+                      <SelectItem key={f.facultyId} value={f.facultyId}>{f.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
-          <div className="flex items-center gap-2">
-            <Label htmlFor="faculty-notposted-fid">Faculty (click refresh to resolve)</Label>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => void loadFacultyId()}
-              disabled={!collegeId || !department || loading}
-            >
-              Resolve Faculty
-            </Button>
-          </div>
-          {facultyFacultyId && (
-            <div className="text-xs text-muted-foreground">Selected faculty: {facultyFacultyId}</div>
+          {selectedCourseId && !isLoadingFaculty && faculty.length === 0 && (
+            <p className="text-xs text-muted-foreground">No faculty found for this course.</p>
           )}
+
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label htmlFor="faculty-notposted-date">Daily date</Label>
@@ -172,7 +242,7 @@ export function FacultyNotPostedView({
               />
             </div>
             <div className="flex items-end">
-              <Button onClick={() => void load("daily")} disabled={loading}>Load Daily</Button>
+              <Button onClick={() => void load("daily")} disabled={loading || !selectedFacultyId}>Load Daily</Button>
             </div>
           </div>
           <div className="grid grid-cols-3 gap-3">
@@ -185,7 +255,7 @@ export function FacultyNotPostedView({
               <Input id="faculty-notposted-to" type="date" value={to} onChange={(e) => setTo(e.target.value)} />
             </div>
             <div className="flex items-end">
-              <Button onClick={() => void load("period")} disabled={loading}>Load Period</Button>
+              <Button onClick={() => void load("period")} disabled={loading || !selectedFacultyId}>Load Period</Button>
             </div>
           </div>
           <div className="grid grid-cols-3 gap-3">
@@ -198,20 +268,28 @@ export function FacultyNotPostedView({
               <Input id="faculty-notposted-month" value={month} onChange={(e) => setMonth(e.target.value)} placeholder="4" />
             </div>
             <div className="flex items-end">
-              <Button onClick={() => void load("month")} disabled={loading}>Load Monthly</Button>
+              <Button onClick={() => void load("month")} disabled={loading || !selectedFacultyId}>Load Monthly</Button>
             </div>
           </div>
-          <Button variant="outline" onClick={() => void load("tillNow")} disabled={loading}>
+          <Button variant="outline" onClick={() => void load("tillNow")} disabled={loading || !selectedFacultyId}>
             Load Till Now (365d cap)
           </Button>
         </CardContent>
       </Card>
 
+      {!selectedDepartmentId ? (
+        <EmptyState title="Select a department to get started" />
+      ) : !selectedCourseId ? (
+        <EmptyState title="Select a course to see its faculty" />
+      ) : !selectedFacultyId ? (
+        <EmptyState title="Select a faculty member, then pick a query above" />
+      ) : null}
+
       {data != null && loadedMode === "daily" && (() => {
         const d = data as DailyResult;
         return (
           <Card>
-            <CardHeader><CardTitle>{d.facultyName} — {d.date}</CardTitle></CardHeader>
+            <CardHeader><CardTitle>{selectedFaculty?.name ?? d.facultyName} — {d.date}</CardTitle></CardHeader>
             <CardContent className="overflow-auto">
               <table className="w-full text-sm">
                 <thead>
@@ -249,7 +327,7 @@ export function FacultyNotPostedView({
         const dates = Object.keys(d.byDate).sort();
         return (
           <Card>
-            <CardHeader><CardTitle>{d.facultyName} — Summary</CardTitle></CardHeader>
+            <CardHeader><CardTitle>{selectedFaculty?.name ?? d.facultyName} — Summary</CardTitle></CardHeader>
             <CardContent className="space-y-4 overflow-auto">
               <div className="flex flex-wrap gap-4 text-sm">
                 <span>Total periods: <strong>{d.totalPeriods}</strong></span>
