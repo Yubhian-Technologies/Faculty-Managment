@@ -87,7 +87,7 @@ test.describe("Academic Module Integration - Full Chain", () => {
   test("Step 7: Student attendance POST requires assignmentId and date", async () => {
     test.skip(!env, "missing env vars");
     const res = await ctx.post("/api/college/student-attendance", {
-      data: { assignmentId, date: "2026-09-26" },
+      data: { assignmentId: "test_assignment", date: "2026-09-26" },
     });
     expect(res.status()).toBe(400);
   });

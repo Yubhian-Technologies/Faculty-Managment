@@ -22,6 +22,8 @@ export async function GET(request: Request) {
     const departmentId = searchParams.get("departmentId");
     const semester = searchParams.get("semester");
 
+    const year = searchParams.get("year");
+
     // Need at least courseId or subjectId to narrow the query
     if (!courseId && !subjectId) {
       return NextResponse.json({ error: "courseId or subjectId is required" }, { status: 400 });
@@ -48,9 +50,7 @@ export async function GET(request: Request) {
 
     let query: FirebaseFirestore.Query;
 
-    // If subjectId is provided, query by subjectId only (to avoid
-    // Firestore composite index requirements between courseId and
-    // subjectId). The subject document already carries courseId.
+    // Single-field equality query to avoid Firestore composite index requirements
     if (subjectId) {
       query = db.collection("colleges").doc(session.collegeId)
         .collection("subjectSemesterAssignments").where("subjectId", "==", subjectId);
@@ -58,16 +58,28 @@ export async function GET(request: Request) {
       query = db.collection("colleges").doc(session.collegeId)
         .collection("subjectSemesterAssignments").where("courseId", "==", courseId);
     }
-    if (academicYear) query = query.where("academicYear", "==", academicYear);
-    if (targetDeptIds) {
-      query = query.where("departmentId", "in", targetDeptIds.slice(0, 10));
-    } else if (departmentId) {
-      query = query.where("departmentId", "==", departmentId);
-    }
-    if (semester) query = query.where("semester", "==", Number(semester));
 
     const snap = await query.get();
-    const assignments = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    let assignments = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Record<string, any>));
+
+    if (academicYear) {
+      assignments = assignments.filter((a) => !a.academicYear || a.academicYear === academicYear);
+    }
+    if (targetDeptIds && targetDeptIds.length > 0) {
+      const set = new Set(targetDeptIds);
+      assignments = assignments.filter((a) => a.departmentId && set.has(String(a.departmentId)));
+    } else if (departmentId) {
+      assignments = assignments.filter((a) => a.departmentId === departmentId);
+    }
+    if (semester != null) {
+      const semNum = Number(semester);
+      assignments = assignments.filter((a) => a.semester === semNum);
+    }
+    if (year != null) {
+      const yearNum = Number(year);
+      assignments = assignments.filter((a) => a.year == null || a.year === yearNum);
+    }
+
     return NextResponse.json({ assignments });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {

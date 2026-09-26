@@ -305,7 +305,7 @@ const effectiveSemester = semesterOptions.length === 0
       const [assignLists, subjectsLists] = await Promise.all([
         Promise.all(
           activeCourseIds.map((courseId) =>
-            fetch(`/api/college/subject-semester-assignments?courseId=${encodeURIComponent(courseId)}&semester=${effectiveSemester}`)
+            fetch(`/api/college/subject-semester-assignments?courseId=${encodeURIComponent(courseId)}&year=${encodeURIComponent(year)}&semester=${effectiveSemester}`)
               .then((r) => r.json() as Promise<{ assignments?: SubjectSemesterAssignment[] }>)
               .then((d) => d.assignments ?? [])
           )

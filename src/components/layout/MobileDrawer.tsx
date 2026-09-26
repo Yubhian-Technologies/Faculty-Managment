@@ -14,7 +14,6 @@ import { useIsSubDepartmentHod } from "@/hooks/useIsSubDepartmentHod";
 import { usePrincipalPendingHiring } from "@/hooks/usePrincipalPendingHiring";
 import { isNavItemActive, filterVisibleNavItems, isPathHidden, ROLES_WITH_EMBEDDED_PANEL_ACCESS, type NavItem } from "./navConfig";
 import { useIsTimetableIncharge } from "@/hooks/useIsTimetableIncharge";
-import { useCanSendCirculars } from "@/hooks/useCanSendCirculars";
 import { NavIcon } from "./NavIcon";
 import { WorkContextSwitcher } from "./WorkContextSwitcher";
 import { useWorkContext } from "@/hooks/useWorkContext";
@@ -46,8 +45,6 @@ export function MobileDrawer({ hiddenModules, hiddenItems }: MobileDrawerProps) 
   const { pendingCount: pendingHiringCount } = usePrincipalPendingHiring();
   const { items: contextItems, contexts } = useWorkContext();
   const { isIncharge } = useIsTimetableIncharge();
-  // Circulars tab is assignment-gated — see Sidebar.tsx / useCanSendCirculars.
-  const { canSend: canSendCirculars } = useCanSendCirculars();
 
   useEffect(() => {
     setSidebarOpen(false);
@@ -63,9 +60,6 @@ export function MobileDrawer({ hiddenModules, hiddenItems }: MobileDrawerProps) 
         if (isIncharge === null) return true;
         return isIncharge === true;
       }
-      // Circulars is delegated — hide for users without send-permission.
-      const isCircularsNav = item.href === "/hod/circulars" || item.href === "/panel/circulars";
-      if (isCircularsNav) return canSendCirculars !== false;
       return true;
     });
   let navItems = baseNavItems;

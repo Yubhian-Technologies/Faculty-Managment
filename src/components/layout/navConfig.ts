@@ -266,7 +266,6 @@ export const NAV_ITEMS: NavItem[] = [
   // (unlinked, not deleted) for any existing notification links/bookmarks.
   { label: "Attendance", href: "/hod/faculty-attendance", iconName: "ClipboardCheck", roles: ["HOD"], module: "attendance" },
   { label: "Attendance Reports", href: "/hod/attendance-reports", iconName: "CalendarRange", roles: ["HOD"], module: "attendance" },
-  { label: "Circulars", href: "/hod/circulars", iconName: "Megaphone", roles: ["HOD"] },
   { label: "Leave Profiles", href: "/hod/leave/profiles", iconName: "ClipboardList", roles: ["HOD"] },
   { label: "Budget", href: "/hod/budget", iconName: "PiggyBank", roles: ["HOD"], section: "Budget & Purchase" },
   { label: "Indents", href: "/hod/indents", iconName: "ShoppingCart", roles: ["HOD"] },
@@ -405,7 +404,6 @@ export const NAV_ITEMS: NavItem[] = [
   // Faculty Incharge's own equivalent, not offered to HOD here.
   { label: "Lab Batches", href: "/panel/students/batches", iconName: "Layers", roles: ["PANEL_MEMBER"], module: "lab-batches" },
   { label: "My Feedback", href: "/panel/feedback", iconName: "MessageSquare", roles: ["PANEL_MEMBER"] },
-  { label: "Circulars", href: "/panel/circulars", iconName: "Megaphone", roles: ["PANEL_MEMBER"] },
   { label: "Leave", href: "/panel/leave", iconName: "CalendarClock", roles: ["PANEL_MEMBER"], section: "Leave & Attendance" },
   { label: "Adjustment Requests", href: "/leave/adjustments", iconName: "UserCheck", roles: ["PANEL_MEMBER"] },
   { label: "My Attendance", href: "/panel/attendance", iconName: "ClipboardCheck", roles: ["PANEL_MEMBER"], module: "attendance" },

@@ -6,16 +6,16 @@ The academic backbone: derived academic structure (common first year vs departme
 
 ## Component & Class Structure
 
-| Component | Location | Responsibility |
-|---|---|---|
-| Academic structure | `src/lib/college/academicStructure.ts` | `getAcademicStructure` (server) / `structureFromDepartments` (callers holding the list) — **single source of truth**, inferred from departments, never stored |
-| Regulations | `src/lib/college/academicSession.ts` | `regulationsForCourseYearByBatch`, `regulationsForBatchStartYear` |
-| Semesters | `src/lib/college/semester.ts` | Semester propagation logic (unit-tested) |
-| Department scope | `src/lib/departments/scope.ts`, `hodScope.ts`, `managedBranches.ts` | HOD scope (`editable ⊃ facultyManageable ⊃ own`), one-branch-one-subdepartment rule (409 + transaction) |
-| Student cohort ops | `api/college/students/{distribute, distribute-cohort, promote}` | Share `evenSplit.ts`, `departmentHistory.ts`, `ChunkedBatch`; `dryRun` preflight |
-| Import | `api/college/students/import-excel`, `subjects/import`, `src/lib/import/` | Excel parsing (exceljs) |
-| Exams | `src/lib/exams/`, `src/types/examConfig.ts`, `examGuidelines.ts`, `midPaper.ts` | Internal marks (one batch per assignment), exam configs per course/year |
-| UI | `src/components/academics/`, `src/components/students/` | DepartmentsPanel, roster editors |
+| Component          | Location                                                                        | Responsibility                                                                                                                                                |
+| ------------------ | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Academic structure | `src/lib/college/academicStructure.ts`                                          | `getAcademicStructure` (server) / `structureFromDepartments` (callers holding the list) — **single source of truth**, inferred from departments, never stored |
+| Regulations        | `src/lib/college/academicSession.ts`                                            | `regulationsForCourseYearByBatch`, `regulationsForBatchStartYear`                                                                                             |
+| Semesters          | `src/lib/college/semester.ts`                                                   | Semester propagation logic (unit-tested)                                                                                                                      |
+| Department scope   | `src/lib/departments/scope.ts`, `hodScope.ts`, `managedBranches.ts`             | HOD scope (`editable ⊃ facultyManageable ⊃ own`), one-branch-one-subdepartment rule (409 + transaction)                                                       |
+| Student cohort ops | `api/college/students/{distribute, distribute-cohort, promote}`                 | Share `evenSplit.ts`, `departmentHistory.ts`, `ChunkedBatch`; `dryRun` preflight                                                                              |
+| Import             | `api/college/students/import-excel`, `subjects/import`, `src/lib/import/`       | Excel parsing (exceljs)                                                                                                                                       |
+| Exams              | `src/lib/exams/`, `src/types/examConfig.ts`, `examGuidelines.ts`, `midPaper.ts` | Internal marks (one batch per assignment), exam configs per course/year                                                                                       |
+| UI                 | `src/components/academics/`, `src/components/students/`                         | DepartmentsPanel, roster editors                                                                                                                              |
 
 ## Sequence Diagram — subject listing & creation (representative)
 

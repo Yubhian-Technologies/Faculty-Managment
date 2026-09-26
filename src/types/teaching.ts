@@ -96,17 +96,19 @@ export interface Subject {
 export interface SubjectSemesterAssignment {
   id: string;
   collegeId: string;
-  department: string;
+  department?: string;
+  departmentName?: string;
   departmentId?: string;
   courseId?: string;
   courseName?: string;
   regulation?: string;
+  year?: number;
   semester: number;
-  academicYear: string;
+  academicYear?: string;
   subjectId: string;
   subjectName: string;
   subjectCode: string;
-  isActive: boolean;
+  isActive?: boolean;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }

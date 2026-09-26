@@ -15,7 +15,7 @@ import { sectionDisplayLabel } from "@/lib/sections/sectionLabel";
 import { matchesCurrentSemester } from "@/lib/college/semester";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import type {
-  Course, CourseYearTiming, Department, FacultyAssignmentRequest, FacultyMember, Section, Subject, TeachingAssignment,
+  Course, CourseYearTiming, Department, FacultyAssignmentRequest, FacultyMember, Section, Subject, TeachingAssignment, SubjectSemesterAssignment,
 } from "@/types";
 
 function statusBadge(status: FacultyAssignmentRequest["status"]) {
@@ -52,7 +52,9 @@ export function TeachingAssignmentsEditor({ courseId, year, backHref }: Teaching
   const [course, setCourse] = useState<Course | null>(null);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [sections, setSections] = useState<Section[]>([]);
-  const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [masterSubjects, setMasterSubjects] = useState<Subject[]>([]);
+  const [semesterAssignments, setSemesterAssignments] = useState<SubjectSemesterAssignment[]>([]);
+  const [isLoadingSemesterAssignments, setIsLoadingSemesterAssignments] = useState(false);
   const [timings, setTimings] = useState<CourseYearTiming[]>([]);
   const [assignments, setAssignments] = useState<TeachingAssignment[]>([]);
   // `name` is the derived display name (facultyDisplayName), not a stored field.
@@ -73,7 +75,7 @@ export function TeachingAssignmentsEditor({ courseId, year, backHref }: Teaching
       fetch("/api/college/departments").then((r) => r.json() as Promise<{ departments: Department[] }>),
       fetch(`/api/college/sections?courseId=${encodeURIComponent(courseId)}&year=${encodeURIComponent(year)}`)
         .then((r) => r.json() as Promise<{ sections: Section[] }>),
-      fetch(`/api/college/subjects?courseId=${encodeURIComponent(courseId)}&year=${encodeURIComponent(year)}`)
+      fetch(`/api/college/subjects?courseId=${encodeURIComponent(courseId)}`)
         .then((r) => r.json() as Promise<{ subjects: Subject[] }>),
       fetch(`/api/college/course-year-timings?courseId=${encodeURIComponent(courseId)}`)
         .then((r) => r.json() as Promise<{ timings: CourseYearTiming[] }>),
@@ -91,7 +93,7 @@ export function TeachingAssignmentsEditor({ courseId, year, backHref }: Teaching
         setCourse(foundCourse);
         setDepartments(deptsData.departments ?? []);
         setSections((sectionsData.sections ?? []).sort((a, b) => a.name.localeCompare(b.name)));
-        setSubjects(subjectsData.subjects ?? []);
+        setMasterSubjects(subjectsData.subjects ?? []);
         setTimings((timingsData.timings ?? []).filter((t) => t.year === Number(year)));
         setAssignments(assignData.assignments ?? []);
         setAssignmentRequests(requestsData.requests ?? []);
@@ -133,6 +135,83 @@ export function TeachingAssignmentsEditor({ courseId, year, backHref }: Teaching
       ? selectedSemester
       : semesterOptions[0];
 
+  // Fetch subjects assigned to this specific semester and year by Dean Academics
+  useEffect(() => {
+    if (!courseId || effectiveSemester == null) {
+      setSemesterAssignments([]);
+      return;
+    }
+    let cancelled = false;
+    setIsLoadingSemesterAssignments(true);
+    fetch(`/api/college/subject-semester-assignments?courseId=${encodeURIComponent(courseId)}&year=${encodeURIComponent(year)}&semester=${effectiveSemester}`)
+      .then((r) => r.json() as Promise<{ assignments?: SubjectSemesterAssignment[] }>)
+      .then((d) => {
+        if (!cancelled) {
+          setSemesterAssignments(d.assignments ?? []);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setSemesterAssignments([]);
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoadingSemesterAssignments(false);
+      });
+    return () => { cancelled = true; };
+  }, [courseId, year, effectiveSemester]);
+
+  // Narrow master subjects down to ONLY subjects assigned by Dean Academics for this course, year, and semester
+  const assignedSubjects = useMemo(() => {
+    if (effectiveSemester == null) return [];
+
+    // Relevant department IDs and names for this course and its sections
+    const validDeptIds = new Set<string>();
+    if (course?.departmentId) validDeptIds.add(course.departmentId);
+    for (const s of sections) {
+      const d = departments.find((dept) => dept.name === s.department);
+      if (d) validDeptIds.add(d.id);
+    }
+    const validDeptNames = new Set<string>();
+    for (const s of sections) if (s.department) validDeptNames.add(s.department);
+    const courseDept = departments.find((d) => d.id === course?.departmentId);
+    if (courseDept) validDeptNames.add(courseDept.name);
+
+    // Filter to assignments matching this semester and year, and matching department scope
+    const matchingAssignments = semesterAssignments.filter((a) => {
+      if (a.semester !== effectiveSemester) return false;
+      if (a.year != null && a.year !== Number(year)) return false;
+      const aDeptName = a.departmentName ?? a.department;
+      if (validDeptIds.size > 0 && a.departmentId && !validDeptIds.has(a.departmentId)) {
+        if (!aDeptName || !validDeptNames.has(aDeptName)) return false;
+      }
+      return true;
+    });
+
+    const assignedSubjectIds = new Set(matchingAssignments.map((a) => a.subjectId));
+    const resolved = masterSubjects.filter((s) => assignedSubjectIds.has(s.id));
+
+    // Fallback if masterSubjects doesn't yet contain a newly assigned subject
+    const resolvedIds = new Set(resolved.map((s) => s.id));
+    for (const a of matchingAssignments) {
+      if (!resolvedIds.has(a.subjectId)) {
+        resolved.push({
+          id: a.subjectId,
+          name: a.subjectName,
+          code: a.subjectCode,
+          collegeId: a.collegeId ?? "",
+          courseId: a.courseId,
+          hoursPerWeek: 0,
+          credits: 0,
+          type: "THEORY",
+          isActive: true,
+          createdAt: a.createdAt,
+          updatedAt: a.updatedAt,
+        } as Subject);
+        resolvedIds.add(a.subjectId);
+      }
+    }
+    return resolved;
+  }, [effectiveSemester, semesterAssignments, year, course, sections, departments, masterSubjects]);
+
   // This course-year's own OUTGOING requests only - the API already scopes a
   // Timetable Incharge caller to their own sent requests, but an HOD caller
   // gets their whole department's mailbox back (incoming + every other
@@ -152,32 +231,73 @@ export function TeachingAssignmentsEditor({ courseId, year, backHref }: Teaching
     [myOutgoingRequests]
   );
 
-  const gapRows = useMemo(() => subjects.map((subject) => {
+  // Unstaffed subjects: only checks sections of the department(s) to which the subject was assigned
+  const gapRows = useMemo(() => assignedSubjects.map((subject) => {
+    const subjectDeptIds = new Set(
+      semesterAssignments
+        .filter((a) => a.subjectId === subject.id && a.semester === effectiveSemester)
+        .map((a) => a.departmentId)
+        .filter(Boolean)
+    );
+    const subjectDeptNames = new Set(
+      semesterAssignments
+        .filter((a) => a.subjectId === subject.id && a.semester === effectiveSemester)
+        .map((a) => a.departmentName ?? a.department)
+        .filter(Boolean)
+    );
+
+    const relevantSections = sections.filter((s) => {
+      if (subjectDeptIds.size === 0 && subjectDeptNames.size === 0) return true;
+      const d = departments.find((dept) => dept.name === s.department);
+      if (d && subjectDeptIds.has(d.id)) return true;
+      if (s.department && subjectDeptNames.has(s.department)) return true;
+      return false;
+    });
+
     const staffedSectionIds = new Set(
       assignments
         .filter((a) => a.subjectId === subject.id && matchesCurrentSemester(a.timetableSemester, effectiveSemester))
         .map((a) => a.sectionId)
     );
-    return { subject, unstaffedSections: sections.filter((s) => !staffedSectionIds.has(s.id)) };
-  }), [subjects, sections, assignments, effectiveSemester]);
+    return { subject, unstaffedSections: relevantSections.filter((s) => !staffedSectionIds.has(s.id)) };
+  }), [assignedSubjects, semesterAssignments, effectiveSemester, sections, departments, assignments]);
 
-  const availableSubjectsForAssign = assignForm.sectionId
-    ? (() => {
-        const selectedSection = sections.find((s) => s.id === assignForm.sectionId);
-        return subjects.filter((s) => {
-          if (selectedSection?.regulation && s.regulation && s.regulation !== selectedSection.regulation) return false;
-          if (pendingRequestKeys.has(`${assignForm.sectionId}_${s.id}`)) return false;
-          const existingForSubject = assignments.filter((a) =>
-            a.sectionId === assignForm.sectionId && a.subjectId === s.id &&
-            matchesCurrentSemester(a.timetableSemester, effectiveSemester)
-          );
-          // Only PRACTICAL (lab) subjects may be staffed twice for Batch 1 / Batch 2 half-half split.
-          // THEORY/TUTORIAL/PROJECT stay single-faculty per section.
-          if (s.type === "PRACTICAL") return existingForSubject.length < 2;
-          return existingForSubject.length === 0;
-        });
-      })()
-    : subjects;
+  // Available subjects for assignment: narrowed specifically to the chosen section's department, year, and semester
+  const availableSubjectsForAssign = useMemo(() => {
+    if (!assignForm.sectionId) return assignedSubjects;
+    const selectedSection = sections.find((s) => s.id === assignForm.sectionId);
+    if (!selectedSection) return assignedSubjects;
+
+    const sectionDept = departments.find((d) => d.name === selectedSection.department);
+    const sectionDeptId = sectionDept?.id;
+
+    const sectionAssignedSubjectIds = new Set(
+      semesterAssignments
+        .filter((a) => {
+          if (a.semester !== effectiveSemester) return false;
+          if (a.year != null && a.year !== Number(year)) return false;
+          if (sectionDeptId && a.departmentId) return a.departmentId === sectionDeptId;
+          const aDeptName = a.departmentName ?? a.department;
+          if (selectedSection.department && aDeptName) return aDeptName === selectedSection.department;
+          return true;
+        })
+        .map((a) => a.subjectId)
+    );
+
+    return assignedSubjects.filter((s) => {
+      if (!sectionAssignedSubjectIds.has(s.id)) return false;
+      if (selectedSection.regulation && s.regulation && s.regulation !== selectedSection.regulation) return false;
+      if (pendingRequestKeys.has(`${assignForm.sectionId}_${s.id}`)) return false;
+      const existingForSubject = assignments.filter((a) =>
+        a.sectionId === assignForm.sectionId && a.subjectId === s.id &&
+        matchesCurrentSemester(a.timetableSemester, effectiveSemester)
+      );
+      // Only PRACTICAL (lab) subjects may be staffed twice for Batch 1 / Batch 2 half-half split.
+      // THEORY/TUTORIAL/PROJECT stay single-faculty per section.
+      if (s.type === "PRACTICAL") return existingForSubject.length < 2;
+      return existingForSubject.length === 0;
+    });
+  }, [assignForm.sectionId, sections, departments, semesterAssignments, effectiveSemester, year, assignedSubjects, pendingRequestKeys, assignments]);
 
   // Every top-level department in the college is askable except this
   // section's own - see hod/teaching-assignments/page.tsx's own copy.
@@ -193,7 +313,7 @@ export function TeachingAssignmentsEditor({ courseId, year, backHref }: Teaching
     setSavingAssignment(true);
     try {
       const fac = faculty.find((f) => f.id === assignForm.facultyId);
-      const subj = subjects.find((s) => s.id === assignForm.subjectId);
+      const subj = assignedSubjects.find((s) => s.id === assignForm.subjectId) ?? masterSubjects.find((s) => s.id === assignForm.subjectId);
       const res = await fetch("/api/college/teaching-assignments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -306,10 +426,10 @@ export function TeachingAssignmentsEditor({ courseId, year, backHref }: Teaching
         <Card>
           <CardHeader className="pb-3"><CardTitle className="text-base">Unstaffed Subjects</CardTitle></CardHeader>
           <CardContent>
-            {isLoading ? (
+            {isLoading || isLoadingSemesterAssignments ? (
               <div className="space-y-2">{[1, 2, 3].map((i) => <div key={i} className="h-14 bg-muted animate-pulse rounded-lg" />)}</div>
-            ) : subjects.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-6">No subjects defined yet for this year.</p>
+            ) : assignedSubjects.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-6">No subjects assigned by Dean Academics for this semester yet.</p>
             ) : sections.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-6">No sections created yet for this year.</p>
             ) : (
