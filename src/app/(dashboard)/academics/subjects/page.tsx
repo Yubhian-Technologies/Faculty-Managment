@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
+import { Pagination } from "@/components/shared/Pagination";
 import { toast } from "@/hooks/useToast";
 import type { Course, CourseCatalogItem, Subject } from "@/types";
 import { SUBJECT_TYPE_LABELS } from "@/types";
@@ -29,6 +30,10 @@ export default function AcademicsSubjectsPage() {
   const [selectedAcademicYear, setSelectedAcademicYear] = useState(academicSessionLabel(currentAcademicStartYear()));
   const [currentSessionLabel, setCurrentSessionLabel] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Subject | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  useEffect(() => { setCurrentPage(1); }, [selectedCourseId, selectedAcademicYear]);
 
   useEffect(() => {
     fetch("/api/college/courses")
@@ -92,6 +97,8 @@ export default function AcademicsSubjectsPage() {
     () => Math.max(0, ...subjects.map((s) => s.serialNumber ?? 0)) + 1,
     [subjects]
   );
+  const totalPages = Math.max(1, Math.ceil(sortedSubjects.length / pageSize));
+  const paginatedSubjects = sortedSubjects.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   const loadSubjects = useCallback(async (courseId: string, academicYear: string) => {
     if (!courseId) { setSubjects([]); return; }
@@ -397,64 +404,74 @@ export default function AcademicsSubjectsPage() {
                     No subjects added yet. Select a regulation above and click Load.
                   </p>
                 ) : (
-                  <Card className="overflow-hidden">
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm">
-                        <thead className="bg-muted/50 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                          <tr>
-                            <th className="px-4 py-3">S.No.</th>
-                            <th className="px-4 py-3">Category</th>
-                            <th className="px-4 py-3">Name of the Subject</th>
-                            <th className="px-4 py-3 text-center">L</th>
-                            <th className="px-4 py-3 text-center">T</th>
-                            <th className="px-4 py-3 text-center">P</th>
-                            <th className="px-4 py-3 text-center">Credits</th>
-                            <th className="px-4 py-3" />
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y">
-                          {sortedSubjects.map((s) => (
-                            <tr key={s.id}>
-                              <td className="px-4 py-2.5">{s.serialNumber ?? "—"}</td>
-                              <td className="px-4 py-2.5">
-                                {s.category ? <Badge variant="outline" className="text-xs">{s.category === "OTHER" ? (s.customCategory || "Other") : s.category}</Badge> : "—"}
-                              </td>
-                              <td className="px-4 py-2.5">
-                                <div className="font-medium text-foreground">{s.name}</div>
-                                <div className="flex flex-wrap items-center gap-2 mt-1">
-                                  <Badge variant="secondary" className="text-xs font-mono">{s.code}</Badge>
-                                  <Badge variant="outline" className="text-xs">{SUBJECT_TYPE_LABELS[s.type]}</Badge>
-                                  {s.regulation && <Badge variant="secondary" className="text-xs">{s.regulation}</Badge>}
-                                  {s.academicYear && <Badge variant="outline" className="text-xs">{s.academicYear}</Badge>}
-                                  <span className="text-xs text-muted-foreground">{s.hoursPerWeek} hrs/week</span>
-                                </div>
-                              </td>
-                              <td className="px-4 py-2.5 text-center">{s.lectureHours ?? "—"}</td>
-                              <td className="px-4 py-2.5 text-center">{s.tutorialHours ?? "—"}</td>
-                              <td className="px-4 py-2.5 text-center">{s.practicalHours ?? "—"}</td>
-                              <td className="px-4 py-2.5 text-center">{s.credits}</td>
-                              <td className="px-4 py-2.5 text-right">
-                                <div className="flex justify-end gap-1">
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-8 w-8"
-                                    aria-label={`Edit ${s.name}`}
-                                    onClick={() => router.push(`/academics/subjects/${s.id}/edit?courseId=${selectedCourseId}&academicYear=${encodeURIComponent(selectedAcademicYear)}&regulation=${encodeURIComponent(singleRegulation)}`)}
-                                  >
-                                    <Pencil className="h-3.5 w-3.5" />
-                                  </Button>
-                                  <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" aria-label={`Delete ${s.name}`} onClick={() => setDeleteTarget(s)}>
-                                    <Trash2 className="h-3.5 w-3.5" />
-                                  </Button>
-                                </div>
-                              </td>
+                  <>
+                    <Card className="overflow-hidden">
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead className="bg-muted/50 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                            <tr>
+                              <th className="px-4 py-3">S.No.</th>
+                              <th className="px-4 py-3">Category</th>
+                              <th className="px-4 py-3">Name of the Subject</th>
+                              <th className="px-4 py-3 text-center">L</th>
+                              <th className="px-4 py-3 text-center">T</th>
+                              <th className="px-4 py-3 text-center">P</th>
+                              <th className="px-4 py-3 text-center">Credits</th>
+                              <th className="px-4 py-3" />
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </Card>
+                          </thead>
+                          <tbody className="divide-y">
+                            {paginatedSubjects.map((s) => (
+                              <tr key={s.id}>
+                                <td className="px-4 py-2.5">{s.serialNumber ?? "—"}</td>
+                                <td className="px-4 py-2.5">
+                                  {s.category ? <Badge variant="outline" className="text-xs">{s.category === "OTHER" ? (s.customCategory || "Other") : s.category}</Badge> : "—"}
+                                </td>
+                                <td className="px-4 py-2.5">
+                                  <div className="font-medium text-foreground">{s.name}</div>
+                                  <div className="flex flex-wrap items-center gap-2 mt-1">
+                                    <Badge variant="secondary" className="text-xs font-mono">{s.code}</Badge>
+                                    <Badge variant="outline" className="text-xs">{SUBJECT_TYPE_LABELS[s.type]}</Badge>
+                                    {s.regulation && <Badge variant="secondary" className="text-xs">{s.regulation}</Badge>}
+                                    {s.academicYear && <Badge variant="outline" className="text-xs">{s.academicYear}</Badge>}
+                                    <span className="text-xs text-muted-foreground">{s.hoursPerWeek} hrs/week</span>
+                                  </div>
+                                </td>
+                                <td className="px-4 py-2.5 text-center">{s.lectureHours ?? "—"}</td>
+                                <td className="px-4 py-2.5 text-center">{s.tutorialHours ?? "—"}</td>
+                                <td className="px-4 py-2.5 text-center">{s.practicalHours ?? "—"}</td>
+                                <td className="px-4 py-2.5 text-center">{s.credits}</td>
+                                <td className="px-4 py-2.5 text-right">
+                                  <div className="flex justify-end gap-1">
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-8 w-8"
+                                      aria-label={`Edit ${s.name}`}
+                                      onClick={() => router.push(`/academics/subjects/${s.id}/edit?courseId=${selectedCourseId}&academicYear=${encodeURIComponent(selectedAcademicYear)}&regulation=${encodeURIComponent(singleRegulation)}`)}
+                                    >
+                                      <Pencil className="h-3.5 w-3.5" />
+                                    </Button>
+                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" aria-label={`Delete ${s.name}`} onClick={() => setDeleteTarget(s)}>
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </Button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </Card>
+                    <Pagination
+                      page={currentPage}
+                      pageSize={pageSize}
+                      total={sortedSubjects.length}
+                      onPageChange={setCurrentPage}
+                      onPageSizeChange={setPageSize}
+                      disabled={isLoadingSubjects}
+                    />
+                  </>
                 )}
               </CardContent>
             </Card>
