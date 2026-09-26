@@ -21,13 +21,14 @@ import { toast } from "@/hooks/useToast";
 import {
   RosterFormFields, RosterDetailView, departmentsOfferingCourse, yearOptionsForDepartment, yearOptionsForCourse,
 } from "@/components/students/RosterFieldInputs";
-import { freshmanLandingDepartmentNames, type DepartmentWithId } from "@/lib/college/academicStructure";
+import { freshmanPickerDepartmentNames, type DepartmentWithId } from "@/lib/college/academicStructure";
 import {
   EDITABLE_ROSTER_FIELDS, LIST_ROSTER_FIELDS,
   rosterFieldDisplay, rosterFieldFormValue, rosterFormToPayload,
 } from "@/lib/students/rosterFields";
 import { toCSV, downloadCSV } from "@/lib/utils/csv";
 import { GraduatedStudentsView } from "@/components/students/GraduatedStudentsView";
+import { StudentPromotionsPanel } from "@/components/students/StudentPromotionsPanel";
 import type { StudentListItem, Department, AcademicYear, Course } from "@/types";
 
 // The Add and Edit forms collect every field the roster import collects, in the
@@ -52,9 +53,13 @@ const SEARCH_DEBOUNCE_MS = 350;
 // Graduated Students used to be its own sidebar entry (/college-office/graduates);
 // it now lives here as a sub-tab (top-right pill), matching the pattern
 // principal/students already uses - see PrincipalStudentsPage. The old route
-// still works standalone for any existing bookmarks/links.
+// still works standalone for any existing bookmarks/links. Promotion is the
+// same StudentPromotionsPanel Principal/VP use (POST /api/college/students/promote,
+// which now also accepts COLLEGE_OFFICE) - College Office runs the cohort
+// promotion/graduation itself rather than asking Principal to.
 const STUDENT_TABS = [
   { key: "roster", label: "All Students" },
+  { key: "promotion", label: "Promotion" },
   { key: "graduates", label: "Graduated" },
 ] as const;
 type StudentTabKey = (typeof STUDENT_TABS)[number]["key"];
@@ -469,7 +474,7 @@ export default function OfficeStudentsPage() {
     // department with a Core Department named - same rule RosterFieldInputs
     // already steers the pickers toward and the server enforces on submit.
     if (!editTarget && form.year === "1") {
-      const freshmanNames = freshmanLandingDepartmentNames(departments as DepartmentWithId[]);
+      const freshmanNames = freshmanPickerDepartmentNames(departments as DepartmentWithId[]);
       if (freshmanNames.size > 0 && !freshmanNames.has(form.department)) {
         toast({ variant: "destructive", title: `"${form.department}" is a real branch - set it as Core Department instead of Department for a 1st Year student` });
         return;
@@ -584,7 +589,13 @@ export default function OfficeStudentsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Students"
-        description={activeTab === "graduates" ? "Every student who has completed their programme" : undefined}
+        description={
+          activeTab === "promotion"
+            ? "Move a cohort to the next year"
+            : activeTab === "graduates"
+            ? "Every student who has completed their programme"
+            : undefined
+        }
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex items-center gap-1.5">
@@ -616,7 +627,9 @@ export default function OfficeStudentsPage() {
         }
       />
 
-      {activeTab === "graduates" ? (
+      {activeTab === "promotion" ? (
+        <StudentPromotionsPanel showHeader={false} />
+      ) : activeTab === "graduates" ? (
         <GraduatedStudentsView showHeader={false} />
       ) : (
         <>

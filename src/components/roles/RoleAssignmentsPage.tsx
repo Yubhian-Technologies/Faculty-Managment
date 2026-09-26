@@ -141,7 +141,10 @@ export function RoleAssignmentsPage({ collegeId }: { collegeId?: string }) {
                           <UserCog className="h-3.5 w-3.5 mr-1" />{seat.holderUid ? "Change" : "Assign"}
                         </Button>
                       )}
-                      {canAssign() && seat.holderUid && (
+                      {/* Library has no Vacate - it's a shared/office seat that
+                          should always have someone in it; use Change to hand
+                          it to someone else instead of emptying it. */}
+                      {canAssign() && seat.holderUid && seat.role !== "LIBRARY" && (
                         <Button size="sm" variant="ghost" onClick={() => setVacateSeat(seat)}>
                           <UserMinus className="h-3.5 w-3.5 mr-1" />Vacate
                         </Button>

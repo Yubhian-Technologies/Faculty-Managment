@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { FreshmanDepartmentBadge } from "@/components/shared/FreshmanDepartmentBadge";
 import { toast } from "@/hooks/useToast";
 import { useMyDepartments } from "@/hooks/useMyDepartments";
@@ -627,32 +628,25 @@ export default function HODSectionsPage() {
         </div>
       )}
 
-      {/* Course filter tabs */}
+      {/* Course filter - a dropdown rather than one pill per course, so this
+          row stays compact as the college's course catalog grows. Picking
+          any value (including "All Courses") resets Year/Branch the same way
+          every option here always has. */}
       {courses.length > 0 && (
-        <div className="flex gap-2 flex-wrap">
-          <button
-            onClick={() => { setActiveCourseKey("all"); setActiveYear("all"); setSecondaryDeptFilter(null); }}
-            className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
-              activeCourseKey === "all"
-                ? "bg-primary text-primary-foreground border-primary"
-                : "bg-background border-border hover:bg-muted"
-            }`}
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-medium text-muted-foreground">Course:</span>
+          <Select
+            value={activeCourseKey}
+            onValueChange={(v) => { setActiveCourseKey(v); setActiveYear("all"); setSecondaryDeptFilter(null); }}
           >
-            All Courses
-          </button>
-          {courseGroups.map((g) => (
-            <button
-              key={g.key}
-              onClick={() => { setActiveCourseKey(g.key); setActiveYear("all"); setSecondaryDeptFilter(null); }}
-              className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
-                activeCourseKey === g.key
-                  ? "bg-primary text-primary-foreground border-primary"
-                  : "bg-background border-border hover:bg-muted"
-              }`}
-            >
-              {g.name}
-            </button>
-          ))}
+            <SelectTrigger className="w-64"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Courses</SelectItem>
+              {courseGroups.map((g) => (
+                <SelectItem key={g.key} value={g.key}>{g.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       )}
 
@@ -691,110 +685,68 @@ export default function HODSectionsPage() {
         </div>
       )}
 
-      {/* Department / branch filter tabs. Two shapes:
-          - Main/common HOD (useCascadeFilter): Sub-Department chips only - never
-            the common department or a sub-department itself, since neither owns
-            sections directly. Picking a sub-department reveals a second row of
-            just the real branches it manages (e.g. BS-Maths -> IT, CSBS).
+      {/* Department / branch filter - dropdown(s) rather than one pill per
+          department, so this row stays compact as more departments/branches
+          get added. Two shapes, same as before pills:
+          - Main/common HOD (useCascadeFilter): a Sub-Department dropdown -
+            never the common department or a sub-department itself, since
+            neither owns sections directly. Picking a grouping sub-department
+            reveals a second Branch dropdown, just the real branches it
+            manages (e.g. BS-Maths -> IT, CSBS) - this only appears once the
+            first is picked, i.e. course, then department, then branch.
           - Everyone else (plain HOD, or a Sub-HOD logged in directly): the
-            existing flat row - own department plus every branch grouped under
-            them, so a Sub-HOD can jump between the departments assigned to
-            them (All, CSE, IT, ...). */}
+            existing flat dropdown - own department plus every branch grouped
+            under them, so a Sub-HOD can jump between the departments assigned
+            to them (All, CSE, IT, ...). */}
       {useCascadeFilter ? (
         <>
-          <div className="flex gap-2 flex-wrap">
-            <button
-              onClick={() => { setSubDeptFilter(null); setDeptFilter("all"); }}
-              className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
-                subDeptFilter === null && deptFilter === "all"
-                  ? "bg-primary text-primary-foreground border-primary"
-                  : "bg-background border-border hover:bg-muted"
-              }`}
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium text-muted-foreground">Department:</span>
+            <Select
+              value={subDeptFilter ?? deptFilter}
+              onValueChange={(v) => {
+                if (v === "all") { setSubDeptFilter(null); setDeptFilter("all"); return; }
+                if (plainChildren.some((c) => c.name === v)) { setSubDeptFilter(null); setDeptFilter(v); return; }
+                setSubDeptFilter(v); setDeptFilter("all");
+              }}
             >
-              All Departments
-            </button>
-            {plainChildren.map((c) => (
-              <button
-                key={c.id}
-                onClick={() => { setSubDeptFilter(null); setDeptFilter(c.name); }}
-                className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
-                  deptFilter === c.name
-                    ? "bg-primary text-primary-foreground border-primary"
-                    : "bg-background border-border hover:bg-muted"
-                }`}
-              >
-                {c.name}
-              </button>
-            ))}
-            {groupingChildren.map((c) => (
-              <button
-                key={c.id}
-                onClick={() => { setSubDeptFilter(c.name); setDeptFilter("all"); }}
-                className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
-                  subDeptFilter === c.name
-                    ? "bg-primary text-primary-foreground border-primary"
-                    : "bg-background border-border hover:bg-muted"
-                }`}
-              >
-                {c.name}
-              </button>
-            ))}
+              <SelectTrigger className="w-64"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Departments</SelectItem>
+                {plainChildren.map((c) => <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>)}
+                {groupingChildren.map((c) => <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
           </div>
 
           {subDeptFilter && (
-            <div className="flex gap-2 flex-wrap">
-              <button
-                onClick={() => setDeptFilter("all")}
-                className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
-                  deptFilter === "all"
-                    ? "bg-primary text-primary-foreground border-primary"
-                    : "bg-background border-border hover:bg-muted"
-                }`}
-              >
-                All {subDeptFilter}
-              </button>
-              {Array.from(subDeptBranchNames ?? []).sort().map((name) => (
-                <button
-                  key={name}
-                  onClick={() => setDeptFilter(name)}
-                  className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
-                    deptFilter === name
-                      ? "bg-primary text-primary-foreground border-primary"
-                      : "bg-background border-border hover:bg-muted"
-                  }`}
-                >
-                  {name}
-                </button>
-              ))}
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-medium text-muted-foreground">Branch:</span>
+              <Select value={deptFilter} onValueChange={setDeptFilter}>
+                <SelectTrigger className="w-64"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All {subDeptFilter}</SelectItem>
+                  {Array.from(subDeptBranchNames ?? []).sort().map((name) => (
+                    <SelectItem key={name} value={name}>{name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           )}
         </>
       ) : (
         scopeDepartments.length > 1 && (
-          <div className="flex gap-2 flex-wrap">
-            <button
-              onClick={() => setDeptFilter("all")}
-              className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
-                deptFilter === "all"
-                  ? "bg-primary text-primary-foreground border-primary"
-                  : "bg-background border-border hover:bg-muted"
-              }`}
-            >
-              All Departments
-            </button>
-            {scopeDepartments.map((d) => (
-              <button
-                key={d}
-                onClick={() => setDeptFilter(d)}
-                className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
-                  deptFilter === d
-                    ? "bg-primary text-primary-foreground border-primary"
-                    : "bg-background border-border hover:bg-muted"
-                }`}
-              >
-                {d}{freshmanDeptNames.has(d) ? " · Freshman's Dept" : ""}
-              </button>
-            ))}
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium text-muted-foreground">Department:</span>
+            <Select value={deptFilter} onValueChange={setDeptFilter}>
+              <SelectTrigger className="w-64"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Departments</SelectItem>
+                {scopeDepartments.map((d) => (
+                  <SelectItem key={d} value={d}>{d}{freshmanDeptNames.has(d) ? " · Freshman's Dept" : ""}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         )
       )}

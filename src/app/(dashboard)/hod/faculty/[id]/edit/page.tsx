@@ -19,7 +19,7 @@ import { toast } from "@/hooks/useToast";
 import { migrateFacultyDoc } from "@/lib/faculty/fieldRenames";
 import { toDateInputValue } from "@/lib/utils";
 import { designationLabel } from "@/lib/designations/config";
-import { EMPLOYEE_CATEGORY_LABELS, FACULTY_STATUS_LABELS, SELECTABLE_FACULTY_STATUS_VALUES, FACULTY_STATUS_DATE_FIELD, FACULTY_STATUS_DATE_LABELS } from "@/types";
+import { EMPLOYEE_CATEGORY_LABELS, FACULTY_STATUS_LABELS, MANUALLY_SELECTABLE_FACULTY_STATUS_VALUES, FACULTY_STATUS_DATE_FIELD, FACULTY_STATUS_DATE_LABELS } from "@/types";
 import type { DesignationCatalogItem, Designation, EmployeeCategory, FacultyStatus } from "@/types";
 
 // Sentinel for the "Others" row - matches hod/faculty/new/page.tsx's own
@@ -319,9 +319,16 @@ export default function EditHodFacultyIdentityPage() {
                 <Select value={form.status} onValueChange={(v) => set({ status: v as FacultyStatus })}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {SELECTABLE_FACULTY_STATUS_VALUES.map((s) => (
+                    {MANUALLY_SELECTABLE_FACULTY_STATUS_VALUES.map((s) => (
                       <SelectItem key={s} value={s}>{FACULTY_STATUS_LABELS[s]}</SelectItem>
                     ))}
+                    {/* On Leave can no longer be picked manually (see its own
+                        status option, set only by the Leave module) - but an
+                        already on-leave record must still show and keep its
+                        real value here rather than going blank. */}
+                    {form.status === "ON_LEAVE" && (
+                      <SelectItem value="ON_LEAVE">{FACULTY_STATUS_LABELS.ON_LEAVE}</SelectItem>
+                    )}
                   </SelectContent>
                 </Select>
               </div>
