@@ -33,7 +33,15 @@ export default function AcademicsSubjectsPage() {
   useEffect(() => {
     fetch("/api/college/courses")
       .then((r) => r.json() as Promise<{ courses: Course[] }>)
-      .then((d) => setCourses((d.courses ?? []).filter((c) => c.isActive)))
+      .then((d) => {
+        const active = (d.courses ?? []).filter((c) => c.isActive);
+        const byCatalog = new Map<string, Course>();
+        for (const c of active) {
+          const key = c.catalogId ?? `name:${c.name.trim().toLowerCase()}`;
+          if (!byCatalog.has(key)) byCatalog.set(key, c);
+        }
+        setCourses(Array.from(byCatalog.values()).sort((a, b) => a.name.localeCompare(b.name)));
+      })
       .catch(() => toast({ variant: "destructive", title: "Failed to load courses" }))
       .finally(() => setIsLoading(false));
 
