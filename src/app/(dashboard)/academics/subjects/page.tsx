@@ -27,6 +27,7 @@ export default function AcademicsSubjectsPage() {
   const [isLoadingSubjects, setIsLoadingSubjects] = useState(false);
 
   const [selectedCourseId, setSelectedCourseId] = useState("");
+  const [selectedRegulation, setSelectedRegulation] = useState("");
   const [selectedAcademicYear, setSelectedAcademicYear] = useState(academicSessionLabel(currentAcademicStartYear()));
   const [currentSessionLabel, setCurrentSessionLabel] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Subject | null>(null);
@@ -100,13 +101,14 @@ export default function AcademicsSubjectsPage() {
   const totalPages = Math.max(1, Math.ceil(sortedSubjects.length / pageSize));
   const paginatedSubjects = sortedSubjects.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
-  const loadSubjects = useCallback(async (courseId: string, academicYear: string) => {
+  const loadSubjects = useCallback(async (courseId: string, academicYear: string, regulation: string) => {
     if (!courseId) { setSubjects([]); return; }
     setIsLoadingSubjects(true);
     try {
       const regulationsParam = allowedRegulations.length ? `&regulations=${encodeURIComponent(allowedRegulations.join(","))}` : "";
+      const regulationParam = regulation ? `&regulation=${encodeURIComponent(regulation)}` : "";
       const res = await fetch(
-        `/api/college/subjects?courseId=${encodeURIComponent(courseId)}${regulationsParam}${academicYear ? `&academicYear=${encodeURIComponent(academicYear)}` : ""}`
+        `/api/college/subjects?courseId=${encodeURIComponent(courseId)}${regulationsParam}${regulationParam}${academicYear ? `&academicYear=${encodeURIComponent(academicYear)}` : ""}`
       );
       const data = await res.json() as { subjects: Subject[]; academicYears?: string[] };
       setSessionsWithSubjects(data.academicYears ?? []);
@@ -120,10 +122,10 @@ export default function AcademicsSubjectsPage() {
 
   useEffect(() => {
     if (selectedCourseId) {
-      void loadSubjects(selectedCourseId, selectedAcademicYear);
+      void loadSubjects(selectedCourseId, selectedAcademicYear, selectedRegulation);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedCourseId, selectedAcademicYear, allowedRegulations.join(","), loadSubjects]);
+  }, [selectedCourseId, selectedAcademicYear, selectedRegulation, allowedRegulations.join(","), loadSubjects]);
 
   const regulationsKey = allowedRegulations.join(",");
   const hasRestoredRef = useRef(false);
@@ -132,15 +134,18 @@ export default function AcademicsSubjectsPage() {
     hasRestoredRef.current = true;
     const courseId = searchParams.get("courseId");
     const academicYear = searchParams.get("academicYear") || selectedAcademicYear;
+    const regulation = searchParams.get("regulation") || "";
     if (!courseId) return;
     if (courses.some((c) => c.id === courseId)) {
       setSelectedCourseId(courseId);
       setSelectedAcademicYear(academicYear);
+      if (regulation) setSelectedRegulation(regulation);
     }
   }, [isLoading, courses, searchParams, loadSubjects, selectedAcademicYear]);
 
   function selectCourse(courseId: string) {
     setSelectedCourseId(courseId);
+    setSelectedRegulation("");
     setSubjects([]);
   }
 
@@ -151,7 +156,7 @@ export default function AcademicsSubjectsPage() {
       const json = await res.json() as { error?: string };
       if (!res.ok) throw new Error(json.error ?? "Failed to delete subject");
       toast({ variant: "success", title: `${deleteTarget.name} removed` });
-      await loadSubjects(selectedCourseId, selectedAcademicYear);
+      await loadSubjects(selectedCourseId, selectedAcademicYear, selectedRegulation);
     } catch (err) {
       toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to delete subject" });
     } finally {
@@ -257,7 +262,7 @@ export default function AcademicsSubjectsPage() {
             {
               children: [
                 new Paragraph({ text: selectedCourse.name, heading: HeadingLevel.HEADING_2, alignment: AlignmentType.CENTER }),
-                new Paragraph({ text: `Regulation: ${allowedRegulations.join(", ") || "None"} · Academic Year: ${selectedAcademicYear}`, alignment: AlignmentType.CENTER }),
+                new Paragraph({ text: `Regulation: ${selectedRegulation || allowedRegulations.join(", ") || "None"} · Academic Year: ${selectedAcademicYear}`, alignment: AlignmentType.CENTER }),
                 new Paragraph({ text: "" }),
                 table,
               ],
@@ -328,17 +333,27 @@ export default function AcademicsSubjectsPage() {
               </div>
               <div className="space-y-1.5">
                 <Label>Regulation</Label>
-                <div className="flex h-9 items-center gap-1.5 rounded-md border bg-muted/30 px-3 flex-wrap">
-                  {!selectedCourseId ? (
-                    <span className="text-sm text-muted-foreground">Pick a course first</span>
-                  ) : allowedRegulations.length === 0 ? (
-                    <span className="text-sm text-muted-foreground">None assigned</span>
-                  ) : (
-                    allowedRegulations.map((r) => (
-                      <Badge key={r} variant="secondary" className="text-xs">{r}</Badge>
-                    ))
-                  )}
-                </div>
+                <Select value={selectedRegulation} onValueChange={setSelectedRegulation}>
+                  <SelectTrigger>
+                    <SelectValue placeholder={
+                      !selectedCourseId ? "Pick a course first" :
+                      allowedRegulations.length === 0 ? "None assigned" :
+                      selectedRegulation || "All regulations"
+                    } />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {allowedRegulations.length === 0 ? (
+                      <SelectItem value="">None assigned</SelectItem>
+                    ) : (
+                      <>
+                        <SelectItem value="">All regulations</SelectItem>
+                        {allowedRegulations.map((r) => (
+                          <SelectItem key={r} value={r}>{r}</SelectItem>
+                        ))}
+                      </>
+                    )}
+                  </SelectContent>
+                </Select>
               </div>
             </CardContent>
           </Card>
@@ -372,24 +387,24 @@ export default function AcademicsSubjectsPage() {
                     >
                       <History className="h-4 w-4 mr-2" />History
                     </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => void loadSubjects(selectedCourseId, selectedAcademicYear)}
-                    >
-                      <RefreshCw className="h-4 w-4 mr-2" />Load
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => router.push(`/academics/subjects/import?courseId=${selectedCourseId}`)}
-                    >
-                      <Upload className="h-4 w-4 mr-2" />Import Subjects
-                    </Button>
-                    <Button
-                      size="sm"
-                      onClick={() => router.push(`/academics/subjects/new?courseId=${selectedCourseId}&academicYear=${encodeURIComponent(selectedAcademicYear)}&regulation=${encodeURIComponent(singleRegulation)}&nextSerialNumber=${nextSerialNumber}&catalogId=${encodeURIComponent(selectedCourse.catalogId ?? "")}`)}
-                    >
+                     <Button
+                       size="sm"
+                       variant="outline"
+                       onClick={() => void loadSubjects(selectedCourseId, selectedAcademicYear, selectedRegulation)}
+                     >
+                       <RefreshCw className="h-4 w-4 mr-2" />Load
+                     </Button>
+                     <Button
+                       size="sm"
+                       variant="outline"
+                       onClick={() => router.push(`/academics/subjects/import?courseId=${selectedCourseId}`)}
+                     >
+                       <Upload className="h-4 w-4 mr-2" />Import Subjects
+                     </Button>
+                     <Button
+                       size="sm"
+                       onClick={() => router.push(`/academics/subjects/new?courseId=${selectedCourseId}&academicYear=${encodeURIComponent(selectedAcademicYear)}&regulation=${encodeURIComponent(selectedRegulation || singleRegulation)}&nextSerialNumber=${nextSerialNumber}&catalogId=${encodeURIComponent(selectedCourse.catalogId ?? "")}`)}
+                     >
                       <Plus className="h-4 w-4 mr-2" />Add Subject
                     </Button>
                   </div>
@@ -399,11 +414,13 @@ export default function AcademicsSubjectsPage() {
                   <div className="space-y-2">
                     {[1, 2, 3].map((i) => <div key={i} className="h-16 rounded-lg border bg-muted/30 animate-pulse" />)}
                   </div>
-                ) : subjects.length === 0 ? (
-                  <p className="text-sm text-muted-foreground py-6 text-center">
-                    No subjects added yet. Select a regulation above and click Load.
-                  </p>
-                ) : (
+                 ) : subjects.length === 0 ? (
+                   <p className="text-sm text-muted-foreground py-6 text-center">
+                     {selectedRegulation
+                       ? `No subjects found for ${selectedRegulation}. Add one above.`
+                       : "No subjects added yet. Select a regulation above and click Load."}
+                   </p>
+                 ) : (
                   <>
                     <Card className="overflow-hidden">
                       <div className="overflow-x-auto">
@@ -448,7 +465,7 @@ export default function AcademicsSubjectsPage() {
                                       size="icon"
                                       className="h-8 w-8"
                                       aria-label={`Edit ${s.name}`}
-                                      onClick={() => router.push(`/academics/subjects/${s.id}/edit?courseId=${selectedCourseId}&academicYear=${encodeURIComponent(selectedAcademicYear)}&regulation=${encodeURIComponent(singleRegulation)}`)}
+                                       onClick={() => router.push(`/academics/subjects/${s.id}/edit?courseId=${selectedCourseId}&academicYear=${encodeURIComponent(selectedAcademicYear)}&regulation=${encodeURIComponent(selectedRegulation || singleRegulation)}`)}
                                     >
                                       <Pencil className="h-3.5 w-3.5" />
                                     </Button>
