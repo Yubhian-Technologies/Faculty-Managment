@@ -302,20 +302,15 @@ const effectiveSemester = semesterOptions.length === 0
     semesterFilteredKeys.current.add(filterKey);
     const catalogId = course.catalogId;
     void (async () => {
-      const departmentIds = Array.from(new Set(
-        activeCourseIds
-          .map((cId) => courses.find((c) => c.id === cId)?.departmentId)
-          .filter((id): id is string => !!id)
-      ));
       const [assignLists, subjectsData] = await Promise.all([
         Promise.all(
-          departmentIds.map((deptId) =>
-            fetch(`/api/college/subject-semester-assignments?catalogId=${encodeURIComponent(catalogId)}&year=${year}&departmentId=${encodeURIComponent(deptId)}&semester=${effectiveSemester}`)
+          activeCourseIds.map((courseId) =>
+            fetch(`/api/college/subject-semester-assignments?courseId=${encodeURIComponent(courseId)}&semester=${effectiveSemester}`)
               .then((r) => r.json() as Promise<{ assignments?: SubjectSemesterAssignment[] }>)
               .then((d) => d.assignments ?? [])
           )
         ),
-        fetch(`/api/college/subjects?catalogId=${encodeURIComponent(catalogId)}&year=${year}`)
+        fetch(`/api/college/subjects?courseId=${encodeURIComponent(course.id)}`)
           .then((r) => r.json() as Promise<{ subjects?: Subject[] }>),
       ]);
       const assignedIds = new Set(assignLists.flat().map((a) => a.subjectId));
