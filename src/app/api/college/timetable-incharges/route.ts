@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodEditDepartmentId } from "@/lib/departments/scope";
+import { findBranchManager, type DepartmentYearRow } from "@/lib/departments/managedBranches";
 import { timetableInchargeDocId } from "@/lib/departments/timetableIncharge";
 import type { TimetableIncharge } from "@/types";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
@@ -76,18 +77,34 @@ export async function GET(request: Request) {
 // Assigns/re-assigns - setting a new uid for a course-year that already has
 // one just overwrites it (the previous Incharge simply loses access, same as
 // any other permission change - nothing about their past edits is undone).
+//
+// `courseIds` (plural) is the shared-first-year form: a sub-department (e.g.
+// "BASIC SCIENCE ENGLISH") manages several branches' own Year-1 course docs
+// (e.g. "data science", "machine learning" - see Department.managedDepartments/
+// findBranchManager), each with its OWN Course doc and its OWN
+// TimetableIncharge doc (isTimetableIncharge stays keyed by courseId+year for
+// every existing write-route check) - but the HOD picking one person to cover
+// that whole sub-department shouldn't have to repeat this dialog once per
+// branch. One request writes one doc per courseId, all pointing at the same
+// person. `courseId` (singular) is kept for a plain, non-shared course-year -
+// behaviorally identical to passing `courseIds: [courseId]`, minus the
+// same-owner-department relaxation below (a person there must belong to the
+// course's own department, exactly as before).
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");
     const body = (await request.json()) as {
-      courseId?: string; year?: number; personId?: string; personType?: "FACULTY" | "SUPPORTING_STAFF";
+      courseId?: string; courseIds?: string[]; year?: number; personId?: string; personType?: "FACULTY" | "SUPPORTING_STAFF";
     };
-    const courseId = body.courseId?.trim();
+    const courseIds = (body.courseIds?.length ? body.courseIds : body.courseId ? [body.courseId] : [])
+      .map((c) => c.trim())
+      .filter(Boolean);
+    const isBatch = Boolean(body.courseIds?.length);
     const year = body.year;
     const personId = body.personId?.trim();
     const personType = body.personType;
-    if (!courseId || !year || !personId || !personType) {
-      return NextResponse.json({ error: "courseId, year, personId and personType are required" }, { status: 400 });
+    if (courseIds.length === 0 || !year || !personId || !personType) {
+      return NextResponse.json({ error: "courseId(s), year, personId and personType are required" }, { status: 400 });
     }
 
     const db = getAdminDb();
@@ -99,43 +116,81 @@ export async function POST(request: Request) {
     // applies the same restriction) - both are department-scoped rosters an
     // HOD already manages, so either is a legitimate Timetable Incharge.
     const personColl = personType === "FACULTY" ? "facultyMembers" : "supportingStaff";
-    const [courseSnap, personSnap] = await Promise.all([
-      collegeRef.collection("courses").doc(courseId).get(),
+    const [courseSnaps, personSnap, departmentsSnap] = await Promise.all([
+      Promise.all(courseIds.map((id) => collegeRef.collection("courses").doc(id).get())),
       collegeRef.collection(personColl).doc(personId).get(),
+      collegeRef.collection("departments").get(),
     ]);
-    if (!courseSnap.exists) return NextResponse.json({ error: "Course not found" }, { status: 404 });
+    const missingCourse = courseSnaps.findIndex((s) => !s.exists);
+    if (missingCourse !== -1) return NextResponse.json({ error: "Course not found" }, { status: 404 });
     if (!personSnap.exists) return NextResponse.json({ error: "That person was not found" }, { status: 404 });
 
-    const course = courseSnap.data() as { name: string; departmentId: string };
+    const courses = courseSnaps.map((s) => ({ id: s.id, ...(s.data() as { name: string; departmentId: string; catalogId?: string }) }));
     const person = personSnap.data() as {
       name?: string; legalName?: string; department?: string; userUid?: string; staffCategory?: string;
     };
+    const departments = departmentsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<DepartmentYearRow, "id">) }));
+    const departmentById = new Map(departments.map((d) => [d.id, d]));
 
     if (personType === "SUPPORTING_STAFF" && person.staffCategory !== "TECHNICAL") {
       return NextResponse.json({ error: "Only Technical supporting staff can be made Timetable Incharge" }, { status: 400 });
     }
 
     if (session.role === "HOD") {
-      // course.departmentId is already explicit, so authorize against the
-      // HOD's FULL scope (every department they actually head), not just
-      // whichever one is currently active in the Working-as switcher -
-      // otherwise assigning an Incharge for a course in the HOD's OTHER
-      // department fails purely because the switcher happens to be parked
-      // elsewhere. See getHodDepartmentScope's activeOnly option.
+      // Each course's departmentId is already explicit, so authorize against
+      // the HOD's FULL scope (every department they actually head, including
+      // managed branches), not just whichever one is currently active in the
+      // Working-as switcher - otherwise assigning an Incharge for a course in
+      // the HOD's OTHER department fails purely because the switcher happens
+      // to be parked elsewhere. See getHodDepartmentScope's activeOnly option.
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid, { activeOnly: false });
-      if (!canHodEditDepartmentId(scope, course.departmentId)) {
+      const unauthorized = courses.find((c) => !canHodEditDepartmentId(scope, c.departmentId));
+      if (unauthorized) {
         return NextResponse.json({ error: "This course isn't in your department or one of your sub-departments" }, { status: 403 });
       }
     }
-    // The person must belong to the exact same department as the course -
-    // unlike Teaching Assignments (which allows a sub-department's specialist
-    // onto a parent-owned section), Timetable Incharge is a straightforward
-    // "someone in this department" delegation, matching how the HOD picks
-    // them (a plain department roster dropdown, no cascade).
-    const departmentSnap = await collegeRef.collection("departments").doc(course.departmentId).get();
-    const departmentName = (departmentSnap.data() as { name?: string } | undefined)?.name;
-    if (person.department !== departmentName) {
-      return NextResponse.json({ error: "That person isn't in this course's department" }, { status: 400 });
+
+    // Single-course callers keep the original strict rule: the person must
+    // belong to the exact same department as the course - unlike Teaching
+    // Assignments (which allows a sub-department's specialist onto a
+    // parent-owned section), Timetable Incharge is normally a straightforward
+    // "someone in this department" delegation, no cascade.
+    //
+    // A batch call is different by construction: every branch course here
+    // shares ONE managing sub-department (that's the whole point of grouping
+    // them). `ownerName` resolves to that shared manager (findBranchManager) -
+    // or, for a standalone branch with no manager, its own name, same as the
+    // non-batch rule. Every course in the batch must resolve to the SAME
+    // owner, or the batch doesn't actually represent one coherent unit. The
+    // person, in turn, may belong to that owning sub-department itself, to
+    // any one of the branches it manages (`branchNames` - e.g. "data
+    // science", "machine learning"), OR to the owner's own PARENT department
+    // (e.g. "BASIC SCIENCE") - a sub-department rarely has much of its own
+    // dedicated roster; most of its faculty commonly sit at the parent
+    // instead (see the Faculty Register's "Sub-Department HODs" grouping).
+    let ownerName: string | undefined;
+    let ownerDept: DepartmentYearRow | undefined;
+    const branchNames = new Set<string>();
+    for (const c of courses) {
+      const deptName = departmentById.get(c.departmentId)?.name;
+      if (!deptName) return NextResponse.json({ error: "Course department not found" }, { status: 404 });
+      branchNames.add(deptName);
+      const manager = isBatch ? findBranchManager(departments, deptName, c.catalogId) : null;
+      const resolved = manager?.department.name ?? deptName;
+      if (ownerName === undefined) {
+        ownerName = resolved;
+        ownerDept = manager?.department ?? departmentById.get(c.departmentId);
+      } else if (ownerName !== resolved) {
+        return NextResponse.json({ error: "These courses don't share one managing department" }, { status: 400 });
+      }
+    }
+    const ownerParentName = ownerDept?.parentDepartmentId ? departmentById.get(ownerDept.parentDepartmentId)?.name : undefined;
+    const eligibleNames = new Set([ownerName, ...(isBatch ? branchNames : []), ...(isBatch && ownerParentName ? [ownerParentName] : [])]);
+    if (!person.department || !eligibleNames.has(person.department)) {
+      return NextResponse.json(
+        { error: isBatch ? "That person isn't in this sub-department, its parent department, or one of the branches it manages" : "That person isn't in this course's department" },
+        { status: 400 },
+      );
     }
     if (!person.userUid) {
       return NextResponse.json({ error: "That person has no login yet - they can't be made Timetable Incharge" }, { status: 400 });
@@ -143,28 +198,31 @@ export async function POST(request: Request) {
 
     const assignerSnap = await collegeRef.collection("users").doc(session.uid).get();
     const assignerName = (assignerSnap.data() as { name?: string } | undefined)?.name ?? "";
+    const facultyName = personType === "FACULTY" ? facultyDisplayName(person) : (person.name ?? "");
 
     const now = new Date();
-    const id = timetableInchargeDocId(courseId, year);
-    const ref = collegeRef.collection("timetableIncharges").doc(id);
-    const existing = await ref.get();
-    await ref.set({
-      collegeId: session.collegeId,
-      departmentId: course.departmentId,
-      departmentName: departmentName ?? person.department ?? "",
-      courseId,
-      courseName: course.name,
-      year: Number(year),
-      uid: person.userUid,
-      // Faculty: legalName (facultyDisplayName); Supporting Staff keep their own `name`.
-      facultyName: personType === "FACULTY" ? facultyDisplayName(person) : (person.name ?? ""),
-      assignedBy: session.uid,
-      assignedByName: assignerName,
-      updatedAt: now,
-      ...(existing.exists ? {} : { createdAt: now }),
-    }, { merge: true });
+    const ids = await Promise.all(courses.map(async (c) => {
+      const id = timetableInchargeDocId(c.id, year);
+      const ref = collegeRef.collection("timetableIncharges").doc(id);
+      const existing = await ref.get();
+      await ref.set({
+        collegeId: session.collegeId,
+        departmentId: c.departmentId,
+        departmentName: departmentById.get(c.departmentId)?.name ?? person.department ?? "",
+        courseId: c.id,
+        courseName: c.name,
+        year: Number(year),
+        uid: person.userUid,
+        facultyName,
+        assignedBy: session.uid,
+        assignedByName: assignerName,
+        updatedAt: now,
+        ...(existing.exists ? {} : { createdAt: now }),
+      }, { merge: true });
+      return id;
+    }));
 
-    return NextResponse.json({ id });
+    return NextResponse.json(isBatch ? { ids } : { id: ids[0] });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -177,30 +235,39 @@ export async function POST(request: Request) {
 // Revokes - the course-year reverts to HOD-only, same as it was before any
 // delegation existed. Never deletes the Incharge's past edits (teaching
 // assignments/timetable slots they made stay exactly as they are).
+// `ids` (comma-separated, plural) revokes a whole shared-first-year batch -
+// one Timetable Incharge doc per branch course-year - in one call, each
+// individually scope-checked exactly like a single `id` delete.
 export async function DELETE(request: Request) {
   try {
     const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");
     const { searchParams } = new URL(request.url);
+    const idsParam = searchParams.get("ids");
     const id = searchParams.get("id");
-    if (!id) return NextResponse.json({ error: "id is required" }, { status: 400 });
+    const ids = idsParam ? idsParam.split(",").map((s) => s.trim()).filter(Boolean) : id ? [id] : [];
+    if (ids.length === 0) return NextResponse.json({ error: "id or ids is required" }, { status: 400 });
 
     const db = getAdminDb();
     const collegeRef = db.collection("colleges").doc(session.collegeId);
-    const ref = collegeRef.collection("timetableIncharges").doc(id);
-    const snap = await ref.get();
-    if (!snap.exists) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    const scope = session.role === "HOD"
+      ? await getHodDepartmentScope(db, session.collegeId, session.uid, { activeOnly: false })
+      : null;
 
-    if (session.role === "HOD") {
-      // Same activeOnly: false reasoning as POST above - the record's own
-      // departmentId is already explicit.
-      const { departmentId } = snap.data() as TimetableIncharge;
-      const scope = await getHodDepartmentScope(db, session.collegeId, session.uid, { activeOnly: false });
-      if (!canHodEditDepartmentId(scope, departmentId)) {
-        return NextResponse.json({ error: "This department isn't yours" }, { status: 403 });
+    const refs = ids.map((docId) => collegeRef.collection("timetableIncharges").doc(docId));
+    const snaps = await Promise.all(refs.map((r) => r.get()));
+    for (const snap of snaps) {
+      if (!snap.exists) continue; // already revoked/never existed - deleting the rest of the batch still proceeds
+      if (scope) {
+        // Same activeOnly: false reasoning as POST above - the record's own
+        // departmentId is already explicit.
+        const { departmentId } = snap.data() as TimetableIncharge;
+        if (!canHodEditDepartmentId(scope, departmentId)) {
+          return NextResponse.json({ error: "This department isn't yours" }, { status: 403 });
+        }
       }
     }
 
-    await ref.delete();
+    await Promise.all(refs.map((r) => r.delete()));
     return NextResponse.json({ ok: true });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {

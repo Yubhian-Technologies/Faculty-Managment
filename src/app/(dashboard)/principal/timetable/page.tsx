@@ -45,6 +45,7 @@ export default function PrincipalTimetablePage() {
   const [courseName, setCourseName] = useState("");
   const [departmentId, setDepartmentId] = useState("");
   const [year, setYear] = useState("");
+  const [semester, setSemester] = useState<number | null>(null);
   const [sections, setSections] = useState<Section[]>([]);
   const [sectionId, setSectionId] = useState("");
   const [timing, setTiming] = useState<CourseYearTiming | null>(null);
@@ -65,6 +66,7 @@ export default function PrincipalTimetablePage() {
   function resetBelowCourse() {
     setDepartmentId("");
     setYear("");
+    setSemester(null);
     setSections([]);
     setSectionId("");
     setTiming(null);
@@ -77,6 +79,7 @@ export default function PrincipalTimetablePage() {
   function chooseDepartment(id: string) {
     setDepartmentId(id);
     setYear("");
+    setSemester(null);
     setSections([]);
     setSectionId("");
     setTiming(null);
@@ -84,6 +87,7 @@ export default function PrincipalTimetablePage() {
   }
   function chooseYear(y: string) {
     setYear(y);
+    setSemester(null);
     setSections([]);
     setSectionId("");
     setTiming(null);
@@ -133,6 +137,17 @@ export default function PrincipalTimetablePage() {
     return assigned.length > 0 ? courseYears.filter((y) => assigned.includes(y)) : courseYears;
   })();
 
+  const semesterOptions = useMemo(() => {
+    if (!timing) return [];
+    const sems = timing.semesters;
+    return sems ? sems.map((s) => s.semester).sort((a, b) => a - b) : [];
+  }, [timing]);
+  const effectiveSemester = semesterOptions.length === 0
+    ? null
+    : semester != null && semesterOptions.includes(semester)
+      ? semester
+      : semesterOptions[0];
+
   // Sections + timing for the resolved course-year. Downstream state is cleared
   // by the choose* handlers, so this effect never has to reset anything itself.
   //
@@ -152,7 +167,7 @@ export default function PrincipalTimetablePage() {
     void (async () => {
       try {
         const [s, t] = await Promise.all([
-          fetch(`/api/college/sections?departmentId=${encodeURIComponent(departmentId)}&year=${encodeURIComponent(year)}`)
+          fetch(`/api/college/sections?departmentId=${encodeURIComponent(departmentId)}&year=${encodeURIComponent(year)}${effectiveSemester != null ? "&semester=" + effectiveSemester : ""}`)
             .then((r) => r.json() as Promise<{ sections: Section[] }>),
           fetch(`/api/college/course-year-timings?courseId=${encodeURIComponent(courseId)}`)
             .then((r) => r.json() as Promise<{ timings: CourseYearTiming[] }>),
@@ -170,14 +185,14 @@ export default function PrincipalTimetablePage() {
       }
     })();
     return () => { cancelled = true; };
-  }, [departmentId, year, courseId, courseName, courses]);
+  }, [departmentId, year, effectiveSemester, courseId, courseName, courses]);
 
   useEffect(() => {
     if (!sectionId) return;
     let cancelled = false;
     void (async () => {
       try {
-        const d = await fetch(`/api/college/timetable-slots?sectionId=${encodeURIComponent(sectionId)}&week=${isoDateKey(weekStart)}`)
+        const d = await fetch(`/api/college/timetable-slots?sectionId=${encodeURIComponent(sectionId)}&week=${isoDateKey(weekStart)}${effectiveSemester != null ? "&semester=" + effectiveSemester : ""}`)
           .then((r) => r.json() as Promise<{ slots: TimetableSlot[] }>);
         if (cancelled) return;
         setSlots(d.slots ?? []);
@@ -188,7 +203,7 @@ export default function PrincipalTimetablePage() {
       }
     })();
     return () => { cancelled = true; };
-  }, [sectionId, weekStart]);
+  }, [sectionId, weekStart, effectiveSemester]);
 
   const rows = timing ? buildRows(timing) : [];
   const displaySlots = typeFilter === "ALL" ? slots : slots.filter((s) => s.subjectType === typeFilter);
@@ -246,23 +261,39 @@ export default function PrincipalTimetablePage() {
           </select>
         </div>
 
-        <div className="space-y-1.5">
-          <label className="text-sm font-medium" htmlFor="tt-section">Section</label>
-          <select
-            id="tt-section"
-            className={selectClass}
-            value={sectionId}
-            onChange={(e) => setSectionId(e.target.value)}
-            disabled={sections.length === 0}
-          >
-            {sections.length === 0 ? <option value="">No sections</option> : null}
-            {/* Department code included: a parent department and its
-                sub-departments each have their own "A". */}
-            {sections.map((s) => (
-              <option key={s.id} value={s.id}>{sectionDisplayLabel(s, departments)}</option>
-            ))}
-          </select>
-        </div>
+<div className="space-y-1.5">
+           <label className="text-sm font-medium" htmlFor="tt-semester">Semester</label>
+           <select
+             id="tt-semester"
+             className={selectClass}
+             value={effectiveSemester != null ? String(effectiveSemester) : ""}
+             onChange={(e) => setSemester(Number(e.target.value))}
+             disabled={!timing || semesterOptions.length === 0}
+           >
+             <option value="">Select semester</option>
+             {semesterOptions.map((s) => (
+               <option key={s} value={s}>Semester {s}</option>
+             ))}
+           </select>
+         </div>
+
+         <div className="space-y-1.5">
+           <label className="text-sm font-medium" htmlFor="tt-section">Section</label>
+           <select
+             id="tt-section"
+             className={selectClass}
+             value={sectionId}
+             onChange={(e) => setSectionId(e.target.value)}
+             disabled={sections.length === 0}
+           >
+             {sections.length === 0 ? <option value="">No sections</option> : null}
+             {/* Department code included: a parent department and its
+                 sub-departments each have their own "A". */}
+             {sections.map((s) => (
+               <option key={s.id} value={s.id}>{sectionDisplayLabel(s, departments)}</option>
+             ))}
+           </select>
+         </div>
       </div>
 
       {!sectionId ? (

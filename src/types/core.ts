@@ -3202,3 +3202,25 @@ export interface PaginationState {
   hasMore: boolean;
   lastDoc: unknown;
 }
+
+// ─── Faculty Assigned Modules ───────────────────────────────────
+// Per-person module assignment layered on top of their base role.
+export type FacultyAssignedModule =
+  | "timetable-incharge"
+  | "lab-batches"
+  | "teaching-load"
+  | "assignment-requests"
+  | "attendance"
+  | "leave-approvals"
+  | "students";
+
+export interface FacultyAssignedModulesDoc {
+  uid: string;
+  collegeId: string;
+  facultyId: string;
+  modules: FacultyAssignedModule[];
+  assignedBy?: string;
+  assignedByName?: string;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}

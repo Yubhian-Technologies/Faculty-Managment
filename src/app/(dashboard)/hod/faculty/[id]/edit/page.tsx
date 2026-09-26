@@ -19,6 +19,15 @@ import { toast } from "@/hooks/useToast";
 import { migrateFacultyDoc } from "@/lib/faculty/fieldRenames";
 import { toDateInputValue } from "@/lib/utils";
 import { designationLabel } from "@/lib/designations/config";
+import { FacultyProfileModuleEditor, type FacultyEditRecord } from "@/components/faculty/FacultyProfileModuleEditor";
+import { getMissingRequiredPersonalFields, FACULTY_REQUIRED_PERSONAL_FIELDS } from "@/components/shared/PersonalDetailsFields";
+import { getFacultyProfileModules, type ProfileModuleKey } from "@/lib/faculty/profileModules";
+import { syncTeachingAssignments } from "@/lib/teaching/syncTeachingAssignments";
+import type { StagedTeachingRow } from "@/components/faculty/TeachingAssignmentsEditor";
+import { useCollegeType } from "@/hooks/useCollegeType";
+import { personalRecordFromDoc, personalPatchBody } from "@/lib/faculty/personalRecord";
+import { diffAcademicProfile, isEmptyChanges } from "@/lib/faculty/academicProfileChanges";
+import { degreeTypeError } from "@/lib/faculty/degreeType";
 import { EMPLOYEE_CATEGORY_LABELS, FACULTY_STATUS_LABELS, MANUALLY_SELECTABLE_FACULTY_STATUS_VALUES, FACULTY_STATUS_DATE_FIELD, FACULTY_STATUS_DATE_LABELS } from "@/types";
 import type { DesignationCatalogItem, Designation, EmployeeCategory, FacultyStatus } from "@/types";
 
@@ -76,6 +85,31 @@ export default function EditHodFacultyIdentityPage() {
   // current designation - the server rejects a different value here, so the field is read-only.
   const [designationManaged, setDesignationManaged] = useState(false);
   const [designationOptions, setDesignationOptions] = useState<string[]>([]);
+  const { collegeType } = useCollegeType();
+  // Same step-pill pattern as the Add Faculty wizard (hod/faculty/new) -
+  // "Identity & Employment" plus one tab per profile module, one section
+  // visible at a time instead of a long scrolling accordion. No "Review &
+  // Submit" tab here - that's specific to the create wizard's one-shot
+  // submission; each tab here already saves independently on its own.
+  type EditTabKey = "core" | ProfileModuleKey;
+  const tabs: { key: EditTabKey; label: string }[] = [
+    { key: "core", label: "Identity & Employment" },
+    ...getFacultyProfileModules().map((m) => ({ key: m.key, label: m.label })),
+  ];
+  const [activeTab, setActiveTab] = useState<EditTabKey>("core");
+
+  // Every OTHER module (Personal Details, Academic Qualification, ...) is
+  // editable right here too now, not just Identity & Employment - see the
+  // Accordion below. Same record shape / load-once-diff-on-save logic
+  // [id]/[module]/edit/page.tsx already uses per module, just all loaded
+  // together so "Edit Details" is genuinely one stop for everything, while
+  // that per-module page (reached from each View tile) keeps working
+  // exactly as before for anyone who lands there directly.
+  const [record, setRecord] = useState<FacultyEditRecord>({});
+  const [originalAcademicProfile, setOriginalAcademicProfile] = useState<FacultyEditRecord["academicProfile"]>({});
+  const [teachingRows, setTeachingRows] = useState<StagedTeachingRow[]>([]);
+  const [originalTeachingRows, setOriginalTeachingRows] = useState<StagedTeachingRow[]>([]);
+  const [savingModule, setSavingModule] = useState<ProfileModuleKey | null>(null);
 
   useEffect(() => {
     fetch(`/api/college/faculty/${facultyId}`)
@@ -90,6 +124,15 @@ export default function EditHodFacultyIdentityPage() {
         setEmployeeId((m.employeeId as string) ?? "");
         setCollegeEmail((m.collegeEmail as string) ?? "");
         setDepartment((m.department as string) ?? "");
+        const academicProfile = (m.academicProfile as FacultyEditRecord["academicProfile"]) ?? {};
+        setOriginalAcademicProfile(academicProfile);
+        setRecord({
+          ...personalRecordFromDoc(m, { ratificationHistory: true }),
+          academicProfile,
+          joiningLetterUrl: (m.joiningLetterUrl as string) ?? "",
+          appointmentLetterUrl: (m.appointmentLetterUrl as string) ?? "",
+          resumeUrl: (m.resumeUrl as string) ?? "",
+        });
         const highestQualification = normalizeHighestQualification(m.highestQualification);
         setQualIsOther(!!highestQualification && !(HIGHEST_QUALIFICATION_OPTIONS as readonly string[]).includes(highestQualification));
         setForm({
@@ -116,6 +159,85 @@ export default function EditHodFacultyIdentityPage() {
       .catch(() => toast({ variant: "destructive", title: "Failed to load faculty record" }))
       .finally(() => setLoading(false));
   }, [facultyId, router]);
+
+  useEffect(() => {
+    fetch(`/api/college/teaching-assignments?facultyId=${encodeURIComponent(facultyId)}`)
+      .then((r) => r.json() as Promise<{
+        assignments: Array<{ id: string; courseId: string; courseName: string; year: number; sectionId: string; sectionName: string; subjectId: string; subjectName: string; subjectCode: string; hoursPerWeek: number; isPast?: boolean; assignmentAcademicYear?: string; assignmentSemester?: string; passPercentage?: number; studentFeedback?: number }>;
+        timetableSlots: Array<{ id: string; assignmentId: string; day: StagedTeachingRow["slots"][number]["day"]; periodNumber: number }>;
+      }>)
+      .then((d) => {
+        const rows: StagedTeachingRow[] = (d.assignments ?? []).map((a) => ({
+          localId: a.id, id: a.id, courseId: a.courseId, courseName: a.courseName, year: a.year,
+          sectionId: a.sectionId, sectionName: a.sectionName, subjectId: a.subjectId, subjectName: a.subjectName,
+          subjectCode: a.subjectCode, hoursPerWeek: a.hoursPerWeek, subjectHoursPerWeek: a.hoursPerWeek,
+          isPast: a.isPast, assignmentAcademicYear: a.assignmentAcademicYear, assignmentSemester: a.assignmentSemester,
+          passPercentage: a.passPercentage, studentFeedback: a.studentFeedback,
+          slots: (d.timetableSlots ?? []).filter((s) => s.assignmentId === a.id).map((s) => ({ localId: s.id, id: s.id, day: s.day, periodNumber: s.periodNumber })),
+        }));
+        setTeachingRows(rows);
+        setOriginalTeachingRows(rows);
+      })
+      .catch(() => { /* non-critical */ });
+  }, [facultyId]);
+
+  function patchRecord(next: Partial<FacultyEditRecord>) {
+    setRecord((r) => ({ ...r, ...next }));
+  }
+
+  // Mirrors [id]/[module]/edit/page.tsx's own handleSave exactly (same
+  // validation, same diff-only-what-changed PATCH body, same teaching-load
+  // sync path) - just parameterized by moduleKey and staying on this page
+  // afterward (toast only) instead of navigating away, since every module is
+  // already visible here in its own Accordion section.
+  async function handleSaveModule(moduleKey: ProfileModuleKey) {
+    if (moduleKey === "personal") {
+      const missing = getMissingRequiredPersonalFields(record, FACULTY_REQUIRED_PERSONAL_FIELDS);
+      if (missing.length > 0) {
+        toast({ variant: "destructive", title: "Some required fields are missing", description: missing.join(", ") });
+        return;
+      }
+    }
+    if (moduleKey === "qualification") {
+      const degreeErr = degreeTypeError(record.academicProfile);
+      if (degreeErr) {
+        toast({ variant: "destructive", title: "Some required fields are missing", description: degreeErr });
+        return;
+      }
+    }
+    setSavingModule(moduleKey);
+    try {
+      if (moduleKey === "teaching-load") {
+        const errors = await syncTeachingAssignments(facultyId, form.legalName, originalTeachingRows, teachingRows);
+        if (errors.length > 0) {
+          toast({ variant: "destructive", title: "Some teaching assignments failed to save", description: errors.join("; ") });
+          return;
+        }
+        setOriginalTeachingRows(teachingRows);
+      } else {
+        const academicProfileChanges = diffAcademicProfile(originalAcademicProfile, record.academicProfile);
+        if (moduleKey !== "personal" && isEmptyChanges(academicProfileChanges)) {
+          toast({ variant: "success", title: "No changes to save" });
+          return;
+        }
+        const body: Record<string, unknown> =
+          moduleKey === "personal" ? personalPatchBody(record, { ratificationHistory: true }) : { academicProfileChanges };
+
+        const res = await fetch(`/api/college/faculty/${facultyId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) throw new Error();
+        setOriginalAcademicProfile(record.academicProfile);
+      }
+      toast({ variant: "success", title: "Saved" });
+    } catch {
+      toast({ variant: "destructive", title: "Failed to save" });
+    } finally {
+      setSavingModule(null);
+    }
+  }
 
   useEffect(() => {
     void (async () => {
@@ -223,8 +345,28 @@ export default function EditHodFacultyIdentityPage() {
           Back to Faculty Details
         </Link>
       </Button>
-      <PageHeader title="Edit Identity & Employment" description={`Employee ID: ${employeeId}`} />
+      <PageHeader title="Edit Details" description={`Employee ID: ${employeeId}`} />
 
+      {/* Same step-pill bar as the Add Faculty wizard - click any tab to
+          switch sections without leaving this page. Purely a display switch
+          (no validation gate like the wizard's Next button), since editing
+          doesn't need to happen in order. */}
+      <div className="flex flex-wrap gap-2 mb-4">
+        {tabs.map((t) => (
+          <button
+            type="button"
+            key={t.key}
+            onClick={() => setActiveTab(t.key)}
+            className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+              activeTab === t.key ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/70"
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === "core" ? (
       <form onSubmit={(e) => void handleSubmit(e)}>
         <Card className="mt-6">
           <CardHeader><CardTitle className="text-base">Identity & Employment</CardTitle></CardHeader>
@@ -460,6 +602,41 @@ export default function EditHodFacultyIdentityPage() {
           <Button type="submit" loading={saving}>Save Changes</Button>
         </div>
       </form>
+      ) : (
+        // Every other tab shares this same shape: the matching module editor
+        // plus its own Save, independent of every other tab (and of Identity
+        // & Employment's own submit above) - switching tabs never loses
+        // unsaved edits on another one, each is saved on its own. Clicking a
+        // View tile's own "Edit" still opens this same section on its own
+        // dedicated page ([id]/[module]/edit) - both paths reach every field.
+        <Card>
+          <CardHeader><CardTitle className="text-base">{tabs.find((t) => t.key === activeTab)?.label}</CardTitle></CardHeader>
+          <CardContent className="space-y-5">
+            <FacultyProfileModuleEditor
+              moduleKey={activeTab as ProfileModuleKey}
+              record={record}
+              onChange={patchRecord}
+              facultyId={facultyId}
+              teachingRows={teachingRows}
+              onTeachingRowsChange={setTeachingRows}
+              department={department}
+              collegeType={collegeType}
+              requiredPersonalFields={FACULTY_REQUIRED_PERSONAL_FIELDS}
+              hideLegalName
+              ratificationHistory
+            />
+            <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end pt-4 border-t">
+              <Button type="button" variant="outline" onClick={() => router.push(`/hod/faculty/${facultyId}`)}>Cancel</Button>
+              <Button
+                onClick={() => void handleSaveModule(activeTab as ProfileModuleKey)}
+                loading={savingModule === activeTab}
+              >
+                Save Changes
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

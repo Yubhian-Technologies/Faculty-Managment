@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { canHodEditDepartmentYear, resolveBranchYearOwner, type DepartmentYearRow } from "@/lib/departments/managedBranches";
+import { canHodEditDepartmentYear, canHodExclusivelyOwnDepartmentYear, resolveBranchYearOwner, type DepartmentYearRow } from "@/lib/departments/managedBranches";
 
 // Who may EDIT a section, as api/college/sections/[id] decides it.
 //
@@ -60,5 +60,40 @@ describe("section edit ownership", () => {
   it("still refuses a department outside the HOD's tree entirely", () => {
     expect(canHodEditDepartmentYear(itHod, depts, "AIML", 1, CAT)).toBe(false);
     expect(canHodEditDepartmentYear(aiHod, depts, "IT", 2, CAT)).toBe(false);
+  });
+});
+
+describe("section edit ownership - Sections-only exclusive variant", () => {
+  // canHodExclusivelyOwnDepartmentYear is Sections' own stricter gate (GET's
+  // accessLevel tag and PATCH/DELETE) - unlike canHodEditDepartmentYear above
+  // (which Teaching Assignments/Students keep relying on), a true child whose
+  // year is claimed by a DIFFERENT department's managedDepartments loses
+  // exclusive ownership of that year to the manager instead of keeping it
+  // unconditionally.
+  it("denies the branch's own permanent HOD the shared year a different department manages", () => {
+    expect(canHodExclusivelyOwnDepartmentYear(aiHod, depts, "AIDS", 1, CAT)).toBe(false);
+    expect(canHodExclusivelyOwnDepartmentYear(aiHod, depts, "AIML", 1, CAT)).toBe(false);
+  });
+
+  it("still lets the branch's own permanent HOD edit the years nobody else manages", () => {
+    expect(canHodExclusivelyOwnDepartmentYear(aiHod, depts, "AIDS", 2, CAT)).toBe(true);
+  });
+
+  it("still lets the shared-year manager edit the year it actually runs", () => {
+    expect(canHodExclusivelyOwnDepartmentYear(bsHod, depts, "IT", 1, CAT)).toBe(true);
+  });
+
+  it("still keeps a managed branch's later years away from the manager", () => {
+    expect(canHodExclusivelyOwnDepartmentYear(bsHod, depts, "IT", 2, CAT)).toBe(false);
+  });
+
+  it("still keeps the shared year away from the branch's own HOD, and later years with them", () => {
+    expect(canHodExclusivelyOwnDepartmentYear(itHod, depts, "IT", 1, CAT)).toBe(false);
+    expect(canHodExclusivelyOwnDepartmentYear(itHod, depts, "IT", 3, CAT)).toBe(true);
+  });
+
+  it("still refuses a department outside the HOD's tree entirely", () => {
+    expect(canHodExclusivelyOwnDepartmentYear(itHod, depts, "AIML", 1, CAT)).toBe(false);
+    expect(canHodExclusivelyOwnDepartmentYear(aiHod, depts, "IT", 2, CAT)).toBe(false);
   });
 });

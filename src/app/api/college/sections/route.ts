@@ -29,6 +29,8 @@ export async function GET(request: Request) {
     const courseFilterRaw = searchParams.get("courseId");
     const courseFilterIds = courseFilterRaw ? courseFilterRaw.split(",").map((s) => s.trim()).filter(Boolean) : [];
     const departmentIdFilter = searchParams.get("departmentId");
+    const semesterParam = searchParams.get("semester");
+    const requestedSemester = semesterParam != null ? Number(semesterParam) : null;
 
     const db = getAdminDb();
     const sectionsColl = db.collection("colleges").doc(session.collegeId).collection("sections");
@@ -205,17 +207,27 @@ export async function GET(request: Request) {
         if (seenIds.has(d.id)) continue;
         const data = d.data();
         const deptName = data.department as string;
-        // A direct sub-department (childDepartmentNames) is fully owned
-        // regardless of year - only a MANAGED branch needs this check, since
-        // that's the relationship that's year-scoped (only the years the
-        // manager - this HOD, or one of their own children - actually teaches).
-        if (hodScope!.managedDepartmentNames.includes(deptName) && hodDepartments.length > 0) {
+        // A direct sub-department (childDepartmentNames) is normally fully
+        // owned regardless of year, same as a MANAGED branch's own owned
+        // years - but a branch can be BOTH: a true child of one department
+        // AND grouped under a DIFFERENT department's managedDepartments for
+        // the shared first year (e.g. "data science" is Artificial
+        // Intelligence's own child but Year 1 runs under "BASIC SCIENCE
+        // ENGLISH"). Mirrors the primarySnap loop's own check above and
+        // assertHodOwnsSection's canHodExclusivelyOwnDepartmentYear
+        // (sections/[id]/route.ts) - a section never comes back with more
+        // read access here than it can actually be edited with there. Shown
+        // read-only (not hidden) rather than skipped, same reasoning as the
+        // primarySnap loop: a branch's own roster page shouldn't look
+        // incomplete just because this year belongs to someone else.
+        let accessLevel: "primary" | "secondary" = "primary";
+        if (hodDepartments.length > 0) {
           const catalogId = catalogIdByCourseId.get(data.courseId as string);
           const owner = resolveBranchYearOwner(hodDepartments, deptName, data.year as number, catalogId);
-          if (!hodScope!.ownDepartmentNames.includes(owner) && !hodScope!.childDepartmentNames.includes(owner)) continue;
+          if (!hodScope!.ownDepartmentNames.includes(owner) && !hodScope!.childDepartmentNames.includes(owner)) accessLevel = "secondary";
         }
         seenIds.add(d.id);
-        sections.push({ id: d.id, ...data, accessLevel: "primary" });
+        sections.push({ id: d.id, ...data, accessLevel });
       }
     }
     if (secondarySnap && hodScope) {
@@ -240,14 +252,45 @@ export async function GET(request: Request) {
         if (!isFed) continue;
         seenIds.add(d.id);
         sections.push({ id: d.id, ...data, accessLevel: "secondary" });
-      }
-    }
-    sections.sort((a, b) => {
-      const ya = (a.year as number | undefined) ?? 0;
-      const yb = (b.year as number | undefined) ?? 0;
-      if (ya !== yb) return ya - yb;
-      return ((a.name as string | undefined) ?? "").localeCompare((b.name as string | undefined) ?? "");
-    });
+}
+     }
+
+     // Semester filter: sections belong to a course+year, and CourseYearTiming
+     // defines which semesters exist for that course-year. Filter sections
+     // down to only those whose course-year has the requested semester.
+     if (requestedSemester != null && sections.length > 0) {
+       const courseYearKeySet = new Set<string>();
+       for (const s of sections) {
+         courseYearKeySet.add(`${s.courseId as string}|${s.year as number}`);
+       }
+       const courseYearTimings = await Promise.all(
+         Array.from(courseYearKeySet).map((k) => {
+           const [cId, yStr] = k.split("|");
+           return db.collection("colleges").doc(session.collegeId)
+             .collection("courseYearTimings").where("courseId", "==", cId).where("year", "==", Number(yStr)).get()
+             .then((snap) => { const r: number[] = []; for (const d of snap.docs) { const t = d.data() as { semesters?: { semester: number }[] }; if (t.semesters) for (const s of t.semesters) r.push(s.semester); } return r; });
+         })
+       );
+       const validKeys = new Set(courseYearKeySet);
+       let idx = 0;
+       for (const k of courseYearKeySet) {
+         const semesters = courseYearTimings[idx] ?? [];
+         if (!semesters.includes(requestedSemester)) validKeys.delete(k);
+         idx++;
+       }
+       const allSections = [...sections];
+       sections.length = 0;
+       for (const s of allSections) {
+         if (validKeys.has(`${s.courseId}|${s.year}`)) sections.push(s);
+       }
+     }
+
+     sections.sort((a, b) => {
+       const ya = (a.year as number | undefined) ?? 0;
+       const yb = (b.year as number | undefined) ?? 0;
+       if (ya !== yb) return ya - yb;
+       return ((a.name as string | undefined) ?? "").localeCompare((b.name as string | undefined) ?? "");
+     });
 
     // `studentCount` used to be a manually-typed capacity estimate ("Student
     // Intake"); now that rosters are actually imported, overwrite it with the
