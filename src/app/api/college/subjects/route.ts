@@ -16,7 +16,6 @@ export async function GET(request: Request) {
     const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "COLLEGE_OFFICE", "PANEL_MEMBER", "COLLEGE_STAFF", "EXAM_CELL", "ACADEMICS");
     const { searchParams } = new URL(request.url);
     const courseId = searchParams.get("courseId");
-    const year = searchParams.get("year");
     const deptFilter = searchParams.get("department");
     const academicYear = searchParams.get("academicYear");
     const regulation = searchParams.get("regulation");
@@ -50,8 +49,8 @@ export async function GET(request: Request) {
       // Same bidirectional visibility as the HOD branch above, for Academics/
       // Principal/VP: browsing a fed department (e.g. IT) also shows its
       // feeder's subjects (e.g. Basic Science's shared 1st-year catalog) -
-      // the `year` filter below keeps a feeder's subjects from leaking into
-      // a year it doesn't own.
+      // the `regulations` filter below keeps a feeder's subjects from
+      // leaking into a regulation it doesn't own.
       const names = await getRelatedDepartmentNames(db, session.collegeId, deptFilter);
       query = names.length > 1
         ? query.where("department", "in", names.slice(0, 30))
@@ -59,7 +58,6 @@ export async function GET(request: Request) {
     }
 
     if (courseId) query = query.where("courseId", "==", courseId);
-    if (year) query = query.where("year", "==", Number(year));
 
     const snap = await query.get();
     let subjects = snap.docs

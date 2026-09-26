@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { BookOpen, Plus, Pencil, Trash2, Upload, History, FileDown, FileSpreadsheet, FileText } from "lucide-react";
+import { BookOpen, Plus, Pencil, Trash2, Upload, History, RefreshCw, FileSpreadsheet, FileText } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,8 +13,7 @@ import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
 import type { Course, CourseCatalogItem, Department, Subject } from "@/types";
 import { SUBJECT_TYPE_LABELS } from "@/types";
-import { academicSessionLabel, currentAcademicStartYear, parseAcademicYearStart } from "@/lib/college/academicSession";
-import { resolveDepartmentCourseScope, regulationsForCourseYearByBatch } from "@/lib/college/academicStructure";
+import { academicSessionLabel, currentAcademicStartYear } from "@/lib/college/academicSession";
 
 function ordinalYear(year: number) {
   const suffix = year === 1 ? "st" : year === 2 ? "nd" : year === 3 ? "rd" : "th";
@@ -22,7 +21,7 @@ function ordinalYear(year: number) {
 }
 
 // Academics' version of the HOD Subjects page - same subject list/add/edit/delete,
-// but drilled down Department -> Course -> Year instead of just Course -> Year,
+// but drilled down Department -> Course -> Regulation instead of just Course -> Year,
 // since a Academics isn't scoped to one department the way an HOD is.
 export default function AcademicsSubjectsPage() {
   const router = useRouter();
@@ -31,8 +30,8 @@ export default function AcademicsSubjectsPage() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   // Course Catalog entries (regulations/regulationBatches per course) - used
-  // to resolve which regulation(s) govern the selected course's selected
-  // year, same source hod/sections/new/page.tsx's own regulation picker reads.
+  // to resolve which regulation(s) govern the selected course, same source
+  // hod/sections/new/page.tsx's own regulation picker reads.
   const [catalogItems, setCatalogItems] = useState<CourseCatalogItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingCourses, setIsLoadingCourses] = useState(false);
@@ -40,12 +39,11 @@ export default function AcademicsSubjectsPage() {
 
   const [selectedDepartmentId, setSelectedDepartmentId] = useState("");
   const [selectedCourseId, setSelectedCourseId] = useState("");
-  const [selectedYear, setSelectedYear] = useState("");
   // Calendar academic session (e.g. "2026-27") a subject is tagged with when
   // the Academics adds it, AND what "now" means for resolving which regulation
-  // covers a year below (regulationsForCourseYearByBatch) - defaults to the
-  // real current session, but picking a different one here lets the Academics
-  // browse which regulation covered a year in a past/future session too.
+  // covers it - defaults to the real current session, but picking a different
+  // one here lets the Academics browse which regulation covered a year in a
+  // past/future session too.
   const [selectedAcademicYear, setSelectedAcademicYear] = useState(academicSessionLabel(currentAcademicStartYear()));
   // The college's own configured current session (Settings > Academic Year),
   // when a Principal has set one - applied over the plain clock-based default
@@ -105,46 +103,15 @@ export default function AcademicsSubjectsPage() {
     [departments, selectedDepartmentId]
   );
   const selectedCourse = useMemo(() => courses.find((c) => c.id === selectedCourseId) ?? null, [courses, selectedCourseId]);
-  // Scoped to the course's own ACTUAL owning department's "Years Taught"
-  // (resolveDepartmentCourseScope), not the raw 1..durationYears span, and
-  // deliberately not the top-level Department picker either - loadCourses
-  // above can surface a feeder's own course row under a fed department that
-  // owns none of its own (e.g. Basic Science's course shown while "CSE" is
-  // picked above), and that course's real scope lives on Basic Science, not
-  // CSE. Matching the fed department's own (wrong) years here is exactly
-  // what used to make the feeder's reserved year unreachable - see
-  // hod/subjects/page.tsx's courseLabel/yearOptions for the same fix already
-  // applied there.
-  const courseOwningDepartment = useMemo(
-    () => (selectedCourse ? departments.find((d) => d.id === selectedCourse.departmentId) ?? null : null),
-    [selectedCourse, departments]
-  );
-  const yearOptions = useMemo(() => {
-    if (!selectedCourse || !courseOwningDepartment) return [];
-    const courseYears = Array.from({ length: selectedCourse.durationYears }, (_, i) => i + 1);
-    const assigned = resolveDepartmentCourseScope(courseOwningDepartment, selectedCourse.catalogId).assignedYears;
-    return assigned.length > 0 ? courseYears.filter((y) => assigned.includes(y)) : courseYears;
-  }, [selectedCourse, courseOwningDepartment]);
   const selectedCatalogItem = useMemo(
     () => catalogItems.find((c) => c.id === selectedCourse?.catalogId) ?? null,
     [catalogItems, selectedCourse]
   );
-  // Whichever regulation(s) govern the selected year AS OF the selected
-  // Academic Year session above, resolved from this course's own Course
-  // Catalog entry's regulationBatches - purely informational (shown as a
-  // badge, tagged onto a new subject when unambiguous), never a gate on
-  // adding subjects, which are scoped by Academic Year session instead
-  // (see loadSubjects).
+  // All regulations for this course (no year filter) - shown as
+  // selectable badges, used to scope the subject list.
   const allowedRegulations = useMemo(
-    () => (selectedYear
-      ? regulationsForCourseYearByBatch(
-          selectedCatalogItem?.regulationBatches ?? {},
-          Number(selectedYear),
-          parseAcademicYearStart(selectedAcademicYear) ?? currentAcademicStartYear(),
-          selectedCatalogItem?.regulations,
-        )
-      : []),
-    [selectedCatalogItem, selectedYear, selectedAcademicYear]
+    () => selectedCatalogItem?.regulations ?? [],
+    [selectedCatalogItem]
   );
   // The single regulation to tag a new subject with - only when unambiguous.
   const singleRegulation = allowedRegulations.length === 1 ? allowedRegulations[0] : "";
@@ -180,11 +147,7 @@ export default function AcademicsSubjectsPage() {
       // normalized name for legacy courses created before the catalog), keeping
       // THIS department's own doc when both exist so subjects file against the
       // department the Academics actually picked. A feeder's copy is still kept when
-      // the department owns none, which is the case that merge exists for - see
-      // yearOptions below, which resolves scope against the SURVIVING course's
-      // own owning department (not necessarily the one picked above) so the
-      // feeder's reserved year is still reachable through it rather than stuck
-      // showing the fed department's own (wrong) years.
+      // the department owns none, which is the case that merge exists for.
       const active = (data.courses ?? []).filter((c) => c.isActive);
       const byCatalogCourse = new Map<string, Course>();
       for (const c of active) {
@@ -206,16 +169,16 @@ export default function AcademicsSubjectsPage() {
   }, []);
 
   // A session's list = the core (non-elective) subjects of the regulation(s)
-  // governing this course-year in that session, plus the electives offered
+  // governing this course in that session, plus the electives offered
   // in that session only - so past sessions stay browsable as history.
   // Regulations come from a ref (kept current below) so callers needn't pass them.
   const regulationsRef = useRef<string[]>([]);
-  const loadSubjects = useCallback(async (departmentName: string, courseId: string, year: string, academicYear: string) => {
-    if (!departmentName || !courseId || !year) { setSubjects([]); return; }
+  const loadSubjects = useCallback(async (departmentName: string, courseId: string, academicYear: string) => {
+    if (!departmentName || !courseId) { setSubjects([]); return; }
     setIsLoadingSubjects(true);
     try {
       const res = await fetch(
-        `/api/college/subjects?department=${encodeURIComponent(departmentName)}&courseId=${encodeURIComponent(courseId)}&year=${encodeURIComponent(year)}${regulationsRef.current.length ? `&regulations=${encodeURIComponent(regulationsRef.current.join(","))}` : ""}${academicYear ? `&academicYear=${encodeURIComponent(academicYear)}` : ""}`
+        `/api/college/subjects?department=${encodeURIComponent(departmentName)}&courseId=${encodeURIComponent(courseId)}${regulationsRef.current.length ? `&regulations=${encodeURIComponent(regulationsRef.current.join(","))}` : ""}${academicYear ? `&academicYear=${encodeURIComponent(academicYear)}` : ""}`
       );
       const data = await res.json() as { subjects: Subject[]; academicYears?: string[] };
       setSessionsWithSubjects(data.academicYears ?? []);
@@ -235,17 +198,17 @@ export default function AcademicsSubjectsPage() {
   regulationsRef.current = allowedRegulations;
   const regulationsKey = allowedRegulations.join(",");
   // Reload whenever the selection, the session, or the regulation resolved for
-  // it changes (the catalog can land after the year is picked).
+  // it changes (the catalog can land after the course is picked).
   useEffect(() => {
-    if (selectedDepartment && selectedCourseId && selectedYear) {
-      void loadSubjects(selectedDepartment.name, selectedCourseId, selectedYear, selectedAcademicYear);
+    if (selectedDepartment && selectedCourseId) {
+      void loadSubjects(selectedDepartment.name, selectedCourseId, selectedAcademicYear);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedDepartment?.name, selectedCourseId, selectedYear, selectedAcademicYear, regulationsKey, loadSubjects]);
+  }, [selectedDepartment?.name, selectedCourseId, selectedAcademicYear, regulationsKey, loadSubjects]);
 
   // Coming back from "Add Subject"/"Edit" (see their departmentId/courseId/
-  // year/academicYear query params on success) should land right back on the
-  // same department, course, year and session instead of the blank pickers -
+  // academicYear query params on success) should land right back on the
+  // same department, course and session instead of the blank pickers -
   // restore that selection once, as soon as the department list is in so
   // selectedDepartment can resolve. Runs at most once (hasRestoredRef) so it
   // doesn't fight the user's own subsequent picks.
@@ -255,7 +218,6 @@ export default function AcademicsSubjectsPage() {
     hasRestoredRef.current = true;
     const departmentId = searchParams.get("departmentId");
     const courseId = searchParams.get("courseId");
-    const year = searchParams.get("year");
     const academicYear = searchParams.get("academicYear") || selectedAcademicYear;
     if (!departmentId) return;
     const dept = departments.find((d) => d.id === departmentId);
@@ -266,7 +228,6 @@ export default function AcademicsSubjectsPage() {
       const list = await loadCourses(departmentId);
       if (courseId && list.some((c) => c.id === courseId)) {
         setSelectedCourseId(courseId);
-        if (year) setSelectedYear(year);
       }
     })();
     // hasRestoredRef guards this to run at most once - selectedAcademicYear
@@ -277,7 +238,6 @@ export default function AcademicsSubjectsPage() {
   function selectDepartment(departmentId: string) {
     setSelectedDepartmentId(departmentId);
     setSelectedCourseId("");
-    setSelectedYear("");
     setCourses([]);
     setSubjects([]);
     void loadCourses(departmentId);
@@ -285,12 +245,7 @@ export default function AcademicsSubjectsPage() {
 
   function selectCourse(courseId: string) {
     setSelectedCourseId(courseId);
-    setSelectedYear("");
     setSubjects([]);
-  }
-
-  function selectYear(year: string) {
-    setSelectedYear(year);
   }
 
   async function handleDelete() {
@@ -300,7 +255,7 @@ export default function AcademicsSubjectsPage() {
       const json = await res.json() as { error?: string };
       if (!res.ok) throw new Error(json.error ?? "Failed to delete subject");
       toast({ variant: "success", title: `${deleteTarget.name} removed` });
-      await loadSubjects(selectedDepartment.name, selectedCourseId, selectedYear, selectedAcademicYear);
+      await loadSubjects(selectedDepartment.name, selectedCourseId, selectedAcademicYear);
     } catch (err) {
       toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to delete subject" });
     } finally {
@@ -309,8 +264,8 @@ export default function AcademicsSubjectsPage() {
   }
 
   async function handleExportXlsx() {
-    if (!selectedDepartment || !selectedCourse || !selectedYear) {
-      toast({ variant: "destructive", title: "Select Department, Course and Year first" });
+    if (!selectedDepartment || !selectedCourse) {
+      toast({ variant: "destructive", title: "Select Department and Course first" });
       return;
     }
     if (sortedSubjects.length === 0) {
@@ -357,7 +312,7 @@ export default function AcademicsSubjectsPage() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      const safeName = `${selectedDepartment.name}-${selectedCourse.name}-${ordinalYear(Number(selectedYear))}`.replace(/[^a-zA-Z0-9]+/g, "-");
+      const safeName = `${selectedDepartment.name}-${selectedCourse.name}`.replace(/[^a-zA-Z0-9]+/g, "-");
       a.download = `${safeName}-subjects.xlsx`;
       a.click();
       URL.revokeObjectURL(url);
@@ -368,8 +323,8 @@ export default function AcademicsSubjectsPage() {
   }
 
   async function handleExportDocx() {
-    if (!selectedDepartment || !selectedCourse || !selectedYear) {
-      toast({ variant: "destructive", title: "Select Department, Course and Year first" });
+    if (!selectedDepartment || !selectedCourse) {
+      toast({ variant: "destructive", title: "Select Department and Course first" });
       return;
     }
     if (sortedSubjects.length === 0) {
@@ -379,7 +334,7 @@ export default function AcademicsSubjectsPage() {
     try {
       // Try real docx, fallback to HTML-based .doc if package not available
       let blob: Blob;
-      let filename = `${selectedDepartment.name}-${selectedCourse.name}-${ordinalYear(Number(selectedYear))}`.replace(/[^a-zA-Z0-9]+/g, "-");
+      let filename = `${selectedDepartment.name}-${selectedCourse.name}`.replace(/[^a-zA-Z0-9]+/g, "-");
       try {
         const docx: any = await (eval('import("docx")') as Promise<any>);
         const { Document, Packer, Paragraph, Table, TableRow, TableCell, WidthType, TextRun, HeadingLevel, AlignmentType } = docx as any;
@@ -407,7 +362,7 @@ export default function AcademicsSubjectsPage() {
           sections: [
             {
               children: [
-                new Paragraph({ text: `${selectedDepartment.name} · ${selectedCourse.name} · ${ordinalYear(Number(selectedYear))}`, heading: HeadingLevel.HEADING_2, alignment: AlignmentType.CENTER }),
+                new Paragraph({ text: `${selectedDepartment.name} · ${selectedCourse.name}`, heading: HeadingLevel.HEADING_2, alignment: AlignmentType.CENTER }),
                 new Paragraph({ text: `Regulation: ${allowedRegulations.join(", ") || "None"} · Academic Year: ${selectedAcademicYear}`, alignment: AlignmentType.CENTER }),
                 new Paragraph({ text: "" }),
                 table,
@@ -425,7 +380,7 @@ export default function AcademicsSubjectsPage() {
               `<tr><td>${s.serialNumber ?? ""}</td><td>${s.category === "OTHER" ? (s.customCategory || "Other") : (s.category ?? "")}</td><td>${s.name}</td><td>${s.code}</td><td>${s.type ? SUBJECT_TYPE_LABELS[s.type] ?? s.type : ""}</td><td>${s.lectureHours ?? ""}</td><td>${s.tutorialHours ?? ""}</td><td>${s.practicalHours ?? ""}</td><td>${s.credits ?? ""}</td></tr>`
           )
           .join("");
-        const html = `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body><h2 style="text-align:center">${selectedDepartment.name} · ${selectedCourse.name} · ${ordinalYear(Number(selectedYear))}</h2><table border="1" cellpadding="4" cellspacing="0" style="border-collapse:collapse;width:100%"><thead><tr><th>S.No.</th><th>Category</th><th>Name</th><th>Code</th><th>Type</th><th>L</th><th>T</th><th>P</th><th>Credits</th></tr></thead><tbody>${rowsHtml}</tbody></table></body></html>`;
+        const html = `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body><h2 style="text-align:center">${selectedDepartment.name} · ${selectedCourse.name}</h2><table border="1" cellpadding="4" cellspacing="0" style="border-collapse:collapse;width:100%"><thead><tr><th>S.No.</th><th>Category</th><th>Name</th><th>Code</th><th>Type</th><th>L</th><th>T</th><th>P</th><th>Credits</th></tr></thead><tbody>${rowsHtml}</tbody></table></body></html>`;
         blob = new Blob([html], { type: "application/msword" });
         filename += ".doc";
       }
@@ -445,13 +400,13 @@ export default function AcademicsSubjectsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Subjects"
-        description="Manage subjects offered for each year of every department's courses"
+        description="Manage subjects offered for each regulation of every department's courses"
         actions={
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => void handleExportXlsx()} disabled={!selectedDepartmentId || !selectedCourseId || !selectedYear}>
+            <Button variant="outline" onClick={() => void handleExportXlsx()} disabled={!selectedDepartmentId || !selectedCourseId}>
               <FileSpreadsheet className="h-4 w-4 mr-2" />Export XLSX
             </Button>
-            <Button variant="outline" onClick={() => void handleExportDocx()} disabled={!selectedDepartmentId || !selectedCourseId || !selectedYear}>
+            <Button variant="outline" onClick={() => void handleExportDocx()} disabled={!selectedDepartmentId || !selectedCourseId}>
               <FileText className="h-4 w-4 mr-2" />Export DOCX
             </Button>
           </div>
@@ -467,7 +422,7 @@ export default function AcademicsSubjectsPage() {
       ) : (
         <>
           <Card>
-            <CardContent className="p-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <CardContent className="p-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
               <div className="space-y-1.5">
                 <Label>Department</Label>
                 <Select value={selectedDepartmentId} onValueChange={selectDepartment}>
@@ -487,22 +442,12 @@ export default function AcademicsSubjectsPage() {
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <Label>Year</Label>
-                <Select value={selectedYear} onValueChange={selectYear} disabled={!selectedCourse}>
-                  <SelectTrigger><SelectValue placeholder="Select year" /></SelectTrigger>
-                  <SelectContent>
-                    {yearOptions.map((y) => <SelectItem key={y} value={String(y)}>{ordinalYear(y)}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
                 <Label>Regulation</Label>
-                {/* Read-only - auto-resolved from Course Catalog's own
-                    regulation batches for this course & year. Never picked
-                    manually here. */}
+                {/* Read-only - auto-resolved from the Course Catalog's own
+                    regulations for this course. Never picked manually here. */}
                 <div className="flex h-9 items-center gap-1.5 rounded-md border bg-muted/30 px-3">
-                  {!selectedYear ? (
-                    <span className="text-sm text-muted-foreground">Pick a year first</span>
+                  {!selectedCourseId ? (
+                    <span className="text-sm text-muted-foreground">Pick a course first</span>
                   ) : allowedRegulations.length === 0 ? (
                     <span className="text-sm text-muted-foreground">None assigned</span>
                   ) : (
@@ -523,13 +468,13 @@ export default function AcademicsSubjectsPage() {
             </p>
           )}
 
-          {selectedCourse && selectedYear && selectedDepartment && (
+          {selectedCourse && selectedDepartment && (
             <Card>
               <CardContent className="p-4 space-y-4">
                 <div className="flex items-center justify-between flex-wrap gap-2">
                   <h2 className="font-semibold text-sm flex items-center gap-2">
                     <BookOpen className="h-4 w-4" />
-                    {selectedDepartment.name} · {selectedCourse.name} · {ordinalYear(Number(selectedYear))}
+                    {selectedDepartment.name} · {selectedCourse.name}
                   </h2>
                   <div className="flex flex-wrap items-center gap-2">
                     {showHistory && (
@@ -555,13 +500,20 @@ export default function AcademicsSubjectsPage() {
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => router.push(`/academics/subjects/import?departmentId=${selectedDepartmentId}&courseId=${selectedCourseId}&year=${selectedYear}&academicYear=${encodeURIComponent(selectedAcademicYear)}&department=${encodeURIComponent(selectedDepartment.name)}&courseName=${encodeURIComponent(selectedCourse.name)}`)}
+                      onClick={() => void loadSubjects(selectedDepartment.name, selectedCourseId, selectedAcademicYear)}
+                    >
+                      <RefreshCw className="h-4 w-4 mr-2" />Load
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => router.push(`/academics/subjects/import?departmentId=${selectedDepartmentId}&courseId=${selectedCourseId}&academicYear=${encodeURIComponent(selectedAcademicYear)}&department=${encodeURIComponent(selectedDepartment.name)}&courseName=${encodeURIComponent(selectedCourse.name)}`)}
                     >
                       <Upload className="h-4 w-4 mr-2" />Import Subjects
                     </Button>
                     <Button
                       size="sm"
-                      onClick={() => router.push(`/academics/subjects/new?departmentId=${selectedDepartmentId}&courseId=${selectedCourseId}&year=${selectedYear}&academicYear=${encodeURIComponent(selectedAcademicYear)}&department=${encodeURIComponent(selectedDepartment.name)}&regulation=${encodeURIComponent(singleRegulation)}&nextSerialNumber=${nextSerialNumber}&catalogId=${encodeURIComponent(selectedCourse.catalogId ?? "")}`)}
+                      onClick={() => router.push(`/academics/subjects/new?departmentId=${selectedDepartmentId}&courseId=${selectedCourseId}&academicYear=${encodeURIComponent(selectedAcademicYear)}&department=${encodeURIComponent(selectedDepartment.name)}&regulation=${encodeURIComponent(singleRegulation)}&nextSerialNumber=${nextSerialNumber}&catalogId=${encodeURIComponent(selectedCourse.catalogId ?? "")}`)}
                     >
                       <Plus className="h-4 w-4 mr-2" />Add Subject
                     </Button>
@@ -574,7 +526,7 @@ export default function AcademicsSubjectsPage() {
                   </div>
                 ) : subjects.length === 0 ? (
                   <p className="text-sm text-muted-foreground py-6 text-center">
-                    No subjects added yet for this year.
+                    No subjects added yet. Select a regulation above and click Load.
                   </p>
                 ) : (
                   <Card className="overflow-hidden">
@@ -620,7 +572,7 @@ export default function AcademicsSubjectsPage() {
                                     size="icon"
                                     className="h-8 w-8"
                                     aria-label={`Edit ${s.name}`}
-                                    onClick={() => router.push(`/academics/subjects/${s.id}/edit?departmentId=${selectedDepartmentId}&courseId=${selectedCourseId}&year=${selectedYear}&academicYear=${encodeURIComponent(selectedAcademicYear)}&regulation=${encodeURIComponent(singleRegulation)}`)}
+                                    onClick={() => router.push(`/academics/subjects/${s.id}/edit?departmentId=${selectedDepartmentId}&courseId=${selectedCourseId}&academicYear=${encodeURIComponent(selectedAcademicYear)}&regulation=${encodeURIComponent(singleRegulation)}`)}
                                   >
                                     <Pencil className="h-3.5 w-3.5" />
                                   </Button>

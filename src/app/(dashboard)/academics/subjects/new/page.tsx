@@ -49,14 +49,17 @@ export default function NewAcademicsSubjectPage() {
   const nextSerialNumber = searchParams.get("nextSerialNumber") ?? "";
   const catalogId = searchParams.get("catalogId") ?? "";
   // Carried through to the success redirect so the Subjects list lands back
-  // on this same department/course/year/session/regulation instead of the
+  // on this same department/course/session/regulation instead of the
   // blank pickers.
-  const backHref = `/academics/subjects?departmentId=${encodeURIComponent(departmentId)}&courseId=${encodeURIComponent(courseId)}&year=${encodeURIComponent(year)}&academicYear=${encodeURIComponent(academicYear)}&regulation=${encodeURIComponent(regulationFromList)}`;
+  const backHref = `/academics/subjects?departmentId=${encodeURIComponent(departmentId)}&courseId=${encodeURIComponent(courseId)}&academicYear=${encodeURIComponent(academicYear)}&regulation=${encodeURIComponent(regulationFromList)}`;
 
   const [form, setForm] = useState<SubjectForm>({
     ...EMPTY_SUBJECT_FORM, regulation: regulationFromList, serialNumber: nextSerialNumber,
   });
   const [saving, setSaving] = useState(false);
+  // Year of the course this subject belongs to. When no URL
+  // param was supplied, the user picks it here.
+  const [formYear, setFormYear] = useState<string>(year);
   // Whichever of this course's own regulations (Course Catalog, see
   // CourseCatalogSettingsCard) currently cover the picked year, resolved
   // from their batch coverage - offered as an optional tag, not required
@@ -65,23 +68,30 @@ export default function NewAcademicsSubjectPage() {
   const [regulations, setRegulations] = useState<string[]>([]);
 
   useEffect(() => {
-    if (!courseId || !year) {
-      toast({ variant: "destructive", title: "Select a course, department and year first" });
+    if (!courseId) {
+      toast({ variant: "destructive", title: "Select a course first" });
       router.push("/academics/subjects");
     }
-  }, [courseId, year, router]);
+  }, [courseId, router]);
 
   useEffect(() => {
+    if (!catalogId) return;
     fetch("/api/college/course-catalog")
       .then((r) => r.json() as Promise<{ items: CourseCatalogItem[] }>)
       .then((d) => {
         const catalogItem = (d.items ?? []).find((c) => c.id === catalogId);
-        setRegulations(regulationsForCourseYearByBatch(catalogItem?.regulationBatches ?? {}, Number(year), parseAcademicYearStart(academicYear) ?? undefined, catalogItem?.regulations));
+        // If year is known from URL, resolve regulations for it;
+        // otherwise show all regulations for the course.
+        if (year) {
+          setRegulations(regulationsForCourseYearByBatch(catalogItem?.regulationBatches ?? {}, Number(year), parseAcademicYearStart(academicYear) ?? undefined, catalogItem?.regulations));
+        } else {
+          setRegulations(catalogItem?.regulations ?? []);
+        }
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load regulations" }));
   }, [catalogId, year, academicYear]);
 
-  if (!courseId || !year) return null;
+  if (!courseId) return null;
 
   function setF(patch: Partial<SubjectForm>) {
     setForm((f) => ({ ...f, ...patch }));
@@ -109,6 +119,10 @@ export default function NewAcademicsSubjectPage() {
       toast({ variant: "destructive", title: "L, T and P are required" });
       return;
     }
+    if (!formYear) {
+      toast({ variant: "destructive", title: "Select a year" });
+      return;
+    }
     setSaving(true);
     try {
       const res = await fetch("/api/college/subjects", {
@@ -116,7 +130,7 @@ export default function NewAcademicsSubjectPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           courseId,
-          year: Number(year),
+          year: Number(formYear),
           department: department || undefined,
           academicYear: academicYear || undefined,
           regulation: form.regulation,
@@ -151,11 +165,7 @@ export default function NewAcademicsSubjectPage() {
     <div className="max-w-xl">
       <PageHeader
         title="Add Subject"
-        description={
-          academicYear
-            ? `Add a subject offered for this year of the course, for academic year ${academicYear}`
-            : "Add a subject offered for this year of the course"
-        }
+        description="Add a subject to this course"
       />
 
       <Card>
@@ -166,6 +176,15 @@ export default function NewAcademicsSubjectPage() {
           <form onSubmit={handleSubmit} className="space-y-5">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
+                <Label>Year *</Label>
+                <Select value={formYear} onValueChange={setFormYear}>
+                  <SelectTrigger><SelectValue placeholder="Select year" /></SelectTrigger>
+                  <SelectContent>
+                    {[1, 2, 3, 4].map((y) => <SelectItem key={y} value={String(y)}>{y} Year</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
                 <Label>S.No. *</Label>
                 <Input
                   type="number"
@@ -174,24 +193,25 @@ export default function NewAcademicsSubjectPage() {
                   onChange={(e) => setF({ serialNumber: stripLeadingZeros(e.target.value) })}
                 />
               </div>
-              <div className="space-y-2">
-                <Label>Category *</Label>
-                <Select value={form.category} onValueChange={(v) => setF({ category: v as SubjectCategory })}>
-                  <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
-                  <SelectContent>
-                    {(Object.entries(SUBJECT_CATEGORY_LABELS) as [SubjectCategory, string][]).map(([value, label]) => (
-                      <SelectItem key={value} value={value}>{label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {form.category === "OTHER" && (
-                  <Input
-                    value={form.customCategory}
-                    onChange={(e) => setF({ customCategory: e.target.value })}
-                    placeholder="Enter category name"
-                  />
-                )}
-              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Category *</Label>
+              <Select value={form.category} onValueChange={(v) => setF({ category: v as SubjectCategory })}>
+                <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
+                <SelectContent>
+                  {(Object.entries(SUBJECT_CATEGORY_LABELS) as [SubjectCategory, string][]).map(([value, label]) => (
+                    <SelectItem key={value} value={value}>{label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {form.category === "OTHER" && (
+                <Input
+                  value={form.customCategory}
+                  onChange={(e) => setF({ customCategory: e.target.value })}
+                  placeholder="Enter category name"
+                />
+              )}
             </div>
 
             <div className="space-y-2">
@@ -202,14 +222,14 @@ export default function NewAcademicsSubjectPage() {
             <div className="space-y-2">
               <Label>Regulation</Label>
               <Select value={form.regulation} onValueChange={(v) => setF({ regulation: v })} disabled={regulations.length === 0}>
-                <SelectTrigger><SelectValue placeholder={regulations.length ? "Select regulation (optional)" : "None resolved for this year"} /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder={regulations.length ? "Select regulation (optional)" : "None resolved for this course"} /></SelectTrigger>
                 <SelectContent>
                   {regulations.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
                 </SelectContent>
               </Select>
               {regulations.length === 0 && (
                 <p className="text-xs text-muted-foreground">
-                  No regulation&rsquo;s batch currently covers this year - the subject will be added without one.
+                  No regulation is assigned to this course yet. The subject will be added without one.
                 </p>
               )}
             </div>

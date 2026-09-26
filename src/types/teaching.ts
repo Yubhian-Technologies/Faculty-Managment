@@ -73,7 +73,6 @@ export interface Subject {
   customCategory?: string;
   name: string;
   code: string;
-  catalogId?: string;
   hoursPerWeek: number;
   totalHoursPerSemester?: number;
   // L-T-P breakdown (Lecture/Tutorial/Practical hours per week) alongside
@@ -91,31 +90,23 @@ export interface Subject {
   updatedAt: Timestamp;
 }
 
-// ─── Subject <-> Semester assignment ──────────────────────────────────
-// A master Subject (catalogId + year + regulation, department-independent)
-// can be taught in a DIFFERENT semester by different departments (e.g.
-// Physics = Semester 1 for CSE, Semester 2 for ECE) - a real many-to-many
-// relationship a single field on Subject can never represent. This
-// collection is that mapping: one row per (subject, department) pair,
-// doc id `${subjectId}_${departmentId}` - the id scheme itself is what
-// enforces "one semester per subject per department" while leaving every
-// other department free to hold its own independent row for the same
-// subject. See academics/assign-semester/page.tsx (the only place these
-// are created) and api/college/subject-semester-assignments/route.ts.
+// ─── Subject Semester Assignment ────────────────────────────────────
+// Used by the teaching-assignments page (HOD) and the faculty modules
+// route to list subjects assigned for a specific semester.
+
 export interface SubjectSemesterAssignment {
-  id: string; // `${subjectId}_${departmentId}`
+  id: string;
   collegeId: string;
+  department: string;
+  departmentId?: string;
+  courseId?: string;
+  courseName?: string;
+  semester: number;
+  academicYear: string;
   subjectId: string;
   subjectName: string;
   subjectCode: string;
-  catalogId: string;
-  year: number;
-  departmentId: string;
-  departmentName: string;
-  // This department's OWN Course doc - Teaching Assignments/Timetable
-  // stay section/course-scoped, so this is what lets them join back to it.
-  courseId: string;
-  semester: number;
+  isActive: boolean;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
