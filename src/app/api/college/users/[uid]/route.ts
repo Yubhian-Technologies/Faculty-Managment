@@ -9,7 +9,7 @@ import { syncDepartmentHod, getHodDepartmentScope, canHodEditDepartment } from "
 import { MANAGEABLE_STAFF_ROLES } from "@/types";
 import { normalizeAcademicProfile } from "@/lib/faculty/academicProfileCompat";
 import { degreeTypeError } from "@/lib/faculty/degreeType";
-import { migrateUserDoc } from "@/lib/faculty/fieldRenames";
+import { migrateUserDoc, migrateFacultyDoc, migrateSupportingStaffDoc } from "@/lib/faculty/fieldRenames";
 import { withLegacyPersonalKeysDeleted } from "@/lib/faculty/legacyKeyDeletes";
 import { assignSeat } from "@/lib/roles/seats";
 import type { UserRole } from "@/types";
@@ -97,7 +97,35 @@ export async function GET(
     const { targetSnap, error, status } = await loadTargetInScope(db, session, uid);
     if (!targetSnap) return NextResponse.json({ error }, { status });
 
-    return NextResponse.json({ user: { uid: targetSnap.id, ...migrateUserDoc(targetSnap.data() ?? {}) } });
+    const user = { uid: targetSnap.id, ...migrateUserDoc(targetSnap.data() ?? {}) } as Record<string, unknown> & { role?: string };
+
+    // An HOD/Department Office/Panel Member login's own `users` doc only ever
+    // stores a thin subset (name/email/department/isActive) - their real
+    // profile (College Email, Date of Joining, Total/Internal Experience,
+    // Academic Qualification, ...) lives on a linked facultyMembers record
+    // instead, when one exists (see lib/faculty/link-hod for how an HOD gets
+    // one). Without this merge, viewing the SAME person through this page
+    // (Principal/HOD/College Office's "Staff" list) showed a near-empty
+    // profile even though their Faculty record - reachable via a different
+    // role's page - was fully filled in. Same merge Super Admin's own user
+    // view already does (api/admin/users/[uid]), just not previously applied
+    // here. A College Staff login merges its supportingStaff record the same
+    // way. No-op (empty query result) for anyone with no linked record.
+    let linkedCollection: "facultyMembers" | "supportingStaff" | null = null;
+    if (user.role === "HOD" || user.role === "DEPARTMENT_OFFICE" || user.role === "PANEL_MEMBER") linkedCollection = "facultyMembers";
+    else if (user.role === "COLLEGE_STAFF") linkedCollection = "supportingStaff";
+
+    if (linkedCollection) {
+      const linkedSnap = await db.collection("colleges").doc(session.collegeId).collection(linkedCollection)
+        .where("userUid", "==", uid).limit(1).get();
+      if (!linkedSnap.empty) {
+        const linkedData = linkedSnap.docs[0].data();
+        const linkedLifted = linkedCollection === "facultyMembers" ? migrateFacultyDoc(linkedData) : migrateSupportingStaffDoc(linkedData);
+        return NextResponse.json({ user: { ...linkedLifted, ...user, recordId: linkedSnap.docs[0].id } });
+      }
+    }
+
+    return NextResponse.json({ user });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
