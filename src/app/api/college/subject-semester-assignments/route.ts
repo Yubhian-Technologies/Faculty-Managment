@@ -46,11 +46,18 @@ export async function GET(request: Request) {
       targetDeptIds = Array.from(deptIds);
     }
 
-    let query: FirebaseFirestore.Query = db
-      .collection("colleges").doc(session.collegeId)
-      .collection("subjectSemesterAssignments")
-      .where("courseId", "==", courseId);
-    if (subjectId) query = query.where("subjectId", "==", subjectId);
+    let query: FirebaseFirestore.Query;
+
+    // If subjectId is provided, query by subjectId only (to avoid
+    // Firestore composite index requirements between courseId and
+    // subjectId). The subject document already carries courseId.
+    if (subjectId) {
+      query = db.collection("colleges").doc(session.collegeId)
+        .collection("subjectSemesterAssignments").where("subjectId", "==", subjectId);
+    } else {
+      query = db.collection("colleges").doc(session.collegeId)
+        .collection("subjectSemesterAssignments").where("courseId", "==", courseId);
+    }
     if (academicYear) query = query.where("academicYear", "==", academicYear);
     if (targetDeptIds) {
       query = query.where("departmentId", "in", targetDeptIds.slice(0, 10));
