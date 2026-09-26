@@ -342,16 +342,9 @@ export default function AcademicsSubjectsPage() {
                     } />
                   </SelectTrigger>
                   <SelectContent>
-                    {allowedRegulations.length === 0 ? (
-                      <SelectItem value="">None assigned</SelectItem>
-                    ) : (
-                      <>
-                        <SelectItem value="">All regulations</SelectItem>
-                        {allowedRegulations.map((r) => (
-                          <SelectItem key={r} value={r}>{r}</SelectItem>
-                        ))}
-                      </>
-                    )}
+                    {allowedRegulations.map((r) => (
+                      <SelectItem key={r} value={r}>{r}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
