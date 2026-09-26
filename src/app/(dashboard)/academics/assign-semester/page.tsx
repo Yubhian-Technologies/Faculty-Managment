@@ -142,14 +142,10 @@ export default function AssignToSemesterPage() {
     setIsLoadingSubjects(true);
     try {
       const catalogId = course.catalogId ?? "";
-      const [subjectsRes, timingsRes, assignmentsRes] = await Promise.all([
-        catalogId
-          ? fetch(`/api/college/subjects?catalogId=${encodeURIComponent(catalogId)}&year=${encodeURIComponent(year)}`)
-          : fetch(`/api/college/subjects?courseId=${encodeURIComponent(course.id)}&year=${encodeURIComponent(year)}`),
+       const [subjectsRes, timingsRes, assignmentsRes] = await Promise.all([
+        fetch(`/api/college/subjects?courseId=${encodeURIComponent(course.id)}&year=${encodeURIComponent(year)}`),
         fetch(`/api/college/course-year-timings?courseId=${encodeURIComponent(course.id)}`),
-        catalogId
-          ? fetch(`/api/college/subject-semester-assignments?catalogId=${encodeURIComponent(catalogId)}&year=${encodeURIComponent(year)}&departmentId=${encodeURIComponent(departmentId)}`)
-          : Promise.resolve(null),
+        fetch(`/api/college/subject-semester-assignments?courseId=${encodeURIComponent(course.id)}&departmentId=${encodeURIComponent(departmentId)}`),
       ]);
       const subjectsData = await subjectsRes.json() as { subjects?: Subject[] };
       const timingsData = await timingsRes.json() as { timings?: CourseYearTiming[] };
