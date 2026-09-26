@@ -4,9 +4,9 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 
-// Maps a master Subject (catalogId + year, department-independent - see
-// Subject.catalogId's own doc-comment) into a specific semester FOR ONE
-// DEPARTMENT (SubjectSemesterAssignment, types/teaching.ts) - a different
+// Maps a master Subject (courseId + regulation, department-independent)
+// into a specific semester FOR ONE DEPARTMENT
+// (SubjectSemesterAssignment, types/teaching.ts) - a different
 // department can independently map the exact same subject into a different
 // semester, since the doc id (`${subjectId}_${departmentId}`) scopes "one
 // semester per subject" to just that one department.
@@ -16,13 +16,13 @@ export async function GET(request: Request) {
       "HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "ACADEMICS", "PANEL_MEMBER", "COLLEGE_STAFF"
     );
     const { searchParams } = new URL(request.url);
-    const catalogId = searchParams.get("catalogId");
-    const year = searchParams.get("year");
+    const courseId = searchParams.get("courseId");
+    const academicYear = searchParams.get("academicYear");
     const departmentId = searchParams.get("departmentId");
     const semester = searchParams.get("semester");
 
-    if (!catalogId || !year) {
-      return NextResponse.json({ error: "catalogId and year are required" }, { status: 400 });
+    if (!courseId || !academicYear) {
+      return NextResponse.json({ error: "courseId and academicYear are required" }, { status: 400 });
     }
 
     const db = getAdminDb();
@@ -47,8 +47,8 @@ export async function GET(request: Request) {
     let query: FirebaseFirestore.Query = db
       .collection("colleges").doc(session.collegeId)
       .collection("subjectSemesterAssignments")
-      .where("catalogId", "==", catalogId)
-      .where("year", "==", Number(year));
+      .where("courseId", "==", courseId)
+      .where("academicYear", "==", academicYear);
     if (targetDeptIds) {
       query = query.where("departmentId", "in", targetDeptIds.slice(0, 10));
     } else if (departmentId) {
@@ -78,17 +78,18 @@ export async function POST(request: Request) {
       subjectId?: string;
       subjectName?: string;
       subjectCode?: string;
-      catalogId?: string;
+      courseId?: string;
+      academicYear?: string;
+      regulation?: string;
       year?: number;
       departmentId?: string;
       departmentName?: string;
-      courseId?: string;
       semester?: number;
     };
-    const { subjectId, subjectName, subjectCode, catalogId, year, departmentId, departmentName, courseId, semester } = body;
-    if (!subjectId || !catalogId || !year || !departmentId || !courseId || !semester) {
+    const { subjectId, subjectName, subjectCode, courseId, academicYear, regulation, year, departmentId, departmentName, semester } = body;
+    if (!subjectId || !courseId || !academicYear || !departmentId || !semester) {
       return NextResponse.json(
-        { error: "subjectId, catalogId, year, departmentId, courseId and semester are required" },
+        { error: "subjectId, courseId, academicYear, departmentId and semester are required" },
         { status: 400 }
       );
     }
@@ -98,7 +99,14 @@ export async function POST(request: Request) {
 
     // Validate against THIS department's own CourseYearTiming - the same
     // course-year could resolve to a different semester count for a
-    // different department's copy of the course.
+    // different department's copy of the course. `year` is the ordinal
+    // course year (1-based) used to look up CourseYearTiming doc IDs.
+    if (!year) {
+      return NextResponse.json(
+        { error: "year (ordinal course year for validation) is required" },
+        { status: 400 }
+      );
+    }
     const timingSnap = await collegeRef.collection("courseYearTimings").doc(`${courseId}_year${year}`).get();
     const configuredSemesters = (timingSnap.data() as { semesters?: { semester: number }[] } | undefined)?.semesters ?? [];
     if (!configuredSemesters.some((s) => s.semester === Number(semester))) {
@@ -116,11 +124,11 @@ export async function POST(request: Request) {
       subjectId,
       subjectName: subjectName ?? "",
       subjectCode: subjectCode ?? "",
-      catalogId,
-      year: Number(year),
+      courseId,
+      academicYear,
+      regulation: regulation ?? "",
       departmentId,
       departmentName: departmentName ?? "",
-      courseId,
       semester: Number(semester),
       createdAt: existing.exists ? (existing.data() as { createdAt?: unknown }).createdAt : now,
       updatedAt: now,

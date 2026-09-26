@@ -42,17 +42,12 @@ export async function GET(request: Request) {
     const sectionSnap = await collegeRef.collection("sections").doc(sectionId).get();
     if (!sectionSnap.exists) return NextResponse.json({ error: "Section not found" }, { status: 404 });
     const section = sectionSnap.data() as { courseId: string; year: number };
-    const [semesterResult, courseSnap] = await Promise.all([
+    const [semesterResult] = await Promise.all([
       resolveRequestedSemester(db, session.collegeId, section.courseId, section.year, requestedSemester),
-      collegeRef.collection("courses").doc(section.courseId).get(),
     ]);
     if (!semesterResult.ok) {
       return NextResponse.json({ error: semesterResult.error }, { status: 400 });
     }
-    // catalogId-scoped, not courseId-scoped - a master subject is filed under
-    // whichever department's own Course doc created it (see Subject.catalogId's
-    // own doc-comment), which may not be this section's own courseId.
-    const catalogId = (courseSnap.data() as { catalogId?: string } | undefined)?.catalogId;
     const currentSemester = semesterResult.semester;
     const currentAcademicYear = await resolveCollegeAcademicYear(db, session.collegeId);
     const requestedAcademicYear = academicYearParam || currentAcademicYear;
@@ -69,9 +64,10 @@ export async function GET(request: Request) {
       // Joined onto each slot below so the Timetable pages' Theory/Practical
       // filter can group by SubjectType without a second round-trip - same
       // technique as class-leader/timetable/route.ts's own Theory/Lab filter.
-      catalogId
-        ? collegeRef.collection("subjects").where("catalogId", "==", catalogId).where("year", "==", section.year).get()
-        : collegeRef.collection("subjects").where("courseId", "==", section.courseId).where("year", "==", section.year).get(),
+      // Master subjects are scoped by courseId + regulation (no year),
+      // so we query by courseId without a year filter. Legacy subjects
+      // (which have year) are also matched since they share the same courseId.
+      collegeRef.collection("subjects").where("courseId", "==", section.courseId).get(),
     ]);
     const subjectTypeById = new Map(subjectsSnap.docs.map((d) => [d.id, (d.data() as { type?: SubjectType }).type]));
     // A prior semester's or prior session's published slots stay in

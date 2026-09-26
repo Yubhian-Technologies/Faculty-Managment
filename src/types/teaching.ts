@@ -100,6 +100,7 @@ export interface SubjectSemesterAssignment {
   departmentId?: string;
   courseId?: string;
   courseName?: string;
+  regulation?: string;
   semester: number;
   academicYear: string;
   subjectId: string;
