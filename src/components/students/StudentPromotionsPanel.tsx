@@ -13,6 +13,7 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { CardSkeleton } from "@/components/shared/SkeletonLoader";
 import { toast } from "@/hooks/useToast";
 import { yearOrdinalLabel } from "@/lib/college/academicYears";
+import { sectionParityGap, describeSectionParityGap } from "@/lib/college/sectionParity";
 import { parseExcelFile, parseCSV, matchHeaders, getUnmatchedHeaders, readFileAsText } from "@/lib/utils/csv";
 import { cn } from "@/lib/utils";
 import type { AcademicYear, Course, Section, StudentRecord } from "@/types";
@@ -168,6 +169,15 @@ export function StudentPromotionsPanel({ showHeader = true }: { showHeader?: boo
   const isFinalYear = sourceSection
     ? sourceSection.year >= (sourceCourse?.durationYears ?? maxActiveYear)
     : false;
+
+  // A cohort can only move up when the next year has exactly the same sections
+  // (same course + department) - otherwise a section has nowhere to go, or an
+  // extra one is left empty. Shared-first-year feeder sections are exempt.
+  const parityError = useMemo(() => {
+    if (!sourceSection || isFinalYear || (sourceSection.secondaryDepartments?.length ?? 0) > 0) return "";
+    const gap = sectionParityGap(sections, sourceSection.department, sourceSection.courseId, sourceSection.year, sourceSection.year + 1);
+    return gap.missing.length || gap.extra.length ? describeSectionParityGap(gap, sourceSection.year, sourceSection.year + 1) : "";
+  }, [sections, sourceSection, isFinalYear]);
 
   useEffect(() => {
     if (!sourceSection) {
@@ -360,6 +370,10 @@ export function StudentPromotionsPanel({ showHeader = true }: { showHeader?: boo
       toast({ variant: "destructive", title: "Select at least one student" });
       return;
     }
+    if (parityError) {
+      toast({ variant: "destructive", title: parityError });
+      return;
+    }
     // Final year has no per-student target to fill in - every row shows the
     // same static "Graduate" label instead of a Select (see the table below),
     // so rowTargets is never populated for these rows. Only non-final-year
@@ -385,7 +399,7 @@ export function StudentPromotionsPanel({ showHeader = true }: { showHeader?: boo
             body: JSON.stringify(
               target === GRADUATE
                 ? { studentIds, action: "GRADUATE", sourceSectionId: sourceSection!.id }
-                : { studentIds, action: "PROMOTE", targetSectionId: target }
+                : { studentIds, action: "PROMOTE", targetSectionId: target, sourceSectionId: sourceSection!.id }
             ),
           })
         )
@@ -437,6 +451,12 @@ export function StudentPromotionsPanel({ showHeader = true }: { showHeader?: boo
 
       {sourceSection && (
         <>
+          {parityError && (
+            <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>{parityError}</span>
+            </div>
+          )}
           <Card>
             <CardContent className="p-5 space-y-3">
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -521,7 +541,7 @@ export function StudentPromotionsPanel({ showHeader = true }: { showHeader?: boo
                   <Users className="h-4 w-4 text-muted-foreground" />
                   <span><strong>{regularCount}</strong> regular students · <strong>{selectedCount}</strong> selected</span>
                 </div>
-                <Button onClick={() => void handleSubmit()} loading={isSubmitting} disabled={selectedCount === 0}>
+                <Button onClick={() => void handleSubmit()} loading={isSubmitting} disabled={selectedCount === 0 || !!parityError}>
                   <GraduationCap className="h-4 w-4 mr-2" />
                   {isFinalYear ? "Graduate Selected" : "Promote Selected"}
                 </Button>

@@ -86,6 +86,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Location Staff", href: "/administration/users", iconName: "Users", roles: ["ADMINISTRATION"], section: "Management" },
   { label: "Departments", href: "/administration/departments", iconName: "Settings2", roles: ["ADMINISTRATION"] },
   { label: "Colleges", href: "/administration/colleges", iconName: "Building2", roles: ["ADMINISTRATION"] },
+  { label: "Role Assignments", href: "/administration/role-assignments", iconName: "UserCog", roles: ["ADMINISTRATION"] },
   { label: "Hiring Requests", href: "/administration/vacancies", iconName: "ClipboardList", roles: ["ADMINISTRATION"], section: "Hiring" },
   { label: "Interview Plans", href: "/administration/interviews", iconName: "CalendarCheck", roles: ["ADMINISTRATION"] },
   { label: "Offer Letters", href: "/administration/offers", iconName: "FileText", roles: ["ADMINISTRATION"] },
@@ -283,8 +284,11 @@ export const NAV_ITEMS: NavItem[] = [
 
   // College Office
   { label: "Dashboard", href: "/college-office", iconName: "LayoutDashboard", roles: ["COLLEGE_OFFICE"] },
+  // Graduated Students lives as a sub-tab (top-right pill) inside the Students
+  // page itself now, rather than its own sidebar entry - see
+  // OfficeStudentsPage. /college-office/graduates still works as a direct
+  // route for any existing bookmarks/links.
   { label: "Students", href: "/college-office/students", iconName: "GraduationCap", roles: ["COLLEGE_OFFICE"], section: "Students" },
-  { label: "Graduated Students", href: "/college-office/graduates", iconName: "Award", roles: ["COLLEGE_OFFICE"] },
   { label: "Semester Timings", href: "/college-office/timings", iconName: "Clock", roles: ["COLLEGE_OFFICE"] },
   { label: "Non-Technical Staff", href: "/college-office/non-technical-staff", iconName: "UsersRound", roles: ["COLLEGE_OFFICE"], section: "Staff" },
   // Only the first item of a group carries `section` - the sidebar renders a
@@ -560,13 +564,31 @@ function seatRolesOf(primary: UserRole, roles: readonly UserRole[]): UserRole[] 
 // Empty for a login with no seats (nothing to switch between). `roles` lists
 // seat roles most senior first, so the first context is the default.
 // A head of several departments gets one context per department ("HOD - CSE").
+//
+// An HOD context's key always carries its department (`HOD:<dept>`), even
+// with exactly one department - only the LABEL collapses to plain "Head of
+// Department" when there's just one, to keep the switcher uncluttered. The
+// key has to carry it regardless: useWorkContext's syncActiveHodCookie reads
+// the department straight out of this key via departmentOfContext(), and the
+// server-side "Working as HOD" override in requireRole (verifySession.ts)
+// depends on that cookie being set to tell an HOD seat apart from a more
+// senior role/seat the same login also holds (e.g. a College Admin who is
+// also one department's HOD). A bare "HOD" key made departmentOfContext()
+// return null, so the cookie was never set for a single-department HOD, and
+// such a login's API calls silently resolved as their senior role instead -
+// e.g. a College-Admin-and-HOD's Faculty Register call hit no HOD branch at
+// all and came back with the WHOLE college's roster instead of just their
+// department's.
 export function getWorkContexts(primary: UserRole, roles: readonly UserRole[] = [], hodDepartments: readonly string[] = []): WorkContext[] {
   const seats = seatRolesOf(primary, roles);
   if (seats.length === 0) return [];
   return [
     ...seats.flatMap((r): WorkContext[] =>
-      r === "HOD" && hodDepartments.length > 1
-        ? hodDepartments.map((d) => ({ key: hodContextKey(d) as WorkContextKey, label: `${ROLE_LABELS.HOD} - ${d}` }))
+      r === "HOD" && hodDepartments.length > 0
+        ? hodDepartments.map((d) => ({
+            key: hodContextKey(d) as WorkContextKey,
+            label: hodDepartments.length > 1 ? `${ROLE_LABELS.HOD} - ${d}` : ROLE_LABELS.HOD,
+          }))
         : [{ key: r as WorkContextKey, label: ROLE_LABELS[r] }]
     ),
     { key: "ME" as WorkContextKey, label: "My Work" },

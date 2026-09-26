@@ -11,6 +11,7 @@ import { formatDate, stripLeadingZeros } from "@/lib/utils";
 import { Info } from "lucide-react";
 import { HiringTermsSettingsCard } from "@/components/hiring/HiringTermsSettingsCard";
 import { AcademicYearSettingsCard } from "@/components/academics/AcademicYearSettingsCard";
+import { FinancialYearSettingsCard } from "@/components/academics/FinancialYearSettingsCard";
 import { DesignationCatalogCard } from "@/components/academics/DesignationCatalogCard";
 import { LeaveApprovalRoutingCard } from "@/components/leave/LeaveApprovalRoutingCard";
 import { LeaveVacationStaffCard } from "@/components/leave/LeaveVacationStaffCard";
@@ -136,6 +137,7 @@ export default function PrincipalSettingsPage() {
       {/* First of the academic cards: the college-wide session everything else
           sits inside - a course's academic year defaults from it. */}
       <AcademicYearSettingsCard />
+      <FinancialYearSettingsCard />
 
       <Card>
         <CardHeader>

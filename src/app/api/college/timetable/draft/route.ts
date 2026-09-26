@@ -567,8 +567,11 @@ export async function PATCH(request: Request) {
       if (block.length === 0) {
         return NextResponse.json({ error: "That slot is not in the draft" }, { status: 404 });
       }
-      const drop = new Set(block.map((s) => cellKey(s.day, s.periodNumber)));
-      slots = draft.slots.filter((s) => !drop.has(cellKey(s.day, s.periodNumber)));
+      // Drop only this assignment's own slots, not every slot that happens to
+      // share a cell (a split period has two assignments at the same
+      // day+period) - `block` holds direct references into draft.slots, so
+      // identity comparison scopes the removal correctly.
+      slots = draft.slots.filter((s) => !block.includes(s));
     } else if (action === "add") {
       const { toDay, toPeriod } = body;
       if (!toDay || !toPeriod) {
@@ -656,7 +659,11 @@ export async function PATCH(request: Request) {
       }
 
       slots = draft.slots
-        .filter((s) => !moving.has(cellKey(s.day, s.periodNumber)))
+        // Same identity-based scoping as the "remove" branch above - `moving`
+        // (cellKey-based) stays for the occupancy check in validatePlacement,
+        // but vacating the source cell must not also drop a split partner
+        // (a different assignment) that shares the same day+period.
+        .filter((s) => !block.includes(s))
         .concat(
           block.map((s, i) => ({
             ...s,

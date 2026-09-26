@@ -12,7 +12,7 @@ import { getFacultyIdCandidates } from "@/lib/faculty/resolveFacultyMemberId";
 import { resolveDepartmentCourseScope, resolveCatalogId, freshmanLandingDepartmentNames, expandDepartmentNameForRollup, type DepartmentWithId } from "@/lib/college/academicStructure";
 import { fetchStudentsPage, fetchMatchingStudentIds, fetchStudentsForExport } from "@/lib/students/paginatedList";
 import { isLikelySameUnassignedStudent } from "@/lib/students/duplicateDetection";
-import { validateYearForCourseDuration, validateYearSemesterConsistency } from "@/lib/students/rosterValidation";
+import { validateYearForCourseDuration } from "@/lib/students/rosterValidation";
 import type { Course, Section, StudentRecord, StudentStatus, DepartmentCourseScope } from "@/types";
 import { loadDepartmentIndex, stampDepartmentIds } from "@/lib/departments/stampIds";
 
@@ -508,36 +508,6 @@ export async function POST(request: Request) {
           const yearDurationError = validateYearForCourseDuration(Number(body.year), resolvedCourseDoc?.durationYears, courseName);
           if (yearDurationError) {
             return NextResponse.json({ error: yearDurationError }, { status: 400 });
-          }
-        }
-        // Basic Year <-> Semester sanity check - mirrors the bulk importer's
-        // identical check (import-excel/route.ts). Semester is free text
-        // everywhere it's entered (including the Fix Row dialog, which can
-        // pre-fill it from a failed import row's raw text), so this can't
-        // rely on a dropdown constraining it the way Gender/Scholarship etc.
-        // already do.
-        if (typeof body.semester === "string" && body.semester.trim()) {
-          // Widths default to 2/year unless this course-year actually has a
-          // CourseYearTiming doc configuring a different semester count -
-          // see validateYearSemesterConsistency's own doc-comment for why
-          // this is looked up per-year rather than assumed uniform.
-          const timingsSnap = await collegeRef
-            .collection("courseYearTimings")
-            .where("courseId", "==", courseId)
-            .where("year", "<=", Number(body.year))
-            .get();
-          const semesterCountsByYear: Record<number, number> = {};
-          for (const d of timingsSnap.docs) {
-            const t = d.data() as { year: number; semesters?: unknown[] };
-            semesterCountsByYear[t.year] = (t.semesters ?? []).length;
-          }
-          const semesterError = validateYearSemesterConsistency(
-            Number(body.year),
-            Number(body.semester.match(/\d+/)?.[0]),
-            semesterCountsByYear
-          );
-          if (semesterError) {
-            return NextResponse.json({ error: semesterError }, { status: 400 });
           }
         }
         let assignedYears = resolveDepartmentCourseScope(deptScopeDoc, catalogId).assignedYears;

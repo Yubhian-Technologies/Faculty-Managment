@@ -7,8 +7,9 @@ import { FieldValue } from "firebase-admin/firestore";
 import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
 import { isTimetableIncharge } from "@/lib/departments/timetableIncharge";
 import { draftDocId, matchesCurrentSemester, resolveCurrentSemester, resolveRequestedSemester } from "@/lib/college/semester";
-import { resolveTimetableAcademicYear, matchesCurrentAcademicYear } from "@/lib/college/academicSession";
+import { matchesCurrentAcademicYear } from "@/lib/college/academicSession";
 import type { CourseYearTiming, TimetableDraft, TimetableSlot } from "@/types";
+import { resolveCollegeAcademicYear } from "@/lib/college/collegeAcademicYear";
 
 // Materialises a draft into `timetableSlots` - the moment it becomes visible to
 // the Principal, Vice Principal, faculty (panel/teaching) and the Class Leader.
@@ -114,10 +115,7 @@ export async function POST(request: Request) {
     // write below has to agree on which session it's operating in, or a new
     // cohort's publish would silently delete or conflict against the
     // PREVIOUS cohort's own slots for the exact same sectionId/courseId/year.
-    const sessionSnap = await collegeRef.collection("academicSessions").where("isCurrent", "==", true).limit(1).get();
-    const currentAcademicYear = resolveTimetableAcademicYear(
-      sessionSnap.empty ? undefined : (sessionSnap.docs[0].data() as { label?: string }).label
-    );
+    const currentAcademicYear = await resolveCollegeAcademicYear(db, session.collegeId);
 
     // Re-check faculty double-booking against live data: another section may have
     // published since this draft was generated, so the draft's view of who is

@@ -158,7 +158,6 @@ export async function GET(request: Request) {
         course: student.course ?? null,
         year: student.year,
         section: student.section,
-        semester: student.semester ?? null,
       },
       subjects,
       total: {

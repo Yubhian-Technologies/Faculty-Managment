@@ -13,6 +13,7 @@ import { isNameOrChildAmong } from "@/lib/departments/codeOrNameResolver";
 import { isTimetableIncharge } from "@/lib/departments/timetableIncharge";
 import type { Department, DepartmentCourseScope } from "@/types";
 import { loadDepartmentIndex, stampDepartmentIds } from "@/lib/departments/stampIds";
+import { resolveCollegeAcademicYear } from "@/lib/college/collegeAcademicYear";
 
 export async function GET(request: Request) {
   try {
@@ -206,17 +207,27 @@ export async function GET(request: Request) {
         if (seenIds.has(d.id)) continue;
         const data = d.data();
         const deptName = data.department as string;
-        // A direct sub-department (childDepartmentNames) is fully owned
-        // regardless of year - only a MANAGED branch needs this check, since
-        // that's the relationship that's year-scoped (only the years the
-        // manager - this HOD, or one of their own children - actually teaches).
-        if (hodScope!.managedDepartmentNames.includes(deptName) && hodDepartments.length > 0) {
+        // A direct sub-department (childDepartmentNames) is normally fully
+        // owned regardless of year, same as a MANAGED branch's own owned
+        // years - but a branch can be BOTH: a true child of one department
+        // AND grouped under a DIFFERENT department's managedDepartments for
+        // the shared first year (e.g. "data science" is Artificial
+        // Intelligence's own child but Year 1 runs under "BASIC SCIENCE
+        // ENGLISH"). Mirrors the primarySnap loop's own check above and
+        // assertHodOwnsSection's canHodExclusivelyOwnDepartmentYear
+        // (sections/[id]/route.ts) - a section never comes back with more
+        // read access here than it can actually be edited with there. Shown
+        // read-only (not hidden) rather than skipped, same reasoning as the
+        // primarySnap loop: a branch's own roster page shouldn't look
+        // incomplete just because this year belongs to someone else.
+        let accessLevel: "primary" | "secondary" = "primary";
+        if (hodDepartments.length > 0) {
           const catalogId = catalogIdByCourseId.get(data.courseId as string);
           const owner = resolveBranchYearOwner(hodDepartments, deptName, data.year as number, catalogId);
-          if (!hodScope!.ownDepartmentNames.includes(owner) && !hodScope!.childDepartmentNames.includes(owner)) continue;
+          if (!hodScope!.ownDepartmentNames.includes(owner) && !hodScope!.childDepartmentNames.includes(owner)) accessLevel = "secondary";
         }
         seenIds.add(d.id);
-        sections.push({ id: d.id, ...data, accessLevel: "primary" });
+        sections.push({ id: d.id, ...data, accessLevel });
       }
     }
     if (secondarySnap && hodScope) {
@@ -438,10 +449,10 @@ export async function POST(request: Request) {
       if (parsedBatchStart != null) {
         allowed = regulationsForBatchStartYear(catalogItem?.regulationBatches ?? {}, parsedBatchStart, catalogItem?.regulations);
       } else {
-        const sessionSnap = await db.collection("colleges").doc(session.collegeId)
-          .collection("academicSessions").where("isCurrent", "==", true).limit(1).get();
+        // Resolved centrally so this honours the college's own academic-year
+        // start day, not the April cutoff this used to assume.
         const asOfStartYear = parseAcademicYearStart(
-          sessionSnap.empty ? undefined : (sessionSnap.docs[0].data() as { label?: string }).label
+          await resolveCollegeAcademicYear(db, session.collegeId)
         ) ?? currentAcademicStartYear();
         allowed = regulationsForCourseYearByBatch(catalogItem?.regulationBatches ?? {}, Number(body.year), asOfStartYear, catalogItem?.regulations);
       }

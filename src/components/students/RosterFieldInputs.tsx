@@ -28,7 +28,7 @@ const NONE = "__none__";
 // the CSV import/export path is unchanged, this is about the on-screen form.
 // landLineNo is deliberately NOT here: a landline with its STD code runs past
 // 10 digits (the template's own sample is "08832451234").
-const PHONE_FIELD_KEYS = new Set(["guardianContact", "mobileNo"]);
+const PHONE_FIELD_KEYS = new Set(["guardianContact", "fatherContactNo", "motherContactNo", "mobileNo"]);
 
 function ordinalYear(year: number) {
   const suffix = year === 1 ? "st" : year === 2 ? "nd" : year === 3 ? "rd" : "th";
@@ -129,6 +129,22 @@ export function secondaryDepartmentOptions(
   }
   names.delete(departmentName);
   return Array.from(names).sort((a, b) => a.localeCompare(b));
+}
+
+/**
+ * Whether Core Department (Secondary Department) is REQUIRED, not just
+ * offered, for the given department+year - true only once a 1st-year student
+ * is landed under a Basic Science (Freshman) department, since without it
+ * they're stuck unpromotable and invisible to any branch's own HOD. Shared by
+ * this field's own per-student rendering below and by the College Office's
+ * bulk-import picker (college-office/students/import/page.tsx), which asks
+ * the same question once for the whole file instead of once per student -
+ * both must agree on when this is actually mandatory, not just visible.
+ * Mirrors the same rule the server enforces on submit (college/students POST
+ * and the bulk importer's unassigned rows).
+ */
+export function isSecondaryDepartmentRequired(departments: Department[], departmentName: string, year: string): boolean {
+  return year === "1" && !!departmentName && freshmanLandingDepartmentNames(departments).has(departmentName);
 }
 
 /**
@@ -403,13 +419,7 @@ function FieldInput({ field, values, onChange, departments, courseNames, courses
       ? secondaryDepartmentOptions(departments, courses, values.department, values.course ?? "")
       : [];
     if (branches.length === 0) return null;
-    // Required (not just offered) once a 1st-year student is correctly
-    // landed under a Basic Science (Freshman) department - without it they're
-    // stuck unpromotable. Mirrors the same rule the server enforces on submit
-    // (college/students POST and the bulk importer's unassigned rows).
-    const isRequiredNow = values.year === "1" && values.department
-      ? freshmanLandingDepartmentNames(departments).has(values.department)
-      : false;
+    const isRequiredNow = isSecondaryDepartmentRequired(departments, values.department, values.year);
     return (
       <div className="space-y-2">
         <Label>{field.label}{isRequiredNow ? " *" : ""}</Label>

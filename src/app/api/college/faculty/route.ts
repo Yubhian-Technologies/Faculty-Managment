@@ -71,8 +71,7 @@ export async function GET(request: Request) {
       // A `department` param means a caller already knows exactly which
       // department it needs (a picker - e.g. hod/timetable's Assign
       // Timetable Incharge dialog, or TeachingAssignmentsEditor staffing a
-      // subject - both filter/trust the result down to that one department
-      // themselves). Use the HOD's FULL scope there (activeOnly: false), not
+      // subject). Use the HOD's FULL scope there (activeOnly: false), not
       // just whichever department happens to be active in the Working-as
       // switcher - otherwise the picker silently comes back empty for a
       // department the HOD legitimately manages but isn't "working as" right
@@ -80,25 +79,46 @@ export async function GET(request: Request) {
       // keeps the Working-as narrowing so switching context actually
       // isolates that view, as intended.
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid, { activeOnly: !deptFilter });
-      if (scope.ownDepartmentNames.length > 0) {
-        primaryQuery = primaryQuery.where("department", "in", scope.ownDepartmentNames.slice(0, 30));
-      } else {
-      // An HOD with no department on file must see nothing - not the whole
-      // college, which is what leaving the query unfiltered would return.
-        primaryQuery = primaryQuery.where("department", "==", "__none__");
-      }
 
-      // Sub-departments only (facultyManageableDepartmentNames) - a managed/
-      // "core" branch's own faculty roster is never this HOD's, sub-HOD or
-      // main HOD alike (see its own doc-comment in lib/departments/scope.ts),
-      // so `excludeManaged` has nothing left to do here; kept as a no-op for
-      // any existing caller still passing it. Skipped entirely for the
-      // own-only roster (see ownOnly above).
-      const ownedNames = ownOnly
-        ? []
-        : facultyManageableDepartmentNames(scope).filter((n) => !scope.ownDepartmentNames.includes(n));
-      if (ownedNames.length > 0) {
-        childDeptQuery = withStatus(facultyColl.where("department", "in", ownedNames.slice(0, 30)));
+      if (deptFilter) {
+        // Scope strictly to the ONE department the caller asked about (its
+        // own tree - itself plus a true parent/children, never a managed/
+        // "core" branch or a sibling department) rather than this HOD's whole
+        // multi-department scope - a multi-department HOD (or one staffing a
+        // shared/managed course whose departmentId resolves outside their own
+        // tree) previously got every department they head back regardless of
+        // which one was actually asked for, leaking e.g. AIML faculty into a
+        // CSE subject's picker. Every existing caller either already filters
+        // client-side to this exact department (Assign Timetable Incharge) or
+        // was relying on this endpoint to do it and wasn't (TeachingAssignmentsEditor) -
+        // both get the correct, narrower result either way.
+        const treeNames = canHodManageFacultyDepartment(scope, deptFilter)
+          ? (await getDepartmentTreeNames(db, session.collegeId, deptFilter)).filter((n) => canHodManageFacultyDepartment(scope, n))
+          : [];
+        primaryQuery = treeNames.length > 0
+          ? primaryQuery.where("department", "in", treeNames.slice(0, 30))
+          : primaryQuery.where("department", "==", "__none__");
+      } else if (scope.ownDepartmentNames.length > 0) {
+        primaryQuery = primaryQuery.where("department", "in", scope.ownDepartmentNames.slice(0, 30));
+
+        // Sub-departments only (facultyManageableDepartmentNames) - a managed/
+        // "core" branch's own faculty roster is never this HOD's, sub-HOD or
+        // main HOD alike (see its own doc-comment in lib/departments/scope.ts),
+        // so `excludeManaged` has nothing left to do here; kept as a no-op for
+        // any existing caller still passing it. Skipped entirely for the
+        // own-only roster (see ownOnly above). Only relevant for this ambient
+        // (no deptFilter) roster - a deptFilter caller already got its own
+        // tree, children included, above.
+        const ownedNames = ownOnly
+          ? []
+          : facultyManageableDepartmentNames(scope).filter((n) => !scope.ownDepartmentNames.includes(n));
+        if (ownedNames.length > 0) {
+          childDeptQuery = withStatus(facultyColl.where("department", "in", ownedNames.slice(0, 30)));
+        }
+      } else {
+        // An HOD with no department on file must see nothing - not the whole
+        // college, which is what leaving the query unfiltered would return.
+        primaryQuery = primaryQuery.where("department", "==", "__none__");
       }
     } else if (session.role === "PANEL_MEMBER" || session.role === "COLLEGE_STAFF") {
       // A Timetable Incharge (see TimetableIncharge in src/types/core.ts) -
@@ -311,6 +331,20 @@ export async function POST(request: Request) {
         .doc(session.uid)
         .get();
       department = (hodSnap.data() as { department?: string } | undefined)?.department ?? department;
+    }
+
+    // A faculty member with no department belongs to no roster: every list in
+    // the app queries facultyMembers by `department`, so a blank one makes the
+    // person invisible everywhere at once - on their own department's Faculty
+    // page, in substitute and Faculty Incharge pickers, in exports. It used to
+    // be accepted silently, and the people it happened to were HODs added by a
+    // Principal or College Admin, whose own login carries no department for the
+    // fallback above to borrow.
+    if (!department.trim()) {
+      return NextResponse.json(
+        { error: "A department is required - a faculty member with none appears on no roster" },
+        { status: 400 },
+      );
     }
 
     // Check employee ID uniqueness across every college, not just this one -

@@ -872,6 +872,18 @@ export interface FacultyNorms {
   // must complete before converting into their vacation/non-vacation leave
   // category - see src/lib/leave/categoryEngine.ts.
   newJoiningYears: number;
+  // The day the college's academic year BEGINS - month 1-12, day 1-31 (e.g.
+  // 6 and 1 for June 1). The year itself is never stored: it is worked out
+  // from today against this cutoff, so it rolls over on its own each cycle
+  // (see currentAcademicStartYear). Absent means April 1, which is what the
+  // app assumed for every college before this was configurable.
+  academicYearStartMonth?: number;
+  academicYearStartDay?: number;
+  // The day it ENDS, same shape. Absent means March 31 - i.e. the day before
+  // an April 1 start comes round again. An end that falls before the start in
+  // the calendar (June 1 -> May 31) is taken as the following year.
+  academicYearEndMonth?: number;
+  academicYearEndDay?: number;
   // Which approval tier each requester role's leave request goes to first
   // (see src/lib/leave/approvalRouting.ts). A role with no entry here uses the
   // built-in default for that role.
@@ -2599,6 +2611,18 @@ export interface AcademicSession {
   collegeId: string;
   label: string; // e.g. "2025-26"
   isCurrent: boolean;
+  // The dates the session actually runs between, "YYYY-MM-DD", as the
+  // Principal entered them. Optional because every session created before
+  // these existed has only a label - such a session is still displayed, just
+  // with the April-March range the rest of the app assumes.
+  //
+  // Recorded and displayed; NOT what anything compares on. `label` remains
+  // the interop key every consumer stamps and matches against (timetable
+  // slots, teaching assignments, leave period coverage, section regulations),
+  // so a college whose year runs June-May gets an honest range on screen
+  // without re-deriving a comparison used in seven places.
+  startDate?: string;
+  endDate?: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
@@ -2677,12 +2701,26 @@ export interface StudentRecord {
   status: StudentStatus;
   gender?: string;
   dateOfBirth?: string; // yyyy-mm-dd, kept as string (no statutory-date math needed)
+  // Parent/guardian block - all optional free text. Father/Mother are the
+  // default point of contact; Guardian Name/Contact is only for the (less
+  // common) case where someone else altogether holds that role. Not part of
+  // the College Office's bulk-import template (Course/Department/Academic
+  // Year are already picked once for the whole file there, and these are
+  // equally per-student-only detail) - set via the Add/Edit form instead,
+  // same as every other admission-detail field below.
+  fatherName?: string;
+  fatherContactNo?: string;
+  motherName?: string;
+  motherContactNo?: string;
+  guardianName?: string;
   guardianContact?: string;
   email?: string;
   // Secondary — view-only access, for a student pre-registered to a core
   // branch (e.g. CSE) while physically enrolled under Basic Science in 1st
-  // year. Only ever set by the College Office bulk import for exactly this
-  // case; cleared automatically when the student is promoted into that
+  // year. Set via the Add/Edit form (not the College Office's bulk-import
+  // template - Department is already fixed for the whole file there, and a
+  // freshman needs this set individually anyway); cleared automatically when
+  // the student is promoted into that
   // department (see students/promote/route.ts), at which point it becomes
   // their primary `department` instead.
   secondaryDepartment?: string;
@@ -2720,10 +2758,12 @@ export interface StudentRecord {
   // fill in, not something the system guesses.
   labBatch?: string;
   // ─── Admission-detail fields ────────────────────────────────────────────
-  // All optional, all set only via the College Office bulk import (see
-  // src/lib/students/importRow.ts) - there is no per-student edit form for
-  // any of these today, same as the older gender/dateOfBirth/etc. fields
-  // above. Photo is intentionally not collected via CSV import at all.
+  // All optional, set either via the College Office bulk import (see
+  // src/lib/students/importRow.ts and rosterFields.ts's ROSTER_FIELDS - the
+  // one definition shared by the template, the Add/Edit form and the detail
+  // view) or by hand afterward through the Add/Edit form, same as the older
+  // gender/dateOfBirth/etc. fields above. Photo is intentionally not
+  // collected via CSV import at all.
   //
   // The programme the student is admitted into (B.Tech, M.Tech …). Validated
   // against the college's `courses` collection when set (name or short Code,
@@ -2752,7 +2792,6 @@ export interface StudentRecord {
   // route.ts's findCurrentSectionDoc, student-attendance and
   // internal-exam-marks routes' roster queries.
   courseId?: string;
-  semester?: number;
   dateOfAdmission?: string; // yyyy-mm-dd
   admissionNo?: string;
   hallTicketNo?: string;
@@ -2761,7 +2800,6 @@ export interface StudentRecord {
   entranceRank?: string;
   jeeRank?: string;
   jeePercentage?: string;
-  seatType?: string; // e.g. Convenor, Management
   scholarship?: boolean;
   caste?: Caste;
   subCaste?: string;
@@ -2774,6 +2812,8 @@ export interface StudentRecord {
   aadharNo?: string;
   rationCardNo?: string;
   bankAccountNo?: string;
+  bankName?: string;
+  ifscCode?: string;
   lastAttendedInstitution?: string;
   distanceFromResidenceKm?: number;
   hosteller?: boolean;
@@ -3136,4 +3176,26 @@ export interface PaginationState {
   pageSize: number;
   hasMore: boolean;
   lastDoc: unknown;
+}
+
+// ─── Faculty Assigned Modules ───────────────────────────────────
+// Per-person module assignment layered on top of their base role.
+export type FacultyAssignedModule =
+  | "timetable-incharge"
+  | "lab-batches"
+  | "teaching-load"
+  | "assignment-requests"
+  | "attendance"
+  | "leave-approvals"
+  | "students";
+
+export interface FacultyAssignedModulesDoc {
+  uid: string;
+  collegeId: string;
+  facultyId: string;
+  modules: FacultyAssignedModule[];
+  assignedBy?: string;
+  assignedByName?: string;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
 }

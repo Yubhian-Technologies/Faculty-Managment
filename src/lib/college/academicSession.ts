@@ -3,9 +3,82 @@
 // year of study, not a calendar session. Session boundary mirrors the existing
 // convention in management/indents/page.tsx (fiscal-year-style, April cutoff).
 
-export function currentAcademicStartYear(): number {
-  const d = new Date();
-  return d.getMonth() >= 3 ? d.getFullYear() : d.getFullYear() - 1;
+/** The day a college's academic year begins. Month is 1-12, NOT a JS month index. */
+export interface AcademicYearStart {
+  month: number;
+  day: number;
+}
+
+/** April 1 - what every college was assumed to run on before this was configurable. */
+export const DEFAULT_ACADEMIC_YEAR_START: AcademicYearStart = { month: 4, day: 1 };
+
+/** March 31 - the day before an April 1 start comes round again. */
+export const DEFAULT_ACADEMIC_YEAR_END: AcademicYearStart = { month: 3, day: 31 };
+
+const isMonthDay = (m: unknown, d: unknown) => {
+  const ok = (n: unknown, max: number) => typeof n === "number" && Number.isInteger(n) && n >= 1 && n <= max;
+  return ok(m, 12) && ok(d, 31);
+};
+
+/** A stored start day, or April 1 when it is absent or nonsense. */
+export function resolveAcademicYearStart(
+  start?: { academicYearStartMonth?: number; academicYearStartDay?: number } | null
+): AcademicYearStart {
+  const month = start?.academicYearStartMonth;
+  const day = start?.academicYearStartDay;
+  return isMonthDay(month, day)
+    ? { month: month as number, day: day as number }
+    : DEFAULT_ACADEMIC_YEAR_START;
+}
+
+/** A stored end day, or March 31 when it is absent or nonsense. */
+export function resolveAcademicYearEnd(
+  end?: { academicYearEndMonth?: number; academicYearEndDay?: number } | null
+): AcademicYearStart {
+  const month = end?.academicYearEndMonth;
+  const day = end?.academicYearEndDay;
+  return isMonthDay(month, day)
+    ? { month: month as number, day: day as number }
+    : DEFAULT_ACADEMIC_YEAR_END;
+}
+
+/**
+ * The year the CURRENT academic session started, worked out from today against
+ * the college's own start day. Nothing is stored and nothing has to be
+ * advanced by hand - on 31 May 2027 a June-1 college is still in 2026-27, and
+ * the next day it is in 2027-28.
+ *
+ * Defaults to April 1, so every existing caller that passes nothing keeps the
+ * exact behaviour it had when the cutoff was hardcoded.
+ */
+export function currentAcademicStartYear(
+  now: Date = new Date(),
+  start: AcademicYearStart = DEFAULT_ACADEMIC_YEAR_START
+): number {
+  const month = now.getMonth() + 1; // getMonth() is 0-based; `start.month` is not
+  const started = month > start.month || (month === start.month && now.getDate() >= start.day);
+  return started ? now.getFullYear() : now.getFullYear() - 1;
+}
+
+/**
+ * The dates a session actually spans, given the start day: from the cutoff in
+ * `startYear` to the day before the cutoff a year later. Returned as ISO
+ * "YYYY-MM-DD" for display; nothing compares on these.
+ */
+export function academicYearRange(
+  startYear: number,
+  start: AcademicYearStart = DEFAULT_ACADEMIC_YEAR_START,
+  end: AcademicYearStart = DEFAULT_ACADEMIC_YEAR_END
+): { from: string; to: string } {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  // An end BEFORE the start in the calendar belongs to the next year (June 1
+  // -> May 31); one after it stays inside the same one (Jan 1 -> Dec 31).
+  const endsLater = end.month > start.month || (end.month === start.month && end.day > start.day);
+  const endYear = endsLater ? startYear : startYear + 1;
+  return {
+    from: `${startYear}-${pad(start.month)}-${pad(start.day)}`,
+    to: `${endYear}-${pad(end.month)}-${pad(end.day)}`,
+  };
 }
 
 export function academicSessionLabel(startYear: number): string {
@@ -165,8 +238,11 @@ export function recentAcademicSessions(): string[] {
 // and `collegeId` in scope should call resolveTimetableAcademicYear below
 // instead, so a Principal's override (see resolveCurrentAcademicYear) is
 // actually honored.
-export function currentTimetableAcademicYear(now: Date = new Date()): string {
-  return academicSessionLabel(now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1);
+export function currentTimetableAcademicYear(
+  now: Date = new Date(),
+  start: AcademicYearStart = DEFAULT_ACADEMIC_YEAR_START
+): string {
+  return academicSessionLabel(currentAcademicStartYear(now, start));
 }
 
 // Override-aware counterpart to currentTimetableAcademicYear, in the same
@@ -176,9 +252,13 @@ export function currentTimetableAcademicYear(now: Date = new Date()): string {
 // isCurrent:true (same doc resolveCurrentAcademicYear reads, just in short
 // form here) - pass null/undefined when none exists yet, which falls back to
 // today's pure date math exactly as before this function existed.
-export function resolveTimetableAcademicYear(storedCurrentLabel?: string | null, now: Date = new Date()): string {
+export function resolveTimetableAcademicYear(
+  storedCurrentLabel?: string | null,
+  now: Date = new Date(),
+  start: AcademicYearStart = DEFAULT_ACADEMIC_YEAR_START
+): string {
   const stored = parseAcademicYearStart(storedCurrentLabel);
-  return stored != null ? academicSessionLabel(stored) : currentTimetableAcademicYear(now);
+  return stored != null ? academicSessionLabel(stored) : currentTimetableAcademicYear(now, start);
 }
 
 // Same null-tolerant convention as lib/college/semester.ts's
@@ -247,4 +327,38 @@ export function academicYearDateRangeLabel(label: string): string {
   const start = parseAcademicYearStart(label);
   if (start == null) return label;
   return `01/04/${start}-31/03/${start + 1}`;
+}
+
+/** "2026-06-01" -> "01/06/2026". Empty for anything that isn't a date. */
+export function displayDate(iso: string | undefined | null): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec((iso ?? "").trim());
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : "";
+}
+
+/**
+ * What to show for a session: the dates the Principal actually entered when
+ * there are any, and the assumed April-March range otherwise. The assumed one
+ * is a guess - a college running June-May was always shown 01/04-31/03 and
+ * had no way to say otherwise - so a session carrying real dates must never
+ * fall back to it.
+ */
+export function sessionRangeLabel(
+  session: { label: string; startDate?: string; endDate?: string } | null | undefined,
+  fallbackLabel?: string
+): string {
+  if (session?.startDate && session.endDate) {
+    return `${displayDate(session.startDate)}-${displayDate(session.endDate)}`;
+  }
+  return academicYearDateRangeLabel(session?.label ?? fallbackLabel ?? "");
+}
+
+/**
+ * The short label a date range belongs to, taken from the year the range
+ * STARTS in - so 2026-06-01 to 2027-05-31 is "2026-27", the same shape every
+ * consumer already compares against. This is what keeps arbitrary dates and
+ * the existing label-keyed comparisons compatible.
+ */
+export function sessionLabelForRange(startISO: string): string | undefined {
+  const m = /^(\d{4})-\d{2}-\d{2}$/.exec((startISO ?? "").trim());
+  return m ? academicSessionLabel(Number(m[1])) : undefined;
 }

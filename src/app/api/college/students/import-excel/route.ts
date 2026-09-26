@@ -10,7 +10,7 @@ import { resolveDepartmentByNameOrCode, resolveCourseByNameOrCode, isConfiguredS
 import { resolveBranchYearOwner, resolveFreshmanLandingDepartment, type DepartmentYearRow } from "@/lib/departments/managedBranches";
 import { freshmanLandingDepartmentNames, type DepartmentWithId } from "@/lib/college/academicStructure";
 import { isLikelySameUnassignedStudent, STRONG_IDENTITY_FIELDS } from "@/lib/students/duplicateDetection";
-import { validateYearForCourseDuration, validateYearSemesterConsistency } from "@/lib/students/rosterValidation";
+import { validateYearForCourseDuration } from "@/lib/students/rosterValidation";
 import { ChunkedBatch } from "@/lib/firestore/chunkedBatch";
 import type { Section } from "@/types";
 
@@ -109,23 +109,11 @@ export async function POST(request: Request) {
       hodScope = await getHodDepartmentScope(db, collegeId, session.uid);
     }
 
-    const [sectionsSnap, departmentsSnap, coursesSnap, courseYearTimingsSnap] = await Promise.all([
+    const [sectionsSnap, departmentsSnap, coursesSnap] = await Promise.all([
       db.collection("colleges").doc(collegeId).collection("sections").get(),
       db.collection("colleges").doc(collegeId).collection("departments").get(),
       db.collection("colleges").doc(collegeId).collection("courses").get(),
-      db.collection("colleges").doc(collegeId).collection("courseYearTimings").get(),
     ]);
-    // Per-course, per-year configured semester count, for the Year<->Semester
-    // check below - a single whole-collection prefetch (not a per-row query,
-    // per this route's own no-per-row-DB-call convention) feeding
-    // validateYearSemesterConsistency's optional width override.
-    const semesterCountsByCourse = new Map<string, Record<number, number>>();
-    for (const d of courseYearTimingsSnap.docs) {
-      const t = d.data() as { courseId: string; year: number; semesters?: unknown[] };
-      const byYear = semesterCountsByCourse.get(t.courseId) ?? {};
-      byYear[t.year] = (t.semesters ?? []).length;
-      semesterCountsByCourse.set(t.courseId, byYear);
-    }
     // Section name + year alone isn't unique college-wide - two different
     // departments can each have a "Section A, Year 1" - so every name::year
     // key keeps *all* matching sections, not just the last one seen, and a
@@ -448,15 +436,19 @@ export async function POST(request: Request) {
           continue;
         }
 
-        // Secondary Department is a column on the Office's template, and the
-        // Office's rows are exactly the ones that need it: a 1st-year sitting
-        // under a common department (Basic Science) while registered to the
-        // core branch they'll be promoted into. It used to be forced to
-        // undefined here, so the only path that could set it was the placed
-        // (section-named) one - which the Office template never takes, since
-        // it has no Section column. That made the field unreachable for the
-        // people it exists for. Resolved before the duplicate check below so
-        // that check can recognize this row by either field.
+        // Core Department (Secondary Department) is no longer a per-row
+        // column on the Office's own bulk-import template - Department is
+        // already fixed for the whole file by the dropdown picker
+        // (college-office/students/import/page.tsx), and typing a DIFFERENT
+        // branch per row would defeat the point of fixing Department once.
+        // Core Department is picked once too instead, the same way, by that
+        // same picker card (its own FieldInput reuse of this field - see
+        // RosterFieldInputs.tsx) - so every row in a dropdown-driven file
+        // shares row.secondaryDepartment already, exactly as if it had been
+        // typed per row. Still resolved/validated per row here (not just
+        // trusted from the picker) since this route is also reachable from
+        // the URL-locked (arriving from a section) flow, which has no picker
+        // card and would never populate it.
         let unassignedSecondary: string | undefined;
         if (row.secondaryDepartment?.trim()) {
           unassignedSecondary = resolveDepartment(row.secondaryDepartment);
@@ -493,7 +485,11 @@ export async function POST(request: Request) {
 
         // A row correctly landed under a Freshman department for Year 1 must
         // still name the real branch via Core Department - without it, the
-        // student is stuck unpromotable and invisible to any branch's own HOD.
+        // student is stuck unpromotable and invisible to any branch's own
+        // HOD. The Office's own picker already enforces this client-side
+        // before Download Template/Upload even appear (isSecondaryDepartmentRequired,
+        // college-office/students/import/page.tsx) - this is the server-side
+        // backstop, same as every other rule that page's picker narrows for.
         if (Number(row.year) === 1 && freshmanNames.size > 0 && !unassignedSecondary) {
           failed.push({
             row: rowNum, rollNumber: row.rollNumber ?? "-",
@@ -532,12 +528,6 @@ export async function POST(request: Request) {
         const resolvedCourseDoc = resolvedCourseId ? plainCourses.find((c) => c.id === resolvedCourseId) : undefined;
         const yearDurationError = validateYearForCourseDuration(Number(row.year), resolvedCourseDoc?.durationYears, resolvedCourse);
         if (yearDurationError) { failed.push({ row: rowNum, rollNumber: row.rollNumber ?? "-", error: yearDurationError }); continue; }
-        const yearSemesterError = validateYearSemesterConsistency(
-          Number(row.year),
-          row.semester ? Number(row.semester.match(/\d+/)?.[0]) : undefined,
-          resolvedCourseId ? semesterCountsByCourse.get(resolvedCourseId) : undefined
-        );
-        if (yearSemesterError) { failed.push({ row: rowNum, rollNumber: row.rollNumber ?? "-", error: yearSemesterError }); continue; }
 
         // The Office doesn't know roll numbers yet, so they're optional here.
         // De-dupe by roll when it's present, otherwise by name+dept+year -
@@ -758,15 +748,7 @@ export async function POST(request: Request) {
       // placed row - a section can't have been created with an
       // out-of-duration year in the first place (sections/route.ts POST),
       // and `section` was only just resolved by matching row.year against a
-      // REAL section - so there's nothing left to check there. Year <->
-      // Semester consistency isn't tied to sections at all though, so it
-      // still needs its own check here, same as the unassigned path.
-      const placedYearSemesterError = validateYearSemesterConsistency(
-        section.year,
-        row.semester ? Number(row.semester.match(/\d+/)?.[0]) : undefined,
-        semesterCountsByCourse.get(section.courseId)
-      );
-      if (placedYearSemesterError) { failed.push({ row: rowNum, rollNumber: row.rollNumber, error: placedYearSemesterError }); continue; }
+      // REAL section - so there's nothing left to check there.
 
       const docRef = studentsColl.doc();
       batch.set(docRef, buildStudentDoc(section, { ...row, secondaryDepartment: secondaryDept || undefined, course: placedCourse }, now));

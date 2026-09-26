@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Eye, Pencil, Trash2, UsersRound } from "lucide-react";
+import { ArrowLeft, Eye, Trash2, UsersRound, History } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Button } from "@/components/ui/button";
@@ -73,6 +73,15 @@ export default function PrincipalDepartmentFacultyPage() {
         .then((d) => d.faculty ?? []),
     enabled: !!department,
   });
+
+  // An HOD is almost always ALSO a teaching Faculty member of their own
+  // department - when they have a real facultyMembers record (userUid links
+  // it back to their login), "View/Edit HOD" should open THAT full profile
+  // (Research, Teaching Load, every module) instead of the generic Staff
+  // view, which deliberately hides those two modules for non-teaching roles
+  // (see principal/staff/[uid]/page.tsx's excludeModules). Falls back to the
+  // Staff view only for a bare HOD login with no Faculty record at all.
+  const hodFaculty = faculty.find((f) => (f as unknown as { userUid?: string }).userUid === hod?.uid);
 
   // Clears the department's HOD assignment. Deliberately NOT a delete of the
   // person: the same PATCH the Assign HOD dropdown already uses (hodUid: "")
@@ -174,11 +183,24 @@ export default function PrincipalDepartmentFacultyPage() {
                 </div>
               </div>
               <div className="flex gap-2">
+                {/* Always stays inside the Faculty section - never the generic
+                    Staff view (see hodFaculty's own comment above). With a real
+                    Faculty record, this opens their full profile (view + edit via
+                    its module tiles). Without one, it opens the SAME Add Faculty
+                    form principal/faculty/new/page.tsx re-exports from HOD's own,
+                    in its "link mode" (?linkUid=&department=&name=) - completing
+                    it creates their Faculty record on the spot, so there's never
+                    a need to fall back to Staff for a bare HOD login either. */}
                 <Button size="sm" variant="outline" asChild>
-                  <Link href={`/principal/staff/${hod.uid}`}><Eye className="h-3.5 w-3.5 mr-1" />View HOD</Link>
-                </Button>
-                <Button size="sm" variant="outline" asChild>
-                  <Link href={`/principal/staff/${hod.uid}/edit`}><Pencil className="h-3.5 w-3.5 mr-1" />Edit HOD</Link>
+                  <Link
+                    href={
+                      hodFaculty
+                        ? `/principal/faculty/${deptId}/${hodFaculty.id}`
+                        : `/principal/faculty/new?linkUid=${hod.uid}&department=${encodeURIComponent(department?.name ?? "")}&name=${encodeURIComponent(hod.name)}`
+                    }
+                  >
+                    <Eye className="h-3.5 w-3.5 mr-1" />View HOD
+                  </Link>
                 </Button>
                 <Button
                   size="sm"
@@ -217,6 +239,14 @@ export default function PrincipalDepartmentFacultyPage() {
         keyExtractor={(f) => f.id}
         searchPlaceholder="Search by name, employee ID, or email..."
         searchKeys={["legalName", "nameAsPerPan", "employeeId", "email"] as (keyof FacultyRow)[]}
+        // Same historical date-range view as hod/faculty's own Faculty
+        // Timeline, scoped to this department - kept beside the search box
+        // via DataTable's own filterComponent slot, same placement as hod/faculty.
+        filterComponent={
+          <Button variant="outline" size="sm" onClick={() => router.push(`/principal/faculty/${deptId}/timeline`)}>
+            <History className="h-4 w-4 mr-1" />Faculty Timeline
+          </Button>
+        }
         emptyTitle="No faculty in this department"
         emptyDescription="Faculty added by the HOD for this department will appear here."
         onRowClick={(f) => router.push(`/principal/faculty/${deptId}/${f.id}`)}

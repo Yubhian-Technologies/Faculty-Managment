@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Trash2, Send } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -64,6 +65,8 @@ export default function TeachingAssignmentsPage() {
   const [assignments, setAssignments] = useState<AssignmentRow[]>([]);
   const [assignmentRequests, setAssignmentRequests] = useState<FacultyAssignmentRequest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [removeTarget, setRemoveTarget] = useState<AssignmentRow | null>(null);
+  const [removing, setRemoving] = useState(false);
 
   // Shared course/year context for both the staffing-gap finder and the
   // assign-faculty form. This is a course GROUP key, not a course-doc id -
@@ -577,6 +580,7 @@ const effectiveSemester = semesterOptions.length === 0
   }
 
   async function handleRemove(id: string) {
+    setRemoving(true);
     try {
       const res = await fetch(`/api/college/teaching-assignments?id=${id}`, { method: "DELETE" });
       if (!res.ok) throw new Error();
@@ -584,6 +588,9 @@ const effectiveSemester = semesterOptions.length === 0
       load();
     } catch {
       toast({ variant: "destructive", title: "Failed to remove assignment" });
+    } finally {
+      setRemoving(false);
+      setRemoveTarget(null);
     }
   }
 
@@ -871,7 +878,7 @@ const effectiveSemester = semesterOptions.length === 0
                           <p className="text-xs text-muted-foreground">{a.facultyName} · {a.hoursPerWeek} hrs/wk</p>
                         </div>
                         {a.accessLevel !== "secondary" && (
-                          <Button size="sm" variant="ghost" onClick={() => void handleRemove(a.id)}>
+                          <Button size="sm" variant="ghost" onClick={() => setRemoveTarget(a)}>
                             <Trash2 className="h-4 w-4 text-destructive" />
                           </Button>
                         )}
@@ -901,7 +908,7 @@ const effectiveSemester = semesterOptions.length === 0
                           </p>
                         </div>
                         {a.accessLevel !== "secondary" && (
-                          <Button size="sm" variant="ghost" onClick={() => void handleRemove(a.id)}>
+                          <Button size="sm" variant="ghost" onClick={() => setRemoveTarget(a)}>
                             <Trash2 className="h-4 w-4 text-destructive" />
                           </Button>
                         )}
@@ -914,6 +921,17 @@ const effectiveSemester = semesterOptions.length === 0
           )}
         </CardContent>
       </Card>
+
+      <ConfirmDialog
+        open={!!removeTarget}
+        onOpenChange={(open) => !open && setRemoveTarget(null)}
+        title={`Remove ${removeTarget?.subjectName ?? "this"} assignment?`}
+        description={`This will remove ${removeTarget?.facultyName ?? "the faculty member"}'s assignment to ${removeTarget?.subjectName ?? "this subject"}.`}
+        confirmLabel="Remove"
+        variant="destructive"
+        loading={removing}
+        onConfirm={() => { if (removeTarget) void handleRemove(removeTarget.id); }}
+      />
     </div>
   );
 }
