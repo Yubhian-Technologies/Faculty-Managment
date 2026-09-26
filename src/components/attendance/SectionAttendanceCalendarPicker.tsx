@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { toast } from "@/hooks/useToast";
 import type { Section } from "@/types";
@@ -26,12 +28,24 @@ export function SectionAttendanceCalendarPicker({
   const router = useRouter();
   const [sections, setSections] = useState<(Section & { id: string })[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [semester, setSemester] = useState<number | null>(null);
+  const [semesterOptions, setSemesterOptions] = useState<number[]>([]);
 
   useEffect(() => {
     void (async () => {
       setIsLoading(true);
       try {
-        const sectionsRes = await fetch("/api/college/sections");
+        const semRes = await fetch("/api/college/course-year-timings");
+        if (semRes.ok) {
+          const semJson = await semRes.json() as { timings: { semesters: { semester: number }[] }[] };
+          const nums = new Set<number>();
+          for (const t of semJson.timings ?? []) for (const s of t.semesters ?? []) nums.add(s.semester);
+          setSemesterOptions(Array.from(nums).sort((a, b) => a - b));
+        }
+      } catch { /* non-critical */ }
+      try {
+        const semQs = semester != null ? `&semester=${semester}` : "";
+        const sectionsRes = await fetch(`/api/college/sections${semQs}`);
         if (!sectionsRes.ok) throw new Error("Failed to load sections");
         const sectionsJson = (await sectionsRes.json()) as { sections?: (Section & { id: string })[] };
         setSections(sectionsJson.sections ?? []);
@@ -41,11 +55,27 @@ export function SectionAttendanceCalendarPicker({
         setIsLoading(false);
       }
     })();
-  }, []);
+  }, [semester]);
 
   return (
     <div className="space-y-6">
       <PageHeader title={title} description={description} />
+
+      {semesterOptions.length > 0 && (
+        <div className="flex items-center gap-3">
+          <Label className="text-sm font-medium">Semester</Label>
+          <Select value={semester != null ? String(semester) : ""} onValueChange={(v) => setSemester(Number(v))}>
+            <SelectTrigger className="w-40">
+              <SelectValue placeholder="All semesters" />
+            </SelectTrigger>
+            <SelectContent>
+              {semesterOptions.map((s) => (
+                <SelectItem key={s} value={String(s)}>Semester {s}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
 
       {isLoading ? (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

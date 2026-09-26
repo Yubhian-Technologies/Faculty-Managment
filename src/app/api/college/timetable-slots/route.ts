@@ -41,10 +41,17 @@ export async function GET(request: Request) {
     const sectionSnap = await collegeRef.collection("sections").doc(sectionId).get();
     if (!sectionSnap.exists) return NextResponse.json({ error: "Section not found" }, { status: 404 });
     const section = sectionSnap.data() as { courseId: string; year: number };
-    const semesterResult = await resolveRequestedSemester(db, session.collegeId, section.courseId, section.year, requestedSemester);
+    const [semesterResult, courseSnap] = await Promise.all([
+      resolveRequestedSemester(db, session.collegeId, section.courseId, section.year, requestedSemester),
+      collegeRef.collection("courses").doc(section.courseId).get(),
+    ]);
     if (!semesterResult.ok) {
       return NextResponse.json({ error: semesterResult.error }, { status: 400 });
     }
+    // catalogId-scoped, not courseId-scoped - a master subject is filed under
+    // whichever department's own Course doc created it (see Subject.catalogId's
+    // own doc-comment), which may not be this section's own courseId.
+    const catalogId = (courseSnap.data() as { catalogId?: string } | undefined)?.catalogId;
     const currentSemester = semesterResult.semester;
     const currentSessionSnap = await collegeRef.collection("academicSessions").where("isCurrent", "==", true).limit(1).get();
     const currentAcademicYear = resolveTimetableAcademicYear(
@@ -64,7 +71,9 @@ export async function GET(request: Request) {
       // Joined onto each slot below so the Timetable pages' Theory/Practical
       // filter can group by SubjectType without a second round-trip - same
       // technique as class-leader/timetable/route.ts's own Theory/Lab filter.
-      collegeRef.collection("subjects").where("courseId", "==", section.courseId).where("year", "==", section.year).get(),
+      catalogId
+        ? collegeRef.collection("subjects").where("catalogId", "==", catalogId).where("year", "==", section.year).get()
+        : collegeRef.collection("subjects").where("courseId", "==", section.courseId).where("year", "==", section.year).get(),
     ]);
     const subjectTypeById = new Map(subjectsSnap.docs.map((d) => [d.id, (d.data() as { type?: SubjectType }).type]));
     // A prior semester's or prior session's published slots stay in
@@ -214,19 +223,40 @@ export async function POST(request: Request) {
       );
     }
 
+    const cellSlotsSnap = await collegeRef.collection("timetableSlots")
+      .where("sectionId", "==", assignment.sectionId)
+      .where("day", "==", day)
+      .where("periodNumber", "==", Number(periodNumber))
+      .get();
+    const cellSlotsNow = cellSlotsSnap.docs
+      .map((d) => d.data() as TimetableSlot)
+      .filter((data) => matchesCurrentSemester(data.semester, assignmentSemester) && matchesCurrentAcademicYear(data.academicYear, currentAcademicYear));
     if (!body.allowSplit) {
-      const conflictSnap = await collegeRef.collection("timetableSlots")
-        .where("sectionId", "==", assignment.sectionId)
-        .where("day", "==", day)
-        .where("periodNumber", "==", Number(periodNumber))
-        .get();
-      const conflict = conflictSnap.docs.some((d) => {
-        const data = d.data() as TimetableSlot;
-        return matchesCurrentSemester(data.semester, assignmentSemester) && matchesCurrentAcademicYear(data.academicYear, currentAcademicYear);
-      });
-      if (conflict) {
+      if (cellSlotsNow.length > 0) {
         return NextResponse.json(
           { error: `Conflict: this section already has a subject scheduled on ${day} period ${periodNumber}` },
+          { status: 409 }
+        );
+      }
+    } else if (cellSlotsNow.length > 0) {
+      // A period may only ever be split between exactly two lab (PRACTICAL)
+      // subjects - never a third occupant, and never mixed with a theory/
+      // tutorial/project class (the check above already confirmed the
+      // INCOMING subject is PRACTICAL - this checks the EXISTING one(s)).
+      if (cellSlotsNow.length >= 2) {
+        return NextResponse.json(
+          { error: `Period ${periodNumber} on ${day} already has 2 subjects sharing it - a period can only be split between two labs.` },
+          { status: 409 }
+        );
+      }
+      const existingSubjectIds = Array.from(new Set(cellSlotsNow.map((s) => s.subjectId)));
+      const existingSubjectDocs = await Promise.all(
+        existingSubjectIds.map((id) => collegeRef.collection("subjects").doc(id).get())
+      );
+      const existingTypeById = new Map(existingSubjectDocs.map((d) => [d.id, (d.data() as { type?: string } | undefined)?.type]));
+      if (cellSlotsNow.some((s) => existingTypeById.get(s.subjectId) !== "PRACTICAL")) {
+        return NextResponse.json(
+          { error: `Period ${periodNumber} on ${day} already has a theory class scheduled - it can't be split with a lab.` },
           { status: 409 }
         );
       }

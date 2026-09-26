@@ -11,13 +11,19 @@ export interface NavItem {
   roles: UserRole[];
   badge?: string;
   section?: string; // optional section header rendered above this item
+  // Which functional module this item belongs to (e.g. "timetable-incharge",
+  // "lab-batches", "teaching-load", "assignment-requests"). When a faculty
+  // member has assigned modules, only items whose module is in their
+  // assignment list are shown (personal items always visible). Leave
+  // unset for items that are always visible regardless of assignments.
+  module?: string;
   // Hides this item for a login whose real, un-normalized role (FMSUser.realRole)
   // is one of these - even though `roles` above still matches its normalized
   // `role`. Exists for COLLEGE_ADMIN, which reads as "PRINCIPAL" in `role`
   // everywhere (see FMSUser.realRole) but must not see a specific Principal-only
   // item. Leave unset for every ordinary item - this is a narrow exception, not
   // a general per-item permission system (that's filterVisibleNavItems' own
-  // Super-Admin-configurable hiddenModules/hiddenItems).
+  // hiddenModules/hiddenItems).
   hideForRealRoles?: UserRole[];
   // The inverse of hideForRealRoles: shows this item ONLY for a login whose
   // real, un-normalized role (FMSUser.realRole) is one of these, even though
@@ -227,7 +233,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Faculty", href: "/hod/faculty", iconName: "UsersRound", roles: ["HOD"], section: "Department" },
   { label: "Supporting Staff", href: "/hod/supporting-staff", iconName: "UsersRound", roles: ["HOD"] },
   { label: "Sections", href: "/hod/sections", iconName: "BookMarked", roles: ["HOD"] },
-  { label: "Students", href: "/hod/students", iconName: "GraduationCap", roles: ["HOD"] },
+  { label: "Students", href: "/hod/students", iconName: "GraduationCap", roles: ["HOD"], module: "students" },
   { label: "Sub-Departments", href: "/hod/settings/sub-departments", iconName: "Settings2", roles: ["HOD"] },
   { label: "Designations", href: "/hod/settings/designations", iconName: "Tags", roles: ["HOD"] },
   // Hidden from a Department Office head, whose `role` also reads "HOD": they
@@ -236,15 +242,15 @@ export const NAV_ITEMS: NavItem[] = [
   // dead link out of their sidebar. See NavItem.hideForRealRoles.
   { label: "Department Office", href: "/hod/settings/department-office", iconName: "UserCog", roles: ["HOD"], hideForRealRoles: ["DEPARTMENT_OFFICE"] },
   { label: "Subjects", href: "/hod/subjects", iconName: "Library", roles: ["HOD"] },
-  { label: "Teaching Assignments", href: "/hod/teaching-assignments", iconName: "BookOpen", roles: ["HOD"] },
-  { label: "Assignment Requests", href: "/hod/assignment-requests", iconName: "Send", roles: ["HOD"] },
+  { label: "Teaching Assignments", href: "/hod/teaching-assignments", iconName: "BookOpen", roles: ["HOD"], module: "timetable-incharge" },
+  { label: "Assignment Requests", href: "/hod/assignment-requests", iconName: "Send", roles: ["HOD"], module: "assignment-requests" },
   { label: "Internal Exam", href: "/hod/internal-exam", iconName: "ClipboardCheck", roles: ["HOD"] },
   { label: "Mid Paper Setter", href: "/hod/mid-paper-setter", iconName: "UserCog", roles: ["HOD"] },
   // Sits directly below Teaching Assignments: subjects are assigned there first,
   // then scheduled here.
-  { label: "Timetable", href: "/hod/timetable", iconName: "CalendarDays", roles: ["HOD"] },
-  { label: "Leave Approvals", href: "/hod/leave-approvals", iconName: "CalendarClock", roles: ["HOD"], section: "Approvals" },
-  { label: "Leave History", href: "/hod/leave-history", iconName: "History", roles: ["HOD"] },
+  { label: "Timetable", href: "/hod/timetable", iconName: "CalendarDays", roles: ["HOD"], module: "timetable-incharge" },
+  { label: "Leave Approvals", href: "/hod/leave-approvals", iconName: "CalendarClock", roles: ["HOD"], section: "Approvals", module: "leave-approvals" },
+  { label: "Leave History", href: "/hod/leave-history", iconName: "History", roles: ["HOD"], module: "leave-approvals" },
   // Arrange cover for their department's faculty / supporting staff who have
   // other work on a date or range - see StaffAdjustmentsPage.
   { label: "Adjustments", href: "/hod/adjustments", iconName: "UserCheck", roles: ["HOD"] },
@@ -257,8 +263,8 @@ export const NAV_ITEMS: NavItem[] = [
   // every report/history/completion view (see
   // hod/attendance-reports/page.tsx). The old routes still work standalone
   // (unlinked, not deleted) for any existing notification links/bookmarks.
-  { label: "Attendance", href: "/hod/faculty-attendance", iconName: "ClipboardCheck", roles: ["HOD"] },
-  { label: "Attendance Reports", href: "/hod/attendance-reports", iconName: "CalendarRange", roles: ["HOD"] },
+  { label: "Attendance", href: "/hod/faculty-attendance", iconName: "ClipboardCheck", roles: ["HOD"], module: "attendance" },
+  { label: "Attendance Reports", href: "/hod/attendance-reports", iconName: "CalendarRange", roles: ["HOD"], module: "attendance" },
   { label: "Circulars", href: "/hod/circulars", iconName: "Megaphone", roles: ["HOD"] },
   { label: "Leave Profiles", href: "/hod/leave/profiles", iconName: "ClipboardList", roles: ["HOD"] },
   { label: "Budget", href: "/hod/budget", iconName: "PiggyBank", roles: ["HOD"], section: "Budget & Purchase" },
@@ -268,11 +274,11 @@ export const NAV_ITEMS: NavItem[] = [
   // Pipeline's own status badges/actions (see PipelineBoard.tsx), matching
   // the same merge done for Principal/Vice Principal.
   { label: "Hiring Pipeline", href: "/hod/pipeline", iconName: "GitBranch", roles: ["HOD"], section: "Hiring" },
-  { label: "Candidates", href: "/hod/candidates", iconName: "Users", roles: ["HOD"] },
+  { label: "Candidates", href: "/hod/candidates", iconName: "Users", roles: ["HOD"], module: "students" },
   { label: "My Attendance", href: "/hod/attendance", iconName: "ClipboardCheck", roles: ["HOD"], section: "My Work" },
   { label: "My Leave", href: "/hod/leave", iconName: "CalendarClock", roles: ["HOD"] },
   { label: "Adjustment Requests", href: "/leave/adjustments", iconName: "UserCheck", roles: ["HOD"] },
-  { label: "Teaching Load", href: "/hod/teaching", iconName: "BookOpen", roles: ["HOD"] },
+  { label: "Teaching Load", href: "/hod/teaching", iconName: "BookOpen", roles: ["HOD"], module: "teaching-load" },
   { label: "My Profile", href: "/hod/profile", iconName: "UserCircle", roles: ["HOD"], section: "Personal" },
 
   // College Office
@@ -315,16 +321,17 @@ export const NAV_ITEMS: NavItem[] = [
   // entry above; only Technical-category staff are ever eligible (see
   // TimetableIncharge in src/types/core.ts), but the page itself shows an
   // empty state for anyone else, same convention as Leave/Attendance.
-  { label: "Timetable Incharge", href: "/college-staff/timetable-incharge", iconName: "UserCog", roles: ["COLLEGE_STAFF"] },
-  { label: "Assignment Requests", href: "/college-staff/assignment-requests", iconName: "Send", roles: ["COLLEGE_STAFF"] },
+  { label: "Timetable Incharge", href: "/college-staff/timetable-incharge", iconName: "UserCog", roles: ["COLLEGE_STAFF"], module: "timetable-incharge" },
+  { label: "Assignment Requests", href: "/college-staff/assignment-requests", iconName: "Send", roles: ["COLLEGE_STAFF"], module: "assignment-requests" },
   { label: "My Profile", href: "/college-staff/profile", iconName: "UserCircle", roles: ["COLLEGE_STAFF"], section: "Personal" },
   { label: "My Leave", href: "/college-staff/leave", iconName: "CalendarClock", roles: ["COLLEGE_STAFF"] },
   { label: "Adjustment Requests", href: "/leave/adjustments", iconName: "UserCheck", roles: ["COLLEGE_STAFF"] },
-  { label: "My Attendance", href: "/college-staff/attendance", iconName: "ClipboardCheck", roles: ["COLLEGE_STAFF"], section: "My Work" },
+  { label: "My Attendance", href: "/college-staff/attendance", iconName: "ClipboardCheck", roles: ["COLLEGE_STAFF"], section: "My Work", module: "attendance" },
 
   // Academics
   { label: "Dashboard", href: "/academics", iconName: "LayoutDashboard", roles: ["ACADEMICS"] },
   { label: "Subjects", href: "/academics/subjects", iconName: "Library", roles: ["ACADEMICS"], section: "Academics" },
+  { label: "Assign to Semester", href: "/academics/assign-semester", iconName: "CalendarRange", roles: ["ACADEMICS"], section: "Academics" },
   { label: "My Profile", href: "/academics/profile", iconName: "UserCircle", roles: ["ACADEMICS"], section: "Personal" },
   { label: "My Leave", href: "/academics/leave", iconName: "CalendarClock", roles: ["ACADEMICS"] },
   { label: "Adjustment Requests", href: "/leave/adjustments", iconName: "UserCheck", roles: ["ACADEMICS"] },
@@ -366,38 +373,38 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", href: "/rnd-coordinator", iconName: "LayoutDashboard", roles: ["RND_COORDINATOR"] },
   { label: "My Profile", href: "/rnd-coordinator/profile", iconName: "UserCircle", roles: ["RND_COORDINATOR"], section: "Personal" },
 
-  // Faculty (PANEL_MEMBER) — My Interviews is injected dynamically in Sidebar when assigned
+// Faculty (PANEL_MEMBER) — My Interviews is injected dynamically in Sidebar when assigned
   // Full module set — Super Admin controls which modules/items are actually
   // visible per college via the Nav Visibility settings (filterVisibleNavItems).
   { label: "Dashboard", href: "/panel", iconName: "LayoutDashboard", roles: ["PANEL_MEMBER"] },
-  { label: "Teaching Load", href: "/panel/teaching", iconName: "BookOpen", roles: ["PANEL_MEMBER"], section: "My Work" },
+  { label: "Teaching Load", href: "/panel/teaching", iconName: "BookOpen", roles: ["PANEL_MEMBER"], section: "My Work", module: "teaching-load" },
   // Shown to every PANEL_MEMBER regardless of whether an HOD has actually
   // delegated anything to them yet - the page itself shows an empty state
-  // when it's empty, same convention as Leave/Attendance always showing even
+  // when it's empty, same convention as Leave/Attendance always showing
   // before someone has any requests/records (see TimetableIncharge in
   // src/types/core.ts).
-  { label: "Timetable Incharge", href: "/panel/timetable-incharge", iconName: "UserCog", roles: ["PANEL_MEMBER"] },
+  { label: "Timetable Incharge", href: "/panel/timetable-incharge", iconName: "UserCog", roles: ["PANEL_MEMBER"], module: "timetable-incharge" },
   // Only meaningful once this uid is Timetable Incharge for at least one
   // department (see isTimetableInchargeForDepartment) - shown unconditionally
   // like the entry above, same empty-state convention.
-  { label: "Assignment Requests", href: "/panel/assignment-requests", iconName: "Send", roles: ["PANEL_MEMBER"] },
+  { label: "Assignment Requests", href: "/panel/assignment-requests", iconName: "Send", roles: ["PANEL_MEMBER"], module: "assignment-requests" },
   { label: "Internal Exam", href: "/panel/internal-exam", iconName: "ClipboardList", roles: ["PANEL_MEMBER"] },
   { label: "Add Mid Bank", href: "/panel/mid-bank", iconName: "BookOpen", roles: ["PANEL_MEMBER"] },
-  { label: "Student Attendance", href: "/panel/mark-attendance", iconName: "CalendarCheck", roles: ["PANEL_MEMBER"] },
-  { label: "Attendance Report", href: "/panel/monthly-records", iconName: "CalendarRange", roles: ["PANEL_MEMBER"] },
-  { label: "Students", href: "/panel/students", iconName: "GraduationCap", roles: ["PANEL_MEMBER"] },
+  { label: "Student Attendance", href: "/panel/mark-attendance", iconName: "CalendarCheck", roles: ["PANEL_MEMBER"], module: "attendance" },
+  { label: "Attendance Report", href: "/panel/monthly-records", iconName: "CalendarRange", roles: ["PANEL_MEMBER"], module: "attendance" },
+  { label: "Students", href: "/panel/students", iconName: "GraduationCap", roles: ["PANEL_MEMBER"], module: "students" },
   // Dividing a section's own roster into lab sub-groups (StudentRecord.
   // labBatch) - only meaningful once this login is Faculty Incharge of at
   // least one section (see Section.facultyInchargeUid); the page itself shows
   // an empty state otherwise, same convention as the entries above. HOD-only
   // by design elsewhere (hod/students' per-student Edit dialog) - this is the
   // Faculty Incharge's own equivalent, not offered to HOD here.
-  { label: "Lab Batches", href: "/panel/students/batches", iconName: "Layers", roles: ["PANEL_MEMBER"] },
+  { label: "Lab Batches", href: "/panel/students/batches", iconName: "Layers", roles: ["PANEL_MEMBER"], module: "lab-batches" },
   { label: "My Feedback", href: "/panel/feedback", iconName: "MessageSquare", roles: ["PANEL_MEMBER"] },
   { label: "Circulars", href: "/panel/circulars", iconName: "Megaphone", roles: ["PANEL_MEMBER"] },
   { label: "Leave", href: "/panel/leave", iconName: "CalendarClock", roles: ["PANEL_MEMBER"], section: "Leave & Attendance" },
   { label: "Adjustment Requests", href: "/leave/adjustments", iconName: "UserCheck", roles: ["PANEL_MEMBER"] },
-  { label: "My Attendance", href: "/panel/attendance", iconName: "ClipboardCheck", roles: ["PANEL_MEMBER"] },
+  { label: "My Attendance", href: "/panel/attendance", iconName: "ClipboardCheck", roles: ["PANEL_MEMBER"], module: "attendance" },
   { label: "My Profile", href: "/panel/profile", iconName: "UserCircle", roles: ["PANEL_MEMBER"], section: "Personal" },
 
   // Accounts
@@ -519,6 +526,33 @@ export function getNavItemsForRoles(primary: UserRole, roles: readonly UserRole[
 export type WorkContextKey = "ME" | UserRole | `HOD:${string}`;
 export interface WorkContext { key: WorkContextKey; label: string }
 
+// Modules that are always personal — never hidden by module assignment.
+export const PERSONAL_MODULES = new Set(["profile", "attendance", "leave", "teaching", "dashboard"]);
+
+// Returns which module a nav item belongs to, or null if it's always
+// visible (personal items or un-mapped).
+export function getItemModule(item: Pick<NavItem, "module" | "href">): string | null {
+  if (item.module) return item.module;
+  return null;
+}
+
+// Given a list of assigned modules, return which nav items should be
+// visible. If assignedModules is empty (no assignment set),
+// everything is visible. Otherwise only items whose module is in
+// assignedModules (plus personal items) are shown.
+export function filterByAssignedModules(
+  items: NavItem[],
+  assignedModules: string[],
+): NavItem[] {
+  if (assignedModules.length === 0) return items;
+  const modSet = new Set(assignedModules);
+  return items.filter((item) => {
+    const mod = item.module;
+    if (!mod) return true;
+    return PERSONAL_MODULES.has(mod) || modSet.has(mod);
+  });
+}
+
 function seatRolesOf(primary: UserRole, roles: readonly UserRole[]): UserRole[] {
   return roles.filter((r, i) => r !== primary && roles.indexOf(r) === i);
 }
@@ -638,19 +672,28 @@ export function filterVisibleNavItems(
   // Drop "My Profile" (top-bar avatar) and "Settings" (top-bar gear). Done
   // here, after modules are fixed, so removing them can't shift their
   // neighbours into the module above.
-  excludeTopBarItems = false
+  excludeTopBarItems = false,
+  // When non-empty, only items whose module is in this set (plus
+  // personal items) are shown. Empty = no module filtering.
+  assignedModules: string[] = []
 ): NavItem[] {
-  // Each item's module is fixed from the FULL list before anything is removed.
-  // Computing it after removal let the items following a removed section-header
-  // item (e.g. Budget, hidden for College Admin) slide into the previous
-  // module - Budget Report / Budget History ended up under "Staff & HR".
+  // Apply assigned-modules filtering first: if the user has assigned
+  // modules, only keep items whose module is in that set (personal
+  // items like profile/leave/attendance/dashboard are always kept).
+  let working = filterByAssignedModules(items, assignedModules);
+
+  // Each item's module is fixed from the FULL list before anything is
+  // removed. Computing it after removal let the items following a
+  // removed section-header item (e.g. Budget, hidden for College Admin)
+  // slide into the previous module - Budget Report / Budget History
+  // ended up under "Staff & HR".
   const kept: { item: NavItem; module: string }[] = [];
-  items.forEach((item, i) => {
+  working.forEach((item, i) => {
     if (realRole && item.hideForRealRoles?.includes(realRole)) return;
     if (item.showOnlyForRealRoles && !(realRole && item.showOnlyForRealRoles.includes(realRole))) return;
     if (excludeTopBarItems && (isProfileNavItem(item) || isSettingsNavItem(item))) return;
     if (hiddenItems.includes(item.href)) return;
-    const moduleName = computeItemModule(items, i);
+    const moduleName = computeItemModule(working, i);
     if (hiddenModules.includes(moduleName)) return;
     kept.push({ item, module: moduleName });
   });

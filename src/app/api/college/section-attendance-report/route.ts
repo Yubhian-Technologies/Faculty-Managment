@@ -7,6 +7,7 @@ import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/s
 import { fetchSectionStudents } from "@/lib/students/sectionRoster";
 import { calcPercent } from "@/lib/studentAttendance/percentage";
 import { isShortageByPercent } from "@/lib/studentAttendance/shortage";
+import { matchesCurrentSemester } from "@/lib/college/semester";
 import type { Section, StudentAttendanceMark, StudentAttendanceSession, TeachingAssignment } from "@/types";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -21,7 +22,8 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 // report mode (Monthly, Period, Till Now alike).
 async function currentSectionSubjects(
   collegeRef: FirebaseFirestore.DocumentReference,
-  sectionId: string
+  sectionId: string,
+  requestedSemester: number | null
 ): Promise<{ subjectId: string; subjectName: string; subjectCode: string }[]> {
   const assignmentsSnap = await collegeRef.collection("teachingAssignments")
     .where("sectionId", "==", sectionId).get();
@@ -29,6 +31,10 @@ async function currentSectionSubjects(
   for (const doc of assignmentsSnap.docs) {
     const a = doc.data() as TeachingAssignment;
     if (a.isPast) continue;
+    // Same leniency as matchesCurrentSemester everywhere else - an assignment
+    // never tagged with a semester (course-year has none configured) still
+    // counts regardless of which semester was requested.
+    if (requestedSemester != null && !matchesCurrentSemester(a.timetableSemester, requestedSemester)) continue;
     if (!bySubject.has(a.subjectId)) bySubject.set(a.subjectId, a);
   }
   return Array.from(bySubject.values())
@@ -114,6 +120,15 @@ export async function GET(request: Request) {
     const threshold = thresholdRaw != null ? Math.max(0, Math.min(100, Number(thresholdRaw) || 75)) : 75;
     const dailyPercent = searchParams.get("dailyPercent") === "true";
     const hostellerParam = searchParams.get("hosteller") as "yes" | "no" | null;
+    // Optional - narrows every mode below (they all derive from allSessions/
+    // currentSectionSubjects) to one semester's own subjects/sessions.
+    // Omitted counts every subject/session regardless of semester, same as
+    // before this existed.
+    const semesterParam = searchParams.get("semester");
+    if (semesterParam != null && !Number.isFinite(Number(semesterParam))) {
+      return NextResponse.json({ error: "semester must be a valid number" }, { status: 400 });
+    }
+    const requestedSemester = semesterParam != null ? Number(semesterParam) : null;
     const filterByHosteller = <T extends { hosteller?: boolean }>(list: T[]): T[] => {
       if (hostellerParam === "yes") return list.filter((s) => s.hosteller === true);
       if (hostellerParam === "no") return list.filter((s) => s.hosteller !== true);
@@ -167,7 +182,12 @@ export async function GET(request: Request) {
       .where("sectionId", "==", sectionId)
       .where("status", "==", "SUBMITTED")
       .get();
-    const allSessions = sessionsSnap.docs.map((d) => d.data() as StudentAttendanceSession);
+    // Filtered once here (same leniency as currentSectionSubjects above) -
+    // every mode below derives from this single list, so this is the one
+    // place a semester filter needs to apply for all of them to be correct.
+    const allSessions = sessionsSnap.docs
+      .map((d) => d.data() as StudentAttendanceSession)
+      .filter((r) => requestedSemester == null || matchesCurrentSemester(r.semester, requestedSemester));
 
     // "Period" (from/to) or "Till now" (allTime, no bounds) - every student
     // x every subject's Held/Attend/% across an arbitrary range, mirroring
@@ -285,7 +305,7 @@ export async function GET(request: Request) {
         ? allSessions
         : allSessions.filter((r) => r.date >= fromParam! && r.date <= toParam!);
 
-      const subjects = await currentSectionSubjects(collegeRef, sectionId);
+      const subjects = await currentSectionSubjects(collegeRef, sectionId, requestedSemester);
       const sessionsBySubject = new Map<string, StudentAttendanceSession[]>();
       for (const r of rangeSessions) {
         if (!sessionsBySubject.has(r.subjectId)) sessionsBySubject.set(r.subjectId, []);
@@ -388,7 +408,7 @@ export async function GET(request: Request) {
     const inMonth = inYear.filter((r) => r.date.slice(5, 7) === monthStr);
 
     if (summaryParam && !dateParam) {
-      const subjects = await currentSectionSubjects(collegeRef, sectionId);
+      const subjects = await currentSectionSubjects(collegeRef, sectionId, requestedSemester);
 
       // Sun-Sat calendar-row week boundaries for this month, matching the
       // month-picker grid on the page that consumes this - week 0 starts
@@ -490,7 +510,7 @@ export async function GET(request: Request) {
 
     // Every subject currently assigned to this section, any faculty - the
     // report's stable column set.
-    const subjects = await currentSectionSubjects(collegeRef, sectionId);
+    const subjects = await currentSectionSubjects(collegeRef, sectionId, requestedSemester);
 
     const dayRecords = inMonth.filter((r) => r.date === dateParam);
     const sessionBySubject = new Map<string, StudentAttendanceSession>();

@@ -28,6 +28,8 @@ export async function GET(request: Request) {
     const courseFilterRaw = searchParams.get("courseId");
     const courseFilterIds = courseFilterRaw ? courseFilterRaw.split(",").map((s) => s.trim()).filter(Boolean) : [];
     const departmentIdFilter = searchParams.get("departmentId");
+    const semesterParam = searchParams.get("semester");
+    const requestedSemester = semesterParam != null ? Number(semesterParam) : null;
 
     const db = getAdminDb();
     const sectionsColl = db.collection("colleges").doc(session.collegeId).collection("sections");
@@ -239,14 +241,45 @@ export async function GET(request: Request) {
         if (!isFed) continue;
         seenIds.add(d.id);
         sections.push({ id: d.id, ...data, accessLevel: "secondary" });
-      }
-    }
-    sections.sort((a, b) => {
-      const ya = (a.year as number | undefined) ?? 0;
-      const yb = (b.year as number | undefined) ?? 0;
-      if (ya !== yb) return ya - yb;
-      return ((a.name as string | undefined) ?? "").localeCompare((b.name as string | undefined) ?? "");
-    });
+}
+     }
+
+     // Semester filter: sections belong to a course+year, and CourseYearTiming
+     // defines which semesters exist for that course-year. Filter sections
+     // down to only those whose course-year has the requested semester.
+     if (requestedSemester != null && sections.length > 0) {
+       const courseYearKeySet = new Set<string>();
+       for (const s of sections) {
+         courseYearKeySet.add(`${s.courseId as string}|${s.year as number}`);
+       }
+       const courseYearTimings = await Promise.all(
+         Array.from(courseYearKeySet).map((k) => {
+           const [cId, yStr] = k.split("|");
+           return db.collection("colleges").doc(session.collegeId)
+             .collection("courseYearTimings").where("courseId", "==", cId).where("year", "==", Number(yStr)).get()
+             .then((snap) => { const r: number[] = []; for (const d of snap.docs) { const t = d.data() as { semesters?: { semester: number }[] }; if (t.semesters) for (const s of t.semesters) r.push(s.semester); } return r; });
+         })
+       );
+       const validKeys = new Set(courseYearKeySet);
+       let idx = 0;
+       for (const k of courseYearKeySet) {
+         const semesters = courseYearTimings[idx] ?? [];
+         if (!semesters.includes(requestedSemester)) validKeys.delete(k);
+         idx++;
+       }
+       const allSections = [...sections];
+       sections.length = 0;
+       for (const s of allSections) {
+         if (validKeys.has(`${s.courseId}|${s.year}`)) sections.push(s);
+       }
+     }
+
+     sections.sort((a, b) => {
+       const ya = (a.year as number | undefined) ?? 0;
+       const yb = (b.year as number | undefined) ?? 0;
+       if (ya !== yb) return ya - yb;
+       return ((a.name as string | undefined) ?? "").localeCompare((b.name as string | undefined) ?? "");
+     });
 
     // `studentCount` used to be a manually-typed capacity estimate ("Student
     // Intake"); now that rosters are actually imported, overwrite it with the

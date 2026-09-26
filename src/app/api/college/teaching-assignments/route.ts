@@ -435,6 +435,29 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: semesterResult.error }, { status: 400 });
       }
       const timetableSemester = semesterResult.semester;
+      // Defense-in-depth: the UI now only offers subjects already mapped
+      // (for THIS department) to the semester being staffed - see
+      // SubjectSemesterAssignment (types/teaching.ts) - but a subjectId is
+      // still trusted input, re-checked here too, same as the
+      // faculty-availability check above. Looked up by this course's own
+      // departmentId (course.departmentId), not the subject itself - the
+      // same subject can be mapped to a different semester for a different
+      // department. No mapping at all for this department (never assigned,
+      // or a course-year with no semesters configured) is exempt, same
+      // leniency as matchesCurrentSemester.
+      if (timetableSemester != null) {
+        const assignmentSnap = await collegeRef
+          .collection("subjectSemesterAssignments")
+          .doc(`${subjectId}_${course.departmentId}`)
+          .get();
+        const mappedSemester = (assignmentSnap.data() as { semester?: number } | undefined)?.semester;
+        if (mappedSemester != null && mappedSemester !== timetableSemester) {
+          return NextResponse.json(
+            { error: `This subject is mapped to Semester ${mappedSemester}, not Semester ${timetableSemester}` },
+            { status: 400 },
+          );
+        }
+      }
       // This session - a Section is a fixed year-slot a new cohort occupies
       // every academic year (see Section.batch's own doc-comment), so a slot
       // booked here has to be tagged and conflict-checked against the SAME

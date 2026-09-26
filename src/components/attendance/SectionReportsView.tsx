@@ -75,6 +75,8 @@ export function SectionReportsView({ sectionId, title }: { sectionId?: string; t
   const [month, setMonth] = useState("");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
+  const [semester, setSemester] = useState<number | null>(null);
+  const [semesterOptions, setSemesterOptions] = useState<number[]>([]);
   const [data, setData] = useState<Record<string, unknown> | null>(null);
   // The range mode the currently-loaded `data` actually came from — kept
   // separate from the live `rangeMode` selector so switching the dropdown
@@ -88,6 +90,27 @@ export function SectionReportsView({ sectionId, title }: { sectionId?: string; t
     if (sectionId) return;
     void fetch("/api/college/sections").then((r) => r.json()).then((j) => setSections(j.sections ?? j.data ?? [])).catch(() => {});
   }, [sectionId]);
+
+  // Fetch semester options when a section is resolved
+  useEffect(() => {
+    const sid = resolvedSectionId || sectionId;
+    if (!sid) { setSemesterOptions([]); setSemester(null); return; }
+    void (async () => {
+      try {
+        const s = await fetch(`/api/college/sections?sectionId=${sid}`).then((r) => r.json() as Promise<{ sections: { courseId: string; year: number }[] }>);
+        const secList = s.sections ?? [];
+        if (secList.length === 0) { setSemesterOptions([]); setSemester(null); return; }
+        const sec = secList[0];
+        const t = await fetch(`/api/college/course-year-timings?courseId=${encodeURIComponent(sec.courseId)}`).then((r) => r.json() as Promise<{ timings: { semesters: number[]; year: number }[] }>);
+        const timing = (t.timings ?? []).find((x) => x.year === sec.year);
+        if (timing?.semesters?.length) {
+          setSemesterOptions([...timing.semesters].sort((a, b) => a - b));
+        } else {
+          setSemesterOptions([]);
+        }
+      } catch { setSemesterOptions([]); }
+    })();
+  }, [resolvedSectionId, sectionId]);
 
   async function load() {
     const sid = resolvedSectionId || sectionId;
@@ -115,6 +138,7 @@ export function SectionReportsView({ sectionId, title }: { sectionId?: string; t
       if (hosteller !== "all") params.set("hosteller", hosteller);
       if (viewMode === "consolidated") params.set("consolidated", "true");
       if (subjectId) params.set("subjectId", subjectId);
+      if (semester != null) params.set("semester", String(semester));
       const res = await fetch(`/api/college/section-attendance-report?${params.toString()}`);
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Failed");
@@ -335,6 +359,17 @@ export function SectionReportsView({ sectionId, title }: { sectionId?: string; t
                 <Input type="number" min={0} max={100} value={threshold} onChange={(e) => setThreshold(Number(e.target.value))} />
               </div>
             )}
+            <div>
+              <Label>Semester</Label>
+              <Select value={semester != null ? String(semester) : ""} onValueChange={(v) => setSemester(Number(v))}>
+                <SelectTrigger><SelectValue placeholder="All semesters" /></SelectTrigger>
+                <SelectContent>
+                  {semesterOptions.map((s) => (
+                    <SelectItem key={s} value={String(s)}>Semester {s}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
           <div className="space-y-2">
             <Label>Hosteller</Label>
