@@ -3178,24 +3178,41 @@ export interface PaginationState {
   lastDoc: unknown;
 }
 
-// ─── Faculty Assigned Modules ───────────────────────────────────
-// Per-person module assignment layered on top of their base role.
-export type FacultyAssignedModule =
-  | "timetable-incharge"
-  | "lab-batches"
-  | "teaching-load"
-  | "assignment-requests"
-  | "attendance"
-  | "leave-approvals"
-  | "students";
+// ─── Faculty Assigned Modules ──────────────────────────────────
+// Documents stored at colleges/{collegeId}/facultyAssignedModules.
 
-export interface FacultyAssignedModulesDoc {
-  uid: string;
+export interface FacultyAssignedModule {
+  id: string;
   collegeId: string;
   facultyId: string;
+  facultyName: string;
+  department: string;
+  departmentId?: string;
+  courseId?: string;
+  courseName?: string;
+  subjectId: string;
+  subjectName: string;
+  subjectCode: string;
+  semester: number;
+  academicYear: string;
+  year?: number;
+  sectionId?: string;
+  sectionName?: string;
+  hoursPerWeek: number;
+  isActive: boolean;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
+export interface FacultyAssignedModulesDoc {
+  id: string;
+  collegeId: string;
+  facultyId: string;
+  academicYear: string;
+  semester: number;
+  department: string;
+  departmentId?: string;
   modules: FacultyAssignedModule[];
-  assignedBy?: string;
-  assignedByName?: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
