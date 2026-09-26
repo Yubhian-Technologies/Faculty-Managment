@@ -17,7 +17,10 @@ import { deriveHodScope, buildCourseGroups, managerEffectiveYears } from "@/lib/
 import { fedYears } from "@/lib/college/academicStructure";
 import { matchesCurrentSemester } from "@/lib/college/semester";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
-import type { Course, CourseYearTiming, Department, SectionListItem, Subject, TeachingAssignment, FacultyMember, FacultyAssignmentRequest } from "@/types";
+import type {
+  Course, CourseYearTiming, Department, SectionListItem, Subject, SubjectSemesterAssignment,
+  TeachingAssignment, FacultyMember, FacultyAssignmentRequest,
+} from "@/types";
 
 type AssignmentRow = TeachingAssignment & { accessLevel?: "primary" | "secondary" };
 // `name` here is the derived display name (facultyDisplayName), not a stored field.
@@ -273,26 +276,70 @@ export default function TeachingAssignmentsPage() {
   // configured one, otherwise null (no semester concept for this course-year
   // - every filter that reads this treats null as "everything matches", so
   // the page behaves exactly as it did before semesters existed).
-  const effectiveSemester = semesterOptions.length === 0
-    ? null
-    : selectedSemester != null && semesterOptions.includes(selectedSemester)
-      ? selectedSemester
-      : semesterOptions[0];
+const effectiveSemester = semesterOptions.length === 0
+     ? null
+     : selectedSemester != null && semesterOptions.includes(selectedSemester)
+       ? selectedSemester
+       : semesterOptions[0];
+
+  const fetchKey = `${key}_sem${effectiveSemester ?? ""}`;
+
+  // ensureCourseYearData's own subjects fetch (below) is unfiltered -
+  // effectiveSemester isn't known yet the first time it runs. Once a real
+  // semester resolves, narrow subjectsCache[key] down to only subjects
+  // mapped (per department - see SubjectSemesterAssignment, types/teaching.ts)
+  // to it (see academics/assign-semester/page.tsx). Fetched by catalogId, and
+  // unioning every course-doc id's own owning department's mappings (same
+  // "union across the group" convention this page already uses for
+  // sections/timings) - a shared programme's course-doc ids can each belong
+  // to a different department. No semesters configured (effectiveSemester
+  // === null) leaves the full unfiltered list in place, exactly as before.
+  const semesterFilteredKeys = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (effectiveSemester == null || activeCourseIds.length === 0 || !year || !course?.catalogId) return;
+    const filterKey = `${key}_sem${effectiveSemester}`;
+    if (semesterFilteredKeys.current.has(filterKey)) return;
+    semesterFilteredKeys.current.add(filterKey);
+    const catalogId = course.catalogId;
+    void (async () => {
+      const departmentIds = Array.from(new Set(
+        activeCourseIds
+          .map((cId) => courses.find((c) => c.id === cId)?.departmentId)
+          .filter((id): id is string => !!id)
+      ));
+      const [assignLists, subjectsData] = await Promise.all([
+        Promise.all(
+          departmentIds.map((deptId) =>
+            fetch(`/api/college/subject-semester-assignments?catalogId=${encodeURIComponent(catalogId)}&year=${year}&departmentId=${encodeURIComponent(deptId)}&semester=${effectiveSemester}`)
+              .then((r) => r.json() as Promise<{ assignments?: SubjectSemesterAssignment[] }>)
+              .then((d) => d.assignments ?? [])
+          )
+        ),
+        fetch(`/api/college/subjects?catalogId=${encodeURIComponent(catalogId)}&year=${year}`)
+          .then((r) => r.json() as Promise<{ subjects?: Subject[] }>),
+      ]);
+      const assignedIds = new Set(assignLists.flat().map((a) => a.subjectId));
+      const filtered = (subjectsData.subjects ?? []).filter((s) => assignedIds.has(s.id));
+      setSubjectsCache((c) => ({ ...c, [key]: filtered }));
+    })();
+  }, [key, year, activeCourseIds, effectiveSemester, course, courses]);
 
   // Queried once per course-doc id and merged, since the sections/subjects/
   // timings APIs take a single courseId and one programme spans several docs.
-  async function ensureCourseYearData(courseIds: string[], k: string, y: string) {
+  async function ensureCourseYearData(courseIds: string[], k: string, y: string, sem?: number | null) {
     if (courseIds.length === 0) return;
-    if (!(k in sectionsCache)) {
+    const cacheKey = sem != null ? `${k}_sem${sem}` : k;
+    const semQs = sem != null ? `&semester=${sem}` : "";
+    if (!(cacheKey in sectionsCache)) {
       const lists = await Promise.all(
         courseIds.map((cId) =>
-          fetch(`/api/college/sections?courseId=${encodeURIComponent(cId)}&year=${y}`)
+          fetch(`/api/college/sections?courseId=${encodeURIComponent(cId)}&year=${y}${semQs}`)
             .then((r) => r.json() as Promise<{ sections: SectionListItem[] }>)
             .then((d) => d.sections ?? [])
         )
       );
       const byId = new Map(lists.flat().map((s) => [s.id, s]));
-      setSectionsCache((c) => ({ ...c, [k]: Array.from(byId.values()) }));
+      setSectionsCache((c) => ({ ...c, [cacheKey]: Array.from(byId.values()) }));
     }
     if (!(k in subjectsCache)) {
       const lists = await Promise.all(
@@ -347,13 +394,13 @@ export default function TeachingAssignmentsPage() {
   const fetchedKeys = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (activeCourseIds.length === 0 || !year) return;
-    if (fetchedKeys.current.has(key)) return;
-    fetchedKeys.current.add(key);
-    void (async () => { await ensureCourseYearData(activeCourseIds, key, year); })();
+    if (fetchedKeys.current.has(fetchKey)) return;
+    fetchedKeys.current.add(fetchKey);
+    void (async () => { await ensureCourseYearData(activeCourseIds, key, year, effectiveSemester); })();
     // ensureCourseYearData is redefined every render but reads only its
     // arguments and the caches it guards on, so it is deliberately not a dep.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, year, activeCourseIds]);
+  }, [key, year, effectiveSemester, activeCourseIds]);
 
   function handleDepartmentChange(v: string) {
     // ALL is a sentinel: Radix Select can't hold "" as an item value.
@@ -378,11 +425,12 @@ export default function TeachingAssignmentsPage() {
 
   // Which subject/section combos for the selected course+year (and, once
   // this course-year has semesters configured, the selected semester) have
-  // no faculty assigned yet. Subjects themselves aren't semester-tagged (one
-  // subject can be taught across more than one semester) - it's the
-  // ASSIGNMENT that's semester-specific, so switching semesters re-surfaces
-  // the same subject as a gap again for whichever semester hasn't been
-  // staffed yet, even if it's already staffed for another.
+  // no faculty assigned yet. `subjects` itself is already narrowed to the
+  // selected semester by the effect above (once one resolves) via each
+  // subject's own `semester` mapping (see academics/subjects's "Assign to
+  // Semester" tab) - switching semesters swaps in that semester's own subject
+  // list, so a gap here is always for a subject actually offered this
+  // semester, not a stale cross-semester one.
   const gapRows = useMemo(() => {
     if (!courseKey || !year) return [];
     // Matched against every course-doc id in the group: an assignment stores

@@ -55,19 +55,29 @@ export default function HODTeachingPage() {
   const [timetableSlots, setTimetableSlots] = useState<TimetableSlot[]>([]);
   const [timings, setTimings] = useState<CourseYearTiming[]>([]);
   const [typeFilter, setTypeFilter] = useState<"ALL" | "THEORY" | "PRACTICAL">("ALL");
+  const [semester, setSemester] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   // Monday of the week currently on screen - navigable via WeekNavigator,
   // defaulting to this calendar week. weekDates pairs positionally with
   // DAYS above, labelling each column with its actual date.
   const [weekStart, setWeekStart] = useState<Date>(() => currentWeekDates()[0]);
   const weekDates = useMemo(() => currentWeekDates(weekStart), [weekStart]);
+  const semesterOptions = useMemo(() => {
+    const nums = new Set<number>();
+    for (const t of timings) for (const s of t.semesters ?? []) nums.add(s.semester);
+    return Array.from(nums).sort((a, b) => a - b);
+  }, [timings]);
+  const effectiveSemester = semesterOptions.length === 0
+    ? null
+    : semester != null && semesterOptions.includes(semester) ? semester : semesterOptions[0];
 
   useEffect(() => {
     void (async () => {
       setIsLoading(true);
       try {
+        const qs = `myAssignments=true&week=${isoDateKey(weekStart)}${effectiveSemester != null ? "&semester=" + effectiveSemester : ""}`;
         const [assignRes, timingsRes] = await Promise.all([
-          fetch(`/api/college/teaching-assignments?myAssignments=true&week=${isoDateKey(weekStart)}`),
+          fetch(`/api/college/teaching-assignments?${qs}`),
           fetch("/api/college/course-year-timings"),
         ]);
         if (!assignRes.ok) throw new Error("Failed to load teaching assignments");
@@ -87,7 +97,7 @@ export default function HODTeachingPage() {
         setIsLoading(false);
       }
     })();
-  }, [weekStart]);
+  }, [weekStart, effectiveSemester]);
 
   const totalHoursPerWeek = assignments.reduce((sum, a) => sum + (a.hoursPerWeek ?? 0), 0);
   const subjectCount = assignments.length;
@@ -226,21 +236,33 @@ export default function HODTeachingPage() {
           No timetable slots have been published for you yet.
         </div>
       ) : (
-        <>
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <WeekNavigator weekStart={weekStart} onChange={setWeekStart} />
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-medium text-muted-foreground">Show:</span>
-            {(["ALL", "THEORY", "PRACTICAL"] as const).map((t) => (
-              <Button key={t} size="sm" variant={typeFilter === t ? "default" : "outline"} onClick={() => setTypeFilter(t)}>
-                {t === "ALL" ? "All" : t === "THEORY" ? "Theory" : "Practical"}
-              </Button>
-            ))}
-            <Button size="sm" variant="outline" onClick={downloadPdf}>
-              <FileDown className="h-3.5 w-3.5 mr-1.5" />Download
-            </Button>
-          </div>
-        </div>
+<>
+         <div className="flex flex-wrap items-center justify-between gap-2">
+           <WeekNavigator weekStart={weekStart} onChange={setWeekStart} />
+           <div className="flex items-center gap-2">
+             <span className="text-xs font-medium text-muted-foreground">Show:</span>
+             {(["ALL", "THEORY", "PRACTICAL"] as const).map((t) => (
+               <Button key={t} size="sm" variant={typeFilter === t ? "default" : "outline"} onClick={() => setTypeFilter(t)}>
+                 {t === "ALL" ? "All" : t === "THEORY" ? "Theory" : "Practical"}
+               </Button>
+             ))}
+             {semesterOptions.length > 0 && (
+               <select
+                 className="h-9 rounded-md border border-input bg-background px-3 text-sm focus:border-primary focus:outline-none"
+                 value={effectiveSemester != null ? String(effectiveSemester) : ""}
+                 onChange={(e) => setSemester(Number(e.target.value))}
+               >
+                 <option value="">All semesters</option>
+                 {semesterOptions.map((s) => (
+                   <option key={s} value={s}>Semester {s}</option>
+                 ))}
+               </select>
+             )}
+             <Button size="sm" variant="outline" onClick={downloadPdf}>
+               <FileDown className="h-3.5 w-3.5 mr-1.5" />Download
+             </Button>
+           </div>
+         </div>
         <div className="overflow-x-auto rounded-lg border">
           <table className="w-full text-sm border-collapse">
             <thead>

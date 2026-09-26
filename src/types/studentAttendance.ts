@@ -39,6 +39,7 @@ export interface StudentAttendanceSession {
   sectionId?: string;
   sectionName: string;
   year?: number;
+  semester?: number;           // semester-scoped subjects only
   subjectId: string;
   subjectName: string;
   subjectCode: string;
