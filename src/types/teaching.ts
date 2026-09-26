@@ -28,44 +28,43 @@ export const SUBJECT_CATEGORY_LABELS: Record<SubjectCategory, string> = {
 };
 
 // Two independent shapes share this collection (see api/college/subjects/route.ts):
-// course/year-scoped (departmentId/courseId/year set) and semester-scoped
-// (semester set, no course link).
+// master subjects (courseId + regulation, no department/year) and
+// semester-scoped subjects (semester set, no course link).
 export interface Subject {
   id: string;
   collegeId: string;
-  department: string;
-  departmentId?: string;
   courseId?: string;
   courseName?: string;
-  year?: number;               // academic year within the course (1..course.durationYears) - common to all sections of that year
+  // Legacy fields - populated on existing subjects from before
+  // the master-subject restructuring. Not set on new subjects
+  // (scoped by courseId + regulation only).
+  department?: string;
+  departmentId?: string;
+  year?: number;
   semester?: number;           // semester-scoped subjects only
   // The calendar academic session this subject entry belongs to (e.g.
-  // "2026-27") - not the same as `year` above. Set by the Academics when creating
-  // a subject (see academics/subjects/new/page.tsx) and what the Academics' Subjects
-  // list is actually scoped/filtered by (academics/subjects/page.tsx) - each
-  // session gets its own independent subject list per course-year, filled in
-  // fresh by the Academics rather than carried over or auto-reset. Optional/absent
-  // on subjects created before this field existed or via the HOD's own
-  // Subjects page.
+  // "2026-27"). Optional/absent on subjects created before this field
+  // existed. Each session gets its own independent subject list per
+  // course+regulation, filled in fresh by the Academics rather than
+  // carried over or auto-reset.
   academicYear?: string;
   // The curriculum regulation this subject's syllabus follows (e.g. "R20",
   // "R23"), auto-resolved from the owning course's own Course Catalog
   // regulations (CourseCatalogItem.regulations/regulationBatches) when
-  // unambiguous. Optional, not a gate on adding a subject - a course-year
-  // with no (or more than one) regulation currently resolved can still have
-  // subjects added; this is purely a tag, used elsewhere to match a Subject
-  // to a Section on the same regulation (TeachingAssignmentsEditor). Absent
-  // on semester-scoped subjects and on subjects created before this field
-  // existed. Immutable once set (like courseId/year) - not editable via PATCH.
+  // unambiguous. Optional, not a gate on adding a subject - a course
+  // with no (or more than one) regulation currently resolved can still
+  // have subjects added; this is purely a tag, used elsewhere to match
+  // a Subject to a Section on the same regulation
+  // (TeachingAssignmentsEditor). Absent on semester-scoped subjects and
+  // on subjects created before this field existed. Immutable once set.
   regulation?: string;
-  // Row position in the Academics' curriculum-table view of a course/year -
+  // Row position in the Academics' curriculum-table view of a course -
   // editable, so the Academics can match a printed curriculum sheet's ordering
-  // instead of being stuck with alphabetical-by-name. Course/year-scoped
-  // subjects only; absent on legacy subjects created before this field
-  // existed (those sort after any with a serialNumber, then by name).
+  // instead of being stuck with alphabetical-by-name. Master subjects only;
+  // absent on legacy subjects created before this field existed.
   serialNumber?: number;
   // Curriculum category (e.g. Professional Core, Open Elective) - see
-  // SUBJECT_CATEGORY_LABELS. Course/year-scoped subjects only.
+  // SUBJECT_CATEGORY_LABELS. Master subjects only.
   category?: SubjectCategory;
   // Free-text label when category is "OTHER" - the curriculum's own name for
   // a category outside the standard AICTE list above. Unset for every other
@@ -79,7 +78,7 @@ export interface Subject {
   // `hoursPerWeek` and `type` above - a single subject's weekly load is
   // often split across more than one of these (e.g. 3 lecture + 2 lab
   // hours), which neither hoursPerWeek nor the single-valued `type` capture
-  // on their own. Course/year-scoped subjects only.
+  // on their own. Master subjects only.
   lectureHours?: number;
   tutorialHours?: number;
   practicalHours?: number;

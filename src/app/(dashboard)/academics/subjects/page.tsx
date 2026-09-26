@@ -507,13 +507,13 @@ export default function AcademicsSubjectsPage() {
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => router.push(`/academics/subjects/import?departmentId=${selectedDepartmentId}&courseId=${selectedCourseId}&academicYear=${encodeURIComponent(selectedAcademicYear)}&department=${encodeURIComponent(selectedDepartment.name)}&courseName=${encodeURIComponent(selectedCourse.name)}`)}
+                      onClick={() => router.push(`/academics/subjects/import?courseId=${selectedCourseId}&academicYear=${encodeURIComponent(selectedAcademicYear)}`)}
                     >
                       <Upload className="h-4 w-4 mr-2" />Import Subjects
                     </Button>
                     <Button
                       size="sm"
-                      onClick={() => router.push(`/academics/subjects/new?departmentId=${selectedDepartmentId}&courseId=${selectedCourseId}&academicYear=${encodeURIComponent(selectedAcademicYear)}&department=${encodeURIComponent(selectedDepartment.name)}&regulation=${encodeURIComponent(singleRegulation)}&nextSerialNumber=${nextSerialNumber}&catalogId=${encodeURIComponent(selectedCourse.catalogId ?? "")}`)}
+                      onClick={() => router.push(`/academics/subjects/new?courseId=${selectedCourseId}&academicYear=${encodeURIComponent(selectedAcademicYear)}&regulation=${encodeURIComponent(singleRegulation)}&nextSerialNumber=${nextSerialNumber}&catalogId=${encodeURIComponent(selectedCourse.catalogId ?? "")}`)}
                     >
                       <Plus className="h-4 w-4 mr-2" />Add Subject
                     </Button>

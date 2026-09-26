@@ -92,7 +92,7 @@ export async function POST(request: Request) {
 
     if (session.role === "HOD") {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
-      if (!canHodEditDepartment(scope, subject.department)) {
+      if (!canHodEditDepartment(scope, subject.department ?? "")) {
         return NextResponse.json({ error: "This subject isn't in your department" }, { status: 403 });
       }
     }
