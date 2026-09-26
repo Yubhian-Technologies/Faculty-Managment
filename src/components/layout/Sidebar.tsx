@@ -14,6 +14,7 @@ import { useCollegeType } from "@/hooks/useCollegeType";
 import { hasSupportingStaffSplit } from "@/lib/designations/config";
 import { isNavItemActive, filterVisibleNavItems, isPathHidden, ROLES_WITH_EMBEDDED_PANEL_ACCESS, type NavItem } from "./navConfig";
 import { useIsTimetableIncharge } from "@/hooks/useIsTimetableIncharge";
+import { useCanSendCirculars } from "@/hooks/useCanSendCirculars";
 import { NavIcon } from "./NavIcon";
 import { WorkContextSwitcher } from "./WorkContextSwitcher";
 import { useWorkContext } from "@/hooks/useWorkContext";
@@ -51,6 +52,11 @@ export function Sidebar({ hiddenModules, hiddenItems }: SidebarProps) {
   const { collegeType } = useCollegeType();
   const { items: contextItems } = useWorkContext();
   const { isIncharge } = useIsTimetableIncharge();
+  // Circulars tab is assignment-gated: only Principal/VP and users the Principal
+  // granted send-permission see it (server is still the real gate - see
+  // useCanSendCirculars). null = still resolving; keep the tab visible while
+  // loading to avoid flicker for users who do have access.
+  const { canSend: canSendCirculars } = useCanSendCirculars();
 
   if (!user) return null;
 
@@ -63,6 +69,14 @@ export function Sidebar({ hiddenModules, hiddenItems }: SidebarProps) {
   const baseNavItems = filterVisibleNavItems(contextItems, hiddenModules, hiddenItems, user.realRole, true)
     .filter((item) => !hideSubDepartmentsLink || item.href !== "/hod/settings/sub-departments")
     .filter((item) => hasSupportingStaffSplit(collegeType) || (item.href !== "/hod/supporting-staff" && item.href !== "/hod/settings/designations"))
+    .filter((item) => {
+      // Circulars is delegated — hide the nav entry when the user holds no
+      // send-permission (Principal/VP or circularPermissions grant). HOD/Panel
+      // users without the grant never see the tab; Principal/VP are unaffected.
+      const isCircularsNav = item.href === "/hod/circulars" || item.href === "/panel/circulars";
+      if (isCircularsNav) return canSendCirculars !== false;
+      return true;
+    })
     .filter((item) => {
       // Timetable Incharge is delegated — hide the nav entry when the user holds
       // no such delegation (checked once on mount via useIsTimetableIncharge).

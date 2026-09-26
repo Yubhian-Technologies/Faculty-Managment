@@ -2,7 +2,7 @@
 
 ## Module Overview
 
-Owns every authorization decision: sign-in session minting (`/api/auth/session`), edge page gating (`src/proxy.ts`), per-route API guards (`src/lib/auth/verifySession.ts`), cookie signing (`src/lib/auth/sessionToken.ts`), live role/seat resolution (`src/lib/auth/liveRoles.ts`, `src/lib/roles/seatRoles.ts`), and the Firestore rules layer. Interface surface: the `require*` guard family consumed by ~276 of 290 route files.
+Owns every authorization decision: sign-in session minting (`/api/auth/session`), edge page gating (`src/proxy.ts`), per-route API guards (`src/lib/auth/verifySession.ts`), cookie signing (`src/lib/auth/sessionToken.ts`), live role/seat resolution (`src/lib/auth/liveRoles.ts`, `src/lib/roles/seatRoles.ts`), and the Firestore rules layer. Interface surface: the `require*` guard family consumed by ~279 of 290 route files.
 
 ## Component & Class Structure
 

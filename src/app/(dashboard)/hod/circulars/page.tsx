@@ -6,17 +6,16 @@ import { CircularForm } from "@/components/circular/CircularForm";
 import { Card, CardContent } from "@/components/ui/card";
 import { useRouter } from "next/navigation";
 import type { Circular } from "@/types/circular";
+import { useCanSendCirculars } from "@/hooks/useCanSendCirculars";
 
 export default function HodCircularsPage() {
   const router = useRouter();
   const [circulars, setCirculars] = useState<Circular[]>([]);
-  const [canSend, setCanSend] = useState<boolean | null>(null);
-
+  // Server truth (circularPermissions doc), shared with the sidebar's tab gate.
+  const { canSend } = useCanSendCirculars();
   async function load() {
     const c = await fetch("/api/college/circulars").then((r) => r.json());
     setCirculars(c.circulars ?? []);
-    // Optimistically show form; server enforces 403 on POST/publish if not permitted
-    setCanSend(true);
   }
   useEffect(() => { void load(); }, []);
 

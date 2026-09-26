@@ -77,7 +77,7 @@ Key env vars: `FIREBASE_ADMIN_PROJECT_ID` / `FIREBASE_ADMIN_CLIENT_EMAIL` / `FIR
 
 ### Strict boundaries — do NOT modify without permission
 
-1. `src/lib/auth/verifySession.ts` (~276 importers): `requireRole` intentionally rewrites roles; the resolution order underpins ~420 `role === "HOD"` checks.
+1. `src/lib/auth/verifySession.ts` (~279 importers): `requireRole` intentionally rewrites roles; the resolution order underpins ~420 `role === "HOD"` checks.
 2. `src/lib/departments/scope.ts`: the three scope functions (`editable ⊃ facultyManageable ⊃ own`) look redundant and are not — the comments record real bugs.
 3. `firestore.rules`: OR-combined — a second `match` block for the same path never tightens access. JWT claims carry only `{role, collegeId, locationId}`; seat-holders are invisible to rules.
 4. `src/components/shared/DataTable.tsx` (~68 importers) and `src/components/layout/navConfig.ts` (item placement silently changes module/visibility mapping; keep `BOTTOM_NAV_ITEMS` in sync).

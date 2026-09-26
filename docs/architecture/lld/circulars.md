@@ -8,9 +8,9 @@ College circulars: drafting, audience targeting, publishing with notifications, 
 
 | Component | Location | Responsibility |
 |---|---|---|
-| Domain types | `src/types/circular.ts` | `Circular`, `CircularSettings`, `CircularPermissionsDoc` |
-| Lib layer | `src/lib/circular/` | Audience resolution, publish + `notifyAudience` |
-| Upload | `api/upload/circular` | Storage at `colleges/{id}/circulars/` |
+| Domain types | `src/types/circular.ts` | `Circular`, `CircularAudience`, `CircularSettings`, `CircularPermission(sDoc)` |
+| Lib layer | `src/lib/circular/` (`service.ts`, `permissions.ts`, `settings.ts`, `audienceSummary.ts`) | Audience resolution, `publishCircular` (idempotent: already-PUBLISHED returns as-is, no double notify), `requireCanSendCircular` gate |
+| Upload | `api/upload/circular` | Storage at `colleges/{id}/circulars/` (verified path in route) |
 | UI | `src/components/circular/` — `CircularCard` (abstraction over Card), `CircularForm`, `CircularViewer` | Form (employeeType/departments/date/subject/body/messageFrom/FileUpload, Save Draft/Publish), viewer with print/download of same HTML |
 | Nav | `navConfig.ts` — `Megaphone` entry for `PRINCIPAL/HOD/PANEL_MEMBER` | Visibility |
 
@@ -39,25 +39,37 @@ sequenceDiagram
 ## Data Models & Schemas (src/types/circular.ts)
 
 ```ts
-Circular {
-  subject, body, date,
-  audience: { employeeType: "TEACHING" | "NON_TEACHING" | "ALL", departmentIds: string[] },
-  messageFrom,                       // one of CircularSettings.messageFromOptions
-  attachments: [{name, url}],        // Storage: colleges/{id}/circulars/
-  status: "DRAFT" | "PUBLISHED",
-  createdBy, createdAt, updatedAt, publishedAt?
+// src/types/circular.ts
+type EmployeeScope = "TEACHING" | "NON_TEACHING" | "ALL";
+type CircularStatus = "DRAFT" | "PUBLISHED" | "ARCHIVED";
+type CircularRecipientKind = "STAFF" | "STUDENTS";   // absent = STAFF (legacy docs)
+CircularAudience {
+  employeeType: EmployeeScope,
+  departmentIds: string[],        // [] = all departments
+  departmentNames?: string[],     // denormalized for display
+  recipientKind?: CircularRecipientKind,
+  targetYears?: number[],         // STUDENTS circulars only; []/absent = every year
 }
-CircularSettings      { messageFromOptions: string[] }  // defaults Management/Principal/Academics/HOD; Principal-editable
-CircularPermissionsDoc{ allowedUids: string[], allowedRoles: UserRole[] }  // PRINCIPAL/VP implicit
+CircularAttachment { fileName, fileUrl (Storage download URL), fileType?, fileSize? }
+Circular {
+  id, collegeId, subject, body, date: Timestamp, audience, messageFrom,
+  attachments: CircularAttachment[],       // Storage: colleges/{id}/circulars/
+  status: CircularStatus,
+  createdBy, createdByName, createdByRole, publishedAt?, publishedBy?, publishedByName?,
+  createdAt, updatedAt
+}
+CircularSettings      { messageFromOptions: string[] }  // Principal-managed
+CircularPermission    { grantedToUid? | grantedToRole? | grantedToDepartment?, grantedBy, ... }
+CircularPermissionsDoc{ allowedUids: string[], allowedRoles: UserRole[] }  // aggregated single doc
 ```
 
-Collections: `colleges/{id}/{circulars, circularSettings, circularPermissions}`.
+Docs live at `colleges/{id}/circulars/{id}` and `colleges/{id}/settings/{circularSettings, circularPermissions}` (verified: `src/lib/circular/settings.ts`).
 
 ## API/Method Contracts
 
 - `GET /api/college/circulars` — list (role-filtered to authored + published-visible).
-- `POST /api/college/circulars` — create DRAFT or PUBLISH inline; 403 when not in permissions doc.
-- `POST /api/college/circulars/[id]/publish` — flip status + fan-out notifications; idempotent guard against double publish.
+- `POST /api/college/circulars` — create DRAFT or PUBLISH inline; gated by `requireCanSendCircular` (permissions doc; Principal/VP always allowed); 403 otherwise.
+- `POST /api/college/circulars/[id]/publish` — `publishCircular` flips status + best-effort fan-out notifications; **idempotent** (already-PUBLISHED returns the circular unchanged, no double notify). `ARCHIVED` exists in the type but is not set by any route today.
 - `GET /api/college/circulars/[id]` — view (title = notification subject).
 - `GET/PUT /api/college/circular-settings` — Principal only for PUT.
 - `GET/POST /api/college/circular-permissions` — manage allow-list.

@@ -12,7 +12,7 @@ The academic backbone: derived academic structure (common first year vs departme
 | Regulations | `src/lib/college/academicSession.ts` | `regulationsForCourseYearByBatch`, `regulationsForBatchStartYear` |
 | Semesters | `src/lib/college/semester.ts` | Semester propagation logic (unit-tested) |
 | Department scope | `src/lib/departments/scope.ts`, `hodScope.ts`, `managedBranches.ts` | HOD scope (`editable ⊃ facultyManageable ⊃ own`), one-branch-one-subdepartment rule (409 + transaction) |
-| Student cohort ops | `api/college/students/{distribute-cohort, advance-year, promote}` | Share `evenSplit.ts`, `departmentHistory.ts`, `ChunkedBatch`; `dryRun` preflight |
+| Student cohort ops | `api/college/students/{distribute, distribute-cohort, promote}` | Share `evenSplit.ts`, `departmentHistory.ts`, `ChunkedBatch`; `dryRun` preflight |
 | Import | `api/college/students/import-excel`, `subjects/import`, `src/lib/import/` | Excel parsing (exceljs) |
 | Exams | `src/lib/exams/`, `src/types/examConfig.ts`, `examGuidelines.ts`, `midPaper.ts` | Internal marks (one batch per assignment), exam configs per course/year |
 | UI | `src/components/academics/`, `src/components/students/` | DepartmentsPanel, roster editors |
@@ -69,7 +69,7 @@ type AcademicStructure =
 - `GET /api/college/subjects` — HOD sees own + sub + parent departments (bidirectional); electives (PEC/OEC) not deduped; core subjects deduped by `regulation|code`; returns `academicYears` history list from real data.
 - `POST /api/college/subjects` — 201 `{id}`; 400 `department is required`; 401 sentinel; 500 logged.
 - `POST /api/college/departments/...` — grouping a branch under a second sub-department → **409** (one-owner rule, transactional).
-- `POST /api/college/students/distribute-cohort` / `advance-year` — `dryRun` flag for preflight; `advance-year` 409 names **every** missing target section; promotion shares helpers with distribution.
+- `POST /api/college/students/distribute` / `distribute-cohort` / `promote` — `dryRun` flag for preflight; distribution conflicts (missing/blank student names, unsorted rosters) return **409**; promotion shares helpers with distribution.
 - `POST /api/college/students/import-excel` — Excel → roster; validates against derived structure (freshman landing departments).
 - `POST /api/college/exam-configurations`, `internal-exam-marks` — per course/year/session; internal marks = one batch per assignment (contrast with per-period student attendance).
 
@@ -79,5 +79,5 @@ type AcademicStructure =
 - Firestore `in` limit 30 → department name lists capped (`.slice(0, 30)`); an HOD with >30 departments silently loses scope (known, deliberate fail-closed).
 - A first-year student keeps their real branch — any feature keying on the freshman sub-department must use `getHodDepartmentScope`, not `student.department`.
 - `academicYear`-less subjects match any session (History dropdown built from actual data, not a fixed window).
-- Cohort ops use `ChunkedBatch` for >500-doc writes; `dryRun` exists precisely because mis-targeted section naming is destructive.
+- Cohort ops use `ChunkedBatch` for >500-doc writes; `dryRun` exists precisely because mis-targeted section naming is destructive. (Note: an `advance-year` route referenced by older docs no longer exists — do not reintroduce it without checking git history.)
 - E2E coverage for this module in `tests/e2e/api/{subjects,sections,course-catalog,...}.spec.ts` + unit tests under `src/lib/college/__tests__/`.

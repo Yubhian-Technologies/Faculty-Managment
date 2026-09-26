@@ -8,12 +8,12 @@ Course-year timings, teaching assignments (two shapes), timetable slots + drafts
 
 | Component | Location | Responsibility |
 |---|---|---|
-| Period clock | `src/lib/timetable/currentPeriod.ts` | `resolveSubstituteSlotsForDate`, active-period lookup (IST), split-lab awareness — consumed by student attendance |
+| Period clock | `src/lib/timetable/currentPeriod.ts` | `getFacultyPeriodsForDate`, `getCurrentTimetableSlot`, `checkFacultyPeriodWindow`; substitute-aware via `resolveSubstituteSlotsForDate` imported from `src/lib/leave/periodCoverage.ts`; split-lab awareness — consumed by student attendance |
 | Grid | `src/lib/timetable/buildGrid.ts` | Render weekly grid from slots |
 | Context loading | `src/lib/timetable/loadContext.ts`, `sharedYearTiming.ts` | Shared-first-year timing fallback for freshman year |
 | Hours math | `src/lib/timetable/hoursMatch.ts` | Faculty workload vs assignment hours (unit-tested) |
 | Coverage | `src/lib/leave/periodCoverage.ts` | Authority: `facultyId === facultyMemberId` OR `substituteFacultyId` |
-| Types | `src/types/teaching.ts` | `CourseYearTiming`, `TeachingAssignment`, `TimetableSlot`, `TimetableDraft`, `TimetableRules` |
+| Types | `src/types/teaching.ts`, `src/types/core.ts` | `TeachingAssignment`, `TimetableSlot`, `TimetableDraft`, `TimetableRules` (`teaching.ts`); `CourseYearTiming` (`core.ts:767`) |
 
 ## Sequence Diagram — publishing a timetable & resolving the current period
 
@@ -26,9 +26,9 @@ sequenceDiagram
     participant SA as student-attendance/today-periods
 
     TI->>A: POST slots → TimetableDraft (outside timetableSlots until publish)
-    TI->>A: POST publish
-    A->>FS: transaction — validate conflicts (faculty double-booked, room/section) → write timetableSlots
-    A-->>TI: 200 | 409 conflict (detail)
+    TI->>A: POST /timetable/publish
+    A->>FS: re-validate (section, semester, conflicts) → write timetableSlots
+    A-->>TI: 200 | 400 validation/conflict message
     F->>SA: GET today-periods (faculty view)
     SA->>SA: slots where facultyId==me OR substituteFacultyId==me (periodCoverage)
     SA->>SA: isOpen via CourseYearTiming periods (IST window)
@@ -39,15 +39,25 @@ sequenceDiagram
 ## Data Models & Schemas (src/types/teaching.ts)
 
 ```ts
-CourseYearTiming { id: `${courseId}_year${N}`, collegeStart, collegeEnd, periods: Period[], semesters: [...] }
+CourseYearTiming { // src/types/core.ts:767, doc id `${courseId}_year${year}`
+  collegeId, departmentId, courseId, year,
+  collegeStartTime: "HH:MM", collegeEndTime: "HH:MM",   // Principal-set day bounds
+  numberOfPeriods, periodDurationMinutes,
+  lunchBreak: BreakConfig, shortBreaks: BreakConfig[],
+  periods?: PeriodTiming[],      // HOD's explicit breakdown; overrides the formula when set
+  semesters?: SemesterDuration[] // absent/empty = one continuous whole-year timetable
+}
 TeachingAssignment {
   // two shapes:
-  course/section-scoped: { courseId, sectionId, ... }     // real sectionId → roster source
-  semester-scoped:       { semester, assignmentSemester, sectionName } // free-text section, no sectionId
-  facultyId, subjectId, hoursPerWeek...
+  course/section-scoped: { courseId, year, sectionId, ... }
+  semester-scoped:       { academicYear, semester: number, section: string } // free-text section, no sectionId
+  facultyId, subjectId, subjectName, subjectCode, hoursPerWeek, assignedBy,
+  // resume/table fields (course/section-scoped only): isPast?, assignmentAcademicYear?,
+  // assignmentSemester?: string (free-text, distinct from `semester`), timetableSemester?: number
 }
-TimetableSlot { day: "MON".."SAT", periodNumber, semester?, academicYear?, labBatch?, facultyId, substituteFacultyId?, subjectId, sectionId? }
-TimetableDraft  // staging; promoted to timetableSlots on publish
+TimetableSlot { day: "MON".."SAT", periodNumber, year, sectionId, facultyId,
+  substituteFacultyId?, labBatch?, source?: "MANUAL"|"GENERATED", isPinned?, classroom? }
+TimetableDraft { status: "DRAFT"|"PUBLISHED", ... }   // staging; promoted on publish
 TimetableRules  { workingDays, maxPerDay, ... }
 ```
 
@@ -55,7 +65,8 @@ Collections: `colleges/{id}/{timetableSlots, timetableDrafts, timetableRules, te
 
 ## API/Method Contracts
 
-- `GET/POST /api/college/college-timetable-slots` (via `timetable-slots` route) — HOD/incharge scoped; publish flow transactional; conflicts → **409**.
+- `GET/POST /api/college/timetable-slots` — slot CRUD; HOD/incharge scoped.
+- `POST /api/college/timetable/draft` then `POST /api/college/timetable/publish` — publish re-validates (sectionId required, semester resolution, non-empty draft, conflict re-check); validation/conflict failures return **400** with a message (not 409).
 - `GET /api/college/teaching-assignments` — role-scoped (HOD = own department via scope lib).
 - `POST /api/college/course-year-timings` — upsert `courseId_yearN` timing docs; drives all period windows.
 - `POST /api/college/timetable-incharges` — delegates timetable authority (checked by `useIsTimetableIncharge`).
