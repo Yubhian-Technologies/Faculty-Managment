@@ -1033,6 +1033,17 @@ export const SELECTABLE_FACULTY_STATUS_VALUES = (Object.keys(FACULTY_STATUS_LABE
 );
 export const FACULTY_STATUS_ERROR_MESSAGE = `Status must be one of ${SELECTABLE_FACULTY_STATUS_VALUES.map((s) => FACULTY_STATUS_LABELS[s]).join(", ")}`;
 
+// Narrower still - what a human can actually PICK from the Add/Edit Faculty
+// status dropdown. ON_LEAVE is excluded here: nobody is meant to be manually
+// marked on-leave from this form - that status is meant to come from the
+// Leave module (importing/setting leave), once it writes it. It's still a
+// server-accepted value (SELECTABLE_FACULTY_STATUS_VALUES above, used by the
+// POST/PATCH routes) so an existing ON_LEAVE record stays valid and editable
+// without the dropdown forcing it to something else.
+export const MANUALLY_SELECTABLE_FACULTY_STATUS_VALUES = SELECTABLE_FACULTY_STATUS_VALUES.filter(
+  (s) => s !== "ON_LEAVE"
+);
+
 // Which stored date field records "when" a faculty member's status changed to
 // this value - only the three that mark leaving/entering a distinct
 // engagement phase carry one; ACTIVE/ON_LEAVE/INTERVIEW_DONE don't. Each date
@@ -2820,6 +2831,20 @@ export interface StudentRecord {
   physicallyHandicapped?: boolean;
   handicappedType?: "H" | "V" | "O"; // Hearing / Visual / Other - only meaningful when physicallyHandicapped
   identificationMarks?: string;
+  // Address/domicile block (AP local-candidature admission detail) - Permanent
+  // Address is only meaningfully set when permanentAddressSameAsTemporary is
+  // false; the two "Details" fields are only meaningful when their own Yes/No
+  // field above them is true. See rosterFields.ts's ROSTER_FIELDS for how the
+  // Add/Edit form gates these on screen.
+  temporaryAddress?: string;
+  permanentAddressSameAsTemporary?: boolean;
+  permanentAddress?: string;
+  state?: string;
+  district?: string;
+  studiedOutsideAP?: boolean;
+  studiedOutsideAPDetails?: string;
+  familyIdLinkedOtherState?: boolean;
+  familyIdLinkedOtherStateDetails?: string;
   remarks?: string;
   // ─── Graduation snapshot ────────────────────────────────────────────────
   // Set once, when `status` flips to GRADUATED (students/promote route). The

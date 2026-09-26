@@ -2,6 +2,7 @@
 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -9,7 +10,7 @@ import {
   EDITABLE_ROSTER_FIELDS, PRIMARY_ROSTER_FIELDS, DETAIL_ROSTER_FIELDS,
   rosterFieldDisplay, type RosterField,
 } from "@/lib/students/rosterFields";
-import { resolveDepartmentCourseScope, resolveCatalogId, freshmanLandingDepartmentNames } from "@/lib/college/academicStructure";
+import { resolveDepartmentCourseScope, resolveCatalogId, freshmanPickerDepartmentNames } from "@/lib/college/academicStructure";
 import { managerEffectiveYears } from "@/lib/departments/hodScope";
 import { CASTE_LABELS, SUB_CASTES_BY_CASTE } from "@/types";
 import type { Department, StudentRecord, Course, Caste } from "@/types";
@@ -29,6 +30,11 @@ const NONE = "__none__";
 // landLineNo is deliberately NOT here: a landline with its STD code runs past
 // 10 digits (the template's own sample is "08832451234").
 const PHONE_FIELD_KEYS = new Set(["guardianContact", "fatherContactNo", "motherContactNo", "mobileNo"]);
+
+// Roster fields holding a full postal address, rendered as a multi-line
+// Textarea instead of the default single-line Input - the CSV/import shape
+// (kind: "text" in rosterFields.ts) is unchanged, this is on-screen only.
+const TEXTAREA_FIELD_KEYS = new Set(["temporaryAddress", "permanentAddress"]);
 
 function ordinalYear(year: number) {
   const suffix = year === 1 ? "st" : year === 2 ? "nd" : year === 3 ? "rd" : "th";
@@ -144,7 +150,7 @@ export function secondaryDepartmentOptions(
  * and the bulk importer's unassigned rows).
  */
 export function isSecondaryDepartmentRequired(departments: Department[], departmentName: string, year: string): boolean {
-  return year === "1" && !!departmentName && freshmanLandingDepartmentNames(departments).has(departmentName);
+  return year === "1" && !!departmentName && freshmanPickerDepartmentNames(departments).has(departmentName);
 }
 
 /**
@@ -356,7 +362,7 @@ function FieldInput({ field, values, onChange, departments, courseNames, courses
     // submit) is what keeps this in sync with the Add Student form's own
     // behaviour, which the bulk importer's "fix failed row" dialog reuses
     // verbatim (RosterFormFields).
-    const freshmanNames = freshmanLandingDepartmentNames(departments);
+    const freshmanNames = freshmanPickerDepartmentNames(departments);
     if (values.year === "1" && freshmanNames.size > 0) {
       options = options.filter((d) => freshmanNames.has(d.name));
     }
@@ -454,7 +460,7 @@ function FieldInput({ field, values, onChange, departments, courseNames, courses
     // Year 1 is never valid for a real branch once the college runs a shared
     // first year - even if that branch's own (possibly stale) assignedYears
     // still lists it - see freshmanLandingDepartmentNames's own doc-comment.
-    const freshmanNames = freshmanLandingDepartmentNames(departments);
+    const freshmanNames = freshmanPickerDepartmentNames(departments);
     if (values.department && freshmanNames.size > 0 && !freshmanNames.has(values.department)) {
       options = options.filter((y) => y !== 1);
     }
@@ -567,6 +573,30 @@ function FieldInput({ field, values, onChange, departments, courseNames, courses
     );
   }
 
+  if (field.key === "permanentAddress") {
+    // Mirrors Faculty's own Personal Details form (PersonalDetailsFields.tsx)
+    // - Permanent Address is only asked for once "Same as Temporary" is
+    // explicitly No; otherwise it's implicitly the Temporary Address above,
+    // and the CSV/stored value is simply left blank rather than duplicated.
+    if (values.permanentAddressSameAsTemporary === "Yes") {
+      return (
+        <div className="space-y-2 sm:col-span-2">
+          <Label>{label}</Label>
+          <p className="text-xs text-muted-foreground">Permanent Address will be saved as the Temporary Address above - no need to enter it separately.</p>
+        </div>
+      );
+    }
+    return (
+      <div className="space-y-2 sm:col-span-2">
+        <Label htmlFor={id}>{label}</Label>
+        <Textarea id={id} value={value} onChange={(e) => onChange(field.key, e.target.value)} placeholder={field.placeholder} />
+      </div>
+    );
+  }
+
+  if (field.key === "studiedOutsideAPDetails" && values.studiedOutsideAP !== "Yes") return null;
+  if (field.key === "familyIdLinkedOtherStateDetails" && values.familyIdLinkedOtherState !== "Yes") return null;
+
   if (field.kind === "select" || field.kind === "yesno") {
     const options = field.kind === "yesno" ? ["Yes", "No"] : field.options ?? [];
     return (
@@ -582,6 +612,15 @@ function FieldInput({ field, values, onChange, departments, courseNames, courses
             {options.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
           </SelectContent>
         </Select>
+      </div>
+    );
+  }
+
+  if (TEXTAREA_FIELD_KEYS.has(field.key)) {
+    return (
+      <div className="space-y-2 sm:col-span-2">
+        <Label htmlFor={id}>{label}</Label>
+        <Textarea id={id} value={value} onChange={(e) => onChange(field.key, e.target.value)} placeholder={field.placeholder} />
       </div>
     );
   }

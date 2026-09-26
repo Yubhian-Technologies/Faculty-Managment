@@ -25,7 +25,7 @@ import { experienceBreakdown, totalYearsOfExperience, formatDuration, allPreviou
 import { PHONE_REGEX, EMAIL_REGEX, APAAR_REGEX } from "@/lib/validations";
 import { AvatarUploadField } from "@/components/shared/AvatarUploadField";
 import { PROFILE_MODULES } from "@/lib/faculty/profileModules";
-import { EMPLOYEE_CATEGORY_LABELS, FACULTY_STATUS_LABELS, SELECTABLE_FACULTY_STATUS_VALUES, FACULTY_STATUS_DATE_FIELD, FACULTY_STATUS_DATE_LABELS } from "@/types";
+import { EMPLOYEE_CATEGORY_LABELS, FACULTY_STATUS_LABELS, MANUALLY_SELECTABLE_FACULTY_STATUS_VALUES, FACULTY_STATUS_DATE_FIELD, FACULTY_STATUS_DATE_LABELS } from "@/types";
 import type { DesignationCatalogItem, EmployeeCategory, FacultyStatus } from "@/types";
 import { useCollegeType } from "@/hooks/useCollegeType";
 import { designationLabel } from "@/lib/designations/config";
@@ -493,7 +493,11 @@ export default function NewFacultyPage() {
 
       {/* Step indicator - click any step to jump to it; steps with missing
           required fields are outlined in red. Jumping stays free (it is how
-          you go back to fix something); it is Next that enforces the step. */}
+          you go back to fix something); it is Next that enforces the step.
+          The checkmark is re-derived from findStepProblem on every render
+          (not just when Next is pressed) - otherwise jumping straight to a
+          later step via the pills, skipping Next entirely, left every step
+          in between showing complete regardless of whether it actually was. */}
       <div className="flex flex-wrap gap-2 mb-4">
         {steps.map((s, i) => (
           <button
@@ -505,7 +509,7 @@ export default function NewFacultyPage() {
               i === stepIndex ? "bg-primary text-primary-foreground" : i < stepIndex ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground hover:bg-muted/70"
             }`}
           >
-            {i < stepIndex && !erroredSteps.has(s.key) && <Check className="h-3 w-3" />}
+            {i < stepIndex && !erroredSteps.has(s.key) && !findStepProblem(s.key) && <Check className="h-3 w-3" />}
             {s.label}
           </button>
         ))}
@@ -653,7 +657,7 @@ export default function NewFacultyPage() {
                     >
                       <SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger>
                       <SelectContent>
-                        {SELECTABLE_FACULTY_STATUS_VALUES.map((s) => (
+                        {MANUALLY_SELECTABLE_FACULTY_STATUS_VALUES.map((s) => (
                           <SelectItem key={s} value={s}>{FACULTY_STATUS_LABELS[s]}</SelectItem>
                         ))}
                       </SelectContent>

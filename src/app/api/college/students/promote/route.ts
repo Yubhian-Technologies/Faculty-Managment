@@ -20,14 +20,16 @@ async function getUserName(db: Firestore, collegeId: string, uid: string): Promi
   }
 }
 
-// Principal/VP move a cohort of REGULAR students to a different department's
-// section for the next year (PROMOTE), or mark a final-year cohort complete
-// (GRADUATE). Targets a single destination per call - the "bulk-by-section
-// with per-student override" UX (src/app/(dashboard)/principal/promotions)
-// groups students by their resolved target and fires one call per group.
+// Principal/VP/College Office move a cohort of REGULAR students to a
+// different department's section for the next year (PROMOTE), or mark a
+// final-year cohort complete (GRADUATE). Targets a single destination per
+// call - the "bulk-by-section with per-student override" UX
+// (StudentPromotionsPanel, used by both principal/students's "Promotion" tab
+// and college-office/students's own) groups students by their resolved
+// target and fires one call per group.
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");
+    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "COLLEGE_OFFICE");
     const body = (await request.json()) as {
       studentIds: string[];
       action: "PROMOTE" | "GRADUATE";
