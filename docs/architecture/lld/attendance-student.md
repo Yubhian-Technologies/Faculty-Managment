@@ -9,8 +9,8 @@ Faculty marks present/absent per (assignment, date, timetable period); HOD offic
 | Component | Location | Responsibility |
 |---|---|---|
 | Session domain types | `src/types/studentAttendance.ts` | `StudentAttendanceSession` (doc id `${assignmentId}_${date}_${periodNumber}`), entries, DRAFT/SUBMITTED status |
-| Period resolution | `src/lib/timetable/currentPeriod.ts` | `resolveSubstituteSlotsForDate` (substitute-aware), split-lab `labBatch` awareness, `isOpen` IST window |
-| Roster | `src/lib/students/` (`fetchSectionStudents`, `sectionRoster`) | Primary + `secondaryDepartment` merge; `labBatch`-scoped roster for split labs |
+| Period resolution | `src/lib/timetable/currentPeriod.ts` | `getFacultyPeriodsForDate` (substitute-aware via `resolveSubstituteSlotsForDate` from `src/lib/leave/periodCoverage.ts`), split-lab `labBatch` awareness, `isOpen` IST window |
+| Roster | `src/lib/students/sectionRoster.ts` | `fetchSectionStudents` — primary + `secondaryDepartment` merge; `labBatch`-scoped roster for split labs |
 | Write gates | route handlers | `WRONG_DATE / NOT_SCHEDULED / OUTSIDE_WINDOW / PERIOD_MISMATCH` |
 | Period status | `src/lib/attendance/periodAttendanceStatus.ts` | `IN_PROGRESS` classification |
 | Reporting | `src/lib/studentAttendance/` (`percentage.ts`, `shortage.ts`, `absentReport.ts`, `exportCsv.ts`, `notPostedAggregation.ts`) | Reports + CSV; unit-tested |
@@ -65,7 +65,7 @@ interface StudentAttendanceSession {
 }
 ```
 
-Collections: `colleges/{id}/studentAttendanceSessions` (sessions), `studentAttendance` reporting composites (8 composite indexes: status+sectionId/date, facultyId/date, subjectId/date, department/date, date).
+Collections: **`colleges/{id}/studentAttendance`** (one doc per `${assignmentId}_${date}_${periodNumber}`); reporting composites in `firestore.indexes.json`: 4 **COLLECTION_GROUP** composite indexes on `studentAttendance` (status+sectionId+date, status+facultyId+date, status+subjectId+date, status+department+date) among 61 indexes total.
 
 ## API/Method Contracts
 

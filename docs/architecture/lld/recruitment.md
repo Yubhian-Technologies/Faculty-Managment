@@ -11,7 +11,7 @@ The largest domain: vacancy request → approval → candidate collection → hi
 | Firestore data access | `src/lib/firestore/hiring.ts` | Typed CRUD for `vacancyRequests`, `candidates`, `candidateApplications`, `hiringBatches`, `hiringBatches/{id}/panelFeedback` |
 | Pipeline rules | `src/lib/hiringPipeline.ts` | Stage transitions, allowed next steps |
 | Provisioning | `src/lib/firestore/facultyProvisioning.ts` | Post-offer: Auth user + `facultyMembers` doc creation |
-| Offer letters | `src/lib/offerLetterContactBlock.ts`, `src/lib/offerLetterDecision.ts`, `api/college/offer-letters` | PDF data assembly, accept/decline handling |
+| Offer letters | `src/lib/offerLetterContactBlock.ts`, `api/college/offer-letters` | PDF data assembly, accept/decline handling |
 | Dashboard UI | `src/components/hiring/`, `src/hooks/useHiring.ts`, `useHiringActivity.ts`, `usePrincipalPendingHiring.ts` | HOD requirement panel, HR batches, panel scoring, Principal approvals |
 | Panel scoring | shared routes `/panel/interviews`, `/evaluation`, `src/app/api/college/panel-feedback` | PANEL_MEMBER feedback capture |
 

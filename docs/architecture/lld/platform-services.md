@@ -10,7 +10,7 @@ Shared infrastructure every domain leans on: file uploads (21 routes), server-si
 |---|---|---|
 | Uploads | `src/app/api/upload/*` — certificate, circular, resume, joining-letter, profile-photo, faculty-document, supporting-staff-document, leave-proof, finance-receipt, purchase-grn, indent-receipt, budget-circular, budget-report, consultancy-doc, hackathon-doc, innovation-doc, ipr-doc, phd-doc, research-service-doc, seed-funding-doc, sponsored-project-doc | Each route self-guards; writes to `colleges/{id}/<domain>/` in Storage; client-side compression via `browser-image-compression` |
 | PDF | `src/lib/pdf/`, `/api/pdf/generate`, `/api/pdf/image-proxy` | HTML templates → puppeteer + `@sparticuz/chromium` (binary shipped via `outputFileTracingIncludes` for exactly that route); **fallback: raw HTML download when Chromium unavailable** (e.g. local dev) |
-| Email | `/api/email/send`, `src/lib/email/`, `/api/college/email-requests` | nodemailer; SMTP env vars; `EMAIL_FROM` |
+| Email | `/api/email/send`, `src/lib/email/` (`mailer.ts`, `templates.ts`), `/api/college/email-requests` | nodemailer; SMTP env vars; `EMAIL_FROM`. `email-requests` is the **official email workflow managed by the WEBMASTER** (only the Webmaster can create the official email — 403 otherwise; requests tracked with a status field, overseen by WEBMASTER/COLLEGE_OFFICE/PRINCIPAL/VP/SUPER_ADMIN) |
 | Cron | `functions/src/index.ts` → `/api/cron/attendance-not-posted` | Function = thin pinger (secret `CRON_SECRET`, `APP_URL`); all logic in the app route |
 | Notifications | `src/lib/notify.ts` (`notify`, `notifyRole`), `src/components/notifications/`, `useNotifications` | `AppNotification` docs under `colleges/{id}/notifications`; GLOBAL-role resolution via `systemUsers` |
 | Audit | `AuditLog` union in `src/types/core.ts`, `/api/college/audit-logs`, `/api/admin/audit-logs`, `/api/college/finance-audit-logs` | Every cross-cutting write appends one |
@@ -64,7 +64,7 @@ sequenceDiagram
 
 - `POST /api/upload/<domain>` — `requireCollegeMember(...)` per domain; returns `{url}` / Storage path; 403 on wrong scope; 400 on missing/oversized file (10 MB server-action cap noted above).
 - `POST /api/pdf/generate` — guard → HTML → PDF; fallback HTML on Chromium absence; `GET /api/pdf/image-proxy` for remote images inside PDFs.
-- `POST /api/email/send` — SMTP relay; `/api/college/email-requests` provides an approval workflow (Principal approves before send).
+- `POST /api/email/send` — SMTP relay; `/api/college/email-requests` — official-email request workflow created by the WEBMASTER (403 for anyone else), status-tracked.
 - `POST /api/cron/attendance-not-posted` — Bearer `CRON_SECRET` only; app-internal, never exposed to clients.
 - `notify(db, collegeId, toUid, type, title, message, link?)` and `notifyRole(db, collegeId, role, ...)` — the only sanctioned notification helpers.
 

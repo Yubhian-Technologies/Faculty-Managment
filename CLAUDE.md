@@ -118,7 +118,7 @@ firestore.rules, firestore.indexes.json, storage.rules
 
 ### Strict boundaries — do NOT modify without permission
 
-1. **`src/lib/auth/verifySession.ts`** — imported by ~276 of 290 API route files. `requireRole` deliberately *rewrites* roles (HOD-seat resolution); changing resolution order changes ~420 `role === "HOD"` checks.
+1. **`src/lib/auth/verifySession.ts`** — imported by ~279 of 290 API route files. `requireRole` deliberately *rewrites* roles (HOD-seat resolution); changing resolution order changes ~420 `role === "HOD"` checks.
 2. **`src/lib/departments/scope.ts`** — the department authorization boundary; three non-interchangeable scope functions (`editableDepartmentNames ⊃ facultyManageableDepartmentNames ⊃ ownDepartmentNames`).
 3. **`firestore.rules`** — deployed separately by hand; repo file is ahead of the live ruleset. OR-combined matching means adding a second `match` block never tightens anything.
 4. **`src/components/shared/DataTable.tsx`** (~68 importers) and **`src/components/layout/navConfig.ts`** (~27 importers; `computeItemModule` walks backwards to sections — item placement changes Super Admin visibility mapping).

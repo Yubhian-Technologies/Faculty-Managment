@@ -10,7 +10,7 @@ Faculty/staff self-attendance: check-in/check-out with geofence + face verificat
 |---|---|
 | `istTime.ts` | **Single source of time truth** — `getISTParts`, `istDateKey`, `istMidnightUTC`, `istMonthBounds`, `istDayOfWeek`, `parseISTDateParam`. Fixed `Asia/Kolkata` (no DST). |
 | `geofence.ts` | Haversine distance + polygon containment against campus location |
-| `faceMatch.ts` | EAR 0.92 / yaw 0.12 thresholds + liveness (face-api.js weights at `public/models/`) |
+| `faceMatch.ts` | Blink-based liveness (`BLINK_DIP_RATIO` 0.92 / `BLINK_REOPEN_RATIO` 0.95 on EAR) + head-yaw anti-spoof offset (face-api.js weights at `public/models/`) |
 | `workingDays.ts` | Per-role Sunday override; classifies working days vs HOLIDAY |
 | `lateStatus.ts` | 09:05 cutoff; `recordLateCheckIn` — idempotent via `runTransaction` |
 | `attendanceWindow.ts` | Valid check-in/out windows per day |

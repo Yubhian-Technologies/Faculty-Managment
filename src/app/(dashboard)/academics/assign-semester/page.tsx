@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Pagination } from "@/components/shared/Pagination";
 import { toast } from "@/hooks/useToast";
 import type { Course, CourseCatalogItem, CourseYearTiming, Department, Subject, SubjectSemesterAssignment } from "@/types";
 
@@ -54,6 +55,12 @@ export default function AssignToSemesterPage() {
   const [selectedSemester, setSelectedSemester] = useState<number | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [searchText, setSearchText] = useState("");
+
+  // Pagination
+  const [masterPage, setMasterPage] = useState(1);
+  const masterPageSize = 10;
+  const [assignPage, setAssignPage] = useState(1);
+  const assignPageSize = 10;
 
   useEffect(() => {
     fetch("/api/college/departments")
@@ -171,6 +178,8 @@ export default function AssignToSemesterPage() {
     setAssignments([]);
     setTimings([]);
     setSearchText("");
+    setMasterPage(1);
+    setAssignPage(1);
     void loadCourses(departmentId);
   }
 
@@ -187,18 +196,23 @@ export default function AssignToSemesterPage() {
     setAssignments([]);
     setTimings([]);
     setSearchText("");
+    setMasterPage(1);
+    setAssignPage(1);
   }
 
   function selectYear(year: string) {
     setSelectedYear(year);
     setSelectedSemester(null);
     setSearchText("");
+    setMasterPage(1);
+    setAssignPage(1);
     if (selectedCourse) void loadSubjectsAndTimings(selectedCourse, selectedDepartmentId, year);
   }
 
   async function setSubjectSemester(subject: Subject, semester: number | null) {
     if (!selectedCourse || !selectedDepartment) return;
     setSavingId(subject.id);
+    setAssignPage(1);
     try {
       if (semester != null) {
         const res = await fetch("/api/college/subject-semester-assignments", {
@@ -262,6 +276,12 @@ export default function AssignToSemesterPage() {
     () => assignments.filter((a) => a.semester === effectiveSemester).sort((a, b) => a.subjectName.localeCompare(b.subjectName)),
     [assignments, effectiveSemester]
   );
+
+  // Paginated slices
+  const masterTotalPages = Math.max(1, Math.ceil(searchedMasterPool.length / masterPageSize));
+  const paginatedMasterPool = searchedMasterPool.slice((masterPage - 1) * masterPageSize, masterPage * masterPageSize);
+  const assignTotalPages = Math.max(1, Math.ceil(semesterAssignments.length / assignPageSize));
+  const paginatedAssignments = semesterAssignments.slice((assignPage - 1) * assignPageSize, assignPage * assignPageSize);
 
   return (
     <div className="space-y-6">
@@ -394,37 +414,47 @@ export default function AssignToSemesterPage() {
                       <p className="text-sm text-muted-foreground text-center py-6">
                         Nothing left to add - every master subject already has a semester for {selectedDepartment?.name ?? ""}.
                       </p>
-                    ) : searchedMasterPool.length === 0 ? (
-                      <p className="text-sm text-muted-foreground text-center py-6">
-                        No subjects match &quot;{searchText}&quot;.
-                      </p>
-                    ) : (
-                      <div className="space-y-2">
-                        {searchedMasterPool.map((s) => (
-                          <div key={s.id} className="flex items-center justify-between gap-2 rounded-md border p-2.5">
-                            <div>
-                              <p className="text-sm font-medium">{s.name} <span className="text-muted-foreground">({s.code})</span></p>
-                              {s.regulation && <Badge variant="secondary" className="text-xs mt-1">{s.regulation}</Badge>}
-                            </div>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              loading={savingId === s.id}
-                              onClick={() => void setSubjectSemester(s, effectiveSemester)}
-                            >
-                              Add<ArrowRight className="h-3.5 w-3.5 ml-1.5" />
-                            </Button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
+                     ) : paginatedMasterPool.length === 0 ? (
+                       <p className="text-sm text-muted-foreground text-center py-6">
+                         No subjects match &quot;{searchText}&quot;.
+                       </p>
+                     ) : (
+                       <>
+                         <div className="space-y-2">
+                           {paginatedMasterPool.map((s) => (
+                             <div key={s.id} className="flex items-center justify-between gap-2 rounded-md border p-2.5">
+                               <div>
+                                 <p className="text-sm font-medium">{s.name} <span className="text-muted-foreground">({s.code})</span></p>
+                                 {s.regulation && <Badge variant="secondary" className="text-xs mt-1">{s.regulation}</Badge>}
+                               </div>
+                               <Button
+                                 size="sm"
+                                 variant="outline"
+                                 loading={savingId === s.id}
+                                 onClick={() => void setSubjectSemester(s, effectiveSemester)}
+                               >
+                                 Add<ArrowRight className="h-3.5 w-3.5 ml-1.5" />
+                               </Button>
+                             </div>
+                           ))}
+                         </div>
+                         <Pagination
+                           page={masterPage}
+                           pageSize={masterPageSize}
+                           total={searchedMasterPool.length}
+                           onPageChange={setMasterPage}
+                           onPageSizeChange={() => {}}
+                           disabled={false}
+                         />
+                       </>
+                     )}
+                   </CardContent>
+                 </Card>
 
-                <Card>
-                  <CardHeader className="pb-3"><CardTitle className="text-base">{isSubDept ? "Semester " + effectiveSemester + " - " + selectedDepartment?.name + " (sub-department)" : "Semester " + effectiveSemester + " - " + (selectedDepartment?.name ?? "")}</CardTitle></CardHeader>
-                  <CardContent>
-                    {semesterAssignments.length === 0 ? (
+                 <Card>
+                   <CardHeader className="pb-3"><CardTitle className="text-base">{isSubDept ? "Semester " + effectiveSemester + " - " + selectedDepartment?.name + " (sub-department)" : "Semester " + effectiveSemester + " - " + (selectedDepartment?.name ?? "")}</CardTitle></CardHeader>
+                   <CardContent>
+                     {paginatedAssignments.length === 0 ? (
                       <p className="text-sm text-muted-foreground text-center py-6">
                         No subjects assigned to this semester yet.
                       </p>
