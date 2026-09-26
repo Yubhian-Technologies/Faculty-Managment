@@ -18,11 +18,13 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const courseId = searchParams.get("courseId");
     const academicYear = searchParams.get("academicYear");
+    const subjectId = searchParams.get("subjectId");
     const departmentId = searchParams.get("departmentId");
     const semester = searchParams.get("semester");
 
-    if (!courseId || !academicYear) {
-      return NextResponse.json({ error: "courseId and academicYear are required" }, { status: 400 });
+    // Need at least courseId or subjectId to narrow the query
+    if (!courseId && !subjectId) {
+      return NextResponse.json({ error: "courseId or subjectId is required" }, { status: 400 });
     }
 
     const db = getAdminDb();
@@ -47,8 +49,9 @@ export async function GET(request: Request) {
     let query: FirebaseFirestore.Query = db
       .collection("colleges").doc(session.collegeId)
       .collection("subjectSemesterAssignments")
-      .where("courseId", "==", courseId)
-      .where("academicYear", "==", academicYear);
+      .where("courseId", "==", courseId);
+    if (subjectId) query = query.where("subjectId", "==", subjectId);
+    if (academicYear) query = query.where("academicYear", "==", academicYear);
     if (targetDeptIds) {
       query = query.where("departmentId", "in", targetDeptIds.slice(0, 10));
     } else if (departmentId) {
@@ -68,28 +71,24 @@ export async function GET(request: Request) {
   }
 }
 
-// Upsert (not add) - same course/year-scoped-subject-creation role restriction
-// as POST /api/college/subjects (Academics/Principal/VP/Super Admin; HOD
-// manages the unrelated semester-scoped shape instead).
+// Assign a master Subject (from the subjects collection) to a specific
+// semester FOR ONE DEPARTMENT (SubjectSemesterAssignment,
+// types/teaching.ts). Auto-resolves courseId, academicYear, regulation,
+// and year from the subject document - the caller only needs
+// subjectId + departmentId + semester.
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "ACADEMICS");
     const body = (await request.json()) as {
       subjectId?: string;
-      subjectName?: string;
-      subjectCode?: string;
-      courseId?: string;
-      academicYear?: string;
-      regulation?: string;
-      year?: number;
       departmentId?: string;
-      departmentName?: string;
       semester?: number;
+      departmentName?: string;
     };
-    const { subjectId, subjectName, subjectCode, courseId, academicYear, regulation, year, departmentId, departmentName, semester } = body;
-    if (!subjectId || !courseId || !academicYear || !departmentId || !semester) {
+    const { subjectId, departmentId, semester, departmentName } = body;
+    if (!subjectId || !departmentId || !semester) {
       return NextResponse.json(
-        { error: "subjectId, courseId, academicYear, departmentId and semester are required" },
+        { error: "subjectId, departmentId and semester are required" },
         { status: 400 }
       );
     }
@@ -97,21 +96,51 @@ export async function POST(request: Request) {
     const db = getAdminDb();
     const collegeRef = db.collection("colleges").doc(session.collegeId);
 
-    // Validate against THIS department's own CourseYearTiming - the same
-    // course-year could resolve to a different semester count for a
-    // different department's copy of the course. `year` is the ordinal
-    // course year (1-based) used to look up CourseYearTiming doc IDs.
-    if (!year) {
-      return NextResponse.json(
-        { error: "year (ordinal course year for validation) is required" },
-        { status: 400 }
-      );
+    // Auto-resolve courseId, academicYear, regulation, year from the
+    // master Subject document so the caller only needs subjectId.
+    const subjectSnap = await db.collection("colleges").doc(session.collegeId).collection("subjects").doc(subjectId).get();
+    if (!subjectSnap.exists) {
+      return NextResponse.json({ error: "Subject not found" }, { status: 404 });
     }
-    const timingSnap = await collegeRef.collection("courseYearTimings").doc(`${courseId}_year${year}`).get();
-    const configuredSemesters = (timingSnap.data() as { semesters?: { semester: number }[] } | undefined)?.semesters ?? [];
-    if (!configuredSemesters.some((s) => s.semester === Number(semester))) {
+    const subject = subjectSnap.data() as { courseId?: string; academicYear?: string; regulation?: string; name?: string; code?: string; courseName?: string };
+    const courseId = subject.courseId;
+    const academicYear = subject.academicYear ?? "";
+    const regulation = subject.regulation ?? "";
+    if (!courseId) {
+      return NextResponse.json({ error: "Subject has no courseId - cannot resolve assignment" }, { status: 400 });
+    }
+
+    // Use subject.academicYear to derive the ordinal year for
+    // CourseYearTiming lookup. If academicYear is "2026-27", the
+    // start year is 2026. The CourseYearTiming doc ID is
+    // ${courseId}_year${year} where year is the ordinal (1-based).
+    const yearStart = academicYear ? Number(academicYear.split("-")[0]) : undefined;
+    // Derive ordinal year from the session: a subject created for
+    // academicYear XXXX-XXXX corresponds to year 1 if the current
+    // session matches. Fall back to the section/courseYearTiming
+    // resolution below.
+    const timingSnap = await collegeRef.collection("courseYearTimings").doc(`${courseId}_year1`).get();
+    const configuredSemesters = timingSnap.exists
+      ? (timingSnap.data() as { semesters?: { semester: number }[] } | undefined)?.semesters ?? []
+      : [];
+    // Try year 1 first, then year 2, etc. until we find a
+    // CourseYearTiming that has the requested semester configured.
+    let resolvedYear = 1;
+    let foundSemesters = configuredSemesters;
+    for (let y = 1; y <= 6; y++) {
+      const snap = await collegeRef.collection("courseYearTimings").doc(`${courseId}_year${y}`).get();
+      if (snap.exists) {
+        const sems = (snap.data() as { semesters?: { semester: number }[] } | undefined)?.semesters ?? [];
+        if (sems.some((s) => s.semester === Number(semester))) {
+          resolvedYear = y;
+          foundSemesters = sems;
+          break;
+        }
+      }
+    }
+    if (foundSemesters.length === 0 || !foundSemesters.some((s) => s.semester === Number(semester))) {
       return NextResponse.json(
-        { error: "That semester isn't configured for this department's course-year - set it up in Course-Year Timings first" },
+        { error: "That semester isn't configured for any year of this course - set it up in Course-Year Timings first" },
         { status: 400 }
       );
     }
@@ -122,13 +151,14 @@ export async function POST(request: Request) {
     await ref.set({
       collegeId: session.collegeId,
       subjectId,
-      subjectName: subjectName ?? "",
-      subjectCode: subjectCode ?? "",
+      subjectName: subject.name ?? "",
+      subjectCode: subject.code ?? "",
       courseId,
       academicYear,
-      regulation: regulation ?? "",
+      regulation,
+      year: resolvedYear,
       departmentId,
-      departmentName: departmentName ?? "",
+      departmentName: departmentName ?? subject.courseName ?? "",
       semester: Number(semester),
       createdAt: existing.exists ? (existing.data() as { createdAt?: unknown }).createdAt : now,
       updatedAt: now,
