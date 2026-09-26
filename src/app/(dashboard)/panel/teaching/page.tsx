@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Clock, Layers } from "lucide-react";
+import { Clock, Layers, FileDown } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { toast } from "@/hooks/useToast";
 import { formatDMY, currentWeekDates } from "@/lib/utils";
 import { isoDateKey } from "@/lib/leave/dayCounter";
 import { defaultPeriodTimings } from "@/lib/timetable/buildGrid";
+import { renderHtmlToPdf } from "@/lib/pdf/htmlToPdf";
 import { WeekNavigator } from "@/components/timetable/WeekNavigator";
 import type { TeachingAssignment, TimetableSlot, DayOfWeek, CourseYearTiming, PeriodTiming } from "@/types";
 import { DAY_LABELS } from "@/types";
@@ -37,6 +38,17 @@ function formatTime12h(hhmm: string) {
 function ordinalYear(year: number) {
   const suffix = year === 1 ? "st" : year === 2 ? "nd" : year === 3 ? "rd" : "th";
   return `${year}${suffix} Year`;
+}
+
+// A subject/section/classroom name containing "&", "<" or similar HTML-significant
+// characters would otherwise render as broken markup in the downloaded PDF.
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 export default function TeachingLoadPage() {
@@ -103,6 +115,72 @@ export default function TeachingLoadPage() {
     return periodsByCourseYear.get(`${courseId}_${year}`)?.find((p) => p.period === period);
   }
 
+  function downloadPdf() {
+    if (periods.length === 0) return;
+    // A real "–" character, not the &ndash; HTML entity - the entity would
+    // otherwise get HTML-escaped a second time below (escapeHtml turns its "&"
+    // into "&amp;"), printing the literal text "&ndash;" in the PDF instead of
+    // a dash.
+    const EN_DASH = "–";
+    // The download is the standing SEMESTER timetable (the recurring MON-SAT
+    // pattern this person teaches every week), not a snapshot of whichever
+    // calendar week happens to be on screen - so it deliberately drops two
+    // things the on-screen grid overlays for the browsed week only: (1) the
+    // synthetic "substitute_*" entries api/college/teaching-assignments
+    // injects for a period this person is one-off covering for someone else
+    // (never a recurring slot of theirs), and (2) the substituteFacultyName/
+    // substituteForName annotation a leave-covered slot of their OWN picks up
+    // for that specific week - both would misrepresent every other week's
+    // actual schedule.
+    const semesterSlots = timetableSlots
+      .filter((s) => !s.id.startsWith("substitute_"))
+      .filter((s) => typeFilter === "ALL" || s.subjectType === typeFilter);
+    const dayHeaderCells = DAYS.map((d) =>
+      `<th style="border:1px solid #1e2a5e;background:#0a0a7a;color:#fff;padding:6px 4px;font-size:10.5px;">${escapeHtml(DAY_LABELS[d])}</th>`
+    ).join("");
+    const bodyRows = periods.map((period) => {
+      const cells = DAYS.map((d) => {
+        const slot = semesterSlots.find((s) => s.day === d && s.periodNumber === period);
+        if (!slot) {
+          return `<td style="border:1px solid #e5e7eb;padding:3px;vertical-align:middle;"><div style="border:1px dashed #d1d5db;border-radius:4px;padding:12px 2px;text-align:center;color:#c4c4c4;font-size:11px;">${EN_DASH}</div></td>`;
+        }
+        const assignment = assignmentById.get(slot.assignmentId);
+        const time = periodTimeFor(slot.courseId, slot.year, slot.periodNumber);
+        const subline = [
+          assignment?.courseName,
+          assignment?.year ? ordinalYear(assignment.year) : null,
+          assignment?.sectionName ? `Section ${assignment.sectionName}` : null,
+        ].filter(Boolean).join(" · ");
+        const timeLine = time
+          ? `<div style="font-size:8.5px;color:#6b7280;margin-bottom:2px;">${escapeHtml(formatTime12h(time.startTime))}${EN_DASH}${escapeHtml(formatTime12h(time.endTime))}</div>`
+          : "";
+        const subjectLine = `<div style="font-size:10.5px;font-weight:700;color:#111827;line-height:1.25;">${escapeHtml(slot.subjectName)}</div>`;
+        const noteLine = subline
+          ? `<div style="font-size:9px;color:#6b7280;margin-top:2px;line-height:1.25;">${escapeHtml(subline)}</div>`
+          : "";
+        const roomLine = slot.classroom
+          ? `<div style="font-size:8.5px;color:#6b7280;margin-top:1px;">${escapeHtml(slot.classroom)}</div>`
+          : "";
+        return `<td style="border:1px solid #e5e7eb;padding:3px;vertical-align:top;"><div style="background:#eef2ff;border:1px solid #c7d2fe;border-radius:5px;padding:5px 6px;">${timeLine}${subjectLine}${noteLine}${roomLine}</div></td>`;
+      }).join("");
+      return `<tr><td style="border:1px solid #e5e7eb;padding:4px;font-size:11px;font-weight:700;text-align:center;background:#f3f4f6;vertical-align:middle;">${period}</td>${cells}</tr>`;
+    }).join("");
+    const html = `<!doctype html><html><head><meta charset="utf-8"><style>
+      body{font-family:Arial,Helvetica,sans-serif;margin:18px;color:#111827;}
+      table{border-collapse:collapse;width:100%;table-layout:fixed;}
+      col.period{width:9%;}
+    </style></head><body>
+      <h3 style="margin:0;text-align:center;font-size:18px;">Semester Timetable</h3>
+      <p style="margin:2px 0 14px;text-align:center;font-size:10.5px;color:#6b7280;">Standing weekly schedule for this semester</p>
+      <table>
+        <colgroup><col class="period" />${DAYS.map(() => "<col />").join("")}</colgroup>
+        <thead><tr><th style="border:1px solid #1e2a5e;background:#0a0a7a;color:#fff;padding:6px 4px;font-size:10.5px;">Period</th>${dayHeaderCells}</tr></thead>
+        <tbody>${bodyRows}</tbody>
+      </table>
+    </body></html>`;
+    void renderHtmlToPdf(html, `Semester-Timetable-${isoDateKey(weekStart)}.pdf`);
+  }
+
   if (isLoading) {
     return (
       <div className="space-y-6">
@@ -164,6 +242,9 @@ export default function TeachingLoadPage() {
                 {t === "ALL" ? "All" : t === "THEORY" ? "Theory" : "Practical"}
               </Button>
             ))}
+            <Button size="sm" variant="outline" onClick={downloadPdf}>
+              <FileDown className="h-3.5 w-3.5 mr-1.5" />Download
+            </Button>
           </div>
         </div>
         <div className="overflow-x-auto rounded-lg border">

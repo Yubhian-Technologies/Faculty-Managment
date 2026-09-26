@@ -279,3 +279,42 @@ export function canHodEditDepartmentYear<T extends DepartmentYearRow & { name?: 
   const owner = resolveBranchYearOwner(departments, departmentName, year, catalogId);
   return scope.ownDepartmentNames.includes(owner) || scope.childDepartmentNames.includes(owner);
 }
+
+/**
+ * Stricter sibling of `canHodEditDepartmentYear`, for Sections ONLY (its own
+ * GET accessLevel tagging and PATCH/DELETE gate - see api/college/sections).
+ * `canHodEditDepartmentYear`'s `childDepartmentNames` clause deliberately lets
+ * a true sub-department's own HOD keep editing it every year regardless of
+ * who else manages a given year - Teaching Assignments and the Students
+ * routes rely on that and must keep it. Sections wants the opposite for a
+ * branch that is BOTH a true child of one department AND grouped under a
+ * DIFFERENT department's `managedDepartments` for the shared first year (e.g.
+ * "data science"/"machine learning" are true children of "Artificial
+ * Intelligence" but grouped under "BASIC SCIENCE ENGLISH" for Year 1): the
+ * shared-year manager should be the ONLY one who can edit/delete that year's
+ * sections, with the branch's own permanent HOD getting view-only there and
+ * full ownership resuming from the year they actually start running their own
+ * sections. Same signature and department-membership guard as
+ * `canHodEditDepartmentYear`; only the unconditional `childDepartmentNames`
+ * early-return is dropped, so `resolveBranchYearOwner` decides every case
+ * (own, child, and managed alike) uniformly instead of skipping it for a true
+ * child.
+ */
+export function canHodExclusivelyOwnDepartmentYear<T extends DepartmentYearRow & { name?: string }>(
+  scope: { ownDepartmentNames: string[]; childDepartmentNames: string[]; managedDepartmentNames: string[] },
+  departments: T[],
+  departmentName: string,
+  year: number,
+  catalogId?: string
+): boolean {
+  if (!departmentName || scope.ownDepartmentNames.length === 0) return false;
+  if (
+    !scope.ownDepartmentNames.includes(departmentName) &&
+    !scope.childDepartmentNames.includes(departmentName) &&
+    !scope.managedDepartmentNames.includes(departmentName)
+  ) {
+    return false;
+  }
+  const owner = resolveBranchYearOwner(departments, departmentName, year, catalogId);
+  return scope.ownDepartmentNames.includes(owner) || scope.childDepartmentNames.includes(owner);
+}

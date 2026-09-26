@@ -19,7 +19,7 @@ import { EMPLOYEE_CATEGORY_LABELS } from "@/types";
 import { matchOption } from "@/lib/import/fieldConstraints";
 import { getFacultyImportColumns, getFacultyImportHints, getFacultyImportSampleRows } from "@/lib/faculty/csvColumns";
 import { useMyDepartments } from "@/hooks/useMyDepartments";
-import { facultyDepartmentOptions } from "@/lib/departments/facultyDepartmentOptions";
+import { facultyDepartmentOptions, isFacultyDestination, type FacultyDepartmentLike } from "@/lib/departments/facultyDepartmentOptions";
 import { Download, Upload, CheckCircle2, XCircle, FileSpreadsheet, ArrowLeft, AlertTriangle, Pencil } from "lucide-react";
 
 type ParsedRow = Record<string, string>;
@@ -71,7 +71,7 @@ export default function FacultyImportPage() {
   // "Dept Code" column - one file can now cover more than one of these at
   // once instead of the whole batch landing in a single department picked
   // up front.
-  const [allDepartments, setAllDepartments] = useState<{ id: string; name: string; code: string; parentDepartmentId?: string; isActive?: boolean }[]>([]);
+  const [allDepartments, setAllDepartments] = useState<(FacultyDepartmentLike & { isActive?: boolean })[]>([]);
   useEffect(() => {
     void (async () => {
       try {
@@ -85,7 +85,9 @@ export default function FacultyImportPage() {
   }, []);
   const importableDepartments = isHod
     ? facultyDepartmentOptions(allDepartments, ownDepartments)
-    : allDepartments.map((d) => ({ id: d.id, name: d.name, code: d.code }));
+    : allDepartments
+        .filter((d) => isFacultyDestination(d, allDepartments))
+        .map((d) => ({ id: d.id, name: d.name, code: d.code }));
   const departmentCodeOptions = importableDepartments.map((d) => d.code);
 
   // A two-sheet .xlsx rather than a flat CSV, matching the Supporting Staff

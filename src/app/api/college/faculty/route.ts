@@ -333,6 +333,20 @@ export async function POST(request: Request) {
       department = (hodSnap.data() as { department?: string } | undefined)?.department ?? department;
     }
 
+    // A faculty member with no department belongs to no roster: every list in
+    // the app queries facultyMembers by `department`, so a blank one makes the
+    // person invisible everywhere at once - on their own department's Faculty
+    // page, in substitute and Faculty Incharge pickers, in exports. It used to
+    // be accepted silently, and the people it happened to were HODs added by a
+    // Principal or College Admin, whose own login carries no department for the
+    // fallback above to borrow.
+    if (!department.trim()) {
+      return NextResponse.json(
+        { error: "A department is required - a faculty member with none appears on no roster" },
+        { status: 400 },
+      );
+    }
+
     // Check employee ID uniqueness across every college, not just this one -
     // the public faculty-profile link is keyed on employeeId alone (see
     // /api/public/faculty-public), so a collision between colleges would let
