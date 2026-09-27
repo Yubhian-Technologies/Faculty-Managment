@@ -174,3 +174,65 @@ Verified against the current working tree — these are **already fixed**, do no
 3. **F4** — require `courseId` in the import service (closes a latent cross-department misfile risk before any UI change reopens it).
 4. **F2** — reject overlapping `regulationBatches` at the Course Catalog boundary (prevents the ambiguous state at its source).
 5. **F5** — cosmetic warning, do whenever convenient.
+
+---
+
+## 6. Implementation action plan
+
+Guiding rule for every item below: **no schema migration, no new abstraction, no feature flag.** Every fix is either (a) a validation that only rejects a *new* write going forward (never touches existing documents, so nothing already saved can start failing to read), or (b) a dead-code deletion that changes no runtime behavior at all. That's what keeps the existing workflow intact — there is nothing to roll back at the data layer if a fix needs to be reverted, only a code revert.
+
+Each item is broken into the three layers the request asked to have optimised together: **Model** (Firestore shape / `src/types`), **Controller** (the API route / service), **View** (the page that has to keep behaving the same or surface the new message correctly).
+
+### Step 1 — F1: stop pretending the master-subject batch check exists
+
+- **Model:** no change. `CourseCatalogItem.regulationBatches` shape is untouched.
+- **Controller** ([subjects/route.ts:160-190](src/app/api/college/subjects/route.ts#L160)): delete the `allBatchYears`/`minYear`/`maxYear`/`regulationsForCourseYearByBatch(...)` block entirely. A master Subject has no `year`, so a batch-*year* congruence check was never answerable at this level in the first place — that's already correctly enforced one level down, at Section creation, which has an actual batch to check against (§3's asymmetry). Replace it with the single check that's actually meaningful here: `catalogRegulations.includes(regulation)`, i.e. exactly what already runs today via the accidental fallback. **This is a no-op for runtime behavior** — it only removes misleading dead code, so nothing that currently succeeds or fails changes.
+- **View:** none required. `academics/subjects/new/page.tsx`'s own comment ("show all regulations for this course, master subject has no year") already matches the simplified server behavior — it's already correct, just confirms no drift once the controller is simplified.
+- **Verification:** re-run existing subject-creation flows manually (or existing tests if any cover this route) and confirm identical accept/reject outcomes before and after — the diff should be behavior-neutral.
+
+### Step 2 — F4: require `courseId` in bulk import (closes the cross-department misfile path)
+
+- **Model:** no change.
+- **Controller** ([MasterSubjectImportService.ts:62-75](src/lib/subjects/services/MasterSubjectImportService.ts#L62)): require `payload.courseId`; if missing, fail the whole import up front with a clear message ("Select a Course before importing"), the same shape as the existing `records` length checks in `subjects/import/route.ts`. Delete the name/code `courses.find(...)` fallback rather than trying to make it "smarter" — the shipped UI never relies on it.
+- **View:** none required — `academics/subjects/import/page.tsx:266` already always sends `courseId` (`courseId: selectedCourse.id`), so this tightening is invisible to the real product flow.
+- **Verification:** unit test on `MasterSubjectImportService.executeImport` — omit `courseId`, expect a top-level rejection instead of a per-row failure; re-run with `courseId` present and confirm output is byte-identical to today's.
+
+### Step 3 — F5: warn instead of silently dropping regulation on import
+
+- **Model:** no change.
+- **Controller** ([MasterSubjectImportService.ts:110-124](src/lib/subjects/services/MasterSubjectImportService.ts#L110)): in the `catalogRegulations.length === 0` fall-through branch, push one `warnings` entry ("Course has no regulations configured — imported without a regulation tag") before continuing. Purely additive; `created` count and the subject document written are unchanged.
+- **View:** none required — `academics/subjects/import/page.tsx`'s result card already renders `result.warnings` generically (the "Imported, but some fields were ignored" block).
+- **Verification:** import a row against a course with an empty `regulations` list, confirm the new warning appears and the subject is still created exactly as before.
+
+### Step 4 — F3: block deletes that would orphan a subject instance
+
+- **Model:** no change.
+- **Controller:**
+  - [subjects/[id]/route.ts DELETE](src/app/api/college/subjects/%5Bid%5D/route.ts#L176): add `subjectSemesterAssignments.where("subjectId","==",id).limit(1).get()` alongside the existing `teachingAssignments` check; non-empty → 409 with a message in the same voice as the existing one ("This subject still has department instances assigned. Unassign it from Teaching Assignments first, or mark it inactive.").
+  - [courses/[id]/route.ts DELETE](src/app/api/college/courses/%5Bid%5D/route.ts#L79): add the equivalent two checks — `subjects.where("courseId","==",id).limit(1)` and `subjectSemesterAssignments.where("courseId","==",id).limit(1)` — alongside the existing `sections` check, same 409 pattern ("Cannot delete a course that has subjects. Remove its subjects first.").
+- **View:** no change required in either case — both `academics/subjects/page.tsx` and the course-management UI already route API errors through the shared toast pattern, so a new 409 message surfaces exactly like the existing "in use" ones do. Worth a quick manual check that the delete button's confirm-dialog doesn't assume success and optimistically remove the row before the response comes back.
+- **Verification:** route tests — (a) instantiate a subject into a department, attempt to delete the master subject, expect 409, unassign, delete again, expect 200; (b) create a course with a subject but no sections, attempt delete, expect 409.
+- **Why this is safe to tighten (unlike F2 below, this is a pure net-add):** it only turns a previously-silent data-corruption path into an explicit, recoverable error. No existing document is touched; a delete that would have succeeded and quietly orphaned data now fails loudly and tells the user what to clean up first.
+
+### Step 5 — F2: reject overlapping regulation batches at the Course Catalog boundary
+
+- **Model:** no change to `CourseCatalogItem`.
+- **Controller** ([course-catalog/route.ts POST:61-70](src/app/api/college/course-catalog/route.ts#L61), [course-catalog/[id]/route.ts PATCH:78-88](src/app/api/college/course-catalog/%5Bid%5D/route.ts#L78)): after the existing per-regulation format regex passes, run one more pass over the **complete** submitted `regulationBatches` map (both routes already receive/write it as a full replacement object, never a partial merge — confirmed by how `CourseCatalogSettingsCard` manages `draft.regulationBatches` client-side) — expand each regulation's `parseBatchStartYears`, and if any start-year appears under more than one regulation code, reject with 400 naming the conflicting regulations and year.
+- **View** (`CourseCatalogSettingsCard.tsx`'s `RegulationBatchesEditor.addRegulation`, optional UX improvement, not required for correctness): run the same overlap check client-side before calling `setDraft(...)`, so the conflict surfaces as an inline toast at the moment of adding a batch rather than only on save. Skip this if it isn't wanted — the server check alone is sufficient and this is the one place in the whole plan that's a genuine "nice to have," not a fix.
+- **Why this is the last step, not the first:** it's the only change in this plan that can reject a *save* an Academics/Principal user is actively trying to make (unlike F3, which only blocks destructive deletes). It needs to ship after the others so there's a stable baseline to test the new rejection against, and it's worth a quick manual pass through existing colleges' catalog data (read-only, via the existing GET) to confirm no college already has an overlapping config that this would suddenly start blocking on their *next* edit — if one exists, that college's Academics team gets a one-time "fix your batches" prompt the next time they touch that entry, which is the intended outcome, not a regression, but worth knowing about in advance rather than being surprised by a support ticket.
+
+### Sequencing summary
+
+| Step | Finding | Risk of breaking existing workflow | Type of change |
+|---|---|---|---|
+| 1 | F1 | None — behavior-neutral dead code removal | Simplification |
+| 2 | F4 | None — shipped UI already complies | Guard rail (closes unused path) |
+| 3 | F5 | None — additive warning only | Additive |
+| 4 | F3 | Low — only blocks an action that was silently corrupting data | New guard |
+| 5 | F2 | Low, but the only step that can reject a legitimate in-progress save | New validation |
+
+### Cross-layer check to run once, after all five steps
+
+- **Model:** `src/types/teaching.ts` / `src/types/core.ts` — confirm no type needs a new optional field (none of the fixes above add stored data, so this should be a no-op check, not a change).
+- **Controller:** `npx tsc --noEmit` and `npx vitest run` (per this repo's own command list in `CLAUDE.md`) — not `npm run lint`, which is documented as already broken on `main` for unrelated reasons.
+- **View:** manually exercise, once, end-to-end in the Academics and HOD dashboards: create a catalog entry with two regulations → add a course → add a master subject → instantiate it into a department's semester → assign a teaching assignment → confirm the Sections page's own regulation picker still shows the same options it did before (Step 5 must not have narrowed *that* endpoint — it doesn't touch `sections/route.ts` at all, but worth eyeballing once since it's the one page in this whole chain that was already correct).

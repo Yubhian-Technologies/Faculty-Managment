@@ -14,6 +14,8 @@ import { Pagination } from "@/components/shared/Pagination";
 import { toast } from "@/hooks/useToast";
 import type { Course, CourseCatalogItem, CourseYearTiming, Department, Subject, SubjectSemesterAssignment } from "@/types";
 import { SUBJECT_TYPE_LABELS } from "@/types";
+import { regulationsForCourseYearByBatch } from "@/lib/college/academicStructure";
+import { currentAcademicStartYear } from "@/lib/college/academicSession";
 
 function ordinalYear(year: number) {
   const suffix = year === 1 ? "st" : year === 2 ? "nd" : year === 3 ? "rd" : "th";
@@ -115,10 +117,60 @@ export default function AssignToSemesterPage() {
     return Array.from({ length: selectedCourse.durationYears }, (_, i) => i + 1);
   }, [selectedCourse]);
 
+  const catalogItemForCourse = useMemo(
+    () => catalogById.get(selectedCourse?.catalogId ?? "") ?? null,
+    [selectedCourse, catalogById]
+  );
+
   const regulationOptions = useMemo(() => {
     if (!selectedCourse) return [];
-    return catalogById.get(selectedCourse.catalogId ?? "")?.regulations ?? [];
-  }, [selectedCourse, catalogById]);
+    return catalogItemForCourse?.regulations ?? [];
+  }, [selectedCourse, catalogItemForCourse]);
+
+  // Which regulation(s) this course's own Course Catalog batch coverage says
+  // actually governs the selected Year, as of the current academic session -
+  // the same batch-aware resolution Section creation already enforces
+  // server-side (sections/route.ts POST) and the Subjects picker offers
+  // (academics/subjects/new/page.tsx). Normally resolves to exactly one;
+  // empty when nothing does (no regulationBatches configured for this
+  // course, or a Year no configured batch currently covers) -
+  // regulationsForCourseYearByBatch's own backward-compatibility fallback
+  // applies here too: an unconfigured course (regulationBatches absent)
+  // makes this resolve to every one of the
+  // course's regulations, not none, so a college that hasn't set batches up
+  // yet keeps its previous "pick manually" behavior rather than being told
+  // "no regulation assigned" for every year.
+  const yearRegulationMatches = useMemo(() => {
+    if (!selectedCourse || !selectedYear || !catalogItemForCourse) return [];
+    return regulationsForCourseYearByBatch(
+      catalogItemForCourse.regulationBatches ?? {},
+      Number(selectedYear),
+      currentAcademicStartYear(),
+      catalogItemForCourse.regulations,
+    );
+  }, [selectedCourse, selectedYear, catalogItemForCourse]);
+
+  // Auto-fill the Regulation field the moment exactly one regulation
+  // resolves for the selected Year - mirrors the accurate, batch-aware
+  // check Sections already enforce, so this page's default stops depending
+  // on whoever's filling the form remembering which regulation each batch
+  // maps to. Left blank (not force-picked) when zero or more than one
+  // regulation resolves - see the Regulation field's own "no regulation
+  // assigned for this year" fallback below for the zero case, and the plain
+  // Select for the ambiguous (>1, misconfigured Course Catalog) case, so a
+  // person can still resolve either manually rather than being blocked.
+  useEffect(() => {
+    if (yearRegulationMatches.length === 1) {
+      setSelectedRegulation(yearRegulationMatches[0]);
+    }
+  }, [yearRegulationMatches]);
+
+  // True only when this course DOES have regulations configured at all
+  // (regulationOptions non-empty - the pre-existing "None assigned" message
+  // below already covers the other case) but none of them actually cover
+  // the selected Year for the current session - the specific, accurate
+  // "batch gap" the calculation above exists to catch.
+  const noRegulationForYear = Boolean(selectedYear) && regulationOptions.length > 0 && yearRegulationMatches.length === 0;
 
   const semesterOptions = useMemo(() => {
     const nums = new Set<number>();
@@ -384,12 +436,18 @@ export default function AssignToSemesterPage() {
               </div>
               <div className="space-y-1.5">
                 <Label>Regulation</Label>
-                <Select value={selectedRegulation} onValueChange={setSelectedRegulation} disabled={!selectedYear || regulationOptions.length === 0}>
-                  <SelectTrigger><SelectValue placeholder={regulationOptions.length ? "Select regulation" : "None assigned"} /></SelectTrigger>
-                  <SelectContent>
-                    {regulationOptions.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                {noRegulationForYear ? (
+                  <div className="flex h-9 items-center rounded-md border bg-muted/30 px-3">
+                    <span className="text-xs text-muted-foreground">No regulation assigned for this year</span>
+                  </div>
+                ) : (
+                  <Select value={selectedRegulation} onValueChange={setSelectedRegulation} disabled={!selectedYear || regulationOptions.length === 0}>
+                    <SelectTrigger><SelectValue placeholder={regulationOptions.length ? "Select regulation" : "None assigned"} /></SelectTrigger>
+                    <SelectContent>
+                      {regulationOptions.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
               <div className="space-y-1.5">
                 <Label>Semester</Label>

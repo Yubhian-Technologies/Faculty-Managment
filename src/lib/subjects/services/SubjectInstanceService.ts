@@ -81,7 +81,12 @@ export class SubjectInstanceService {
     if (!deptDoc.exists) {
       throw new Error("Department not found");
     }
-    const deptData = deptDoc.data() as { name?: string; courseScopes?: Record<string, { assignedYears?: number[] }>; assignedYears?: number[] };
+    const deptData = deptDoc.data() as {
+      name?: string;
+      courseScopes?: Record<string, { assignedYears?: number[] }>;
+      assignedYears?: number[];
+      parentDepartmentId?: string;
+    };
     const resolvedDeptName = departmentName ?? deptData.name;
     const catalogId = (courseDoc.data() as { catalogId?: string } | undefined)?.catalogId;
 
@@ -107,10 +112,16 @@ export class SubjectInstanceService {
 
     // 4. This department must actually be scoped to teach this course in
     // this year (Department.courseScopes, or the legacy flat assignedYears
-    // fallback when no per-course override exists) - otherwise nothing stops
-    // a wrong-department pick (any role) from silently creating a mapping
-    // for a course/year the department doesn't run at all.
-    const scopedYears = (catalogId ? deptData.courseScopes?.[catalogId]?.assignedYears : undefined) ?? deptData.assignedYears;
+    // fallback when no per-course override exists). If this is a sub-department
+    // without its own assignedYears, inherit from the parent department.
+    let scopedYears = (catalogId ? deptData.courseScopes?.[catalogId]?.assignedYears : undefined) ?? deptData.assignedYears;
+    if ((!scopedYears || scopedYears.length === 0) && deptData.parentDepartmentId) {
+      const parentDoc = await collegeRef.collection("departments").doc(deptData.parentDepartmentId).get();
+      if (parentDoc.exists) {
+        const parentData = parentDoc.data() as { courseScopes?: Record<string, { assignedYears?: number[] }>; assignedYears?: number[] };
+        scopedYears = (catalogId ? parentData.courseScopes?.[catalogId]?.assignedYears : undefined) ?? parentData.assignedYears;
+      }
+    }
     if (scopedYears && scopedYears.length > 0 && !scopedYears.includes(resolvedYear)) {
       throw new Error(
         `"${resolvedDeptName ?? departmentId}" isn't scoped to teach this course in Year ${resolvedYear} - check its Years Taught / Academic Structure.`

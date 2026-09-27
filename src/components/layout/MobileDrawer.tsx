@@ -50,7 +50,7 @@ export function MobileDrawer({ hiddenModules, hiddenItems }: MobileDrawerProps) 
     setSidebarOpen(false);
   }, [pathname, setSidebarOpen]);
 
-  if (!user) return null;
+  if (!user || user.role === "CLASS_LEADER" || pathname?.startsWith("/class-leader")) return null;
 
   const baseNavItems = filterVisibleNavItems(contextItems, hiddenModules, hiddenItems, user.realRole, true)
     .filter((item) => !hideSubDepartmentsLink || item.href !== "/hod/settings/sub-departments")

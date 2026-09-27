@@ -27,7 +27,6 @@ export async function POST(request: Request) {
     const result = await importer.executeImport({
       collegeId: session.collegeId,
       courseId: body.courseId,
-      courseName: body.course,
       regulation: body.regulation,
       academicYear: body.academicYear,
       records: body.records,

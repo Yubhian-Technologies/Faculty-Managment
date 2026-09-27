@@ -76,16 +76,32 @@ export async function DELETE(
     const snap = await ref.get();
     if (!snap.exists) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-    const sectionsUsingCourse = await db
-      .collection("colleges")
-      .doc(session.collegeId)
-      .collection("sections")
-      .where("courseId", "==", id)
-      .limit(1)
-      .get();
+    const collegeRefForChecks = db.collection("colleges").doc(session.collegeId);
+    const [sectionsUsingCourse, subjectsUsingCourse, instancesUsingCourse] = await Promise.all([
+      collegeRefForChecks.collection("sections").where("courseId", "==", id).limit(1).get(),
+      collegeRefForChecks.collection("subjects").where("courseId", "==", id).limit(1).get(),
+      collegeRefForChecks.collection("subjectSemesterAssignments").where("courseId", "==", id).limit(1).get(),
+    ]);
     if (!sectionsUsingCourse.empty) {
       return NextResponse.json(
         { error: "Cannot delete a course that has sections. Remove its sections first." },
+        { status: 409 }
+      );
+    }
+    // A course with no Sections yet can still already have Master Subjects
+    // (and department instances made from them) defined against it - deleting
+    // it out from under those would orphan every one of them (courseId
+    // pointing at nothing). Same reasoning as the Sections check above, just
+    // for the two other collections that key off courseId.
+    if (!subjectsUsingCourse.empty) {
+      return NextResponse.json(
+        { error: "Cannot delete a course that has subjects. Remove its subjects first." },
+        { status: 409 }
+      );
+    }
+    if (!instancesUsingCourse.empty) {
+      return NextResponse.json(
+        { error: "Cannot delete a course that has subjects assigned to a department's semester. Unassign them first." },
         { status: 409 }
       );
     }

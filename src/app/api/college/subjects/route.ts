@@ -6,7 +6,6 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import type { SubjectCategory, SubjectType } from "@/types";
 import { SUBJECT_CATEGORY_LABELS } from "@/types";
 import { getRelatedDepartmentNames } from "@/lib/departments/scope";
-import { regulationsForCourseYearByBatch } from "@/lib/college/academicStructure";
 
 export async function GET(request: Request) {
   try {
@@ -142,47 +141,25 @@ export async function POST(request: Request) {
       const course = courseSnap.data() as { name: string; departmentId: string; durationYears: number; catalogId?: string };
 
       // Optional - a subject can be added for a course even when no
-      // regulation currently resolves for it. When one IS provided,
-      // it must still belong to this course's own Course Catalog
-      // entry - a Pharmacy-only code should never be accepted for
-      // a B.Tech subject. The master subject is scoped by course
-      // + regulation only (no year), so we check against all
-      // regulations assigned to this course.
+      // regulation currently resolves for it. When one IS provided, it must
+      // belong to this course's own Course Catalog entry - a Pharmacy-only
+      // code should never be accepted for a B.Tech subject. A master
+      // subject has no ordinal year of its own (see this route's own POST
+      // body type), so there's no batch/year to resolve it against here -
+      // that congruence check only makes sense once a real batch exists
+      // (Section.batch - see sections/route.ts POST, which is where it's
+      // actually enforced). Here we only check "is this regulation one the
+      // catalog has ever assigned to this course at all".
       const regulation = body.regulation?.trim();
       if (regulation) {
         const catalogSnap = course.catalogId
           ? await db.collection("colleges").doc(session.collegeId).collection("courseCatalog").doc(course.catalogId).get()
           : null;
         const catalogData = catalogSnap?.exists
-          ? (catalogSnap.data() as { regulations?: string[]; regulationBatches?: Record<string, string> })
+          ? (catalogSnap.data() as { regulations?: string[] })
           : undefined;
         const catalogRegulations = catalogData?.regulations ?? [];
-        // When regulationBatches data exists, resolve which regulations
-        // apply to this course (all of them, since the master subject
-        // has no year). Otherwise fall back to the catalog's own
-        // regulation list.
-        let applicableRegulations: string[];
-        if (catalogData?.regulationBatches && Object.keys(catalogData.regulationBatches).length > 0) {
-          const allBatchYears = Object.values(catalogData.regulationBatches).map(Number);
-          const minYear = Math.min(...allBatchYears);
-          const maxYear = Math.max(...allBatchYears);
-          applicableRegulations = regulationsForCourseYearByBatch(
-            catalogData.regulationBatches,
-            minYear,
-            undefined,
-            catalogData?.regulations,
-          );
-        } else {
-          applicableRegulations = catalogRegulations;
-        }
-        if (applicableRegulations.length > 0) {
-          if (!applicableRegulations.includes(regulation)) {
-            return NextResponse.json(
-              { error: `That regulation isn't assigned to ${course.name}. Check Course Catalog.` },
-              { status: 400 },
-            );
-          }
-        } else if (!catalogRegulations.includes(regulation)) {
+        if (!catalogRegulations.includes(regulation)) {
           return NextResponse.json(
             { error: `That regulation isn't assigned to ${course.name}. Check Course Catalog.` },
             { status: 400 },

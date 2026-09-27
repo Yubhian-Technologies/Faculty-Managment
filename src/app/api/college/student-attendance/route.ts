@@ -73,6 +73,15 @@ export async function POST(request: Request) {
     let sectionName: string;
     let year: number | undefined;
     let courseId: string | undefined;
+    // Which of the two independent TeachingAssignment shapes' own semester
+    // field actually applies - course/section-scoped rows carry
+    // `timetableSemester` (CourseYearTiming-derived); the legacy semester-
+    // scoped shape carries `semester` directly (see TeachingAssignment's own
+    // doc-comments, types/teaching.ts). Stamped onto the attendance session
+    // below so Section Attendance Report's own semester filter - which
+    // already reads StudentAttendanceSession.semester - has something real
+    // to filter on, instead of every session being permanently unscoped.
+    const semester = assignment.sectionId ? assignment.timetableSemester : assignment.semester;
 
     if (assignment.sectionId) {
       const sectionSnap = await collegeRef.collection("sections").doc(assignment.sectionId).get();
@@ -167,13 +176,17 @@ export async function POST(request: Request) {
           status: existingByStudent.get(s.id)?.status ?? null,
         }));
         const presentCount = entries.filter((e) => e.status === "PRESENT").length;
+        // Self-heals a draft created before `semester` started being stamped
+        // (existing.semester == null) - never overwrites one already set.
+        const semesterFix = existing.semester == null && semester != null ? { semester } : {};
         tx.update(ref, {
           entries,
           totalStudents: entries.length,
           presentCount,
           updatedAt: now,
+          ...semesterFix,
         });
-        resultSession = { ...existing, id, entries, totalStudents: entries.length, presentCount, updatedAt: now as unknown as StudentAttendanceSession["updatedAt"] } as unknown as StudentAttendanceSession & { id: string };
+        resultSession = { ...existing, id, entries, totalStudents: entries.length, presentCount, updatedAt: now as unknown as StudentAttendanceSession["updatedAt"], ...semesterFix } as unknown as StudentAttendanceSession & { id: string };
         resultStatus = 200;
         return;
       }
@@ -196,6 +209,7 @@ export async function POST(request: Request) {
         ...(sectionId ? { sectionId } : {}),
         sectionName,
         ...(year != null ? { year } : {}),
+        ...(semester != null ? { semester } : {}),
         subjectId: assignment.subjectId,
         subjectName: assignment.subjectName,
         subjectCode: assignment.subjectCode,

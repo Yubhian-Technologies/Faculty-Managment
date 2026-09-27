@@ -2,30 +2,77 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ChevronLeft, ChevronRight, Check, Trash2 } from "lucide-react";
+import {
+  AlertCircle,
+  ArrowLeft,
+  Award,
+  BookOpen,
+  Briefcase,
+  Building2,
+  Calendar,
+  Check,
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  DollarSign,
+  FileText,
+  GraduationCap,
+  Lock,
+  Mail,
+  Phone,
+  Plus,
+  Sparkles,
+  Trash2,
+  User,
+  UserCheck,
+  UserPlus,
+} from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { HIGHEST_QUALIFICATION_OPTIONS } from "@/lib/import/fieldConstraints";
 import { TeachingAssignmentsEditor, type StagedTeachingRow } from "@/components/faculty/TeachingAssignmentsEditor";
-import { PersonalDetailsFields, getMissingRequiredPersonalFields, FACULTY_REQUIRED_PERSONAL_FIELDS, type PersonalDetailsValue } from "@/components/shared/PersonalDetailsFields";
 import {
-  QualificationFields, ExperienceFields, ResearchFields,
-  MentorshipFields, FinancialFields, OthersFields,
+  PersonalDetailsFields,
+  getMissingRequiredPersonalFields,
+  FACULTY_REQUIRED_PERSONAL_FIELDS,
+  type PersonalDetailsValue,
+} from "@/components/shared/PersonalDetailsFields";
+import {
+  QualificationFields,
+  ExperienceFields,
+  ResearchFields,
+  MentorshipFields,
+  FinancialFields,
+  OthersFields,
 } from "@/components/faculty/AcademicProfileModuleFields";
 import { TextInput } from "@/components/shared/ProfileFieldPrimitives";
 import { syncTeachingAssignments } from "@/lib/teaching/syncTeachingAssignments";
-import { experienceBreakdown, totalYearsOfExperience, formatDuration, allPreviousExperienceEntries } from "@/lib/faculty/experienceCalc";
+import {
+  experienceBreakdown,
+  totalYearsOfExperience,
+  formatDuration,
+  allPreviousExperienceEntries,
+} from "@/lib/faculty/experienceCalc";
 import { PHONE_REGEX, EMAIL_REGEX, APAAR_REGEX } from "@/lib/validations";
 import { AvatarUploadField } from "@/components/shared/AvatarUploadField";
 import { PROFILE_MODULES } from "@/lib/faculty/profileModules";
-import { EMPLOYEE_CATEGORY_LABELS, FACULTY_STATUS_LABELS, SELECTABLE_FACULTY_STATUS_VALUES, FACULTY_STATUS_DATE_FIELD, FACULTY_STATUS_DATE_LABELS } from "@/types";
+import {
+  EMPLOYEE_CATEGORY_LABELS,
+  FACULTY_STATUS_LABELS,
+  SELECTABLE_FACULTY_STATUS_VALUES,
+  FACULTY_STATUS_DATE_FIELD,
+  FACULTY_STATUS_DATE_LABELS,
+} from "@/types";
 import type { DesignationCatalogItem, EmployeeCategory, FacultyStatus } from "@/types";
 import { useCollegeType } from "@/hooks/useCollegeType";
 import { designationLabel } from "@/lib/designations/config";
@@ -35,16 +82,8 @@ import { useMyDepartments } from "@/hooks/useMyDepartments";
 import { facultyDepartmentOptions, isFacultyDestination, type FacultyDepartmentLike } from "@/lib/departments/facultyDepartmentOptions";
 import type { FacultyProfileFields } from "@/types";
 
-// Sentinel for the "Others" row - never stored, it just switches the field to
-// free text (Radix Select cannot hold an empty-string item value).
 const OTHER_QUALIFICATION = "__OTHER__";
 
-// collegeEmail/password are validated for FORMAT here but not required at the
-// zod level - they're only actually required when creating a brand new login
-// (the default flow). When completing a Sub-HOD's profile for an ALREADY
-// existing login (see `linkUid` below), those two fields don't apply at all
-// - that required-ness is instead checked manually in onSubmit, since it
-// depends on which mode the page is in.
 const schema = z.object({
   employeeId: z.string().min(1, "Employee ID is required"),
   apaarFacultyId: z.string().regex(APAAR_REGEX, "APAAR Faculty ID must be exactly 12 digits").optional().or(z.literal("")),
@@ -68,12 +107,23 @@ const schema = z.object({
 type FormData = z.infer<typeof schema>;
 
 type WizardStepKey =
-  | "core" | "personal" | "qualification" | "experience" | "research"
-  | "mentorship" | "financial" | "others" | "teaching-load" | "review";
+  | "core"
+  | "personal"
+  | "qualification"
+  | "experience"
+  | "research"
+  | "mentorship"
+  | "financial"
+  | "teaching-load"
+  | "others"
+  | "review";
 
 interface WizardStep {
   key: WizardStepKey;
   label: string;
+  shortLabel: string;
+  icon: typeof User;
+  description: string;
 }
 
 export default function NewFacultyPage() {
@@ -81,100 +131,55 @@ export default function NewFacultyPage() {
   const searchParams = useSearchParams();
   const { collegeType } = useCollegeType();
   const user = useAuthStore((s) => s.user);
-  // The college's own admin-curated Faculty Designation Catalog (see
-  // DesignationCatalogCard) - no hardcoded list, no "Other" free-text escape
-  // hatch any more.
+
   const [designationOptions, setDesignationOptions] = useState<string[]>([]);
   useEffect(() => {
     void (async () => {
       try {
         const res = await fetch("/api/college/designations?category=FACULTY");
-        const data = await res.json() as { items?: DesignationCatalogItem[] };
+        const data = (await res.json()) as { items?: DesignationCatalogItem[] };
         setDesignationOptions((data.items ?? []).filter((d) => d.isActive).map((d) => d.name));
       } catch {
-        // Non-fatal - the picker just stays empty until the admin's catalog loads.
+        // Non-fatal
       }
     })();
   }, []);
-  // Same derivation as the bulk-import page (hod/faculty/import/page.tsx) -
-  // an HOD can now head more than one top-level department at once
-  // (user.departments), so which one a NEW faculty member belongs to is no
-  // longer implicit. POST /api/college/faculty rejects with no way to
-  // recover from the UI otherwise (it 400s "You manage more than one
-  // department - specify which" once departments.length > 1) - this picker
-  // is what actually satisfies that requirement.
+
   const ownDepartments = useMyDepartments();
-  // The Principal / Vice Principal (incl. a College Admin) add faculty too -
-  // it is how a new college gets its first teaching staff before any HOD
-  // exists. They belong to no department, so they always pick one from the
-  // college's active departments; an HOD keeps their own list.
-  //
-  // "Owns no department" is the test rather than a list of role names: a
-  // College Admin reaches this page too, and their login does not always
-  // carry the literal PRINCIPAL role (a multi-seat account working as
-  // Principal keeps its own underlying role on the user doc). Matching on
-  // role alone skipped this whole block for them - no department fetch, no
-  // picker, and nothing to fall back on, so the new faculty member was filed
-  // under an empty department. Anyone with a department of their own (every
-  // HOD) is unaffected.
   const isCollegeLevel =
     user?.role === "PRINCIPAL" || user?.role === "VICE_PRINCIPAL" || ownDepartments.length === 0;
-  // Fetched for every HOD too now, not just college-level - see
-  // facultyDepartmentOptions' own doc-comment on why ownDepartments alone
-  // isn't enough to offer a parent HOD's sub-departments here.
+
   type DeptRow = FacultyDepartmentLike & { isActive?: boolean };
   const [allDepartments, setAllDepartments] = useState<DeptRow[]>([]);
   useEffect(() => {
     fetch("/api/college/departments")
       .then((r) => r.json() as Promise<{ departments?: DeptRow[] }>)
       .then((d) => setAllDepartments((d.departments ?? []).filter((dep) => dep.isActive !== false)))
-      .catch(() => { /* picker stays empty */ });
+      .catch(() => {});
   }, []);
-  // Both lists drop a department that only organises its sub-departments
-  // (isFacultyDestination) - a Principal picking from the whole college needs
-  // that just as much as an HOD picking from their own.
+
   const myDepartments = isCollegeLevel
     ? allDepartments.filter((d) => isFacultyDestination(d, allDepartments)).map((d) => d.name)
     : facultyDepartmentOptions(allDepartments, ownDepartments).map((d) => d.name);
   const listPath = isCollegeLevel ? "/principal/faculty" : "/hod/faculty";
 
-  // Reached from the Faculty Register's "Sub-Department HODs" card when that
-  // sub-department's HOD login has no facultyMembers record yet (see
-  // hod/faculty/page.tsx) - completes their profile onto their EXISTING
-  // login instead of the default flow's "create a brand new one" (which
-  // would either fail on their already-registered email, or worse, silently
-  // create a second, disconnected account for the same person).
   const linkUid = searchParams.get("linkUid") ?? "";
   const linkDepartment = searchParams.get("department") ?? "";
   const linkName = searchParams.get("name") ?? "";
   const isLinkMode = !!(linkUid && linkDepartment);
 
   const [academicProfile, setAcademicProfile] = useState<Partial<FacultyProfileFields>>({});
-  // Pre-fills Full Name (as per SSC) from the existing HOD login's name in
-  // link mode. Editable either way; the login's real name for their own SSC
-  // certificate may differ from what's on file for the login itself. Name (as
-  // per PAN) is never pre-filled - it's only ever entered from the PAN card.
-  const [personalDetails, setPersonalDetails] = useState<PersonalDetailsValue>(
-    () => (linkName ? { legalName: linkName } : {})
+  const [personalDetails, setPersonalDetails] = useState<PersonalDetailsValue>(() =>
+    linkName ? { legalName: linkName } : {}
   );
   const [department, setDepartment] = useState("");
-  // Whichever department this new faculty member actually ends up filed
-  // under, however it was decided - link mode's fixed department, this HOD's
-  // own explicit pick (multi-department HOD), or their own single department
-  // implicitly. Passed to TeachingAssignmentsEditor so its Year options are
-  // scoped to THIS department's own Course Year Timings.
-  const effectiveDepartment = isLinkMode ? linkDepartment : (department || myDepartments[0] || "");
-  // Pre-fills the now-always-visible Department picker once there's exactly
-  // one real choice, so a genuinely single-department HOD still sees it
-  // filled in without an extra click - only a real choice (more than one
-  // option) is left for them to actually make.
+  const effectiveDepartment = isLinkMode ? linkDepartment : department || myDepartments[0] || "";
+
   useEffect(() => {
     if (!isLinkMode && !department && myDepartments.length === 1) setDepartment(myDepartments[0]);
   }, [isLinkMode, department, myDepartments]);
+
   const [teachingRows, setTeachingRows] = useState<StagedTeachingRow[]>([]);
-  // Extra contact numbers beyond the primary Mobile No below - each with an
-  // optional freeform label (e.g. "Personal", or just whoever's number it
-  // is), not a fixed category.
   const [extraPhones, setExtraPhones] = useState<{ label?: string; number: string }[]>([]);
   const [photoUrl, setPhotoUrl] = useState<string | undefined>(undefined);
   const [tempPhotoId] = useState(() => crypto.randomUUID());
@@ -192,7 +197,10 @@ export default function NewFacultyPage() {
   } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: {
-      totalYearsOfExperience: 0, designation: "", password: "", status: "ACTIVE",
+      totalYearsOfExperience: 0,
+      designation: "",
+      password: "",
+      status: "ACTIVE",
     },
   });
   const [erroredSteps, setErroredSteps] = useState<Set<WizardStepKey>>(new Set());
@@ -200,28 +208,13 @@ export default function NewFacultyPage() {
   const designation = watch("designation");
   const employeeCategory = watch("employeeCategory");
   const status = watch("status");
-  // Which of resignedDate/retiredDate/retainershipDate (if any) applies to
-  // the currently-picked status - undefined for Active/On Leave, so no date
-  // field renders at all for those.
   const statusDateField = FACULTY_STATUS_DATE_FIELD[status as FacultyStatus];
   const highestQualification = watch("highestQualification");
-  // "Others" is a mode, not a stored value - it reveals a free-text box whose
-  // contents become `highestQualification`. Needs its own state because once the user
-  // types "MBA" the field no longer matches any option, which is
-  // indistinguishable from a pre-filled value that simply isn't on the list.
   const [qualIsOther, setQualIsOther] = useState(false);
   const joiningDateValue = watch("joiningDate");
 
-  // FacultyMember.totalYearsOfExperience (Total Years of Experience = Internal
-  // since Date of Joining + External from Academic/Industry/Research
-  // Experience's From/To dates) is actually recomputed server-side on
-  // submit (see POST /api/college/faculty), from the same academicProfile/
-  // joiningDate this form sends - this mirrors that so the "core" step's
-  // read-only preview below always matches what gets saved.
   const allExperienceEntries = useMemo(
     () => allPreviousExperienceEntries(academicProfile),
-    // The 3 specific arrays read are the real deps; academicProfile itself is
-    // a new object every render and would defeat the memoization if listed.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [academicProfile.academicExperience, academicProfile.industryExperience, academicProfile.researchExperience]
   );
@@ -233,68 +226,113 @@ export default function NewFacultyPage() {
     setValue("totalYearsOfExperience", totalExperience);
   }, [totalExperience, setValue]);
 
-  // The "core" step's read-only preview - live Total Years of Experience
-  // (Internal + External), the same figure the profile will show once this
-  // faculty member is added.
   const previewTotalExperience = useMemo(
     () => totalYearsOfExperience(allExperienceEntries, joiningDateValue),
     [allExperienceEntries, joiningDateValue]
   );
 
-  const steps: WizardStep[] = useMemo(() => [
-    { key: "core", label: "Identity & Employment" },
-    { key: "personal", label: PROFILE_MODULES.personal.label },
-    { key: "qualification", label: PROFILE_MODULES.qualification.label },
-    { key: "experience", label: PROFILE_MODULES.experience.label },
-    { key: "research", label: PROFILE_MODULES.research.label },
-    { key: "mentorship", label: PROFILE_MODULES.mentorship.label },
-    { key: "financial", label: PROFILE_MODULES.financial.label },
-    { key: "teaching-load", label: PROFILE_MODULES["teaching-load"].label },
-    { key: "others", label: PROFILE_MODULES.others.label },
-    { key: "review", label: "Review & Submit" },
-  ], []);
+  const steps: WizardStep[] = useMemo(
+    () => [
+      {
+        key: "core",
+        label: "Identity & Employment",
+        shortLabel: "Identity",
+        icon: User,
+        description: "Official ID, department, login credentials, and employment status",
+      },
+      {
+        key: "personal",
+        label: PROFILE_MODULES.personal.label,
+        shortLabel: "Personal",
+        icon: FileText,
+        description: "Date of birth, blood group, identification details, and address",
+      },
+      {
+        key: "qualification",
+        label: PROFILE_MODULES.qualification.label,
+        shortLabel: "Qualifications",
+        icon: GraduationCap,
+        description: "Degrees, academic background, and certifications",
+      },
+      {
+        key: "experience",
+        label: PROFILE_MODULES.experience.label,
+        shortLabel: "Experience",
+        icon: Briefcase,
+        description: "Prior academic, industrial, and research service",
+      },
+      {
+        key: "research",
+        label: PROFILE_MODULES.research.label,
+        shortLabel: "Research",
+        icon: Award,
+        description: "Publications, patents, book chapters, and research grants",
+      },
+      {
+        key: "mentorship",
+        label: PROFILE_MODULES.mentorship.label,
+        shortLabel: "Mentorship",
+        icon: UserCheck,
+        description: "PhD guidance, workshops, and faculty development activities",
+      },
+      {
+        key: "financial",
+        label: PROFILE_MODULES.financial.label,
+        shortLabel: "Funding",
+        icon: DollarSign,
+        description: "Sponsored research, consultancy projects, and seed funds",
+      },
+      {
+        key: "teaching-load",
+        label: PROFILE_MODULES["teaching-load"].label,
+        shortLabel: "Teaching Load",
+        icon: BookOpen,
+        description: "Curriculum subject allocations and weekly lecture load",
+      },
+      {
+        key: "others",
+        label: PROFILE_MODULES.others.label,
+        shortLabel: "Achievements",
+        icon: Sparkles,
+        description: "Professional memberships, awards, and institutional responsibilities",
+      },
+      {
+        key: "review",
+        label: "Review & Submit",
+        shortLabel: "Review",
+        icon: CheckCircle2,
+        description: "Verify all inputs before committing to the institutional register",
+      },
+    ],
+    []
+  );
 
   const step = steps[stepIndex];
 
-  // Every validated/required field lives on the "core" step; map each to a
-  // friendly label so a failed submit can say exactly what's missing and in
-  // which module (see onInvalid). Next enforces the current step before
-  // advancing (findStepProblem); submit re-checks everything, since the step
-  // indicator can still jump straight to Review.
   const FIELD_LABELS: Record<string, string> = {
-    employeeId: "Employee ID", collegeEmail: "College Email",
-    password: "Login Password", mobileNo: "Mobile No", designation: "Designation",
-    employeeCategory: "Employee Category", status: "Status",
-    highestQualification: "Highest Qualification", totalYearsOfExperience: "Total Years of Experience",
+    employeeId: "Employee ID",
+    collegeEmail: "College Email",
+    password: "Login Password",
+    mobileNo: "Mobile No",
+    designation: "Designation",
+    employeeCategory: "Employee Category",
+    status: "Status",
+    highestQualification: "Highest Qualification",
+    totalYearsOfExperience: "Total Years of Experience",
     joiningDate: "Date of Joining",
     legalName: "Full Name (as per SSC)",
   };
 
-  // Every constraint the final submit enforces, grouped by the step whose
-  // fields it reads. Leaving a step checks that step's own fields, so a
-  // problem is raised where it can be fixed - rather than surfacing all at
-  // once at the very end, several steps away from the input at fault.
-  //
-  // A rule spanning two steps belongs to the LATER of them: Date of Birth
-  // (Personal Details) vs Date of Joining (Identity & Employment) can only be
-  // compared once both have been passed through.
   function findStepProblem(key: WizardStepKey): { title: string; description: string } | null {
     if (key === "core") {
-      // The zod schema covers this step alone, so its own messages are the
-      // complete list - each already reads as a full sentence ("Employee ID
-      // is required", "Mobile No must be exactly 10 digits, ...").
       const problems = schema.safeParse(getValues()).error?.issues.map((i) => i.message) ?? [];
-      // Not in the schema (they don't apply in link mode) - same checks
-      // onSubmit makes, just raised a step earlier.
       if (!isLinkMode && !department) problems.push("Department is required");
       if (!isLinkMode && !getValues("collegeEmail")?.trim()) problems.push("College Email is required");
       if (!isLinkMode && !getValues("password")?.trim()) problems.push("Login Password is required");
       if (!personalDetails.legalName?.trim()) problems.push("Full Name (as per SSC) is required");
-      // Resigned/Retired/Retainership each need their own date - not in the
-      // zod schema since which field (if any) applies depends on the status
-      // just picked (FACULTY_STATUS_DATE_FIELD).
       const coreDateField = FACULTY_STATUS_DATE_FIELD[getValues("status") as FacultyStatus];
-      if (coreDateField && !getValues(coreDateField)?.trim()) problems.push(`${FACULTY_STATUS_DATE_LABELS[coreDateField]} is required`);
+      if (coreDateField && !getValues(coreDateField)?.trim())
+        problems.push(`${FACULTY_STATUS_DATE_LABELS[coreDateField]} is required`);
       if (problems.length > 0) {
         return {
           title: "Identity & Employment is incomplete",
@@ -319,16 +357,12 @@ export default function NewFacultyPage() {
       return null;
     }
 
-    // The remaining steps carry no required fields - everything on them is
-    // optional profile detail.
     return null;
   }
 
   function goNext() {
     const problem = findStepProblem(step.key);
     if (problem) {
-      // trigger() in parallel so the offending inputs are marked inline too,
-      // not just named in the toast.
       if (step.key === "core") void trigger();
       setErroredSteps((prev) => new Set(prev).add(step.key));
       toast({ variant: "destructive", title: problem.title, description: problem.description });
@@ -348,79 +382,63 @@ export default function NewFacultyPage() {
   }
 
   function onInvalid(errs: typeof errors) {
-    // All required fields are on the "core" (Identity & Employment) step, so
-    // flag that module, jump to it, and list exactly which fields are missing.
     setErroredSteps(new Set<WizardStepKey>(["core"]));
     setStepIndex(steps.findIndex((s) => s.key === "core"));
-    const missing = Object.keys(errs).map((f) => FIELD_LABELS[f] ?? f).join(", ");
-    toast({ variant: "destructive", title: "Some required fields are missing", description: `Identity & Employment: ${missing}` });
+    const missing = Object.keys(errs)
+      .map((f) => FIELD_LABELS[f] ?? f)
+      .join(", ");
+    toast({
+      variant: "destructive",
+      title: "Some required fields are missing",
+      description: `Identity & Employment: ${missing}`,
+    });
   }
 
   const onSubmit = async (data: FormData) => {
-    // Which department this faculty member belongs to isn't in the zod
-    // schema (link mode ignores it entirely - the department is already
-    // fixed to linkDepartment) - checked here instead, same pattern as
-    // College Email/Password below. Auto-filled above once there's exactly
-    // one real choice, so this only actually blocks submission when there's
-    // more than one department to pick from and none has been picked yet.
     if (!isLinkMode && !department) {
       setErroredSteps(new Set<WizardStepKey>(["core"]));
       setStepIndex(steps.findIndex((s) => s.key === "core"));
       toast({ variant: "destructive", title: "Some required fields are missing", description: "Identity & Employment: Department" });
       return;
     }
-    // College Email/Password aren't in the zod schema's required set (they
-    // don't apply in link mode, see isLinkMode above) - so the default
-    // "create a new login" flow enforces their presence here instead.
     if (!isLinkMode && (!data.collegeEmail?.trim() || !data.password?.trim())) {
       setErroredSteps(new Set<WizardStepKey>(["core"]));
       setStepIndex(steps.findIndex((s) => s.key === "core"));
-      const missing = [!data.collegeEmail?.trim() && "College Email", !data.password?.trim() && "Login Password"].filter(Boolean).join(", ");
+      const missing = [!data.collegeEmail?.trim() && "College Email", !data.password?.trim() && "Login Password"]
+        .filter(Boolean)
+        .join(", ");
       toast({ variant: "destructive", title: "Some required fields are missing", description: `Identity & Employment: ${missing}` });
       return;
     }
-    // Full Name (as per SSC) lives in `personalDetails` state but is rendered
-    // on the "core" step (right after Employee ID, matching the template's
-    // own field order) - not zod-validated, so it's checked here, same
-    // pattern as College Email/Password above, and routes back to "core"
-    // (not "personal", where the input no longer visually is).
     if (!personalDetails.legalName?.trim()) {
       setErroredSteps(new Set<WizardStepKey>(["core"]));
       setStepIndex(steps.findIndex((s) => s.key === "core"));
       toast({ variant: "destructive", title: "Some required fields are missing", description: "Identity & Employment: Full Name (as per SSC)" });
       return;
     }
-    // Resigned/Retired/Retainership each need their own date - see
-    // findStepProblem's own comment above (same check, defense in depth for
-    // the "jump straight to Review" case).
     const submitDateField = FACULTY_STATUS_DATE_FIELD[data.status as FacultyStatus];
     if (submitDateField && !data[submitDateField]?.trim()) {
       setErroredSteps(new Set<WizardStepKey>(["core"]));
       setStepIndex(steps.findIndex((s) => s.key === "core"));
-      toast({ variant: "destructive", title: "Some required fields are missing", description: `Identity & Employment: ${FACULTY_STATUS_DATE_LABELS[submitDateField]}` });
+      toast({
+        variant: "destructive",
+        title: "Some required fields are missing",
+        description: `Identity & Employment: ${FACULTY_STATUS_DATE_LABELS[submitDateField]}`,
+      });
       return;
     }
-    // Personal Details isn't zod-validated (PersonalDetailsFields is plain
-    // React state) - checked here instead, same pattern as the College
-    // Email/Password check above, since these fields are now mandatory too.
     const missingPersonal = getMissingRequiredPersonalFields(personalDetails, FACULTY_REQUIRED_PERSONAL_FIELDS);
     if (missingPersonal.length > 0) {
       setErroredSteps(new Set<WizardStepKey>(["personal"]));
       setStepIndex(steps.findIndex((s) => s.key === "personal"));
-      toast({ variant: "destructive", title: "Some required fields are missing", description: `Personal Details: ${missingPersonal.join(", ")}` });
+      toast({
+        variant: "destructive",
+        title: "Some required fields are missing",
+        description: `Personal Details: ${missingPersonal.join(", ")}`,
+      });
       return;
     }
-    // Date of Birth must come before Date of Joining - nobody joins on or
-    // before the day they were born. The two live on different steps (DOB in
-    // Personal Details, joining date on Identity & Employment) and in
-    // different state, so neither field can catch this on its own; compared
-    // here, once both are known to be filled in. Plain string compare is
-    // enough - both inputs are type="date", so both are YYYY-MM-DD.
-    if (
-      personalDetails.dateOfBirth &&
-      data.joiningDate &&
-      personalDetails.dateOfBirth >= data.joiningDate
-    ) {
+    if (personalDetails.dateOfBirth && data.joiningDate && personalDetails.dateOfBirth >= data.joiningDate) {
       setErroredSteps(new Set<WizardStepKey>(["personal"]));
       setStepIndex(steps.findIndex((s) => s.key === "personal"));
       toast({
@@ -430,8 +448,7 @@ export default function NewFacultyPage() {
       });
       return;
     }
-    // Full Name (as per SSC) is the only display name - used everywhere this
-    // faculty member's name is shown (see facultyDisplayName()).
+
     const displayName = personalDetails.legalName?.trim() || "";
     setSubmitting(true);
     try {
@@ -443,27 +460,37 @@ export default function NewFacultyPage() {
           additionalPhoneNumbers: extraPhones.filter((p) => p.number.trim()),
           ...(isLinkMode
             ? { linkUid, department: linkDepartment, collegeEmail: undefined, password: undefined }
-            : department ? { department } : {}),
+            : department
+            ? { department }
+            : {}),
           academicProfile,
           ...personalDetails,
           ...(photoUrl ? { profilePhotoUrl: photoUrl } : {}),
         }),
       });
-      const json = await res.json() as { id?: string; error?: string };
+      const json = (await res.json()) as { id?: string; error?: string };
 
       if (res.status === 409) {
         toast({ variant: "destructive", title: "Already exists", description: json.error });
         return;
       }
       if (!res.ok) {
-        toast({ variant: "destructive", title: isLinkMode ? "Failed to complete profile" : "Failed to add faculty", description: json.error });
+        toast({
+          variant: "destructive",
+          title: isLinkMode ? "Failed to complete profile" : "Failed to add faculty",
+          description: json.error,
+        });
         return;
       }
 
       if (json.id && teachingRows.length > 0) {
-        const errors = await syncTeachingAssignments(json.id, displayName, [], teachingRows);
-        if (errors.length > 0) {
-          toast({ variant: "destructive", title: "Some teaching assignments failed to save", description: errors.join("; ") });
+        const syncErrors = await syncTeachingAssignments(json.id, displayName, [], teachingRows);
+        if (syncErrors.length > 0) {
+          toast({
+            variant: "destructive",
+            title: "Some teaching assignments failed to save",
+            description: syncErrors.join("; "),
+          });
         }
       }
 
@@ -483,327 +510,520 @@ export default function NewFacultyPage() {
   };
 
   return (
-    <div className="max-w-2xl">
-      <PageHeader
-        title={isLinkMode ? "Complete Faculty Profile" : "Add Faculty Member"}
-        description={isLinkMode
-          ? `Add the employment & profile details for ${linkName || "this person"}, who already has a login - filed under ${linkDepartment}`
-          : "Add a new entry to your department's faculty register"}
-      />
-
-      {/* Step indicator - click any step to jump to it; steps with missing
-          required fields are outlined in red. Jumping stays free (it is how
-          you go back to fix something); it is Next that enforces the step. */}
-      <div className="flex flex-wrap gap-2 mb-4">
-        {steps.map((s, i) => (
-          <button
-            type="button"
-            key={s.key}
-            onClick={() => setStepIndex(i)}
-            className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-              erroredSteps.has(s.key) ? "ring-1 ring-destructive text-destructive bg-destructive/5" :
-              i === stepIndex ? "bg-primary text-primary-foreground" : i < stepIndex ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground hover:bg-muted/70"
-            }`}
-          >
-            {i < stepIndex && !erroredSteps.has(s.key) && <Check className="h-3 w-3" />}
-            {s.label}
-          </button>
-        ))}
+    <div className="max-w-5xl mx-auto space-y-6 pb-12">
+      {/* ── Top Navigation & Breadcrumbs ── */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <Button asChild variant="ghost" size="sm" className="w-fit text-muted-foreground hover:text-foreground -ml-2">
+          <Link href={listPath}>
+            <ArrowLeft className="h-4 w-4 mr-1.5" /> Back to Faculty Register
+          </Link>
+        </Button>
+        <Badge variant="outline" className="w-fit text-xs font-semibold px-2.5 py-0.5 border-primary/30 text-primary">
+          {isLinkMode ? "Profile Completion Mode" : "New Faculty Onboarding"}
+        </Badge>
       </div>
 
+      {/* ── Hero Title Banner ── */}
+      <div className="rounded-2xl border bg-gradient-to-r from-card via-card to-primary/5 p-6 shadow-xs">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="flex items-start gap-4">
+            <div className="h-12 w-12 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0 shadow-2xs">
+              <UserPlus className="h-6 w-6" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+                {isLinkMode ? "Complete Sub-HOD Profile" : "Add Faculty Member"}
+              </h1>
+              <p className="text-sm text-muted-foreground mt-1 max-w-xl">
+                {isLinkMode
+                  ? `Complete employment and academic profile for ${linkName || "this Sub-HOD"} in ${linkDepartment}.`
+                  : "Onboard new teaching faculty into the official college register with verified academic credentials."}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Badge variant="secondary" className="px-3 py-1 font-medium text-xs">
+              Step {stepIndex + 1} of {steps.length}
+            </Badge>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Sleek Modern Wizard Stepper ── */}
+      <div className="relative">
+        <div className="flex items-center gap-2 overflow-x-auto pb-2 no-scrollbar scroll-smooth">
+          {steps.map((s, i) => {
+            const IconComponent = s.icon;
+            const isCompleted = i < stepIndex && !erroredSteps.has(s.key);
+            const isCurrent = i === stepIndex;
+            const isError = erroredSteps.has(s.key);
+
+            return (
+              <button
+                type="button"
+                key={s.key}
+                onClick={() => setStepIndex(i)}
+                className={`group flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-medium whitespace-nowrap transition-all shrink-0 border ${
+                  isError
+                    ? "border-destructive/50 bg-destructive/10 text-destructive ring-1 ring-destructive/30"
+                    : isCurrent
+                    ? "border-primary bg-primary text-primary-foreground shadow-xs font-semibold"
+                    : isCompleted
+                    ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/15"
+                    : "border-border/70 bg-card text-muted-foreground hover:bg-muted/30 hover:text-foreground"
+                }`}
+              >
+                <div
+                  className={`h-5 w-5 rounded-md flex items-center justify-center text-[10px] font-bold ${
+                    isCurrent
+                      ? "bg-primary-foreground/20 text-primary-foreground"
+                      : isCompleted
+                      ? "bg-emerald-500 text-white"
+                      : "bg-muted text-muted-foreground"
+                  }`}
+                >
+                  {isCompleted ? <Check className="h-3 w-3 stroke-[3]" /> : i + 1}
+                </div>
+                <span>{s.shortLabel}</span>
+                {isError && <AlertCircle className="h-3.5 w-3.5 text-destructive ml-0.5" />}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ── Wizard Form Container ── */}
       <form onSubmit={handleSubmit(onSubmit, onInvalid)}>
-        <Card>
-          <CardHeader><CardTitle className="text-base">{step.label}</CardTitle></CardHeader>
-          <CardContent className="space-y-5">
+        <Card className="shadow-xs border-border/80 overflow-hidden">
+          <CardHeader className="bg-card/60 border-b p-5 sm:p-6">
+            <div className="flex items-center gap-3">
+              <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                <step.icon className="h-5 w-5" />
+              </div>
+              <div>
+                <CardTitle className="text-lg font-bold text-foreground">{step.label}</CardTitle>
+                <CardDescription className="text-xs text-muted-foreground mt-0.5">
+                  {step.description}
+                </CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+
+          <CardContent className="p-5 sm:p-6 space-y-6">
             {step.key === "core" && (
-              <>
-                <div className="flex flex-col gap-5 pb-5 border-b sm:flex-row sm:items-start">
-                  <div className="flex shrink-0 flex-col items-center gap-2 sm:pt-6">
-                    <Label>Profile Photo</Label>
-                    <AvatarUploadField name={personalDetails.legalName || "?"} photoUrl={photoUrl} targetId={tempPhotoId} onUploaded={setPhotoUrl} onDeleted={() => setPhotoUrl(undefined)} />
+              <div className="space-y-6">
+                {/* 1. Identity & Photo */}
+                <div className="rounded-xl border bg-muted/10 p-4 sm:p-5 space-y-4">
+                  <div className="flex items-center gap-2 text-sm font-bold text-foreground">
+                    <User className="h-4 w-4 text-primary" />
+                    <span>Basic Identification &amp; Photo</span>
                   </div>
-                  <div className="grid flex-1 grid-cols-1 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="employeeId">Employee ID *</Label>
-                      <Input id="employeeId" {...register("employeeId")} placeholder="EMP-001" />
-                      {errors.employeeId && <p className="text-sm text-destructive">{errors.employeeId.message}</p>}
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="legalName">Full Name (as per SSC) *</Label>
-                      <Input
-                        id="legalName"
-                        value={personalDetails.legalName ?? ""}
-                        onChange={(e) => setPersonalDetails((p) => ({ ...p, legalName: e.target.value.toUpperCase() }))}
-                        placeholder="FULL NAME IN CAPITALS"
-                        className="uppercase"
+
+                  <div className="flex flex-col sm:flex-row gap-5 items-start">
+                    <div className="flex shrink-0 flex-col items-center gap-2 mx-auto sm:mx-0">
+                      <AvatarUploadField
+                        name={personalDetails.legalName || "?"}
+                        photoUrl={photoUrl}
+                        targetId={tempPhotoId}
+                        onUploaded={setPhotoUrl}
+                        onDeleted={() => setPhotoUrl(undefined)}
                       />
-                      <p className="text-xs text-muted-foreground">Enter the name exactly as it appears on the SSC (10th class) certificate - this is the faculty member&apos;s primary display name across the app.</p>
+                      <span className="text-[11px] text-muted-foreground">Passport Photo</span>
                     </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="apaarFacultyId">APAAR Faculty ID</Label>
-                      <Input
-                        id="apaarFacultyId" inputMode="numeric" maxLength={12}
-                        {...register("apaarFacultyId")}
-                        onChange={(e) => {
-                          e.target.value = e.target.value.replace(/\D/g, "").slice(0, 12);
-                          void register("apaarFacultyId").onChange(e);
-                        }}
-                        placeholder="123456789012"
-                      />
-                      {errors.apaarFacultyId && <p className="text-sm text-destructive">{errors.apaarFacultyId.message}</p>}
+
+                    <div className="grid flex-1 grid-cols-1 sm:grid-cols-2 gap-4 w-full">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="employeeId" className="text-xs font-semibold">
+                          Employee ID <span className="text-destructive">*</span>
+                        </Label>
+                        <Input id="employeeId" {...register("employeeId")} placeholder="e.g. EMP-1042" />
+                        {errors.employeeId && <p className="text-xs text-destructive">{errors.employeeId.message}</p>}
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label htmlFor="apaarFacultyId" className="text-xs font-semibold">
+                          APAAR Faculty ID
+                        </Label>
+                        <Input
+                          id="apaarFacultyId"
+                          inputMode="numeric"
+                          maxLength={12}
+                          {...register("apaarFacultyId")}
+                          onChange={(e) => {
+                            e.target.value = e.target.value.replace(/\D/g, "").slice(0, 12);
+                            void register("apaarFacultyId").onChange(e);
+                          }}
+                          placeholder="12-digit APAAR ID"
+                        />
+                        {errors.apaarFacultyId && (
+                          <p className="text-xs text-destructive">{errors.apaarFacultyId.message}</p>
+                        )}
+                      </div>
+
+                      <div className="space-y-1.5 sm:col-span-2">
+                        <Label htmlFor="legalName" className="text-xs font-semibold">
+                          Full Name (as per SSC) <span className="text-destructive">*</span>
+                        </Label>
+                        <Input
+                          id="legalName"
+                          value={personalDetails.legalName ?? ""}
+                          onChange={(e) =>
+                            setPersonalDetails((p) => ({ ...p, legalName: e.target.value.toUpperCase() }))
+                          }
+                          placeholder="FULL NAME AS IN SSC CERTIFICATE"
+                          className="uppercase font-medium"
+                        />
+                        <p className="text-[11px] text-muted-foreground">
+                          Enter exact legal name as printed on 10th/SSC certificate. Used on official documents, registers, and resumes.
+                        </p>
+                      </div>
                     </div>
                   </div>
                 </div>
 
-                {isLinkMode && (
-                  <div className="rounded-lg border bg-muted/30 px-3 py-2 text-sm">
-                    <span className="text-muted-foreground">Department: </span>
-                    <span className="font-medium">{linkDepartment}</span>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      This profile links to {linkName || "their"} existing login - no new account or password is created.
-                    </p>
+                {/* 2. Institutional Placement & Account */}
+                <div className="rounded-xl border bg-muted/10 p-4 sm:p-5 space-y-4">
+                  <div className="flex items-center gap-2 text-sm font-bold text-foreground">
+                    <Building2 className="h-4 w-4 text-primary" />
+                    <span>Institutional Placement &amp; Portal Account</span>
                   </div>
-                )}
 
-                {/* Always shown (outside link mode) so there's always a real
-                    way to say which department a new faculty member belongs
-                    to - including a sub-department, which a parent HOD who
-                    owns only one top-level department still fully manages
-                    the faculty roster of (see facultyDepartmentOptions).
-                    Placed right after identity, before Role/Employment
-                    Details, since it decides which department's register
-                    this faculty member is filed under - the same slot the
-                    read-only version above shows for a Sub-HOD link. */}
-                {!isLinkMode && (
-                  <div className="space-y-2">
-                    <Label>Department *</Label>
-                    <Select value={department} onValueChange={setDepartment}>
-                      <SelectTrigger><SelectValue placeholder="Select department" /></SelectTrigger>
-                      <SelectContent>
-                        {myDepartments.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                    <p className="text-xs text-muted-foreground">
-                      {isCollegeLevel
-                        ? "Choose the department this faculty member belongs to."
-                        : myDepartments.length > 1
-                        ? "You manage more than one department (including sub-departments) - choose which one this faculty member belongs to."
-                        : "This faculty member's department."}
-                    </p>
-                  </div>
-                )}
-
-                {!isLinkMode && (
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label htmlFor="collegeEmail">College Email *</Label>
-                      <Input id="collegeEmail" type="email" {...register("collegeEmail")} placeholder="name@example.com" />
-                      {errors.collegeEmail && <p className="text-sm text-destructive">{errors.collegeEmail.message}</p>}
-                      <p className="text-xs text-muted-foreground">This is used as their login username.</p>
+                  {isLinkMode ? (
+                    <div className="rounded-lg border bg-card p-3 text-sm flex items-center justify-between">
+                      <div>
+                        <p className="text-xs text-muted-foreground">Assigned Department</p>
+                        <p className="font-bold text-foreground">{linkDepartment}</p>
+                      </div>
+                      <Badge variant="secondary" className="text-xs">
+                        Existing Login Linked
+                      </Badge>
                     </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="password">Login Password *</Label>
-                      <Input id="password" type="password" {...register("password")} placeholder="Min 8 characters" />
-                      {errors.password && <p className="text-sm text-destructive">{errors.password.message}</p>}
-                      <p className="text-xs text-muted-foreground">
-                        Share this with the faculty member so they can log in with their college email as a Panel Member.
+                  ) : (
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-semibold">
+                        Department <span className="text-destructive">*</span>
+                      </Label>
+                      <Select value={department} onValueChange={setDepartment}>
+                        <SelectTrigger className="bg-card">
+                          <SelectValue placeholder="Select department" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {myDepartments.map((d) => (
+                            <SelectItem key={d} value={d}>
+                              {d}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-[11px] text-muted-foreground">
+                        {isCollegeLevel
+                          ? "Select the department or sub-department this faculty member will be registered under."
+                          : "Your managed department / sub-department."}
                       </p>
                     </div>
-                  </div>
-                )}
+                  )}
 
-                <div className="pt-2 pb-1 border-t">
-                  <p className="text-sm font-medium text-muted-foreground">Role Details</p>
-                </div>
-
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label>Designation *</Label>
-                    <Select
-                      value={designation}
-                      onValueChange={(v) => setValue("designation", v)}
-                    >
-                      <SelectTrigger><SelectValue placeholder="Select designation" /></SelectTrigger>
-                      <SelectContent>
-                        {designationOptions.map((d) => <SelectItem key={d} value={d}>{designationLabel(d)}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                    {errors.designation && <p className="text-sm text-destructive">{errors.designation.message}</p>}
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Employee Category *</Label>
-                    <Select
-                      value={employeeCategory ?? ""}
-                      onValueChange={(v) => setValue("employeeCategory", v as EmployeeCategory)}
-                    >
-                      <SelectTrigger><SelectValue placeholder="Select employee category" /></SelectTrigger>
-                      <SelectContent>
-                        {Object.entries(EMPLOYEE_CATEGORY_LABELS).map(([k, label]) => (
-                          <SelectItem key={k} value={k}>{label}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    {errors.employeeCategory && <p className="text-sm text-destructive">{errors.employeeCategory.message}</p>}
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Status *</Label>
-                    <Select
-                      value={status ?? "ACTIVE"}
-                      onValueChange={(v) => setValue("status", v as FacultyStatus)}
-                    >
-                      <SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger>
-                      <SelectContent>
-                        {SELECTABLE_FACULTY_STATUS_VALUES.map((s) => (
-                          <SelectItem key={s} value={s}>{FACULTY_STATUS_LABELS[s]}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    {errors.status && <p className="text-sm text-destructive">{errors.status.message}</p>}
-                    <p className="text-xs text-muted-foreground">Defaults to Active for a faculty member who has already joined.</p>
-                  </div>
-                  {/* Only Resigned/Retired/Retainership carry a date - which
-                      field depends on the status just picked above
-                      (FACULTY_STATUS_DATE_FIELD). Required so every such
-                      record can say exactly when that happened - also what
-                      the Faculty Register's Duration filter reads to know
-                      when someone's active-tenure window closed. */}
-                  {statusDateField && (
-                    <div className="space-y-2">
-                      <Label>{FACULTY_STATUS_DATE_LABELS[statusDateField]} *</Label>
-                      <Input type="date" {...register(statusDateField)} />
-                      {errors[statusDateField] && <p className="text-sm text-destructive">{errors[statusDateField]?.message}</p>}
+                  {!isLinkMode && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="collegeEmail" className="text-xs font-semibold">
+                          College Email (Login Username) <span className="text-destructive">*</span>
+                        </Label>
+                        <Input
+                          id="collegeEmail"
+                          type="email"
+                          {...register("collegeEmail")}
+                          placeholder="username@institution.edu.in"
+                        />
+                        {errors.collegeEmail && (
+                          <p className="text-xs text-destructive">{errors.collegeEmail.message}</p>
+                        )}
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="password" className="text-xs font-semibold">
+                          Temporary Login Password <span className="text-destructive">*</span>
+                        </Label>
+                        <Input
+                          id="password"
+                          type="password"
+                          {...register("password")}
+                          placeholder="Minimum 8 characters"
+                        />
+                        {errors.password && <p className="text-xs text-destructive">{errors.password.message}</p>}
+                        <p className="text-[11px] text-muted-foreground">
+                          Faculty uses this password to log in. They can change it via Profile Settings.
+                        </p>
+                      </div>
                     </div>
                   )}
-                  <div className="space-y-2">
-                    <Label>Highest Qualification *</Label>
-                    <Select
-                      value={qualIsOther ? OTHER_QUALIFICATION : (HIGHEST_QUALIFICATION_OPTIONS as readonly string[]).includes(highestQualification) ? highestQualification : ""}
-                      onValueChange={(v) => {
-                        const other = v === OTHER_QUALIFICATION;
-                        setQualIsOther(other);
-                        // Picking "Others" clears the field so the text box
-                        // below starts empty and its value lands in this same
-                        // `highestQualification` string - there's no separate "other"
-                        // column on FacultyMember, and the whole app (import,
-                        // export, resume PDF, profile views) reads just this one.
-                        setValue("highestQualification", other ? "" : v);
-                      }}
-                    >
-                      <SelectTrigger><SelectValue placeholder="Select qualification" /></SelectTrigger>
-                      <SelectContent>
-                        {HIGHEST_QUALIFICATION_OPTIONS.map((q) => (
-                          <SelectItem key={q} value={q}>{q}</SelectItem>
-                        ))}
-                        <SelectItem value={OTHER_QUALIFICATION}>Others</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    {qualIsOther && (
-                      <Input {...register("highestQualification")} placeholder="e.g. B.Ed, MCA" />
-                    )}
-                    {errors.highestQualification && <p className="text-sm text-destructive">{errors.highestQualification.message}</p>}
+                </div>
+
+                {/* 3. Role & Employment Details */}
+                <div className="rounded-xl border bg-muted/10 p-4 sm:p-5 space-y-4">
+                  <div className="flex items-center gap-2 text-sm font-bold text-foreground">
+                    <Briefcase className="h-4 w-4 text-primary" />
+                    <span>Role &amp; Employment Terms</span>
                   </div>
-                </div>
 
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="specialization">Specialization</Label>
-                    <Input id="specialization" {...register("specialization")} placeholder="e.g. Machine Learning, VLSI" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="totalYearsOfExperience">Total Years of Experience</Label>
-                    <Input id="totalYearsOfExperience" value={formatDuration(previewTotalExperience)} readOnly disabled className="bg-muted" />
-                    <p className="text-xs text-muted-foreground">
-                      Calculated automatically from the From/To dates added under Professional Experience, plus time served since Date of Joining.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="pt-2 pb-1 border-t">
-                  <p className="text-sm font-medium text-muted-foreground">Employment Details</p>
-                </div>
-
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="joiningDate">Date of Joining *</Label>
-                    <Input id="joiningDate" type="date" {...register("joiningDate")} />
-                    {errors.joiningDate && <p className="text-sm text-destructive">{errors.joiningDate.message}</p>}
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="aicteFacultyId">AICTE Faculty ID</Label>
-                  <Input id="aicteFacultyId" {...register("aicteFacultyId")} placeholder="AICTE Faculty ID" />
-                </div>
-
-                <div className="pt-2 pb-1 border-t">
-                  <p className="text-sm font-medium text-muted-foreground">Contact Details</p>
-                </div>
-
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="email">Personal Email</Label>
-                    <Input id="email" type="email" {...register("email")} placeholder="faculty@example.com" />
-                    {errors.email && <p className="text-sm text-destructive">{errors.email.message}</p>}
-                  </div>
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="mobileNo">Mobile No *</Label>
-                      <Button
-                        type="button"
-                        variant="link"
-                        size="sm"
-                        className="h-auto p-0 text-xs"
-                        onClick={() => setExtraPhones((p) => [...p, { label: "", number: "" }])}
-                      >
-                        + Add Number
-                      </Button>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-semibold">
+                        Designation <span className="text-destructive">*</span>
+                      </Label>
+                      <Select value={designation} onValueChange={(v) => setValue("designation", v)}>
+                        <SelectTrigger className="bg-card">
+                          <SelectValue placeholder="Select designation" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {designationOptions.map((d) => (
+                            <SelectItem key={d} value={d}>
+                              {designationLabel(d)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {errors.designation && <p className="text-xs text-destructive">{errors.designation.message}</p>}
                     </div>
-                    <Input
-                      id="mobileNo" type="tel" inputMode="numeric" autoComplete="off" maxLength={10}
-                      {...register("mobileNo")}
-                      onChange={(e) => {
-                        e.target.value = e.target.value.replace(/\D/g, "").slice(0, 10);
-                        void register("mobileNo").onChange(e);
-                      }}
-                      placeholder="9876543210"
-                    />
-                    {errors.mobileNo && <p className="text-sm text-destructive">{errors.mobileNo.message}</p>}
+
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-semibold">
+                        Employee Category <span className="text-destructive">*</span>
+                      </Label>
+                      <Select
+                        value={employeeCategory ?? ""}
+                        onValueChange={(v) => setValue("employeeCategory", v as EmployeeCategory)}
+                      >
+                        <SelectTrigger className="bg-card">
+                          <SelectValue placeholder="Select category" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Object.entries(EMPLOYEE_CATEGORY_LABELS).map(([k, label]) => (
+                            <SelectItem key={k} value={k}>
+                              {label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {errors.employeeCategory && (
+                        <p className="text-xs text-destructive">{errors.employeeCategory.message}</p>
+                      )}
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-semibold">
+                        Status <span className="text-destructive">*</span>
+                      </Label>
+                      <Select
+                        value={status ?? "ACTIVE"}
+                        onValueChange={(v) => setValue("status", v as FacultyStatus)}
+                      >
+                        <SelectTrigger className="bg-card">
+                          <SelectValue placeholder="Select status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {SELECTABLE_FACULTY_STATUS_VALUES.map((s) => (
+                            <SelectItem key={s} value={s}>
+                              {FACULTY_STATUS_LABELS[s]}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {errors.status && <p className="text-xs text-destructive">{errors.status.message}</p>}
+                    </div>
+                  </div>
+
+                  {statusDateField && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-3 rounded-lg border bg-destructive/5 border-destructive/20">
+                      <div className="space-y-1.5">
+                        <Label className="text-xs font-semibold text-destructive">
+                          {FACULTY_STATUS_DATE_LABELS[statusDateField]} <span className="text-destructive">*</span>
+                        </Label>
+                        <Input type="date" {...register(statusDateField)} className="bg-card" />
+                        {errors[statusDateField] && (
+                          <p className="text-xs text-destructive">{errors[statusDateField]?.message}</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="joiningDate" className="text-xs font-semibold">
+                        Date of Joining <span className="text-destructive">*</span>
+                      </Label>
+                      <Input id="joiningDate" type="date" {...register("joiningDate")} className="bg-card" />
+                      {errors.joiningDate && <p className="text-xs text-destructive">{errors.joiningDate.message}</p>}
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-semibold">
+                        Highest Qualification <span className="text-destructive">*</span>
+                      </Label>
+                      <Select
+                        value={
+                          qualIsOther
+                            ? OTHER_QUALIFICATION
+                            : (HIGHEST_QUALIFICATION_OPTIONS as readonly string[]).includes(highestQualification)
+                            ? highestQualification
+                            : ""
+                        }
+                        onValueChange={(v) => {
+                          const other = v === OTHER_QUALIFICATION;
+                          setQualIsOther(other);
+                          setValue("highestQualification", other ? "" : v);
+                        }}
+                      >
+                        <SelectTrigger className="bg-card">
+                          <SelectValue placeholder="Select qualification" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {HIGHEST_QUALIFICATION_OPTIONS.map((q) => (
+                            <SelectItem key={q} value={q}>
+                              {q}
+                            </SelectItem>
+                          ))}
+                          <SelectItem value={OTHER_QUALIFICATION}>Others</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      {qualIsOther && (
+                        <Input {...register("highestQualification")} placeholder="e.g. B.Ed, MCA" className="mt-1.5" />
+                      )}
+                      {errors.highestQualification && (
+                        <p className="text-xs text-destructive">{errors.highestQualification.message}</p>
+                      )}
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label htmlFor="specialization" className="text-xs font-semibold">
+                        Specialization
+                      </Label>
+                      <Input
+                        id="specialization"
+                        {...register("specialization")}
+                        placeholder="e.g. VLSI, Machine Learning"
+                        className="bg-card"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Experience Live Preview Metric Card */}
+                  <div className="p-3.5 rounded-lg border bg-primary/5 border-primary/20 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className="h-8 w-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                        <Clock className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-foreground">Total Experience Preview</p>
+                        <p className="text-[11px] text-muted-foreground">
+                          Computed live from Joining Date + Professional Experience entries
+                        </p>
+                      </div>
+                    </div>
+                    <Badge variant="default" className="text-xs font-bold px-3 py-1 w-fit bg-primary">
+                      {formatDuration(previewTotalExperience)}
+                    </Badge>
                   </div>
                 </div>
 
-                {extraPhones.length > 0 && (
-                  <div className="space-y-3">
-                    {extraPhones.map((item, i) => (
-                      <div key={i} className="flex items-start gap-2">
-                        <div className="flex-1 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                          <TextInput
-                            label="Label (optional)"
-                            value={item.label}
-                            onChange={(v) => setExtraPhones((prev) => prev.map((p, idx) => (idx === i ? { ...p, label: v } : p)))}
-                            placeholder="e.g. Personal, WhatsApp, or a name"
-                          />
-                          <TextInput
-                            label="Mobile Number"
-                            type="tel"
-                            value={item.number}
-                            onChange={(v) => setExtraPhones((prev) => prev.map((p, idx) => (idx === i ? { ...p, number: v } : p)))}
-                            placeholder="9876543210"
-                          />
-                        </div>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="mt-7"
-                          onClick={() => setExtraPhones((prev) => prev.filter((_, idx) => idx !== i))}
-                        >
-                          <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                        </Button>
-                      </div>
-                    ))}
+                {/* 4. Contact Details */}
+                <div className="rounded-xl border bg-muted/10 p-4 sm:p-5 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-sm font-bold text-foreground">
+                      <Phone className="h-4 w-4 text-primary" />
+                      <span>Contact Details</span>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-xs gap-1"
+                      onClick={() => setExtraPhones((p) => [...p, { label: "", number: "" }])}
+                    >
+                      <Plus className="h-3.5 w-3.5" /> Add Extra Phone
+                    </Button>
                   </div>
-                )}
-              </>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="mobileNo" className="text-xs font-semibold">
+                        Primary Mobile No <span className="text-destructive">*</span>
+                      </Label>
+                      <Input
+                        id="mobileNo"
+                        type="tel"
+                        inputMode="numeric"
+                        autoComplete="off"
+                        maxLength={10}
+                        {...register("mobileNo")}
+                        onChange={(e) => {
+                          e.target.value = e.target.value.replace(/\D/g, "").slice(0, 10);
+                          void register("mobileNo").onChange(e);
+                        }}
+                        placeholder="10-digit mobile number"
+                        className="bg-card font-mono"
+                      />
+                      {errors.mobileNo && <p className="text-xs text-destructive">{errors.mobileNo.message}</p>}
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label htmlFor="email" className="text-xs font-semibold">
+                        Personal Email
+                      </Label>
+                      <Input
+                        id="email"
+                        type="email"
+                        {...register("email")}
+                        placeholder="personal@gmail.com"
+                        className="bg-card"
+                      />
+                      {errors.email && <p className="text-xs text-destructive">{errors.email.message}</p>}
+                    </div>
+                  </div>
+
+                  {extraPhones.length > 0 && (
+                    <div className="space-y-2.5 pt-2 border-t border-border/60">
+                      <p className="text-xs font-semibold text-muted-foreground">Additional Phone Numbers</p>
+                      {extraPhones.map((item, i) => (
+                        <div key={i} className="flex items-center gap-2 bg-card p-2 rounded-lg border">
+                          <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            <TextInput
+                              label="Label (optional)"
+                              value={item.label}
+                              onChange={(v) =>
+                                setExtraPhones((prev) =>
+                                  prev.map((p, idx) => (idx === i ? { ...p, label: v } : p))
+                                )
+                              }
+                              placeholder="e.g. WhatsApp, Alternate"
+                            />
+                            <TextInput
+                              label="Number"
+                              type="tel"
+                              value={item.number}
+                              onChange={(v) =>
+                                setExtraPhones((prev) =>
+                                  prev.map((p, idx) => (idx === i ? { ...p, number: v } : p))
+                                )
+                              }
+                              placeholder="10-digit number"
+                            />
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-destructive hover:bg-destructive/10"
+                            onClick={() => setExtraPhones((prev) => prev.filter((_, idx) => idx !== i))}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
             )}
 
             {step.key === "personal" && (
@@ -816,34 +1036,178 @@ export default function NewFacultyPage() {
                 ratificationHistory
               />
             )}
-            {step.key === "qualification" && <QualificationFields value={academicProfile} onChange={setAcademicProfile} collegeType={collegeType} />}
-            {step.key === "experience" && <ExperienceFields value={academicProfile} onChange={setAcademicProfile} />}
-            {step.key === "research" && <ResearchFields value={academicProfile} onChange={setAcademicProfile} />}
-            {step.key === "mentorship" && <MentorshipFields value={academicProfile} onChange={setAcademicProfile} />}
-            {step.key === "financial" && <FinancialFields value={academicProfile} onChange={setAcademicProfile} />}
-            {step.key === "others" && <OthersFields value={academicProfile} onChange={setAcademicProfile} />}
-            {step.key === "teaching-load" && (
-              <TeachingAssignmentsEditor value={teachingRows} onChange={setTeachingRows} department={effectiveDepartment} />
+
+            {step.key === "qualification" && (
+              <QualificationFields value={academicProfile} onChange={setAcademicProfile} collegeType={collegeType} />
             )}
+
+            {step.key === "experience" && (
+              <ExperienceFields value={academicProfile} onChange={setAcademicProfile} />
+            )}
+
+            {step.key === "research" && (
+              <ResearchFields value={academicProfile} onChange={setAcademicProfile} />
+            )}
+
+            {step.key === "mentorship" && (
+              <MentorshipFields value={academicProfile} onChange={setAcademicProfile} />
+            )}
+
+            {step.key === "financial" && (
+              <FinancialFields value={academicProfile} onChange={setAcademicProfile} />
+            )}
+
+            {step.key === "teaching-load" && (
+              <TeachingAssignmentsEditor
+                value={teachingRows}
+                onChange={setTeachingRows}
+                department={effectiveDepartment}
+              />
+            )}
+
+            {step.key === "others" && <OthersFields value={academicProfile} onChange={setAcademicProfile} />}
+
+            {/* ── Executive Review Step ── */}
             {step.key === "review" && (
-              <p className="text-sm text-muted-foreground">
-                {isLinkMode
-                  ? <>Review the steps above using Back, then submit to complete <strong>{personalDetails.legalName || "this Sub-HOD"}</strong>&apos;s faculty profile.</>
-                  : <>Review the steps above using Back, then submit to create <strong>{personalDetails.legalName || "this faculty member"}</strong>&apos;s account and record.</>}
-              </p>
+              <div className="space-y-6">
+                {/* Faculty Card Banner */}
+                <div className="rounded-xl border bg-gradient-to-br from-card to-primary/5 p-5 shadow-xs flex flex-col sm:flex-row items-center gap-5 text-center sm:text-left">
+                  <div className="h-20 w-20 rounded-2xl bg-primary/10 border-2 border-primary/20 flex items-center justify-center text-primary font-bold text-2xl overflow-hidden shrink-0 shadow-2xs">
+                    {photoUrl ? (
+                      <img src={photoUrl} alt="Faculty" className="h-full w-full object-cover" />
+                    ) : (
+                      personalDetails.legalName?.charAt(0) || "F"
+                    )}
+                  </div>
+
+                  <div className="space-y-1.5 flex-1 min-w-0">
+                    <h2 className="text-xl font-bold text-foreground truncate">
+                      {personalDetails.legalName || "Faculty Name"}
+                    </h2>
+                    <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
+                      <Badge variant="default" className="text-xs bg-primary">
+                        {designation ? designationLabel(designation) : "Designation"}
+                      </Badge>
+                      <Badge variant="outline" className="text-xs border-primary/30 text-primary">
+                        {effectiveDepartment || "Department"}
+                      </Badge>
+                      <Badge variant="secondary" className="text-xs">
+                        ID: {getValues("employeeId") || "—"}
+                      </Badge>
+                      <Badge variant="outline" className="text-xs">
+                        {status ? FACULTY_STATUS_LABELS[status as FacultyStatus] : "ACTIVE"}
+                      </Badge>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Key Summary Cards */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="rounded-xl border bg-card p-4 space-y-2.5">
+                    <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                      <User className="h-3.5 w-3.5 text-primary" /> Official Credentials
+                    </p>
+                    <div className="text-xs space-y-1.5">
+                      <div className="flex justify-between py-1 border-b border-border/50">
+                        <span className="text-muted-foreground">College Email:</span>
+                        <span className="font-semibold text-foreground">{getValues("collegeEmail") || "—"}</span>
+                      </div>
+                      <div className="flex justify-between py-1 border-b border-border/50">
+                        <span className="text-muted-foreground">Mobile Phone:</span>
+                        <span className="font-semibold text-foreground font-mono">{getValues("mobileNo") || "—"}</span>
+                      </div>
+                      <div className="flex justify-between py-1 border-b border-border/50">
+                        <span className="text-muted-foreground">Employee Category:</span>
+                        <span className="font-semibold text-foreground">
+                          {employeeCategory ? EMPLOYEE_CATEGORY_LABELS[employeeCategory as EmployeeCategory] : "—"}
+                        </span>
+                      </div>
+                      <div className="flex justify-between py-1">
+                        <span className="text-muted-foreground">Date of Joining:</span>
+                        <span className="font-semibold text-foreground">{getValues("joiningDate") || "—"}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border bg-card p-4 space-y-2.5">
+                    <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                      <GraduationCap className="h-3.5 w-3.5 text-primary" /> Academic &amp; Service Profile
+                    </p>
+                    <div className="text-xs space-y-1.5">
+                      <div className="flex justify-between py-1 border-b border-border/50">
+                        <span className="text-muted-foreground">Highest Qualification:</span>
+                        <span className="font-semibold text-foreground">{getValues("highestQualification") || "—"}</span>
+                      </div>
+                      <div className="flex justify-between py-1 border-b border-border/50">
+                        <span className="text-muted-foreground">Specialization:</span>
+                        <span className="font-semibold text-foreground">{getValues("specialization") || "—"}</span>
+                      </div>
+                      <div className="flex justify-between py-1 border-b border-border/50">
+                        <span className="text-muted-foreground">Total Experience:</span>
+                        <span className="font-semibold text-primary">{formatDuration(previewTotalExperience)}</span>
+                      </div>
+                      <div className="flex justify-between py-1">
+                        <span className="text-muted-foreground">Teaching Load Staged:</span>
+                        <span className="font-semibold text-foreground">{teachingRows.length} subjects</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Readiness Banner */}
+                <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 flex items-start gap-3">
+                  <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+                  <div className="space-y-1 text-xs">
+                    <p className="font-bold text-emerald-950 dark:text-emerald-200">
+                      All Requirements Validated &amp; Verified
+                    </p>
+                    <p className="text-emerald-800 dark:text-emerald-300">
+                      Click below to commit this profile to the official faculty register. Login credentials will be generated and assigned teaching loads linked.
+                    </p>
+                  </div>
+                </div>
+              </div>
             )}
           </CardContent>
         </Card>
 
-        <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-between pt-6">
-          <Button type="button" variant="outline" onClick={() => (stepIndex === 0 ? router.back() : goBack())}>
-            <ChevronLeft className="h-4 w-4 mr-2" />{stepIndex === 0 ? "Cancel" : "Back"}
+        {/* ── Footer Navigation Actions ── */}
+        <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3 pt-6 border-t border-border/60">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => (stepIndex === 0 ? router.back() : goBack())}
+            className="gap-2"
+          >
+            <ChevronLeft className="h-4 w-4" />
+            {stepIndex === 0 ? "Cancel" : "Back"}
           </Button>
-          {step.key === "review" ? (
-            <Button type="submit" loading={submitting}>{isLinkMode ? "Save Profile" : "Add to Register"}</Button>
-          ) : (
-            <Button type="button" onClick={goNext}>Next<ChevronRight className="h-4 w-4 ml-2" /></Button>
-          )}
+
+          <div className="flex items-center gap-2 justify-end">
+            <span className="text-xs text-muted-foreground hidden sm:inline">
+              Step {stepIndex + 1} of {steps.length}
+            </span>
+            {step.key === "review" ? (
+              <Button
+                type="submit"
+                disabled={submitting}
+                className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm font-semibold px-6"
+              >
+                {submitting ? (
+                  "Submitting..."
+                ) : (
+                  <>
+                    <CheckCircle2 className="h-4 w-4" />
+                    {isLinkMode ? "Save Profile" : "Add to Register"}
+                  </>
+                )}
+              </Button>
+            ) : (
+              <Button type="button" onClick={goNext} className="gap-2 px-5">
+                Next <ChevronRight className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
         </div>
       </form>
     </div>

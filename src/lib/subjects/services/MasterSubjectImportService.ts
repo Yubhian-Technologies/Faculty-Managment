@@ -5,7 +5,6 @@ import type { Subject } from "@/types";
 export interface MasterImportPayload {
   collegeId: string;
   courseId?: string;
-  courseName?: string;
   academicYear?: string;
   regulation?: string;
   records: SubjectRowInput[];
@@ -22,6 +21,17 @@ export class MasterSubjectImportService {
 
   public async executeImport(payload: MasterImportPayload): Promise<MasterImportResult> {
     const { collegeId, records } = payload;
+    if (!payload.courseId) {
+      // The shipped importer (academics/subjects/import/page.tsx) always
+      // sends the selected course's id explicitly. Without this, a caller
+      // that only sends a course NAME would get matched below by free-text
+      // name/code across the WHOLE college - and since every department
+      // legitimately clones the same Course Catalog entry into its own
+      // Course doc with an identical name (see courses/route.ts POST), that
+      // match is ambiguous by construction and can silently bind subjects to
+      // the wrong department's course. Reject up front instead of guessing.
+      return { created: 0, failed: [{ row: 0, code: "-", error: "Select a Course before importing" }], warnings: [] };
+    }
     const collegeRef = this.db.collection("colleges").doc(collegeId);
 
     // 1. Fetch active courses
@@ -59,20 +69,17 @@ export class MasterSubjectImportService {
       const codeLabel = row.code?.toString().trim() || "-";
 
       // ── Resolve Course ────────────────────────────────────────────────────
-      const courseInput = row.course?.toString().trim() || payload.courseName?.trim();
-      let matchingCourse = payload.courseId ? courses.find((c) => c.id === payload.courseId) : undefined;
-      if (!matchingCourse && courseInput) {
-        matchingCourse = courses.find(
-          (c) =>
-            c.name.toLowerCase() === courseInput.toLowerCase() ||
-            (c.code && c.code.toLowerCase() === courseInput.toLowerCase())
-        );
-      }
-      if (!matchingCourse) {
+      // courseId is required (checked above) and always the specific
+      // department-owned Course doc the caller selected - never resolved
+      // from a free-typed name/code, which would be ambiguous whenever more
+      // than one department has cloned the same Course Catalog entry (see
+      // courses/route.ts POST; this is the normal, expected shape, not an
+      // edge case).
+      const course = courses.find((c) => c.id === payload.courseId);
+      if (!course) {
         failed.push({ row: rowNum, code: codeLabel, error: "Course is required" });
         continue;
       }
-      const course = matchingCourse;
 
       // ── Resolve Academic Year ─────────────────────────────────────────────
       const academicYear = row.academicYear?.toString().trim() || payload.academicYear?.trim();
@@ -121,6 +128,18 @@ export class MasterSubjectImportService {
             )}) - select a regulation or specify in Regulation column`,
           });
           continue;
+        } else {
+          // No regulations configured for this course at all - importing
+          // without one is allowed (same leniency every other regulation
+          // check in this codebase falls back to), but unlike the branches
+          // above this produces no signal at all otherwise, so the import
+          // result looks like a clean success with regulation silently
+          // dropped.
+          warnings.push({
+            row: rowNum,
+            code: validData.code,
+            warning: `${course.name} has no regulations configured - imported without a regulation tag`,
+          });
         }
       } else {
         if (catalogRegulations.length > 0 && !catalogRegulations.includes(regulation)) {
