@@ -6,9 +6,7 @@ import { BookOpen, Plus, Pencil, Trash2, Upload, FileSpreadsheet, FileText } fro
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { Pagination } from "@/components/shared/Pagination";
 import { toast } from "@/hooks/useToast";
@@ -26,15 +24,14 @@ export default function AcademicsSubjectsPage() {
   const [isLoadingCourses, setIsLoadingCourses] = useState(false);
   const [isLoadingSubjects, setIsLoadingSubjects] = useState(false);
 
-  const [selectedCourseId, setSelectedCourseId] = useState("");
-  const [selectedRegulation, setSelectedRegulation] = useState("");
   const [selectedAcademicYear, setSelectedAcademicYear] = useState(academicSessionLabel(currentAcademicStartYear()));
   const [currentSessionLabel, setCurrentSessionLabel] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Subject | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
-  useEffect(() => { setCurrentPage(1); }, [selectedCourseId, selectedAcademicYear]);
+  const selectedCourseId = searchParams.get("courseId") ?? "";
+  const selectedRegulation = searchParams.get("regulation") ?? "";
 
   useEffect(() => {
     fetch("/api/college/courses")
@@ -82,15 +79,14 @@ export default function AcademicsSubjectsPage() {
     [selectedCatalogItem]
   );
 
-  useEffect(() => {
-    if (allowedRegulations.length > 0) {
-      if (!selectedRegulation || !allowedRegulations.includes(selectedRegulation)) {
-        setSelectedRegulation(allowedRegulations[0]);
-      }
-    } else {
-      setSelectedRegulation("");
-    }
-  }, [allowedRegulations, selectedRegulation]);
+  function selectCourse(courseId: string) {
+    const course = courses.find((c) => c.id === courseId);
+    const catalogItem = catalogItems.find((ci) => ci.id === course?.catalogId);
+    const regs = catalogItem?.regulations ?? [];
+    const regulation = regs.length > 0 ? regs[0] : "";
+    const newAcademicYear = searchParams.get("academicYear") ?? academicSessionLabel(currentAcademicStartYear());
+    router.push(`/academics/subjects?courseId=${courseId}&regulation=${encodeURIComponent(regulation)}${newAcademicYear ? `&academicYear=${encodeURIComponent(newAcademicYear)}` : ""}`);
+  }
 
   const sortedSubjects = useMemo(
     () => [...subjects].sort((a, b) => {
@@ -132,30 +128,6 @@ export default function AcademicsSubjectsPage() {
       setSubjects([]);
     }
   }, [selectedCourseId, selectedAcademicYear, selectedRegulation, loadSubjects]);
-
-  const hasRestoredRef = useRef(false);
-  useEffect(() => {
-    if (hasRestoredRef.current || isLoading || courses.length === 0) return;
-    hasRestoredRef.current = true;
-    const courseId = searchParams.get("courseId");
-    const academicYear = searchParams.get("academicYear") || selectedAcademicYear;
-    const regulation = searchParams.get("regulation") || "";
-    if (!courseId) return;
-    if (courses.some((c) => c.id === courseId)) {
-      setSelectedCourseId(courseId);
-      setSelectedAcademicYear(academicYear);
-      if (regulation) setSelectedRegulation(regulation);
-    }
-  }, [isLoading, courses, searchParams, selectedAcademicYear]);
-
-  function selectCourse(courseId: string) {
-    setSelectedCourseId(courseId);
-    const course = courses.find((c) => c.id === courseId);
-    const catalogItem = catalogItems.find((ci) => ci.id === course?.catalogId);
-    const regs = catalogItem?.regulations ?? [];
-    setSelectedRegulation(regs.length > 0 ? regs[0] : "");
-    setSubjects([]);
-  }
 
   async function handleDelete() {
     if (!deleteTarget) return;
@@ -309,164 +281,134 @@ export default function AcademicsSubjectsPage() {
         title="Subjects"
         description="Manage subjects offered for each regulation of every course"
         actions={
-          <div className="flex flex-col gap-3">
-            <div className="flex items-center gap-3">
-              <div className="space-y-1.5">
-                <Label>Course</Label>
-                <Select value={selectedCourseId} onValueChange={selectCourse} disabled={isLoadingCourses}>
-                  <SelectTrigger className="w-48"><SelectValue placeholder={isLoadingCourses ? "Loading…" : "Select course"} /></SelectTrigger>
-                  <SelectContent>
-                    {courses.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label>Regulation</Label>
-                <Select
-                  value={selectedRegulation}
-                  onValueChange={setSelectedRegulation}
-                  disabled={!selectedCourseId || allowedRegulations.length === 0}
-                >
-                  <SelectTrigger className="w-36">
-                    <SelectValue placeholder={
-                      !selectedCourseId ? "Pick a course first" :
-                      allowedRegulations.length === 0 ? "No regulations assigned" :
-                      "Select regulation"
-                    } />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {allowedRegulations.map((r) => (
-                      <SelectItem key={r} value={r}>{r}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={() => void handleExportXlsx()} disabled={!selectedCourseId || !selectedRegulation}>
-                <FileSpreadsheet className="h-4 w-4 mr-2" />Export XLSX
-              </Button>
-              <Button variant="outline" onClick={() => void handleExportDocx()} disabled={!selectedCourseId || !selectedRegulation}>
-                <FileText className="h-4 w-4 mr-2" />Export DOCX
-              </Button>
-              <Button variant="outline" onClick={() => router.push(`/academics/subjects/import?courseId=${selectedCourseId}&regulation=${encodeURIComponent(selectedRegulation)}`)}>
-                <Upload className="h-4 w-4 mr-2" />Import Subjects
-              </Button>
-            </div>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => void handleExportXlsx()} disabled={!selectedCourseId || !selectedRegulation}>
+              <FileSpreadsheet className="h-4 w-4 mr-2" />Export XLSX
+            </Button>
+            <Button variant="outline" onClick={() => void handleExportDocx()} disabled={!selectedCourseId || !selectedRegulation}>
+              <FileText className="h-4 w-4 mr-2" />Export DOCX
+            </Button>
+            <Button variant="outline" onClick={() => router.push(`/academics/subjects/import?courseId=${selectedCourseId}&regulation=${encodeURIComponent(selectedRegulation)}`)}>
+              <Upload className="h-4 w-4 mr-2" />Import Subjects
+            </Button>
           </div>
         }
       />
 
-{isLoading ? (
+      {isLoading ? (
         <div className="h-28 rounded-lg border bg-muted/30 animate-pulse" />
       ) : courses.length === 0 ? (
         <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
           No courses have been set up for this college yet.
         </div>
       ) : (
-        <Card>
-          <CardContent className="p-4 space-y-4">
-            <div className="flex items-center justify-between flex-wrap gap-2">
-              <h2 className="font-semibold text-sm flex items-center gap-2">
-                <BookOpen className="h-4 w-4" />
-                {selectedCourse!.name}
-              </h2>
-              <div className="flex flex-wrap items-center gap-2">
-                <Button
-                  size="sm"
-                  onClick={() => router.push(`/academics/subjects/new?courseId=${selectedCourseId}&academicYear=${encodeURIComponent(selectedAcademicYear)}&regulation=${encodeURIComponent(selectedRegulation)}&nextSerialNumber=${nextSerialNumber}&catalogId=${encodeURIComponent(selectedCourse!.catalogId ?? "")}`)}
-                  disabled={!selectedCourseId || !selectedRegulation}
-                >
-                  <Plus className="h-4 w-4 mr-2" />Add Subject
-                </Button>
-              </div>
-            </div>
+        <>
+          {selectedCourse && (
+            <Card>
+              <CardContent className="p-4 space-y-4">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <h2 className="font-semibold text-sm flex items-center gap-2">
+                    <BookOpen className="h-4 w-4" />
+                    {selectedCourse.name}
+                  </h2>
+                  <div className="flex flex-wrap items-center gap-2">
+                      <Button
+                        size="sm"
+                        onClick={() => router.push(`/academics/subjects/new?courseId=${selectedCourseId}&academicYear=${encodeURIComponent(selectedAcademicYear)}&regulation=${encodeURIComponent(selectedRegulation)}&nextSerialNumber=${nextSerialNumber}&catalogId=${encodeURIComponent(selectedCourse.catalogId ?? "")}`)}
+                        disabled={!selectedCourseId || !selectedRegulation}
+                      >
+                       <Plus className="h-4 w-4 mr-2" />Add Subject
+                      </Button>
+                    </div>
+                </div>
 
-            {isLoadingSubjects ? (
-              <div className="space-y-2">
-                {[1, 2, 3].map((i) => <div key={i} className="h-16 rounded-lg border bg-muted/30 animate-pulse" />)}
-              </div>
-            ) : subjects.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-6 text-center">
-                {!selectedRegulation
-                  ? "Select a regulation above to view and add subjects."
-                  : allowedRegulations.length === 0
-                  ? "No regulations have been configured for this course in Course Catalog."
-                  : `No subjects found for ${selectedRegulation}. Add one above.`}
-              </p>
-            ) : (
-              <>
-                <Card className="overflow-hidden">
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead className="bg-muted/50 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                        <tr>
-                          <th className="px-4 py-3">S.No.</th>
-                          <th className="px-4 py-3">Category</th>
-                          <th className="px-4 py-3">Name of the Subject</th>
-                          <th className="px-4 py-3 text-center">L</th>
-                          <th className="px-4 py-3 text-center">T</th>
-                          <th className="px-4 py-3 text-center">P</th>
-                          <th className="px-4 py-3 text-center">Credits</th>
-                          <th className="px-4 py-3" />
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y">
-                        {paginatedSubjects.map((s) => (
-                          <tr key={s.id}>
-                            <td className="px-4 py-2.5">{s.serialNumber ?? "—"}</td>
-                            <td className="px-4 py-2.5">
-                              {s.category ? <Badge variant="outline" className="text-xs">{s.category === "OTHER" ? (s.customCategory || "Other") : s.category}</Badge> : "—"}
-                            </td>
-                            <td className="px-4 py-2.5">
-                              <div className="font-medium text-foreground">{s.name}</div>
-                              <div className="flex flex-wrap items-center gap-2 mt-1">
-                                <Badge variant="secondary" className="text-xs font-mono">{s.code}</Badge>
-                                {s.shortCode && <Badge variant="outline" className="text-xs font-mono">{s.shortCode}</Badge>}
-                                <Badge variant="outline" className="text-xs">{SUBJECT_TYPE_LABELS[s.type]}</Badge>
-                                {s.regulation && <Badge variant="secondary" className="text-xs">{s.regulation}</Badge>}
-                                {s.academicYear && <Badge variant="outline" className="text-xs">{s.academicYear}</Badge>}
-                                <span className="text-xs text-muted-foreground">{s.hoursPerWeek} hrs/week</span>
-                              </div>
-                            </td>
-                            <td className="px-4 py-2.5 text-center">{s.lectureHours ?? "—"}</td>
-                            <td className="px-4 py-2.5 text-center">{s.tutorialHours ?? "—"}</td>
-                            <td className="px-4 py-2.5 text-center">{s.practicalHours ?? "—"}</td>
-                            <td className="px-4 py-2.5 text-center">{s.credits}</td>
-                            <td className="px-4 py-2.5 text-right">
-                              <div className="flex justify-end gap-1">
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-8 w-8"
-                                  aria-label={`Edit ${s.name}`}
-                                   onClick={() => router.push(`/academics/subjects/${s.id}/edit?courseId=${selectedCourseId}&academicYear=${encodeURIComponent(selectedAcademicYear)}&regulation=${encodeURIComponent(selectedRegulation || s.regulation || "")}`)}
-                                >
-                                  <Pencil className="h-3.5 w-3.5" />
-                                </Button>
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" aria-label={`Delete ${s.name}`} onClick={() => setDeleteTarget(s)}>
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </Button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                {isLoadingSubjects ? (
+                  <div className="space-y-2">
+                    {[1, 2, 3].map((i) => <div key={i} className="h-16 rounded-lg border bg-muted/30 animate-pulse" />)}
                   </div>
-                </Card>
-                <Pagination
-                  page={currentPage}
-                  pageSize={pageSize}
-                  total={sortedSubjects.length}
-                  onPageChange={setCurrentPage}
-                  onPageSizeChange={setPageSize}
-                  disabled={isLoadingSubjects}
-                />
-              </>
-            )}
-          </CardContent>
-</Card>
+                 ) : subjects.length === 0 ? (
+                    <p className="text-sm text-muted-foreground py-6 text-center">
+                      {!selectedRegulation
+                        ? "Select a regulation above to view and add subjects."
+                        : allowedRegulations.length === 0
+                        ? "No regulations have been configured for this course in Course Catalog."
+                        : `No subjects found for ${selectedRegulation}. Add one above.`}
+                    </p>
+                  ) : (
+                   <>
+                     <Card className="overflow-hidden">
+                       <div className="overflow-x-auto">
+                         <table className="w-full text-sm">
+                           <thead className="bg-muted/50 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                             <tr>
+                               <th className="px-4 py-3">S.No.</th>
+                               <th className="px-4 py-3">Category</th>
+                               <th className="px-4 py-3">Name of the Subject</th>
+                               <th className="px-4 py-3 text-center">L</th>
+                               <th className="px-4 py-3 text-center">T</th>
+                               <th className="px-4 py-3 text-center">P</th>
+                               <th className="px-4 py-3 text-center">Credits</th>
+                               <th className="px-4 py-3" />
+                             </tr>
+                           </thead>
+                           <tbody className="divide-y">
+                             {paginatedSubjects.map((s) => (
+                               <tr key={s.id}>
+                                 <td className="px-4 py-2.5">{s.serialNumber ?? "—"}</td>
+                                 <td className="px-4 py-2.5">
+                                   {s.category ? <Badge variant="outline" className="text-xs">{s.category === "OTHER" ? (s.customCategory || "Other") : s.category}</Badge> : "—"}
+                                 </td>
+                                 <td className="px-4 py-2.5">
+                                   <div className="font-medium text-foreground">{s.name}</div>
+                                   <div className="flex flex-wrap items-center gap-2 mt-1">
+                                     <Badge variant="secondary" className="text-xs font-mono">{s.code}</Badge>
+                                     {s.shortCode && <Badge variant="outline" className="text-xs font-mono">{s.shortCode}</Badge>}
+                                     <Badge variant="outline" className="text-xs">{SUBJECT_TYPE_LABELS[s.type]}</Badge>
+                                     {s.regulation && <Badge variant="secondary" className="text-xs">{s.regulation}</Badge>}
+                                     {s.academicYear && <Badge variant="outline" className="text-xs">{s.academicYear}</Badge>}
+                                     <span className="text-xs text-muted-foreground">{s.hoursPerWeek} hrs/week</span>
+                                   </div>
+                                 </td>
+                                 <td className="px-4 py-2.5 text-center">{s.lectureHours ?? "—"}</td>
+                                 <td className="px-4 py-2.5 text-center">{s.tutorialHours ?? "—"}</td>
+                                 <td className="px-4 py-2.5 text-center">{s.practicalHours ?? "—"}</td>
+                                 <td className="px-4 py-2.5 text-center">{s.credits}</td>
+                                 <td className="px-4 py-2.5 text-right">
+                                   <div className="flex justify-end gap-1">
+                                     <Button
+                                       variant="ghost"
+                                       size="icon"
+                                       className="h-8 w-8"
+                                       aria-label={`Edit ${s.name}`}
+                                        onClick={() => router.push(`/academics/subjects/${s.id}/edit?courseId=${selectedCourseId}&academicYear=${encodeURIComponent(selectedAcademicYear)}&regulation=${encodeURIComponent(selectedRegulation || s.regulation || "")}`)}
+                                     >
+                                       <Pencil className="h-3.5 w-3.5" />
+                                     </Button>
+                                     <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" aria-label={`Delete ${s.name}`} onClick={() => setDeleteTarget(s)}>
+                                       <Trash2 className="h-3.5 w-3.5" />
+                                     </Button>
+                                   </div>
+                                 </td>
+                               </tr>
+                             ))}
+                           </tbody>
+                         </table>
+                       </div>
+                     </Card>
+                     <Pagination
+                       page={currentPage}
+                       pageSize={pageSize}
+                       total={sortedSubjects.length}
+                       onPageChange={setCurrentPage}
+                       onPageSizeChange={setPageSize}
+                       disabled={isLoadingSubjects}
+                     />
+                   </>
+                 )}
+              </CardContent>
+            </Card>
+          )}
+        </>
       )}
 
       <ConfirmDialog
