@@ -483,7 +483,7 @@ export default function ClassLeaderDashboardPage() {
                                     : "text-blue-700 dark:text-blue-300 border-blue-300"
                                 }`}
                               >
-                                {isLab ? "Practical / Lab" : "Theory"}
+                                {isLab ? "Practical" : "Theory"}
                               </Badge>
                             )}
                           </div>

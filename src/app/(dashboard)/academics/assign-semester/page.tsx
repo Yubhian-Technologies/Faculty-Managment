@@ -14,8 +14,9 @@ import { Pagination } from "@/components/shared/Pagination";
 import { toast } from "@/hooks/useToast";
 import type { Course, CourseCatalogItem, CourseYearTiming, Department, Subject, SubjectSemesterAssignment } from "@/types";
 import { SUBJECT_TYPE_LABELS } from "@/types";
-import { regulationsForCourseYearByBatch } from "@/lib/college/academicStructure";
+import { regulationsForCourseYearByBatch, fedYears } from "@/lib/college/academicStructure";
 import { currentAcademicStartYear } from "@/lib/college/academicSession";
+import { managerTeachingYears } from "@/lib/departments/managedBranches";
 
 function ordinalYear(year: number) {
   const suffix = year === 1 ? "st" : year === 2 ? "nd" : year === 3 ? "rd" : "th";
@@ -50,7 +51,6 @@ export default function AssignToSemesterPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingCourses, setIsLoadingCourses] = useState(false);
   const [isLoadingSubjects, setIsLoadingSubjects] = useState(false);
-  const [expandedDeptId, setExpandedDeptId] = useState<string | null>(null);
 
   const [selectedDepartmentId, setSelectedDepartmentId] = useState("");
   const [selectedCourseId, setSelectedCourseId] = useState("");
@@ -109,13 +109,30 @@ export default function AssignToSemesterPage() {
   // Whether the currently selected department is a child (sub-department)
   const isSubDept = selectedDepartmentId && allDepartments.some((d) => d.id === selectedDepartmentId && d.parentDepartmentId);
 
-  // Get top-level department that the selected sub-dept belongs to (for expanding)
-  const parentDeptId = selectedDepartment?.parentDepartmentId ?? null;
-
+  // Narrowed to the years this exact department actually teaches this
+  // course, not just "1..durationYears" - a shared-first-year department
+  // (e.g. Basic Science, assignedYears [1]) never teaches Year 2-4, and a
+  // branch it feeds (e.g. CSE) never teaches the fed Year 1, even though
+  // both structurally belong to a 4-year course. managerTeachingYears
+  // resolves the department's own (or inherited-from-parent) configured
+  // years first; only when that's genuinely unconfigured does fedYears
+  // subtract whatever a feeder has claimed - the same precedence
+  // academicStructure.ts's own doc-comments describe (assignedYears is
+  // supposed to already exclude fed years; fedYears only closes the gap
+  // when a department was left unconfigured). A college with no
+  // shared-first-year setup at all sees no change - both resolve empty and
+  // the fallback returns every year unfiltered, same as before this existed.
   const yearOptions = useMemo(() => {
-    if (!selectedCourse) return [];
-    return Array.from({ length: selectedCourse.durationYears }, (_, i) => i + 1);
-  }, [selectedCourse]);
+    if (!selectedCourse || !selectedDepartment) return [];
+    const courseYears = Array.from({ length: selectedCourse.durationYears }, (_, i) => i + 1);
+    const catalogId = selectedCourse.catalogId;
+    const assigned = managerTeachingYears(allDepartments, selectedDepartment, catalogId);
+    if (assigned.length > 0) {
+      return courseYears.filter((y) => assigned.includes(y));
+    }
+    const excluded = new Set(fedYears(selectedDepartment, allDepartments, catalogId));
+    return courseYears.filter((y) => !excluded.has(y));
+  }, [selectedCourse, selectedDepartment, allDepartments]);
 
   const catalogItemForCourse = useMemo(
     () => catalogById.get(selectedCourse?.catalogId ?? "") ?? null,
@@ -183,12 +200,24 @@ export default function AssignToSemesterPage() {
       ? selectedSemester
       : semesterOptions[0];
 
+  // Passes the SELECTED department's own id straight through, whether it's a
+  // parent or a sub-department - never collapsed to the parent's id first.
+  // /api/college/courses already resolves a sub-department correctly on its
+  // own (getRelatedDepartmentIds expands the child's id to [child, parent],
+  // then filterSubDepartmentCourses settles the combined list: the child's
+  // own customised copies stand in for the parent's, and anything the child
+  // has excluded via excludedCourseCatalogIds is dropped) - that settling
+  // logic only runs when the request's departmentId IS the sub-department,
+  // per that route's own targetSubDepartment check. Pre-collapsing to the
+  // parent's id here (the previous behavior) skipped it entirely, so a
+  // sub-department with its own customized course, or one it had excluded,
+  // silently showed the parent's raw list instead - identical output for a
+  // sub-department that has never customized anything, since that's exactly
+  // what an unfiltered inherited list already looks like.
   const loadCourses = useCallback(async (departmentId: string) => {
     setIsLoadingCourses(true);
     try {
-      const dept = allDepartments.find((d) => d.id === departmentId);
-      const courseDeptId = dept?.parentDepartmentId ?? departmentId;
-      const res = await fetch(`/api/college/courses?departmentId=${encodeURIComponent(courseDeptId)}`);
+      const res = await fetch(`/api/college/courses?departmentId=${encodeURIComponent(departmentId)}`);
       const data = await res.json() as { courses?: Course[] };
       setCourses((data.courses ?? []).filter((c) => c.isActive).sort((a, b) => a.name.localeCompare(b.name)));
     } catch {
@@ -196,7 +225,7 @@ export default function AssignToSemesterPage() {
     } finally {
       setIsLoadingCourses(false);
     }
-  }, [allDepartments]);
+  }, []);
 
   // Master Collection = every subject for this catalog course+year
   // (department-independent). Semester panel = this DEPARTMENT's own
@@ -242,10 +271,6 @@ export default function AssignToSemesterPage() {
     setMasterPage(1);
     setAssignPage(1);
     void loadCourses(departmentId);
-  }
-
-  function toggleExpand(deptId: string) {
-    setExpandedDeptId(expandedDeptId === deptId ? null : deptId);
   }
 
   function selectCourse(courseId: string) {
@@ -325,25 +350,32 @@ export default function AssignToSemesterPage() {
           year: Number(selectedYear),
         }),
       });
-      const json = await res.json() as { assignedCount?: number; error?: string };
+      const json = await res.json() as { assignedCount?: number; failed?: { subjectId: string; error: string }[]; error?: string };
       if (!res.ok) throw new Error(json.error ?? "Failed to assign subjects");
       setSelectedSubjectIds([]);
-      toast({ variant: "success", title: `${json.assignedCount ?? selectedSubjectIds.length} subjects instantiated for Semester ${effectiveSemester}` });
+      const failed = json.failed ?? [];
+      if (failed.length > 0) {
+        // Every subject the backend couldn't instantiate (duplicate,
+        // department-scope violation, etc.) - shown by name, not just id, so
+        // this is actionable rather than a bare error code. Previously
+        // dropped entirely: only assignedCount was ever read, so a partial
+        // failure looked identical to full success.
+        const subjectNameById = new Map(subjects.map((s) => [s.id, s.name]));
+        const shown = failed.slice(0, 3).map((f) => `${subjectNameById.get(f.subjectId) ?? f.subjectId}: ${f.error}`);
+        toast({
+          variant: "destructive",
+          title: `${json.assignedCount ?? 0} assigned, ${failed.length} failed`,
+          description: shown.join(" · ") + (failed.length > 3 ? ` (+${failed.length - 3} more)` : ""),
+        });
+      } else {
+        toast({ variant: "success", title: `${json.assignedCount ?? selectedSubjectIds.length} subjects instantiated for Semester ${effectiveSemester}` });
+      }
       await loadSubjectsAndTimings(selectedCourse, selectedDepartment.id, selectedYear);
     } catch (err) {
       toast({ variant: "destructive", title: err instanceof Error ? err.message : "Bulk assign failed" });
     } finally {
       setIsBulkAssigning(false);
     }
-  }
-
-  // Get the label to display for a department in the dropdown
-  function deptLabel(dept: Department) {
-    if (dept.parentDepartmentId) {
-      const parent = allDepartments.find((d) => d.id === dept.parentDepartmentId);
-      return `  ${dept.name}`; // indented for children
-    }
-    return dept.name;
   }
 
   const assignedSubjectIds = useMemo(() => new Set(assignments.map((a) => a.subjectId)), [assignments]);
@@ -390,29 +422,16 @@ export default function AssignToSemesterPage() {
                 <Select value={selectedDepartmentId} onValueChange={selectDepartment}>
                   <SelectTrigger><SelectValue placeholder="Select department" /></SelectTrigger>
                   <SelectContent>
-                    {departments.map((d) => (
+                    {departments.flatMap((d) => [
                       <SelectItem key={d.id} value={d.id}>
-                        <div className="flex items-center gap-1.5">
-                          {d.name}
-                          {childrenOf.has(d.id) && (
-                            <button
-                              type="button"
-                              onClick={(e) => { e.stopPropagation(); toggleExpand(d.id); }}
-                              className="ml-1 text-xs text-muted-foreground hover:text-foreground"
-                              aria-label={expandedDeptId === d.id ? "Collapse" : "Expand"}
-                            >
-                              {expandedDeptId === d.id ? "▼" : "▶"}
-                            </button>
-                          )}
-                        </div>
-                      </SelectItem>
-                    ))}
-                    {expandedDeptId && childrenOf.has(expandedDeptId) &&
-                      childrenOf.get(expandedDeptId)!.map((child) => (
-                        <SelectItem key={child.id} value={child.id} className="pl-4">
+                        {d.name}
+                      </SelectItem>,
+                      ...(childrenOf.get(d.id) ?? []).map((child) => (
+                        <SelectItem key={child.id} value={child.id} className="pl-6">
                           {child.name}
                         </SelectItem>
-                      ))}
+                      )),
+                    ])}
                   </SelectContent>
                 </Select>
               </div>
@@ -642,8 +661,9 @@ export default function AssignToSemesterPage() {
                         No subjects assigned to this semester yet. Select from Master Collection and click Add or Bulk Assign.
                       </p>
                     ) : (
+                      <>
                       <div className="space-y-2">
-                        {semesterAssignments.map((a) => {
+                        {paginatedAssignments.map((a) => {
                           const subject = subjects.find((s) => s.id === a.subjectId);
                           return (
                             <div key={a.id} className="flex items-start justify-between gap-3 rounded-md border p-3">
@@ -687,6 +707,15 @@ export default function AssignToSemesterPage() {
                           );
                         })}
                       </div>
+                      <Pagination
+                        page={assignPage}
+                        pageSize={assignPageSize}
+                        total={semesterAssignments.length}
+                        onPageChange={setAssignPage}
+                        onPageSizeChange={() => {}}
+                        disabled={false}
+                      />
+                      </>
                     )}
                   </CardContent>
                 </Card>

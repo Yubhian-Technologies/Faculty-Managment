@@ -823,11 +823,6 @@ export default function HODSectionsPage() {
                         <Link href={`/hod/sections/${sec.id}`} className="hover:underline">
                           <div className="flex items-center gap-2 flex-wrap">
                             <p className="text-2xl font-bold tracking-tight">{sec.name}</p>
-                            {/* The section's own department (branch) - always shown so a
-                                Sub-HOD can tell which of their managed branches it belongs to. */}
-                            {sec.department && (
-                              <Badge variant="secondary" className="text-xs">{sec.department}</Badge>
-                            )}
                             {sec.accessLevel === "secondary" && (
                               <Badge variant="secondary" className="text-xs">View only</Badge>
                             )}

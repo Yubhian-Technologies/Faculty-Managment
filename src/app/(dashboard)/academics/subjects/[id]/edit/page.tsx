@@ -41,28 +41,38 @@ export default function EditAcademicsSubjectPage() {
   const params = useParams<{ id: string }>();
   const subjectId = params.id;
   const searchParams = useSearchParams();
-  const departmentId = searchParams.get("departmentId") ?? "";
   const courseId = searchParams.get("courseId") ?? "";
-  const year = searchParams.get("year") ?? "";
   const academicYear = searchParams.get("academicYear") ?? "";
   const regulationFromList = searchParams.get("regulation") ?? "";
   // Carried through to Cancel/Save so the Subjects list lands back on this
-  // same department/course/year/session/regulation instead of the blank pickers.
-  const backHref = `/academics/subjects?departmentId=${encodeURIComponent(departmentId)}&courseId=${encodeURIComponent(courseId)}&year=${encodeURIComponent(year)}&academicYear=${encodeURIComponent(academicYear)}&regulation=${encodeURIComponent(regulationFromList)}`;
+  // same course/session/regulation instead of the blank pickers - matching
+  // exactly the 3 params the list page itself reads (academics/subjects/
+  // page.tsx) and the Edit link sends. `year`/`departmentId` never belonged
+  // here at all: master subjects are courseId+regulation scoped with no
+  // ordinal year or department (see types/teaching.ts's own Subject.year
+  // comment) - that's the semester-scoped HOD subjects model instead. Reading
+  // them made this page's load guard fire on every visit (they were never
+  // sent), so Edit Subject could never actually open.
+  const backHref = `/academics/subjects?courseId=${encodeURIComponent(courseId)}&academicYear=${encodeURIComponent(academicYear)}&regulation=${encodeURIComponent(regulationFromList)}`;
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<SubjectForm>(EMPTY_SUBJECT_FORM);
-  // Set at creation, immutable here (like courseId/year) - shown for context only.
+  // Set at creation, immutable here (like courseId) - shown for context only.
   const [regulation, setRegulation] = useState("");
 
   useEffect(() => {
-    if (!courseId || !year) {
-      toast({ variant: "destructive", title: "Select a course and year first" });
+    if (!courseId) {
+      toast({ variant: "destructive", title: "Select a course first" });
       router.push(backHref);
       return;
     }
-    fetch(`/api/college/subjects?courseId=${encodeURIComponent(courseId)}&year=${encodeURIComponent(year)}`)
+    // courseId alone is enough to find this subject - academicYear/regulation
+    // only narrow the list page's own filter, and passing a stale/mismatched
+    // one here would risk 404ing a subject that genuinely exists under this
+    // course. Same courseId-only fetch new/page.tsx already uses to verify a
+    // course before creating one.
+    fetch(`/api/college/subjects?courseId=${encodeURIComponent(courseId)}`)
       .then((r) => r.json() as Promise<{ subjects: Subject[] }>)
       .then((d) => {
         const s = (d.subjects ?? []).find((x) => x.id === subjectId);
@@ -90,7 +100,7 @@ export default function EditAcademicsSubjectPage() {
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load subject" }))
       .finally(() => setLoading(false));
-  }, [courseId, year, subjectId, router, backHref]);
+  }, [courseId, subjectId, router, backHref]);
 
   function setF(patch: Partial<SubjectForm>) {
     setForm((f) => ({ ...f, ...patch }));
