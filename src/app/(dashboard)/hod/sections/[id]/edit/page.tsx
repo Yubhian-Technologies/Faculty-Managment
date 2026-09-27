@@ -97,11 +97,21 @@ export default function EditSectionPage() {
   // section's own department hasn't resolved from the `departments` fetch
   // yet - see the effect below) leaves the list unfiltered rather than
   // empty; the effect re-fires and narrows it down the moment it resolves.
-  const loadSubjects = useCallback((courseId: string, year: string, regulation: string, departmentId: string) => {
+  const loadSubjects = useCallback((courseId: string, year: string, regulation: string, departmentId: string, catalogId?: string) => {
     if (!courseId || !year) { setSubjects([]); return; }
     setSubjectsLoading(true);
+    const regParam = regulation ? `&regulation=${encodeURIComponent(regulation)}` : "";
+    // catalogId when available, not courseId alone - a master subject is
+    // department-independent (see /api/college/subjects GET's own
+    // doc-comment), physically filed under whichever ONE department's
+    // Course doc created it, which can differ from this section's own
+    // courseId. Without this, a subject legitimately assigned to this
+    // department (assignedIds below, correctly scoped) could be silently
+    // dropped by the join below because `master` never contained it.
     Promise.all([
-      fetch(`/api/college/subjects?courseId=${courseId}&year=${year}${regulation ? `&regulation=${encodeURIComponent(regulation)}` : ""}`)
+      fetch(catalogId
+        ? `/api/college/subjects?catalogId=${encodeURIComponent(catalogId)}${regParam}`
+        : `/api/college/subjects?courseId=${courseId}&year=${year}${regParam}`)
         .then((r) => r.json() as Promise<{ subjects?: SubjectRow[] }>),
       departmentId
         ? fetch(`/api/college/subject-semester-assignments?courseId=${encodeURIComponent(courseId)}&departmentId=${encodeURIComponent(departmentId)}&year=${encodeURIComponent(year)}`)
@@ -127,8 +137,9 @@ export default function EditSectionPage() {
   useEffect(() => {
     if (!form.courseId || !form.year) { setSubjects([]); return; }
     const departmentId = departments.find((d) => d.name === ownerDept)?.id ?? "";
-    loadSubjects(form.courseId, form.year, form.regulation, departmentId);
-  }, [form.courseId, form.year, form.regulation, ownerDept, departments, loadSubjects]);
+    const catalogId = courses.find((c) => c.id === form.courseId)?.catalogId;
+    loadSubjects(form.courseId, form.year, form.regulation, departmentId, catalogId);
+  }, [form.courseId, form.year, form.regulation, ownerDept, departments, courses, loadSubjects]);
 
   useEffect(() => {
     fetch("/api/college/faculty?availableOnly=true")

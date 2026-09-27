@@ -15,7 +15,7 @@ import { CardSkeleton } from "@/components/shared/SkeletonLoader";
 import { Pagination } from "@/components/shared/Pagination";
 import { RosterDetailView } from "@/components/students/RosterFieldInputs";
 import { toast } from "@/hooks/useToast";
-import type { SectionListItem, StudentRecord, Subject, TeachingAssignment } from "@/types";
+import type { Course, SectionListItem, StudentRecord, Subject, TeachingAssignment } from "@/types";
 import { SUBJECT_TYPE_LABELS } from "@/types";
 
 type SectionRow = SectionListItem;
@@ -62,6 +62,19 @@ export default function SectionRosterPage() {
           toast({ variant: "destructive", title: "Section not found" });
           return;
         }
+        // Resolved before the subjects fetch below, not alongside it in the
+        // same Promise.all - the subjects fetch's own URL needs catalogId
+        // in hand first. courses is auto-scoped to this HOD's own
+        // departments server-side (no departmentId param - see
+        // /api/college/courses GET's own HOD branch), matching this page's
+        // HOD-only access.
+        const catalogId = sec.courseId
+          ? await fetch("/api/college/courses")
+              .then((r) => r.json() as Promise<{ courses?: Course[] }>)
+              .then((cd) => cd.courses?.find((c) => c.id === sec.courseId)?.catalogId)
+              .catch(() => undefined)
+          : undefined;
+
         await Promise.all([
           // Students API scopes by section NAME + year, not id - section names
           // aren't unique across departments, so narrow client-side (same
@@ -85,9 +98,17 @@ export default function SectionRosterPage() {
           // already have an assignment. Narrowed to this section's own
           // regulation client-side below (lenient both ways, same as
           // Teaching Assignments' own filter - see availableSubjectsForAssign
-          // in hod/teaching-assignments/page.tsx).
+          // in hod/teaching-assignments/page.tsx). Queried by catalogId when
+          // resolved - a master subject is department-independent (see
+          // /api/college/subjects GET's own doc-comment), and the previous
+          // `department=` param here was never even read by that route (no
+          // such param exists on it), so this always silently fell back to
+          // courseId alone, missing any subject filed under a sibling
+          // department's Course doc.
           sec.courseId
-            ? fetch(`/api/college/subjects?department=${encodeURIComponent(sec.department)}&courseId=${encodeURIComponent(sec.courseId)}&year=${sec.year}`)
+            ? fetch(catalogId
+                ? `/api/college/subjects?catalogId=${encodeURIComponent(catalogId)}`
+                : `/api/college/subjects?courseId=${encodeURIComponent(sec.courseId)}&year=${sec.year}`)
                 .then((r) => r.json() as Promise<{ subjects: Subject[] }>)
                 .then((sd) => setSubjects(sd.subjects ?? []))
             : Promise.resolve(),

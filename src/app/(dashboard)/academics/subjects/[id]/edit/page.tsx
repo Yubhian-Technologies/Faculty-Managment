@@ -42,6 +42,16 @@ export default function EditAcademicsSubjectPage() {
   const subjectId = params.id;
   const searchParams = useSearchParams();
   const courseId = searchParams.get("courseId") ?? "";
+  // Used only for the lookup fetch below - `courseId` above stays whatever
+  // the list page's OWN Course filter was (needed unchanged for Cancel/Save
+  // to land back on a courseId the list's deduped-by-catalog Course dropdown
+  // actually recognizes - see backHref below). A subject reached from the
+  // list can be physically filed under a DIFFERENT department's Course doc
+  // than whichever one the list happens to be showing as "the" course for
+  // this catalog entry (master subjects are catalog-shared - see
+  // /api/college/subjects GET's own doc-comment) - looking it up by that
+  // mismatched courseId 404s a subject that genuinely exists.
+  const catalogId = searchParams.get("catalogId") ?? "";
   const academicYear = searchParams.get("academicYear") ?? "";
   const regulationFromList = searchParams.get("regulation") ?? "";
   // Carried through to Cancel/Save so the Subjects list lands back on this
@@ -67,12 +77,14 @@ export default function EditAcademicsSubjectPage() {
       router.push(backHref);
       return;
     }
-    // courseId alone is enough to find this subject - academicYear/regulation
-    // only narrow the list page's own filter, and passing a stale/mismatched
-    // one here would risk 404ing a subject that genuinely exists under this
-    // course. Same courseId-only fetch new/page.tsx already uses to verify a
-    // course before creating one.
-    fetch(`/api/college/subjects?courseId=${encodeURIComponent(courseId)}`)
+    // catalogId (when the list page had one) finds this subject regardless of
+    // which department's Course doc it's physically filed under - see
+    // catalogId's own doc-comment above. courseId-only remains the fallback
+    // for a legacy course with no catalogId, same as new/page.tsx's own
+    // course-verify fetch.
+    fetch(catalogId
+      ? `/api/college/subjects?catalogId=${encodeURIComponent(catalogId)}`
+      : `/api/college/subjects?courseId=${encodeURIComponent(courseId)}`)
       .then((r) => r.json() as Promise<{ subjects: Subject[] }>)
       .then((d) => {
         const s = (d.subjects ?? []).find((x) => x.id === subjectId);

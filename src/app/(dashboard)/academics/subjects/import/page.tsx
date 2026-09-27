@@ -150,18 +150,26 @@ export default function ImportAcademicsSubjectsPage() {
     []
   );
 
+  // Queried by catalogId, not courseId - the S.No. sequence is a shared
+  // curriculum-table ordering across every department teaching this catalog
+  // course (see /api/college/subjects GET's own doc-comment), so it must
+  // account for subjects visible from sibling departments too, not just
+  // whichever one selectedCourseId happens to resolve to.
   const [nextSerialNumber, setNextSerialNumber] = useState(1);
   useEffect(() => {
     if (!selectedCourseId) return;
+    const scopeParam = selectedCourse?.catalogId
+      ? `catalogId=${encodeURIComponent(selectedCourse.catalogId)}`
+      : `courseId=${encodeURIComponent(selectedCourseId)}`;
     const regParam = selectedRegulation ? `&regulation=${encodeURIComponent(selectedRegulation)}` : "";
     const yearParam = selectedAcademicYear ? `&academicYear=${encodeURIComponent(selectedAcademicYear)}` : "";
-    fetch(`/api/college/subjects?courseId=${encodeURIComponent(selectedCourseId)}${regParam}${yearParam}`)
+    fetch(`/api/college/subjects?${scopeParam}${regParam}${yearParam}`)
       .then((r) => r.json() as Promise<{ subjects?: Subject[] }>)
       .then((d) => {
         setNextSerialNumber(Math.max(0, ...(d.subjects ?? []).map((s) => s.serialNumber ?? 0)) + 1);
       })
       .catch(() => {});
-  }, [selectedCourseId, selectedAcademicYear, selectedRegulation]);
+  }, [selectedCourseId, selectedCourse, selectedAcademicYear, selectedRegulation]);
 
   // ── Steps 1-4: Download Template / Upload / Preview / Import ───────────────
   const fileRef = useRef<HTMLInputElement>(null);
@@ -277,9 +285,12 @@ export default function ImportAcademicsSubjectsPage() {
         toast({ variant: "success", title: `${json.created} subject${json.created !== 1 ? "s" : ""} imported successfully` });
         setRows([]);
         if (selectedCourseId) {
+          const scopeParam = selectedCourse?.catalogId
+            ? `catalogId=${encodeURIComponent(selectedCourse.catalogId)}`
+            : `courseId=${encodeURIComponent(selectedCourseId)}`;
           const regParam = selectedRegulation ? `&regulation=${encodeURIComponent(selectedRegulation)}` : "";
           const yearParam = selectedAcademicYear ? `&academicYear=${encodeURIComponent(selectedAcademicYear)}` : "";
-          fetch(`/api/college/subjects?courseId=${encodeURIComponent(selectedCourseId)}${regParam}${yearParam}`)
+          fetch(`/api/college/subjects?${scopeParam}${regParam}${yearParam}`)
             .then((r) => r.json() as Promise<{ subjects?: Subject[] }>)
             .then((d) => {
               setNextSerialNumber(Math.max(0, ...(d.subjects ?? []).map((s) => s.serialNumber ?? 0)) + 1);

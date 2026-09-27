@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { toast } from "@/hooks/useToast";
 import { formatDateTime } from "@/lib/utils";
 import { resolveDepartmentCourseScope } from "@/lib/college/academicStructure";
-import type { Course, Department, ExamConfiguration, InternalExamMarksBatch, Section, Subject } from "@/types";
+import type { Course, Department, ExamConfiguration, InternalExamMarksBatch, Section, SubjectSemesterAssignment } from "@/types";
 
 type Batch = InternalExamMarksBatch & { courseId?: string; courseName?: string };
 type Entry = InternalExamMarksBatch["entries"][number];
@@ -35,7 +35,6 @@ function ordinalYear(year: number | undefined) {
 export default function PrincipalInternalMarksPage() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
-  const [subjects, setSubjects] = useState<Subject[]>([]);
   const [allBatches, setAllBatches] = useState<Batch[]>([]);
   const [isLoadingData, setIsLoadingData] = useState(true);
   // Distinguishes "the load itself failed" from "the load succeeded and
@@ -66,10 +65,9 @@ export default function PrincipalInternalMarksPage() {
     setIsLoadingData(true);
     setLoadError(false);
     try {
-      const [courseRes, deptRes, subjectRes, batchRes] = await Promise.all([
+      const [courseRes, deptRes, batchRes] = await Promise.all([
         fetch("/api/college/courses"),
         fetch("/api/college/departments"),
-        fetch("/api/college/subjects"),
         fetch("/api/college/internal-exam-marks"),
       ]);
       // Every one of these must actually succeed — a fetch resolving with a
@@ -77,16 +75,14 @@ export default function PrincipalInternalMarksPage() {
       // hiccup, etc.) does NOT throw, so without this check a failed load
       // silently falls through to "no marks found for this selection"
       // instead of a real error the user can act on.
-      if (!courseRes.ok || !deptRes.ok || !subjectRes.ok || !batchRes.ok) {
+      if (!courseRes.ok || !deptRes.ok || !batchRes.ok) {
         throw new Error("One or more requests failed");
       }
       const courseJson = (await courseRes.json()) as { courses?: Course[] };
       const deptJson = (await deptRes.json()) as { departments?: Department[] };
-      const subjectJson = (await subjectRes.json()) as { subjects?: Subject[] };
       const batchJson = (await batchRes.json()) as { batches?: Batch[] };
       setCourses(courseJson.courses ?? []);
       setDepartments(deptJson.departments ?? []);
-      setSubjects(subjectJson.subjects ?? []);
       setAllBatches(batchJson.batches ?? []);
     } catch {
       setLoadError(true);
@@ -190,15 +186,50 @@ export default function PrincipalInternalMarksPage() {
     return [...new Set(inScope.map((s) => s.name))].sort();
   }, [sections, departmentId, branchName]);
 
+  // Subjects for Course+Year, across every department offering it - sourced
+  // from SubjectSemesterAssignment (the "Assign to Semester" output, actually
+  // populated on every current subject), not raw master Subject docs filtered
+  // by `department`/`year` - those are legacy fields no subject created since
+  // the master-subject restructuring ever populates (courseId+regulation
+  // scoped only, see /api/college/subjects GET's own doc-comment), which
+  // silently emptied this dropdown for every current subject. Fetched once
+  // per matching department's own Course doc (one courseId = one department),
+  // unfiltered by semester - Internal Marks operates at Year granularity, not
+  // semester, same as `allBatches` above (Batch.year, no semester field).
+  const [semesterAssignments, setSemesterAssignments] = useState<SubjectSemesterAssignment[]>([]);
+  useEffect(() => {
+    void (async () => {
+      if (!courseName || !year || matchingCourses.length === 0) { setSemesterAssignments([]); return; }
+      try {
+        const lists = await Promise.all(
+          matchingCourses.map((c) =>
+            fetch(`/api/college/subject-semester-assignments?courseId=${encodeURIComponent(c.id)}&year=${encodeURIComponent(year)}`)
+              .then((r) => r.json() as Promise<{ assignments?: SubjectSemesterAssignment[] }>)
+              .then((d) => d.assignments ?? [])
+          )
+        );
+        setSemesterAssignments(lists.flat());
+      } catch {
+        toast({ variant: "destructive", title: "Failed to load subjects" });
+      }
+    })();
+  }, [courseName, year, matchingCourses]);
+
   const subjectOptions = useMemo(() => {
     if (!courseName || !year || !departmentId) return [];
-    return subjects.filter(
-      (s) =>
-        matchingCourseIds.has(s.courseId ?? "") &&
-        s.year === Number(year) &&
-        (departmentId === ALL || s.department === branchName)
-    );
-  }, [subjects, courseName, year, departmentId, branchName, matchingCourseIds]);
+    const scoped = departmentId === ALL
+      ? semesterAssignments
+      : semesterAssignments.filter((a) => a.departmentId === departmentId);
+    // Dedupe by subjectId - the same catalog subject can be independently
+    // assigned by more than one department when Branch is "All".
+    const bySubjectId = new Map<string, { id: string; name: string; code: string }>();
+    for (const a of scoped) {
+      if (!bySubjectId.has(a.subjectId)) {
+        bySubjectId.set(a.subjectId, { id: a.subjectId, name: a.subjectName, code: a.subjectCode });
+      }
+    }
+    return Array.from(bySubjectId.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [semesterAssignments, courseName, year, departmentId]);
 
   function resetDownstream(from: "course" | "year" | "branch" | "section") {
     if (from === "course") { setYear(""); setDepartmentId(""); setSectionName(""); setSubjectId(""); setSections([]); }
