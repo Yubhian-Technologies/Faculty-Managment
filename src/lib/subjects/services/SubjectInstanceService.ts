@@ -8,6 +8,13 @@ export interface SubjectInstanceAssignOptions {
   semester: number;
   departmentName?: string;
   year?: number;
+  // The DEPARTMENT PERFORMING this assignment's own Course doc id - not
+  // necessarily the same Course doc the master subject's own `courseId`
+  // field points to (see assignSubjectInstance's own doc-comment on why
+  // those can differ). Optional only for backward compatibility with any
+  // caller that predates this field; falls back to the master subject's
+  // own courseId when absent.
+  courseId?: string;
   customOverrides?: {
     lectureHours?: number;
     tutorialHours?: number;
@@ -23,6 +30,7 @@ export interface BulkAssignOptions {
   semester: number;
   departmentName?: string;
   year?: number;
+  courseId?: string;
 }
 
 export interface BulkAssignResult {
@@ -78,7 +86,22 @@ export class SubjectInstanceService {
       throw new Error(`Master subject with ID "${subjectId}" was not found`);
     }
     const master = masterDoc.data() as Subject;
-    const courseId = master.courseId;
+    // The department PERFORMING this assignment's own Course doc id, not
+    // master.courseId - a master subject is department-independent (visible
+    // to every department teaching this catalog course, see
+    // /api/college/subjects GET's own doc-comment), but its `courseId`
+    // field still points to whichever ONE department's Course doc happened
+    // to receive it when it was created. Resolving Year (step 3, via that
+    // course's own courseYearTimings) and the department-scope check (step
+    // 4) against that arbitrary origin department - instead of the
+    // department this assignment is actually FOR - validated against the
+    // wrong department's calendar entirely, and would have stored the
+    // wrong courseId on the instance doc (silently invisible afterward,
+    // since GET here filters by the requesting department's own courseId).
+    // Falls back to master.courseId only for a caller that predates this
+    // option (none currently exist - this file's own route.ts always sends
+    // it now).
+    const courseId = options.courseId || master.courseId;
     if (!courseId) {
       throw new Error("Master subject has no courseId associated with it");
     }
@@ -200,7 +223,7 @@ export class SubjectInstanceService {
    * Bulk assigns multiple master subjects to a department-semester
    */
   public async bulkAssignSubjectInstances(options: BulkAssignOptions): Promise<BulkAssignResult> {
-    const { collegeId, subjectIds, departmentId, semester, departmentName, year } = options;
+    const { collegeId, subjectIds, departmentId, semester, departmentName, year, courseId } = options;
     const failed: { subjectId: string; error: string }[] = [];
     let assignedCount = 0;
     // Shared across every subject in this call - every one of them normally
@@ -219,6 +242,7 @@ export class SubjectInstanceService {
           semester,
           departmentName,
           year,
+          courseId,
         }, yearCache);
         assignedCount++;
       } catch (err) {

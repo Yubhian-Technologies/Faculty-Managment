@@ -104,13 +104,21 @@ export default function AcademicsSubjectsPage() {
   const totalPages = Math.max(1, Math.ceil(sortedSubjects.length / pageSize));
   const paginatedSubjects = sortedSubjects.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
-  const loadSubjects = useCallback(async (courseId: string, academicYear: string, regulation: string) => {
+  // Master subjects are course+regulation scoped, shared by every department
+  // that teaches this catalog course - not owned by whichever department's
+  // Course doc happens to be `courseId` (see /api/college/subjects GET's own
+  // doc-comment). Queried by `catalogId` so the list is the same regardless
+  // of which department's doc `courseId` (still needed to file a NEW subject
+  // against a real Course doc, below) resolves to. Falls back to `courseId`
+  // only for the rare legacy Course doc with no catalogId set.
+  const loadSubjects = useCallback(async (courseId: string, academicYear: string, regulation: string, catalogId?: string) => {
     if (!courseId || !regulation) { setSubjects([]); return; }
     setIsLoadingSubjects(true);
     try {
+      const scopeParam = catalogId ? `catalogId=${encodeURIComponent(catalogId)}` : `courseId=${encodeURIComponent(courseId)}`;
       const regulationParam = `&regulation=${encodeURIComponent(regulation)}`;
       const res = await fetch(
-        `/api/college/subjects?courseId=${encodeURIComponent(courseId)}${regulationParam}${academicYear ? `&academicYear=${encodeURIComponent(academicYear)}` : ""}`
+        `/api/college/subjects?${scopeParam}${regulationParam}${academicYear ? `&academicYear=${encodeURIComponent(academicYear)}` : ""}`
       );
       const data = await res.json() as { subjects: Subject[] };
       setSubjects(data.subjects ?? []);
@@ -123,11 +131,11 @@ export default function AcademicsSubjectsPage() {
 
   useEffect(() => {
     if (selectedCourseId && selectedRegulation) {
-      void loadSubjects(selectedCourseId, selectedAcademicYear, selectedRegulation);
+      void loadSubjects(selectedCourseId, selectedAcademicYear, selectedRegulation, selectedCourse?.catalogId);
     } else {
       setSubjects([]);
     }
-  }, [selectedCourseId, selectedAcademicYear, selectedRegulation, loadSubjects]);
+  }, [selectedCourseId, selectedAcademicYear, selectedRegulation, selectedCourse, loadSubjects]);
 
   async function handleDelete() {
     if (!deleteTarget) return;
@@ -136,7 +144,7 @@ export default function AcademicsSubjectsPage() {
       const json = await res.json() as { error?: string };
       if (!res.ok) throw new Error(json.error ?? "Failed to delete subject");
       toast({ variant: "success", title: `${deleteTarget.name} removed` });
-      await loadSubjects(selectedCourseId, selectedAcademicYear, selectedRegulation);
+      await loadSubjects(selectedCourseId, selectedAcademicYear, selectedRegulation, selectedCourse?.catalogId);
     } catch (err) {
       toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to delete subject" });
     } finally {
@@ -380,7 +388,7 @@ export default function AcademicsSubjectsPage() {
                                        size="icon"
                                        className="h-8 w-8"
                                        aria-label={`Edit ${s.name}`}
-                                        onClick={() => router.push(`/academics/subjects/${s.id}/edit?courseId=${selectedCourseId}&academicYear=${encodeURIComponent(selectedAcademicYear)}&regulation=${encodeURIComponent(selectedRegulation || s.regulation || "")}`)}
+                                        onClick={() => router.push(`/academics/subjects/${s.id}/edit?courseId=${encodeURIComponent(selectedCourseId)}&catalogId=${encodeURIComponent(selectedCourse?.catalogId ?? "")}&academicYear=${encodeURIComponent(selectedAcademicYear)}&regulation=${encodeURIComponent(selectedRegulation || s.regulation || "")}`)}
                                      >
                                        <Pencil className="h-3.5 w-3.5" />
                                      </Button>

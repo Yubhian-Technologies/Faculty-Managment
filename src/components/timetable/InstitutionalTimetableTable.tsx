@@ -106,7 +106,22 @@ export function InstitutionalTimetableTable({
   // Filter slots if type filter is active
   const filteredSlots = useMemo(() => {
     if (typeFilter === "ALL") return slots;
-    return slots.filter((s) => s.subjectType === typeFilter);
+    return slots.filter((s) => {
+      const type = (s as any).subjectType;
+      if (typeFilter === "THEORY") {
+        if (type === "THEORY") return true;
+        if (type === "PRACTICAL" || s.labBatch) return false;
+        const name = (s.subjectName || "").toLowerCase();
+        return !name.includes("lab") && !name.includes("practical");
+      }
+      if (typeFilter === "PRACTICAL") {
+        if (type === "PRACTICAL" || s.labBatch) return true;
+        if (type === "THEORY") return false;
+        const name = (s.subjectName || "").toLowerCase();
+        return name.includes("lab") || name.includes("practical");
+      }
+      return true;
+    });
   }, [slots, typeFilter]);
 
   // Map subjects for quick lookup
@@ -360,7 +375,7 @@ export function InstitutionalTimetableTable({
                   onClick={() => onTypeFilterChange(t)}
                   className="h-8 text-xs px-2.5"
                 >
-                  {t === "ALL" ? "All" : t === "THEORY" ? "Theory" : "Lab"}
+                  {t === "ALL" ? "All" : t === "THEORY" ? "Theory" : "Practical"}
                 </Button>
               ))}
             </div>

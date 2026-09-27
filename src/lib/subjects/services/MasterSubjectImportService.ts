@@ -39,6 +39,17 @@ export class MasterSubjectImportService {
     const courses = coursesSnap.docs
       .map((d) => ({ id: d.id, ...(d.data() as { name: string; code?: string; catalogId?: string; isActive?: boolean }) }))
       .filter((c) => c.isActive !== false);
+    // courseId -> the shared key its duplicate-detection group is keyed by.
+    // Master subjects are department-independent (visible to every
+    // department teaching this catalog course - see /api/college/subjects
+    // GET's own doc-comment), so two departments' separate Course docs for
+    // the SAME catalog course must dedupe against each other, not just
+    // within their own courseId - otherwise Basic Science and CSE could
+    // both import "R231101" and end up with two subjects sharing that code
+    // in the one Master Collection they both now see. Falls back to the
+    // courseId itself only for a legacy Course doc with no catalogId, which
+    // has no sibling to collide with anyway.
+    const groupKeyByCourseId = new Map<string, string>(courses.map((c) => [c.id, c.catalogId || c.id]));
 
     // 2. Fetch catalog items for regulation verification
     const catalogSnap = await collegeRef.collection("courseCatalog").get();
@@ -47,14 +58,16 @@ export class MasterSubjectImportService {
       catalogById.set(d.id, d.data() as { regulations?: string[]; regulationBatches?: Record<string, string> });
     }
 
-    // 3. Track existing subject codes in this college to prevent duplicate insertions
+    // 3. Track existing subject codes across every department sharing this
+    // catalog course, to prevent duplicate insertions from any of them.
     const subjectsSnap = await collegeRef.collection("subjects").select("courseId", "regulation", "code").get();
     const existingCodes = new Set<string>();
     for (const d of subjectsSnap.docs) {
       const s = d.data() as { courseId?: string; regulation?: string; code?: string };
       if (s.courseId && s.code) {
         const regKey = (s.regulation ?? "").trim();
-        existingCodes.add(`${s.courseId}:${regKey}:${s.code.toUpperCase()}`);
+        const groupKey = groupKeyByCourseId.get(s.courseId) ?? s.courseId;
+        existingCodes.add(`${groupKey}:${regKey}:${s.code.toUpperCase()}`);
       }
     }
 
@@ -151,12 +164,13 @@ export class MasterSubjectImportService {
       }
 
       // ── Deduplication Check ───────────────────────────────────────────────
-      const dedupeKey = `${course.id}:${(regulation ?? "").trim()}:${validData.code}`;
+      const dedupeGroupKey = groupKeyByCourseId.get(course.id) ?? course.id;
+      const dedupeKey = `${dedupeGroupKey}:${(regulation ?? "").trim()}:${validData.code}`;
       if (existingCodes.has(dedupeKey)) {
         failed.push({
           row: rowNum,
           code: validData.code,
-          error: "A subject with this code already exists for this course and regulation",
+          error: "A subject with this code already exists for this course and regulation (possibly under another department teaching the same course)",
         });
         continue;
       }

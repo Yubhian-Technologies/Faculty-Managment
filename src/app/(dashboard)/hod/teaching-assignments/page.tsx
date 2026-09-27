@@ -306,6 +306,16 @@ const effectiveSemester = semesterOptions.length === 0
     if (semesterFilteredKeys.current.has(filterKey)) return;
     semesterFilteredKeys.current.add(filterKey);
     void (async () => {
+      // Subjects fetched by catalogId when available, not per-courseId union -
+      // a master subject is department-independent (see /api/college/subjects
+      // GET's own doc-comment), physically filed under whichever ONE
+      // department's Course doc happened to create it, which can be outside
+      // this HOD's own activeCourseIds (departments/courses they manage)
+      // entirely. Without this, a subject legitimately assigned to this
+      // department's semester (assignedIds, correctly scoped) could still be
+      // silently dropped by the join below if its own courseId falls outside
+      // activeCourseIds. Falls back to the courseId union only when this
+      // course has no catalogId (a legacy, pre-catalog-migration course).
       const [assignLists, subjectsLists] = await Promise.all([
         Promise.all(
           activeCourseIds.map((courseId) =>
@@ -314,13 +324,17 @@ const effectiveSemester = semesterOptions.length === 0
               .then((d) => d.assignments ?? [])
           )
         ),
-        Promise.all(
-          activeCourseIds.map((courseId) =>
-            fetch(`/api/college/subjects?courseId=${encodeURIComponent(courseId)}`)
+        course?.catalogId
+          ? fetch(`/api/college/subjects?catalogId=${encodeURIComponent(course.catalogId)}`)
               .then((r) => r.json() as Promise<{ subjects?: Subject[] }>)
-              .then((d) => d.subjects ?? [])
-          )
-        ),
+              .then((d) => [d.subjects ?? []])
+          : Promise.all(
+              activeCourseIds.map((courseId) =>
+                fetch(`/api/college/subjects?courseId=${encodeURIComponent(courseId)}`)
+                  .then((r) => r.json() as Promise<{ subjects?: Subject[] }>)
+                  .then((d) => d.subjects ?? [])
+              )
+            ),
       ]);
       const assignedIds = new Set(assignLists.flat().map((a) => a.subjectId));
       const allSubjects = subjectsLists.flat();
@@ -330,9 +344,12 @@ const effectiveSemester = semesterOptions.length === 0
     })();
   }, [key, year, activeCourseIds, effectiveSemester, course, courses]);
 
-  // Queried once per course-doc id and merged, since the sections/subjects/
-  // timings APIs take a single courseId and one programme spans several docs.
-  async function ensureCourseYearData(courseIds: string[], k: string, y: string, sem?: number | null) {
+  // Queried once per course-doc id and merged, since the sections/timings
+  // APIs take a single courseId and one programme spans several docs.
+  // Subjects are the one exception - fetched by catalogId when given (see
+  // the semesterFilteredKeys effect above for why courseId union alone
+  // misses subjects filed under a department outside courseIds).
+  async function ensureCourseYearData(courseIds: string[], k: string, y: string, sem?: number | null, catalogId?: string) {
     if (courseIds.length === 0) return;
     const cacheKey = sem != null ? `${k}_sem${sem}` : k;
     const semQs = sem != null ? `&semester=${sem}` : "";
@@ -348,13 +365,17 @@ const effectiveSemester = semesterOptions.length === 0
       setSectionsCache((c) => ({ ...c, [cacheKey]: Array.from(byId.values()) }));
     }
     if (!(k in subjectsCache)) {
-      const lists = await Promise.all(
-        courseIds.map((cId) =>
-          fetch(`/api/college/subjects?courseId=${encodeURIComponent(cId)}&year=${y}`)
+      const lists = catalogId
+        ? [await fetch(`/api/college/subjects?catalogId=${encodeURIComponent(catalogId)}`)
             .then((r) => r.json() as Promise<{ subjects: Subject[] }>)
-            .then((d) => d.subjects ?? [])
-        )
-      );
+            .then((d) => d.subjects ?? [])]
+        : await Promise.all(
+            courseIds.map((cId) =>
+              fetch(`/api/college/subjects?courseId=${encodeURIComponent(cId)}&year=${y}`)
+                .then((r) => r.json() as Promise<{ subjects: Subject[] }>)
+                .then((d) => d.subjects ?? [])
+            )
+          );
       const byId = new Map(lists.flat().map((s) => [s.id, s]));
       setSubjectsCache((c) => ({ ...c, [k]: Array.from(byId.values()) }));
     }
@@ -402,11 +423,11 @@ const effectiveSemester = semesterOptions.length === 0
     if (activeCourseIds.length === 0 || !year) return;
     if (fetchedKeys.current.has(fetchKey)) return;
     fetchedKeys.current.add(fetchKey);
-    void (async () => { await ensureCourseYearData(activeCourseIds, key, year, effectiveSemester); })();
+    void (async () => { await ensureCourseYearData(activeCourseIds, key, year, effectiveSemester, course?.catalogId); })();
     // ensureCourseYearData is redefined every render but reads only its
     // arguments and the caches it guards on, so it is deliberately not a dep.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, year, effectiveSemester, activeCourseIds]);
+  }, [key, year, effectiveSemester, activeCourseIds, course]);
 
   function handleDepartmentChange(v: string) {
     // ALL is a sentinel: Radix Select can't hold "" as an item value.

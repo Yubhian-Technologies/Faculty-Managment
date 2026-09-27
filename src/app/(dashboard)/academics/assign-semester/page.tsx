@@ -23,18 +23,24 @@ function ordinalYear(year: number) {
   return `${year}${suffix} Year`;
 }
 
-// A master subject (Subject.catalogId + year, department-independent - see
-// its own doc-comment in types/teaching.ts) can be mapped into a DIFFERENT
-// semester by different departments - Physics might be Semester 1 for CSE
-// and Semester 2 for ECE. That's a real many-to-many relationship, so it's
-// its own collection (SubjectSemesterAssignment, doc id
-// `${subjectId}_${departmentId}`) rather than a single field on Subject.
+// A master subject (courseId + regulation, department-independent - see its
+// own doc-comment in types/teaching.ts and /api/college/subjects GET's own)
+// can be mapped into a DIFFERENT semester by different departments - Physics
+// might be Semester 1 for CSE and Semester 2 for ECE. That's a real
+// many-to-many relationship, so it's its own collection
+// (SubjectSemesterAssignment, doc id `${subjectId}_${departmentId}`) rather
+// than a single field on Subject.
 //
-// Picker order: Department -> Course -> Year -> Regulation -> Semester. This
-// is an ordinary department-scoped picker (Department's own courses only) -
-// unlike Master Subjects' own Regulation-first picker, there's no need to
-// resolve "which department's course doc" here, because the mapping this
-// page creates is keyed by departmentId directly.
+// Picker order: Regulation -> Course -> Department -> Year -> Semester.
+// Regulation and Course are picked at the CATALOG level first (mirrors
+// Master Subjects' own Regulation-first picker) - the Master Collection they
+// resolve is genuinely department-independent, so which department eventually
+// receives the "copy to semester" doesn't matter until that step. Only once
+// Department is chosen does this page need one department's own Course doc
+// (`selectedCourse`, resolved - not picked again - from `courses`, that
+// department's own courses/route.ts result matched against the already-
+// chosen catalogId) for Year/Semester, which ARE department-specific
+// (Course-Year Timings, managerTeachingYears/fedYears).
 //
 // Sub-department support: when a top-level department has children
 // (e.g. Basic Science → BS-Chemistry, BS-Mathematics), the picker
@@ -52,10 +58,14 @@ export default function AssignToSemesterPage() {
   const [isLoadingCourses, setIsLoadingCourses] = useState(false);
   const [isLoadingSubjects, setIsLoadingSubjects] = useState(false);
 
-  const [selectedDepartmentId, setSelectedDepartmentId] = useState("");
-  const [selectedCourseId, setSelectedCourseId] = useState("");
-  const [selectedYear, setSelectedYear] = useState("");
+  // Picked in this order: Regulation -> Course (catalog-level, hence
+  // selectedCatalogId not selectedCourseId) -> Department -> Year -> Semester.
+  // selectedCourse itself (the department's own Course doc) is resolved
+  // below, not picked directly - see this file's own top doc-comment.
   const [selectedRegulation, setSelectedRegulation] = useState("");
+  const [selectedCatalogId, setSelectedCatalogId] = useState("");
+  const [selectedDepartmentId, setSelectedDepartmentId] = useState("");
+  const [selectedYear, setSelectedYear] = useState("");
   const [selectedSemester, setSelectedSemester] = useState<number | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [searchText, setSearchText] = useState("");
@@ -87,11 +97,44 @@ export default function AssignToSemesterPage() {
   }, []);
 
   const catalogById = useMemo(() => new Map(catalogItems.map((c) => [c.id, c])), [catalogItems]);
+
+  // Regulation options (top-level, picked first): every regulation ANY
+  // active catalog course has ever been configured with, flattened and
+  // deduped - a college may run more than one programme/regulation, and
+  // which one governs is exactly what this field exists to pin down before
+  // Course even narrows.
+  const topLevelRegulationOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const c of catalogItems) for (const r of c.regulations ?? []) set.add(r);
+    return Array.from(set).sort();
+  }, [catalogItems]);
+
+  // Course options (catalog-level, picked second): every catalog entry that
+  // actually offers the selected Regulation. This is a CourseCatalogItem
+  // pick, not a specific department's Course doc - Department (and which of
+  // its Course docs that resolves to) comes after.
+  const catalogOptions = useMemo(
+    () => catalogItems.filter((c) => (c.regulations ?? []).includes(selectedRegulation)).sort((a, b) => a.name.localeCompare(b.name)),
+    [catalogItems, selectedRegulation]
+  );
+  const selectedCatalogItem = useMemo(() => catalogById.get(selectedCatalogId) ?? null, [catalogById, selectedCatalogId]);
+
   const selectedDepartment = useMemo(
     () => allDepartments.find((d) => d.id === selectedDepartmentId) ?? null,
     [allDepartments, selectedDepartmentId]
   );
-  const selectedCourse = useMemo(() => courses.find((c) => c.id === selectedCourseId) ?? null, [courses, selectedCourseId]);
+
+  // This DEPARTMENT's own Course doc for the already-chosen catalog entry -
+  // resolved once Department is picked, not chosen directly (Course was
+  // already fixed at the catalog level above). `courses` is this one
+  // department's own list (loadCourses, sub-department-aware) - a
+  // department that doesn't actually teach this catalog course resolves to
+  // null here rather than silently falling back to a different department's
+  // doc, surfaced below as "doesn't teach this course yet".
+  const selectedCourse = useMemo(
+    () => courses.find((c) => c.catalogId === selectedCatalogId) ?? null,
+    [courses, selectedCatalogId]
+  );
 
   // Build parent → children map for the department tree
   const childrenOf = useMemo(() => {
@@ -122,101 +165,36 @@ export default function AssignToSemesterPage() {
   // when a department was left unconfigured). A college with no
   // shared-first-year setup at all sees no change - both resolve empty and
   // the fallback returns every year unfiltered, same as before this existed.
+  // Narrowed twice: first to the years this exact department actually
+  // teaches this course (assignedYears/fedYears, as before), then to the
+  // years the already-chosen Regulation's own batch coverage actually
+  // governs - the same batch-aware check Sections and Subjects already
+  // enforce, just run per-candidate-year here since Regulation is now fixed
+  // BEFORE Year is even offered (rather than the old Year-first flow, which
+  // resolved which regulation(s) covered one already-chosen Year). A
+  // catalog entry with no regulationBatches configured keeps every
+  // teachable year - regulationsForCourseYearByBatch's own
+  // backward-compatibility fallback already makes it resolve to every one
+  // of the course's regulations for an unconfigured year, so selectedRegulation
+  // (always one of them) always matches.
   const yearOptions = useMemo(() => {
     if (!selectedCourse || !selectedDepartment) return [];
     const courseYears = Array.from({ length: selectedCourse.durationYears }, (_, i) => i + 1);
     const catalogId = selectedCourse.catalogId;
     const assigned = managerTeachingYears(allDepartments, selectedDepartment, catalogId);
-    if (assigned.length > 0) {
-      return courseYears.filter((y) => assigned.includes(y));
-    }
-    const excluded = new Set(fedYears(selectedDepartment, allDepartments, catalogId));
-    return courseYears.filter((y) => !excluded.has(y));
-  }, [selectedCourse, selectedDepartment, allDepartments]);
-
-  const catalogItemForCourse = useMemo(
-    () => catalogById.get(selectedCourse?.catalogId ?? "") ?? null,
-    [selectedCourse, catalogById]
-  );
-
-  // The FULL set of regulations this course has ever been configured with,
-  // regardless of Year - used only to detect "course has regulations at all"
-  // (noRegulationForYear below, and the regulationRequired gate) and as the
-  // fallback shown before a Year is picked. Never rendered directly as the
-  // Regulation Select's options once a Year is selected - see
-  // `regulationOptions` below, which narrows this to the Year.
-  const courseRegulationOptions = useMemo(() => {
-    if (!selectedCourse) return [];
-    return catalogItemForCourse?.regulations ?? [];
-  }, [selectedCourse, catalogItemForCourse]);
-
-  // Which regulation(s) this course's own Course Catalog batch coverage says
-  // actually governs the selected Year, as of the current academic session -
-  // the same batch-aware resolution Section creation already enforces
-  // server-side (sections/route.ts POST) and the Subjects picker offers
-  // (academics/subjects/new/page.tsx). Normally resolves to exactly one;
-  // empty when nothing does (no regulationBatches configured for this
-  // course, or a Year no configured batch currently covers) -
-  // regulationsForCourseYearByBatch's own backward-compatibility fallback
-  // applies here too: an unconfigured course (regulationBatches absent)
-  // makes this resolve to every one of the
-  // course's regulations, not none, so a college that hasn't set batches up
-  // yet keeps its previous "pick manually" behavior rather than being told
-  // "no regulation assigned" for every year.
-  const yearRegulationMatches = useMemo(() => {
-    if (!selectedCourse || !selectedYear || !catalogItemForCourse) return [];
-    return regulationsForCourseYearByBatch(
-      catalogItemForCourse.regulationBatches ?? {},
-      Number(selectedYear),
-      currentAcademicStartYear(),
-      catalogItemForCourse.regulations,
+    const teachableYears = assigned.length > 0
+      ? courseYears.filter((y) => assigned.includes(y))
+      : courseYears.filter((y) => !new Set(fedYears(selectedDepartment, allDepartments, catalogId)).has(y));
+    if (!selectedCatalogItem) return teachableYears;
+    return teachableYears.filter((y) =>
+      regulationsForCourseYearByBatch(
+        selectedCatalogItem.regulationBatches ?? {},
+        y,
+        currentAcademicStartYear(),
+        selectedCatalogItem.regulations,
+      ).includes(selectedRegulation)
     );
-  }, [selectedCourse, selectedYear, catalogItemForCourse]);
-
-  // What the Regulation Select actually offers: narrowed to the Year-valid
-  // subset the moment one exists, so picking a regulation that doesn't even
-  // cover the selected Year is no longer possible. Falls back to the
-  // course-wide list only before a Year is chosen (Select is disabled then
-  // anyway - see its own `disabled` prop below) or for a course that's
-  // never had batch coverage configured (regulationsForCourseYearByBatch's
-  // own fallback already makes yearRegulationMatches equal the full list in
-  // that case, so this fallback rarely triggers in practice).
-  const regulationOptions = yearRegulationMatches.length > 0 ? yearRegulationMatches : courseRegulationOptions;
-
-  // Auto-fill the Regulation field the moment exactly one regulation
-  // resolves for the selected Year - mirrors the accurate, batch-aware
-  // check Sections already enforce, so this page's default stops depending
-  // on whoever's filling the form remembering which regulation each batch
-  // maps to. Left blank (not force-picked) when zero or more than one
-  // regulation resolves - see the Regulation field's own "no regulation
-  // assigned for this year" fallback below for the zero case, and the plain
-  // Select for the ambiguous (>1, misconfigured Course Catalog) case, so a
-  // person can still resolve either manually rather than being blocked.
-  useEffect(() => {
-    if (yearRegulationMatches.length === 1) {
-      setSelectedRegulation(yearRegulationMatches[0]);
-    }
-  }, [yearRegulationMatches]);
-
-  // True only when this course DOES have regulations configured at all
-  // (courseRegulationOptions non-empty - the pre-existing "None assigned"
-  // message below already covers the other case) but none of them actually
-  // cover the selected Year for the current session - the specific,
-  // accurate "batch gap" the calculation above exists to catch.
-  const noRegulationForYear = Boolean(selectedYear) && courseRegulationOptions.length > 0 && yearRegulationMatches.length === 0;
-
-  // Whether a regulation is even a concept for this course at all. A course
-  // with zero regulations ever configured (courseRegulationOptions empty)
-  // has nothing to gate on, so Semester/subjects unlock right after Year,
-  // same as before this fix - unchanged behavior for colleges that haven't
-  // set up regulations.
-  const regulationRequired = courseRegulationOptions.length > 0;
-  // Gate for Semester and the subject panels below: a course with
-  // regulations must have one actually selected before either unlocks -
-  // otherwise the Master Collection mixes subjects from every regulation
-  // together (see subjectsInRegulation below, which only filters by
-  // regulation once one is selected).
-  const regulationReady = !regulationRequired || Boolean(selectedRegulation);
+  }, [selectedCourse, selectedDepartment, allDepartments, selectedCatalogItem, selectedRegulation]);
 
   const semesterOptions = useMemo(() => {
     const nums = new Set<number>();
@@ -268,8 +246,18 @@ export default function AssignToSemesterPage() {
       // GET route never reads a `year` param; `year` is still this
       // function's own param (used below for the assignment/instance calls
       // that DO need it - Year is what a department's mapping is keyed by).
+      //
+      // Queried by catalogId, not this department's own course.id - the
+      // Master Collection is genuinely department-independent (see this
+      // function's own doc-comment above), shared by every department that
+      // teaches this catalog course, not just whichever one's Course doc a
+      // given subject happens to be filed under (see /api/college/subjects
+      // GET's own doc-comment). Falls back to course.id only for the rare
+      // legacy Course doc with no catalogId set.
        const [subjectsRes, timingsRes, assignmentsRes] = await Promise.all([
-        fetch(`/api/college/subjects?courseId=${encodeURIComponent(course.id)}`),
+        fetch(catalogId
+          ? `/api/college/subjects?catalogId=${encodeURIComponent(catalogId)}`
+          : `/api/college/subjects?courseId=${encodeURIComponent(course.id)}`),
         fetch(`/api/college/course-year-timings?courseId=${encodeURIComponent(course.id)}`),
         fetch(`/api/college/subject-semester-assignments?courseId=${encodeURIComponent(course.id)}&departmentId=${encodeURIComponent(departmentId)}`),
       ]);
@@ -286,11 +274,11 @@ export default function AssignToSemesterPage() {
     }
   }, []);
 
-  function selectDepartment(departmentId: string) {
-    setSelectedDepartmentId(departmentId);
-    setSelectedCourseId("");
+  function selectRegulation(regulation: string) {
+    setSelectedRegulation(regulation);
+    setSelectedCatalogId("");
+    setSelectedDepartmentId("");
     setSelectedYear("");
-    setSelectedRegulation("");
     setSelectedSemester(null);
     setCourses([]);
     setSubjects([]);
@@ -299,13 +287,25 @@ export default function AssignToSemesterPage() {
     setSearchText("");
     setMasterPage(1);
     setAssignPage(1);
-    void loadCourses(departmentId);
   }
 
-  function selectCourse(courseId: string) {
-    setSelectedCourseId(courseId);
+  function selectCatalog(catalogId: string) {
+    setSelectedCatalogId(catalogId);
+    setSelectedDepartmentId("");
     setSelectedYear("");
-    setSelectedRegulation("");
+    setSelectedSemester(null);
+    setCourses([]);
+    setSubjects([]);
+    setAssignments([]);
+    setTimings([]);
+    setSearchText("");
+    setMasterPage(1);
+    setAssignPage(1);
+  }
+
+  function selectDepartment(departmentId: string) {
+    setSelectedDepartmentId(departmentId);
+    setSelectedYear("");
     setSelectedSemester(null);
     setSubjects([]);
     setAssignments([]);
@@ -313,6 +313,7 @@ export default function AssignToSemesterPage() {
     setSearchText("");
     setMasterPage(1);
     setAssignPage(1);
+    void loadCourses(departmentId);
   }
 
   function selectYear(year: string) {
@@ -377,6 +378,7 @@ export default function AssignToSemesterPage() {
           departmentName: selectedDepartment.name,
           semester: effectiveSemester,
           year: Number(selectedYear),
+          courseId: selectedCourse.id,
         }),
       });
       const json = await res.json() as { assignedCount?: number; failed?: { subjectId: string; error: string }[]; error?: string };
@@ -447,8 +449,26 @@ export default function AssignToSemesterPage() {
           <Card>
             <CardContent className="p-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
               <div className="space-y-1.5">
+                <Label>Regulation</Label>
+                <Select value={selectedRegulation} onValueChange={selectRegulation}>
+                  <SelectTrigger><SelectValue placeholder="Select regulation" /></SelectTrigger>
+                  <SelectContent>
+                    {topLevelRegulationOptions.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Course</Label>
+                <Select value={selectedCatalogId} onValueChange={selectCatalog} disabled={!selectedRegulation}>
+                  <SelectTrigger><SelectValue placeholder="Select course" /></SelectTrigger>
+                  <SelectContent>
+                    {catalogOptions.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
                 <Label>Department</Label>
-                <Select value={selectedDepartmentId} onValueChange={selectDepartment}>
+                <Select value={selectedDepartmentId} onValueChange={selectDepartment} disabled={!selectedCatalogId}>
                   <SelectTrigger><SelectValue placeholder="Select department" /></SelectTrigger>
                   <SelectContent>
                     {departments.flatMap((d) => [
@@ -465,37 +485,13 @@ export default function AssignToSemesterPage() {
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <Label>Course</Label>
-                <Select value={selectedCourseId} onValueChange={selectCourse} disabled={!selectedDepartment || isLoadingCourses}>
-                  <SelectTrigger><SelectValue placeholder={isLoadingCourses ? "Loading…" : "Select course"} /></SelectTrigger>
-                  <SelectContent>
-                    {courses.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
                 <Label>Year</Label>
-                <Select value={selectedYear} onValueChange={selectYear} disabled={!selectedCourse}>
-                  <SelectTrigger><SelectValue placeholder="Select year" /></SelectTrigger>
+                <Select value={selectedYear} onValueChange={selectYear} disabled={!selectedCourse || isLoadingCourses}>
+                  <SelectTrigger><SelectValue placeholder={isLoadingCourses ? "Loading…" : "Select year"} /></SelectTrigger>
                   <SelectContent>
                     {yearOptions.map((y) => <SelectItem key={y} value={String(y)}>{ordinalYear(y)}</SelectItem>)}
                   </SelectContent>
                 </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label>Regulation</Label>
-                {noRegulationForYear ? (
-                  <div className="flex h-9 items-center rounded-md border bg-muted/30 px-3">
-                    <span className="text-xs text-muted-foreground">No regulation assigned for this year</span>
-                  </div>
-                ) : (
-                  <Select value={selectedRegulation} onValueChange={setSelectedRegulation} disabled={!selectedYear || regulationOptions.length === 0}>
-                    <SelectTrigger><SelectValue placeholder={regulationOptions.length ? "Select regulation" : "None assigned"} /></SelectTrigger>
-                    <SelectContent>
-                      {regulationOptions.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                )}
               </div>
               <div className="space-y-1.5">
                 <Label>Semester</Label>
@@ -503,15 +499,11 @@ export default function AssignToSemesterPage() {
                   <div className="flex h-9 items-center rounded-md border bg-muted/30 px-3">
                     <span className="text-xs text-muted-foreground">No semesters configured for this year</span>
                   </div>
-                ) : selectedYear && !regulationReady ? (
-                  <div className="flex h-9 items-center rounded-md border bg-muted/30 px-3">
-                    <span className="text-xs text-muted-foreground">Select a regulation first</span>
-                  </div>
                 ) : (
                   <Select
                     value={effectiveSemester != null ? String(effectiveSemester) : ""}
                     onValueChange={(v) => setSelectedSemester(Number(v))}
-                    disabled={!selectedYear || semesterOptions.length === 0 || !regulationReady}
+                    disabled={!selectedYear || semesterOptions.length === 0}
                   >
                     <SelectTrigger><SelectValue placeholder="Select semester" /></SelectTrigger>
                     <SelectContent>
@@ -529,19 +521,25 @@ export default function AssignToSemesterPage() {
             </p>
           )}
 
+          {selectedDepartment && !isLoadingCourses && courses.length > 0 && !selectedCourse && (
+            <p className="text-sm text-muted-foreground px-1">
+              {selectedDepartment.name} doesn&apos;t teach {selectedCatalogItem?.name ?? "this course"} yet.
+            </p>
+          )}
+
+          {selectedCourse && selectedDepartment && !selectedYear && yearOptions.length === 0 && (
+            <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+              {selectedDepartment.name} isn&apos;t scoped to teach any year of {selectedCatalogItem?.name ?? "this course"} under {selectedRegulation}.
+            </div>
+          )}
+
           {selectedYear && semesterOptions.length === 0 && (
             <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
               This course-year has no semesters configured yet. Set them up in Course-Year Timings first.
             </div>
           )}
 
-          {selectedYear && semesterOptions.length > 0 && !regulationReady && (
-            <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-              Select a regulation to see subjects for this semester.
-            </div>
-          )}
-
-          {selectedYear && effectiveSemester != null && regulationReady && (
+          {selectedYear && effectiveSemester != null && (
             isLoadingSubjects ? (
               <div className="grid gap-4 md:grid-cols-2">
                 {[1, 2].map((i) => <div key={i} className="h-40 rounded-lg border bg-muted/30 animate-pulse" />)}

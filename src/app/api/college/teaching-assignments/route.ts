@@ -443,6 +443,52 @@ export async function POST(request: Request) {
       // lib/college/academicSession.ts's own doc-comment.
       const currentAcademicYear = await resolveCollegeAcademicYear(db, session.collegeId);
 
+      // Server-side legitimacy check: this subject must actually have been
+      // assigned to this department via Assign to Semester before it can be
+      // staffed here - previously unchecked (this route only verified "does
+      // the Subject document exist", never "was it curricularly assigned to
+      // THIS department"). The UI (TeachingAssignmentsEditor's
+      // assignedSubjects) already restricts the picker to exactly this set,
+      // but that's never a substitute for a server-side guard (see
+      // CLAUDE.md's own "nav visibility is never security" rule - the same
+      // applies to form-option visibility). Skipped for a historical
+      // (isPast) record - those document what actually happened, which may
+      // reference an assignment since removed or changed, same exemption
+      // the conflict checks below already give it.
+      //
+      // The exact-semester match is enforced ONLY when the caller explicitly
+      // picked one (body.timetableSemester != null - a real semester-aware
+      // picker, e.g. this branch's own section/timetable flow). When it
+      // wasn't sent, `timetableSemester` above already fell back to
+      // resolveCurrentSemester's date-window guess (see resolveRequestedSemester),
+      // which returns null whenever "today" doesn't land inside any
+      // configured semester's date range - a real, common gap (dates not
+      // configured precisely, staffing during a break, pre-staffing ahead of
+      // the semester's start). SubjectSemesterAssignment.semester is never
+      // null, so requiring an exact match there would reject every
+      // legitimate assignment made through a caller with no semester picker
+      // at all (components/faculty/TeachingAssignmentsEditor.tsx, the HOD
+      // Faculty Profile editor - confirmed it never sends timetableSemester).
+      // Existence of the assignment (this subject IS this department's
+      // curriculum) is the one guarantee always enforced.
+      if (!body.isPast) {
+        const instanceSnap = await collegeRef.collection("subjectSemesterAssignments")
+          .doc(`${subjectId}_${course.departmentId}`)
+          .get();
+        if (!instanceSnap.exists) {
+          return NextResponse.json(
+            { error: "This subject hasn't been assigned to this department's semester yet - use Assign to Semester first." },
+            { status: 400 },
+          );
+        }
+        if (body.timetableSemester != null && (instanceSnap.data() as { semester?: number }).semester !== timetableSemester) {
+          return NextResponse.json(
+            { error: "This subject is assigned to a different semester for this department - check Assign to Semester." },
+            { status: 400 },
+          );
+        }
+      }
+
       // Conflict check: this faculty already teaching this exact section+subject
       // IN THIS SAME SEMESTER? Only applies to current assignments - past ones
       // are historical records and may legitimately repeat the same

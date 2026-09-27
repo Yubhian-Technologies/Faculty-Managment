@@ -117,6 +117,7 @@ export async function POST(request: Request) {
       semester?: number;
       departmentName?: string;
       year?: number;
+      courseId?: string;
       customOverrides?: {
         lectureHours?: number;
         tutorialHours?: number;
@@ -125,7 +126,7 @@ export async function POST(request: Request) {
       };
     };
 
-    const { subjectId, subjectIds, departmentId, semester, departmentName, year, customOverrides } = body;
+    const { subjectId, subjectIds, departmentId, semester, departmentName, year, courseId, customOverrides } = body;
     if (!departmentId || semester == null) {
       return NextResponse.json(
         { error: "departmentId and semester are required" },
@@ -152,6 +153,7 @@ export async function POST(request: Request) {
         semester: Number(semester),
         departmentName,
         year: year ? Number(year) : undefined,
+        courseId,
       });
       return NextResponse.json(result, { status: 201 });
     }
@@ -170,6 +172,7 @@ export async function POST(request: Request) {
       semester: Number(semester),
       departmentName,
       year: year ? Number(year) : undefined,
+      courseId,
       customOverrides,
     });
 

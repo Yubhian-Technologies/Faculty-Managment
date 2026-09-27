@@ -43,9 +43,8 @@ export default function ClassLeaderTimetablePage() {
   const [selectedSemester, setSelectedSemester] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Optional filters
-  const [theorySubjectId, setTheorySubjectId] = useState("");
-  const [labSubjectId, setLabSubjectId] = useState("");
+  // Filters: All / Theory / Practical + Optional Batch
+  const [typeFilter, setTypeFilter] = useState<"ALL" | "THEORY" | "PRACTICAL">("ALL");
   const [batchValue, setBatchValue] = useState("");
 
   const [weekStart, setWeekStart] = useState<Date>(() => currentWeekDates()[0]);
@@ -76,36 +75,35 @@ export default function ClassLeaderTimetablePage() {
       .finally(() => setIsLoading(false));
   }, [weekStart, selectedSemester]);
 
-  // Filters derived from slots
-  const theoryOptions = useMemo(() => {
-    const byId = new Map<string, string>();
-    for (const s of slots) if (s.subjectType === "THEORY" && s.subjectId) byId.set(s.subjectId, s.subjectName);
-    return Array.from(byId, ([id, name]) => ({ id, name }));
-  }, [slots]);
+  function isTheorySlot(s: TimetableSlotRow): boolean {
+    if (s.subjectType === "THEORY") return true;
+    if (s.subjectType === "PRACTICAL" || s.labBatch) return false;
+    const name = (s.subjectName || "").toLowerCase();
+    return !name.includes("lab") && !name.includes("practical");
+  }
 
-  const labOptions = useMemo(() => {
-    const byId = new Map<string, string>();
-    for (const s of slots) if (s.subjectType === "PRACTICAL" && s.subjectId) byId.set(s.subjectId, s.subjectName);
-    return Array.from(byId, ([id, name]) => ({ id, name }));
-  }, [slots]);
+  function isPracticalSlot(s: TimetableSlotRow): boolean {
+    if (s.subjectType === "PRACTICAL" || s.labBatch) return true;
+    if (s.subjectType === "THEORY") return false;
+    const name = (s.subjectName || "").toLowerCase();
+    return name.includes("lab") || name.includes("practical");
+  }
 
   const batchOptions = useMemo(
     () => Array.from(new Set(slots.map((s) => s.labBatch).filter((b): b is string => !!b))),
     [slots]
   );
 
-  const hasActiveFilters = Boolean(theorySubjectId || labSubjectId || batchValue);
+  const hasActiveFilters = typeFilter !== "ALL" || Boolean(batchValue);
 
-  const filteredSlots = useMemo(
-    () =>
-      slots.filter(
-        (s) =>
-          (!theorySubjectId || s.subjectId === theorySubjectId) &&
-          (!labSubjectId || s.subjectId === labSubjectId) &&
-          (!batchValue || s.labBatch === batchValue)
-      ),
-    [slots, theorySubjectId, labSubjectId, batchValue]
-  );
+  const filteredSlots = useMemo(() => {
+    return slots.filter((s) => {
+      if (typeFilter === "THEORY" && !isTheorySlot(s)) return false;
+      if (typeFilter === "PRACTICAL" && !isPracticalSlot(s)) return false;
+      if (batchValue && s.labBatch !== batchValue) return false;
+      return true;
+    });
+  }, [slots, typeFilter, batchValue]);
 
   const departmentName = useMemo(() => {
     if (!section) return "";
@@ -175,49 +173,22 @@ export default function ClassLeaderTimetablePage() {
               </div>
             )}
 
-            {/* Quick Filters */}
+            {/* Quick Filters: Type (All / Theory / Practical) + Batch */}
             <div className="flex items-center gap-2 flex-wrap">
-              {theoryOptions.length > 0 && (
-                <div className="flex items-center gap-1.5">
-                  <Select
-                    value={theorySubjectId || "__all__"}
-                    onValueChange={(v) => setTheorySubjectId(v === "__all__" ? "" : v)}
+              <div className="inline-flex rounded-lg border p-0.5 bg-muted/30">
+                {(["ALL", "THEORY", "PRACTICAL"] as const).map((t) => (
+                  <Button
+                    key={t}
+                    type="button"
+                    size="sm"
+                    variant={typeFilter === t ? "default" : "ghost"}
+                    className="h-7 text-xs px-3 font-medium transition-all"
+                    onClick={() => setTypeFilter(t)}
                   >
-                    <SelectTrigger className="h-8 text-xs w-36">
-                      <SelectValue placeholder="Theory: All" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__all__">All Theory</SelectItem>
-                      {theoryOptions.map((o) => (
-                        <SelectItem key={o.id} value={o.id}>
-                          {o.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-
-              {labOptions.length > 0 && (
-                <div className="flex items-center gap-1.5">
-                  <Select
-                    value={labSubjectId || "__all__"}
-                    onValueChange={(v) => setLabSubjectId(v === "__all__" ? "" : v)}
-                  >
-                    <SelectTrigger className="h-8 text-xs w-32">
-                      <SelectValue placeholder="Lab: All" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__all__">All Labs</SelectItem>
-                      {labOptions.map((o) => (
-                        <SelectItem key={o.id} value={o.id}>
-                          {o.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
+                    {t === "ALL" ? "All" : t === "THEORY" ? "Theory" : "Practical"}
+                  </Button>
+                ))}
+              </div>
 
               {batchOptions.length > 0 && (
                 <div className="flex items-center gap-1.5">
@@ -246,8 +217,7 @@ export default function ClassLeaderTimetablePage() {
                   variant="ghost"
                   size="sm"
                   onClick={() => {
-                    setTheorySubjectId("");
-                    setLabSubjectId("");
+                    setTypeFilter("ALL");
                     setBatchValue("");
                   }}
                   className="h-8 text-xs px-2 text-muted-foreground hover:text-foreground"

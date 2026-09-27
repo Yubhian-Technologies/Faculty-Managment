@@ -94,6 +94,21 @@ export function TeachingAssignmentsEditor({ courseId, year, backHref }: Teaching
         setDepartments(deptsData.departments ?? []);
         setSections((sectionsData.sections ?? []).sort((a, b) => a.name.localeCompare(b.name)));
         setMasterSubjects(subjectsData.subjects ?? []);
+        // Refined by catalogId once the course (and its catalogId) resolves -
+        // the initial fetch above had to go out before that, so it's
+        // courseId-only. A master subject is department-independent (see
+        // /api/college/subjects GET's own doc-comment), physically filed
+        // under whichever ONE department's Course doc created it, so the
+        // courseId-only fetch can miss one legitimately assigned to this
+        // course-year (masterSubjects is only ever used here as a
+        // supplemental hoursPerWeek fallback, but a missing entry there still
+        // means a wrong/zero hoursPerWeek gets sent on assign).
+        if (foundCourse?.catalogId) {
+          fetch(`/api/college/subjects?catalogId=${encodeURIComponent(foundCourse.catalogId)}`)
+            .then((r) => r.json() as Promise<{ subjects: Subject[] }>)
+            .then((d) => setMasterSubjects(d.subjects ?? []))
+            .catch(() => { /* non-critical - courseId-only list already set above */ });
+        }
         setTimings((timingsData.timings ?? []).filter((t) => t.year === Number(year)));
         setAssignments(assignData.assignments ?? []);
         setAssignmentRequests(requestsData.requests ?? []);
