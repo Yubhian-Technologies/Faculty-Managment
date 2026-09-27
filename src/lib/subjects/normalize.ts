@@ -24,14 +24,80 @@ for (const [key, label] of Object.entries(SUBJECT_TYPE_LABELS) as [SubjectType, 
   TYPE_BY_TEXT.set(normalizeText(label), key);
 }
 
-/** Accepts either the enum key ("PCC") or its full label ("Professional Core"). */
-export function resolveSubjectCategory(text: string | undefined): SubjectCategory | undefined {
-  if (!text?.trim()) return undefined;
-  return CATEGORY_BY_TEXT.get(normalizeText(text));
+// Common aliases in Indian college curricula (AICTE, JNTU, Anna Univ, VTU, etc.)
+const TYPE_ALIASES: Record<string, SubjectType> = {
+  // Practical / Lab
+  lab: "PRACTICAL",
+  laboratory: "PRACTICAL",
+  practical: "PRACTICAL",
+  practicals: "PRACTICAL",
+  "lab course": "PRACTICAL",
+  "laboratory course": "PRACTICAL",
+  "practical course": "PRACTICAL",
+  "practical lab": "PRACTICAL",
+  "lab practical": "PRACTICAL",
+  p: "PRACTICAL",
+
+  // Theory
+  theory: "THEORY",
+  theories: "THEORY",
+  lecture: "THEORY",
+  lectures: "THEORY",
+  th: "THEORY",
+  lec: "THEORY",
+  "theory course": "THEORY",
+
+  // Tutorial
+  tutorial: "TUTORIAL",
+  tutorials: "TUTORIAL",
+  tut: "TUTORIAL",
+  tu: "TUTORIAL",
+
+  // Project
+  project: "PROJECT",
+  projects: "PROJECT",
+  "project work": "PROJECT",
+  "mini project": "PROJECT",
+  "major project": "PROJECT",
+  internship: "PROJECT",
+  seminar: "PROJECT",
+  viva: "PROJECT",
+  "comprehensive viva": "PROJECT",
+};
+
+for (const [alias, type] of Object.entries(TYPE_ALIASES)) {
+  TYPE_BY_TEXT.set(normalizeText(alias), type);
 }
 
-/** Accepts either the enum key ("THEORY") or its full label ("Theory"). */
+/** Accepts either the enum key ("PCC"), its full label ("Professional Core"), or any custom category name. */
+export function resolveSubjectCategory(text: string | undefined): SubjectCategory | undefined {
+  if (!text?.trim()) return undefined;
+  const matched = CATEGORY_BY_TEXT.get(normalizeText(text));
+  if (matched) return matched;
+  return text.trim() as SubjectCategory;
+}
+
+/** Accepts either the enum key ("THEORY"), its full label ("Theory"), or common aliases like "Lab", "Practical", etc. */
 export function resolveSubjectType(text: string | undefined): SubjectType | undefined {
   if (!text?.trim()) return undefined;
-  return TYPE_BY_TEXT.get(normalizeText(text));
+  const normalized = normalizeText(text);
+  const matched = TYPE_BY_TEXT.get(normalized);
+  if (matched) return matched;
+
+  // Keyword-based fallback matching for compound or descriptive strings
+  if (normalized.includes("lab") || normalized.includes("practical")) {
+    return "PRACTICAL";
+  }
+  if (normalized.includes("theory") || normalized.includes("lecture")) {
+    return "THEORY";
+  }
+  if (normalized.includes("tutorial")) {
+    return "TUTORIAL";
+  }
+  if (normalized.includes("project") || normalized.includes("internship") || normalized.includes("seminar")) {
+    return "PROJECT";
+  }
+
+  return undefined;
 }
+

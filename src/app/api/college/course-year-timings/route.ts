@@ -31,7 +31,15 @@ export async function GET(request: Request) {
     if (courseId) query = query.where("courseId", "==", courseId);
 
     const snap = await query.get();
-    const timings = snap.docs.map((d) => ({ id: d.id, ...d.data() })) as (CourseYearTiming & { id: string })[];
+    let timings = snap.docs.map((d) => ({ id: d.id, ...d.data() })) as (CourseYearTiming & { id: string })[];
+
+    // Read access scoped the same way PATCH already restricts writes below -
+    // an HOD may only see their own department's (or a sub-department's/
+    // managed branch's) course-year timings, never an arbitrary department's.
+    if (session.role === "HOD") {
+      const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
+      timings = timings.filter((t) => canHodEditDepartmentId(scope, t.departmentId));
+    }
 
     // A shared first year is configured once, on the common department that
     // runs it (e.g. Basic Science), but a section routed to a managed branch

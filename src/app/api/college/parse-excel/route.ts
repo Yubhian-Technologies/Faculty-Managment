@@ -33,7 +33,11 @@ export async function POST(request: Request) {
   try {
     // Any college-scoped role that can reach a bulk-import page may parse a file here -
     // this endpoint only converts bytes to text rows, it never touches Firestore.
-    await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "PANEL_MEMBER", "COLLEGE_OFFICE");
+    // ACADEMICS - academics/subjects/import's own role (subjects/import
+    // route.ts requires it) - was missing here, so an Academics user's
+    // .xlsx upload 401'd on this shared parsing step while .csv (parsed
+    // client-side, no round trip here) silently kept working.
+    await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "PANEL_MEMBER", "COLLEGE_OFFICE", "ACADEMICS");
 
     const formData = await request.formData();
     const file = formData.get("file");

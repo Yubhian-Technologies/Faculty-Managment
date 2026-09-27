@@ -1,22 +1,24 @@
 "use client";
 
 import { useEffect, useState, useCallback, useMemo } from "react";
-import { useRouter } from "next/navigation";
 import { BookOpen, Pencil, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
 import { useMyDepartments } from "@/hooks/useMyDepartments";
-import type { Course, CourseCatalogItem, Department, Subject } from "@/types";
+import type { Course, CourseCatalogItem, CourseYearTiming, Department, Subject, SubjectSemesterAssignment } from "@/types";
 import { SUBJECT_TYPE_LABELS } from "@/types";
 import { fedYears, regulationsForCourseYearByBatch } from "@/lib/college/academicStructure";
 import { deriveHodScope, managerEffectiveYears } from "@/lib/departments/hodScope";
 import { parseAcademicYearStart } from "@/lib/college/academicSession";
+import { resolveCurrentSemester } from "@/lib/college/semester";
 
 const ALL_REGULATIONS = "__all__"; // sentinel: Radix Select items can't use an empty string value
 
@@ -25,16 +27,34 @@ function ordinalYear(year: number) {
   return `${year}${suffix} Year`;
 }
 
+// This page used to read/write master Subject docs directly, filtered by a
+// `year` param /api/college/subjects has never actually read (silently a
+// no-op) and gated Edit/Delete on a `department` field new master subjects
+// (courseId+regulation scoped, department-independent - see that route's
+// own GET doc-comment) never populate - both client- and server-side
+// (subjects/[id]/route.ts's own HOD check), so those buttons were dead for
+// every subject created after the master-subject restructuring, and Delete,
+// had it ever fired, would have hard-deleted the shared master subject for
+// every OTHER department teaching this course too.
+//
+// Rebuilt on the actual current model: what's "offered" to an HOD's
+// department is a SubjectSemesterAssignment (Assign to Semester's own
+// output) - department+semester scoped, not a raw master-subject list. Edit
+// here means adjusting THIS department's own hours/credits override
+// (customOverrides on the assignment) - never the shared master subject's
+// name/code/category, which stays Academics/Principal-owned. Delete means
+// unassigning from this semester, never deleting the master subject.
 export default function HODSubjectsPage() {
-  const router = useRouter();
   const myDepartments = useMyDepartments();
   const [courses, setCourses] = useState<Course[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [assignments, setAssignments] = useState<SubjectSemesterAssignment[]>([]);
+  const [timings, setTimings] = useState<CourseYearTiming[]>([]);
   // Course Catalog entries (regulations/regulationBatches per course) - the
   // Regulation picker below is sourced from here, same as HOD Sections' own
   // regulation picker (hod/sections/new/page.tsx), rather than only from
-  // whatever subjects happen to already exist for this course/year.
+  // whatever's already assigned for this course/year/semester.
   const [catalogItems, setCatalogItems] = useState<CourseCatalogItem[]>([]);
   // The college's own configured current session, when a Principal has set
   // one (Settings > Academic Year) - used only to resolve which regulation
@@ -43,19 +63,20 @@ export default function HODSubjectsPage() {
   // session when nothing's configured yet.
   const [currentSessionStart, setCurrentSessionStart] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isLoadingSubjects, setIsLoadingSubjects] = useState(false);
+  const [isLoadingAssignments, setIsLoadingAssignments] = useState(false);
 
   // Explicit picks only - "" means "no override yet, use the default below".
   // Keeping these separate from the effective values actually shown avoids
   // needing an effect to sync state just to pick a default.
   const [pickedCourseId, setPickedCourseId] = useState("");
   const [pickedYear, setPickedYear] = useState("");
+  const [pickedSemester, setPickedSemester] = useState<number | null>(null);
   // "" means "All regulations" - lets an HOD tell apart subjects filed under
   // different curriculum regulations when a year has more than one active
   // (e.g. a transition batch).
   const [pickedRegulation, setPickedRegulation] = useState("");
 
-  const [deleteTarget, setDeleteTarget] = useState<Subject | null>(null);
+  const [unassignTarget, setUnassignTarget] = useState<SubjectSemesterAssignment | null>(null);
 
   const loadCourses = useCallback(async () => {
     setIsLoading(true);
@@ -162,13 +183,32 @@ export default function HODSubjectsPage() {
     () => catalogItems.find((c) => c.id === selectedCourse?.catalogId) ?? null,
     [catalogItems, selectedCourse]
   );
+
+  const semesterOptions = useMemo(() => {
+    const nums = new Set<number>();
+    for (const t of timings) for (const s of t.semesters ?? []) nums.add(s.semester);
+    return Array.from(nums).sort((a, b) => a - b);
+  }, [timings]);
+  // Defaults to whichever semester's own date range covers today, when the
+  // HOD hasn't picked one explicitly - falls back to the first configured
+  // semester when no semester's dates cover today (or none are dated yet).
+  const currentTiming = useMemo(() => timings.find((t) => t.year === Number(selectedYear)) ?? null, [timings, selectedYear]);
+  const resolvedCurrentSemester = useMemo(() => resolveCurrentSemester(currentTiming), [currentTiming]);
+  const effectiveSemester = semesterOptions.length === 0
+    ? null
+    : pickedSemester != null && semesterOptions.includes(pickedSemester)
+      ? pickedSemester
+      : resolvedCurrentSemester != null && semesterOptions.includes(resolvedCurrentSemester)
+        ? resolvedCurrentSemester
+        : semesterOptions[0];
+
   // Sourced from the Course Catalog (same resolution HOD Sections' and Academics
   // Subjects' own regulation pickers use), unioned with whatever's already
-  // on this course/year's saved subjects - so a regulation the Academics just
-  // configured shows up even before any subject uses it (this control used
-  // to be a post-hoc filter over already-loaded subjects, which meant an
-  // empty subject list always meant an empty, disabled dropdown with no
-  // explanation why), while a legacy/edge-case subject the catalog can no
+  // assigned for this course/year/semester - so a regulation the Academics just
+  // configured shows up even before anything uses it (this control used
+  // to be a post-hoc filter over already-loaded rows, which meant an
+  // empty list always meant an empty, disabled dropdown with no
+  // explanation why), while a legacy/edge-case assignment the catalog can no
   // longer resolve stays filterable too.
   const catalogRegulations = useMemo(
     () => (selectedCourse?.catalogId && selectedYear
@@ -181,71 +221,168 @@ export default function HODSubjectsPage() {
       : []),
     [selectedCourse, selectedCatalogItem, selectedYear, currentSessionStart]
   );
+  const assignmentsForSemester = useMemo(
+    () => assignments.filter((a) => a.semester === effectiveSemester),
+    [assignments, effectiveSemester]
+  );
   const regulationOptions = useMemo(
     () => Array.from(new Set([
       ...catalogRegulations,
-      ...subjects.map((s) => s.regulation).filter((r): r is string => !!r),
+      ...assignmentsForSemester.map((a) => a.regulation).filter((r): r is string => !!r),
     ])).sort(),
-    [catalogRegulations, subjects]
+    [catalogRegulations, assignmentsForSemester]
   );
   const regulationEmptyReason = useMemo(() => {
     if (regulationOptions.length > 0) return null;
     if (!selectedCourse?.catalogId) return "This course isn't linked to a Course Catalog entry.";
     return "No regulation is configured for this year yet — set one in Course Catalog (Academics).";
   }, [regulationOptions, selectedCourse]);
-  const visibleSubjects = useMemo(() => {
-    const filtered = pickedRegulation ? subjects.filter((s) => !s.regulation || s.regulation === pickedRegulation) : subjects;
-    // Curriculum-table order: by S.No. when set, falling back to name for
-    // legacy subjects that predate the field.
-    return [...filtered].sort((a, b) => {
-      if (a.serialNumber != null && b.serialNumber != null) return a.serialNumber - b.serialNumber;
-      if (a.serialNumber != null) return -1;
-      if (b.serialNumber != null) return 1;
-      return a.name.localeCompare(b.name);
-    });
-  }, [subjects, pickedRegulation]);
 
-  const loadSubjects = useCallback(async (courseId: string, year: string) => {
-    if (!courseId || !year) { setSubjects([]); return; }
-    setIsLoadingSubjects(true);
+  const subjectById = useMemo(() => new Map(subjects.map((s) => [s.id, s])), [subjects]);
+  const visibleAssignments = useMemo(() => {
+    const filtered = pickedRegulation
+      ? assignmentsForSemester.filter((a) => !a.regulation || a.regulation === pickedRegulation)
+      : assignmentsForSemester;
+    // Curriculum-table order: by the master subject's own S.No. when set
+    // (SubjectSemesterAssignment doesn't carry its own), falling back to name.
+    return [...filtered].sort((a, b) => {
+      const sa = subjectById.get(a.subjectId)?.serialNumber;
+      const sb = subjectById.get(b.subjectId)?.serialNumber;
+      if (sa != null && sb != null) return sa - sb;
+      if (sa != null) return -1;
+      if (sb != null) return 1;
+      return a.subjectName.localeCompare(b.subjectName);
+    });
+  }, [assignmentsForSemester, pickedRegulation, subjectById]);
+
+  // Subjects (catalogId-scoped, department-independent) alongside Course-Year
+  // Timings and this department's own semester assignments - same three-way
+  // load Assign to Semester itself does, so S.No./category/etc join
+  // correctly and Semester options resolve from real timing data instead of
+  // a param the API silently ignored (the bug this page used to have).
+  const loadAssignments = useCallback(async (course: Course, year: string) => {
+    setIsLoadingAssignments(true);
     try {
-      const res = await fetch(`/api/college/subjects?courseId=${encodeURIComponent(courseId)}&year=${encodeURIComponent(year)}`);
-      const data = await res.json() as { subjects: Subject[] };
-      setSubjects(data.subjects ?? []);
+      const catalogId = course.catalogId ?? "";
+      const [subjectsRes, timingsRes, assignmentsRes] = await Promise.all([
+        fetch(catalogId
+          ? `/api/college/subjects?catalogId=${encodeURIComponent(catalogId)}`
+          : `/api/college/subjects?courseId=${encodeURIComponent(course.id)}`),
+        fetch(`/api/college/course-year-timings?courseId=${encodeURIComponent(course.id)}`),
+        fetch(`/api/college/subject-semester-assignments?courseId=${encodeURIComponent(course.id)}&departmentId=${encodeURIComponent(course.departmentId)}&year=${encodeURIComponent(year)}`),
+      ]);
+      const subjectsData = await subjectsRes.json() as { subjects?: Subject[] };
+      const timingsData = await timingsRes.json() as { timings?: CourseYearTiming[] };
+      const assignmentsData = await assignmentsRes.json() as { assignments?: SubjectSemesterAssignment[] };
+      setSubjects(subjectsData.subjects ?? []);
+      setTimings((timingsData.timings ?? []).filter((t) => t.year === Number(year)));
+      setAssignments(assignmentsData.assignments ?? []);
     } catch {
       toast({ variant: "destructive", title: "Failed to load subjects" });
     } finally {
-      setIsLoadingSubjects(false);
+      setIsLoadingAssignments(false);
     }
   }, []);
 
   useEffect(() => {
-    void (async () => { await loadSubjects(selectedCourseId, selectedYear); })();
-  }, [selectedCourseId, selectedYear, loadSubjects]);
+    if (!selectedCourse || !selectedYear) { setSubjects([]); setTimings([]); setAssignments([]); return; }
+    void loadAssignments(selectedCourse, selectedYear);
+  }, [selectedCourse, selectedYear, loadAssignments]);
 
   function selectCourse(courseId: string) {
     setPickedCourseId(courseId);
     setPickedYear(""); // fall back to the new course's own first year
+    setPickedSemester(null);
     setPickedRegulation("");
   }
 
   function selectYear(year: string) {
     setPickedYear(year);
+    setPickedSemester(null);
     setPickedRegulation("");
   }
 
-  async function handleDelete() {
-    if (!deleteTarget) return;
+  async function handleUnassign() {
+    if (!unassignTarget || !selectedCourse) return;
     try {
-      const res = await fetch(`/api/college/subjects/${deleteTarget.id}`, { method: "DELETE" });
+      const res = await fetch(
+        `/api/college/subject-semester-assignments?subjectId=${encodeURIComponent(unassignTarget.subjectId)}&departmentId=${encodeURIComponent(selectedCourse.departmentId)}`,
+        { method: "DELETE" }
+      );
       const json = await res.json() as { error?: string };
-      if (!res.ok) throw new Error(json.error ?? "Failed to delete subject");
-      toast({ variant: "success", title: `${deleteTarget.name} removed` });
-      await loadSubjects(selectedCourseId, selectedYear);
+      if (!res.ok) throw new Error(json.error ?? "Failed to remove subject");
+      toast({ variant: "success", title: `${unassignTarget.subjectName} removed from this semester` });
+      await loadAssignments(selectedCourse, selectedYear);
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to delete subject" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to remove subject" });
     } finally {
-      setDeleteTarget(null);
+      setUnassignTarget(null);
+    }
+  }
+
+  // ── Edit dialog: adjusts THIS department's own hours/credits override for
+  // an already-assigned subject (SubjectSemesterAssignment.customOverrides) -
+  // never the shared master subject's name/code/category, which stays
+  // Academics/Principal-owned and would otherwise change for every other
+  // department teaching the same catalog course. ─────────────────────────────
+  const [editTarget, setEditTarget] = useState<{
+    assignment: SubjectSemesterAssignment;
+    lectureHours: string;
+    tutorialHours: string;
+    practicalHours: string;
+    credits: string;
+  } | null>(null);
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState("");
+
+  function openEdit(a: SubjectSemesterAssignment) {
+    setEditError("");
+    setEditTarget({
+      assignment: a,
+      lectureHours: String(a.lectureHours ?? 0),
+      tutorialHours: String(a.tutorialHours ?? 0),
+      practicalHours: String(a.practicalHours ?? 0),
+      credits: String(a.credits ?? 0),
+    });
+  }
+
+  async function handleEditSave() {
+    if (!editTarget || !selectedCourse) return;
+    const { assignment, lectureHours, tutorialHours, practicalHours, credits } = editTarget;
+    if (lectureHours === "" || tutorialHours === "" || practicalHours === "") {
+      setEditError("L, T and P are required");
+      return;
+    }
+    setEditSaving(true);
+    setEditError("");
+    try {
+      const res = await fetch("/api/college/subject-semester-assignments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          subjectId: assignment.subjectId,
+          departmentId: selectedCourse.departmentId,
+          departmentName: deptNameById.get(selectedCourse.departmentId),
+          semester: assignment.semester,
+          year: Number(selectedYear),
+          courseId: selectedCourse.id,
+          customOverrides: {
+            lectureHours: Number(lectureHours),
+            tutorialHours: Number(tutorialHours),
+            practicalHours: Number(practicalHours),
+            credits: credits === "" ? undefined : Number(credits),
+          },
+        }),
+      });
+      const json = await res.json() as { error?: string };
+      if (!res.ok) throw new Error(json.error ?? "Failed to save");
+      toast({ variant: "success", title: `${assignment.subjectName} updated` });
+      setEditTarget(null);
+      await loadAssignments(selectedCourse, selectedYear);
+    } catch (err) {
+      setEditError(err instanceof Error ? err.message : "Failed to save");
+    } finally {
+      setEditSaving(false);
     }
   }
 
@@ -253,7 +390,7 @@ export default function HODSubjectsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Subjects"
-        description="Manage subjects offered for each year of your department's courses - common to all sections of that year"
+        description="Subjects assigned to your department for a semester, and their hours/credits"
       />
 
       {isLoading ? (
@@ -265,7 +402,7 @@ export default function HODSubjectsPage() {
       ) : (
         <>
           <Card>
-            <CardContent className="p-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <CardContent className="p-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <div className="space-y-1.5">
                 <Label>Course</Label>
                 <Select value={selectedCourseId} onValueChange={selectCourse}>
@@ -283,6 +420,25 @@ export default function HODSubjectsPage() {
                     {yearOptions.map((y) => <SelectItem key={y} value={String(y)}>{ordinalYear(y)}</SelectItem>)}
                   </SelectContent>
                 </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Semester</Label>
+                {selectedYear && semesterOptions.length === 0 ? (
+                  <div className="flex h-9 items-center rounded-md border bg-muted/30 px-3">
+                    <span className="text-xs text-muted-foreground">Not configured for this year</span>
+                  </div>
+                ) : (
+                  <Select
+                    value={effectiveSemester != null ? String(effectiveSemester) : ""}
+                    onValueChange={(v) => setPickedSemester(Number(v))}
+                    disabled={!selectedYear || semesterOptions.length === 0}
+                  >
+                    <SelectTrigger><SelectValue placeholder="Select semester" /></SelectTrigger>
+                    <SelectContent>
+                      {semesterOptions.map((s) => <SelectItem key={s} value={String(s)}>Semester {s}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
               <div className="space-y-1.5">
                 <Label>Regulation</Label>
@@ -304,25 +460,31 @@ export default function HODSubjectsPage() {
             </CardContent>
           </Card>
 
-          {selectedCourseId && selectedYear && (
+          {selectedYear && semesterOptions.length === 0 && (
+            <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+              This course-year has no semesters configured yet. Set them up in Course-Year Timings first.
+            </div>
+          )}
+
+          {selectedCourseId && selectedYear && effectiveSemester != null && (
             <Card>
               <CardContent className="p-4 space-y-4">
                 <h2 className="font-semibold text-sm flex items-center gap-2">
                   <BookOpen className="h-4 w-4" />
-                  {selectedCourse ? courseLabel(selectedCourse) : ""} · {ordinalYear(Number(selectedYear))}
+                  {selectedCourse ? courseLabel(selectedCourse) : ""} · {ordinalYear(Number(selectedYear))} · Semester {effectiveSemester}
                 </h2>
 
-                {isLoadingSubjects ? (
+                {isLoadingAssignments ? (
                   <div className="space-y-2">
                     {[1, 2, 3].map((i) => <div key={i} className="h-16 rounded-lg border bg-muted/30 animate-pulse" />)}
                   </div>
-                ) : subjects.length === 0 ? (
+                ) : assignmentsForSemester.length === 0 ? (
                   <p className="text-sm text-muted-foreground py-6 text-center">
-                    No subjects added yet for this year.
+                    No subjects assigned to this department for this semester yet.
                   </p>
-                ) : visibleSubjects.length === 0 ? (
+                ) : visibleAssignments.length === 0 ? (
                   <p className="text-sm text-muted-foreground py-6 text-center">
-                    No subjects for this year under regulation {pickedRegulation}.
+                    No subjects for this semester under regulation {pickedRegulation}.
                   </p>
                 ) : (
                   <Card className="overflow-hidden">
@@ -341,47 +503,40 @@ export default function HODSubjectsPage() {
                           </tr>
                         </thead>
                         <tbody className="divide-y">
-                          {visibleSubjects.map((s) => {
-                            // A subject viewed here that isn't actually filed under
-                            // this HOD's own department (e.g. Basic Science's shared
-                            // 1st-year subject, seen from a fed department like IT)
-                            // is read-only - editing/deleting it from a department
-                            // that doesn't own it would change/remove it for every
-                            // other department sharing it too.
-                            const isOwnDepartment = !!s.department && myDepartments.includes(s.department);
+                          {visibleAssignments.map((a) => {
+                            const subject = subjectById.get(a.subjectId);
                             return (
-                              <tr key={s.id}>
-                                <td className="px-4 py-2.5">{s.serialNumber ?? "—"}</td>
+                              <tr key={a.id}>
+                                <td className="px-4 py-2.5">{subject?.serialNumber ?? "—"}</td>
                                 <td className="px-4 py-2.5">
-                                  {s.category ? <Badge variant="outline" className="text-xs">{s.category === "OTHER" ? (s.customCategory || "Other") : s.category}</Badge> : "—"}
+                                  {(a.category ?? subject?.category) ? (
+                                    <Badge variant="outline" className="text-xs">
+                                      {(a.category ?? subject?.category) === "OTHER" ? (a.customCategory || subject?.customCategory || "Other") : (a.category ?? subject?.category)}
+                                    </Badge>
+                                  ) : "—"}
                                 </td>
                                 <td className="px-4 py-2.5">
-                                  <div className="font-medium text-foreground">{s.name}</div>
+                                  <div className="font-medium text-foreground">{a.subjectName}</div>
                                   <div className="flex flex-wrap items-center gap-2 mt-1">
-                                    <Badge variant="secondary" className="text-xs font-mono">{s.code}</Badge>
-                                    <Badge variant="outline" className="text-xs">{SUBJECT_TYPE_LABELS[s.type]}</Badge>
-                                    {s.regulation && <Badge variant="secondary" className="text-xs">{s.regulation}</Badge>}
-                                    {!isOwnDepartment && (
-                                      <Badge variant="outline" className="text-xs">From {s.department}</Badge>
-                                    )}
-                                    <span className="text-xs text-muted-foreground">{s.hoursPerWeek} hrs/week</span>
+                                    <Badge variant="secondary" className="text-xs font-mono">{a.subjectCode}</Badge>
+                                    <Badge variant="outline" className="text-xs">{SUBJECT_TYPE_LABELS[a.type ?? subject?.type ?? "THEORY"]}</Badge>
+                                    {a.regulation && <Badge variant="secondary" className="text-xs">{a.regulation}</Badge>}
+                                    <span className="text-xs text-muted-foreground">{a.hoursPerWeek ?? subject?.hoursPerWeek ?? 0} hrs/week</span>
                                   </div>
                                 </td>
-                                <td className="px-4 py-2.5 text-center">{s.lectureHours ?? "—"}</td>
-                                <td className="px-4 py-2.5 text-center">{s.tutorialHours ?? "—"}</td>
-                                <td className="px-4 py-2.5 text-center">{s.practicalHours ?? "—"}</td>
-                                <td className="px-4 py-2.5 text-center">{s.credits}</td>
+                                <td className="px-4 py-2.5 text-center">{a.lectureHours ?? subject?.lectureHours ?? "—"}</td>
+                                <td className="px-4 py-2.5 text-center">{a.tutorialHours ?? subject?.tutorialHours ?? "—"}</td>
+                                <td className="px-4 py-2.5 text-center">{a.practicalHours ?? subject?.practicalHours ?? "—"}</td>
+                                <td className="px-4 py-2.5 text-center">{a.credits ?? subject?.credits ?? "—"}</td>
                                 <td className="px-4 py-2.5 text-right">
-                                  {isOwnDepartment && (
-                                    <div className="flex justify-end gap-1">
-                                      <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={`Edit ${s.name}`} onClick={() => router.push(`/hod/subjects/${s.id}/edit?courseId=${selectedCourseId}&year=${selectedYear}`)}>
-                                        <Pencil className="h-3.5 w-3.5" />
-                                      </Button>
-                                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" aria-label={`Delete ${s.name}`} onClick={() => setDeleteTarget(s)}>
-                                        <Trash2 className="h-3.5 w-3.5" />
-                                      </Button>
-                                    </div>
-                                  )}
+                                  <div className="flex justify-end gap-1">
+                                    <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={`Edit ${a.subjectName}`} onClick={() => openEdit(a)}>
+                                      <Pencil className="h-3.5 w-3.5" />
+                                    </Button>
+                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" aria-label={`Remove ${a.subjectName}`} onClick={() => setUnassignTarget(a)}>
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </Button>
+                                  </div>
                                 </td>
                               </tr>
                             );
@@ -398,14 +553,46 @@ export default function HODSubjectsPage() {
       )}
 
       <ConfirmDialog
-        open={!!deleteTarget}
-        onOpenChange={(open) => !open && setDeleteTarget(null)}
-        title={`Delete ${deleteTarget?.name ?? "subject"}?`}
-        description="This will permanently remove the subject."
-        confirmLabel="Delete"
+        open={!!unassignTarget}
+        onOpenChange={(open) => !open && setUnassignTarget(null)}
+        title={`Remove ${unassignTarget?.subjectName ?? "subject"} from this semester?`}
+        description="This only unassigns it from your department's semester - the shared master subject itself isn't affected, and it can be re-assigned later from Assign to Semester."
+        confirmLabel="Remove"
         variant="destructive"
-        onConfirm={() => void handleDelete()}
+        onConfirm={() => void handleUnassign()}
       />
+
+      <Dialog open={!!editTarget} onOpenChange={(o) => !o && setEditTarget(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{editTarget?.assignment.subjectName}</DialogTitle>
+          </DialogHeader>
+          {editTarget && (
+            <div className="space-y-4">
+              <p className="text-xs text-muted-foreground">
+                Adjusts this department&apos;s own hours/credits for this subject - the shared subject itself (name, code, category) is managed by Academics.
+              </p>
+              <div className="space-y-2">
+                <Label>L / T / P</Label>
+                <div className="grid grid-cols-3 gap-3">
+                  <Input type="number" min={0} placeholder="L" aria-label="Lecture hours" value={editTarget.lectureHours} onChange={(e) => setEditTarget((prev) => prev && { ...prev, lectureHours: e.target.value })} />
+                  <Input type="number" min={0} placeholder="T" aria-label="Tutorial hours" value={editTarget.tutorialHours} onChange={(e) => setEditTarget((prev) => prev && { ...prev, tutorialHours: e.target.value })} />
+                  <Input type="number" min={0} placeholder="P" aria-label="Practical hours" value={editTarget.practicalHours} onChange={(e) => setEditTarget((prev) => prev && { ...prev, practicalHours: e.target.value })} />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Credits</Label>
+                <Input type="number" min={0} step="any" value={editTarget.credits} onChange={(e) => setEditTarget((prev) => prev && { ...prev, credits: e.target.value })} />
+              </div>
+              {editError && <p className="text-sm text-red-600">{editError}</p>}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditTarget(null)}>Cancel</Button>
+            <Button onClick={() => void handleEditSave()} loading={editSaving}>Save</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

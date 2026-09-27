@@ -89,7 +89,15 @@ export default function MidPaperSetterPage() {
       if (!resolvedCourse || !semester) { setSubjects([]); return; }
       setIsLoadingSubjects(true);
       try {
-        const params = new URLSearchParams({ courseId: resolvedCourse.id, year: String(yearForSemester(Number(semester))) });
+        // catalogId when available, not courseId alone - a master subject is
+        // department-independent (see /api/college/subjects GET's own
+        // doc-comment), physically filed under whichever ONE department's
+        // Course doc created it, which need not be `resolvedCourse.id` (the
+        // first course matching this name in this HOD's own scope) even
+        // when the subject legitimately belongs to this course's programme.
+        const params = resolvedCourse.catalogId
+          ? new URLSearchParams({ catalogId: resolvedCourse.catalogId })
+          : new URLSearchParams({ courseId: resolvedCourse.id, year: String(yearForSemester(Number(semester))) });
         const res = await fetch(`/api/college/subjects?${params}`);
         const data = (await res.json()) as { subjects?: Subject[] };
         setSubjects(data.subjects ?? []);

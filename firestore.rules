@@ -143,7 +143,17 @@ service cloud.firestore {
       match /users/{uid} {
         allow read: if isStaff(collegeId);
         allow create: if isSuperAdmin() && hasCollegeId(collegeId);
-        allow update: if isSuperAdmin() || isOwner(uid);
+        // Owner self-updates are for personal-profile fields only. Every field
+        // any guard (verifySession/liveRoles/scope.ts) treats as an
+        // authorization signal must stay Admin-SDK-only, or a self-write here
+        // is a direct privilege escalation - resolveHeldRoles in liveRoles.ts
+        // reads role/seatRoles/isActive straight off this doc as ground truth.
+        allow update: if isSuperAdmin() ||
+          (isOwner(uid) && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+            'role', 'realRole', 'roles', 'seatIds', 'seatRoles', 'collegeId',
+            'department', 'departments', 'locationDeptId', 'locationDeptIds',
+            'allLocationDepts', 'sectionId', 'sectionName', 'isActive'
+          ]));
         allow delete: if isSuperAdmin();
       }
 

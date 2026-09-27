@@ -151,6 +151,35 @@ export function parseBatchStartYears(batch: string): number[] {
     .filter((y): y is number => y != null);
 }
 
+/**
+ * Every admission start-year that more than one regulation in
+ * `regulationBatches` claims - the ambiguous state regulationsForBatchStartYear's
+ * own doc-comment warns callers to treat as "ask Academics to fix the
+ * batches", but nothing actually stopped it from being SAVED in the first
+ * place. The two writers of this field (course-catalog/route.ts POST and
+ * [id]/route.ts PATCH) call this right before writing and reject if it's
+ * non-empty, so the ambiguous state can no longer be created going forward -
+ * this never touches a catalog entry already saved with an overlap, only a
+ * new write.
+ */
+export function findOverlappingRegulationBatches(
+  regulationBatches: Record<string, string>
+): { year: number; regulations: string[] }[] {
+  const regsByYear = new Map<number, string[]>();
+  for (const [reg, ranges] of Object.entries(regulationBatches ?? {})) {
+    for (const year of parseBatchStartYears(ranges)) {
+      const list = regsByYear.get(year) ?? [];
+      list.push(reg);
+      regsByYear.set(year, list);
+    }
+  }
+  const conflicts: { year: number; regulations: string[] }[] = [];
+  for (const [year, regs] of regsByYear) {
+    if (regs.length > 1) conflicts.push({ year, regulations: regs });
+  }
+  return conflicts.sort((a, b) => a.year - b.year);
+}
+
 // Which regulation code(s) cover a SPECIFIC intake batch (by its start year) -
 // the direct, ground-truth resolution: a batch's own admission year is fixed
 // forever once picked, so the regulation governing it never depends on "what

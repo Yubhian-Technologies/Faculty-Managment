@@ -13,7 +13,6 @@ import { stripLeadingZeros } from "@/lib/utils";
 import type { CourseCatalogItem, SubjectCategory, SubjectType } from "@/types";
 import { SUBJECT_CATEGORY_LABELS, SUBJECT_TYPE_LABELS } from "@/types";
 import { regulationsForCourseYearByBatch } from "@/lib/college/academicStructure";
-import { parseAcademicYearStart } from "@/lib/college/academicSession";
 
 type SubjectForm = {
   serialNumber: string;
@@ -21,6 +20,7 @@ type SubjectForm = {
   customCategory: string;
   name: string;
   code: string;
+  shortCode: string;
   type: SubjectType;
   lectureHours: string;
   tutorialHours: string;
@@ -32,7 +32,7 @@ type SubjectForm = {
 };
 
 const EMPTY_SUBJECT_FORM: SubjectForm = {
-  serialNumber: "", category: "", customCategory: "", name: "", code: "", type: "THEORY",
+  serialNumber: "", category: "", customCategory: "", name: "", code: "", shortCode: "", type: "THEORY",
   lectureHours: "", tutorialHours: "", practicalHours: "",
   hoursPerWeek: "", totalHoursPerSemester: "", credits: "", regulation: "",
 };
@@ -40,48 +40,46 @@ const EMPTY_SUBJECT_FORM: SubjectForm = {
 export default function NewAcademicsSubjectPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const departmentId = searchParams.get("departmentId") ?? "";
   const courseId = searchParams.get("courseId") ?? "";
-  const year = searchParams.get("year") ?? "";
-  const department = searchParams.get("department") ?? "";
   const academicYear = searchParams.get("academicYear") ?? "";
   const regulationFromList = searchParams.get("regulation") ?? "";
   const nextSerialNumber = searchParams.get("nextSerialNumber") ?? "";
   const catalogId = searchParams.get("catalogId") ?? "";
   // Carried through to the success redirect so the Subjects list lands back
-  // on this same department/course/year/session/regulation instead of the
-  // blank pickers.
-  const backHref = `/academics/subjects?departmentId=${encodeURIComponent(departmentId)}&courseId=${encodeURIComponent(courseId)}&year=${encodeURIComponent(year)}&academicYear=${encodeURIComponent(academicYear)}&regulation=${encodeURIComponent(regulationFromList)}`;
+  // on this same course/session/regulation instead of the blank pickers.
+  const backHref = `/academics/subjects?courseId=${encodeURIComponent(courseId)}&academicYear=${encodeURIComponent(academicYear)}&regulation=${encodeURIComponent(regulationFromList)}`;
 
   const [form, setForm] = useState<SubjectForm>({
     ...EMPTY_SUBJECT_FORM, regulation: regulationFromList, serialNumber: nextSerialNumber,
   });
   const [saving, setSaving] = useState(false);
   // Whichever of this course's own regulations (Course Catalog, see
-  // CourseCatalogSettingsCard) currently cover the picked year, resolved
-  // from their batch coverage - offered as an optional tag, not required
-  // (subjects are scoped by Academic Year session, not regulation; see
-  // academics/subjects/page.tsx).
+  // CourseCatalogSettingsCard) are assigned to this course - offered
+  // as an optional tag, not required (subjects are scoped by course
+  // + regulation only; see academics/subjects/page.tsx).
   const [regulations, setRegulations] = useState<string[]>([]);
 
   useEffect(() => {
-    if (!courseId || !year) {
-      toast({ variant: "destructive", title: "Select a course, department and year first" });
+    if (!courseId) {
+      toast({ variant: "destructive", title: "Select a course first" });
       router.push("/academics/subjects");
     }
-  }, [courseId, year, router]);
+  }, [courseId, router]);
 
   useEffect(() => {
+    if (!catalogId) return;
     fetch("/api/college/course-catalog")
       .then((r) => r.json() as Promise<{ items: CourseCatalogItem[] }>)
       .then((d) => {
         const catalogItem = (d.items ?? []).find((c) => c.id === catalogId);
-        setRegulations(regulationsForCourseYearByBatch(catalogItem?.regulationBatches ?? {}, Number(year), parseAcademicYearStart(academicYear) ?? undefined, catalogItem?.regulations));
+        // The master subject is scoped by course + regulation only
+        // (no year), so show all regulations for this course.
+        setRegulations(catalogItem?.regulations ?? []);
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load regulations" }));
-  }, [catalogId, year, academicYear]);
+  }, [catalogId]);
 
-  if (!courseId || !year) return null;
+  if (!courseId) return null;
 
   function setF(patch: Partial<SubjectForm>) {
     setForm((f) => ({ ...f, ...patch }));
@@ -116,8 +114,6 @@ export default function NewAcademicsSubjectPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           courseId,
-          year: Number(year),
-          department: department || undefined,
           academicYear: academicYear || undefined,
           regulation: form.regulation,
           serialNumber: Number(form.serialNumber),
@@ -125,6 +121,7 @@ export default function NewAcademicsSubjectPage() {
           customCategory: form.category === "OTHER" ? form.customCategory.trim() : undefined,
           name: form.name.trim(),
           code: form.code.trim(),
+          shortCode: form.shortCode.trim() || undefined,
           type: form.type,
           lectureHours: Number(form.lectureHours),
           tutorialHours: Number(form.tutorialHours),
@@ -151,11 +148,7 @@ export default function NewAcademicsSubjectPage() {
     <div className="max-w-xl">
       <PageHeader
         title="Add Subject"
-        description={
-          academicYear
-            ? `Add a subject offered for this year of the course, for academic year ${academicYear}`
-            : "Add a subject offered for this year of the course"
-        }
+        description="Add a subject to this course"
       />
 
       <Card>
@@ -202,14 +195,14 @@ export default function NewAcademicsSubjectPage() {
             <div className="space-y-2">
               <Label>Regulation</Label>
               <Select value={form.regulation} onValueChange={(v) => setF({ regulation: v })} disabled={regulations.length === 0}>
-                <SelectTrigger><SelectValue placeholder={regulations.length ? "Select regulation (optional)" : "None resolved for this year"} /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder={regulations.length ? "Select regulation (optional)" : "None resolved for this course"} /></SelectTrigger>
                 <SelectContent>
                   {regulations.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
                 </SelectContent>
               </Select>
               {regulations.length === 0 && (
                 <p className="text-xs text-muted-foreground">
-                  No regulation&rsquo;s batch currently covers this year - the subject will be added without one.
+                  No regulation is assigned to this course yet. The subject will be added without one.
                 </p>
               )}
             </div>
@@ -235,6 +228,20 @@ export default function NewAcademicsSubjectPage() {
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Short Code</Label>
+              <Input
+                value={form.shortCode}
+                onChange={(e) => setF({ shortCode: e.target.value.toUpperCase() })}
+                placeholder="e.g. DS"
+                maxLength={8}
+                className="uppercase"
+              />
+              <p className="text-xs text-muted-foreground">
+                A compact mnemonic shown in the timetable and other tight spaces (e.g. &quot;CHE&quot; for Chemistry) - optional, falls back to Code when blank.
+              </p>
             </div>
 
             <div className="space-y-2">

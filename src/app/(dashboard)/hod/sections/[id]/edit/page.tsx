@@ -88,21 +88,58 @@ export default function EditSectionPage() {
   const [stagedFaculty, setStagedFaculty] = useState<Record<string, string>>({});
   const assignmentIdBySubject = useRef<Record<string, string>>({});
 
-  // Scoped to this section's own regulation (when set) so "Subjects & Faculty"
-  // below only offers the curriculum this section's own batch actually
-  // follows, instead of every regulation's subjects for the year mixed
-  // together - the /api/college/subjects GET filter is lenient (a subject
-  // with no regulation of its own still matches), so this stays safe for
-  // subjects created before regulation existed.
-  const loadSubjects = useCallback((courseId: string, year: string, regulation: string) => {
+  // Scoped to this section's own regulation (when set) AND narrowed down to
+  // only the subjects Academics has actually mapped into this section's own
+  // department+year via Assign to Semester (subject-semester-assignments) -
+  // the plain /api/college/subjects list otherwise returns every master
+  // subject ever created for this course+year+regulation, most of which no
+  // department has been assigned to teach yet. `departmentId` empty (this
+  // section's own department hasn't resolved from the `departments` fetch
+  // yet - see the effect below) leaves the list unfiltered rather than
+  // empty; the effect re-fires and narrows it down the moment it resolves.
+  const loadSubjects = useCallback((courseId: string, year: string, regulation: string, departmentId: string, catalogId?: string) => {
     if (!courseId || !year) { setSubjects([]); return; }
     setSubjectsLoading(true);
-    fetch(`/api/college/subjects?courseId=${courseId}&year=${year}${regulation ? `&regulation=${encodeURIComponent(regulation)}` : ""}`)
-      .then((r) => r.json() as Promise<{ subjects?: SubjectRow[] }>)
-      .then((d) => setSubjects(d.subjects ?? []))
+    const regParam = regulation ? `&regulation=${encodeURIComponent(regulation)}` : "";
+    // catalogId when available, not courseId alone - a master subject is
+    // department-independent (see /api/college/subjects GET's own
+    // doc-comment), physically filed under whichever ONE department's
+    // Course doc created it, which can differ from this section's own
+    // courseId. Without this, a subject legitimately assigned to this
+    // department (assignedIds below, correctly scoped) could be silently
+    // dropped by the join below because `master` never contained it.
+    Promise.all([
+      fetch(catalogId
+        ? `/api/college/subjects?catalogId=${encodeURIComponent(catalogId)}${regParam}`
+        : `/api/college/subjects?courseId=${courseId}&year=${year}${regParam}`)
+        .then((r) => r.json() as Promise<{ subjects?: SubjectRow[] }>),
+      departmentId
+        ? fetch(`/api/college/subject-semester-assignments?courseId=${encodeURIComponent(courseId)}&departmentId=${encodeURIComponent(departmentId)}&year=${encodeURIComponent(year)}`)
+            .then((r) => r.json() as Promise<{ assignments?: { subjectId: string }[] }>)
+        : Promise.resolve({ assignments: [] as { subjectId: string }[] }),
+    ])
+      .then(([subjectsData, assignData]) => {
+        const master = subjectsData.subjects ?? [];
+        if (!departmentId) { setSubjects(master); return; }
+        const assignedIds = new Set(assignData.assignments?.map((a) => a.subjectId));
+        setSubjects(master.filter((s) => assignedIds.has(s.id)));
+      })
       .catch(() => toast({ variant: "destructive", title: "Failed to load subjects" }))
       .finally(() => setSubjectsLoading(false));
   }, []);
+
+  // Single reactive trigger for loadSubjects, replacing 4 separate imperative
+  // call sites (initial load, course/batch/regulation changes) that each had
+  // to remember to pass a resolved departmentId - `ownerDept` and
+  // `departments` resolve from two independent fetches, so any call made
+  // before both landed would fall back to the unfiltered list until this
+  // effect re-fires with the real departmentId anyway.
+  useEffect(() => {
+    if (!form.courseId || !form.year) { setSubjects([]); return; }
+    const departmentId = departments.find((d) => d.name === ownerDept)?.id ?? "";
+    const catalogId = courses.find((c) => c.id === form.courseId)?.catalogId;
+    loadSubjects(form.courseId, form.year, form.regulation, departmentId, catalogId);
+  }, [form.courseId, form.year, form.regulation, ownerDept, departments, courses, loadSubjects]);
 
   useEffect(() => {
     fetch("/api/college/faculty?availableOnly=true")
@@ -149,7 +186,8 @@ export default function EditSectionPage() {
           facultyInchargeUid: s.facultyInchargeUid ?? "",
           facultyInchargeName: s.facultyInchargeName ?? "",
         });
-        loadSubjects(s.courseId ?? "", String(s.year), s.regulation ?? "");
+        // Subjects load via the reactive effect below (needs `departments`
+        // too, which resolves from a separate, parallel fetch).
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load section" }))
       .finally(() => setLoading(false));
@@ -430,9 +468,9 @@ export default function EditSectionPage() {
     const own = group.courseIds.find((id) => courses.find((c) => c.id === id)?.departmentId === ownerDeptId);
     const newCourseId = own ?? group.courseIds[0];
     // A different course may not offer the previously-picked regulation for
-    // this (fixed) year - clear it and let the HOD re-pick.
+    // this (fixed) year - clear it and let the HOD re-pick. Subjects
+    // reload via the reactive effect above once form.courseId changes.
     setF({ courseId: newCourseId, regulation: "" });
-    loadSubjects(newCourseId, form.year, "");
   }
 
   // Branch mode: this section's owning department cross-lists to one or more
@@ -582,7 +620,6 @@ export default function EditSectionPage() {
                     const stillValid = regulationsForBatch(v).some((r) => r.toLowerCase() === form.regulation.toLowerCase());
                     const nextRegulation = stillValid ? form.regulation : "";
                     setF({ batch: v, regulation: nextRegulation });
-                    loadSubjects(form.courseId, form.year, nextRegulation);
                   }}
                 >
                   <SelectTrigger><SelectValue placeholder="Select batch" /></SelectTrigger>
@@ -596,7 +633,7 @@ export default function EditSectionPage() {
                 <Label>Regulation</Label>
                 <Select
                   value={regulationSelectValue}
-                  onValueChange={(v) => { setF({ regulation: v }); loadSubjects(form.courseId, form.year, v); }}
+                  onValueChange={(v) => setF({ regulation: v })}
                   disabled={!form.batch || regulationOptions.length === 0}
                 >
                   <SelectTrigger>
@@ -650,7 +687,7 @@ export default function EditSectionPage() {
                 <p className="text-xs text-muted-foreground">Loading subjects…</p>
               ) : subjects.length === 0 ? (
                 <p className="text-xs text-muted-foreground">
-                  No subjects defined yet for {formCourse?.name} · {ordinalYear(Number(form.year))}. Add subjects first.
+                  No subjects assigned to your department for {formCourse?.name} · {ordinalYear(Number(form.year))} yet - use Assign to Semester first.
                 </p>
               ) : (
                 <div className="space-y-2">

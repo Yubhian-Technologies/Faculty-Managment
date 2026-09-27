@@ -6,16 +6,17 @@ export type SubjectType = "THEORY" | "PRACTICAL" | "TUTORIAL" | "PROJECT";
 
 export const SUBJECT_TYPE_LABELS: Record<SubjectType, string> = {
   THEORY: "Theory",
-  PRACTICAL: "Practical / Lab",
+  PRACTICAL: "Practical",
   TUTORIAL: "Tutorial",
   PROJECT: "Project",
 };
 
 // Standard AICTE model-curriculum categories, used across most Indian
 // engineering colleges' L-T-P-C curriculum tables.
-export type SubjectCategory = "HSMC" | "BSC" | "ESC" | "PCC" | "PEC" | "OEC" | "MC" | "PROJ" | "OTHER";
+export type StandardSubjectCategory = "HSMC" | "BSC" | "ESC" | "PCC" | "PEC" | "OEC" | "MC" | "PROJ" | "OTHER";
+export type SubjectCategory = StandardSubjectCategory | (string & {});
 
-export const SUBJECT_CATEGORY_LABELS: Record<SubjectCategory, string> = {
+export const SUBJECT_CATEGORY_LABELS: Record<string, string> = {
   HSMC: "Humanities & Social Sciences (HSMC)",
   BSC: "Basic Science (BSC)",
   ESC: "Engineering Science (ESC)",
@@ -28,44 +29,43 @@ export const SUBJECT_CATEGORY_LABELS: Record<SubjectCategory, string> = {
 };
 
 // Two independent shapes share this collection (see api/college/subjects/route.ts):
-// course/year-scoped (departmentId/courseId/year set) and semester-scoped
-// (semester set, no course link).
+// master subjects (courseId + regulation, no department/year) and
+// semester-scoped subjects (semester set, no course link).
 export interface Subject {
   id: string;
   collegeId: string;
-  department: string;
-  departmentId?: string;
   courseId?: string;
   courseName?: string;
-  year?: number;               // academic year within the course (1..course.durationYears) - common to all sections of that year
+  // Legacy fields - populated on existing subjects from before
+  // the master-subject restructuring. Not set on new subjects
+  // (scoped by courseId + regulation only).
+  department?: string;
+  departmentId?: string;
+  year?: number;
   semester?: number;           // semester-scoped subjects only
   // The calendar academic session this subject entry belongs to (e.g.
-  // "2026-27") - not the same as `year` above. Set by the Academics when creating
-  // a subject (see academics/subjects/new/page.tsx) and what the Academics' Subjects
-  // list is actually scoped/filtered by (academics/subjects/page.tsx) - each
-  // session gets its own independent subject list per course-year, filled in
-  // fresh by the Academics rather than carried over or auto-reset. Optional/absent
-  // on subjects created before this field existed or via the HOD's own
-  // Subjects page.
+  // "2026-27"). Optional/absent on subjects created before this field
+  // existed. Each session gets its own independent subject list per
+  // course+regulation, filled in fresh by the Academics rather than
+  // carried over or auto-reset.
   academicYear?: string;
   // The curriculum regulation this subject's syllabus follows (e.g. "R20",
   // "R23"), auto-resolved from the owning course's own Course Catalog
   // regulations (CourseCatalogItem.regulations/regulationBatches) when
-  // unambiguous. Optional, not a gate on adding a subject - a course-year
-  // with no (or more than one) regulation currently resolved can still have
-  // subjects added; this is purely a tag, used elsewhere to match a Subject
-  // to a Section on the same regulation (TeachingAssignmentsEditor). Absent
-  // on semester-scoped subjects and on subjects created before this field
-  // existed. Immutable once set (like courseId/year) - not editable via PATCH.
+  // unambiguous. Optional, not a gate on adding a subject - a course
+  // with no (or more than one) regulation currently resolved can still
+  // have subjects added; this is purely a tag, used elsewhere to match
+  // a Subject to a Section on the same regulation
+  // (TeachingAssignmentsEditor). Absent on semester-scoped subjects and
+  // on subjects created before this field existed. Immutable once set.
   regulation?: string;
-  // Row position in the Academics' curriculum-table view of a course/year -
+  // Row position in the Academics' curriculum-table view of a course -
   // editable, so the Academics can match a printed curriculum sheet's ordering
-  // instead of being stuck with alphabetical-by-name. Course/year-scoped
-  // subjects only; absent on legacy subjects created before this field
-  // existed (those sort after any with a serialNumber, then by name).
+  // instead of being stuck with alphabetical-by-name. Master subjects only;
+  // absent on legacy subjects created before this field existed.
   serialNumber?: number;
   // Curriculum category (e.g. Professional Core, Open Elective) - see
-  // SUBJECT_CATEGORY_LABELS. Course/year-scoped subjects only.
+  // SUBJECT_CATEGORY_LABELS. Master subjects only.
   category?: SubjectCategory;
   // Free-text label when category is "OTHER" - the curriculum's own name for
   // a category outside the standard AICTE list above. Unset for every other
@@ -73,14 +73,19 @@ export interface Subject {
   customCategory?: string;
   name: string;
   code: string;
-  catalogId?: string;
+  // A short, human-readable mnemonic ("CHE" for Chemistry) - distinct from
+  // `code` above (the formal registrar/curriculum code, e.g. "CS201").
+  // Optional so existing subjects created before this field existed keep
+  // showing their full name/code until someone fills it in; every display
+  // surface that reads it falls back to `code`/`name` when absent.
+  shortCode?: string;
   hoursPerWeek: number;
   totalHoursPerSemester?: number;
   // L-T-P breakdown (Lecture/Tutorial/Practical hours per week) alongside
   // `hoursPerWeek` and `type` above - a single subject's weekly load is
   // often split across more than one of these (e.g. 3 lecture + 2 lab
   // hours), which neither hoursPerWeek nor the single-valued `type` capture
-  // on their own. Course/year-scoped subjects only.
+  // on their own. Master subjects only.
   lectureHours?: number;
   tutorialHours?: number;
   practicalHours?: number;
@@ -91,31 +96,39 @@ export interface Subject {
   updatedAt: Timestamp;
 }
 
-// ─── Subject <-> Semester assignment ──────────────────────────────────
-// A master Subject (catalogId + year + regulation, department-independent)
-// can be taught in a DIFFERENT semester by different departments (e.g.
-// Physics = Semester 1 for CSE, Semester 2 for ECE) - a real many-to-many
-// relationship a single field on Subject can never represent. This
-// collection is that mapping: one row per (subject, department) pair,
-// doc id `${subjectId}_${departmentId}` - the id scheme itself is what
-// enforces "one semester per subject per department" while leaving every
-// other department free to hold its own independent row for the same
-// subject. See academics/assign-semester/page.tsx (the only place these
-// are created) and api/college/subject-semester-assignments/route.ts.
+// ─── Subject Semester Assignment ────────────────────────────────────
+// Used by the teaching-assignments page (HOD) and the faculty modules
+// route to list subjects assigned for a specific semester.
+
 export interface SubjectSemesterAssignment {
-  id: string; // `${subjectId}_${departmentId}`
+  id: string;
   collegeId: string;
-  subjectId: string;
+  department?: string;
+  departmentName?: string;
+  departmentId?: string;
+  courseId?: string;
+  courseName?: string;
+  regulation?: string;
+  year?: number;
+  semester: number;
+  academicYear?: string;
+  subjectId: string; // References master subject id
+  masterSubjectId?: string; // Explicit provenance pointer
   subjectName: string;
   subjectCode: string;
-  catalogId: string;
-  year: number;
-  departmentId: string;
-  departmentName: string;
-  // This department's OWN Course doc - Teaching Assignments/Timetable
-  // stay section/course-scoped, so this is what lets them join back to it.
-  courseId: string;
-  semester: number;
+  shortCode?: string; // Snapshot of Subject.shortCode - see its own doc-comment
+  // Snapshot attributes copied from Master Subject
+  type?: SubjectType;
+  category?: SubjectCategory;
+  customCategory?: string;
+  lectureHours?: number;
+  tutorialHours?: number;
+  practicalHours?: number;
+  hoursPerWeek?: number;
+  totalHoursPerSemester?: number | null;
+  credits?: number;
+  isCustomized?: boolean;
+  isActive?: boolean;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
@@ -143,6 +156,7 @@ export interface TeachingAssignment {
   subjectId: string;
   subjectName: string;
   subjectCode: string;
+  shortCode?: string; // Snapshot of Subject.shortCode at assignment-creation time - see its own doc-comment
   hoursPerWeek: number;
   totalHoursAllotted?: number;
   assignedBy: string;

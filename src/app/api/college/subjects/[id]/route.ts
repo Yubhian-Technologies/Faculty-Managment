@@ -17,6 +17,7 @@ export async function PATCH(
     const body = (await request.json()) as {
       name?: string;
       code?: string;
+      shortCode?: string;
       hoursPerWeek?: number;
       totalHoursPerSemester?: number | null;
       credits?: number;
@@ -62,6 +63,7 @@ export async function PATCH(
     const updates: Record<string, unknown> = { updatedAt: new Date() };
     if (body.name != null) updates.name = body.name.trim();
     if (body.code != null) updates.code = body.code.toUpperCase().trim();
+    if (body.shortCode != null) updates.shortCode = body.shortCode.trim().toUpperCase();
     if (body.hoursPerWeek != null) updates.hoursPerWeek = Number(body.hoursPerWeek);
     if ("totalHoursPerSemester" in body) updates.totalHoursPerSemester = body.totalHoursPerSemester ?? null;
     if (body.credits != null) updates.credits = Number(body.credits);
@@ -92,16 +94,19 @@ export async function PATCH(
     // point-in-time records, not live state.
     const nameChanged = body.name != null;
     const codeChanged = body.code != null;
-    if (body.hoursPerWeek != null || nameChanged || codeChanged) {
+    const shortCodeChanged = body.shortCode != null;
+    if (body.hoursPerWeek != null || nameChanged || codeChanged || shortCodeChanged) {
       const newHours = body.hoursPerWeek != null ? Number(body.hoursPerWeek) : undefined;
       const newName = nameChanged ? String(updates.name) : undefined;
       const newCode = codeChanged ? String(updates.code) : undefined;
+      const newShortCode = shortCodeChanged ? String(updates.shortCode) : undefined;
       const now = new Date();
 
       const assignmentFields: Record<string, unknown> = { updatedAt: now };
       if (newHours != null) assignmentFields.hoursPerWeek = newHours;
       if (newName != null) assignmentFields.subjectName = newName;
       if (newCode != null) assignmentFields.subjectCode = newCode;
+      if (newShortCode != null) assignmentFields.shortCode = newShortCode;
 
       const assignmentsSnap = await db
         .collection("colleges").doc(session.collegeId)
@@ -169,21 +174,41 @@ export async function DELETE(
     }
 
     // Refuse to hard-delete a subject that still has live teaching
-    // assignments - deleting the doc out from under them would orphan every
-    // one of those (subjectId pointing at nothing, and any future re-fetch of
-    // the subject 404ing). Deactivate (isActive: false) instead, which keeps
-    // the record - and every assignment that names it - intact.
-    const assignmentSnap = await db
-      .collection("colleges").doc(session.collegeId)
-      .collection("teachingAssignments")
-      .where("subjectId", "==", id)
-      .limit(1)
-      .get();
+    // assignments, OR a department instance made from it (subjectSemesterAssignments,
+    // doc id `${subjectId}_${departmentId}` - see SubjectInstanceService) -
+    // deleting the doc out from under either would orphan it (subjectId
+    // pointing at nothing, and any future re-fetch of the subject 404ing).
+    // An instance can exist with no teaching assignment yet (an HOD
+    // instantiated it into their department's semester but hasn't staffed it),
+    // so the instance check has to run independently, not just as a side
+    // effect of the assignment one. Deactivate (isActive: false) instead,
+    // which keeps the record - and everything that names it - intact.
+    const [assignmentSnap, instanceSnap] = await Promise.all([
+      db.collection("colleges").doc(session.collegeId)
+        .collection("teachingAssignments")
+        .where("subjectId", "==", id)
+        .limit(1)
+        .get(),
+      db.collection("colleges").doc(session.collegeId)
+        .collection("subjectSemesterAssignments")
+        .where("subjectId", "==", id)
+        .limit(1)
+        .get(),
+    ]);
     if (!assignmentSnap.empty) {
       return NextResponse.json(
         {
           error:
             "This subject still has active teaching assignments. Remove/reassign them first, or mark the subject inactive instead of deleting it.",
+        },
+        { status: 409 }
+      );
+    }
+    if (!instanceSnap.empty) {
+      return NextResponse.json(
+        {
+          error:
+            "This subject is still assigned to a department's semester. Unassign it from Assign to Semester first, or mark it inactive instead of deleting it.",
         },
         { status: 409 }
       );

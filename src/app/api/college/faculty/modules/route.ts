@@ -1,5 +1,3 @@
-export const dynamic = "force-dynamic";
-
 import { NextResponse } from "next/server";
 import { Timestamp } from "firebase-admin/firestore";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
@@ -33,25 +31,25 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");
-    const body = (await request.json()) as { modules?: FacultyAssignedModule[] };
-const db = getAdminDb();
-      const now = Timestamp.fromDate(new Date());
-      const docRef = modulesRef(db, session.collegeId, session.uid);
-      const modules = (body.modules ?? []).filter((m): m is FacultyAssignedModule =>
-        ["timetable-incharge", "lab-batches", "teaching-load", "assignment-requests", "attendance", "leave-approvals", "students"].includes(m)
-      );
-      const existingSnap = await docRef.get();
-      const existingData = existingSnap.exists ? (existingSnap.data() as FacultyAssignedModulesDoc) : null;
-      await docRef.set({
-        uid: session.uid,
-        collegeId: session.collegeId,
-        facultyId: session.uid,
-        modules,
-        assignedBy: session.uid,
-        updatedAt: now,
-        createdAt: existingData?.createdAt ?? now,
-      } as FacultyAssignedModulesDoc, { merge: true });
-    return NextResponse.json({ modules });
+    const body = (await request.json()) as { modules?: FacultyAssignedModule[]; academicYear?: string; semester?: number; department?: string };
+    const db = getAdminDb();
+    const now = Timestamp.now();
+    const docRef = modulesRef(db, session.collegeId, session.uid);
+    const existingSnap = await docRef.get();
+    const existingData = existingSnap.exists ? (existingSnap.data() as FacultyAssignedModulesDoc) : null;
+    await docRef.set({
+      id: docRef.id,
+      collegeId: session.collegeId,
+      facultyId: session.uid,
+      academicYear: body.academicYear ?? existingData?.academicYear ?? "",
+      semester: body.semester ?? existingData?.semester ?? 1,
+      department: body.department ?? existingData?.department ?? "",
+      modules: body.modules ?? [],
+      assignedBy: session.uid,
+      updatedAt: now,
+      createdAt: existingData?.createdAt ?? now,
+    } as unknown as FacultyAssignedModulesDoc, { merge: true });
+    return NextResponse.json({ modules: body.modules ?? [] });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

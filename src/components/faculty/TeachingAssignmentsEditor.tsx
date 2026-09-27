@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import type { Course, Department, Section, Subject, CourseYearTiming, DayOfWeek } from "@/types";
+import type { Course, Department, Section, Subject, SubjectSemesterAssignment, CourseYearTiming, DayOfWeek } from "@/types";
 import { DAY_LABELS } from "@/types";
 import { sectionDisplayLabel } from "@/lib/sections/sectionLabel";
 import { resolveDepartmentCourseScope } from "@/lib/college/academicStructure";
@@ -97,6 +97,15 @@ export function TeachingAssignmentsEditor({ value, onChange, department }: Props
   );
   const [sectionsCache, setSectionsCache] = useState<Record<string, Section[]>>({});
   const [subjectsCache, setSubjectsCache] = useState<Record<string, Subject[]>>({});
+  // Which subjects are actually curricular-assigned (Assign to Semester) to
+  // THIS department for this course/year, any semester - this page has no
+  // semester picker at all, so unfiltered by semester, matching Internal
+  // Marks' own year-granularity approach. Used to narrow the subject picker
+  // for non-past rows so it never offers a subject the server's own
+  // legitimacy check (teaching-assignments/route.ts POST) would reject -
+  // previously the picker showed every master subject for the course
+  // regardless of assignment status.
+  const [assignmentsCache, setAssignmentsCache] = useState<Record<string, SubjectSemesterAssignment[]>>({});
   const [timingCache, setTimingCache] = useState<Record<string, CourseYearTiming[]>>({});
   const [occupiedCache, setOccupiedCache] = useState<Record<string, { assignmentId: string; day: string; periodNumber: number }[]>>({});
   // Every department's own "Bachelor of Technology" Course doc collapsed into
@@ -124,7 +133,7 @@ export function TeachingAssignmentsEditor({ value, onChange, department }: Props
   // Queried once per course-doc id in the group and merged - the sections/
   // subjects/timings APIs take a single courseId, and one merged catalog
   // programme (courseGroups) can span several of them, one per department.
-  async function ensureCourseYearData(courseIds: string[], year: number) {
+  async function ensureCourseYearData(courseIds: string[], year: number, catalogId?: string) {
     if (courseIds.length === 0) return;
     const key = `${courseIds.join("|")}_${year}`;
     try {
@@ -140,15 +149,35 @@ export function TeachingAssignmentsEditor({ value, onChange, department }: Props
         setSectionsCache((c) => ({ ...c, [key]: Array.from(byId.values()) }));
       }
       if (!(key in subjectsCache)) {
-        const lists = await Promise.all(
-          courseIds.map((cId) =>
-            fetch(`/api/college/subjects?courseId=${encodeURIComponent(cId)}&year=${year}`)
+        // catalogId when available, not a per-courseId union - a master
+        // subject is department-independent (see /api/college/subjects GET's
+        // own doc-comment), physically filed under whichever ONE
+        // department's Course doc created it, which can fall outside this
+        // group's own courseIds entirely. Falls back to the union only for a
+        // legacy course with no catalogId.
+        const lists = catalogId
+          ? [await fetch(`/api/college/subjects?catalogId=${encodeURIComponent(catalogId)}`)
               .then((r) => r.json() as Promise<{ subjects: Subject[] }>)
-              .then((d) => d.subjects ?? [])
-          )
-        );
+              .then((d) => d.subjects ?? [])]
+          : await Promise.all(
+              courseIds.map((cId) =>
+                fetch(`/api/college/subjects?courseId=${encodeURIComponent(cId)}&year=${year}`)
+                  .then((r) => r.json() as Promise<{ subjects: Subject[] }>)
+                  .then((d) => d.subjects ?? [])
+              )
+            );
         const byId = new Map(lists.flat().map((s) => [s.id, s]));
         setSubjectsCache((c) => ({ ...c, [key]: Array.from(byId.values()) }));
+      }
+      if (!(key in assignmentsCache)) {
+        const lists = await Promise.all(
+          courseIds.map((cId) =>
+            fetch(`/api/college/subject-semester-assignments?courseId=${encodeURIComponent(cId)}&year=${year}`)
+              .then((r) => r.json() as Promise<{ assignments?: SubjectSemesterAssignment[] }>)
+              .then((d) => d.assignments ?? [])
+          )
+        );
+        setAssignmentsCache((c) => ({ ...c, [key]: lists.flat() }));
       }
       if (!(key in timingCache)) {
         const lists = await Promise.all(
@@ -183,7 +212,7 @@ export function TeachingAssignmentsEditor({ value, onChange, department }: Props
     for (const row of value) {
       if (row.courseId && row.year) {
         const group = courseGroups.find((g) => g.courseIds.includes(row.courseId));
-        void ensureCourseYearData(group ? group.courseIds : [row.courseId], row.year);
+        void ensureCourseYearData(group ? group.courseIds : [row.courseId], row.year, group?.catalogId);
       }
       if (row.sectionId && !row.isPast) void ensureOccupied(row.sectionId);
     }
@@ -216,7 +245,7 @@ export function TeachingAssignmentsEditor({ value, onChange, department }: Props
   async function handleYearChange(row: StagedTeachingRow, year: number) {
     updateRow(row.localId, { year, sectionId: "", sectionName: "", subjectId: "", subjectName: "", subjectCode: "", hoursPerWeek: 0, slots: [] });
     const group = courseGroups.find((g) => g.courseIds.includes(row.courseId));
-    await ensureCourseYearData(group ? group.courseIds : [row.courseId], year);
+    await ensureCourseYearData(group ? group.courseIds : [row.courseId], year, group?.catalogId);
   }
 
   async function handleSectionChange(row: StagedTeachingRow, sectionId: string) {
@@ -351,12 +380,22 @@ export function TeachingAssignmentsEditor({ value, onChange, department }: Props
         // still shows, and an unset section regulation shows everything.
         const selectedSection = sections.find((s) => s.id === row.sectionId);
         const selectedSubject = subjects.find((s) => s.id === row.subjectId);
-        const regulationFiltered = subjects.filter(
+        const hasRegulationMatches = subjects.some(
           (s) => !selectedSection?.regulation || !s.regulation || s.regulation === selectedSection.regulation
         );
+        const regulationFiltered = subjects.filter(
+          (s) => !hasRegulationMatches || !selectedSection?.regulation || !s.regulation || s.regulation === selectedSection.regulation
+        );
+        // Curricular-assigned subjects only, for a current (non-past) row -
+        // otherwise the picker offers a subject the server's own legitimacy
+        // check (teaching-assignments/route.ts POST) will reject on submit.
+        // The row's own already-picked subject stays visible regardless (its
+        // assignment may have been removed since this row was saved) - same
+        // escape hatch subjectsUsedElsewhere already uses below.
+        const assignedSubjectIds = new Set((assignmentsCache[key] ?? []).map((a) => a.subjectId));
         const availableSubjects = row.isPast
           ? regulationFiltered
-          : regulationFiltered.filter((s) => s.id === row.subjectId || !subjectsUsedElsewhere.has(s.id));
+          : regulationFiltered.filter((s) => s.id === row.subjectId || (!subjectsUsedElsewhere.has(s.id) && assignedSubjectIds.has(s.id)));
 
         return (
           <div key={row.localId} className="space-y-3 rounded-md bg-muted/30 p-3">

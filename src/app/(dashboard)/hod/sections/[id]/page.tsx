@@ -3,17 +3,19 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Users, UserCog, BookOpen } from "lucide-react";
+import { ArrowLeft, Users, UserCog, BookOpen, Search, Pencil, UserCheck } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { CardSkeleton } from "@/components/shared/SkeletonLoader";
+import { Pagination } from "@/components/shared/Pagination";
 import { RosterDetailView } from "@/components/students/RosterFieldInputs";
 import { toast } from "@/hooks/useToast";
-import type { SectionListItem, StudentRecord, Subject, TeachingAssignment } from "@/types";
+import type { Course, SectionListItem, StudentRecord, Subject, TeachingAssignment } from "@/types";
 import { SUBJECT_TYPE_LABELS } from "@/types";
 
 type SectionRow = SectionListItem;
@@ -60,6 +62,19 @@ export default function SectionRosterPage() {
           toast({ variant: "destructive", title: "Section not found" });
           return;
         }
+        // Resolved before the subjects fetch below, not alongside it in the
+        // same Promise.all - the subjects fetch's own URL needs catalogId
+        // in hand first. courses is auto-scoped to this HOD's own
+        // departments server-side (no departmentId param - see
+        // /api/college/courses GET's own HOD branch), matching this page's
+        // HOD-only access.
+        const catalogId = sec.courseId
+          ? await fetch("/api/college/courses")
+              .then((r) => r.json() as Promise<{ courses?: Course[] }>)
+              .then((cd) => cd.courses?.find((c) => c.id === sec.courseId)?.catalogId)
+              .catch(() => undefined)
+          : undefined;
+
         await Promise.all([
           // Students API scopes by section NAME + year, not id - section names
           // aren't unique across departments, so narrow client-side (same
@@ -83,9 +98,17 @@ export default function SectionRosterPage() {
           // already have an assignment. Narrowed to this section's own
           // regulation client-side below (lenient both ways, same as
           // Teaching Assignments' own filter - see availableSubjectsForAssign
-          // in hod/teaching-assignments/page.tsx).
+          // in hod/teaching-assignments/page.tsx). Queried by catalogId when
+          // resolved - a master subject is department-independent (see
+          // /api/college/subjects GET's own doc-comment), and the previous
+          // `department=` param here was never even read by that route (no
+          // such param exists on it), so this always silently fell back to
+          // courseId alone, missing any subject filed under a sibling
+          // department's Course doc.
           sec.courseId
-            ? fetch(`/api/college/subjects?department=${encodeURIComponent(sec.department)}&courseId=${encodeURIComponent(sec.courseId)}&year=${sec.year}`)
+            ? fetch(catalogId
+                ? `/api/college/subjects?catalogId=${encodeURIComponent(catalogId)}`
+                : `/api/college/subjects?courseId=${encodeURIComponent(sec.courseId)}&year=${sec.year}`)
                 .then((r) => r.json() as Promise<{ subjects: Subject[] }>)
                 .then((sd) => setSubjects(sd.subjects ?? []))
             : Promise.resolve(),
@@ -112,6 +135,32 @@ export default function SectionRosterPage() {
     () => new Map(assignments.map((a) => [a.subjectId, a])),
     [assignments]
   );
+
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+
+  const filteredStudents = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return students;
+    return students.filter(
+      (s) =>
+        s.name.toLowerCase().includes(q) ||
+        s.rollNumber.toLowerCase().includes(q) ||
+        (s.email && s.email.toLowerCase().includes(q)) ||
+        (s.secondaryDepartment && s.secondaryDepartment.toLowerCase().includes(q)) ||
+        (s.gender && s.gender.toLowerCase().includes(q)) ||
+        (s.guardianContact && s.guardianContact.includes(q))
+    );
+  }, [students, search]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredStudents.length / pageSize));
+  const safePage = Math.min(Math.max(1, page), totalPages);
+
+  const paginatedStudents = useMemo(() => {
+    const start = (safePage - 1) * pageSize;
+    return filteredStudents.slice(start, start + pageSize);
+  }, [filteredStudents, safePage, pageSize]);
 
   if (isLoading) {
     return (
@@ -140,9 +189,20 @@ export default function SectionRosterPage() {
         title={`Section ${section.name}`}
         description={`${section.department ?? ""}${section.department && section.courseName ? " · " : ""}${section.courseName ?? ""}${section.secondaryDepartments && section.secondaryDepartments.length > 0 ? ` → ${section.secondaryDepartments.join(", ")}` : ""} · ${ordinalYear(section.year)} · ${section.batch}${section.regulation ? ` · ${section.regulation}` : ""}`}
         actions={
-          <Button variant="outline" asChild>
-            <Link href="/hod/sections"><ArrowLeft className="h-4 w-4 mr-1" />Back to Sections</Link>
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" asChild>
+              <Link href="/hod/sections">
+                <ArrowLeft className="h-4 w-4 mr-1" />Back to Sections
+              </Link>
+            </Button>
+            {section.accessLevel !== "secondary" && (
+              <Button asChild>
+                <Link href={`/hod/sections/${id}/edit`}>
+                  <Pencil className="h-4 w-4 mr-1.5" />Edit Section & CR
+                </Link>
+              </Button>
+            )}
+          </div>
         }
       />
 
@@ -150,6 +210,19 @@ export default function SectionRosterPage() {
         <div className="flex items-center gap-1.5">
           <Users className="h-4 w-4" />
           <span><strong className="text-foreground">{students.length}</strong> student{students.length !== 1 ? "s" : ""} enrolled</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <UserCheck className="h-4 w-4" />
+          <span>
+            Class Leader (CR):{" "}
+            {section.classLeaderUid ? (
+              <Badge variant="outline" className="text-xs bg-emerald-50 text-emerald-700 border-emerald-200">
+                Active
+              </Badge>
+            ) : (
+              <span className="text-muted-foreground">Not created</span>
+            )}
+          </span>
         </div>
         {section.accessLevel === "secondary" && (
           <Badge variant="secondary" className="text-xs">View only</Badge>
@@ -209,6 +282,29 @@ export default function SectionRosterPage() {
       )}
 
       <Card>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between p-4 border-b">
+          <div className="flex items-center gap-2">
+            <Users className="h-4 w-4 text-muted-foreground" />
+            <span className="font-semibold text-sm">Enrolled Students</span>
+            <Badge variant="secondary" className="text-xs">
+              {filteredStudents.length}
+            </Badge>
+          </div>
+          {students.length > 0 && (
+            <div className="relative w-full sm:w-64">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search roll no, name..."
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setPage(1);
+                }}
+                className="pl-8 h-9 text-sm"
+              />
+            </div>
+          )}
+        </div>
         <CardContent className="p-0">
           {students.length === 0 ? (
             <div className="py-16">
@@ -218,51 +314,79 @@ export default function SectionRosterPage() {
                 icon={<Users className="h-8 w-8" />}
               />
             </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/50">
-                  <tr>
-                    <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Roll No.</th>
-                    <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Name</th>
-                    {students.some((s) => s.secondaryDepartment) && (
-                      <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Registered Branch</th>
-                    )}
-                    <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Status</th>
-                    <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Gender</th>
-                    <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Guardian Contact</th>
-                    <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Email</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
-                  {students.map((s) => (
-                    <tr
-                      key={s.id}
-                      onClick={() => setViewTarget(s)}
-                      className="cursor-pointer hover:bg-muted/40 transition-colors"
-                    >
-                      <td className="px-4 py-2.5 font-mono">{s.rollNumber}</td>
-                      <td className="px-4 py-2.5 font-medium">{s.name}</td>
-                      {students.some((st) => st.secondaryDepartment) && (
-                        <td className="px-4 py-2.5">
-                          {s.secondaryDepartment
-                            ? <Badge variant="outline" className="text-xs">{s.secondaryDepartment}</Badge>
-                            : <span className="text-muted-foreground">-</span>}
-                        </td>
-                      )}
-                      <td className="px-4 py-2.5">
-                        <Badge variant={s.status === "REGULAR" ? "default" : "secondary"} className="text-xs">
-                          {s.status === "REGULAR" ? "Regular" : s.status === "DETAINED" ? "Detained" : "Graduated"}
-                        </Badge>
-                      </td>
-                      <td className="px-4 py-2.5 text-muted-foreground">{s.gender || "-"}</td>
-                      <td className="px-4 py-2.5 text-muted-foreground">{s.guardianContact || "-"}</td>
-                      <td className="px-4 py-2.5 text-muted-foreground">{s.email || "-"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          ) : filteredStudents.length === 0 ? (
+            <div className="py-12">
+              <EmptyState
+                title="No students match your search"
+                description={`No results found for "${search}".`}
+                icon={<Search className="h-8 w-8" />}
+                action={
+                  <Button variant="outline" size="sm" onClick={() => setSearch("")}>
+                    Clear Search
+                  </Button>
+                }
+              />
             </div>
+          ) : (
+            <>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/50">
+                    <tr>
+                      <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Roll No.</th>
+                      <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Name</th>
+                      {students.some((s) => s.secondaryDepartment) && (
+                        <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Registered Branch</th>
+                      )}
+                      <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Status</th>
+                      <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Gender</th>
+                      <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Guardian Contact</th>
+                      <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Email</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {paginatedStudents.map((s) => (
+                      <tr
+                        key={s.id}
+                        onClick={() => setViewTarget(s)}
+                        className="cursor-pointer hover:bg-muted/40 transition-colors"
+                      >
+                        <td className="px-4 py-2.5 font-mono">{s.rollNumber}</td>
+                        <td className="px-4 py-2.5 font-medium">{s.name}</td>
+                        {students.some((st) => st.secondaryDepartment) && (
+                          <td className="px-4 py-2.5">
+                            {s.secondaryDepartment
+                              ? <Badge variant="outline" className="text-xs">{s.secondaryDepartment}</Badge>
+                              : <span className="text-muted-foreground">-</span>}
+                          </td>
+                        )}
+                        <td className="px-4 py-2.5">
+                          <Badge variant={s.status === "REGULAR" ? "default" : "secondary"} className="text-xs">
+                            {s.status === "REGULAR" ? "Regular" : s.status === "DETAINED" ? "Detained" : "Graduated"}
+                          </Badge>
+                        </td>
+                        <td className="px-4 py-2.5 text-muted-foreground">{s.gender || "-"}</td>
+                        <td className="px-4 py-2.5 text-muted-foreground">{s.guardianContact || "-"}</td>
+                        <td className="px-4 py-2.5 text-muted-foreground">{s.email || "-"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="p-4 border-t">
+                <Pagination
+                  page={safePage}
+                  pageSize={pageSize}
+                  total={filteredStudents.length}
+                  onPageChange={setPage}
+                  onPageSizeChange={(newSize) => {
+                    setPageSize(newSize);
+                    setPage(1);
+                  }}
+                />
+              </div>
+            </>
           )}
         </CardContent>
       </Card>

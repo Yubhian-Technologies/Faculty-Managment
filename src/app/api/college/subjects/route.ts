@@ -5,19 +5,14 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import type { SubjectCategory, SubjectType } from "@/types";
 import { SUBJECT_CATEGORY_LABELS } from "@/types";
-import {
-  getHodDepartmentScope, canHodEditDepartment, getRelatedDepartmentNames, resolveSubjectDepartment,
-} from "@/lib/departments/scope";
-import { resolveDepartmentCourseScope, regulationsForCourseYearByBatch } from "@/lib/college/academicStructure";
-import { parseAcademicYearStart } from "@/lib/college/academicSession";
+import { getRelatedDepartmentNames } from "@/lib/departments/scope";
 
 export async function GET(request: Request) {
   try {
     const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "COLLEGE_OFFICE", "PANEL_MEMBER", "COLLEGE_STAFF", "EXAM_CELL", "ACADEMICS");
     const { searchParams } = new URL(request.url);
     const courseId = searchParams.get("courseId");
-    const year = searchParams.get("year");
-    const deptFilter = searchParams.get("department");
+    const catalogId = searchParams.get("catalogId");
     const academicYear = searchParams.get("academicYear");
     const regulation = searchParams.get("regulation");
     const sessionRegulations = (searchParams.get("regulations") ?? "").split(",").map((r) => r.trim()).filter(Boolean);
@@ -25,41 +20,56 @@ export async function GET(request: Request) {
     const db = getAdminDb();
     let query: FirebaseFirestore.Query = db.collection("colleges").doc(session.collegeId).collection("subjects");
 
-    if (session.role === "HOD") {
-      // Viewing is bidirectional (unlike editing, which stays parent-only -
-      // see canHodEditDepartment in POST below): a parent HOD sees their own
+    // Master subjects (courseId present) never carry a `department` field -
+    // they're course+regulation scoped, department-independent by design
+    // (see this file's POST for the two creation shapes) - so this filter
+    // only applies to the semester-scoped shape. Applying it unconditionally
+    // used to AND it onto the courseId query below, which a master subject
+    // (no `department` field at all) can never match - every HOD got an
+    // empty Master Collection for every course, always.
+    if (session.role === "HOD" && !courseId && !catalogId) {
+      // Viewing is bidirectional: a parent HOD sees their own
       // department's subjects and every sub-department's, AND a sub-HOD
       // (e.g. BS-Chemistry, BS-Mathematics) sees their parent's (Basic
-      // Science) subjects too, since a sub-department's students are taught
-      // under the parent's program/courses rather than owning their own.
-      // Firestore caps `in` at 30 values, which comfortably covers a
-      // department's parent + siblings.
+      // Science) subjects too, since a sub-department's students are
+      // taught under the parent's program/courses rather than owning
+      // their own. Firestore caps `in` at 30 values.
+      const { getHodDepartmentScope } = await import("@/lib/departments/scope");
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
       const relatedNameLists = await Promise.all(
         scope.ownDepartmentNames.map((n) => getRelatedDepartmentNames(db, session.collegeId, n))
       );
-      // Also the grouped/managed branches - a Sub-HOD sees IT/CSE subjects they
-      // manage; a main HOD rolls up its sub-HODs' branches.
       const names = Array.from(new Set([...relatedNameLists.flat(), ...scope.managedDepartmentNames]));
       if (names.length === 1) {
         query = query.where("department", "==", names[0]);
       } else if (names.length > 1) {
         query = query.where("department", "in", names.slice(0, 30));
       }
-    } else if (deptFilter) {
-      // Same bidirectional visibility as the HOD branch above, for Academics/
-      // Principal/VP: browsing a fed department (e.g. IT) also shows its
-      // feeder's subjects (e.g. Basic Science's shared 1st-year catalog) -
-      // the `year` filter below keeps a feeder's subjects from leaking into
-      // a year it doesn't own.
-      const names = await getRelatedDepartmentNames(db, session.collegeId, deptFilter);
-      query = names.length > 1
-        ? query.where("department", "in", names.slice(0, 30))
-        : query.where("department", "==", deptFilter);
     }
 
-    if (courseId) query = query.where("courseId", "==", courseId);
-    if (year) query = query.where("year", "==", Number(year));
+    if (catalogId) {
+      // Which specific department's Course doc a master subject's courseId
+      // happens to point to is an implementation detail, not a real
+      // ownership boundary - every department teaching this same catalog
+      // course (same CourseCatalogItem, different departmentId, different
+      // Course doc) is meant to share one subject pool (see this file's
+      // POST doc-comment). Resolve every department's Course doc for this
+      // catalogId first, then match subjects against the whole set, so a
+      // subject entered once (under any one department's Course doc) is
+      // visible - and, via Assign to Semester, assignable - to every other
+      // department offering the same course, not just whichever one
+      // happened to receive it. Firestore caps `in` at 30 values, same as
+      // the department fan-out above.
+      const coursesSnap = await db.collection("colleges").doc(session.collegeId)
+        .collection("courses").where("catalogId", "==", catalogId).get();
+      const courseIds = coursesSnap.docs.map((d) => d.id).slice(0, 30);
+      if (courseIds.length === 0) {
+        return NextResponse.json({ subjects: [], academicYears: [] });
+      }
+      query = query.where("courseId", "in", courseIds);
+    } else if (courseId) {
+      query = query.where("courseId", "==", courseId);
+    }
 
     const snap = await query.get();
     let subjects = snap.docs
@@ -70,21 +80,13 @@ export async function GET(request: Request) {
     // History dropdown, so it lists real data rather than a fixed window.
     const academicYears = Array.from(new Set(
       subjects
-        .filter((s) => !deptFilter || (s as { department?: string }).department === deptFilter)
         .map((s) => (s as { academicYear?: string }).academicYear)
         .filter((y): y is string => !!y)
     )).sort().reverse();
 
-    // Academics-only filter (see academics/subjects/page.tsx) - a subject with no
-    // academicYear at all (created before this field existed, or via the
-    // HOD's own Subjects page, which doesn't set it) still matches any
-    // session rather than silently disappearing.
+    // Academics-only filter - a subject with no academicYear at all
+    // still matches any session rather than silently disappearing.
     if (academicYear) {
-      // With `regulations` (the ones governing this course-year in that
-      // session), a core subject belongs to its REGULATION's curriculum and
-      // shows in every session that regulation covers; only electives
-      // (PEC/OEC) are per-session, since each year's offering can differ.
-      // Core subjects re-entered per session under one regulation collapse by code.
       const seenCore = new Set<string>();
       subjects = subjects.filter((s) => {
         const { academicYear: sy, regulation: sr, category, code } = s as { academicYear?: string; regulation?: string; category?: string; code?: string };
@@ -101,8 +103,7 @@ export async function GET(request: Request) {
     }
 
     // Same leniency as academicYear above - a subject with no regulation set
-    // (semester-scoped, or created before this field existed / not yet
-    // backfilled) still matches any filter rather than disappearing.
+    // still matches any filter rather than disappearing.
     if (regulation) {
       subjects = subjects.filter((s) => {
         const sr = (s as { regulation?: string }).regulation;
@@ -120,20 +121,20 @@ export async function GET(request: Request) {
   }
 }
 
-// Two independent creation shapes share this collection: course/year-scoped
-// subjects (Academics/Principal/VP/Super Admin - courseId + year, validated
-// against the course) and semester-scoped subjects (HOD Teaching Assignments
-// page - semester + department, no course link). Branch on which fields the
-// caller sent.
+// Two independent creation shapes share this collection: master subjects
+// (Academics/Principal/VP/Super Admin - courseId + regulation, no
+// department/year) and semester-scoped subjects (HOD Teaching
+// Assignments page - semester + department, no course link).
+// Branch on which fields the caller sent.
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "ACADEMICS");
     const body = (await request.json()) as {
       courseId?: string;
-      year?: number;
       semester?: number;
       name: string;
       code: string;
+      shortCode?: string;
       hoursPerWeek?: number;
       totalHoursPerSemester?: number;
       credits?: number;
@@ -157,59 +158,31 @@ export async function POST(request: Request) {
     const now = new Date();
 
     if (body.courseId) {
-      const { courseId, year } = body;
-      if (!year) {
-        return NextResponse.json({ error: "courseId, year, name and code are required" }, { status: 400 });
-      }
-
+      const { courseId } = body;
       const courseSnap = await db.collection("colleges").doc(session.collegeId).collection("courses").doc(courseId).get();
       if (!courseSnap.exists) return NextResponse.json({ error: "Course not found" }, { status: 404 });
       const course = courseSnap.data() as { name: string; departmentId: string; durationYears: number; catalogId?: string };
-      if (year < 1 || year > course.durationYears) {
-        return NextResponse.json({ error: `Year must be between 1 and ${course.durationYears} for ${course.name}` }, { status: 400 });
-      }
 
-      // Optional - a subject can be added for a course-year even when no
-      // regulation (or more than one) currently resolves for it; the Academics'
-      // subject list is scoped by Academic Year session, not regulation (see
-      // academics/subjects/page.tsx). When one IS provided, it must still belong
-      // to this course's own Course Catalog entry - a Pharmacy-only code
-      // should never be accepted for a B.Tech subject.
+      // Optional - a subject can be added for a course even when no
+      // regulation currently resolves for it. When one IS provided, it must
+      // belong to this course's own Course Catalog entry - a Pharmacy-only
+      // code should never be accepted for a B.Tech subject. A master
+      // subject has no ordinal year of its own (see this route's own POST
+      // body type), so there's no batch/year to resolve it against here -
+      // that congruence check only makes sense once a real batch exists
+      // (Section.batch - see sections/route.ts POST, which is where it's
+      // actually enforced). Here we only check "is this regulation one the
+      // catalog has ever assigned to this course at all".
       const regulation = body.regulation?.trim();
       if (regulation) {
         const catalogSnap = course.catalogId
           ? await db.collection("colleges").doc(session.collegeId).collection("courseCatalog").doc(course.catalogId).get()
           : null;
         const catalogData = catalogSnap?.exists
-          ? (catalogSnap.data() as { regulations?: string[]; regulationBatches?: Record<string, string> })
+          ? (catalogSnap.data() as { regulations?: string[] })
           : undefined;
         const catalogRegulations = catalogData?.regulations ?? [];
-        // Must match what THIS year/academic-session actually resolves to
-        // under Course Catalog's batch assignments (same resolution the
-        // form's own Regulation dropdown pre-filters against, see
-        // academics/subjects/new/page.tsx) - not merely be some regulation the
-        // course has ever been assigned. A course can carry two regulations
-        // (e.g. R23 covering intakes 2023-2025, R26 covering 2026-2028);
-        // accepting either regardless of which one this specific Year+
-        // Academic Year falls under is how a 2026-intake 1st Year subject
-        // could get silently tagged R23. Only when NOTHING resolves (no
-        // batch data configured at all - the pre-migration case, see
-        // regulationsForCourseYearByBatch's own doc-comment) does this fall
-        // back to the looser "assigned to the course at all" check.
-        const resolvedRegulations = regulationsForCourseYearByBatch(
-          catalogData?.regulationBatches ?? {},
-          Number(year),
-          body.academicYear ? (parseAcademicYearStart(body.academicYear) ?? undefined) : undefined,
-          catalogData?.regulations,
-        );
-        if (resolvedRegulations.length > 0) {
-          if (!resolvedRegulations.includes(regulation)) {
-            return NextResponse.json(
-              { error: `Regulation "${regulation}" doesn't match the batch assigned to Year ${year}${body.academicYear ? ` for ${body.academicYear}` : ""} - this year resolves to ${resolvedRegulations.join(", ")}. Check Course Catalog batches.` },
-              { status: 400 },
-            );
-          }
-        } else if (!catalogRegulations.includes(regulation)) {
+        if (!catalogRegulations.includes(regulation)) {
           return NextResponse.json(
             { error: `That regulation isn't assigned to ${course.name}. Check Course Catalog.` },
             { status: 400 },
@@ -220,7 +193,7 @@ export async function POST(request: Request) {
       if (body.serialNumber == null || Number.isNaN(Number(body.serialNumber))) {
         return NextResponse.json({ error: "S.No. is required" }, { status: 400 });
       }
-      if (!body.category || !(body.category in SUBJECT_CATEGORY_LABELS)) {
+      if (!body.category || !body.category.trim()) {
         return NextResponse.json({ error: "A valid category is required" }, { status: 400 });
       }
       if (body.category === "OTHER" && !body.customCategory?.trim()) {
@@ -230,60 +203,51 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "L, T and P are required" }, { status: 400 });
       }
 
-      // Course/year-scoped creation is Academics/Principal/VP/Super Admin only.
-      // HOD's own path to this shape (an "Add Subject" button on the HOD
-      // Subjects page) was never built, so the department-scoped HOD branch
-      // that used to live here was validated but unreachable dead code. HOD
-      // still creates subjects via the semester-scoped shape below (Teaching
-      // Assignments page).
+      // Master subject creation is Academics/Principal/VP/Super Admin only.
       if (session.role === "HOD") {
         return NextResponse.json(
-          { error: "Add this subject from Teaching Assignments instead - the course/year Subjects form isn't available to HOD." },
+          { error: "Add this subject from Teaching Assignments instead - the master Subjects form isn't available to HOD." },
           { status: 403 },
         );
       }
 
-      let dept: string;
-      {
-        // Non-HOD callers (Principal/VP/Super Admin/Academics) aren't scoped to one
-        // department, so the client may name which one it's targeting - but
-        // only the course's own department or one of the departments it feeds
-        // (Department.secondaryDepartments) is accepted, so it can never drift
-        // to an unrelated department.
-        const courseDeptSnap = await db.collection("colleges").doc(session.collegeId)
-          .collection("departments").doc(course.departmentId).get();
-        const courseDept = courseDeptSnap.data() as { name?: string; secondaryDepartments?: string[] } | undefined;
-        const courseDeptName = courseDept?.name ?? "";
-        const requestedDept = body.department?.trim() || courseDeptName;
-        if (requestedDept !== courseDeptName && !(courseDept?.secondaryDepartments ?? []).includes(requestedDept)) {
-          return NextResponse.json({ error: "That department doesn't offer this course" }, { status: 403 });
-        }
-        // A fed department's reserved year (e.g. any secondary department's
-        // 1st year, when Basic Science reserves year 1 via assignedYears)
-        // files under the feeder instead, so every fed department reads from
-        // one shared 1st-year list; other years (2nd year onward) stay filed
-        // under the department actually selected (IT for IT, CS for CS, ...).
-        dept = await resolveSubjectDepartment(db, session.collegeId, requestedDept, Number(year), course.catalogId);
+      // ── Duplicate-code check ────────────────────────────────────────────
+      // Same regulation+code within this catalog course, in ANY department
+      // that teaches it - a master subject is department-independent (see
+      // this route's own GET doc-comment), so a duplicate created under a
+      // sibling department's Course doc must be caught too, matching
+      // MasterSubjectImportService's own duplicate detection (bulk import).
+      // This single-add path (also used by the Import page's "Fix and
+      // retry" dialog) previously had no check at all. Falls back to just
+      // this courseId for a legacy Course doc with no catalogId.
+      const code = body.code.toUpperCase().trim();
+      let siblingCourseIds = [courseId];
+      if (course.catalogId) {
+        const siblingSnap = await db.collection("colleges").doc(session.collegeId)
+          .collection("courses").where("catalogId", "==", course.catalogId).get();
+        siblingCourseIds = siblingSnap.docs.map((d) => d.id).slice(0, 30);
       }
-
-      // The department the subject is finally filed under (own, a
-      // sub-department, or a feeder rerouted to by resolveSubjectDepartment)
-      // must actually be assigned to teach this year for this course - the
-      // course-span check above only rules out an impossible year, not one
-      // this specific department has no business in (e.g. Basic Science
-      // offering only Year 1 of a 4-year B.Tech it shares with its branches).
-      const scopeDeptSnap = await db.collection("colleges").doc(session.collegeId)
-        .collection("departments").where("name", "==", dept).limit(1).get();
-      if (!scopeDeptSnap.empty) {
-        const scopeDept = scopeDeptSnap.docs[0].data() as {
-          assignedYears?: number[];
-          secondaryDepartments?: string[];
-          courseScopes?: Record<string, { assignedYears: number[]; secondaryDepartments: string[] }>;
-        };
-        const assignedYears = resolveDepartmentCourseScope(scopeDept, course.catalogId).assignedYears;
-        if (assignedYears.length > 0 && !assignedYears.includes(Number(year))) {
-          return NextResponse.json({ error: `"${dept}" is not assigned to teach Year ${year}` }, { status: 400 });
-        }
+      // Single-field `in` filter only (no compound where) - courseId+code
+      // together would need a composite index this collection doesn't have
+      // (firestore.indexes.json has none for `subjects`, and index deploys
+      // here are manual - see CLAUDE.md - so a compound query would throw
+      // FAILED_PRECONDITION in production). Matches MasterSubjectImportService's
+      // own dupe check: fetch broadly, compare code+regulation in memory.
+      const dupeSnap = await db.collection("colleges").doc(session.collegeId)
+        .collection("subjects")
+        .where("courseId", "in", siblingCourseIds)
+        .select("code", "regulation")
+        .get();
+      const regKey = (regulation ?? "").trim();
+      const hasDupe = dupeSnap.docs.some((d) => {
+        const data = d.data() as { code?: string; regulation?: string };
+        return (data.code ?? "").toUpperCase() === code && (data.regulation ?? "").trim() === regKey;
+      });
+      if (hasDupe) {
+        return NextResponse.json(
+          { error: `A subject with code "${code}" already exists for this course and regulation.` },
+          { status: 409 },
+        );
       }
 
       const ref = await db
@@ -292,16 +256,16 @@ export async function POST(request: Request) {
         .collection("subjects")
         .add({
           collegeId: session.collegeId,
-          department: dept,
-          departmentId: course.departmentId,
           courseId,
           courseName: course.name,
-          year: Number(year),
+          academicYear: body.academicYear,
+          regulation: regulation,
           serialNumber: Number(body.serialNumber),
           category: body.category,
           ...(body.category === "OTHER" ? { customCategory: body.customCategory!.trim() } : {}),
           name: body.name.trim(),
-          code: body.code.toUpperCase().trim(),
+          code,
+          ...(body.shortCode?.trim() ? { shortCode: body.shortCode.trim().toUpperCase() } : {}),
           hoursPerWeek: body.hoursPerWeek != null ? Number(body.hoursPerWeek) : 0,
           totalHoursPerSemester: body.totalHoursPerSemester != null ? Number(body.totalHoursPerSemester) : null,
           lectureHours: Number(body.lectureHours),
@@ -309,8 +273,6 @@ export async function POST(request: Request) {
           practicalHours: Number(body.practicalHours),
           credits: body.credits != null ? Number(body.credits) : 0,
           type: body.type ?? "THEORY",
-          ...(body.academicYear ? { academicYear: body.academicYear } : {}),
-          ...(regulation ? { regulation } : {}),
           isActive: true,
           createdAt: now,
           updatedAt: now,
@@ -325,6 +287,7 @@ export async function POST(request: Request) {
 
     let department = body.department ?? "";
     if (session.role === "HOD") {
+      const { getHodDepartmentScope, canHodEditDepartment } = await import("@/lib/departments/scope");
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
       if (!body.department?.trim() && scope.ownDepartmentNames.length > 1) {
         return NextResponse.json(
@@ -350,6 +313,7 @@ export async function POST(request: Request) {
       department,
       name: body.name.trim(),
       code: body.code.trim().toUpperCase(),
+      ...(body.shortCode?.trim() ? { shortCode: body.shortCode.trim().toUpperCase() } : {}),
       semester: Number(body.semester),
       hoursPerWeek: Number(body.hoursPerWeek) || 0,
       credits: Number(body.credits) || 0,

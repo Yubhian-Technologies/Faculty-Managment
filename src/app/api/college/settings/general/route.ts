@@ -57,7 +57,6 @@ export async function PUT(request: Request) {
       studentFacultyRatio: Number(body.studentFacultyRatio ?? current.studentFacultyRatio),
       teachingHoursPerWeek: Number(body.teachingHoursPerWeek ?? current.teachingHoursPerWeek),
       defaultMinFacultyPerDept: Number(body.defaultMinFacultyPerDept ?? current.defaultMinFacultyPerDept),
-      minimumQualifications: body.minimumQualifications ?? current.minimumQualifications,
       positionNorms: body.positionNorms ?? current.positionNorms,
       newJoiningYears: Number(body.newJoiningYears ?? current.newJoiningYears),
       academicYearStartMonth: Number(body.academicYearStartMonth ?? current.academicYearStartMonth ?? 4),

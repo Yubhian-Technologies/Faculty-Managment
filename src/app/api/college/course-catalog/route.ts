@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { findOverlappingRegulationBatches } from "@/lib/college/academicSession";
 
 // colleges/{collegeId}/courseCatalog - the college's master list of course
 // definitions (canonical name + short code + duration), created by the
@@ -66,6 +67,14 @@ export async function POST(request: Request) {
             { status: 400 }
           );
         }
+      }
+      const conflicts = findOverlappingRegulationBatches(body.regulationBatches);
+      if (conflicts.length > 0) {
+        const first = conflicts[0];
+        return NextResponse.json(
+          { error: `Batch ${first.year} is claimed by more than one regulation (${first.regulations.join(", ")}) - each admission year can only belong to one regulation.` },
+          { status: 400 }
+        );
       }
     }
 
