@@ -172,7 +172,11 @@ export async function POST(request: Request) {
     const response = NextResponse.json({ ok: true, role, realRole, roles, collegeId, locationId, name, email, profile, refreshToken: !claimsWereSet });
     response.cookies.set("fms-session", sessionCookie, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
+      // Not just a NODE_ENV check: a staging/preview deploy reachable over the
+      // public internet is not "development" but also isn't NODE_ENV=production,
+      // and would otherwise send this cookie unencrypted. Only plain localhost
+      // (no TLS available at all) is exempt.
+      secure: new URL(request.url).hostname !== "localhost",
       sameSite: "strict",
       maxAge: 60 * 60 * 24,
       path: "/",
@@ -182,7 +186,9 @@ export async function POST(request: Request) {
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error("[auth/session] token verification failed:", message);
-    return NextResponse.json({ error: "Invalid token", detail: message }, { status: 401 });
+    // Never echo verifier internals (e.g. which key ids are known, why a
+    // revocation check failed) back to the client - log server-side only.
+    return NextResponse.json({ error: "Invalid token" }, { status: 401 });
   }
 }
 

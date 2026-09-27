@@ -111,7 +111,12 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember("HOD", "PRINCIPAL", "SUPER_ADMIN", "PANEL_MEMBER", "COLLEGE_STAFF");
+    // VICE_PRINCIPAL included to match the sibling draft/publish routes
+    // (timetable/draft/route.ts, timetable/publish/route.ts), which already
+    // grant this role the same capability - manually pinning one slot is a
+    // narrower version of the same "build this section's timetable" action
+    // those routes allow.
+    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "PANEL_MEMBER", "COLLEGE_STAFF");
     const body = (await request.json()) as {
       assignmentId: string;
       day: DayOfWeek;

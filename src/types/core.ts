@@ -862,11 +862,6 @@ export interface FacultyNorms {
   studentFacultyRatio: number;
   teachingHoursPerWeek: number;
   defaultMinFacultyPerDept: number;
-  minimumQualifications: {
-    assistantProfessor: string;
-    associateProfessor: string;
-    professor: string;
-  };
   positionNorms: PositionNorm[];
   // Years of service a "new joining" employee (leave profile: CL + OD only)
   // must complete before converting into their vacation/non-vacation leave

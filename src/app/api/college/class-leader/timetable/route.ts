@@ -5,66 +5,43 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getActiveSubstitutionsForDates, currentWeekDateKeys } from "@/lib/leave/periodCoverage";
 import { resolveCurrentSemester, matchesCurrentSemester } from "@/lib/college/semester";
-import type { Course, CourseYearTiming, Department, Section, Subject, TimetableSlot } from "@/types";
+import type { Course, CourseYearTiming, Department, Section, Subject, TimetableSlot, TeachingAssignment } from "@/types";
 
-// Self-contained read for the Class Leader dashboard AND timetable page (both
-// call this one endpoint): resolves the caller's own bound Section (never a
-// client-supplied id, UNLESS `sectionId` is explicitly passed - see below) and
-// returns everything either page needs - timetable grid data, plus the
-// section's per-subject faculty assignments for the dashboard's "Subjects &
-// Faculty" list - in one call. Deliberately not widening teaching-assignments
-// GET's own role list for this instead: that route trusts a client-supplied
-// sectionId with no ownership check for editing purposes, which is a
-// different concern from this route's own read-only browse below.
-//
-// `sectionId`/`semester` (both optional) let the Timetable page's own
-// Course -> Department -> Semester -> Section picker browse ANY section's
-// published timetable, not just the caller's own - the picked `semester` is
-// used AS-IS (not re-derived from today's date via resolveCurrentSemester)
-// since the student is deliberately choosing which one to view. Omitting both
-// keeps the exact previous behavior (own section, today's date-resolved
-// semester) for the dashboard's own call, which never passes either.
+// Class Leader Timetable & Dashboard API:
+// Returns the caller's own bound Section, its course details, timing, current-semester
+// timetable slots (with live substitutions), and current-semester teaching assignments.
+// For CLASS_LEADER role, access is strictly locked to their own assigned section.
 export async function GET(request: Request) {
   try {
     const session = await requireCollegeMember("CLASS_LEADER");
     const db = getAdminDb();
     const collegeRef = db.collection("colleges").doc(session.collegeId);
     const { searchParams } = new URL(request.url);
-    // Optional - the timetable page's own calendar picker, browsing a week
-    // other than the current one. Any date within the target week works (see
-    // currentWeekDateKeys, which resolves it back to that week's Monday).
-    // Omitted keeps the previous "this calendar week" default.
+
     const weekParam = searchParams.get("week");
-    const sectionIdParam = searchParams.get("sectionId");
     const semesterParam = searchParams.get("semester");
     const requestedSemester = semesterParam != null && semesterParam !== "" ? Number(semesterParam) : null;
 
     const userSnap = await collegeRef.collection("users").doc(session.uid).get();
     const ownSectionId = (userSnap.data() as { sectionId?: string } | undefined)?.sectionId ?? null;
-    const targetSectionId = sectionIdParam || ownSectionId;
 
-    // The Course -> Department -> Semester -> Section picker's own option
-    // lists - fetched every call (small per-college collections, same
-    // full-fetch pattern already used by TeachingAssignmentsEditor and the
-    // HOD Teaching Assignments route) so the picker works even before any
-    // section is resolved below (e.g. a class leader with no bound section
-    // yet, browsing someone else's). Purely additive - the dashboard's own
-        // call ignores these.
-    const [coursesSnap, departmentsSnap, sectionsSnap, timingsSnap] = await Promise.all([
-      collegeRef.collection("courses").get(),
-      collegeRef.collection("departments").get(),
-      collegeRef.collection("sections").get(),
-      collegeRef.collection("courseYearTimings").get(),
-    ]);
-    const courses = coursesSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as Course);
-    const departments = departmentsSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as Department);
-    const sections = sectionsSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as Section);
-    const courseYearTimings = timingsSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as CourseYearTiming);
+    // requireCollegeMember("CLASS_LEADER") above guarantees session.role is
+    // always "CLASS_LEADER" here, so there is no non-class-leader caller to
+    // fall back for - strictly the caller's own bound section, never a
+    // client-supplied sectionId (which would let a class leader with no
+    // section on file view an arbitrary one instead).
+    const targetSectionId = ownSectionId;
 
     if (!targetSectionId) {
       return NextResponse.json({
-        course: null, section: null, timing: null, slots: [], assignments: [], resolvedSemester: null,
-        ownSectionId, courses, departments, sections, courseYearTimings,
+        course: null,
+        section: null,
+        timing: null,
+        slots: [],
+        assignments: [],
+        resolvedSemester: null,
+        availableSemesters: [],
+        ownSectionId: null,
       });
     }
 
@@ -74,48 +51,118 @@ export async function GET(request: Request) {
     }
     const section = { id: sectionSnap.id, ...sectionSnap.data() } as Section;
 
-    const [courseSnap, subjectsSnap, slotsSnap, assignmentsSnap] = await Promise.all([
+    // Fetch this section's course, timings, slots, teaching assignments, and departments
+    const [courseSnap, timingsSnap, slotsSnap, assignmentsSnap, deptsSnap] = await Promise.all([
       collegeRef.collection("courses").doc(section.courseId).get(),
-      collegeRef.collection("subjects").where("courseId", "==", section.courseId).where("year", "==", section.year).get(),
+      collegeRef
+        .collection("courseYearTimings")
+        .where("courseId", "==", section.courseId)
+        .where("year", "==", section.year)
+        .limit(1)
+        .get(),
       collegeRef.collection("timetableSlots").where("sectionId", "==", targetSectionId).get(),
       collegeRef.collection("teachingAssignments").where("sectionId", "==", targetSectionId).get(),
+      collegeRef.collection("departments").get(),
     ]);
 
-    const course = courseSnap.exists ? { id: courseSnap.id, ...courseSnap.data() } : null;
-    const timing = courseYearTimings.find((t) => t.courseId === section.courseId && t.year === section.year) ?? null;
-    // Explicitly-picked semester wins outright; otherwise fall back to
-    // whichever one today's date resolves to (the previous, only, behavior).
-    const currentSemester = requestedSemester != null ? requestedSemester : resolveCurrentSemester(timing);
-    // Joined onto each slot so the page's Theory/Lab optional filter can
-    // group by SubjectType without a second round-trip - subjects for this
-    // exact course+year is a small set, fetched once above.
-    const subjectTypeById = new Map(subjectsSnap.docs.map((d) => [d.id, (d.data() as Subject).type]));
-    // A prior semester's published slots stay in Firestore as history (see
-    // publish/route.ts) but drop out of the live weekly grid once the next
-    // semester starts - or once a DIFFERENT semester is explicitly picked.
-    const rawSlots = slotsSnap.docs
-      .map((d) => ({ id: d.id, ...d.data() }) as TimetableSlot & { id: string })
-      .filter((s) => matchesCurrentSemester(s.semester, currentSemester))
-      .map((s) => ({ ...s, subjectType: s.subjectId ? subjectTypeById.get(s.subjectId) : undefined }));
-    const assignments = assignmentsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const course = courseSnap.exists ? ({ id: courseSnap.id, ...courseSnap.data() } as Course) : null;
+    const timing = timingsSnap.empty
+      ? null
+      : ({ id: timingsSnap.docs[0].id, ...timingsSnap.docs[0].data() } as CourseYearTiming);
+    const departments = deptsSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as Department);
 
-    // Overlay the displayed week's approved-leave substitutions, covering
-    // every day of that week (not just today) - see lib/leave/periodCoverage.ts
-    // and the same overlay in GET college/timetable-slots. Only ever the
-    // week actually being viewed (weekParam, defaulting to this week) - a
-    // substitution dated for a different week simply isn't in this set.
-    const substitutions = await getActiveSubstitutionsForDates(db, session.collegeId, currentWeekDateKeys(weekParam ?? undefined));
+    // Current semester resolution: explicit user choice or derived from
+    // timings - the choice must actually be one of this course-year's
+    // configured semesters, the same validated-request convention
+    // resolveRequestedSemester (lib/college/semester.ts) enforces for POST
+    // callers elsewhere in this codebase. Without this, a bad/non-numeric
+    // param (e.g. "abc" -> NaN) passed straight through to
+    // matchesCurrentSemester below, which is never true for NaN, silently
+    // blanking the whole timetable instead of falling back to the resolved
+    // current one.
+    const configuredSemesters = (timing?.semesters ?? []).map((s) => s.semester);
+    const validRequestedSemester =
+      requestedSemester != null && Number.isFinite(requestedSemester) &&
+      (configuredSemesters.length === 0 || configuredSemesters.includes(requestedSemester))
+        ? requestedSemester
+        : null;
+    const currentSemester = validRequestedSemester != null ? validRequestedSemester : resolveCurrentSemester(timing);
+
+    // Fetch subjects for this course so we can map subject types and details
+    const subjectsSnap = await collegeRef
+      .collection("subjects")
+      .where("courseId", "==", section.courseId)
+      .get();
+    const subjectMap = new Map<string, Subject>(
+      subjectsSnap.docs.map((d) => [d.id, { id: d.id, ...d.data() } as Subject])
+    );
+
+    // Filter slots for the current semester and join subject details
+    const rawSlots = slotsSnap.docs
+      .map((d) => ({ id: d.id, ...d.data() } as TimetableSlot & { id: string }))
+      .filter((s) => matchesCurrentSemester(s.semester, currentSemester))
+      .map((s) => {
+        const sub = s.subjectId ? subjectMap.get(s.subjectId) : undefined;
+        return {
+          ...s,
+          subjectCode: sub?.code,
+          shortCode: sub?.shortCode,
+          subjectType: sub?.type,
+        };
+      });
+
+    // Filter teaching assignments strictly for current semester & active status
+    const assignments = assignmentsSnap.docs
+      .map((d) => ({ id: d.id, ...d.data() } as TeachingAssignment & { id: string }))
+      .filter((a) => {
+        if (a.isPast) return false;
+        const sem = a.timetableSemester ?? a.semester;
+        if (sem != null && currentSemester != null) {
+          return matchesCurrentSemester(sem, currentSemester);
+        }
+        return true;
+      })
+      .map((a) => {
+        const sub = a.subjectId ? subjectMap.get(a.subjectId) : undefined;
+        return {
+          ...a,
+          shortCode: a.shortCode || sub?.shortCode,
+          subjectType: a.subjectType || sub?.type,
+        };
+      });
+
+    // Overlay active substitutions for the displayed week
+    const substitutions = await getActiveSubstitutionsForDates(
+      db,
+      session.collegeId,
+      currentWeekDateKeys(weekParam ?? undefined)
+    );
     const substitutionBySlotId = new Map(substitutions.map((s) => [s.timetableSlotId, s]));
     const slots = rawSlots.map((s) => {
-      const sub = substitutionBySlotId.get((s as { id: string }).id);
+      const sub = substitutionBySlotId.get(s.id);
       return sub
-        ? { ...s, substituteFacultyId: sub.substituteFacultyId, substituteFacultyName: sub.substituteFacultyName, substituteForName: sub.requesterName, substituteDate: sub.date }
+        ? {
+            ...s,
+            substituteFacultyId: sub.substituteFacultyId,
+            substituteFacultyName: sub.substituteFacultyName,
+            substituteForName: sub.requesterName,
+            substituteDate: sub.date,
+          }
         : s;
     });
 
+    const availableSemesters = timing?.semesters ?? [];
+
     return NextResponse.json({
-      course, section, timing, slots, assignments, resolvedSemester: currentSemester,
-      ownSectionId, courses, departments, sections, courseYearTimings,
+      course,
+      section,
+      timing,
+      slots,
+      assignments,
+      resolvedSemester: currentSemester,
+      availableSemesters,
+      ownSectionId,
+      departments,
     });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {

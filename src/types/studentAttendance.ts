@@ -39,7 +39,15 @@ export interface StudentAttendanceSession {
   sectionId?: string;
   sectionName: string;
   year?: number;
-  semester?: number;           // semester-scoped assignments only
+  // Whichever of TeachingAssignment's own semester fields applies to the
+  // source assignment - `timetableSemester` for a course/section-scoped one,
+  // `semester` directly for the legacy semester-scoped shape (see
+  // /api/college/student-attendance POST, which resolves and stamps this).
+  // Absent on a session created before this field started being stamped, or
+  // when the source assignment's course-year has no semesters configured at
+  // all - null-tolerant everywhere it's filtered on (matchesCurrentSemester),
+  // same convention as TimetableSlot.semester/TeachingAssignment.timetableSemester.
+  semester?: number;
   subjectId: string;
   subjectName: string;
   subjectCode: string;

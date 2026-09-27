@@ -15,8 +15,14 @@ import type { FacultyMember, StudentAttendanceSession } from "@/types";
 function isAuthorized(request: Request): boolean {
   const secret = process.env.CRON_SECRET;
   if (!secret) return false; // fail closed - never run unconfigured
-  const auth = request.headers.get("authorization");
-  return auth === `Bearer ${secret}`;
+  const auth = request.headers.get("authorization") ?? "";
+  const expected = `Bearer ${secret}`;
+  // Constant-time compare (mirrors sessionToken.ts's readSession) - a plain
+  // === on a secret invites a timing side channel, however impractical here.
+  if (auth.length !== expected.length) return false;
+  let diff = 0;
+  for (let i = 0; i < expected.length; i++) diff |= auth.charCodeAt(i) ^ expected.charCodeAt(i);
+  return diff === 0;
 }
 
 // For one college: whichever faculty have a published class today, whose

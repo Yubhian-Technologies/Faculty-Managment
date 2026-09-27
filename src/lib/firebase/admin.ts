@@ -24,7 +24,13 @@ export async function getAdminAuth() {
 }
 
 export function getAdminDb(): Firestore {
-  return getFirestore(getAdminApp());
+  const db = getFirestore(getAdminApp());
+  try {
+    db.settings({ ignoreUndefinedProperties: true });
+  } catch {
+    // settings already locked or applied
+  }
+  return db;
 }
 
 export function getAdminStorage(): Storage {

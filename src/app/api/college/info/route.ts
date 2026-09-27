@@ -9,18 +9,32 @@ export async function GET(request: Request) {
     const session = await requireCollegeContext(
       request,
       "PRINCIPAL", "VICE_PRINCIPAL", "HOD", "SUPER_ADMIN", "COLLEGE_OFFICE", "PANEL_MEMBER", "ACCOUNTS", "COLLEGE_ACCOUNTS", "FINANCE", "PURCHASE_DEPT",
-      "COLLEGE_STAFF", "ACADEMICS", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D", "PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL", "WEBMASTER"
+      "COLLEGE_STAFF", "ACADEMICS", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D", "PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL", "WEBMASTER", "STUDENT"
     );
     const db = getAdminDb();
     const snap = await db.collection("colleges").doc(session.collegeId).get();
-    const data = snap.data() as { name?: string; phone?: string; email?: string; address?: string; type?: string } | undefined;
+    const data = snap.data() as {
+      name?: string;
+      code?: string;
+      affiliation?: string;
+      phone?: string;
+      contactPhone?: string;
+      email?: string;
+      contactEmail?: string;
+      address?: string;
+      type?: string;
+      logoUrl?: string;
+    } | undefined;
 
     return NextResponse.json({
-      name: data?.name ?? "Sri Vishnu Educational Society",
-      phone: data?.phone ?? "",
-      email: data?.email ?? "",
+      name: data?.name ?? "",
+      code: data?.code ?? "",
+      affiliation: data?.affiliation ?? "",
+      phone: data?.contactPhone || data?.phone || "",
+      email: data?.contactEmail || data?.email || "",
       address: data?.address ?? "",
       type: data?.type,
+      logoUrl: data?.logoUrl ?? "",
     });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {

@@ -377,7 +377,7 @@ export async function POST(request: Request) {
 
       const course = courseSnap.data() as { name: string; departmentId: string; catalogId?: string };
       const section = sectionSnap.data() as { name: string; year: number; department: string };
-      const subject = subjectSnap.data() as { name: string; code: string; hoursPerWeek: number };
+      const subject = subjectSnap.data() as { name: string; code: string; shortCode?: string; hoursPerWeek: number };
 
       // Server-computed, never trusting whatever `facultyName` the client sent -
       // legalName only (facultyDisplayName()).
@@ -501,6 +501,7 @@ export async function POST(request: Request) {
         subjectId,
         subjectName: subject.name,
         subjectCode: subject.code,
+        ...(subject.shortCode ? { shortCode: subject.shortCode } : {}),
         hoursPerWeek: body.hoursPerWeek != null ? Number(body.hoursPerWeek) : subject.hoursPerWeek,
         assignedBy: session.uid,
         assignedByName: session.role,
@@ -613,7 +614,7 @@ export async function POST(request: Request) {
       }
 
       const faculty = facultySnap.data() as { legalName?: string; department?: string };
-      const subject = subjectSnap.data() as { name?: string; code?: string; department?: string; hoursPerWeek?: number };
+      const subject = subjectSnap.data() as { name?: string; code?: string; shortCode?: string; department?: string; hoursPerWeek?: number };
 
       // HOD may assign within their own department and any sub-department beneath
       // it, for both the faculty and the subject; Principal/Super Admin can cross
@@ -639,6 +640,7 @@ export async function POST(request: Request) {
         subjectId: body.subjectId,
         subjectName: subject.name ?? "",
         subjectCode: subject.code ?? "",
+        ...(subject.shortCode ? { shortCode: subject.shortCode } : {}),
         department: subject.department ?? faculty.department ?? "",
         academicYear: body.academicYear,
         semester: Number(body.semester),

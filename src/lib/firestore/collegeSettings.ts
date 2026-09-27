@@ -9,11 +9,6 @@ export const DEFAULT_COLLEGE_SETTINGS: Omit<FacultyNorms, "updatedAt" | "updated
   studentFacultyRatio: 15,
   teachingHoursPerWeek: 16,
   defaultMinFacultyPerDept: 3,
-  minimumQualifications: {
-    assistantProfessor: "M.Phil / NET / Ph.D",
-    associateProfessor: "Ph.D with NET",
-    professor: "Ph.D with 10 years experience",
-  },
   positionNorms: [
     { designation: "Professor", requiredPerDept: 1 },
     { designation: "Associate Professor", requiredPerDept: 2 },

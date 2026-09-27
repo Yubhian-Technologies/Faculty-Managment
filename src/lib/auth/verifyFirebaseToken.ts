@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import { getAdminAuth } from "@/lib/firebase/admin";
 
 interface FirebaseTokenPayload {
   uid: string;
@@ -93,5 +94,27 @@ export async function verifyFirebaseToken(token: string): Promise<FirebaseTokenP
 
   // Normalise uid - Firebase uses both sub and user_id
   payload.uid = payload.user_id ?? payload.sub;
+
+  // Signature/exp/aud/iss alone don't catch a token minted before the account
+  // was disabled or its refresh tokens were revoked (see admin/users/[uid],
+  // location/users/[uid], lib/roles/seats.ts) - Firebase doesn't invalidate an
+  // already-issued ID token on either of those, only on its own expiry. Fail
+  // closed: if this live check can't be performed, treat the token as invalid
+  // rather than silently trusting a token we couldn't confirm is still live.
+  try {
+    const adminAuth = await getAdminAuth();
+    const userRecord = await adminAuth.getUser(payload.uid);
+    if (userRecord.disabled) throw new Error("Firebase account is disabled");
+    if (userRecord.tokensValidAfterTime) {
+      const validAfterSec = new Date(userRecord.tokensValidAfterTime).getTime() / 1000;
+      if (payload.iat < validAfterSec) throw new Error("Token was issued before the account's last revocation");
+    }
+  } catch (err) {
+    if (err instanceof Error && (err.message === "Firebase account is disabled" || err.message.startsWith("Token was issued before"))) {
+      throw err;
+    }
+    throw new Error("Unable to confirm account is still active");
+  }
+
   return payload;
 }

@@ -5,26 +5,35 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { fetchSectionStudents } from "@/lib/students/sectionRoster";
 import { calcPercent } from "@/lib/studentAttendance/percentage";
+import { matchesCurrentSemester } from "@/lib/college/semester";
 import type { Section, StudentAttendanceSession, TeachingAssignment } from "@/types";
 
-// Cross-section attendance-percentage report: Department + Course + Semester
-// (year), optionally narrowed to one Section, with a percentage range filter -
-// for finding students below (or above) a threshold, e.g. exam-eligibility
+// Cross-section attendance-percentage report: Department + Course + Year,
+// optionally narrowed to one Section and/or one Semester (see the optional
+// `semester` param below - distinct from `year`, the course's ordinal
+// academic year, e.g. "2nd Year"), with a percentage range filter - for
+// finding students below (or above) a threshold, e.g. exam-eligibility
 // defaulters. Reuses the exact same roster (lib/students/sectionRoster.ts)
 // and per-student Held/Attended/% math as section-attendance-report's own
 // "till now" mode, just looped across every section in scope instead of one -
 // there's no cross-section report like this today.
 const READ_ROLES = ["EXAM_CELL", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN"];
 
+// Same leniency `matchesCurrentSemester` documents everywhere else - a
+// subject never tagged with a semester (course-year has none configured)
+// still counts regardless of which semester was requested, rather than
+// silently disappearing.
 async function sectionSubjectIds(
   collegeRef: FirebaseFirestore.DocumentReference,
-  sectionId: string
+  sectionId: string,
+  requestedSemester: number | null
 ): Promise<string[]> {
   const snap = await collegeRef.collection("teachingAssignments").where("sectionId", "==", sectionId).get();
   const ids = new Set<string>();
   for (const doc of snap.docs) {
     const a = doc.data() as TeachingAssignment;
     if (a.isPast) continue;
+    if (requestedSemester != null && !matchesCurrentSemester(a.timetableSemester, requestedSemester)) continue;
     ids.add(a.subjectId);
   }
   return Array.from(ids);
@@ -45,16 +54,24 @@ export async function GET(request: Request) {
     const courseId = searchParams.get("courseId");
     const yearParam = searchParams.get("year");
     const sectionId = searchParams.get("sectionId");
+    const semesterParam = searchParams.get("semester");
     const listSections = searchParams.get("listSections") === "true";
     const minPctParam = searchParams.get("minPct");
     const maxPctParam = searchParams.get("maxPct");
 
     if (!department || !courseId || !yearParam) {
-      return NextResponse.json({ error: "Department, Course and Semester are required" }, { status: 400 });
+      return NextResponse.json({ error: "Department, Course and Year are required" }, { status: 400 });
     }
     const year = Number(yearParam);
     if (!Number.isFinite(year)) {
-      return NextResponse.json({ error: "Semester must be a valid number" }, { status: 400 });
+      return NextResponse.json({ error: "Year must be a valid number" }, { status: 400 });
+    }
+    // Optional - omitted keeps today's behavior (every semester mixed
+    // together). Same fail-closed convention as minPct/maxPct below rather
+    // than silently no-op-ing on a garbage value.
+    const requestedSemester = semesterParam != null && semesterParam !== "" ? Number(semesterParam) : null;
+    if (requestedSemester != null && !Number.isFinite(requestedSemester)) {
+      return NextResponse.json({ error: "semester must be a valid number" }, { status: 400 });
     }
     // Never let a garbage minPct/maxPct silently no-op the filter (NaN
     // comparisons are always false) - fail closed on a bad param instead.
@@ -100,7 +117,7 @@ export async function GET(request: Request) {
 
     for (const section of sections) {
       const [subjectIds, sessionsSnap, roster] = await Promise.all([
-        sectionSubjectIds(collegeRef, section.id),
+        sectionSubjectIds(collegeRef, section.id, requestedSemester),
         collegeRef.collection("studentAttendance")
           .where("sectionId", "==", section.id)
           .where("status", "==", "SUBMITTED")
@@ -114,6 +131,9 @@ export async function GET(request: Request) {
       const sessionsBySubject = new Map<string, StudentAttendanceSession[]>();
       for (const d of sessionsSnap.docs) {
         const r = d.data() as StudentAttendanceSession;
+        // Same leniency as sectionSubjectIds above - a session never tagged
+        // with a semester still counts regardless of what was requested.
+        if (requestedSemester != null && !matchesCurrentSemester(r.semester, requestedSemester)) continue;
         if (!sessionsBySubject.has(r.subjectId)) sessionsBySubject.set(r.subjectId, []);
         sessionsBySubject.get(r.subjectId)!.push(r);
       }

@@ -8,8 +8,6 @@ import { useAssignedInterviews } from "@/hooks/useAssignedInterviews";
 import { usePrincipalPendingHiring } from "@/hooks/usePrincipalPendingHiring";
 import { BOTTOM_NAV_ITEMS, isNavItemActive, filterVisibleNavItems, isPathHidden, type NavItem } from "./navConfig";
 import { NavIcon } from "./NavIcon";
-import { useNotifications } from "@/hooks/useNotifications";
-import { useUIStore } from "@/store/uiStore";
 
 const INTERVIEW_NAV_ITEM: NavItem = {
   label: "Interviews",
@@ -29,8 +27,6 @@ interface BottomNavProps {
 export function BottomNav({ hiddenModules, hiddenItems }: BottomNavProps) {
   const user = useAuthStore((s) => s.user);
   const pathname = usePathname();
-  const { unreadCount } = useNotifications();
-  const { setNotificationDrawerOpen } = useUIStore();
   const { hasInterviews } = useAssignedInterviews();
   const { pendingCount: pendingHiringCount } = usePrincipalPendingHiring();
 
@@ -72,21 +68,6 @@ export function BottomNav({ hiddenModules, hiddenItems }: BottomNavProps) {
             </Link>
           );
         })}
-        {/* Notification tab */}
-        <button
-          onClick={() => setNotificationDrawerOpen(true)}
-          className="flex flex-1 flex-col items-center justify-center gap-0.5 min-w-0 px-1 text-muted-foreground relative"
-        >
-          <div className="relative">
-            <NavIcon name="Bell" className="h-5 w-5" />
-            {unreadCount > 0 && (
-              <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-[9px] rounded-full h-4 w-4 flex items-center justify-center font-bold">
-                {unreadCount > 9 ? "9+" : unreadCount}
-              </span>
-            )}
-          </div>
-          <span className="text-[10px] font-medium">Alerts</span>
-        </button>
       </div>
     </nav>
   );
