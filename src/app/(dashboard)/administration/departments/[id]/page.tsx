@@ -66,8 +66,9 @@ export default function LocationDeptDetailPage() {
   }
   if (!dept) return null;
 
-  const head = dept.deptHeadUid ? staff.find((u) => u.uid === dept.deptHeadUid) : undefined;
-  const otherMembers = staff.filter((u) => u.uid !== dept.deptHeadUid);
+  const headUid = dept.deptHeadUid || dept.headUid;
+  const head = headUid ? staff.find((u) => u.uid === headUid) : undefined;
+  const otherMembers = staff.filter((u) => u.uid !== headUid);
 
   return (
     <div className="space-y-6">
