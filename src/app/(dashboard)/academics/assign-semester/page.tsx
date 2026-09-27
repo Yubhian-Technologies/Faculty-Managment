@@ -1,17 +1,19 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowRight, ArrowLeft as ArrowLeftIcon, Search } from "lucide-react";
+import { ArrowRight, ArrowLeft as ArrowLeftIcon, Search, Layers, CheckSquare } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Pagination } from "@/components/shared/Pagination";
 import { toast } from "@/hooks/useToast";
 import type { Course, CourseCatalogItem, CourseYearTiming, Department, Subject, SubjectSemesterAssignment } from "@/types";
+import { SUBJECT_TYPE_LABELS } from "@/types";
 
 function ordinalYear(year: number) {
   const suffix = year === 1 ? "st" : year === 2 ? "nd" : year === 3 ? "rd" : "th";
@@ -55,6 +57,8 @@ export default function AssignToSemesterPage() {
   const [selectedSemester, setSelectedSemester] = useState<number | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [searchText, setSearchText] = useState("");
+  const [selectedSubjectIds, setSelectedSubjectIds] = useState<string[]>([]);
+  const [isBulkAssigning, setIsBulkAssigning] = useState(false);
 
   // Pagination
   const [masterPage, setMasterPage] = useState(1);
@@ -149,8 +153,13 @@ export default function AssignToSemesterPage() {
     setIsLoadingSubjects(true);
     try {
       const catalogId = course.catalogId ?? "";
+      // Master subjects are course+regulation scoped only (no ordinal `year`
+      // field - see types/teaching.ts's own Subject.year comment), so the
+      // GET route never reads a `year` param; `year` is still this
+      // function's own param (used below for the assignment/instance calls
+      // that DO need it - Year is what a department's mapping is keyed by).
        const [subjectsRes, timingsRes, assignmentsRes] = await Promise.all([
-        fetch(`/api/college/subjects?courseId=${encodeURIComponent(course.id)}&year=${encodeURIComponent(year)}`),
+        fetch(`/api/college/subjects?courseId=${encodeURIComponent(course.id)}`),
         fetch(`/api/college/course-year-timings?courseId=${encodeURIComponent(course.id)}`),
         fetch(`/api/college/subject-semester-assignments?courseId=${encodeURIComponent(course.id)}&departmentId=${encodeURIComponent(departmentId)}`),
       ]);
@@ -246,6 +255,33 @@ export default function AssignToSemesterPage() {
       toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to update subject" });
     } finally {
       setSavingId(null);
+    }
+  }
+
+  async function handleBulkAssign() {
+    if (!selectedCourse || !selectedDepartment || effectiveSemester == null || selectedSubjectIds.length === 0) return;
+    setIsBulkAssigning(true);
+    try {
+      const res = await fetch("/api/college/subject-semester-assignments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          subjectIds: selectedSubjectIds,
+          departmentId: selectedDepartment.id,
+          departmentName: selectedDepartment.name,
+          semester: effectiveSemester,
+          year: Number(selectedYear),
+        }),
+      });
+      const json = await res.json() as { assignedCount?: number; error?: string };
+      if (!res.ok) throw new Error(json.error ?? "Failed to assign subjects");
+      setSelectedSubjectIds([]);
+      toast({ variant: "success", title: `${json.assignedCount ?? selectedSubjectIds.length} subjects instantiated for Semester ${effectiveSemester}` });
+      await loadSubjectsAndTimings(selectedCourse, selectedDepartment.id, selectedYear);
+    } catch (err) {
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Bulk assign failed" });
+    } finally {
+      setIsBulkAssigning(false);
     }
   }
 
@@ -398,15 +434,51 @@ export default function AssignToSemesterPage() {
               <div className="grid gap-4 md:grid-cols-2">
                 <Card>
                   <CardHeader className="pb-3 space-y-2">
-                    <CardTitle className="text-base">Master Collection</CardTitle>
-                    <div className="relative">
-                      <Search className="h-3.5 w-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                      <Input
-                        value={searchText}
-                        onChange={(e) => setSearchText(e.target.value)}
-                        placeholder="Search by name or code…"
-                        className="pl-8 h-9"
-                      />
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <CardTitle className="text-base flex items-center gap-2">
+                        <Layers className="h-4 w-4" />
+                        Master Collection
+                      </CardTitle>
+                      {selectedSubjectIds.length > 0 && (
+                        <Button
+                          size="sm"
+                          variant="default"
+                          loading={isBulkAssigning}
+                          onClick={() => void handleBulkAssign()}
+                        >
+                          <CheckSquare className="h-3.5 w-3.5 mr-1.5" />
+                          Assign {selectedSubjectIds.length} to Sem {effectiveSemester}
+                        </Button>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="relative flex-1">
+                        <Search className="h-3.5 w-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                        <Input
+                          value={searchText}
+                          onChange={(e) => setSearchText(e.target.value)}
+                          placeholder="Search by name or code…"
+                          className="pl-8 h-9"
+                        />
+                      </div>
+                      {paginatedMasterPool.length > 0 && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-xs h-9"
+                          onClick={() => {
+                            const idsOnPage = paginatedMasterPool.map((s) => s.id);
+                            const allSelected = idsOnPage.every((id) => selectedSubjectIds.includes(id));
+                            if (allSelected) {
+                              setSelectedSubjectIds((prev) => prev.filter((id) => !idsOnPage.includes(id)));
+                            } else {
+                              setSelectedSubjectIds((prev) => Array.from(new Set([...prev, ...idsOnPage])));
+                            }
+                          }}
+                        >
+                          {paginatedMasterPool.every((s) => selectedSubjectIds.includes(s.id)) ? "Deselect All" : "Select All"}
+                        </Button>
+                      )}
                     </div>
                   </CardHeader>
                   <CardContent>
@@ -421,22 +493,69 @@ export default function AssignToSemesterPage() {
                      ) : (
                        <>
                          <div className="space-y-2">
-                           {paginatedMasterPool.map((s) => (
-                             <div key={s.id} className="flex items-center justify-between gap-2 rounded-md border p-2.5">
-                               <div>
-                                 <p className="text-sm font-medium">{s.name} <span className="text-muted-foreground">({s.code})</span></p>
-                                 {s.regulation && <Badge variant="secondary" className="text-xs mt-1">{s.regulation}</Badge>}
-                               </div>
-                               <Button
-                                 size="sm"
-                                 variant="outline"
-                                 loading={savingId === s.id}
-                                 onClick={() => void setSubjectSemester(s, effectiveSemester)}
+                           {paginatedMasterPool.map((s) => {
+                             const isChecked = selectedSubjectIds.includes(s.id);
+                             return (
+                               <div
+                                 key={s.id}
+                                 className={`flex items-start justify-between gap-3 rounded-md border p-3 transition-colors ${
+                                   isChecked ? "bg-muted/40 border-primary/40" : ""
+                                 }`}
                                >
-                                 Add<ArrowRight className="h-3.5 w-3.5 ml-1.5" />
-                               </Button>
-                             </div>
-                           ))}
+                                 <div className="flex items-start gap-2.5 pt-0.5">
+                                   <Checkbox
+                                     checked={isChecked}
+                                     onCheckedChange={(checked) => {
+                                       setSelectedSubjectIds((prev) =>
+                                         checked ? [...prev, s.id] : prev.filter((id) => id !== s.id)
+                                       );
+                                     }}
+                                   />
+                                   <div className="space-y-1">
+                                     <div className="text-sm font-medium leading-snug">
+                                       {s.name} <span className="font-mono text-xs text-muted-foreground">({s.code})</span>
+                                     </div>
+                                     <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                                       {s.category && (
+                                         <Badge variant="outline" className="text-[11px] py-0">
+                                           {s.category === "OTHER" ? s.customCategory || "Other" : s.category}
+                                         </Badge>
+                                       )}
+                                       {s.type && (
+                                         <Badge variant="secondary" className="text-[11px] py-0">
+                                           {SUBJECT_TYPE_LABELS[s.type] ?? s.type}
+                                         </Badge>
+                                       )}
+                                       {s.credits != null && (
+                                         <Badge variant="outline" className="text-[11px] py-0 font-medium">
+                                           {s.credits} Credits
+                                         </Badge>
+                                       )}
+                                       {(s.lectureHours != null || s.tutorialHours != null || s.practicalHours != null) && (
+                                         <span className="text-[11px] text-muted-foreground">
+                                           L:{s.lectureHours ?? 0} T:{s.tutorialHours ?? 0} P:{s.practicalHours ?? 0}
+                                         </span>
+                                       )}
+                                       {s.regulation && (
+                                         <Badge variant="secondary" className="text-[11px] py-0">
+                                           {s.regulation}
+                                         </Badge>
+                                       )}
+                                     </div>
+                                   </div>
+                                 </div>
+                                 <Button
+                                   size="sm"
+                                   variant="outline"
+                                   className="shrink-0 h-8 text-xs"
+                                   loading={savingId === s.id}
+                                   onClick={() => void setSubjectSemester(s, effectiveSemester)}
+                                 >
+                                   Add<ArrowRight className="h-3.5 w-3.5 ml-1.5" />
+                                 </Button>
+                               </div>
+                             );
+                           })}
                          </div>
                          <Pagination
                            page={masterPage}
@@ -452,22 +571,55 @@ export default function AssignToSemesterPage() {
                  </Card>
 
                  <Card>
-                   <CardHeader className="pb-3"><CardTitle className="text-base">{isSubDept ? "Semester " + effectiveSemester + " - " + selectedDepartment?.name + " (sub-department)" : "Semester " + effectiveSemester + " - " + (selectedDepartment?.name ?? "")}</CardTitle></CardHeader>
+                   <CardHeader className="pb-3">
+                     <CardTitle className="text-base">
+                       {isSubDept
+                         ? `Semester ${effectiveSemester} Instances - ${selectedDepartment?.name} (sub-department)`
+                         : `Semester ${effectiveSemester} Instances - ${selectedDepartment?.name ?? ""}`}
+                     </CardTitle>
+                   </CardHeader>
                    <CardContent>
                      {paginatedAssignments.length === 0 ? (
                       <p className="text-sm text-muted-foreground text-center py-6">
-                        No subjects assigned to this semester yet.
+                        No subjects assigned to this semester yet. Select from Master Collection and click Add or Bulk Assign.
                       </p>
                     ) : (
                       <div className="space-y-2">
                         {semesterAssignments.map((a) => {
                           const subject = subjects.find((s) => s.id === a.subjectId);
                           return (
-                            <div key={a.id} className="flex items-center justify-between gap-2 rounded-md border p-2.5">
-                              <p className="text-sm font-medium">{a.subjectName} <span className="text-muted-foreground">({a.subjectCode})</span></p>
+                            <div key={a.id} className="flex items-start justify-between gap-3 rounded-md border p-3">
+                              <div className="space-y-1">
+                                <div className="text-sm font-medium leading-snug">
+                                  {a.subjectName} <span className="font-mono text-xs text-muted-foreground">({a.subjectCode})</span>
+                                </div>
+                                <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                                  {(a.category || subject?.category) && (
+                                    <Badge variant="outline" className="text-[11px] py-0">
+                                      {a.category ?? subject?.category}
+                                    </Badge>
+                                  )}
+                                  {(a.type || subject?.type) && (
+                                    <Badge variant="secondary" className="text-[11px] py-0">
+                                      {SUBJECT_TYPE_LABELS[a.type ?? subject?.type ?? "THEORY"]}
+                                    </Badge>
+                                  )}
+                                  {(a.credits != null || subject?.credits != null) && (
+                                    <Badge variant="outline" className="text-[11px] py-0 font-medium">
+                                      {a.credits ?? subject?.credits} Credits
+                                    </Badge>
+                                  )}
+                                  {(a.lectureHours != null || subject?.lectureHours != null) && (
+                                    <span className="text-[11px] text-muted-foreground">
+                                      L:{a.lectureHours ?? subject?.lectureHours ?? 0} T:{a.tutorialHours ?? subject?.tutorialHours ?? 0} P:{a.practicalHours ?? subject?.practicalHours ?? 0}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
                               <Button
                                 size="sm"
                                 variant="ghost"
+                                className="shrink-0 text-destructive hover:text-destructive h-8 text-xs"
                                 loading={savingId === a.subjectId}
                                 onClick={() => void setSubjectSemester(subject ?? { id: a.subjectId } as Subject, null)}
                               >

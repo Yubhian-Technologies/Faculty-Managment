@@ -284,9 +284,18 @@ export function TeachingAssignmentsEditor({ courseId, year, backHref }: Teaching
         .map((a) => a.subjectId)
     );
 
+    // Check if any subjects assigned to this department match the section's regulation
+    const hasRegulationMatches = assignedSubjects.some(
+      (s) =>
+        sectionAssignedSubjectIds.has(s.id) &&
+        (!selectedSection.regulation || !s.regulation || s.regulation === selectedSection.regulation)
+    );
+
     return assignedSubjects.filter((s) => {
       if (!sectionAssignedSubjectIds.has(s.id)) return false;
-      if (selectedSection.regulation && s.regulation && s.regulation !== selectedSection.regulation) return false;
+      if (hasRegulationMatches && selectedSection.regulation && s.regulation && s.regulation !== selectedSection.regulation) {
+        return false;
+      }
       if (pendingRequestKeys.has(`${assignForm.sectionId}_${s.id}`)) return false;
       const existingForSubject = assignments.filter((a) =>
         a.sectionId === assignForm.sectionId && a.subjectId === s.id &&
@@ -479,10 +488,14 @@ export function TeachingAssignmentsEditor({ courseId, year, backHref }: Teaching
                   <SelectTrigger><SelectValue placeholder="Select subject" /></SelectTrigger>
                   <SelectContent>
                     {availableSubjectsForAssign.length === 0 && (
-                      <div className="px-2 py-1.5 text-xs text-muted-foreground">All subjects already staffed for this section</div>
+                      <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                        {assignedSubjects.length === 0
+                          ? "No subjects assigned to this department for this semester"
+                          : "All subjects already staffed for this section"}
+                      </div>
                     )}
                     {availableSubjectsForAssign.map((s) => (
-                      <SelectItem key={s.id} value={s.id}>{s.name} ({s.code}{s.regulation ? ` · ${s.regulation}` : ""})</SelectItem>
+                      <SelectItem key={s.id} value={s.id}>{s.name} ({s.shortCode || s.code}{s.regulation ? ` · ${s.regulation}` : ""})</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -593,7 +606,7 @@ export function TeachingAssignmentsEditor({ courseId, year, backHref }: Teaching
                       <div key={a.id} className="flex items-center justify-between py-2.5 px-3">
                         <div>
                           <p className="text-sm font-medium flex items-center gap-1.5">
-                            {a.subjectName} <span className="text-muted-foreground">({a.subjectCode})</span>
+                            {a.subjectName} <span className="text-muted-foreground">({a.shortCode || a.subjectCode})</span>
                             {a.timetableSemester != null && <Badge variant="outline" className="text-xs">Sem {a.timetableSemester}</Badge>}
                           </p>
                           <p className="text-xs text-muted-foreground">{a.facultyName} · {a.hoursPerWeek} hrs/wk</p>

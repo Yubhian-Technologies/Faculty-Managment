@@ -288,19 +288,23 @@ const effectiveSemester = semesterOptions.length === 0
   // effectiveSemester isn't known yet the first time it runs. Once a real
   // semester resolves, narrow subjectsCache[key] down to only subjects
   // mapped (per department - see SubjectSemesterAssignment, types/teaching.ts)
-  // to it (see academics/assign-semester/page.tsx). Fetched by catalogId, and
-  // unioning every course-doc id's own owning department's mappings (same
-  // "union across the group" convention this page already uses for
-  // sections/timings) - a shared programme's course-doc ids can each belong
-  // to a different department. No semesters configured (effectiveSemester
-  // === null) leaves the full unfiltered list in place, exactly as before.
+  // to it (see academics/assign-semester/page.tsx). Queried per course-doc id
+  // (activeCourseIds), same "union across the group" convention this page
+  // already uses for sections/timings - a shared programme's course-doc ids
+  // can each belong to a different department. No semesters configured
+  // (effectiveSemester === null) leaves the full unfiltered list in place,
+  // exactly as before.
   const semesterFilteredKeys = useRef<Set<string>>(new Set());
   useEffect(() => {
-    if (effectiveSemester == null || activeCourseIds.length === 0 || !year || !course?.catalogId) return;
+    // Deliberately no `course?.catalogId` requirement - the fetches below key
+    // only on courseId/year/semester, never catalogId, so gating on it just
+    // skipped filtering forever for any course lacking one (a legacy,
+    // pre-catalog-migration course/group), leaving the raw "every subject for
+    // this year" list in subjectsCache[key] in place with no way to recover.
+    if (effectiveSemester == null || activeCourseIds.length === 0 || !year) return;
     const filterKey = `${key}_sem${effectiveSemester}`;
     if (semesterFilteredKeys.current.has(filterKey)) return;
     semesterFilteredKeys.current.add(filterKey);
-    const catalogId = course.catalogId;
     void (async () => {
       const [assignLists, subjectsLists] = await Promise.all([
         Promise.all(
@@ -462,14 +466,20 @@ const effectiveSemester = semesterOptions.length === 0
   const availableSubjectsForAssign = assignForm.sectionId
     ? (() => {
         const selectedSection = sections.find((s) => s.id === assignForm.sectionId);
-        return subjects.filter((s) =>
-          (!selectedSection?.regulation || !s.regulation || s.regulation === selectedSection.regulation) &&
-          !assignments.some((a) =>
+        if (!selectedSection) return subjects;
+        const hasRegulationMatches = subjects.some(
+          (s) => !selectedSection.regulation || !s.regulation || s.regulation === selectedSection.regulation
+        );
+        return subjects.filter((s) => {
+          if (hasRegulationMatches && selectedSection.regulation && s.regulation && s.regulation !== selectedSection.regulation) {
+            return false;
+          }
+          if (pendingRequestKeys.has(`${assignForm.sectionId}_${s.id}`)) return false;
+          return !assignments.some((a) =>
             a.sectionId === assignForm.sectionId && a.subjectId === s.id &&
             matchesCurrentSemester(a.timetableSemester, effectiveSemester)
-          ) &&
-          !pendingRequestKeys.has(`${assignForm.sectionId}_${s.id}`)
-        );
+          );
+        });
       })()
     : subjects;
 
@@ -779,10 +789,14 @@ const effectiveSemester = semesterOptions.length === 0
                     <SelectTrigger><SelectValue placeholder="Select subject" /></SelectTrigger>
                     <SelectContent>
                       {availableSubjectsForAssign.length === 0 && (
-                        <div className="px-2 py-1.5 text-xs text-muted-foreground">All subjects already staffed for this section</div>
+                        <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                          {subjects.length === 0
+                            ? "No subjects offered for this semester"
+                            : "All subjects already staffed for this section"}
+                        </div>
                       )}
                       {availableSubjectsForAssign.map((s) => (
-                        <SelectItem key={s.id} value={s.id}>{s.name} ({s.code}{s.regulation ? ` · ${s.regulation}` : ""})</SelectItem>
+                        <SelectItem key={s.id} value={s.id}>{s.name} ({s.shortCode || s.code}{s.regulation ? ` · ${s.regulation}` : ""})</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -873,7 +887,7 @@ const effectiveSemester = semesterOptions.length === 0
                       <div key={a.id} className="flex items-center justify-between py-2.5 px-3">
                         <div>
                           <p className="text-sm font-medium flex items-center gap-1.5">
-                            {a.subjectName} <span className="text-muted-foreground">({a.subjectCode})</span>
+                            {a.subjectName} <span className="text-muted-foreground">({a.shortCode || a.subjectCode})</span>
                             {a.timetableSemester != null && <Badge variant="outline" className="text-xs">Sem {a.timetableSemester}</Badge>}
                             {a.accessLevel === "secondary" && <Badge variant="secondary" className="text-xs">View only</Badge>}
                           </p>
@@ -898,7 +912,7 @@ const effectiveSemester = semesterOptions.length === 0
                       <div key={a.id} className="flex items-center justify-between py-2.5 px-3">
                         <div>
                           <p className="text-sm font-medium flex items-center gap-1.5">
-                            {a.subjectName} <span className="text-muted-foreground">({a.subjectCode})</span>
+                            {a.subjectName} <span className="text-muted-foreground">({a.shortCode || a.subjectCode})</span>
                             {a.accessLevel === "secondary" && <Badge variant="secondary" className="text-xs">View only</Badge>}
                           </p>
                           <p className="text-xs text-muted-foreground">

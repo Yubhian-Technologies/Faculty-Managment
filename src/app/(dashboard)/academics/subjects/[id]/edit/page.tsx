@@ -20,6 +20,7 @@ type SubjectForm = {
   customCategory: string;
   name: string;
   code: string;
+  shortCode: string;
   type: SubjectType;
   lectureHours: string;
   tutorialHours: string;
@@ -30,7 +31,7 @@ type SubjectForm = {
 };
 
 const EMPTY_SUBJECT_FORM: SubjectForm = {
-  serialNumber: "", category: "", customCategory: "", name: "", code: "", type: "THEORY",
+  serialNumber: "", category: "", customCategory: "", name: "", code: "", shortCode: "", type: "THEORY",
   lectureHours: "", tutorialHours: "", practicalHours: "",
   hoursPerWeek: "", totalHoursPerSemester: "", credits: "",
 };
@@ -76,6 +77,7 @@ export default function EditAcademicsSubjectPage() {
           customCategory: s.customCategory ?? "",
           name: s.name,
           code: s.code,
+          shortCode: s.shortCode ?? "",
           type: s.type,
           lectureHours: s.lectureHours != null ? String(s.lectureHours) : "",
           tutorialHours: s.tutorialHours != null ? String(s.tutorialHours) : "",
@@ -127,6 +129,7 @@ export default function EditAcademicsSubjectPage() {
           customCategory: form.category === "OTHER" ? form.customCategory.trim() : undefined,
           name: form.name.trim(),
           code: form.code.trim(),
+          shortCode: form.shortCode.trim(),
           type: form.type,
           lectureHours: Number(form.lectureHours),
           tutorialHours: Number(form.tutorialHours),
@@ -236,6 +239,20 @@ export default function EditAcademicsSubjectPage() {
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Short Code</Label>
+              <Input
+                value={form.shortCode}
+                onChange={(e) => setF({ shortCode: e.target.value.toUpperCase() })}
+                placeholder="e.g. DS"
+                maxLength={8}
+                className="uppercase"
+              />
+              <p className="text-xs text-muted-foreground">
+                A compact mnemonic shown in the timetable and other tight spaces (e.g. &quot;CHE&quot; for Chemistry) - optional, falls back to Code when blank.
+              </p>
             </div>
 
             <div className="space-y-2">

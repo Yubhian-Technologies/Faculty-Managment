@@ -17,6 +17,7 @@ export async function PATCH(
     const body = (await request.json()) as {
       name?: string;
       code?: string;
+      shortCode?: string;
       hoursPerWeek?: number;
       totalHoursPerSemester?: number | null;
       credits?: number;
@@ -62,6 +63,7 @@ export async function PATCH(
     const updates: Record<string, unknown> = { updatedAt: new Date() };
     if (body.name != null) updates.name = body.name.trim();
     if (body.code != null) updates.code = body.code.toUpperCase().trim();
+    if (body.shortCode != null) updates.shortCode = body.shortCode.trim().toUpperCase();
     if (body.hoursPerWeek != null) updates.hoursPerWeek = Number(body.hoursPerWeek);
     if ("totalHoursPerSemester" in body) updates.totalHoursPerSemester = body.totalHoursPerSemester ?? null;
     if (body.credits != null) updates.credits = Number(body.credits);
@@ -92,16 +94,19 @@ export async function PATCH(
     // point-in-time records, not live state.
     const nameChanged = body.name != null;
     const codeChanged = body.code != null;
-    if (body.hoursPerWeek != null || nameChanged || codeChanged) {
+    const shortCodeChanged = body.shortCode != null;
+    if (body.hoursPerWeek != null || nameChanged || codeChanged || shortCodeChanged) {
       const newHours = body.hoursPerWeek != null ? Number(body.hoursPerWeek) : undefined;
       const newName = nameChanged ? String(updates.name) : undefined;
       const newCode = codeChanged ? String(updates.code) : undefined;
+      const newShortCode = shortCodeChanged ? String(updates.shortCode) : undefined;
       const now = new Date();
 
       const assignmentFields: Record<string, unknown> = { updatedAt: now };
       if (newHours != null) assignmentFields.hoursPerWeek = newHours;
       if (newName != null) assignmentFields.subjectName = newName;
       if (newCode != null) assignmentFields.subjectCode = newCode;
+      if (newShortCode != null) assignmentFields.shortCode = newShortCode;
 
       const assignmentsSnap = await db
         .collection("colleges").doc(session.collegeId)

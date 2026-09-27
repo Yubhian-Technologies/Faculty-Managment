@@ -20,7 +20,14 @@ export async function GET(request: Request) {
     const db = getAdminDb();
     let query: FirebaseFirestore.Query = db.collection("colleges").doc(session.collegeId).collection("subjects");
 
-    if (session.role === "HOD") {
+    // Master subjects (courseId present) never carry a `department` field -
+    // they're course+regulation scoped, department-independent by design
+    // (see this file's POST for the two creation shapes) - so this filter
+    // only applies to the semester-scoped shape. Applying it unconditionally
+    // used to AND it onto the courseId query below, which a master subject
+    // (no `department` field at all) can never match - every HOD got an
+    // empty Master Collection for every course, always.
+    if (session.role === "HOD" && !courseId) {
       // Viewing is bidirectional: a parent HOD sees their own
       // department's subjects and every sub-department's, AND a sub-HOD
       // (e.g. BS-Chemistry, BS-Mathematics) sees their parent's (Basic
@@ -105,6 +112,7 @@ export async function POST(request: Request) {
       semester?: number;
       name: string;
       code: string;
+      shortCode?: string;
       hoursPerWeek?: number;
       totalHoursPerSemester?: number;
       credits?: number;
@@ -185,7 +193,7 @@ export async function POST(request: Request) {
       if (body.serialNumber == null || Number.isNaN(Number(body.serialNumber))) {
         return NextResponse.json({ error: "S.No. is required" }, { status: 400 });
       }
-      if (!body.category || !(body.category in SUBJECT_CATEGORY_LABELS)) {
+      if (!body.category || !body.category.trim()) {
         return NextResponse.json({ error: "A valid category is required" }, { status: 400 });
       }
       if (body.category === "OTHER" && !body.customCategory?.trim()) {
@@ -218,6 +226,7 @@ export async function POST(request: Request) {
           ...(body.category === "OTHER" ? { customCategory: body.customCategory!.trim() } : {}),
           name: body.name.trim(),
           code: body.code.toUpperCase().trim(),
+          ...(body.shortCode?.trim() ? { shortCode: body.shortCode.trim().toUpperCase() } : {}),
           hoursPerWeek: body.hoursPerWeek != null ? Number(body.hoursPerWeek) : 0,
           totalHoursPerSemester: body.totalHoursPerSemester != null ? Number(body.totalHoursPerSemester) : null,
           lectureHours: Number(body.lectureHours),
@@ -265,6 +274,7 @@ export async function POST(request: Request) {
       department,
       name: body.name.trim(),
       code: body.code.trim().toUpperCase(),
+      ...(body.shortCode?.trim() ? { shortCode: body.shortCode.trim().toUpperCase() } : {}),
       semester: Number(body.semester),
       hoursPerWeek: Number(body.hoursPerWeek) || 0,
       credits: Number(body.credits) || 0,

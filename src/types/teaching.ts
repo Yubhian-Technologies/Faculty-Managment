@@ -13,9 +13,10 @@ export const SUBJECT_TYPE_LABELS: Record<SubjectType, string> = {
 
 // Standard AICTE model-curriculum categories, used across most Indian
 // engineering colleges' L-T-P-C curriculum tables.
-export type SubjectCategory = "HSMC" | "BSC" | "ESC" | "PCC" | "PEC" | "OEC" | "MC" | "PROJ" | "OTHER";
+export type StandardSubjectCategory = "HSMC" | "BSC" | "ESC" | "PCC" | "PEC" | "OEC" | "MC" | "PROJ" | "OTHER";
+export type SubjectCategory = StandardSubjectCategory | (string & {});
 
-export const SUBJECT_CATEGORY_LABELS: Record<SubjectCategory, string> = {
+export const SUBJECT_CATEGORY_LABELS: Record<string, string> = {
   HSMC: "Humanities & Social Sciences (HSMC)",
   BSC: "Basic Science (BSC)",
   ESC: "Engineering Science (ESC)",
@@ -72,6 +73,12 @@ export interface Subject {
   customCategory?: string;
   name: string;
   code: string;
+  // A short, human-readable mnemonic ("CHE" for Chemistry) - distinct from
+  // `code` above (the formal registrar/curriculum code, e.g. "CS201").
+  // Optional so existing subjects created before this field existed keep
+  // showing their full name/code until someone fills it in; every display
+  // surface that reads it falls back to `code`/`name` when absent.
+  shortCode?: string;
   hoursPerWeek: number;
   totalHoursPerSemester?: number;
   // L-T-P breakdown (Lecture/Tutorial/Practical hours per week) alongside
@@ -105,9 +112,22 @@ export interface SubjectSemesterAssignment {
   year?: number;
   semester: number;
   academicYear?: string;
-  subjectId: string;
+  subjectId: string; // References master subject id
+  masterSubjectId?: string; // Explicit provenance pointer
   subjectName: string;
   subjectCode: string;
+  shortCode?: string; // Snapshot of Subject.shortCode - see its own doc-comment
+  // Snapshot attributes copied from Master Subject
+  type?: SubjectType;
+  category?: SubjectCategory;
+  customCategory?: string;
+  lectureHours?: number;
+  tutorialHours?: number;
+  practicalHours?: number;
+  hoursPerWeek?: number;
+  totalHoursPerSemester?: number | null;
+  credits?: number;
+  isCustomized?: boolean;
   isActive?: boolean;
   createdAt: Timestamp;
   updatedAt: Timestamp;
@@ -136,6 +156,7 @@ export interface TeachingAssignment {
   subjectId: string;
   subjectName: string;
   subjectCode: string;
+  shortCode?: string; // Snapshot of Subject.shortCode at assignment-creation time - see its own doc-comment
   hoursPerWeek: number;
   totalHoursAllotted?: number;
   assignedBy: string;

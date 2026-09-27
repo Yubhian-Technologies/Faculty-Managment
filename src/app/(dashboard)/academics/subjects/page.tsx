@@ -441,6 +441,7 @@ export default function AcademicsSubjectsPage() {
                                   <div className="font-medium text-foreground">{s.name}</div>
                                   <div className="flex flex-wrap items-center gap-2 mt-1">
                                     <Badge variant="secondary" className="text-xs font-mono">{s.code}</Badge>
+                                    {s.shortCode && <Badge variant="outline" className="text-xs font-mono">{s.shortCode}</Badge>}
                                     <Badge variant="outline" className="text-xs">{SUBJECT_TYPE_LABELS[s.type]}</Badge>
                                     {s.regulation && <Badge variant="secondary" className="text-xs">{s.regulation}</Badge>}
                                     {s.academicYear && <Badge variant="outline" className="text-xs">{s.academicYear}</Badge>}

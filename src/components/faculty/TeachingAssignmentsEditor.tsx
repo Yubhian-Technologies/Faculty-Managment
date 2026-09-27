@@ -351,8 +351,11 @@ export function TeachingAssignmentsEditor({ value, onChange, department }: Props
         // still shows, and an unset section regulation shows everything.
         const selectedSection = sections.find((s) => s.id === row.sectionId);
         const selectedSubject = subjects.find((s) => s.id === row.subjectId);
-        const regulationFiltered = subjects.filter(
+        const hasRegulationMatches = subjects.some(
           (s) => !selectedSection?.regulation || !s.regulation || s.regulation === selectedSection.regulation
+        );
+        const regulationFiltered = subjects.filter(
+          (s) => !hasRegulationMatches || !selectedSection?.regulation || !s.regulation || s.regulation === selectedSection.regulation
         );
         const availableSubjects = row.isPast
           ? regulationFiltered

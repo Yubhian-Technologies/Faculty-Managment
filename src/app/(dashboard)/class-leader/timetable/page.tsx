@@ -1,23 +1,18 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Coffee, Utensils } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/useToast";
-import { formatDMY, currentWeekDates } from "@/lib/utils";
+import { currentWeekDates } from "@/lib/utils";
 import { isoDateKey } from "@/lib/leave/dayCounter";
-import { buildRows } from "@/lib/timetable/buildGrid";
 import { buildCourseGroups } from "@/lib/departments/hodScope";
 import { sectionDisplayLabel } from "@/lib/sections/sectionLabel";
 import { computeSemesterOptions, resolveYearsForSemesterChoice, type SemesterChoice } from "@/lib/college/semester";
-import { WeekNavigator } from "@/components/timetable/WeekNavigator";
-import type { Course, Department, Section, CourseYearTiming, TimetableSlot, DayOfWeek, SubjectType } from "@/types";
-import { DAY_LABELS } from "@/types";
-
-const DAYS: DayOfWeek[] = ["MON", "TUE", "WED", "THU", "FRI", "SAT"];
+import { InstitutionalTimetableTable } from "@/components/timetable/InstitutionalTimetableTable";
+import type { Course, Department, Section, CourseYearTiming, TimetableSlot, SubjectType } from "@/types";
 
 type TimetableSlotRow = TimetableSlot & { id: string; subjectType?: SubjectType };
 
@@ -259,14 +254,6 @@ export default function ClassLeaderTimetablePage() {
     [slots, theorySubjectId, labSubjectId, batchValue]
   );
 
-  const rows = timing ? buildRows(timing) : [];
-
-  // Plural - a split period (two+ subjects/faculty sharing one section+day+
-  // period) means a cell can hold more than one.
-  function slotsFor(day: DayOfWeek, period: number) {
-    return filteredSlots.filter((s) => s.day === day && s.periodNumber === period);
-  }
-
   return (
     <div className="space-y-6">
       <PageHeader
@@ -328,131 +315,69 @@ export default function ClassLeaderTimetablePage() {
           Timings haven&rsquo;t been configured for {course?.name} - {ordinalYear(section.year)} yet.
         </div>
       ) : (
-        <>
-        <div className="flex items-center justify-between gap-2 flex-wrap">
-          <WeekNavigator weekStart={weekStart} onChange={setWeekStart} />
-          <div className="flex items-end gap-2 flex-wrap">
-            {theoryOptions.length > 0 && (
-              <div className="space-y-1">
-                <Label className="text-xs">Theory</Label>
-                <Select value={theorySubjectId || "__all__"} onValueChange={(v) => setTheorySubjectId(v === "__all__" ? "" : v)}>
-                  <SelectTrigger className="w-40"><SelectValue placeholder="All" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__all__">All</SelectItem>
-                    {theoryOptions.map((o) => <SelectItem key={o.id} value={o.id}>{o.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-            {labOptions.length > 0 && (
-              <div className="space-y-1">
-                <Label className="text-xs">Lab</Label>
-                <Select value={labSubjectId || "__all__"} onValueChange={(v) => setLabSubjectId(v === "__all__" ? "" : v)}>
-                  <SelectTrigger className="w-40"><SelectValue placeholder="All" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__all__">All</SelectItem>
-                    {labOptions.map((o) => <SelectItem key={o.id} value={o.id}>{o.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-            {batchOptions.length > 0 && (
-              <div className="space-y-1">
-                <Label className="text-xs">Batch</Label>
-                <Select value={batchValue || "__all__"} onValueChange={(v) => setBatchValue(v === "__all__" ? "" : v)}>
-                  <SelectTrigger className="w-36"><SelectValue placeholder="All" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__all__">All</SelectItem>
-                    {batchOptions.map((b) => <SelectItem key={b} value={b}>{b}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-            {hasActiveFilters && (
-              <Button type="button" variant="ghost" size="sm" onClick={() => { setTheorySubjectId(""); setLabSubjectId(""); setBatchValue(""); }}>
-                Clear filters
-              </Button>
-            )}
-          </div>
+        <div className="space-y-4">
+          {(theoryOptions.length > 0 || labOptions.length > 0 || batchOptions.length > 0) && (
+            <div className="flex items-end gap-2 flex-wrap rounded-lg border p-3 bg-muted/20">
+              {theoryOptions.length > 0 && (
+                <div className="space-y-1">
+                  <Label className="text-xs">Theory</Label>
+                  <Select value={theorySubjectId || "__all__"} onValueChange={(v) => setTheorySubjectId(v === "__all__" ? "" : v)}>
+                    <SelectTrigger className="w-40"><SelectValue placeholder="All" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__all__">All</SelectItem>
+                      {theoryOptions.map((o) => <SelectItem key={o.id} value={o.id}>{o.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              {labOptions.length > 0 && (
+                <div className="space-y-1">
+                  <Label className="text-xs">Lab</Label>
+                  <Select value={labSubjectId || "__all__"} onValueChange={(v) => setLabSubjectId(v === "__all__" ? "" : v)}>
+                    <SelectTrigger className="w-40"><SelectValue placeholder="All" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__all__">All</SelectItem>
+                      {labOptions.map((o) => <SelectItem key={o.id} value={o.id}>{o.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              {batchOptions.length > 0 && (
+                <div className="space-y-1">
+                  <Label className="text-xs">Batch</Label>
+                  <Select value={batchValue || "__all__"} onValueChange={(v) => setBatchValue(v === "__all__" ? "" : v)}>
+                    <SelectTrigger className="w-36"><SelectValue placeholder="All" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__all__">All</SelectItem>
+                      {batchOptions.map((b) => <SelectItem key={b} value={b}>{b}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              {hasActiveFilters && (
+                <Button type="button" variant="ghost" size="sm" onClick={() => { setTheorySubjectId(""); setLabSubjectId(""); setBatchValue(""); }}>
+                  Clear filters
+                </Button>
+              )}
+            </div>
+          )}
+
+          <InstitutionalTimetableTable
+            section={section}
+            timing={timing}
+            slots={filteredSlots}
+            courseName={course?.name}
+            departmentName={departments.find((d) => d.id === section.department || d.name === section.department)?.name || section.department}
+            academicYear={slots[0]?.academicYear}
+            semesterLabel={(() => {
+              const c = semesterChoiceStr ? decodeSemesterChoice(semesterChoiceStr) : null;
+              return c?.kind === "semester" ? `Semester ${c.value}` : undefined;
+            })()}
+            weekStart={weekStart}
+            onWeekChange={setWeekStart}
+            showWeekNav={true}
+          />
         </div>
-        <div className="overflow-x-auto rounded-lg border">
-          <table className="w-full text-sm border-collapse">
-            <thead>
-              <tr className="bg-muted/50">
-                <th className="p-2.5 text-left font-medium text-muted-foreground border-b w-24">Period</th>
-                {DAYS.map((d, i) => (
-                  <th key={d} className="p-2.5 text-left font-medium text-muted-foreground border-b min-w-[140px]">
-                    <p className="text-[10px] font-normal whitespace-nowrap">{formatDMY(weekDates[i])}</p>
-                    {DAY_LABELS[d]}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row, idx) => {
-                if (row.kind === "lunch" || row.kind === "short") {
-                  const Icon = row.kind === "lunch" ? Utensils : Coffee;
-                  const label = row.kind === "lunch" ? "Lunch Break" : "Short Break";
-                  return (
-                    <tr key={`break_${idx}`} className="bg-amber-50/60">
-                      <td colSpan={DAYS.length + 1} className="p-2 text-center text-xs font-medium text-amber-700">
-                        <span className="inline-flex items-center gap-1.5">
-                          <Icon className="h-3.5 w-3.5" />
-                          {label} · {row.durationMinutes} min
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                }
-                return (
-                  <tr key={`period_${row.period}`} className="border-b last:border-b-0">
-                    <td className="p-2.5 font-medium text-muted-foreground">
-                      {row.period}
-                      {row.startTime && row.endTime && (
-                        <p className="text-[10px] font-normal whitespace-nowrap">
-                          {formatTime12h(row.startTime)}&ndash;{formatTime12h(row.endTime)}
-                        </p>
-                      )}
-                    </td>
-                    {DAYS.map((d) => {
-                      const cellSlots = slotsFor(d, row.period);
-                      return (
-                        <td key={d} className="p-2 align-top">
-                          {cellSlots.length > 0 ? (
-                            <div className="space-y-1">
-                              {cellSlots.map((slot) => (
-                                <div key={slot.assignmentId || slot.id} className={`rounded-md border p-2 ${slot.substituteFacultyName ? "bg-amber-50 border-amber-200" : "bg-primary/5 border-primary/20"}`}>
-                                  <p className="text-xs font-semibold leading-tight">
-                                    {slot.subjectName}
-                                    {slot.labBatch ? <span className="ml-1 text-[10px] font-normal text-muted-foreground">({slot.labBatch})</span> : null}
-                                  </p>
-                                  {slot.substituteFacultyName ? (
-                                    <>
-                                      <p className="text-[11px] font-medium text-amber-700 mt-0.5">{slot.substituteFacultyName}</p>
-                                      <p className="text-[10px] text-muted-foreground">
-                                        Substituting for {slot.substituteForName}{slot.substituteDate ? ` (${formatDMY(slot.substituteDate)})` : ""}
-                                      </p>
-                                    </>
-                                  ) : (
-                                    <p className="text-[11px] text-muted-foreground mt-0.5">{slot.facultyName}</p>
-                                  )}
-                                  {slot.classroom && <p className="text-[11px] text-muted-foreground">{slot.classroom}</p>}
-                                </div>
-                              ))}
-                            </div>
-                          ) : (
-                            <div className="rounded-md border border-dashed p-2 text-center text-[11px] text-muted-foreground">-</div>
-                          )}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-        </>
       )}
     </div>
   );
