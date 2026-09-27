@@ -7,6 +7,8 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { Pagination } from "@/components/shared/Pagination";
 import { toast } from "@/hooks/useToast";
@@ -86,6 +88,11 @@ export default function AcademicsSubjectsPage() {
     const regulation = regs.length > 0 ? regs[0] : "";
     const newAcademicYear = searchParams.get("academicYear") ?? academicSessionLabel(currentAcademicStartYear());
     router.push(`/academics/subjects?courseId=${courseId}&regulation=${encodeURIComponent(regulation)}${newAcademicYear ? `&academicYear=${encodeURIComponent(newAcademicYear)}` : ""}`);
+  }
+
+  function selectRegulation(regulation: string) {
+    const newAcademicYear = searchParams.get("academicYear") ?? academicSessionLabel(currentAcademicStartYear());
+    router.push(`/academics/subjects?courseId=${selectedCourseId}&regulation=${encodeURIComponent(regulation)}${newAcademicYear ? `&academicYear=${encodeURIComponent(newAcademicYear)}` : ""}`);
   }
 
   const sortedSubjects = useMemo(
@@ -311,6 +318,41 @@ export default function AcademicsSubjectsPage() {
         </div>
       ) : (
         <>
+          <Card>
+            <CardContent className="p-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label>Course</Label>
+                <Select value={selectedCourseId} onValueChange={selectCourse}>
+                  <SelectTrigger><SelectValue placeholder="Select course" /></SelectTrigger>
+                  <SelectContent>
+                    {courses.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Regulation</Label>
+                <Select
+                  value={selectedRegulation}
+                  onValueChange={selectRegulation}
+                  disabled={!selectedCourseId || allowedRegulations.length === 0}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={
+                      !selectedCourseId ? "Pick a course first" :
+                      allowedRegulations.length === 0 ? "No regulations assigned" :
+                      "Select regulation"
+                    } />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {allowedRegulations.map((r) => (
+                      <SelectItem key={r} value={r}>{r}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </CardContent>
+          </Card>
+
           {selectedCourse && (
             <Card>
               <CardContent className="p-4 space-y-4">
