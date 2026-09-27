@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import { getHodDepartmentScope, canHodEditDepartmentId } from "@/lib/departments/scope";
+import { getHodDepartmentScope, canHodEditDepartmentId, facultyManageableDepartmentNames } from "@/lib/departments/scope";
 import { isTimetableIncharge } from "@/lib/departments/timetableIncharge";
 import { defaultPeriodTimings } from "@/lib/timetable/buildGrid";
 import { inheritedTimingCourseId } from "@/lib/timetable/sharedYearTiming";
@@ -38,7 +38,41 @@ export async function GET(request: Request) {
     // managed branch's) course-year timings, never an arbitrary department's.
     if (session.role === "HOD") {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
-      timings = timings.filter((t) => canHodEditDepartmentId(scope, t.departmentId));
+      const ownedTimings = timings.filter((t) => canHodEditDepartmentId(scope, t.departmentId));
+      const deniedTimings = timings.filter((t) => !canHodEditDepartmentId(scope, t.departmentId));
+
+      // A lending HOD deep-linked here via a fulfilled Assignment Request
+      // (their own faculty placed to teach a subject on ANOTHER department's
+      // section - see AssignmentRequestsPanel's "Place on timetable") has no
+      // edit rights over that department, but still needs the college-day
+      // timing that governs the grid they were sent to, or the editor can
+      // never render for them at all. Narrowed the same way
+      // canHodManageAssignment's ownsFaculty fallback is: only a course-year
+      // where this HOD's OWN faculty roster already holds a real
+      // TeachingAssignment unlocks that row - department membership itself
+      // grants nothing here.
+      if (deniedTimings.length > 0 && courseId) {
+        const rosterDeptNames = facultyManageableDepartmentNames(scope);
+        const rosterFacultySnap = rosterDeptNames.length > 0
+          ? await db.collection("colleges").doc(session.collegeId).collection("facultyMembers")
+              .where("department", "in", rosterDeptNames.slice(0, 30)).get()
+          : null;
+        const rosterIds = new Set((rosterFacultySnap?.docs ?? []).map((d) => d.id));
+        if (rosterIds.size > 0) {
+          const taSnap = await db.collection("colleges").doc(session.collegeId)
+            .collection("teachingAssignments").where("courseId", "==", courseId).get();
+          const accessibleYears = new Set(
+            taSnap.docs
+              .filter((d) => rosterIds.has((d.data() as { facultyId?: string }).facultyId ?? ""))
+              .map((d) => Number((d.data() as { year?: number }).year))
+          );
+          for (const t of deniedTimings) {
+            if (accessibleYears.has(Number(t.year))) ownedTimings.push(t);
+          }
+        }
+      }
+
+      timings = ownedTimings;
     }
 
     // A shared first year is configured once, on the common department that

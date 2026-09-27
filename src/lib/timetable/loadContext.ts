@@ -1,4 +1,4 @@
-import type { Firestore } from "firebase-admin/firestore";
+import { FieldPath, type Firestore } from "firebase-admin/firestore";
 import type {
   CourseYearTiming, Section, Subject, TeachingAssignment, TimetableRules, TimetableSlot,
 } from "@/types";
@@ -129,6 +129,29 @@ export async function loadTimetableContext(
     (s) => Number(s.year) === Number(section.year),
   );
   const subjectsById = new Map(allCourseSubjects.map((s) => [s.id, s]));
+
+  // A cross-department lend (see faculty-assignment-requests) puts an
+  // assignment on this section whose subject belongs to the LENDING
+  // department's own Course doc, never section.courseId - the query above
+  // misses it entirely, so subjectsById.get() below falls back to undefined
+  // and callers (draft/route.ts's PRACTICAL blockSize/allowSplit gating)
+  // silently treat a lent-in lab as THEORY. Back-fill by id whatever's
+  // still missing rather than widening the query above and losing its
+  // courseId scoping for courseYearSubjects (the "what should this course-
+  // year run" list, which a lent-in subject never belongs on).
+  const missingSubjectIds = Array.from(
+    new Set(assignments.map((a) => a.subjectId).filter((id): id is string => Boolean(id) && !subjectsById.has(id))),
+  );
+  if (missingSubjectIds.length > 0) {
+    const chunks: string[][] = [];
+    for (let i = 0; i < missingSubjectIds.length; i += 30) chunks.push(missingSubjectIds.slice(i, i + 30));
+    const extraSnaps = await Promise.all(
+      chunks.map((ids) => collegeRef.collection("subjects").where(FieldPath.documentId(), "in", ids).get()),
+    );
+    for (const extraSnap of extraSnaps) {
+      for (const d of extraSnap.docs) subjectsById.set(d.id, { id: d.id, ...d.data() } as Subject);
+    }
+  }
 
   const allSlotsRaw = allSlotsSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as TimetableSlot);
 
