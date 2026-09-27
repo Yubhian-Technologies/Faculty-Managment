@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Check, ChevronsUpDown, History, Mail, Plus, Trash2, UserCog, UserMinus } from "lucide-react";
+import { Check, ChevronsUpDown, History, Mail, Plus, RotateCcw, Trash2, UserCog, UserMinus } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { Badge } from "@/components/ui/badge";
@@ -34,9 +34,11 @@ interface Dept { id: string; name: string }
 export function RoleAssignmentsPage({ collegeId }: { collegeId?: string }) {
   const user = useAuthStore((s) => s.user);
   const [seats, setSeats] = useState<RoleSeat[]>([]);
+  const [retiredSeats, setRetiredSeats] = useState<RoleSeat[]>([]);
   const [people, setPeople] = useState<Person[]>([]);
   const [departments, setDepartments] = useState<Dept[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [reactivatingId, setReactivatingId] = useState<string | null>(null);
 
   const qs = collegeId ? `?collegeId=${encodeURIComponent(collegeId)}` : "";
   const canAssign = useCallback(() => !!user && canAssignSeat(user), [user]);
@@ -44,9 +46,10 @@ export function RoleAssignmentsPage({ collegeId }: { collegeId?: string }) {
   const load = useCallback(async () => {
     try {
       const res = await fetch(`/api/college/role-seats${qs}`);
-      const data = await res.json() as { seats?: RoleSeat[]; people?: Person[]; departments?: Dept[]; error?: string };
+      const data = await res.json() as { seats?: RoleSeat[]; retiredSeats?: RoleSeat[]; people?: Person[]; departments?: Dept[]; error?: string };
       if (!res.ok) throw new Error(data.error ?? "Failed to load");
       setSeats(data.seats ?? []);
+      setRetiredSeats(data.retiredSeats ?? []);
       setPeople(data.people ?? []);
       setDepartments(data.departments ?? []);
     } catch (e) {
@@ -61,6 +64,12 @@ export function RoleAssignmentsPage({ collegeId }: { collegeId?: string }) {
   }, [load]);
 
   const visibleSeats = useMemo(() => seats.filter((s) => s.role !== "ACCOUNTS"), [seats]);
+  // A seat retired (e.g. via Delete, or automatically when its department was
+  // deleted) never comes back on its own - ensureHodSeatForDepartment only
+  // creates a fresh one when NONE exists yet for that department, active or
+  // not, so a retired department seat is otherwise stuck unappointable
+  // forever. Surfaced here so it's easy to find rather than invisible.
+  const visibleRetiredSeats = useMemo(() => retiredSeats.filter((s) => s.role !== "ACCOUNTS"), [retiredSeats]);
 
   const grouped = useMemo(() => {
     const map = new Map<number, RoleSeat[]>();
@@ -84,6 +93,15 @@ export function RoleAssignmentsPage({ collegeId }: { collegeId?: string }) {
     });
     const data = await res.json() as { error?: string; code?: string };
     return res.ok ? { ok: true } : { ok: false, error: data.error, code: data.code };
+  }
+
+  async function reactivate(seat: RoleSeat) {
+    setReactivatingId(seat.id);
+    const r = await patchSeat(seat.id, { action: "REACTIVATE" });
+    setReactivatingId(null);
+    if (!r.ok) { toast({ variant: "destructive", title: r.error ?? "Failed" }); return; }
+    toast({ variant: "success", title: `${seat.label} reactivated` });
+    await load();
   }
 
   return (
@@ -178,6 +196,29 @@ export function RoleAssignmentsPage({ collegeId }: { collegeId?: string }) {
             </div>
           </div>
         ))
+      )}
+
+      {canAssign() && visibleRetiredSeats.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Retired</p>
+          <div className="space-y-2">
+            {visibleRetiredSeats.map((seat) => (
+              <Card key={seat.id} className="border-dashed">
+                <CardContent className="p-4 flex flex-wrap items-center gap-3">
+                  <div className="min-w-0 flex-1 space-y-0.5">
+                    <p className="text-sm font-semibold">{seat.label}</p>
+                    <p className="text-xs text-muted-foreground">
+                      Retired - no one holds this role. Reactivate it to appoint someone.
+                    </p>
+                  </div>
+                  <Button size="sm" variant="outline" loading={reactivatingId === seat.id} onClick={() => reactivate(seat)}>
+                    <RotateCcw className="h-3.5 w-3.5 mr-1" />Reactivate
+                  </Button>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
       )}
 
       <AddSeatDialog
