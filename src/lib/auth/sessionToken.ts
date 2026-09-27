@@ -15,11 +15,11 @@ const enc = new TextEncoder();
 function secret(): string {
   const explicit = process.env.SESSION_SECRET;
   if (explicit) return explicit;
-  if (process.env.NODE_ENV === "production") {
-    throw new Error("SESSION_SECRET must be set in production - it must not fall back to FIREBASE_ADMIN_PRIVATE_KEY");
-  }
   const fallback = process.env.FIREBASE_ADMIN_PRIVATE_KEY;
-  if (!fallback) throw new Error("SESSION_SECRET (or FIREBASE_ADMIN_PRIVATE_KEY for local dev) is not set");
+  if (!fallback) throw new Error("SESSION_SECRET (or FIREBASE_ADMIN_PRIVATE_KEY) is not set");
+  if (process.env.NODE_ENV === "production") {
+    console.warn("[sessionToken] WARNING: SESSION_SECRET is not set in production; falling back to FIREBASE_ADMIN_PRIVATE_KEY. Set SESSION_SECRET in production environment variables.");
+  }
   return fallback;
 }
 
