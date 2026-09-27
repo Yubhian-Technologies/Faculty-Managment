@@ -2,7 +2,7 @@
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { BookOpen, ChevronRight, UserPlus } from "lucide-react";
+import { BookOpen, ChevronRight, UserPlus, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
@@ -32,12 +32,26 @@ export default function PrincipalFacultyDepartmentsPage() {
     });
   }
 
+  // A department split into sub-departments (e.g. Basic Science ->
+  // BSC/BSM/BSP/BSE) shouldn't appear as flat, separate top-level cards next
+  // to real departments - each child is only ever reached through its parent
+  // (principal/faculty/[deptId]/page.tsx lists them once you're inside).
+  const topLevelDepartments = departments.filter((d) => !d.parentDepartmentId);
+  const childCount = (parentId: string) => departments.filter((d) => d.parentDepartmentId === parentId).length;
+
   return (
     <div className="space-y-6">
       <PageHeader
         title="Faculty"
         description="Select a department to view its faculty"
-        actions={<Button onClick={() => router.push("/principal/faculty/new")}><UserPlus className="h-4 w-4 mr-2" />Add Faculty</Button>}
+        actions={
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => router.push("/principal/faculty/import")}>
+              <Upload className="h-4 w-4 mr-2" />Import
+            </Button>
+            <Button onClick={() => router.push("/principal/faculty/new")}><UserPlus className="h-4 w-4 mr-2" />Add Faculty</Button>
+          </div>
+        }
       />
 
       <PeopleNotOnRoster departments={departments} />
@@ -48,7 +62,7 @@ export default function PrincipalFacultyDepartmentsPage() {
             <div key={i} className="h-[72px] rounded-lg border bg-muted/30 animate-pulse" />
           ))}
         </div>
-      ) : departments.length === 0 ? (
+      ) : topLevelDepartments.length === 0 ? (
         <EmptyState
           title="No departments yet"
           description="Departments added under Academic Management will appear here."
@@ -56,30 +70,36 @@ export default function PrincipalFacultyDepartmentsPage() {
         />
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {departments.map((d) => (
-            <Card
-              key={d.id}
-              className="cursor-pointer hover:border-primary hover:shadow-md transition-all duration-200"
-              onMouseEnter={() => prefetchDeptFaculty(d.name)}
-              onClick={() => router.push(`/principal/faculty/${d.id}`)}
-            >
-              <CardContent className="p-5 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                    <BookOpen className="h-5 w-5 text-primary" />
+          {topLevelDepartments.map((d) => {
+            const subCount = childCount(d.id);
+            return (
+              <Card
+                key={d.id}
+                className="cursor-pointer hover:border-primary hover:shadow-md transition-all duration-200"
+                onMouseEnter={() => prefetchDeptFaculty(d.name)}
+                onClick={() => router.push(`/principal/faculty/${d.id}`)}
+              >
+                <CardContent className="p-5 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                      <BookOpen className="h-5 w-5 text-primary" />
+                    </div>
+                    <div>
+                      <p className="font-medium">{d.name}</p>
+                      <p className="text-xs text-muted-foreground">{d.code}</p>
+                      <p className={`text-xs mt-0.5 ${d.hodName ? "text-muted-foreground" : "text-orange-500"}`}>
+                        {d.hodName ? `HOD: ${d.hodName}` : "No HOD assigned"}
+                      </p>
+                      {subCount > 0 && (
+                        <p className="text-xs mt-0.5 text-primary">{subCount} sub-department{subCount !== 1 ? "s" : ""}</p>
+                      )}
+                    </div>
                   </div>
-                  <div>
-                    <p className="font-medium">{d.name}</p>
-                    <p className="text-xs text-muted-foreground">{d.code}</p>
-                    <p className={`text-xs mt-0.5 ${d.hodName ? "text-muted-foreground" : "text-orange-500"}`}>
-                      {d.hodName ? `HOD: ${d.hodName}` : "No HOD assigned"}
-                    </p>
-                  </div>
-                </div>
-                <ChevronRight className="h-4 w-4 text-muted-foreground" />
-              </CardContent>
-            </Card>
-          ))}
+                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       )}
     </div>
