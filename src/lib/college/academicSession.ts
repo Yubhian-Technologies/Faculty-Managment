@@ -244,6 +244,34 @@ export function regulationsForCourseYearByBatch(
   return regulationsForBatchStartYear(regulationBatches, admissionStartYearForCourseYear(asOfStartYear, courseYear), fallbackRegulations);
 }
 
+export interface CourseYearCoverage {
+  year: number;
+  admissionYear: number;
+  regulations: string[];
+}
+
+/**
+ * regulationsForCourseYearByBatch, looped across every ordinal year of a
+ * course, as of a session - lets an editor show the whole Year 1..N picture
+ * (and any uncovered year - `regulations` empty) in one place instead of
+ * resolving one year at a time. `regulations.length === 0` is the exact gap
+ * that silently empties a Year dropdown for every department teaching this
+ * course; `regulations.length > 1` is the ambiguous state
+ * findOverlappingRegulationBatches is meant to prevent at write time.
+ */
+export function courseYearCoverage(
+  durationYears: number,
+  regulationBatches: Record<string, string>,
+  fallbackRegulations?: string[],
+  asOfStartYear: number = currentAcademicStartYear(),
+): CourseYearCoverage[] {
+  return Array.from({ length: durationYears }, (_, i) => i + 1).map((year) => ({
+    year,
+    admissionYear: admissionStartYearForCourseYear(asOfStartYear, year),
+    regulations: regulationsForCourseYearByBatch(regulationBatches, year, asOfStartYear, fallbackRegulations),
+  }));
+}
+
 // A handful of sessions to choose from - two years back through one year
 // ahead, newest first. Deliberately short (unlike indents' full history since
 // EARLIEST_ACADEMIC_START_YEAR) - a Subject's session only ever needs to be

@@ -8,18 +8,14 @@ import { isoDateKey } from "@/lib/leave/dayCounter";
 import { sectionDisplayLabel } from "@/lib/sections/sectionLabel";
 import { resolveDepartmentCourseScope } from "@/lib/college/academicStructure";
 import { InstitutionalTimetableTable } from "@/components/timetable/InstitutionalTimetableTable";
-import type { Course, Department, Section, CourseYearTiming, TimetableSlot } from "@/types";
+import { ordinalYear } from "@/lib/timetable/gridModel";
+import type { Course, Department, Section, CourseYearTiming, TimetableSlot, Subject, DayOfWeek } from "@/types";
 
 // Read-only view of PUBLISHED timetables for the Principal and Vice Principal.
 // Reads `timetableSlots`, which only ever contains published slots - drafts live
 // in a separate collection, so an in-progress timetable can never appear here.
 // VICE_PRINCIPAL reaches this page through its inherited access to /principal/*
 // (see ROLE_PATH_MAP in src/proxy.ts).
-
-function ordinalYear(year: number) {
-  const suffix = year === 1 ? "st" : year === 2 ? "nd" : year === 3 ? "rd" : "th";
-  return `${year}${suffix} Year`;
-}
 
 export default function PrincipalTimetablePage() {
   const [courses, setCourses] = useState<Course[]>([]);
@@ -35,6 +31,8 @@ export default function PrincipalTimetablePage() {
   const [sectionId, setSectionId] = useState("");
   const [timing, setTiming] = useState<CourseYearTiming | null>(null);
   const [slots, setSlots] = useState<TimetableSlot[]>([]);
+  const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [workingDays, setWorkingDays] = useState<DayOfWeek[]>([]);
   const [typeFilter, setTypeFilter] = useState<"ALL" | "THEORY" | "PRACTICAL">("ALL");
   const [isLoading, setIsLoading] = useState(true);
   // Derived rather than a separate flag: a synchronous setIsLoading(true) inside
@@ -178,9 +176,11 @@ export default function PrincipalTimetablePage() {
     void (async () => {
       try {
         const d = await fetch(`/api/college/timetable-slots?sectionId=${encodeURIComponent(sectionId)}&week=${isoDateKey(weekStart)}${effectiveSemester != null ? "&semester=" + effectiveSemester : ""}`)
-          .then((r) => r.json() as Promise<{ slots: TimetableSlot[] }>);
+          .then((r) => r.json() as Promise<{ slots: TimetableSlot[]; subjects?: Subject[]; workingDays?: DayOfWeek[] }>);
         if (cancelled) return;
         setSlots(d.slots ?? []);
+        setSubjects(d.subjects ?? []);
+        setWorkingDays(d.workingDays ?? []);
       } catch {
         if (!cancelled) toast({ variant: "destructive", title: "Failed to load timetable" });
       } finally {
@@ -302,11 +302,13 @@ export default function PrincipalTimetablePage() {
           departmentName={departments.find((d) => d.id === departmentId)?.name}
           academicYear={slots[0]?.academicYear}
           semesterLabel={semester ? `Semester ${semester}` : undefined}
+          workingDays={workingDays}
           weekStart={weekStart}
           onWeekChange={setWeekStart}
           showWeekNav={true}
           typeFilter={typeFilter}
           onTypeFilterChange={setTypeFilter}
+          subjects={subjects}
         />
       )}
     </div>

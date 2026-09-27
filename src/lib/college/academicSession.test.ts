@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  academicSessionLabel, academicYearLongLabel, currentTimetableAcademicYear, deriveBatch,
+  academicSessionLabel, academicYearLongLabel, courseYearCoverage, currentTimetableAcademicYear, deriveBatch,
   findOverlappingRegulationBatches, lateralEntryBatch, matchesCurrentAcademicYear, parseAcademicYearStart,
   regulationsForBatchStartYear, regulationsForCourseYearByBatch, resolveCurrentAcademicYear,
   resolveTimetableAcademicYear, sectionBatchIntakeYears,
@@ -50,6 +50,38 @@ describe("regulationsForCourseYearByBatch", () => {
     // should narrow by year rather than silently reverting to "offered every
     // year" for the whole list.
     expect(regulationsForCourseYearByBatch({ R20: "2022-2026" }, 1, 2026, ["R20", "R23"])).toEqual([]);
+  });
+});
+
+describe("courseYearCoverage", () => {
+  // The exact production incident (Sept 2026 session, 4yr BTECH): only R26
+  // (2026 intake) configured. Years 2 and 4 (the 2025 and 2023 intakes) have
+  // no regulation at all, so every department's Year picker silently drops
+  // them - this is the gap the Course Catalog editor now has to surface
+  // before it ever reaches a real dropdown.
+  it("flags every ordinal year with no regulation as a gap", () => {
+    const coverage = courseYearCoverage(4, { R26: "2026-2030" }, ["R26"], 2026);
+    expect(coverage).toEqual([
+      { year: 1, admissionYear: 2026, regulations: ["R26"] },
+      { year: 2, admissionYear: 2025, regulations: [] },
+      { year: 3, admissionYear: 2024, regulations: [] },
+      { year: 4, admissionYear: 2023, regulations: [] },
+    ]);
+  });
+
+  it("shows full coverage once every currently-enrolled intake has a regulation", () => {
+    const coverage = courseYearCoverage(
+      4,
+      { R23: "2023-2027,2024-2028,2025-2029", R26: "2026-2030" },
+      ["R23", "R26"],
+      2026,
+    );
+    expect(coverage.map((c) => c.regulations)).toEqual([["R26"], ["R23"], ["R23"], ["R23"]]);
+  });
+
+  it("flags a year two regulations both claim as ambiguous, not silently picking one", () => {
+    const coverage = courseYearCoverage(1, { R23: "2026-2027", R26: "2026-2027" }, ["R23", "R26"], 2026);
+    expect(coverage[0].regulations).toEqual(["R23", "R26"]);
   });
 });
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowLeft, Clock, Coffee, FileDown, FileSpreadsheet, Lock, PencilLine, Plus, Send, Trash2, Upload, Utensils, X,
@@ -17,22 +17,19 @@ import { toast } from "@/hooks/useToast";
 import { formatDMY } from "@/lib/utils";
 import { useMyDepartments } from "@/hooks/useMyDepartments";
 import { buildRows, defaultPeriodTimings } from "@/lib/timetable/buildGrid";
+import { ordinalYear, resolveTimetableDays } from "@/lib/timetable/gridModel";
 import { SegmentedTabs } from "@/components/shared/SegmentedTabs";
 import { TimetableHistoryPanel } from "@/components/timetable/TimetableHistoryPanel";
 import { InstitutionalTimetableTable } from "@/components/timetable/InstitutionalTimetableTable";
-import { buildSectionTimetablePdfHtml, downloadTimetableAsXls } from "@/lib/timetable/sectionTimetablePdf";
+import { buildSectionTimetablePdfHtml } from "@/lib/timetable/sectionTimetablePdf";
+import { downloadSectionTimetableXlsx } from "@/lib/timetable/timetableExport";
 import { renderHtmlToPdf } from "@/lib/pdf/htmlToPdf";
 import { useCollegeInfo } from "@/hooks/useCollegeInfo";
 import type {
   Course, Section, CourseYearTiming, TimetableSlot, DayOfWeek, DraftSlot, TimetableDraft,
-  TeachingAssignment, FacultyAssignmentRequest, PeriodTiming,
+  TeachingAssignment, FacultyAssignmentRequest, PeriodTiming, Subject,
 } from "@/types";
 import { DAY_LABELS, DEFAULT_TIMETABLE_RULES } from "@/types";
-
-function ordinalYear(year: number) {
-  const suffix = year === 1 ? "st" : year === 2 ? "nd" : year === 3 ? "rd" : "th";
-  return `${year}${suffix} Year`;
-}
 
 /** "09:00" -> "9:00 AM" - display only, stored/submitted values stay 24h "HH:MM". */
 function formatTime12h(hhmm: string) {
@@ -95,6 +92,12 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref }: Tim
   const [section, setSection] = useState<Section | null>(null);
   const [timing, setTiming] = useState<CourseYearTiming | null>(null);
   const [slots, setSlots] = useState<TimetableSlot[]>([]);
+  // The college's configured working days + subject codes, so the grid and
+  // every export show the same days the server accepts and the same subject
+  // short codes a teacher would recognise. Both come from the same
+  // GET college/timetable-slots response that supplies the published slots.
+  const [workingDays, setWorkingDays] = useState<DayOfWeek[]>([]);
+  const [subjects, setSubjects] = useState<Subject[]>([]);
   const [draft, setDraft] = useState<TimetableDraft | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   // Which top-level tab is showing - "History" is a fully separate,
@@ -140,7 +143,20 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref }: Tim
   const [editPeriods, setEditPeriods] = useState<{ startTime: string; endTime: string }[]>([]);
   const [savingPeriods, setSavingPeriods] = useState(false);
 
-  const days: DayOfWeek[] = ["MON", "TUE", "WED", "THU", "FRI", "SAT"];
+  // The days this grid can offer, in one place, for both published and draft
+  // mode. Order comes from the college's TimetableRules.workingDays (the same
+  // doc POST college/timetable-slots validates a new slot's `day` against), so
+  // the editor can never offer a day the API would reject. Any day that already
+  // has a published or draft slot is force-included, so toggling a working day
+  // off can't silently hide classes that are already scheduled. Hardcoded
+  // Mon-Sat is only the last-resort fallback for an unconfigured college.
+  const days: DayOfWeek[] = useMemo(() => {
+    const occupied = new Set<DayOfWeek>([
+      ...slots.map((s) => s.day),
+      ...((draft?.slots ?? []) as DraftSlot[]).map((s) => s.day),
+    ]);
+    return resolveTimetableDays({ workingDays: workingDays.length > 0 ? workingDays : DEFAULT_TIMETABLE_RULES.workingDays }, occupied);
+  }, [workingDays, slots, draft]);
 
   const loadAll = useCallback(async () => {
     try {
@@ -151,7 +167,7 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref }: Tim
         fetch(`/api/college/course-year-timings?courseId=${encodeURIComponent(courseId)}`)
           .then((r) => r.json() as Promise<{ timings: CourseYearTiming[] }>),
         fetch(`/api/college/timetable-slots?sectionId=${encodeURIComponent(sectionId)}`)
-          .then((r) => r.json() as Promise<{ slots: TimetableSlot[] }>),
+          .then((r) => r.json() as Promise<{ slots: TimetableSlot[]; subjects?: Subject[]; workingDays?: DayOfWeek[] }>),
         fetch(`/api/college/timetable/draft?sectionId=${encodeURIComponent(sectionId)}`)
           .then((r) => r.json() as Promise<{ draft: TimetableDraft | null }>),
         fetch(`/api/college/teaching-assignments?sectionId=${encodeURIComponent(sectionId)}`)
@@ -166,6 +182,8 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref }: Tim
       setSection((sectionsData.sections ?? []).find((s) => s.id === sectionId) ?? null);
       setTiming((timingsData.timings ?? []).find((t) => t.year === Number(year)) ?? null);
       setSlots(slotsData.slots ?? []);
+      setSubjects(slotsData.subjects ?? []);
+      setWorkingDays(slotsData.workingDays ?? DEFAULT_TIMETABLE_RULES.workingDays);
       setDraft(draftData.draft ?? null);
       setAssignments((assignData.assignments ?? []).filter((a) => !a.isPast));
       setMyFacultyIds(new Set((facultyData.faculty ?? []).filter((f) => f.accessLevel !== "secondary").map((f) => f.id)));
@@ -559,43 +577,53 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref }: Tim
   }
 
   const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const [isExportingXlsx, setIsExportingXlsx] = useState(false);
+
+  // The section document is the only source of batch/regulation/in-charge. When
+  // it hasn't loaded we pass a name-only stand-in rather than the old fabricated
+  // one (a four-year batch computed from the calendar, a studentCount of 60 and
+  // an id echoed as a department) - printing a made-up batch is worse than
+  // printing none.
+  const printableSection: Partial<Section> | undefined =
+    section ??
+    (fallbackSectionName
+      ? { name: fallbackSectionName, year: Number(year), courseName: course?.name ?? fallbackCourseName ?? undefined }
+      : undefined);
+
+  const exportFileBase = `Timetable_${(course?.name || fallbackCourseName || "Class").replace(/\s+/g, "_")}_Sec_${section?.name || fallbackSectionName || "A"}`;
+
+  // `Section.department` is the department NAME string (see the join-key comment
+  // on POST college/departments), so it is already printable - no name lookup
+  // round-trip is needed for the header.
+  const departmentName = section?.department;
 
   async function handleDownloadPdf() {
     if (!timing || slots.length === 0) return;
     setIsExportingPdf(true);
     try {
-      const periods = Array.from({ length: timing.numberOfPeriods }, (_, i) => i + 1);
-      const calculatedBatch = `${new Date().getFullYear() - (Number(year) - 1)}-${new Date().getFullYear() - (Number(year) - 1) + 4}`;
-      const dummySec = section ?? {
-        id: sectionId,
-        collegeId: timing.collegeId,
-        department: timing.departmentId,
-        courseId,
-        courseName: course?.name,
-        name: fallbackSectionName || "Section",
-        year: Number(year),
-        batch: calculatedBatch,
-        studentCount: 60,
-      };
       const html = buildSectionTimetablePdfHtml({
         collegeName: collegeInfo?.name || "College",
         collegeCode: collegeInfo?.code,
         affiliation: collegeInfo?.affiliation,
         address: collegeInfo?.address,
         phone: collegeInfo?.phone,
+        email: collegeInfo?.email,
         logoUrl: collegeInfo?.logoUrl,
         courseName: course?.name || fallbackCourseName || undefined,
-        departmentName: section?.department,
-        section: dummySec,
+        departmentName,
+        section: printableSection,
         days,
-        periods,
+        periods: Array.from({ length: timing.numberOfPeriods }, (_, i) => i + 1),
         periodTimings: timing.periods ?? [],
+        timing,
         slots,
+        subjects,
+        assignments,
         lunchBreak: timing.lunchBreak,
         shortBreaks: timing.shortBreaks,
         academicYear: slots[0]?.academicYear,
       });
-      const filename = `Timetable_${(course?.name || fallbackCourseName || "Class").replace(/\s+/g, "_")}_Sec_${section?.name || fallbackSectionName || "A"}.pdf`;
+      const filename = `${exportFileBase}.pdf`;
       await renderHtmlToPdf(html, filename);
       toast({ title: "Timetable downloaded", description: `Saved as ${filename}` });
     } catch (err) {
@@ -606,46 +634,44 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref }: Tim
     }
   }
 
-  function handleDownloadXls() {
+  async function handleDownloadXls() {
     if (!timing || slots.length === 0) return;
+    setIsExportingXlsx(true);
     try {
-      const periods = Array.from({ length: timing.numberOfPeriods }, (_, i) => i + 1);
-      const calculatedBatch = `${new Date().getFullYear() - (Number(year) - 1)}-${new Date().getFullYear() - (Number(year) - 1) + 4}`;
-      const dummySec = section ?? {
-        id: sectionId,
-        collegeId: timing.collegeId,
-        department: timing.departmentId,
-        courseId,
-        courseName: course?.name,
-        name: fallbackSectionName || "Section",
-        year: Number(year),
-        batch: calculatedBatch,
-        studentCount: 60,
-      };
-      const html = buildSectionTimetablePdfHtml({
-        collegeName: collegeInfo?.name || "College",
-        collegeCode: collegeInfo?.code,
-        affiliation: collegeInfo?.affiliation,
-        address: collegeInfo?.address,
-        phone: collegeInfo?.phone,
-        logoUrl: collegeInfo?.logoUrl,
-        courseName: course?.name || fallbackCourseName || undefined,
-        departmentName: section?.department,
-        section: dummySec,
-        days,
-        periods,
-        periodTimings: timing.periods ?? [],
-        slots,
-        lunchBreak: timing.lunchBreak,
-        shortBreaks: timing.shortBreaks,
-        academicYear: slots[0]?.academicYear,
-      });
-      const filename = `Timetable_${(course?.name || fallbackCourseName || "Class").replace(/\s+/g, "_")}_Sec_${section?.name || fallbackSectionName || "A"}.xls`;
-      downloadTimetableAsXls(html, filename);
+      const filename = `${exportFileBase}.xlsx`;
+      await downloadSectionTimetableXlsx(
+        {
+          collegeName: collegeInfo?.name,
+          collegeCode: collegeInfo?.code,
+          affiliation: collegeInfo?.affiliation,
+          address: collegeInfo?.address,
+          phone: collegeInfo?.phone,
+          departmentName,
+          courseName: course?.name || fallbackCourseName || undefined,
+          academicYear: slots[0]?.academicYear,
+          sectionName: printableSection?.name,
+          sectionYear: printableSection?.year,
+          batch: printableSection?.batch,
+          regulation: printableSection?.regulation,
+          classInchargeName: printableSection?.facultyInchargeName,
+          days,
+          periods: Array.from({ length: timing.numberOfPeriods }, (_, i) => i + 1),
+          periodTimings: timing.periods ?? [],
+          timing,
+          slots,
+          subjects,
+          assignments,
+          lunchBreak: timing.lunchBreak,
+          shortBreaks: timing.shortBreaks,
+        },
+        filename
+      );
       toast({ title: "Timetable exported", description: `Saved as ${filename}` });
     } catch (err) {
       console.error(err);
       toast({ title: "Export failed", description: "Failed to export timetable spreadsheet", variant: "destructive" });
+    } finally {
+      setIsExportingXlsx(false);
     }
   }
 
@@ -671,11 +697,13 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref }: Tim
             </Button>
             {timing && slots.length > 0 && (
               <>
-                <Button variant="outline" onClick={handleDownloadPdf} disabled={isExportingPdf}>
-                  <FileDown className="h-4 w-4 mr-2" />Download PDF
+                <Button variant="outline" onClick={handleDownloadPdf} disabled={isExportingPdf || isExportingXlsx}>
+                  <FileDown className="h-4 w-4 mr-2" />
+                  {isExportingPdf ? "Preparing…" : "Download PDF"}
                 </Button>
-                <Button variant="outline" onClick={handleDownloadXls}>
-                  <FileSpreadsheet className="h-4 w-4 mr-2 text-emerald-600" />Export XLS
+                <Button variant="outline" onClick={handleDownloadXls} disabled={isExportingPdf || isExportingXlsx}>
+                  <FileSpreadsheet className="h-4 w-4 mr-2 text-emerald-600" />
+                  {isExportingXlsx ? "Preparing…" : "Export Excel"}
                 </Button>
               </>
             )}
@@ -810,10 +838,12 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref }: Tim
           timing={timing}
           slots={slots}
           courseName={course?.name || fallbackCourseName || undefined}
-          departmentName={section?.department}
+          departmentName={departmentName}
           academicYear={slots[0]?.academicYear}
+          workingDays={workingDays}
           typeFilter={typeFilter}
           onTypeFilterChange={setTypeFilter}
+          subjects={subjects}
         />
       ) : (
         <div className="overflow-x-auto rounded-lg border">

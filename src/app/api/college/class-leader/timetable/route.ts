@@ -5,7 +5,17 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getActiveSubstitutionsForDates, currentWeekDateKeys } from "@/lib/leave/periodCoverage";
 import { resolveCurrentSemester, matchesCurrentSemester } from "@/lib/college/semester";
-import type { Course, CourseYearTiming, Department, Section, Subject, TimetableSlot, TeachingAssignment } from "@/types";
+import { DEFAULT_TIMETABLE_RULES } from "@/types";
+import type {
+  Course,
+  CourseYearTiming,
+  Department,
+  Section,
+  Subject,
+  TimetableSlot,
+  TeachingAssignment,
+  TimetableRules,
+} from "@/types";
 
 // Class Leader Timetable & Dashboard API:
 // Returns the caller's own bound Section, its course details, timing, current-semester
@@ -39,8 +49,10 @@ export async function GET(request: Request) {
         timing: null,
         slots: [],
         assignments: [],
+        subjects: [],
         resolvedSemester: null,
         availableSemesters: [],
+        workingDays: DEFAULT_TIMETABLE_RULES.workingDays,
         ownSectionId: null,
       });
     }
@@ -52,7 +64,7 @@ export async function GET(request: Request) {
     const section = { id: sectionSnap.id, ...sectionSnap.data() } as Section;
 
     // Fetch this section's course, timings, slots, teaching assignments, and departments
-    const [courseSnap, timingsSnap, slotsSnap, assignmentsSnap, deptsSnap] = await Promise.all([
+    const [courseSnap, timingsSnap, slotsSnap, assignmentsSnap, deptsSnap, rulesSnap] = await Promise.all([
       collegeRef.collection("courses").doc(section.courseId).get(),
       collegeRef
         .collection("courseYearTimings")
@@ -63,7 +75,15 @@ export async function GET(request: Request) {
       collegeRef.collection("timetableSlots").where("sectionId", "==", targetSectionId).get(),
       collegeRef.collection("teachingAssignments").where("sectionId", "==", targetSectionId).get(),
       collegeRef.collection("departments").get(),
+      // The same college-wide rules POST college/timetable-slots validates a new
+      // slot's `day` against - sent so the grid lays out over the days this
+      // college actually teaches instead of a hardcoded Mon-Sat.
+      collegeRef.collection("settings").doc("timetableRules").get(),
     ]);
+
+    const timetableRules: TimetableRules = rulesSnap.exists
+      ? { ...DEFAULT_TIMETABLE_RULES, ...(rulesSnap.data() as Partial<TimetableRules>) }
+      : DEFAULT_TIMETABLE_RULES;
 
     const course = courseSnap.exists ? ({ id: courseSnap.id, ...courseSnap.data() } as Course) : null;
     const timing = timingsSnap.empty
@@ -159,8 +179,12 @@ export async function GET(request: Request) {
       timing,
       slots,
       assignments,
+      // Full Subject docs so the grid/PDF/Excel can resolve each subject's own
+      // shortCode/code/type rather than deriving an abbreviation from the name.
+      subjects: Array.from(subjectMap.values()),
       resolvedSemester: currentSemester,
       availableSemesters,
+      workingDays: timetableRules.workingDays,
       ownSectionId,
       departments,
     });

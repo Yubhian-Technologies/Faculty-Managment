@@ -16,17 +16,18 @@ import { LEVEL_LABELS } from "@/types";
 import type { LocationDepartment, FMSUser } from "@/types";
 
 const CREATABLE_ROLES = [
+  { value: "LOCATION_STAFF_ADMIN", label: "Location Staff Admin (Head of all Location Depts)" },
   { value: "HR_ADMIN", label: "HR Admin" },
   { value: "ADMIN_OFFICE", label: "Admin Office" },
   { value: "ACCOUNTS", label: "Accounts" },
   { value: "LOCATION_DEPT_HEAD", label: "Dept Head" },
 ] as const;
 
-const SINGLETON_ROLES = ["HR_ADMIN", "ADMIN_OFFICE", "ACCOUNTS"];
-// These three can cover several departments at once (or all of them) - a
+const SINGLETON_ROLES = ["LOCATION_STAFF_ADMIN", "HR_ADMIN", "ADMIN_OFFICE", "ACCOUNTS"];
+// These can cover several departments at once (or all of them) - a
 // Dept Head stays single-department (locationDeptId below), since they head
 // exactly one and a department can only have one head (deptsTaken below).
-const MULTI_DEPT_ROLES = ["HR_ADMIN", "ADMIN_OFFICE", "ACCOUNTS"];
+const MULTI_DEPT_ROLES = ["LOCATION_STAFF_ADMIN", "HR_ADMIN", "ADMIN_OFFICE", "ACCOUNTS"];
 
 export default function NewLocationUserPage() {
   const router = useRouter();
