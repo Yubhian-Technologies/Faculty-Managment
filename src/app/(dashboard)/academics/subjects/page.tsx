@@ -316,7 +316,7 @@ export default function AcademicsSubjectsPage() {
             <Button variant="outline" onClick={() => void handleExportDocx()} disabled={!selectedCourseId || !selectedRegulation}>
               <FileText className="h-4 w-4 mr-2" />Export DOCX
             </Button>
-            <Button variant="outline" onClick={() => router.push(`/academics/subjects/import?courseId=${selectedCourseId}&regulation=${encodeURIComponent(selectedRegulation)}`)} disabled={!selectedCourseId || !selectedRegulation}>
+            <Button variant="outline" onClick={() => router.push(`/academics/subjects/import?courseId=${selectedCourseId}&regulation=${encodeURIComponent(selectedRegulation)}`)}>
               <Upload className="h-4 w-4 mr-2" />Import Subjects
             </Button>
           </div>
