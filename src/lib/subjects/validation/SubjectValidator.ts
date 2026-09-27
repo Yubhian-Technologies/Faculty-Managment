@@ -128,7 +128,7 @@ export class SubjectCatalogValidator {
         type = matched;
       } else if (practicalHours > 0 && lectureHours === 0) {
         type = "PRACTICAL";
-        warnings.push(`Type "${typeText}" not recognized - defaulted to Practical / Lab based on practical hours (P=${practicalHours})`);
+        warnings.push(`Type "${typeText}" not recognized - defaulted to Practical based on practical hours (P=${practicalHours})`);
       } else {
         warnings.push(`Type not recognized ("${typeText}") - defaulted to Theory`);
       }

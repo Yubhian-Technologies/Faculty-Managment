@@ -56,8 +56,19 @@ export class SubjectInstanceService {
 
   /**
    * Instantiates and copies a Master Subject into a Department-Course-Year-Semester Instance.
+   *
+   * `yearCache`, when passed, is consulted before re-walking courseYearTimings
+   * 1..6 - callers within one bulk operation (bulkAssignSubjectInstances)
+   * share a single Map across every subject, since courseId+semester is
+   * normally identical for the whole call (subjects are pre-filtered to one
+   * course by every caller today) and would otherwise re-read the same
+   * courseYearTimings docs once per subject for no reason. Omitted by a
+   * single-subject caller, which keeps resolving fresh every time as before.
    */
-  public async assignSubjectInstance(options: SubjectInstanceAssignOptions): Promise<{ id: string; instance: SubjectSemesterAssignment }> {
+  public async assignSubjectInstance(
+    options: SubjectInstanceAssignOptions,
+    yearCache?: Map<string, number | null>
+  ): Promise<{ id: string; instance: SubjectSemesterAssignment }> {
     const { collegeId, subjectId, departmentId, semester, departmentName, customOverrides } = options;
     const collegeRef = this.db.collection("colleges").doc(collegeId);
 
@@ -97,7 +108,14 @@ export class SubjectInstanceService {
     // present, skipping this resolution (and its "is this semester even
     // configured" check) entirely - a year/semester mismatch could be stored
     // with no server-side check at all.
-    const foundYear = await this.resolveYearForSemester(collegeId, courseId, semester);
+    const yearCacheKey = `${courseId}:${semester}`;
+    let foundYear: number | null;
+    if (yearCache?.has(yearCacheKey)) {
+      foundYear = yearCache.get(yearCacheKey)!;
+    } else {
+      foundYear = await this.resolveYearForSemester(collegeId, courseId, semester);
+      yearCache?.set(yearCacheKey, foundYear);
+    }
     if (foundYear == null) {
       throw new Error(
         `Semester ${semester} isn't configured in Course-Year Timings for course "${master.courseName || courseId}".`
@@ -185,6 +203,12 @@ export class SubjectInstanceService {
     const { collegeId, subjectIds, departmentId, semester, departmentName, year } = options;
     const failed: { subjectId: string; error: string }[] = [];
     let assignedCount = 0;
+    // Shared across every subject in this call - every one of them normally
+    // resolves to the same courseId+semester (they're pre-filtered to one
+    // course by every caller), so this turns what used to be up to 6
+    // sequential Firestore reads PER SUBJECT (courseYearTimings 1..6) into
+    // one lookup total for the whole bulk call.
+    const yearCache = new Map<string, number | null>();
 
     for (const sid of subjectIds) {
       try {
@@ -195,7 +219,7 @@ export class SubjectInstanceService {
           semester,
           departmentName,
           year,
-        });
+        }, yearCache);
         assignedCount++;
       } catch (err) {
         failed.push({

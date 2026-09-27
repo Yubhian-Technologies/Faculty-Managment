@@ -6,7 +6,7 @@ export type SubjectType = "THEORY" | "PRACTICAL" | "TUTORIAL" | "PROJECT";
 
 export const SUBJECT_TYPE_LABELS: Record<SubjectType, string> = {
   THEORY: "Theory",
-  PRACTICAL: "Practical / Lab",
+  PRACTICAL: "Practical",
   TUTORIAL: "Tutorial",
   PROJECT: "Project",
 };

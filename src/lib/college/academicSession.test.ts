@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   academicSessionLabel, academicYearLongLabel, currentTimetableAcademicYear, deriveBatch,
-  lateralEntryBatch, matchesCurrentAcademicYear, parseAcademicYearStart, regulationsForBatchStartYear,
-  regulationsForCourseYearByBatch, resolveCurrentAcademicYear, resolveTimetableAcademicYear,
-  sectionBatchIntakeYears,
+  findOverlappingRegulationBatches, lateralEntryBatch, matchesCurrentAcademicYear, parseAcademicYearStart,
+  regulationsForBatchStartYear, regulationsForCourseYearByBatch, resolveCurrentAcademicYear,
+  resolveTimetableAcademicYear, sectionBatchIntakeYears,
 } from "./academicSession";
 
 describe("sectionBatchIntakeYears", () => {
@@ -197,5 +197,33 @@ describe("lateralEntryBatch", () => {
 
   it("returns null when the batch has no graduation year to keep", () => {
     expect(lateralEntryBatch("not-a-batch", 2025)).toBeNull();
+  });
+});
+
+describe("findOverlappingRegulationBatches", () => {
+  it("finds nothing when every regulation claims a distinct set of years", () => {
+    expect(findOverlappingRegulationBatches({
+      R20: "2020-2024,2021-2025",
+      R23: "2023-2027,2024-2028",
+    })).toEqual([]);
+  });
+
+  it("flags a single year two regulations both claim", () => {
+    expect(findOverlappingRegulationBatches({
+      R20: "2023-2027",
+      R23: "2023-2027",
+    })).toEqual([{ year: 2023, regulations: ["R20", "R23"] }]);
+  });
+
+  it("flags every conflicting year, sorted ascending, when more than one overlaps", () => {
+    expect(findOverlappingRegulationBatches({
+      R20: "2023-2027,2024-2028",
+      R23: "2024-2028,2025-2029",
+    })).toEqual([{ year: 2024, regulations: ["R20", "R23"] }]);
+  });
+
+  it("returns nothing for an empty or single-regulation map", () => {
+    expect(findOverlappingRegulationBatches({})).toEqual([]);
+    expect(findOverlappingRegulationBatches({ R23: "2023-2027" })).toEqual([]);
   });
 });
