@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { Timestamp } from "firebase-admin/firestore";
 import { narrowToActiveLocationDept } from "@/lib/location/activeLocationDept";
 import type { LocationStaffMember } from "@/types/locationStaff";
 
@@ -217,7 +218,7 @@ export async function POST(request: Request) {
       }
     }
 
-    const now = new Date();
+    const now = Timestamp.now();
     const staffPayload: Omit<LocationStaffMember, "id"> = {
       locationId,
       departmentId,
@@ -236,7 +237,7 @@ export async function POST(request: Request) {
       shiftId: body.shiftId || "",
       shiftName,
       status: body.status || "ACTIVE",
-      dateOfJoining: body.dateOfJoining || now.toISOString().split("T")[0],
+      dateOfJoining: body.dateOfJoining || new Date().toISOString().split("T")[0],
       createdAt: now,
       updatedAt: now,
     };

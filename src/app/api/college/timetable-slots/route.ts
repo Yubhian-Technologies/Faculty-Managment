@@ -150,18 +150,24 @@ export async function POST(request: Request) {
     const collegeRef = db.collection("colleges").doc(session.collegeId);
     const assignmentSnap = await collegeRef.collection("teachingAssignments").doc(assignmentId).get();
     if (!assignmentSnap.exists) return NextResponse.json({ error: "Teaching assignment not found" }, { status: 404 });
-    const assignment = assignmentSnap.data() as {
+    const assignmentData = assignmentSnap.data() as {
       facultyId: string; facultyName: string; courseId?: string; year?: number;
       sectionId?: string; subjectId: string; subjectName: string; department: string;
       timetableSemester?: number;
     };
 
-    if (!assignment.sectionId || !assignment.courseId) {
+    if (!assignmentData.sectionId || !assignmentData.courseId || assignmentData.year == null) {
       return NextResponse.json(
-        { error: "Teaching assignment must be linked to a course and section to schedule timetable slots" },
+        { error: "Teaching assignment must be linked to a course, year, and section to schedule timetable slots" },
         { status: 400 }
       );
     }
+    const assignment = {
+      ...assignmentData,
+      courseId: assignmentData.courseId,
+      year: assignmentData.year,
+      sectionId: assignmentData.sectionId,
+    };
 
     // Resolve subject type to gate lab-only split — only PRACTICAL may use allowSplit/labBatch
     const subjectSnapForType = await collegeRef.collection("subjects").doc(assignment.subjectId).get();

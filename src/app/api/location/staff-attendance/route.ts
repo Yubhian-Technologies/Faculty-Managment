@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { Timestamp } from "firebase-admin/firestore";
 import { istDateKey, getISTParts } from "@/lib/attendance/istTime";
 import { narrowToActiveLocationDept } from "@/lib/location/activeLocationDept";
 import type {
@@ -165,7 +166,7 @@ export async function POST(request: Request) {
 
     const date = body.date || istDateKey();
     const db = getAdminDb();
-    const now = new Date();
+    const now = Timestamp.now();
     const currentISTTime = currentISTTime12h();
 
     // ── Bulk Mark Action ──────────────────────────────────────────
@@ -199,7 +200,7 @@ export async function POST(request: Request) {
           checkInTime: existing?.checkInTime || (body.status === "PRESENT" ? currentISTTime : undefined),
           checkOutTime: existing?.checkOutTime,
           markedByUid: session.uid,
-          markedByName: session.name || "Dept Head",
+          markedByName: (session as { name?: string }).name || session.email || "Dept Head",
           notes: body.notes || existing?.notes || "",
           createdAt: existing?.createdAt ?? now,
           updatedAt: now,
@@ -268,7 +269,7 @@ export async function POST(request: Request) {
       checkInTime: updatedCheckIn,
       checkOutTime: updatedCheckOut,
       markedByUid: session.uid,
-      markedByName: session.name || "Dept Head",
+      markedByName: (session as { name?: string }).name || session.email || "Dept Head",
       notes: body.notes !== undefined ? body.notes : (existing?.notes || ""),
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
