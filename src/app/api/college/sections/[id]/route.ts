@@ -300,7 +300,11 @@ export async function PATCH(
         return NextResponse.json({ error: `"${targetDeptName}" is not assigned to teach Year ${targetYear}` }, { status: 400 });
       }
 
-      const availableSecondaryDepts = targetDept.secondaryDepartments ?? [];
+      // Per-course override aware, same as assignedYears above - a department
+      // cross-listed ONLY via courseScopes (the modern per-course shape, not
+      // the legacy flat field) previously resolved to [] here, silently
+      // clearing secondaryDepartments instead of auto-filling the one branch.
+      const availableSecondaryDepts = resolveDepartmentCourseScope(targetDept, course?.catalogId).secondaryDepartments;
       updates.department = targetDeptName;
       updates.secondaryDepartments = availableSecondaryDepts.length === 1 ? [availableSecondaryDepts[0]] : [];
     }
@@ -318,14 +322,21 @@ export async function PATCH(
           .collection("departments").where("name", "==", ownerName).limit(1).get();
         const ownerDoc = ownerSnap.empty ? undefined : ownerSnap.docs[0];
         const ownerData = ownerDoc?.data() as
-          | { secondaryDepartments?: string[]; parentDepartmentId?: string; managedDepartments?: string[] }
+          | { secondaryDepartments?: string[]; courseScopes?: Record<string, DepartmentCourseScope>; parentDepartmentId?: string; managedDepartments?: string[] }
           | undefined;
-        // Own configured branches, or a sub-department's inherited parent branches.
-        let available = ownerData?.secondaryDepartments ?? [];
+        // Own configured branches, or a sub-department's inherited parent
+        // branches - per-course override aware (resolveDepartmentCourseScope),
+        // same fix as the auto-derive block above, for the same reason: a
+        // department (or its parent) cross-listed only via courseScopes
+        // otherwise resolved to [], rejecting a branch it actually does offer.
+        let available = resolveDepartmentCourseScope(ownerData ?? {}, course?.catalogId).secondaryDepartments;
         if (available.length === 0 && ownerData?.parentDepartmentId) {
           const parentSnap = await db.collection("colleges").doc(session.collegeId)
             .collection("departments").doc(ownerData.parentDepartmentId).get();
-          available = (parentSnap.data() as { secondaryDepartments?: string[] } | undefined)?.secondaryDepartments ?? [];
+          available = resolveDepartmentCourseScope(
+            (parentSnap.data() as { secondaryDepartments?: string[]; courseScopes?: Record<string, DepartmentCourseScope> } | undefined) ?? {},
+            course?.catalogId
+          ).secondaryDepartments;
         }
         // Also fold in whatever the owner department (or, for a parent, one of
         // its own sub-departments) fully manages via managedDepartments - same

@@ -44,3 +44,37 @@ export async function createAuthenticatedContext(account: {
 
   return ctx;
 }
+
+export interface DirectSessionOptions {
+  uid: string;
+  email: string;
+  role: string;
+  collegeId: string;
+  locationId?: string;
+  realRole?: string;
+  roles?: string[];
+}
+
+export async function createDirectSessionContext(
+  session: DirectSessionOptions
+): Promise<APIRequestContext> {
+  const { signSession } = await import("@/lib/auth/sessionToken");
+  const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:3000";
+  const token = await signSession({
+    uid: session.uid,
+    email: session.email,
+    role: session.role,
+    collegeId: session.collegeId,
+    locationId: session.locationId ?? "",
+    realRole: session.realRole ?? session.role,
+    roles: session.roles ?? [session.role],
+    exp: Math.floor(Date.now() / 1000) + 86400,
+  });
+  return pwRequest.newContext({
+    baseURL,
+    extraHTTPHeaders: {
+      Cookie: `fms-session=${token}`,
+    },
+  });
+}
+

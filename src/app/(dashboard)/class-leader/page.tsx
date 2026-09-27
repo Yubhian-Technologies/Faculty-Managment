@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -7,23 +7,20 @@ import {
   Calendar,
   CalendarDays,
   Clock,
-  ExternalLink,
-  GraduationCap,
-  Layers,
   MapPin,
   User,
   UserCheck,
-  UserCog,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { useAuthStore } from "@/store/authStore";
 import { useNavVisibility } from "@/hooks/useNavVisibility";
 import { isPathHidden } from "@/components/layout/navConfig";
 import { toast } from "@/hooks/useToast";
-import type { Course, CourseYearTiming, Department, Section, TimetableSlot, TeachingAssignment, SubjectType } from "@/types";
-import { DAY_LABELS, type DayOfWeek } from "@/types";
+import { ordinalYear, resolveTimetableDays } from "@/lib/timetable/gridModel";
+import { formatTime12h } from "@/lib/timetable/facultyTimetablePdf";
+import type { Course, CourseYearTiming, Department, Section, TimetableSlot, TeachingAssignment, SubjectType, DayOfWeek } from "@/types";
+import { DAY_LABELS } from "@/types";
 
 type TimetableSlotRow = TimetableSlot & {
   id: string;
@@ -32,13 +29,6 @@ type TimetableSlotRow = TimetableSlot & {
   shortCode?: string;
 };
 type AssignmentRow = TeachingAssignment & { id: string };
-
-const DAYS_ORDER: DayOfWeek[] = ["MON", "TUE", "WED", "THU", "FRI", "SAT"];
-
-function ordinalYear(year: number) {
-  const suffix = year === 1 ? "st" : year === 2 ? "nd" : year === 3 ? "rd" : "th";
-  return `${year}${suffix} Year`;
-}
 
 function getTodayDayOfWeek(): DayOfWeek {
   const dayIndex = new Date().getDay(); // 0 is Sunday, 1 is Monday...
@@ -51,16 +41,6 @@ function getTodayDayOfWeek(): DayOfWeek {
     6: "SAT",
   };
   return map[dayIndex] ?? "MON";
-}
-
-/** Format "09:00" -> "9:00 AM" */
-function formatTime12h(hhmm: string): string {
-  if (!hhmm) return "";
-  const [h, m] = hhmm.split(":").map(Number);
-  if (Number.isNaN(h) || Number.isNaN(m)) return hhmm;
-  const period = h >= 12 ? "PM" : "AM";
-  const h12 = h % 12 === 0 ? 12 : h % 12;
-  return `${h12}:${String(m).padStart(2, "0")} ${period}`;
 }
 
 export default function ClassLeaderDashboardPage() {
@@ -80,7 +60,6 @@ export default function ClassLeaderDashboardPage() {
   // Day selector for schedule timeline
   const todayDay = useMemo(() => getTodayDayOfWeek(), []);
   const [selectedDay, setSelectedDay] = useState<DayOfWeek>(todayDay);
-
   useEffect(() => {
     fetch("/api/college/class-leader/timetable")
       .then(
@@ -157,12 +136,29 @@ export default function ClassLeaderDashboardPage() {
     return Array.from(map.values());
   }, [assignments]);
 
+  // Only the days this college actually teaches (the API resolves them from
+  // the college's TimetableRules.workingDays, unioned with any day a slot
+  // actually occupies) - never a hardcoded Mon-Sat, and never a day the
+  // timetable has nothing for, so the tab strip only offers real choices.
+  const daysWithClasses = useMemo(() => {
+    const byDay = new Set(slots.map((s) => s.day));
+    const resolved = resolveTimetableDays(null, byDay);
+    return resolved.filter((d) => byDay.has(d));
+  }, [slots]);
+
+  // `selectedDay` can name a day the tab strip no longer offers (today on a
+  // Sunday, or a day whose classes were all filtered away) - fall back rather
+  // than render an empty panel the user has no control to escape.
+  const activeDay = daysWithClasses.includes(selectedDay)
+    ? selectedDay
+    : daysWithClasses[0] ?? resolveTimetableDays()[0];
+
   // Filter slots for the selected day and sort by period number
   const daySlots = useMemo(() => {
     return slots
-      .filter((s) => s.day === selectedDay)
+      .filter((s) => s.day === activeDay)
       .sort((a, b) => a.periodNumber - b.periodNumber);
-  }, [slots, selectedDay]);
+  }, [slots, activeDay]);
 
   // Lookup timing details for each period using `period: number` from PeriodTiming
   const periodTimingsMap = useMemo(() => {
@@ -175,40 +171,35 @@ export default function ClassLeaderDashboardPage() {
     return map;
   }, [timing]);
 
-  const isCurrentDayToday = new Date().getDay() !== 0 && selectedDay === todayDay;
-
   return (
-    <div className="space-y-6 max-w-full overflow-hidden">
-      {/* ── Page Header ── */}
+    <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <Badge variant="outline" className="text-primary border-primary/30 font-semibold px-2.5 py-0.5 text-xs">
-              Class Representative Portal
-            </Badge>
-            {resolvedSemester && (
-              <Badge variant="secondary" className="text-xs">
-                Semester {resolvedSemester}
-              </Badge>
-            )}
-          </div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+        <div className="min-w-0">
+          <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold tracking-tight text-foreground break-words">
             {section ? `Section ${section.name} Dashboard` : "Class Leader Dashboard"}
           </h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
+          <p className="text-sm text-muted-foreground mt-0.5 break-words">
             {section && course
-              ? `${course.name} · ${departmentName} · ${ordinalYear(section.year)}`
+              ? [
+                  course.name,
+                  departmentName,
+                  ordinalYear(section.year),
+                  section.batch,
+                  resolvedSemester ? `Semester ${resolvedSemester}` : undefined,
+                  section.facultyInchargeName ? `In-charge: ${section.facultyInchargeName}` : undefined,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")
               : "Your section's schedule and subject assignments"}
           </p>
         </div>
 
         {section && !isHidden("/class-leader/timetable") && (
           <div className="flex items-center gap-2 shrink-0">
-            <Button asChild className="gap-2 shadow-xs">
+            <Button asChild variant="outline" className="gap-2 w-full sm:w-auto">
               <Link href="/class-leader/timetable">
-                <CalendarDays className="h-4 w-4" />
-                <span>Full Timetable Grid</span>
-                <ExternalLink className="h-3.5 w-3.5 opacity-70" />
+                <CalendarDays className="h-4 w-4 shrink-0" />
+                <span className="truncate">Full Timetable</span>
               </Link>
             </Button>
           </div>
@@ -223,9 +214,6 @@ export default function ClassLeaderDashboardPage() {
       ) : !section ? (
         <Card className="border-dashed">
           <CardContent className="py-12 text-center space-y-3">
-            <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center mx-auto text-muted-foreground">
-              <Layers className="h-6 w-6" />
-            </div>
             <h3 className="font-semibold text-base">No Section Linked</h3>
             <p className="text-sm text-muted-foreground max-w-md mx-auto">
               Your login is not currently bound to an academic section. Please ask your College Office or Department HOD to link your class section.
@@ -234,114 +222,53 @@ export default function ClassLeaderDashboardPage() {
         </Card>
       ) : (
         <div className="space-y-6">
-          {/* ── Key Section Metrics Grid (Balanced 4 cards, zero overflow) ── */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <Card className="shadow-2xs border-border/80">
-              <CardContent className="p-3.5 sm:p-4 flex items-center gap-3 min-w-0">
-                <div className="h-10 w-10 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
-                  <Layers className="h-5 w-5" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs font-medium text-muted-foreground">Class &amp; Section</p>
-                  <p className="font-bold text-sm sm:text-base text-foreground truncate">
-                    Sec {section.name} {section.batch ? `· ${section.batch}` : ""}
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
 
-            <Card className="shadow-2xs border-border/80">
-              <CardContent className="p-3.5 sm:p-4 flex items-center gap-3 min-w-0">
-                <div className="h-10 w-10 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
-                  <GraduationCap className="h-5 w-5" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs font-medium text-muted-foreground">Department</p>
-                  <p className="font-bold text-sm sm:text-base text-foreground truncate" title={departmentName}>
-                    {departmentName}
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="shadow-2xs border-border/80">
-              <CardContent className="p-3.5 sm:p-4 flex items-center gap-3 min-w-0">
-                <div className="h-10 w-10 rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0">
-                  <CalendarDays className="h-5 w-5" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs font-medium text-muted-foreground">Academic Year</p>
-                  <p className="font-bold text-sm sm:text-base text-foreground truncate">
-                    {ordinalYear(section.year)} {resolvedSemester ? `(Sem ${resolvedSemester})` : ""}
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="shadow-2xs border-border/80">
-              <CardContent className="p-3.5 sm:p-4 flex items-center gap-3 min-w-0">
-                <div className="h-10 w-10 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
-                  <UserCog className="h-5 w-5" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs font-medium text-muted-foreground">Faculty In-Charge</p>
-                  <p className="font-bold text-sm sm:text-base text-foreground truncate" title={section.facultyInchargeName || "Not assigned"}>
-                    {section.facultyInchargeName || "Not assigned"}
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* ── Daily Schedule (Direct Timetable on Dashboard) ── */}
+          {/* ── Daily Schedule ── */}
           <Card className="shadow-xs border-border/80 overflow-hidden">
             <CardHeader className="p-4 sm:p-5 border-b bg-card/60 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-              <div>
+              <div className="min-w-0">
                 <CardTitle className="text-base font-bold flex items-center gap-2">
-                  <Clock className="h-4 w-4 text-primary" />
+                  <Clock className="h-4 w-4 text-primary shrink-0" />
                   <span>Class Schedule</span>
-                  {isCurrentDayToday && (
-                    <Badge variant="default" className="text-[10px] uppercase font-bold tracking-wider py-0 px-1.5 h-5 bg-primary">
-                      Today
-                    </Badge>
-                  )}
                 </CardTitle>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Direct period schedule for {DAY_LABELS[selectedDay]}
+                  {DAY_LABELS[activeDay]}&rsquo;s periods
                 </p>
               </div>
 
-              {/* Day Selection Tabs (Zero horizontal overflow) */}
-              <div className="flex items-center gap-1 overflow-x-auto pb-1 sm:pb-0 max-w-full no-scrollbar">
-                {DAYS_ORDER.map((d) => {
-                  const isSelected = selectedDay === d;
-                  const isToday = todayDay === d;
-                  return (
-                    <Button
-                      key={d}
-                      type="button"
-                      size="sm"
-                      variant={isSelected ? "default" : "outline"}
-                      onClick={() => setSelectedDay(d)}
-                      className={`h-7 px-2.5 text-xs font-medium shrink-0 transition-all ${
-                        isSelected ? "shadow-2xs font-semibold" : "text-muted-foreground hover:text-foreground"
-                      }`}
-                    >
-                      {d}
-                      {isToday && (
-                        <span className={`ml-1 h-1.5 w-1.5 rounded-full ${isSelected ? "bg-white" : "bg-primary"}`} />
-                      )}
-                    </Button>
-                  );
-                })}
-              </div>
+              {/* Day selector - only the days this timetable actually has
+                  classes on. */}
+              {daysWithClasses.length > 1 && (
+                <div className="-mx-1 flex items-center gap-1 overflow-x-auto px-1 py-0.5 no-scrollbar" role="tablist" aria-label="Day">
+                  {daysWithClasses.map((d) => {
+                    const isSelected = activeDay === d;
+                    return (
+                      <Button
+                        key={d}
+                        type="button"
+                        size="sm"
+                        role="tab"
+                        aria-selected={isSelected}
+                        variant={isSelected ? "default" : "outline"}
+                        onClick={() => setSelectedDay(d)}
+                        className={`h-8 px-2.5 text-xs font-medium shrink-0 transition-all ${
+                          isSelected ? "shadow-2xs font-semibold" : "text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        <span className="sm:hidden">{DAY_LABELS[d]?.slice(0, 3)}</span>
+                        <span className="hidden sm:inline">{DAY_LABELS[d]}</span>
+                      </Button>
+                    );
+                  })}
+                </div>
+              )}
             </CardHeader>
 
             <CardContent className="p-4 sm:p-5">
               {daySlots.length === 0 ? (
                 <div className="py-10 text-center space-y-2 rounded-lg border border-dashed bg-muted/10">
                   <Calendar className="h-8 w-8 mx-auto text-muted-foreground/50" />
-                  <p className="text-sm font-medium text-foreground">No classes scheduled for {DAY_LABELS[selectedDay]}</p>
+                  <p className="text-sm font-medium text-foreground">No classes scheduled for {DAY_LABELS[activeDay]}</p>
                   <p className="text-xs text-muted-foreground max-w-xs mx-auto">
                     Enjoy your day off or review earlier course material!
                   </p>
@@ -350,9 +277,6 @@ export default function ClassLeaderDashboardPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
                   {daySlots.map((slot) => {
                     const periodTime = periodTimingsMap.get(slot.periodNumber);
-                    const timeLabel = periodTime
-                      ? `${formatTime12h(periodTime.startTime)} – ${formatTime12h(periodTime.endTime)}`
-                      : `Period ${slot.periodNumber}`;
                     const isSub = Boolean(slot.substituteFacultyName);
                     const isLab = slot.subjectType === "PRACTICAL";
 
@@ -367,42 +291,22 @@ export default function ClassLeaderDashboardPage() {
                             : "bg-card hover:bg-muted/15 border-border"
                         }`}
                       >
-                        {/* Period & Time header */}
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-1.5">
-                            <span className="inline-flex items-center justify-center h-5 px-1.5 rounded text-[11px] font-bold bg-muted text-foreground">
-                              P{slot.periodNumber}
-                            </span>
-                            <span className="text-xs font-semibold text-muted-foreground">
-                              {timeLabel}
-                            </span>
-                          </div>
-
-                          <div className="flex items-center gap-1">
-                            {slot.subjectType && (
-                              <Badge
-                                variant="outline"
-                                className={`text-[10px] px-1.5 py-0 h-4 uppercase font-semibold ${
-                                  isLab
-                                    ? "text-emerald-700 dark:text-emerald-300 border-emerald-300"
-                                    : "text-blue-700 dark:text-blue-300 border-blue-300"
-                                }`}
-                              >
-                                {isLab ? "Lab" : "Theory"}
-                              </Badge>
-                            )}
-                            {slot.labBatch && (
-                              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
-                                {slot.labBatch}
-                              </Badge>
-                            )}
-                          </div>
+                        <div className="flex items-baseline justify-between gap-2">
+                          <p className="text-xs font-semibold text-muted-foreground">
+                            Period {slot.periodNumber}
+                            {periodTime && ` · ${formatTime12h(periodTime.startTime)} – ${formatTime12h(periodTime.endTime)}`}
+                          </p>
+                          {isLab && (
+                            <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground shrink-0">
+                              Lab
+                            </p>
+                          )}
                         </div>
 
-                        {/* Subject Details */}
                         <div className="min-w-0">
                           <p className="font-semibold text-sm text-foreground leading-snug line-clamp-2" title={slot.subjectName}>
                             {slot.subjectName}
+                            {slot.labBatch && <span className="font-normal text-muted-foreground"> · {slot.labBatch}</span>}
                           </p>
                           {(slot.subjectCode || slot.shortCode) && (
                             <p className="text-xs font-mono text-muted-foreground mt-0.5">
@@ -411,7 +315,6 @@ export default function ClassLeaderDashboardPage() {
                           )}
                         </div>
 
-                        {/* Faculty & Room Footer */}
                         <div className="pt-2 border-t border-border/50 flex items-center justify-between gap-2 text-xs">
                           <div className="flex items-center gap-1.5 min-w-0 text-muted-foreground">
                             {isSub ? (
@@ -442,18 +345,13 @@ export default function ClassLeaderDashboardPage() {
             </CardContent>
           </Card>
 
-          {/* ── Subjects & Faculty Section (Clean, strictly current-semester) ── */}
+          {/* ── Subjects & Faculty ── */}
           <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <BookOpen className="h-4 w-4 text-primary" />
-                <h2 className="text-base font-bold text-foreground">
-                  Current Semester Subjects
-                </h2>
-                <Badge variant="secondary" className="text-xs px-2 py-0">
-                  {groupedSubjects.length} {groupedSubjects.length === 1 ? "Subject" : "Subjects"}
-                </Badge>
-              </div>
+            <div className="flex items-center gap-2">
+              <BookOpen className="h-4 w-4 text-primary" />
+              <h2 className="text-base font-bold text-foreground">
+                Current Semester Subjects
+              </h2>
             </div>
 
             {groupedSubjects.length === 0 ? (
@@ -465,28 +363,16 @@ export default function ClassLeaderDashboardPage() {
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 {groupedSubjects.map((sub) => {
-                  const isLab = sub.subjectType === "PRACTICAL";
                   return (
                     <Card key={sub.subjectId || sub.subjectCode} className="shadow-2xs border-border/80 flex flex-col justify-between">
                       <CardContent className="p-4 space-y-3 flex-1 flex flex-col justify-between">
                         <div className="space-y-1.5 min-w-0">
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="text-xs font-mono font-bold text-primary px-1.5 py-0.5 rounded bg-primary/10">
-                              {sub.shortCode || sub.subjectCode || "SUB"}
-                            </span>
-                            {sub.subjectType && (
-                              <Badge
-                                variant="outline"
-                                className={`text-[10px] font-semibold ${
-                                  isLab
-                                    ? "text-emerald-700 dark:text-emerald-300 border-emerald-300"
-                                    : "text-blue-700 dark:text-blue-300 border-blue-300"
-                                }`}
-                              >
-                                {isLab ? "Practical" : "Theory"}
-                              </Badge>
+                          <p className="text-xs font-mono font-bold text-primary">
+                            {sub.shortCode || sub.subjectCode || "SUB"}
+                            {sub.subjectType === "PRACTICAL" && (
+                              <span className="font-sans font-medium text-muted-foreground"> · Lab</span>
                             )}
-                          </div>
+                          </p>
                           <p className="font-semibold text-sm text-foreground line-clamp-2" title={sub.subjectName}>
                             {sub.subjectName}
                           </p>
@@ -497,24 +383,19 @@ export default function ClassLeaderDashboardPage() {
                           )}
                         </div>
 
-                        {/* Faculty list */}
                         <div className="pt-2.5 border-t border-border/60 space-y-1">
                           <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
-                            Faculty In-Charge
+                            Faculty
                           </p>
                           {sub.facultyList.map((f, idx) => (
-                            <div key={idx} className="flex items-center justify-between gap-2 text-xs font-medium text-foreground">
-                              <div className="flex items-center gap-1.5 truncate">
-                                <div className="h-5 w-5 rounded-full bg-muted flex items-center justify-center text-[10px] shrink-0 font-bold">
-                                  {f.name.charAt(0)}
-                                </div>
-                                <span className="truncate">{f.name}</span>
+                            <div key={idx} className="flex items-center gap-1.5 text-xs font-medium text-foreground">
+                              <div className="h-5 w-5 rounded-full bg-muted flex items-center justify-center text-[10px] shrink-0 font-bold">
+                                {f.name.charAt(0)}
                               </div>
-                              {f.batch && (
-                                <Badge variant="secondary" className="text-[10px] px-1 py-0 shrink-0">
-                                  {f.batch}
-                                </Badge>
-                              )}
+                              <span className="truncate">
+                                {f.name}
+                                {f.batch && <span className="font-normal text-muted-foreground"> · {f.batch}</span>}
+                              </span>
                             </div>
                           ))}
                         </div>

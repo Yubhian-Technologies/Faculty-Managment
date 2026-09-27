@@ -96,6 +96,23 @@ export function CourseYearTimingForm({ departmentId, courseId, year, onSaved, on
   const [timingForm, setTimingForm] = useState<TimingForm>(EMPTY_TIMING_FORM);
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  // The current academic session's own dates, when the Principal has set
+  // them (AcademicSession.startDate/endDate - optional). Used only for the
+  // submit-time bounds check below; the server (course-year-timings POST)
+  // enforces the same rule regardless, this is just earlier feedback.
+  const [sessionBounds, setSessionBounds] = useState<{ label?: string; startDate: string; endDate: string } | null>(null);
+
+  useEffect(() => {
+    fetch("/api/college/academic-sessions")
+      .then((r) => r.json() as Promise<{ academicSessions?: { label?: string; isCurrent?: boolean; startDate?: string; endDate?: string }[] }>)
+      .then((d) => {
+        const current = (d.academicSessions ?? []).find((s) => s.isCurrent);
+        if (current?.startDate && current?.endDate) {
+          setSessionBounds({ label: current.label, startDate: current.startDate, endDate: current.endDate });
+        }
+      })
+      .catch(() => { /* non-critical - falls back to server-side-only enforcement */ });
+  }, []);
 
   useEffect(() => {
     async function load() {
@@ -194,6 +211,19 @@ export function CourseYearTimingForm({ departmentId, courseId, year, onSaved, on
     if (timingForm.semesters.some((s) => s.startDate > s.endDate)) {
       toast({ variant: "destructive", title: "A semester's end date can't be before its start date" });
       return;
+    }
+    if (sessionBounds) {
+      const outOfBounds = timingForm.semesters.find(
+        (s) => s.startDate < sessionBounds.startDate || s.endDate > sessionBounds.endDate
+      );
+      if (outOfBounds) {
+        toast({
+          variant: "destructive",
+          title: `Semester ${outOfBounds.semester} falls outside the ${sessionBounds.label ?? "current"} academic year`,
+          description: `Academic year runs ${sessionBounds.startDate} to ${sessionBounds.endDate}.`,
+        });
+        return;
+      }
     }
     setIsSaving(true);
     try {
@@ -373,6 +403,11 @@ export function CourseYearTimingForm({ departmentId, courseId, year, onSaved, on
               semester. Which one is &ldquo;current&rdquo; for the timetable follows whichever semester today&rsquo;s
               date falls within.
             </p>
+            {sessionBounds && (
+              <p className="text-xs text-muted-foreground">
+                Must fall within the {sessionBounds.label ?? "current"} academic year: {sessionBounds.startDate} to {sessionBounds.endDate}.
+              </p>
+            )}
             <div className="space-y-1 max-w-[10rem]">
               <p className="text-xs text-muted-foreground">Number of Semesters</p>
               <Input

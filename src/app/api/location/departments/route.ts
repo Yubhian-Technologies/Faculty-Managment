@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { verifySession } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { createFirebaseUser } from "@/lib/firebase/authRest";
 
 export async function GET(request: Request) {
   try {
@@ -14,13 +15,39 @@ export async function GET(request: Request) {
     if (!locationId) return NextResponse.json({ error: "locationId required" }, { status: 400 });
 
     const db = getAdminDb();
-    const snap = await db
-      .collection("locations")
-      .doc(locationId)
-      .collection("locationDepts")
-      .orderBy("name")
-      .get();
-    const depts = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const [deptsSnap, staffSnap] = await Promise.all([
+      db
+        .collection("locations")
+        .doc(locationId)
+        .collection("locationDepts")
+        .orderBy("name")
+        .get(),
+      db
+        .collection("locations")
+        .doc(locationId)
+        .collection("staff")
+        .where("status", "==", "ACTIVE")
+        .get()
+        .catch(() => ({ docs: [] })),
+    ]);
+
+    const staffCountsByDept = new Map<string, number>();
+    for (const doc of staffSnap.docs) {
+      const data = doc.data() as { departmentId?: string };
+      if (data.departmentId) {
+        staffCountsByDept.set(data.departmentId, (staffCountsByDept.get(data.departmentId) ?? 0) + 1);
+      }
+    }
+
+    const depts = deptsSnap.docs.map((d) => {
+      const data = d.data();
+      return {
+        id: d.id,
+        ...data,
+        staffCount: staffCountsByDept.get(d.id) ?? data.staffCount ?? 0,
+      };
+    });
+
     return NextResponse.json({ departments: depts });
   } catch (err) {
     console.error("[location/departments GET]", err);
@@ -31,32 +58,161 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const session = await verifySession();
-    if (!session || !["SUPER_ADMIN", "ADMINISTRATION"].includes(session.role)) {
+    if (!session || !["SUPER_ADMIN", "ADMINISTRATION", "LOCATION_STAFF_ADMIN"].includes(session.role)) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const body = (await request.json()) as {
       name: string;
-      locationId: string;
+      code?: string;
+      description?: string;
+      headUid?: string;
+      headStaffId?: string;
+      headName?: string;
+      headEmail?: string;
+      headPhone?: string;
+      locationId?: string;
+      loginCredentials?: { email: string; password: string };
     };
-    const { name, locationId } = body;
+    const locationId = body.locationId || session.locationId;
+    const name = body.name?.trim();
+    const code = body.code?.trim() ? body.code.trim().toUpperCase() : "";
+
     if (!name || !locationId) {
       return NextResponse.json({ error: "name and locationId required" }, { status: 400 });
     }
-    if (session.role === "ADMINISTRATION" && session.locationId !== locationId) {
+    if (session.role !== "SUPER_ADMIN" && session.locationId !== locationId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const db = getAdminDb();
     const now = new Date();
+
+    let resolvedHeadUid = body.headUid || null;
+    let resolvedHeadEmail = body.headEmail?.trim() || null;
+    let credentialsCreated = false;
+
+    // Check if new login credentials should be created for this Department Head
+    const creds = (body as { loginCredentials?: { email: string; password: string } }).loginCredentials;
+    if (creds?.email && creds?.password) {
+      const credEmail = creds.email.trim().toLowerCase();
+      const credPassword = creds.password.trim();
+      const displayName = body.headName?.trim() || name;
+
+      const newUid = await createFirebaseUser(credEmail, credPassword, displayName);
+      resolvedHeadUid = newUid;
+      resolvedHeadEmail = credEmail;
+      credentialsCreated = true;
+
+      // Create location user record
+      await db.collection("locations").doc(locationId).collection("locationUsers").doc(newUid).set({
+        uid: newUid,
+        locationId,
+        name: displayName,
+        email: credEmail,
+        phone: body.headPhone?.trim() || "",
+        role: "LOCATION_DEPT_HEAD",
+        department: name,
+        locationDeptId: "", // will update with ref.id below
+        locationDeptIds: [],
+        staffId: body.headStaffId || null,
+        isActive: true,
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      // Create system user record for auth mapping
+      await db.collection("systemUsers").doc(newUid).set({
+        uid: newUid,
+        role: "LOCATION_DEPT_HEAD",
+        locationId,
+        collegeId: "",
+        email: credEmail,
+        name: displayName,
+      });
+    }
+
+    const deptPayload = {
+      name,
+      code,
+      description: body.description?.trim() || "",
+      locationId,
+      headUid: resolvedHeadUid || body.headStaffId || null,
+      headStaffId: body.headStaffId || null,
+      headName: body.headName?.trim() || null,
+      headEmail: resolvedHeadEmail,
+      headPhone: body.headPhone?.trim() || null,
+      isActive: true,
+      staffCount: 0,
+      createdAt: now,
+      updatedAt: now,
+    };
+
     const ref = await db
       .collection("locations")
       .doc(locationId)
       .collection("locationDepts")
-      .add({ name: name.trim(), locationId, isActive: true, createdAt: now, updatedAt: now });
+      .add(deptPayload);
 
-    return NextResponse.json({ id: ref.id }, { status: 201 });
-  } catch (err) {
+    // If headStaffId was provided, update that staff member's department and link userUid
+    if (body.headStaffId) {
+      const staffRef = db.collection("locations").doc(locationId).collection("staff").doc(body.headStaffId);
+      const updateData: Record<string, unknown> = {
+        departmentId: ref.id,
+        departmentName: name,
+        isDeptHead: true,
+        updatedAt: now,
+      };
+      if (resolvedHeadUid) {
+        updateData.userUid = resolvedHeadUid;
+      }
+      if (resolvedHeadEmail) {
+        updateData.userEmail = resolvedHeadEmail;
+      }
+      await staffRef.set(updateData, { merge: true });
+    }
+
+    // Ensure user has locationDeptId / locationDeptIds set
+    if (resolvedHeadUid) {
+      const userRef = db.collection("locations").doc(locationId).collection("locationUsers").doc(resolvedHeadUid);
+      const userDoc = await userRef.get();
+      if (userDoc.exists) {
+        const udata = userDoc.data() as { locationDeptIds?: string[] };
+        const existingIds = udata.locationDeptIds ?? [];
+        if (!existingIds.includes(ref.id)) {
+          await userRef.set(
+            {
+              role: "LOCATION_DEPT_HEAD",
+              locationDeptId: ref.id,
+              locationDeptIds: [...existingIds, ref.id],
+              department: name,
+              updatedAt: now,
+            },
+            { merge: true }
+          );
+        }
+      }
+    }
+
+    return NextResponse.json({
+      id: ref.id,
+      ...deptPayload,
+      credentialsCreated,
+      loginEmail: credentialsCreated ? resolvedHeadEmail : undefined,
+    }, { status: 201 });
+  } catch (err: unknown) {
+    if (
+      err && typeof err === "object" && "code" in err &&
+      (err as { code: string }).code === "auth/email-already-exists"
+    ) {
+      return NextResponse.json({ error: "An account with this login email already exists. Use a different email or select existing user." }, { status: 409 });
+    }
+    if (
+      err && typeof err === "object" && "code" in err &&
+      (err as { code: string }).code === "auth/weak-password"
+    ) {
+      return NextResponse.json({ error: "Password must be at least 6 characters" }, { status: 400 });
+    }
     console.error("[location/departments POST]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }

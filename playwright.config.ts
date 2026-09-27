@@ -6,6 +6,7 @@ import path from "path";
 // college/location ids) - this suite exercises the real API routes and
 // Firestore-backed state machine, so it needs a seeded non-production
 // environment to actually pass. It is not runnable against an empty DB.
+loadEnv({ path: path.resolve(__dirname, ".env") });
 loadEnv({ path: path.resolve(__dirname, "tests/e2e/.env.test") });
 
 const BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:3000";
