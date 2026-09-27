@@ -9,15 +9,24 @@ import { Button } from "@/components/ui/button";
 import { SupportingStaffModuleContent } from "@/components/supportingStaff/SupportingStaffModuleContent";
 import { SUPPORTING_STAFF_MODULES, type SupportingStaffModuleKey } from "@/lib/supportingStaff/profileModules";
 import { supportingStaffDisplayName } from "@/lib/supportingStaff/supportingStaffDisplayName";
+import { useAuthStore } from "@/store/authStore";
 import { toast } from "@/hooks/useToast";
 import type { SupportingStaffMember } from "@/types";
 
+// Also mounted at /principal/staff/non-technical/[id]/[module] (re-exported
+// from there) - listPath/detailBasePath below pick the right destination for
+// whichever route rendered this, same isCollegeLevel pattern as
+// hod/faculty/new/page.tsx.
 export default function NonTechnicalStaffModulePage() {
   const router = useRouter();
   const params = useParams<{ id: string; module: string }>();
   const staffId = params.id;
   const moduleKey = params.module as SupportingStaffModuleKey;
   const moduleDef = SUPPORTING_STAFF_MODULES[moduleKey];
+  const user = useAuthStore((s) => s.user);
+  const isCollegeLevel = user?.role === "PRINCIPAL" || user?.role === "VICE_PRINCIPAL";
+  const listPath = isCollegeLevel ? "/principal/staff" : "/college-office/non-technical-staff";
+  const detailBasePath = isCollegeLevel ? "/principal/staff/non-technical" : "/college-office/non-technical-staff";
 
   const [staff, setStaff] = useState<Partial<SupportingStaffMember> | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -29,14 +38,14 @@ export default function NonTechnicalStaffModulePage() {
       .then((d) => {
         if (!d.staff) {
           toast({ variant: "destructive", title: "Staff record not found" });
-          router.push("/college-office/non-technical-staff");
+          router.push(listPath);
           return;
         }
         setStaff(d.staff);
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load staff record" }))
       .finally(() => setIsLoading(false));
-  }, [staffId, moduleDef, router]);
+  }, [staffId, moduleDef, router, listPath]);
 
   if (!moduleDef) {
     return <p className="text-sm text-muted-foreground">Unknown section.</p>;
@@ -50,10 +59,10 @@ export default function NonTechnicalStaffModulePage() {
         actions={
           <div className="flex gap-2">
             <Button variant="outline" asChild>
-              <Link href={`/college-office/non-technical-staff/${staffId}`}><ArrowLeft className="h-4 w-4 mr-2" />Back</Link>
+              <Link href={`${detailBasePath}/${staffId}`}><ArrowLeft className="h-4 w-4 mr-2" />Back</Link>
             </Button>
             <Button asChild>
-              <Link href={`/college-office/non-technical-staff/${staffId}/${moduleKey}/edit`}><Pencil className="h-4 w-4 mr-2" />Edit</Link>
+              <Link href={`${detailBasePath}/${staffId}/${moduleKey}/edit`}><Pencil className="h-4 w-4 mr-2" />Edit</Link>
             </Button>
           </div>
         }

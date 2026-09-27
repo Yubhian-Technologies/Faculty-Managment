@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { ArrowLeft, Search, Users } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
@@ -8,9 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { SectionTimetable } from "@/components/academics/SectionTimetable";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { CardSkeleton } from "@/components/shared/SkeletonLoader";
-import { RosterDetailView } from "@/components/students/RosterFieldInputs";
 import { toast } from "@/hooks/useToast";
 import type { Section, StudentRecord } from "@/types";
 
@@ -28,10 +27,10 @@ export function SectionRoster({ sectionId: id, onBack, backLabel = "Back to Sect
   onBack: () => void;
   backLabel?: string;
 }) {
+  const router = useRouter();
   const [section, setSection] = useState<Section | null>(null);
   const [students, setStudents] = useState<StudentRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [viewTarget, setViewTarget] = useState<StudentRecord | null>(null);
   const [tab, setTab] = useState<"students" | "timetable">("students");
   const [query, setQuery] = useState("");
 
@@ -176,7 +175,7 @@ export function SectionRoster({ sectionId: id, onBack, backLabel = "Back to Sect
                   {filtered.map((s) => (
                     <tr
                       key={s.id}
-                      onClick={() => setViewTarget(s)}
+                      onClick={() => router.push(`/principal/students/${s.id}`)}
                       className="cursor-pointer hover:bg-muted/40 transition-colors"
                     >
                       <td className="px-4 py-2.5 font-mono">{s.rollNumber}</td>
@@ -205,30 +204,6 @@ export function SectionRoster({ sectionId: id, onBack, backLabel = "Back to Sect
       </Card>
       </>
       )}
-
-      {/* Full profile - the same read-only view the HOD and College Office see. */}
-      <Dialog open={!!viewTarget} onOpenChange={(open) => { if (!open) setViewTarget(null); }}>
-        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{viewTarget?.name}</DialogTitle>
-          </DialogHeader>
-
-          {viewTarget && (
-            <div className="flex flex-wrap items-center gap-2 text-sm">
-              <span className="text-muted-foreground">Section:</span>
-              <Badge variant="secondary" className="text-xs">{section.name}</Badge>
-              <span className="text-muted-foreground ml-3">Status:</span>
-              <Badge variant="secondary" className="text-xs">{viewTarget.status}</Badge>
-            </div>
-          )}
-
-          {viewTarget && <RosterDetailView student={viewTarget} />}
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setViewTarget(null)}>Close</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

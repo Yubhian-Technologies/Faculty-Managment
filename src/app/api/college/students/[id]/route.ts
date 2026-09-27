@@ -164,6 +164,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       labBatch?: string;
       /** Admission details from the Office's per-student Edit form. */
       details?: Record<string, unknown>;
+      /** Firebase Storage URL from the Edit form's photo upload. Empty string clears it. */
+      profilePhotoUrl?: string;
     };
 
     // Unassign: pull an already-sectioned student back to "Unassigned"
@@ -212,6 +214,37 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       batch.set(history.ref, history.data);
       await batch.commit();
 
+      return NextResponse.json({ ok: true });
+    }
+
+    // A student's photo - not a roster/CSV field (see
+    // StudentRecord.profilePhotoUrl's own doc-comment), so it gets its own
+    // small branch rather than being folded into `details` (which only ever
+    // accepts/keeps ROSTER_DETAIL_KEYS - a bare profilePhotoUrl there would be
+    // silently dropped by normalizeRosterDetails). Same role tier as the
+    // roster-detail edit just below - whoever can edit this student's profile
+    // at all. Checked before the targetSectionId/details branches below so a
+    // photo-only request (no other field set) doesn't fall through to the
+    // "targetSectionId is required" rejection further down.
+    if (body.profilePhotoUrl !== undefined) {
+      const db = getAdminDb();
+      const collegeRef = db.collection("colleges").doc(session.collegeId);
+      const studentRef = collegeRef.collection("students").doc(id);
+      const studentSnap = await studentRef.get();
+      if (!studentSnap.exists) return NextResponse.json({ error: "Student not found" }, { status: 404 });
+      const student = studentSnap.data() as StudentRecord;
+
+      if (session.role === "HOD") {
+        const { inHodScope } = await loadStudentAndScope(db, session.collegeId, session.uid, session.role);
+        const catalogId = await catalogIdForStudent(db, session.collegeId, student);
+        if (!inHodScope(student.department, student.year, catalogId)) {
+          return NextResponse.json({ error: "Outside your department" }, { status: 403 });
+        }
+      } else if (!["PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "COLLEGE_OFFICE"].includes(session.role)) {
+        return NextResponse.json({ error: "Not allowed to edit student details" }, { status: 403 });
+      }
+
+      await studentRef.update({ profilePhotoUrl: body.profilePhotoUrl.trim() || null, updatedAt: new Date() });
       return NextResponse.json({ ok: true });
     }
 

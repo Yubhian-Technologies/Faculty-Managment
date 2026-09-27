@@ -7,13 +7,13 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-  EDITABLE_ROSTER_FIELDS, PRIMARY_ROSTER_FIELDS, DETAIL_ROSTER_FIELDS,
-  rosterFieldDisplay, type RosterField,
+  EDITABLE_ROSTER_FIELDS, PRIMARY_ROSTER_FIELDS, DETAIL_ROSTER_FIELDS, ROSTER_DETAIL_GROUPS,
+  type RosterField,
 } from "@/lib/students/rosterFields";
 import { resolveDepartmentCourseScope, resolveCatalogId, freshmanPickerDepartmentNames } from "@/lib/college/academicStructure";
 import { managerEffectiveYears } from "@/lib/departments/hodScope";
 import { CASTE_LABELS, SUB_CASTES_BY_CASTE } from "@/types";
-import type { Department, StudentRecord, Course, Caste } from "@/types";
+import type { Department, Course, Caste } from "@/types";
 
 // Renders the roster fields for the Office students page - the Add/Edit form
 // body and the read-only detail view - straight from the shared spec, so both
@@ -644,7 +644,15 @@ function FieldInput({ field, values, onChange, departments, courseNames, courses
   );
 }
 
-/** Every stored roster field, in template order, identity block first. */
+const DETAIL_FIELD_BY_KEY = new Map(DETAIL_ROSTER_FIELDS.map((f) => [f.key, f]));
+
+/**
+ * Every stored roster field, grouped the same way the read-only profile
+ * (StudentDetailsPage) groups them (ROSTER_DETAIL_GROUPS) - Identity first
+ * (unchanged), then one bordered section per group instead of a single long
+ * "Admission Details" block, so Add/Edit reads as the same organised profile
+ * the view does rather than a flat form dump.
+ */
 export function RosterFormFields(props: FormProps) {
   return (
     <div className="space-y-5">
@@ -656,49 +664,20 @@ export function RosterFormFields(props: FormProps) {
           ))}
         </div>
       </div>
-      <div className="border-t pt-4">
-        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-3">Admission Details</p>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          {DETAIL_ROSTER_FIELDS.map((f) => (
-            <FieldInput key={f.key} field={f} {...props} />
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ViewRow({ field, student }: { field: RosterField; student: Partial<StudentRecord> }) {
-  const value = rosterFieldDisplay(field, student);
-  return (
-    <div>
-      <p className="text-xs text-muted-foreground">{field.label}</p>
-      <p className="text-sm font-medium break-words">
-        {value || <span className="text-muted-foreground/50">—</span>}
-      </p>
-    </div>
-  );
-}
-
-/**
- * Read-only view of a student: the identity fields first, then the rest of the
- * admission detail, both in the CSV template's order.
- */
-export function RosterDetailView({ student }: { student: Partial<StudentRecord> }) {
-  return (
-    <div className="space-y-5">
-      <div>
-        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Identity</p>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 rounded-lg border bg-muted/20 p-3">
-          {PRIMARY_ROSTER_FIELDS.map((f) => <ViewRow key={f.key} field={f} student={student} />)}
-        </div>
-      </div>
-      <div>
-        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Admission Details</p>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 rounded-lg border p-3">
-          {DETAIL_ROSTER_FIELDS.map((f) => <ViewRow key={f.key} field={f} student={student} />)}
-        </div>
-      </div>
+      {ROSTER_DETAIL_GROUPS.map((group) => {
+        const fields = group.keys
+          .map((k) => DETAIL_FIELD_BY_KEY.get(k))
+          .filter((f): f is RosterField => !!f);
+        if (fields.length === 0) return null;
+        return (
+          <div key={group.title} className="rounded-lg border p-4">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-3">{group.title}</p>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              {fields.map((f) => <FieldInput key={f.key} field={f} {...props} />)}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

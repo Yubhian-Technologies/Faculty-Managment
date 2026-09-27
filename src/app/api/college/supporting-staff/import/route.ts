@@ -9,6 +9,7 @@ import { splitDegreeAndBranch } from "@/lib/faculty/legacyProfileFallbacks";
 import { experienceBreakdown } from "@/lib/faculty/experienceCalc";
 import { getHodDepartmentScope } from "@/lib/departments/scope";
 import { hasSupportingStaffSplit } from "@/lib/designations/config";
+import { fetchActiveDesignationNames, matchDesignation } from "@/lib/designations/validate";
 import { NON_TECHNICAL_STAFF_DESIGNATION_LABELS } from "@/types";
 import {
   matchOption, normalizeDigits, isScientificNotation,
@@ -259,12 +260,10 @@ export async function POST(request: Request) {
     // The designation catalogue this import is allowed to use - this
     // college's own admin-curated Technical (HOD's Supporting Staff) or
     // Non-Technical (College Office's Non-Technical Staff) list, same split
-    // the manual Add/Edit forms enforce (see DesignationCatalogCard).
-    const designationSnap = await db.collection("colleges").doc(collegeId).collection("designations")
-      .where("category", "==", staffCategory).where("isActive", "==", true).get();
-    const allowedDesignations = designationSnap.docs
-      .map((d) => (d.data() as { name?: string }).name)
-      .filter((n): n is string => !!n);
+    // the manual Add/Edit routes enforce (see DesignationCatalogCard and
+    // resolveDesignation). Fetched once here, matched per row below via
+    // matchDesignation instead of refetching the catalog on every row.
+    const allowedDesignations = await fetchActiveDesignationNames(db, collegeId, staffCategory);
 
     // HOD's imported rows are confined to their own (or owned sub-)
     // department, same as the single "Add Staff" form and the Faculty import.
@@ -356,20 +355,16 @@ export async function POST(request: Request) {
 
       // Map designation - held to this college's own admin-curated catalog
       // for this importer's Technical/Non-Technical category
-      // (allowedDesignations), not free text. matchOption normalizes case/
-      // punctuation/spacing, but the admin's own chosen wording is the only
-      // thing accepted - anything else rejects the row rather than storing
-      // it as typed.
-      const designationRaw = row.designation.trim();
-      const matched = matchOption(designationRaw, allowedDesignations);
-      if (!matched) {
-        failed.push({
-          row: rowNum, employeeId: empId,
-          error: `Designation "${designationRaw}" is not one of the ${staffCategory === "TECHNICAL" ? "Technical" : "Non-Technical"} titles your college allows (${allowedDesignations.join(" / ")})`,
-        });
+      // (allowedDesignations), not free text (matchDesignation normalizes
+      // case/punctuation/spacing, same shared helper the manual Add/Edit
+      // routes use via resolveDesignation) - anything else rejects the row
+      // rather than storing it as typed.
+      const designationResult = matchDesignation(row.designation, allowedDesignations, staffCategory);
+      if ("error" in designationResult) {
+        failed.push({ row: rowNum, employeeId: empId, error: designationResult.error });
         continue;
       }
-      const designation: SupportingStaffDesignation = matched;
+      const designation: SupportingStaffDesignation = designationResult.name;
 
       const status: FacultyStatus = "ACTIVE";
 

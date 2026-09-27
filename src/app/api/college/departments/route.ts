@@ -433,43 +433,51 @@ export async function DELETE(request: Request) {
       );
     }
 
-    // Refuse to delete a department that still has students or sections -
-    // deleting it would silently orphan their `department` string references.
-    // A shared-first-year student stays filed under their common department
-    // (preserved until promotion) with secondaryDepartment naming this
-    // department instead, when THIS department is their real destination
-    // branch - the department-only check misses them entirely, which would
-    // let a branch with a live, un-promoted cohort be deleted outright.
-    const [studentsSnap, studentsSecondarySnap, sectionsSnap] = await Promise.all([
+    // Refuse to delete a department that still has students, sections,
+    // faculty, or supporting staff - deleting it would silently orphan their
+    // `department` string references (a faculty/staff record just disappears
+    // from every scoped listing, with no error, no reassignment, and no way
+    // back short of manually fixing the record). A shared-first-year student
+    // stays filed under their common department (preserved until promotion)
+    // with secondaryDepartment naming this department instead, when THIS
+    // department is their real destination branch - the department-only
+    // check misses them entirely, which would let a branch with a live,
+    // un-promoted cohort be deleted outright.
+    const [studentsSnap, studentsSecondarySnap, sectionsSnap, facultySnap, supportingStaffSnap] = await Promise.all([
       db.collection("colleges").doc(collegeId).collection("students").where("department", "==", dept.name).limit(1).get(),
       db.collection("colleges").doc(collegeId).collection("students").where("secondaryDepartment", "==", dept.name).limit(1).get(),
       db.collection("colleges").doc(collegeId).collection("sections").where("department", "==", dept.name).limit(1).get(),
+      db.collection("colleges").doc(collegeId).collection("facultyMembers").where("department", "==", dept.name).limit(1).get(),
+      db.collection("colleges").doc(collegeId).collection("supportingStaff").where("department", "==", dept.name).limit(1).get(),
     ]);
-    if (!studentsSnap.empty || !studentsSecondarySnap.empty || !sectionsSnap.empty) {
+    if (!studentsSnap.empty || !studentsSecondarySnap.empty || !sectionsSnap.empty || !facultySnap.empty || !supportingStaffSnap.empty) {
       return NextResponse.json(
-        { error: "Cannot delete a department that still has students or sections. Remove them first." },
+        { error: "Cannot delete a department that still has students, sections, faculty, or supporting staff. Remove them first." },
         { status: 409 }
       );
     }
 
     // A sub-department that still manages real branches (Department.
-    // managedDepartments) with their own active students/sections can't be
-    // deleted either - those branches would become unreachable by any HOD
-    // until re-grouped elsewhere. Remove them from Managed Departments first.
+    // managedDepartments) with their own active students/sections/faculty/
+    // supporting staff can't be deleted either - those branches would become
+    // unreachable by any HOD until re-grouped elsewhere. Remove them from
+    // Managed Departments first.
     const managedBranches = dept.managedDepartments ?? [];
     if (managedBranches.length > 0) {
       const branchChecks = await Promise.all(
         managedBranches.map(async (branchName) => {
-          const [branchSections, branchStudents] = await Promise.all([
+          const [branchSections, branchStudents, branchFaculty, branchSupportingStaff] = await Promise.all([
             db.collection("colleges").doc(collegeId).collection("sections").where("department", "==", branchName).limit(1).get(),
             db.collection("colleges").doc(collegeId).collection("students").where("secondaryDepartment", "==", branchName).limit(1).get(),
+            db.collection("colleges").doc(collegeId).collection("facultyMembers").where("department", "==", branchName).limit(1).get(),
+            db.collection("colleges").doc(collegeId).collection("supportingStaff").where("department", "==", branchName).limit(1).get(),
           ]);
-          return !branchSections.empty || !branchStudents.empty;
+          return !branchSections.empty || !branchStudents.empty || !branchFaculty.empty || !branchSupportingStaff.empty;
         })
       );
       if (branchChecks.some(Boolean)) {
         return NextResponse.json(
-          { error: "Cannot delete: this department still manages branches with active students or sections. Remove them from Managed Departments first." },
+          { error: "Cannot delete: this department still manages branches with active students, sections, faculty, or supporting staff. Remove them from Managed Departments first." },
           { status: 409 }
         );
       }

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { UserPlus, Eye, Trash2, Upload, LogIn } from "lucide-react";
+import { UserPlus, Eye, Trash2, Upload, Download, LogIn } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,7 @@ import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { Avatar } from "@/components/shared/Avatar";
 import { toast } from "@/hooks/useToast";
 import { supportingStaffDisplayName } from "@/lib/supportingStaff/supportingStaffDisplayName";
+import { exportSupportingStaffCsv } from "@/lib/supportingStaff/exportCsv";
 import {
   NON_TECHNICAL_STAFF_DESIGNATION_LABELS,
   FACULTY_STATUS_LABELS,
@@ -148,6 +149,13 @@ export default function CollegeOfficeNonTechnicalStaffPage() {
         description="Non-Technical staff records for your college"
         actions={
           <div className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={() => exportSupportingStaffCsv(staff, "non_technical_staff")}
+              disabled={staff.length === 0}
+            >
+              <Download className="h-4 w-4 mr-2" />Export
+            </Button>
             <Button variant="outline" onClick={() => router.push("/college-office/non-technical-staff/import")}>
               <Upload className="h-4 w-4 mr-2" />Import
             </Button>

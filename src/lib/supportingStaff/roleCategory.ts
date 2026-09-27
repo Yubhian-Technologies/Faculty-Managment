@@ -16,13 +16,25 @@ export const SUPPORTING_STAFF_ROLE_CATEGORY: Partial<Record<string, SupportingSt
 };
 
 // POST-only category permission - separate from SUPPORTING_STAFF_ROLE_CATEGORY
-// because PRINCIPAL/VICE_PRINCIPAL need to create Non-Technical records (their
-// GET stays unfiltered) but must never be allowed to create/edit Technical
-// ones - that stays HOD's department-scoped domain.
+// because PRINCIPAL/VICE_PRINCIPAL may still edit/deactivate existing
+// Non-Technical records (their GET stays unfiltered) but must never be
+// allowed to create/edit Technical ones - that stays HOD's department-scoped
+// domain. Whether a role may CREATE a new record is a separate, narrower
+// question - see canRoleCreateSupportingStaff below.
 export function canRolePostCategory(role: string, category: SupportingStaffCategory): boolean {
   if (role === "PRINCIPAL" || role === "VICE_PRINCIPAL") return category === "NON_TECHNICAL";
   const required = SUPPORTING_STAFF_ROLE_CATEGORY[role];
   return !required || required === category;
+}
+
+// Creation-only permission, used by the POST route alone. PRINCIPAL/VICE_PRINCIPAL
+// may still view and manage (edit/deactivate) existing Non-Technical Staff via
+// canRolePostCategory above, but new hires are College Office's own paperwork to
+// enter - Principal/VP no longer get a "create" path for Supporting Staff of
+// either category.
+export function canRoleCreateSupportingStaff(role: string, category: SupportingStaffCategory): boolean {
+  if (role === "PRINCIPAL" || role === "VICE_PRINCIPAL") return false;
+  return canRolePostCategory(role, category);
 }
 
 export function supportingStaffCategoryLabel(category: SupportingStaffCategory): string {
