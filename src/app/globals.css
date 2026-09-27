@@ -170,3 +170,9 @@ html:has(.landing-page) {
     transform: none !important;
   }
 }
+
+/* Horizontally scrollable strips (day tabs, table rows) where a visible
+   scrollbar costs a whole row of a phone's height and adds nothing the
+   content doesn't already imply. */
+.no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }

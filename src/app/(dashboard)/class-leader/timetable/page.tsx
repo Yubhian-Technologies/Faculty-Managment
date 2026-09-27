@@ -2,23 +2,18 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, BookOpen, CalendarDays, Layers } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
-import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/useToast";
 import { currentWeekDates } from "@/lib/utils";
 import { isoDateKey } from "@/lib/leave/dayCounter";
 import { InstitutionalTimetableTable } from "@/components/timetable/InstitutionalTimetableTable";
-import type { Course, Department, Section, CourseYearTiming, TimetableSlot, SubjectType, TeachingAssignment } from "@/types";
+import { ordinalYear } from "@/lib/timetable/gridModel";
+import type { Course, Department, Section, CourseYearTiming, TimetableSlot, SubjectType, Subject, TeachingAssignment, DayOfWeek } from "@/types";
 
 type TimetableSlotRow = TimetableSlot & { id: string; subjectType?: SubjectType };
-
-function ordinalYear(year: number) {
-  const suffix = year === 1 ? "st" : year === 2 ? "nd" : year === 3 ? "rd" : "th";
-  return `${year}${suffix} Year`;
-}
 
 interface ApiResponse {
   course?: Course | null;
@@ -26,8 +21,10 @@ interface ApiResponse {
   timing?: CourseYearTiming | null;
   slots?: TimetableSlotRow[];
   assignments?: (TeachingAssignment & { id: string })[];
+  subjects?: Subject[];
   resolvedSemester?: number | null;
   availableSemesters?: { semester: number; label?: string }[];
+  workingDays?: DayOfWeek[];
   departments?: Department[];
   error?: string;
 }
@@ -38,8 +35,10 @@ export default function ClassLeaderTimetablePage() {
   const [timing, setTiming] = useState<CourseYearTiming | null>(null);
   const [slots, setSlots] = useState<TimetableSlotRow[]>([]);
   const [assignments, setAssignments] = useState<(TeachingAssignment & { id: string })[]>([]);
+  const [subjects, setSubjects] = useState<Subject[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [availableSemesters, setAvailableSemesters] = useState<{ semester: number; label?: string }[]>([]);
+  const [workingDays, setWorkingDays] = useState<DayOfWeek[]>([]);
   const [selectedSemester, setSelectedSemester] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -49,9 +48,20 @@ export default function ClassLeaderTimetablePage() {
 
   const [weekStart, setWeekStart] = useState<Date>(() => currentWeekDates()[0]);
 
+  // Loading state is set alongside the state change that triggers a reload
+  // (week/semester switch), never synchronously inside the fetch effect below.
+  function changeWeek(d: Date) {
+    setIsLoading(true);
+    setWeekStart(d);
+  }
+
+  function changeSemester(s: number | null) {
+    setIsLoading(true);
+    setSelectedSemester(s);
+  }
+
   // Load timetable data for own section
   useEffect(() => {
-    setIsLoading(true);
     const params = new URLSearchParams({ week: isoDateKey(weekStart) });
     if (selectedSemester != null) {
       params.set("semester", String(selectedSemester));
@@ -65,8 +75,10 @@ export default function ClassLeaderTimetablePage() {
         setTiming(d.timing ?? null);
         setSlots(d.slots ?? []);
         setAssignments(d.assignments ?? []);
+        setSubjects(d.subjects ?? []);
         setDepartments(d.departments ?? []);
         setAvailableSemesters(d.availableSemesters ?? []);
+        setWorkingDays(d.workingDays ?? []);
         if (selectedSemester == null && d.resolvedSemester != null) {
           setSelectedSemester(d.resolvedSemester);
         }
@@ -111,7 +123,7 @@ export default function ClassLeaderTimetablePage() {
   }, [departments, section]);
 
   return (
-    <div className="space-y-6 max-w-full overflow-hidden">
+    <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <PageHeader
           title={
@@ -125,7 +137,7 @@ export default function ClassLeaderTimetablePage() {
               : "Your class weekly schedule"
           }
         />
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           <Button asChild variant="outline" size="sm">
             <Link href="/class-leader">
               <ArrowLeft className="h-4 w-4 mr-1.5" /> Back to Dashboard
@@ -164,7 +176,7 @@ export default function ClassLeaderTimetablePage() {
                       size="sm"
                       variant={selectedSemester === sem.semester ? "default" : "ghost"}
                       className="h-7 text-xs px-3"
-                      onClick={() => setSelectedSemester(sem.semester)}
+                      onClick={() => changeSemester(sem.semester)}
                     >
                       Semester {sem.semester}
                     </Button>
@@ -228,8 +240,8 @@ export default function ClassLeaderTimetablePage() {
             </div>
           </div>
 
-          {/* Timetable Table with full PDF/XLS export */}
-          <div className="w-full max-w-full overflow-x-auto">
+          {/* Timetable Table with full PDF/Excel export */}
+          <div className="w-full min-w-0">
             <InstitutionalTimetableTable
               section={section}
               timing={timing}
@@ -238,10 +250,12 @@ export default function ClassLeaderTimetablePage() {
               departmentName={departmentName}
               academicYear={slots[0]?.academicYear}
               semesterLabel={selectedSemester ? `Semester ${selectedSemester}` : undefined}
+              workingDays={workingDays}
               weekStart={weekStart}
-              onWeekChange={setWeekStart}
+              onWeekChange={changeWeek}
               showWeekNav={true}
               assignments={assignments}
+              subjects={subjects}
             />
           </div>
         </div>

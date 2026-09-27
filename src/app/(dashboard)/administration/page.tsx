@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Users, Building2, ClipboardList, Settings2, CalendarCheck, FileText } from "lucide-react";
+import { Users, Building2, ClipboardList, Settings2, CalendarCheck, FileText, UsersRound, ClipboardCheck } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -21,14 +21,10 @@ export default function AdministrationDashboard() {
   const [pendingVacancies, setPendingVacancies] = useState<number | null>(null);
   const [pendingInterviews, setPendingInterviews] = useState<number | null>(null);
   const [pendingOffers, setPendingOffers] = useState<number | null>(null);
-  // Which college's slice of the Hiring Approvals/Colleges tiles to jump
-  // into - a per-visit navigation aid (plain state, not persisted). "" means
-  // no filter, same as today's behavior for everyone who never touches it.
   const [selectedCollegeId, setSelectedCollegeId] = useState("");
   const [colleges, setColleges] = useState<CollegeOption[]>([]);
 
   useEffect(() => {
-    // API already returns only PENDING_ADMIN requests for ADMINISTRATION role
     fetch("/api/location/vacancy-requests")
       .then((r) => r.json() as Promise<{ vacancyRequests: unknown[] }>)
       .then((d) => setPendingVacancies(d.vacancyRequests?.length ?? 0))
@@ -51,23 +47,23 @@ export default function AdministrationDashboard() {
   }, []);
 
   const selectedCollegeName = colleges.find((c) => c.id === selectedCollegeId)?.name ?? "";
-  // Appended to a tile's href once a college is picked - only Hiring
-  // Approvals + Colleges understand it (see collegeId/collegeName handling
-  // on their own pages); Location Staff/Departments stay location-wide by
-  // design, so their hrefs are left untouched below.
   const collegeQuery = selectedCollegeId
     ? `?collegeId=${selectedCollegeId}&collegeName=${encodeURIComponent(selectedCollegeName)}`
     : "";
 
-  const baseActions = [
-    { label: "Hiring Requests", href: `/administration/vacancies${collegeQuery}`, baseHref: "/administration/vacancies", icon: ClipboardList, desc: `${pendingVacancies ?? "…"} pending from HR Admin`, section: "Hiring Approvals" },
-    { label: "Interview Plans", href: `/administration/interviews${collegeQuery}`, baseHref: "/administration/interviews", icon: CalendarCheck, desc: `${pendingInterviews ?? "…"} plans awaiting approval`, section: "" },
-    { label: "Offer Letters", href: `/administration/offers${collegeQuery}`, baseHref: "/administration/offers", icon: FileText, desc: `${pendingOffers ?? "…"} offer letters to approve`, section: "" },
-    { label: "Location Staff", href: "/administration/users", baseHref: "/administration/users", icon: Users, desc: "HR Admin, Admin Office, Accounts, Dept Heads", section: "Management" },
-    { label: "Departments", href: "/administration/departments", baseHref: "/administration/departments", icon: Settings2, desc: "Manage location-level departments", section: "" },
-    { label: "Colleges", href: `/administration/colleges${collegeQuery}`, baseHref: "/administration/colleges", icon: Building2, desc: "View colleges & assign Principals", section: "" },
-  ];
-  const actions = baseActions.filter((a) => !isHidden(a.baseHref));
+  const hiringActions = [
+    { label: "Hiring Requests", href: `/administration/vacancies${collegeQuery}`, baseHref: "/administration/vacancies", icon: ClipboardList, desc: `${pendingVacancies ?? "…"} pending from HR Admin` },
+    { label: "Interview Plans", href: `/administration/interviews${collegeQuery}`, baseHref: "/administration/interviews", icon: CalendarCheck, desc: `${pendingInterviews ?? "…"} plans awaiting approval` },
+    { label: "Offer Letters", href: `/administration/offers${collegeQuery}`, baseHref: "/administration/offers", icon: FileText, desc: `${pendingOffers ?? "…"} offer letters to approve` },
+  ].filter((a) => !isHidden(a.baseHref));
+
+  const managementActions = [
+    { label: "Location Users", href: "/administration/users", baseHref: "/administration/users", icon: Users, desc: "Provision Staff Admin, HR Admin, Accounts & Dept Heads" },
+    { label: "Departments & Heads", href: "/location-staff-admin/departments", baseHref: "/location-staff-admin/departments", icon: Settings2, desc: "Manage campus departments and appoint Dept Heads" },
+    { label: "Campus Staff Directory", href: "/location-staff-admin/staff", baseHref: "/location-staff-admin/staff", icon: UsersRound, desc: "Browse full staff roster with filters & detailed profiles" },
+    { label: "Staff Attendance", href: "/location-staff-admin/attendance", baseHref: "/location-staff-admin/attendance", icon: ClipboardCheck, desc: "Campus-wide check-in / check-out daily attendance records" },
+    { label: "Colleges", href: `/administration/colleges${collegeQuery}`, baseHref: "/administration/colleges", icon: Building2, desc: "View colleges & assign Principals" },
+  ].filter((a) => !isHidden(a.baseHref));
 
   return (
     <div className="space-y-6">
@@ -82,49 +78,53 @@ export default function AdministrationDashboard() {
       </div>
 
       <div className="space-y-5">
-        <div>
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Hiring Approvals</p>
-          <div className="grid gap-3 sm:grid-cols-3">
-            {actions.slice(0, 3).map((action) => (
-              <Card key={action.href} className="hover:shadow-md transition-shadow">
-                <CardContent className="p-4 flex items-start gap-3">
-                  <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                    <action.icon className="h-4 w-4 text-primary" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-sm">{action.label}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">{action.desc}</p>
-                    <Button asChild size="sm" variant="outline" className="mt-3">
-                      <Link href={action.href}>Review</Link>
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+        {hiringActions.length > 0 && (
+          <div>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Hiring Approvals</p>
+            <div className="grid gap-3 sm:grid-cols-3">
+              {hiringActions.map((action) => (
+                <Card key={action.href} className="hover:shadow-md transition-shadow">
+                  <CardContent className="p-4 flex items-start gap-3">
+                    <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                      <action.icon className="h-4 w-4 text-primary" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-sm">{action.label}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">{action.desc}</p>
+                      <Button asChild size="sm" variant="outline" className="mt-3">
+                        <Link href={action.href}>Review</Link>
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
-        <div>
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Management</p>
-          <div className="grid gap-3 sm:grid-cols-3">
-            {actions.slice(3).map((action) => (
-              <Card key={action.href} className="hover:shadow-md transition-shadow">
-                <CardContent className="p-4 flex items-start gap-3">
-                  <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                    <action.icon className="h-4 w-4 text-primary" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-sm">{action.label}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">{action.desc}</p>
-                    <Button asChild size="sm" variant="outline" className="mt-3">
-                      <Link href={action.href}>Open</Link>
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+        {managementActions.length > 0 && (
+          <div>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Location Staff & Campus Operations</p>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {managementActions.map((action) => (
+                <Card key={action.href} className="hover:shadow-md transition-shadow">
+                  <CardContent className="p-4 flex items-start gap-3">
+                    <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                      <action.icon className="h-4 w-4 text-primary" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-sm">{action.label}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">{action.desc}</p>
+                      <Button asChild size="sm" variant="outline" className="mt-3">
+                        <Link href={action.href}>Open</Link>
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );

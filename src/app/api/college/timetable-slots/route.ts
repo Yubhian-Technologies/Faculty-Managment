@@ -59,7 +59,7 @@ export async function GET(request: Request) {
     // specific history year it may not actually belong to.
     const isBrowsingPastYear = requestedAcademicYear !== currentAcademicYear;
 
-    const [snap, subjectsSnap] = await Promise.all([
+    const [snap, subjectsSnap, rulesSnap] = await Promise.all([
       collegeRef.collection("timetableSlots").where("sectionId", "==", sectionId).get(),
       // Joined onto each slot below so the Timetable pages' Theory/Practical
       // filter can group by SubjectType without a second round-trip - same
@@ -68,7 +68,14 @@ export async function GET(request: Request) {
       // so we query by courseId without a year filter. Legacy subjects
       // (which have year) are also matched since they share the same courseId.
       collegeRef.collection("subjects").where("courseId", "==", section.courseId).get(),
+      // The college's own working days, so a read-only grid lays out over the
+      // days this college actually teaches instead of a hardcoded Mon-Sat.
+      collegeRef.collection("settings").doc("timetableRules").get(),
     ]);
+    const rules: TimetableRules = rulesSnap.exists
+      ? { ...DEFAULT_TIMETABLE_RULES, ...(rulesSnap.data() as Partial<TimetableRules>) }
+      : DEFAULT_TIMETABLE_RULES;
+    const subjectDocs = subjectsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) }));
     const subjectTypeById = new Map(subjectsSnap.docs.map((d) => [d.id, (d.data() as { type?: SubjectType }).type]));
     // A prior semester's or prior session's published slots stay in
     // Firestore as history (see publish/route.ts) but drop out of this
@@ -99,7 +106,7 @@ export async function GET(request: Request) {
         : s;
     });
 
-    return NextResponse.json({ slots });
+    return NextResponse.json({ slots, subjects: subjectDocs, workingDays: rules.workingDays });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -144,10 +151,18 @@ export async function POST(request: Request) {
     const assignmentSnap = await collegeRef.collection("teachingAssignments").doc(assignmentId).get();
     if (!assignmentSnap.exists) return NextResponse.json({ error: "Teaching assignment not found" }, { status: 404 });
     const assignment = assignmentSnap.data() as {
-      facultyId: string; facultyName: string; courseId: string; year: number;
-      sectionId: string; subjectId: string; subjectName: string; department: string;
+      facultyId: string; facultyName: string; courseId?: string; year?: number;
+      sectionId?: string; subjectId: string; subjectName: string; department: string;
       timetableSemester?: number;
     };
+
+    if (!assignment.sectionId || !assignment.courseId) {
+      return NextResponse.json(
+        { error: "Teaching assignment must be linked to a course and section to schedule timetable slots" },
+        { status: 400 }
+      );
+    }
+
     // Resolve subject type to gate lab-only split — only PRACTICAL may use allowSplit/labBatch
     const subjectSnapForType = await collegeRef.collection("subjects").doc(assignment.subjectId).get();
     const subjectType = (subjectSnapForType.data() as { type?: string } | undefined)?.type;
@@ -317,6 +332,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     console.error("[college/timetable-slots POST]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: err instanceof Error ? err.message : "Internal error" }, { status: 500 });
   }
 }

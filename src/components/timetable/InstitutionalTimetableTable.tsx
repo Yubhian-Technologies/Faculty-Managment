@@ -5,15 +5,22 @@ import { FileDown, FileSpreadsheet, Printer, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/useToast";
 import { WeekNavigator } from "@/components/timetable/WeekNavigator";
-import {
-  buildSectionTimetablePdfHtml,
-  downloadTimetableAsXls,
-} from "@/lib/timetable/sectionTimetablePdf";
+import { buildSectionTimetablePdfHtml } from "@/lib/timetable/sectionTimetablePdf";
+import { downloadSectionTimetableXlsx } from "@/lib/timetable/timetableExport";
 import { renderHtmlToPdf } from "@/lib/pdf/htmlToPdf";
+import {
+  buildAllocationList,
+  buildTimetableColumns,
+  ordinalYear,
+  periodTimeRange,
+  resolveTimetableDays,
+  slotFacultyName,
+  slotShortCode,
+  type TimetableColumn,
+} from "@/lib/timetable/gridModel";
 import type {
   CourseYearTiming,
   DayOfWeek,
-  PeriodTiming,
   Section,
   Subject,
   TeachingAssignment,
@@ -22,25 +29,6 @@ import type {
 import { DAY_LABELS } from "@/types";
 
 import { useCollegeInfo } from "@/hooks/useCollegeInfo";
-
-const DAYS: DayOfWeek[] = ["MON", "TUE", "WED", "THU", "FRI", "SAT"];
-
-const DAY_SHORT: Record<DayOfWeek, string> = {
-  MON: "Mon",
-  TUE: "Tue",
-  WED: "Wed",
-  THU: "Thu",
-  FRI: "Fri",
-  SAT: "Sat",
-};
-
-/** "09:00" -> "9:00 AM" */
-function formatTime12h(hhmm: string): string {
-  const [h, m] = hhmm.split(":").map(Number);
-  const period = h >= 12 ? "PM" : "AM";
-  const h12 = h % 12 === 0 ? 12 : h % 12;
-  return `${h12}:${String(m).padStart(2, "0")} ${period}`;
-}
 
 export interface InstitutionalTimetableTableProps {
   section?: Section | null;
@@ -60,6 +48,8 @@ export interface InstitutionalTimetableTableProps {
   classInchargeName?: string;
   subjects?: Subject[];
   assignments?: TeachingAssignment[];
+  /** The college's configured working days - the grid only lays out days on this list. */
+  workingDays?: DayOfWeek[];
   weekStart?: Date;
   onWeekChange?: (d: Date) => void;
   showWeekNav?: boolean;
@@ -72,8 +62,8 @@ export function InstitutionalTimetableTable({
   section,
   timing,
   slots,
-  courseName = section?.courseName ?? "Degree Program",
-  departmentName = section?.department ?? "Department",
+  courseName = section?.courseName ?? "",
+  departmentName = section?.department ?? "",
   collegeName,
   collegeCode,
   affiliation,
@@ -83,9 +73,10 @@ export function InstitutionalTimetableTable({
   academicYear = slots[0]?.academicYear ?? "",
   semesterLabel,
   classroom,
-  classInchargeName = section?.facultyInchargeName ?? "—",
+  classInchargeName,
   subjects = [],
   assignments = [],
+  workingDays,
   weekStart,
   onWeekChange,
   showWeekNav = false,
@@ -93,21 +84,36 @@ export function InstitutionalTimetableTable({
   onTypeFilterChange,
   className = "",
 }: InstitutionalTimetableTableProps) {
-  const { collegeInfo } = useCollegeInfo();
-  const activeCollegeName = collegeName || collegeInfo?.name || "College";
+  const { collegeInfo, loading: collegeLoading, failed: collegeFailed } = useCollegeInfo();
+  const activeCollegeName = collegeName || collegeInfo?.name || "";
   const activeCollegeCode = collegeCode ?? (collegeInfo?.code || "");
   const activeAffiliation = affiliation ?? (collegeInfo?.affiliation || "");
   const activeAddress = address ?? (collegeInfo?.address || "");
   const activePhone = phone ?? (collegeInfo?.phone || "");
-  const activeLogoUrl = logoUrl ?? (collegeInfo?.logoUrl || "");
 
   const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const [isExportingXlsx, setIsExportingXlsx] = useState(false);
+
+  const subjectMap = useMemo(() => new Map(subjects.map((s) => [s.id, s])), [subjects]);
+
+  // ── Days: the college's own working days, unioned with any day a slot
+  // actually occupies so a slot published on a since-removed working day is
+  // still visible rather than silently dropped. ──────────────────────────────
+  const days = useMemo(
+    () => resolveTimetableDays(workingDays ? { workingDays } : null, slots.map((s) => s.day)),
+    [workingDays, slots]
+  );
+
+  const columns: TimetableColumn[] = useMemo(
+    () => buildTimetableColumns(timing, { lunchLabel: "Lunch Break" }),
+    [timing]
+  );
 
   // Filter slots if type filter is active
   const filteredSlots = useMemo(() => {
     if (typeFilter === "ALL") return slots;
     return slots.filter((s) => {
-      const type = (s as any).subjectType;
+      const type = (s as TimetableSlot & { subjectType?: string }).subjectType;
       if (typeFilter === "THEORY") {
         if (type === "THEORY") return true;
         if (type === "PRACTICAL" || s.labBatch) return false;
@@ -124,195 +130,65 @@ export function InstitutionalTimetableTable({
     });
   }, [slots, typeFilter]);
 
-  // Map subjects for quick lookup
-  const subjectMap = useMemo(() => {
-    const map = new Map<string, Subject>();
-    for (const s of subjects) map.set(s.id, s);
-    return map;
-  }, [subjects]);
+  // The download always represents exactly what is on screen: the same
+  // working-day list, the same type filter. Previously the PDF/XLS were built
+  // from the unfiltered `slots`, so toggling Theory/Practical changed the grid
+  // and silently did nothing to the file the user saved.
+  const visibleDays = useMemo(() => {
+    const occupied = new Set(filteredSlots.map((s) => s.day));
+    const fromSlots = days.filter((d) => occupied.has(d));
+    return fromSlots.length > 0 ? fromSlots : days;
+  }, [days, filteredSlots]);
 
-  // Periods array
-  const periods = useMemo(
-    () => Array.from({ length: timing.numberOfPeriods }, (_, i) => i + 1),
-    [timing.numberOfPeriods]
+  const allocationList = useMemo(
+    () => buildAllocationList(filteredSlots, { subjects: subjectMap, assignments }),
+    [filteredSlots, subjectMap, assignments]
   );
 
-  // Period timings
-  const timingByPeriod = useMemo(() => {
-    const map = new Map<number, PeriodTiming>();
-    for (const t of timing.periods ?? []) map.set(t.period, t);
-    return map;
-  }, [timing.periods]);
-
-  // Break config
-  const lunchAfter = timing.lunchBreak?.afterPeriod ?? (periods.length >= 6 ? 4 : Math.floor(periods.length / 2));
-  const shortBreakAfters = useMemo(
-    () => new Set(timing.shortBreaks?.map((b) => b.afterPeriod) ?? (periods.length >= 8 ? [2] : [])),
-    [timing.shortBreaks, periods.length]
-  );
-
-  // Build grid columns definition
-  interface GridColumn {
-    id: string;
-    kind: "period" | "break";
-    periodNumber?: number;
-    title: string;
-    timeRange?: string;
-    isLunch?: boolean;
-  }
-
-  const columns: GridColumn[] = useMemo(() => {
-    const cols: GridColumn[] = [];
-
-    for (const p of periods) {
-      const t = timingByPeriod.get(p);
-      const startStr = t ? formatTime12h(t.startTime) : "";
-      const endStr = t ? formatTime12h(t.endTime) : "";
-      const rangeStr = startStr && endStr ? `${startStr} - ${endStr}` : "";
-
-      cols.push({
-        id: `period_${p}`,
-        kind: "period",
-        periodNumber: p,
-        title: `Period ${p}`,
-        timeRange: rangeStr,
-      });
-
-      // Short break after this period
-      if (shortBreakAfters.has(p)) {
-        const nextT = timingByPeriod.get(p + 1);
-        const bStart = endStr || "10:40 AM";
-        const bEnd = nextT ? formatTime12h(nextT.startTime) : "11:00 AM";
-        cols.push({
-          id: `break_short_${p}`,
-          kind: "break",
-          title: "Tea Break",
-          timeRange: `${bStart} - ${bEnd}`,
-          isLunch: false,
-        });
-      }
-
-      // Lunch break after this period
-      if (p === lunchAfter) {
-        const nextT = timingByPeriod.get(p + 1);
-        const lStart = endStr || "12:40 PM";
-        const lEnd = nextT ? formatTime12h(nextT.startTime) : "01:40 PM";
-        cols.push({
-          id: `break_lunch_${p}`,
-          kind: "break",
-          title: "Lunch Break",
-          timeRange: `${lStart} - ${lEnd}`,
-          isLunch: true,
-        });
-      }
-    }
-
-    return cols;
-  }, [periods, timingByPeriod, shortBreakAfters, lunchAfter]);
-
-  // Helper for short code: e.g. DWDM, FLAT, CN, etc.
-  function getSlotShortCode(slot: TimetableSlot): string {
-    const sObj = subjectMap.get(slot.subjectId);
-    if (sObj?.shortCode) return sObj.shortCode;
-    if (sObj?.code) return sObj.code;
-    if ((slot as any).shortCode) return (slot as any).shortCode;
-    if ((slot as any).subjectCode) return (slot as any).subjectCode;
-    const name = slot.subjectName || "";
-    if (name.length <= 10) return name.toUpperCase();
-    return name
-      .split(/\s+/)
-      .map((w) => w[0])
-      .join("")
-      .toUpperCase();
-  }
-
-  // Deduplicated Allocation List
-  const allocationList = useMemo(() => {
-    const seen = new Set<string>();
-    interface AllocEntry {
-      code: string;
-      name: string;
-      faculty: string;
-    }
-    const list: AllocEntry[] = [];
-
-    for (const slot of slots) {
-      const key = slot.subjectId || slot.subjectName;
-      if (!key || seen.has(key)) continue;
-      seen.add(key);
-
-      const sObj = subjectMap.get(slot.subjectId);
-      const assign = assignments.find((a) => a.subjectId === slot.subjectId);
-
-      const code = sObj?.shortCode ?? sObj?.code ?? getSlotShortCode(slot);
-      const name = sObj?.name ?? slot.subjectName;
-      const fac = (slot.facultyName ?? assign?.facultyName ?? "Unassigned").toUpperCase();
-
-      list.push({ code, name, faculty: fac });
-    }
-
-    return list;
-  }, [slots, subjectMap, assignments]);
-
-  // Generate HTML options
-  const pdfOpts = useMemo(() => {
-    const calculatedBatch = `${new Date().getFullYear() - (timing.year - 1)}-${new Date().getFullYear() - (timing.year - 1) + 4}`;
-    const dummySec = section ?? {
-      id: "sec_1",
-      collegeId: "col_1",
-      department: departmentName,
-      courseId: "c_1",
-      courseName,
-      name: "A",
-      year: timing.year,
-      batch: calculatedBatch,
-      studentCount: 60,
-    };
-    return {
+  // ── Export payload ────────────────────────────────────────────────────────
+  const exportMeta = useMemo(
+    () => ({
       collegeName: activeCollegeName,
       collegeCode: activeCollegeCode,
       affiliation: activeAffiliation,
       address: activeAddress,
       phone: activePhone,
-      logoUrl: activeLogoUrl,
-      courseName,
+      logoUrl: logoUrl ?? (collegeInfo?.logoUrl || ""),
       departmentName,
-      section: dummySec,
-      days: DAYS,
-      periods,
-      periodTimings: timing.periods ?? [],
-      slots,
-      lunchBreak: timing.lunchBreak,
-      shortBreaks: timing.shortBreaks,
+      courseName,
       academicYear,
       semesterLabel,
+      regulation: section?.regulation,
+      section: section ?? undefined,
+      classroom,
+      classInchargeName: classInchargeName ?? section?.facultyInchargeName ?? "",
+      days: visibleDays,
+      periods: Array.from({ length: timing.numberOfPeriods }, (_, i) => i + 1),
+      periodTimings: timing.periods ?? [],
+      timing,
+      slots: filteredSlots,
+      lunchBreak: timing.lunchBreak,
+      shortBreaks: timing.shortBreaks,
       subjects,
       assignments,
-    };
-  }, [
-    section,
-    courseName,
-    departmentName,
-    activeCollegeName,
-    activeCollegeCode,
-    activeAffiliation,
-    activeAddress,
-    activePhone,
-    activeLogoUrl,
-    periods,
-    timing,
-    slots,
-    academicYear,
-    semesterLabel,
-    subjects,
-    assignments,
-  ]);
+    }),
+    [
+      activeCollegeName, activeCollegeCode, activeAffiliation, activeAddress, activePhone,
+      collegeInfo?.logoUrl, logoUrl, departmentName, courseName, academicYear, semesterLabel,
+      section, classroom, classInchargeName, visibleDays, timing, filteredSlots, subjects, assignments,
+    ]
+  );
+
+  const fileBase = useMemo(() => {
+    const parts = [courseName || section?.courseName || "Timetable", section?.name ? `Sec_${section.name}` : null, semesterLabel ?? null];
+    return parts.filter(Boolean).join("_").replace(/\s+/g, "_");
+  }, [courseName, section, semesterLabel]);
 
   async function handleDownloadPdf() {
     setIsExportingPdf(true);
     try {
-      const html = buildSectionTimetablePdfHtml(pdfOpts);
-      const filename = `Timetable_${(courseName || "Class").replace(/\s+/g, "_")}_Sec_${section?.name ?? "Section"}.pdf`;
+      const html = buildSectionTimetablePdfHtml(exportMeta);
+      const filename = `${fileBase}.pdf`;
       await renderHtmlToPdf(html, filename);
       toast({ title: "Timetable downloaded", description: `Saved as ${filename}` });
     } catch (err) {
@@ -323,20 +199,30 @@ export function InstitutionalTimetableTable({
     }
   }
 
-  function handleDownloadXls() {
+  async function handleDownloadXlsx() {
+    setIsExportingXlsx(true);
     try {
-      const html = buildSectionTimetablePdfHtml(pdfOpts);
-      const filename = `Timetable_${(courseName || "Class").replace(/\s+/g, "_")}_Sec_${section?.name ?? "Section"}.xls`;
-      downloadTimetableAsXls(html, filename);
+      const filename = `${fileBase}.xlsx`;
+      await downloadSectionTimetableXlsx(
+        {
+          ...exportMeta,
+          sectionName: section?.name,
+          sectionYear: section?.year,
+          batch: section?.batch,
+        },
+        filename
+      );
       toast({ title: "Timetable exported", description: `Saved as ${filename}` });
     } catch (err) {
       console.error(err);
       toast({ title: "Export failed", description: "Failed to export timetable spreadsheet", variant: "destructive" });
+    } finally {
+      setIsExportingXlsx(false);
     }
   }
 
   function handlePrint() {
-    const html = buildSectionTimetablePdfHtml(pdfOpts);
+    const html = buildSectionTimetablePdfHtml(exportMeta);
     const printWindow = window.open("", "_blank");
     if (!printWindow) {
       toast({ title: "Popup blocked", description: "Please allow popups to print the timetable", variant: "destructive" });
@@ -354,18 +240,20 @@ export function InstitutionalTimetableTable({
   return (
     <div className={`space-y-4 ${className}`}>
       {/* ── Toolbar ─────────────────────────────────────────────────────────── */}
-      <div className="flex flex-wrap items-center justify-between gap-2.5">
+      <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center sm:justify-between gap-2.5">
         {showWeekNav && weekStart && onWeekChange ? (
           <WeekNavigator weekStart={weekStart} onChange={onWeekChange} />
         ) : (
-          <div className="text-sm font-semibold text-foreground">
-            {courseName} · {departmentName} {section ? `· Section ${section.name}` : ""}
+          <div className="text-sm font-semibold text-foreground min-w-0 truncate">
+            {[courseName || section?.courseName, departmentName || section?.department, section ? `Section ${section.name}` : null]
+              .filter(Boolean)
+              .join(" · ")}
           </div>
         )}
 
         <div className="flex flex-wrap items-center gap-2">
           {onTypeFilterChange && (
-            <div className="flex items-center gap-1 mr-2">
+            <div className="flex items-center gap-1">
               <span className="text-xs font-medium text-muted-foreground mr-1">Show:</span>
               {(["ALL", "THEORY", "PRACTICAL"] as const).map((t) => (
                 <Button
@@ -373,7 +261,7 @@ export function InstitutionalTimetableTable({
                   size="sm"
                   variant={typeFilter === t ? "default" : "outline"}
                   onClick={() => onTypeFilterChange(t)}
-                  className="h-8 text-xs px-2.5"
+                  className="h-8 px-2.5 text-xs"
                 >
                   {t === "ALL" ? "All" : t === "THEORY" ? "Theory" : "Practical"}
                 </Button>
@@ -381,231 +269,313 @@ export function InstitutionalTimetableTable({
             </div>
           )}
 
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={handleDownloadPdf}
-            disabled={isExportingPdf || slots.length === 0}
-            className="h-8 gap-1.5 text-xs"
-          >
-            {isExportingPdf ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <FileDown className="h-3.5 w-3.5" />
-            )}
-            <span>{isExportingPdf ? "Generating..." : "Download PDF"}</span>
-          </Button>
+          <div className="flex items-center gap-1.5">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleDownloadPdf}
+              disabled={isExportingPdf || filteredSlots.length === 0}
+              aria-label="Download timetable as PDF"
+              className="h-8 gap-1.5 px-2 sm:px-2.5 text-xs"
+            >
+              {isExportingPdf ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <FileDown className="h-3.5 w-3.5" />
+              )}
+              <span className="hidden sm:inline">{isExportingPdf ? "Generating..." : "Download PDF"}</span>
+            </Button>
 
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={handleDownloadXls}
-            disabled={slots.length === 0}
-            className="h-8 gap-1.5 text-xs"
-          >
-            <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" />
-            <span>Export XLS</span>
-          </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleDownloadXlsx}
+              disabled={isExportingXlsx || filteredSlots.length === 0}
+              aria-label="Export timetable as Excel spreadsheet"
+              className="h-8 gap-1.5 px-2 sm:px-2.5 text-xs"
+            >
+              {isExportingXlsx ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" />
+              )}
+              <span className="hidden sm:inline">{isExportingXlsx ? "Exporting..." : "Export Excel"}</span>
+            </Button>
 
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={handlePrint}
-            disabled={slots.length === 0}
-            className="h-8 gap-1.5 text-xs"
-          >
-            <Printer className="h-3.5 w-3.5" />
-            <span>Print</span>
-          </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={handlePrint}
+              disabled={filteredSlots.length === 0}
+              aria-label="Print timetable"
+              className="h-8 gap-1.5 px-2 sm:px-2.5 text-xs"
+            >
+              <Printer className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Print</span>
+            </Button>
+          </div>
         </div>
       </div>
 
-      {/* ── Institutional Grid Table Card ───────────────────────────────────── */}
+      {/* ── Institutional Card Header ───────────────────────────────────────── */}
       <div className="rounded-lg border bg-card shadow-sm overflow-hidden">
-        {/* Institutional Card Header */}
         <div className="border-b bg-muted/20 px-4 py-3 text-center sm:text-left flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            {activeLogoUrl && (
+          <div className="flex items-center gap-3 min-w-0">
+            {(logoUrl ?? collegeInfo?.logoUrl) && (
               <img
-                src={activeLogoUrl}
-                alt="Logo"
-                className="h-10 w-10 object-contain rounded border bg-background p-0.5"
+                src={logoUrl ?? collegeInfo?.logoUrl}
+                alt=""
+                className="h-10 w-10 shrink-0 object-contain rounded border bg-background p-0.5"
               />
             )}
-            <div>
-              <h3 className="text-sm font-bold tracking-wide uppercase text-foreground">
-                {activeCollegeName} {activeCollegeCode ? `(Code: ${activeCollegeCode})` : ""}
+            <div className="min-w-0">
+              <h3 className="text-sm font-bold tracking-wide uppercase text-foreground break-words">
+                {activeCollegeName || (collegeLoading ? "Loading college…" : collegeFailed ? "College" : "Time Table")}
+                {activeCollegeCode ? ` (Code: ${activeCollegeCode})` : ""}
               </h3>
               {activeAffiliation && (
-                <p className="text-[11px] text-muted-foreground font-medium">
-                  {activeAffiliation}
-                </p>
+                <p className="text-[11px] text-muted-foreground font-medium break-words">{activeAffiliation}</p>
               )}
-              <p className="text-xs text-muted-foreground">
-                {departmentName} · {courseName} · Year {timing.year} {section ? `· Section ${section.name}` : ""}
-                {classInchargeName && classInchargeName !== "—" ? ` · Incharge: ${classInchargeName}` : ""}
+              <p className="text-xs text-muted-foreground break-words">
+                {[
+                  departmentName || section?.department,
+                  courseName || section?.courseName,
+                  timing.year != null ? ordinalYear(timing.year) : undefined,
+                  section ? `Section ${section.name}` : undefined,
+                  classInchargeName && classInchargeName !== "—" ? `Incharge: ${classInchargeName}` : undefined,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
               </p>
             </div>
           </div>
-          <div className="text-right">
-            <span className="inline-block px-2 py-0.5 rounded text-[11px] font-bold bg-primary/10 text-primary uppercase tracking-wider">
-              TIME TABLE
-            </span>
+          <div className="shrink-0">
+            <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
+              {semesterLabel || "Time Table"}
+            </p>
           </div>
         </div>
 
-        {/* Timetable Grid Table */}
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs border-collapse">
-            <thead>
-              <tr className="bg-muted/40 border-b">
-                <th className="border-r p-2.5 text-center font-bold text-foreground w-20 min-w-[70px]">
-                  Day of<br />week
-                </th>
+        {/* ── Week view: day-by-day sections, fully visible, no scrolling ───── */}
+        <div className="lg:hidden divide-y divide-border">
+          {visibleDays.map((d) => (
+            <section key={d} aria-label={DAY_LABELS[d] ?? d}>
+              <h4 className="px-4 pt-3 pb-1 text-xs font-bold uppercase tracking-wider text-foreground">
+                {DAY_LABELS[d] ?? d}
+              </h4>
+              <ul className="px-4 pb-3 space-y-1">
                 {columns.map((col) => {
                   if (col.kind === "break") {
                     return (
+                      <li
+                        key={col.id}
+                        className="flex items-center gap-2 py-1 text-[11px] text-muted-foreground"
+                        aria-label={col.label}
+                      >
+                        <span className="h-px flex-1 bg-border" aria-hidden="true" />
+                        <span className="shrink-0 font-medium">
+                          {col.label}
+                          {periodTimeRange(col.startTime, col.endTime) && ` · ${periodTimeRange(col.startTime, col.endTime)}`}
+                        </span>
+                        <span className="h-px flex-1 bg-border" aria-hidden="true" />
+                      </li>
+                    );
+                  }
+
+                  const periodSlots = filteredSlots.filter(
+                    (s) => s.day === d && s.periodNumber === col.periodNumber
+                  );
+                  const range = periodTimeRange(col.startTime, col.endTime);
+
+                  return (
+                    <li
+                      key={col.id}
+                      className="flex items-baseline gap-3 rounded-md px-2 py-1.5 hover:bg-muted/40"
+                    >
+                      <span className="w-24 shrink-0 text-[11px] font-semibold text-muted-foreground">
+                        Period {col.periodNumber}
+                        {range && <span className="block font-normal">{range}</span>}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        {periodSlots.length === 0 ? (
+                          <span className="text-[11px] text-muted-foreground/50">Free</span>
+                        ) : (
+                          periodSlots.map((s, idx) => {
+                            const shortCode = slotShortCode(s, subjectMap);
+                            const isSub = Boolean(s.substituteFacultyName);
+                            const faculty = slotFacultyName(s);
+                            return (
+                              <p
+                                key={s.id || idx}
+                                className="text-xs text-foreground leading-snug"
+                                title={`${s.subjectName}${faculty ? ` · ${faculty}` : ""}${s.classroom ? ` · Room ${s.classroom}` : ""}`}
+                              >
+                                <span className="font-bold">{shortCode}</span>
+                                {s.labBatch && <span className="text-muted-foreground"> · {s.labBatch}</span>}
+                                {faculty && <span className="text-muted-foreground"> · {faculty}</span>}
+                                {isSub && <span className="text-amber-700 dark:text-amber-400 font-medium"> · Sub: {s.substituteFacultyName}</span>}
+                                {s.classroom && <span className="text-muted-foreground"> · Room {s.classroom}</span>}
+                              </p>
+                            );
+                          })
+                        )}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          ))}
+        </div>
+
+        {/* ── Timetable Grid (wide screens) ──────────────────────────────────── */}
+        <div className="hidden lg:block">
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs border-collapse">
+              <thead>
+                <tr className="bg-muted/40 border-b">
+                  <th className="border-r p-2.5 text-center font-bold text-foreground w-20 min-w-[70px] sticky left-0 z-[5] bg-muted/95 backdrop-blur">
+                    Day of<br />week
+                  </th>
+                  {columns.map((col) => {
+                    if (col.kind === "break") {
+                      return (
+                        <th
+                          key={col.id}
+                          className="border-r p-2 text-center font-semibold text-muted-foreground bg-muted/30 min-w-[70px]"
+                        >
+                          <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                            {col.label}
+                          </div>
+                          {periodTimeRange(col.startTime, col.endTime) && (
+                            <div className="text-[9.5px] font-normal text-muted-foreground whitespace-nowrap mt-0.5">
+                              {periodTimeRange(col.startTime, col.endTime)}
+                            </div>
+                          )}
+                        </th>
+                      );
+                    }
+
+                    const range = periodTimeRange(col.startTime, col.endTime);
+                    return (
                       <th
                         key={col.id}
-                        className="border-r p-2 text-center font-semibold text-muted-foreground bg-muted/30 min-w-[85px]"
+                        className="border-r p-2 text-center font-bold text-foreground min-w-[92px]"
                       >
-                        <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                          {col.title}
-                        </div>
-                        {col.timeRange && (
+                        <div>Period {col.periodNumber}</div>
+                        {range && (
                           <div className="text-[9.5px] font-normal text-muted-foreground whitespace-nowrap mt-0.5">
-                            {col.timeRange}
+                            {range}
                           </div>
                         )}
                       </th>
                     );
-                  }
-
+                  })}
+                </tr>
+              </thead>
+              <tbody>
+                {days.map((d) => {
                   return (
-                    <th
-                      key={col.id}
-                      className="border-r p-2 text-center font-bold text-foreground min-w-[105px]"
-                    >
-                      <div>{col.title}</div>
-                      {col.timeRange && (
-                        <div className="text-[9.5px] font-normal text-muted-foreground whitespace-nowrap mt-0.5">
-                          {col.timeRange}
-                        </div>
-                      )}
-                    </th>
+                    <tr key={d} className="border-b last:border-b-0 hover:bg-muted/10">
+                      <td className="border-r p-2.5 text-center font-bold text-foreground sticky left-0 z-[5] backdrop-blur bg-muted/90">
+                        {DAY_LABELS[d]?.slice(0, 3) ?? d}
+                      </td>
+
+                      {columns.map((col) => {
+                        if (col.kind === "break") {
+                          return (
+                            <td key={col.id} className="border-r p-2 text-center bg-muted/25">
+                              <span className="text-muted-foreground/40 font-mono select-none">—</span>
+                            </td>
+                          );
+                        }
+
+                        const periodSlots = filteredSlots.filter(
+                          (s) => s.day === d && s.periodNumber === col.periodNumber
+                        );
+
+                        if (periodSlots.length === 0) {
+                          return (
+                            <td key={col.id} className="border-r p-2 text-center text-muted-foreground/30 font-mono">
+                              —
+                            </td>
+                          );
+                        }
+
+                        return (
+                          <td key={col.id} className="border-r p-2 text-center align-middle">
+                            <div className="flex flex-col items-center justify-center gap-1">
+                              {periodSlots.map((s, idx) => {
+                                const shortCode = slotShortCode(s, subjectMap);
+                                const isSub = Boolean(s.substituteFacultyName);
+                                const faculty = slotFacultyName(s);
+
+                                return (
+                                  <div
+                                    key={s.id || idx}
+                                    className={`w-full rounded px-1.5 py-1 text-center transition-all ${
+                                      isSub
+                                        ? "bg-amber-100 text-amber-900 border border-amber-300"
+                                        : "bg-primary/5 hover:bg-primary/10 border border-primary/20 text-foreground"
+                                    }`}
+                                    title={`${s.subjectName}${faculty ? ` · ${faculty}` : ""}${s.classroom ? ` · Room ${s.classroom}` : ""}`}
+                                  >
+                                    <div className="font-extrabold text-[11px] tracking-wide text-foreground uppercase">
+                                      {shortCode}
+                                    </div>
+                                    {s.labBatch && (
+                                      <div className="text-[9px] font-semibold text-muted-foreground">{s.labBatch}</div>
+                                    )}
+                                    {faculty && (
+                                      <div className="text-[9.5px] font-medium text-muted-foreground truncate max-w-[95px] mx-auto mt-0.5">
+                                        {faculty}
+                                      </div>
+                                    )}
+                                    {isSub && (
+                                      <div className="text-[9px] font-semibold text-amber-800 mt-0.5">
+                                        Sub: {s.substituteFacultyName}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </td>
+                        );
+                      })}
+                    </tr>
                   );
                 })}
-              </tr>
-            </thead>
-            <tbody>
-              {DAYS.map((d) => {
-                const dayLabel = DAY_SHORT[d] ?? d;
-
-                return (
-                  <tr key={d} className="border-b last:border-b-0 hover:bg-muted/10 transition-colors">
-                    <td className="border-r p-2.5 text-center font-bold text-foreground bg-muted/15">
-                      {dayLabel}
-                    </td>
-
-                    {columns.map((col) => {
-                      if (col.kind === "break") {
-                        return (
-                          <td
-                            key={col.id}
-                            className="border-r p-2 text-center bg-muted/25"
-                          >
-                            <span className="text-muted-foreground/40 font-mono select-none">—</span>
-                          </td>
-                        );
-                      }
-
-                      const periodSlots = filteredSlots.filter(
-                        (s) => s.day === d && s.periodNumber === col.periodNumber
-                      );
-
-                      if (periodSlots.length === 0) {
-                        return (
-                          <td
-                            key={col.id}
-                            className="border-r p-2 text-center text-muted-foreground/30 font-mono"
-                          >
-                            —
-                          </td>
-                        );
-                      }
-
-                      return (
-                        <td key={col.id} className="border-r p-2 text-center align-middle">
-                          <div className="flex flex-col items-center justify-center gap-1">
-                            {periodSlots.map((s, idx) => {
-                              const shortCode = getSlotShortCode(s);
-                              const isSub = Boolean(s.substituteFacultyName);
-
-                              return (
-                                <div
-                                  key={s.id || idx}
-                                  className={`w-full rounded px-1.5 py-1 text-center transition-all ${
-                                    isSub
-                                      ? "bg-amber-100 text-amber-900 border border-amber-300"
-                                      : "bg-primary/5 hover:bg-primary/10 border border-primary/20 text-foreground"
-                                  }`}
-                                  title={`${s.subjectName}${s.facultyName ? ` · ${s.facultyName}` : ""}${s.classroom ? ` · Room ${s.classroom}` : ""}`}
-                                >
-                                  <div className="font-extrabold text-[11px] tracking-wide text-foreground uppercase">
-                                    {shortCode}
-                                  </div>
-                                  {s.facultyName && (
-                                    <div className="text-[9.5px] font-medium text-muted-foreground truncate max-w-[95px] mx-auto mt-0.5">
-                                      {s.facultyName}
-                                    </div>
-                                  )}
-                                  {isSub && (
-                                    <div className="text-[9px] font-semibold text-amber-800 mt-0.5">
-                                      Sub: {s.substituteFacultyName}
-                                    </div>
-                                  )}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </td>
-                      );
-                    })}
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+              </tbody>
+            </table>
+          </div>
         </div>
 
-        {/* ── Allocation of Subjects Section ─────────────────────────────────── */}
+        {/* ── Allocation of Subjects ─────────────────────────────────────────── */}
         {allocationList.length > 0 && (
-          <div className="border-t p-4 bg-card">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-foreground mb-3 text-center sm:text-left">
+          <div className="border-t px-4 py-3 bg-card">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-foreground mb-1">
               Allocation of Subjects
             </h4>
-            <div className="overflow-x-auto rounded border">
-              <table className="w-full text-xs border-collapse">
-                <thead>
-                  <tr className="bg-muted/40 border-b text-muted-foreground font-semibold">
-                    <th className="p-2 text-left w-24 border-r">Subject Code</th>
-                    <th className="p-2 text-left border-r">Subject</th>
-                    <th className="p-2 text-left border-r">Name of Faculty</th>
-                    <th className="p-2 text-center w-28">Faculty Initials</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {allocationList.map((item, idx) => (
-                    <tr key={idx} className="border-b last:border-b-0 hover:bg-muted/15">
-                      <td className="p-2 font-bold text-foreground border-r">{item.code}</td>
-                      <td className="p-2 text-foreground border-r">{item.name}</td>
-                      <td className="p-2 text-muted-foreground font-medium border-r">{item.faculty}</td>
-                      <td className="p-2 text-center text-muted-foreground/30 font-mono">—</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <ul className="divide-y divide-border">
+              {allocationList.map((item, idx) => (
+                <li key={idx} className="flex items-baseline gap-3 py-2 text-xs">
+                  <span className="w-16 shrink-0 font-mono font-bold text-foreground text-[11px]">
+                    {item.code}
+                  </span>
+                  <span className="min-w-0 flex-1 text-foreground">
+                    {item.name}
+                    {item.labBatches.length > 0 && (
+                      <span className="text-muted-foreground"> ({item.labBatches.join(", ")})</span>
+                    )}
+                    <span className="text-muted-foreground"> · {item.faculty}</span>
+                  </span>
+                  <span className="shrink-0 font-mono text-muted-foreground text-[11px]">
+                    {item.hoursPerWeek ?? "—"} hrs/wk
+                  </span>
+                </li>
+              ))}
+            </ul>
           </div>
         )}
       </div>
