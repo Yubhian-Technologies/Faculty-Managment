@@ -63,6 +63,15 @@ export interface StudentImportRow {
   physicallyHandicapped?: string;
   handicappedType?: string;
   identificationMarks?: string;
+  temporaryAddress?: string;
+  permanentAddressSameAsTemporary?: string;
+  permanentAddress?: string;
+  state?: string;
+  district?: string;
+  studiedOutsideAP?: string;
+  studiedOutsideAPDetails?: string;
+  familyIdLinkedOtherState?: string;
+  familyIdLinkedOtherStateDetails?: string;
   remarks?: string;
 }
 
@@ -173,6 +182,15 @@ export function buildStudentDoc(
     ...(parseYesNo(row.physicallyHandicapped) !== undefined ? { physicallyHandicapped: parseYesNo(row.physicallyHandicapped) } : {}),
     ...(parseHandicappedType(row.handicappedType) ? { handicappedType: parseHandicappedType(row.handicappedType) } : {}),
     ...(row.identificationMarks?.trim() ? { identificationMarks: row.identificationMarks.trim() } : {}),
+    ...(row.temporaryAddress?.trim() ? { temporaryAddress: row.temporaryAddress.trim() } : {}),
+    ...(parseYesNo(row.permanentAddressSameAsTemporary) !== undefined ? { permanentAddressSameAsTemporary: parseYesNo(row.permanentAddressSameAsTemporary) } : {}),
+    ...(row.permanentAddress?.trim() ? { permanentAddress: row.permanentAddress.trim() } : {}),
+    ...(row.state?.trim() ? { state: row.state.trim() } : {}),
+    ...(row.district?.trim() ? { district: row.district.trim() } : {}),
+    ...(parseYesNo(row.studiedOutsideAP) !== undefined ? { studiedOutsideAP: parseYesNo(row.studiedOutsideAP) } : {}),
+    ...(row.studiedOutsideAPDetails?.trim() ? { studiedOutsideAPDetails: row.studiedOutsideAPDetails.trim() } : {}),
+    ...(parseYesNo(row.familyIdLinkedOtherState) !== undefined ? { familyIdLinkedOtherState: parseYesNo(row.familyIdLinkedOtherState) } : {}),
+    ...(row.familyIdLinkedOtherStateDetails?.trim() ? { familyIdLinkedOtherStateDetails: row.familyIdLinkedOtherStateDetails.trim() } : {}),
     ...(row.remarks?.trim() ? { remarks: row.remarks.trim() } : {}),
     createdAt: now,
     updatedAt: now,

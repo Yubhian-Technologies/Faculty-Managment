@@ -202,6 +202,10 @@ export async function assignSeat(
   const outgoingUid = seat.holderUid;
   if (input.uid && input.uid === outgoingUid) throw new SeatError("That person already holds this seat");
   if (!input.uid && !outgoingUid) throw new SeatError("This seat is already empty");
+  // Library is a shared/office seat that should always have someone in it -
+  // vacating it (leaving it empty) isn't offered in the UI; enforced here too
+  // so a direct API call can't do it either. Reassign with ASSIGN instead.
+  if (!input.uid && seat.role === "LIBRARY") throw new SeatError("Library can't be vacated - assign someone else to it instead");
 
   let newHolder: { uid: string; name: string } | null = null;
   if (input.uid) {

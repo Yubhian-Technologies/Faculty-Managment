@@ -17,6 +17,15 @@ const BLOOD_GROUPS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"] as const
 const GENDER_OPTIONS = ["Male", "Female"];
 const MOTHER_TONGUE_OPTIONS = ["Telugu", "Hindi", "English", "Tamil", "Malayalam", "Urdu"];
 
+// Latest a Date of Birth can be for someone who is at least 18 today - caps
+// the native date picker so nobody underage can even be selected, not just
+// rejected after the fact.
+function latestDobForAge18(): string {
+  const d = new Date();
+  d.setFullYear(d.getFullYear() - 18);
+  return d.toISOString().slice(0, 10);
+}
+
 // Ratification Records only ever apply to these four - never the full
 // admin-curated Teaching designation catalogue (Lecturer, Visiting Faculty,
 // HOD, etc).
@@ -182,7 +191,12 @@ export function PersonalDetailsFields({ value: rawValue, onChange, requiredField
         )}
         <div className="space-y-2">
           <Label>Date of Birth{mark("dateOfBirth")}</Label>
-          <Input type="date" value={value.dateOfBirth ?? ""} onChange={(e) => set("dateOfBirth", e.target.value)} />
+          <Input
+            type="date"
+            value={value.dateOfBirth ?? ""}
+            max={latestDobForAge18()}
+            onChange={(e) => set("dateOfBirth", e.target.value)}
+          />
         </div>
         <div className="space-y-2">
           <Label>Gender{mark("gender")}</Label>

@@ -327,6 +327,26 @@ export function freshmanLandingDepartmentNames(allDepartments: DepartmentWithId[
 }
 
 /**
+ * The PICKER's own broader version of freshmanLandingDepartmentNames - adds
+ * back every qualifying "no own sections" parent itself (e.g. "BASIC
+ * SCIENCE"), which freshmanLandingDepartmentNames deliberately excludes for
+ * its own (storage/rollup) purposes. A human adding/importing a Year-1
+ * student may not know which sub-department manages a given branch and
+ * should be able to pick the shared parent directly with a real branch as
+ * Core Department - the server (resolveFreshmanLandingDepartment) already
+ * remaps that combination to the correct sub-department on write, so
+ * offering the parent here is always safe. A no-op superset for every
+ * college without this shape (identical to freshmanLandingDepartmentNames).
+ */
+export function freshmanPickerDepartmentNames(allDepartments: DepartmentWithId[]): Set<string> {
+  const names = freshmanLandingDepartmentNames(allDepartments);
+  for (const d of allDepartments) {
+    if (d.name && isCommonYearDepartment(d)) names.add(d.name);
+  }
+  return names;
+}
+
+/**
  * The real children of `name`, when `name` is a "no own sections" shared-
  * first-year parent - a pure organizing container (parentRunsOwnSections
  * === false, see that field's own doc-comment in src/types/core.ts) that
