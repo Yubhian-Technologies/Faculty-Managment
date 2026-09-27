@@ -309,34 +309,12 @@ export default function AcademicsSubjectsPage() {
         title="Subjects"
         description="Manage subjects offered for each regulation of every course"
         actions={
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={() => void handleExportXlsx()} disabled={!selectedCourseId || !selectedRegulation}>
-              <FileSpreadsheet className="h-4 w-4 mr-2" />Export XLSX
-            </Button>
-            <Button variant="outline" onClick={() => void handleExportDocx()} disabled={!selectedCourseId || !selectedRegulation}>
-              <FileText className="h-4 w-4 mr-2" />Export DOCX
-            </Button>
-            <Button variant="outline" onClick={() => router.push(`/academics/subjects/import?courseId=${selectedCourseId}&regulation=${encodeURIComponent(selectedRegulation)}`)}>
-              <Upload className="h-4 w-4 mr-2" />Import Subjects
-            </Button>
-          </div>
-        }
-      />
-
-      {isLoading ? (
-        <div className="h-28 rounded-lg border bg-muted/30 animate-pulse" />
-      ) : courses.length === 0 ? (
-        <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-          No courses have been set up for this college yet.
-        </div>
-      ) : (
-        <>
-          <Card>
-            <CardContent className="p-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center gap-3">
               <div className="space-y-1.5">
                 <Label>Course</Label>
                 <Select value={selectedCourseId} onValueChange={selectCourse} disabled={isLoadingCourses}>
-                  <SelectTrigger><SelectValue placeholder={isLoadingCourses ? "Loading…" : "Select course"} /></SelectTrigger>
+                  <SelectTrigger className="w-48"><SelectValue placeholder={isLoadingCourses ? "Loading…" : "Select course"} /></SelectTrigger>
                   <SelectContent>
                     {courses.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
                   </SelectContent>
@@ -349,7 +327,7 @@ export default function AcademicsSubjectsPage() {
                   onValueChange={setSelectedRegulation}
                   disabled={!selectedCourseId || allowedRegulations.length === 0}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="w-36">
                     <SelectValue placeholder={
                       !selectedCourseId ? "Pick a course first" :
                       allowedRegulations.length === 0 ? "No regulations assigned" :
@@ -363,115 +341,132 @@ export default function AcademicsSubjectsPage() {
                   </SelectContent>
                 </Select>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => void handleExportXlsx()} disabled={!selectedCourseId || !selectedRegulation}>
+                <FileSpreadsheet className="h-4 w-4 mr-2" />Export XLSX
+              </Button>
+              <Button variant="outline" onClick={() => void handleExportDocx()} disabled={!selectedCourseId || !selectedRegulation}>
+                <FileText className="h-4 w-4 mr-2" />Export DOCX
+              </Button>
+              <Button variant="outline" onClick={() => router.push(`/academics/subjects/import?courseId=${selectedCourseId}&regulation=${encodeURIComponent(selectedRegulation)}`)}>
+                <Upload className="h-4 w-4 mr-2" />Import Subjects
+              </Button>
+            </div>
+          </div>
+        }
+      />
 
-          {selectedCourse && (
-            <Card>
-              <CardContent className="p-4 space-y-4">
-                <div className="flex items-center justify-between flex-wrap gap-2">
-                  <h2 className="font-semibold text-sm flex items-center gap-2">
-                    <BookOpen className="h-4 w-4" />
-                    {selectedCourse.name}
-                  </h2>
-<div className="flex flex-wrap items-center gap-2">
-                      <Button
-                        size="sm"
-                        onClick={() => router.push(`/academics/subjects/new?courseId=${selectedCourseId}&academicYear=${encodeURIComponent(selectedAcademicYear)}&regulation=${encodeURIComponent(selectedRegulation)}&nextSerialNumber=${nextSerialNumber}&catalogId=${encodeURIComponent(selectedCourse.catalogId ?? "")}`)}
-                        disabled={!selectedCourseId || !selectedRegulation}
-                      >
-                       <Plus className="h-4 w-4 mr-2" />Add Subject
-                      </Button>
-                    </div>
-                </div>
+{isLoading ? (
+        <div className="h-28 rounded-lg border bg-muted/30 animate-pulse" />
+      ) : courses.length === 0 ? (
+        <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+          No courses have been set up for this college yet.
+        </div>
+      ) : (
+        <Card>
+          <CardContent className="p-4 space-y-4">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <h2 className="font-semibold text-sm flex items-center gap-2">
+                <BookOpen className="h-4 w-4" />
+                {selectedCourse!.name}
+              </h2>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  size="sm"
+                  onClick={() => router.push(`/academics/subjects/new?courseId=${selectedCourseId}&academicYear=${encodeURIComponent(selectedAcademicYear)}&regulation=${encodeURIComponent(selectedRegulation)}&nextSerialNumber=${nextSerialNumber}&catalogId=${encodeURIComponent(selectedCourse!.catalogId ?? "")}`)}
+                  disabled={!selectedCourseId || !selectedRegulation}
+                >
+                  <Plus className="h-4 w-4 mr-2" />Add Subject
+                </Button>
+              </div>
+            </div>
 
-                {isLoadingSubjects ? (
-                  <div className="space-y-2">
-                    {[1, 2, 3].map((i) => <div key={i} className="h-16 rounded-lg border bg-muted/30 animate-pulse" />)}
+            {isLoadingSubjects ? (
+              <div className="space-y-2">
+                {[1, 2, 3].map((i) => <div key={i} className="h-16 rounded-lg border bg-muted/30 animate-pulse" />)}
+              </div>
+            ) : subjects.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-6 text-center">
+                {!selectedRegulation
+                  ? "Select a regulation above to view and add subjects."
+                  : allowedRegulations.length === 0
+                  ? "No regulations have been configured for this course in Course Catalog."
+                  : `No subjects found for ${selectedRegulation}. Add one above.`}
+              </p>
+            ) : (
+              <>
+                <Card className="overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-muted/50 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                        <tr>
+                          <th className="px-4 py-3">S.No.</th>
+                          <th className="px-4 py-3">Category</th>
+                          <th className="px-4 py-3">Name of the Subject</th>
+                          <th className="px-4 py-3 text-center">L</th>
+                          <th className="px-4 py-3 text-center">T</th>
+                          <th className="px-4 py-3 text-center">P</th>
+                          <th className="px-4 py-3 text-center">Credits</th>
+                          <th className="px-4 py-3" />
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {paginatedSubjects.map((s) => (
+                          <tr key={s.id}>
+                            <td className="px-4 py-2.5">{s.serialNumber ?? "—"}</td>
+                            <td className="px-4 py-2.5">
+                              {s.category ? <Badge variant="outline" className="text-xs">{s.category === "OTHER" ? (s.customCategory || "Other") : s.category}</Badge> : "—"}
+                            </td>
+                            <td className="px-4 py-2.5">
+                              <div className="font-medium text-foreground">{s.name}</div>
+                              <div className="flex flex-wrap items-center gap-2 mt-1">
+                                <Badge variant="secondary" className="text-xs font-mono">{s.code}</Badge>
+                                {s.shortCode && <Badge variant="outline" className="text-xs font-mono">{s.shortCode}</Badge>}
+                                <Badge variant="outline" className="text-xs">{SUBJECT_TYPE_LABELS[s.type]}</Badge>
+                                {s.regulation && <Badge variant="secondary" className="text-xs">{s.regulation}</Badge>}
+                                {s.academicYear && <Badge variant="outline" className="text-xs">{s.academicYear}</Badge>}
+                                <span className="text-xs text-muted-foreground">{s.hoursPerWeek} hrs/week</span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-2.5 text-center">{s.lectureHours ?? "—"}</td>
+                            <td className="px-4 py-2.5 text-center">{s.tutorialHours ?? "—"}</td>
+                            <td className="px-4 py-2.5 text-center">{s.practicalHours ?? "—"}</td>
+                            <td className="px-4 py-2.5 text-center">{s.credits}</td>
+                            <td className="px-4 py-2.5 text-right">
+                              <div className="flex justify-end gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8"
+                                  aria-label={`Edit ${s.name}`}
+                                   onClick={() => router.push(`/academics/subjects/${s.id}/edit?courseId=${selectedCourseId}&academicYear=${encodeURIComponent(selectedAcademicYear)}&regulation=${encodeURIComponent(selectedRegulation || s.regulation || "")}`)}
+                                >
+                                  <Pencil className="h-3.5 w-3.5" />
+                                </Button>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" aria-label={`Delete ${s.name}`} onClick={() => setDeleteTarget(s)}>
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
-                 ) : subjects.length === 0 ? (
-                   <p className="text-sm text-muted-foreground py-6 text-center">
-                     {!selectedRegulation
-                       ? "Select a regulation above to view and add subjects."
-                       : allowedRegulations.length === 0
-                       ? "No regulations have been configured for this course in Course Catalog."
-                       : `No subjects found for ${selectedRegulation}. Add one above.`}
-                   </p>
-                 ) : (
-                  <>
-                    <Card className="overflow-hidden">
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-sm">
-                          <thead className="bg-muted/50 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                            <tr>
-                              <th className="px-4 py-3">S.No.</th>
-                              <th className="px-4 py-3">Category</th>
-                              <th className="px-4 py-3">Name of the Subject</th>
-                              <th className="px-4 py-3 text-center">L</th>
-                              <th className="px-4 py-3 text-center">T</th>
-                              <th className="px-4 py-3 text-center">P</th>
-                              <th className="px-4 py-3 text-center">Credits</th>
-                              <th className="px-4 py-3" />
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y">
-                            {paginatedSubjects.map((s) => (
-                              <tr key={s.id}>
-                                <td className="px-4 py-2.5">{s.serialNumber ?? "—"}</td>
-                                <td className="px-4 py-2.5">
-                                  {s.category ? <Badge variant="outline" className="text-xs">{s.category === "OTHER" ? (s.customCategory || "Other") : s.category}</Badge> : "—"}
-                                </td>
-                                <td className="px-4 py-2.5">
-                                  <div className="font-medium text-foreground">{s.name}</div>
-                                  <div className="flex flex-wrap items-center gap-2 mt-1">
-                                    <Badge variant="secondary" className="text-xs font-mono">{s.code}</Badge>
-                                    {s.shortCode && <Badge variant="outline" className="text-xs font-mono">{s.shortCode}</Badge>}
-                                    <Badge variant="outline" className="text-xs">{SUBJECT_TYPE_LABELS[s.type]}</Badge>
-                                    {s.regulation && <Badge variant="secondary" className="text-xs">{s.regulation}</Badge>}
-                                    {s.academicYear && <Badge variant="outline" className="text-xs">{s.academicYear}</Badge>}
-                                    <span className="text-xs text-muted-foreground">{s.hoursPerWeek} hrs/week</span>
-                                  </div>
-                                </td>
-                                <td className="px-4 py-2.5 text-center">{s.lectureHours ?? "—"}</td>
-                                <td className="px-4 py-2.5 text-center">{s.tutorialHours ?? "—"}</td>
-                                <td className="px-4 py-2.5 text-center">{s.practicalHours ?? "—"}</td>
-                                <td className="px-4 py-2.5 text-center">{s.credits}</td>
-                                <td className="px-4 py-2.5 text-right">
-                                  <div className="flex justify-end gap-1">
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      className="h-8 w-8"
-                                      aria-label={`Edit ${s.name}`}
-                                       onClick={() => router.push(`/academics/subjects/${s.id}/edit?courseId=${selectedCourseId}&academicYear=${encodeURIComponent(selectedAcademicYear)}&regulation=${encodeURIComponent(selectedRegulation || s.regulation || "")}`)}
-                                    >
-                                      <Pencil className="h-3.5 w-3.5" />
-                                    </Button>
-                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" aria-label={`Delete ${s.name}`} onClick={() => setDeleteTarget(s)}>
-                                      <Trash2 className="h-3.5 w-3.5" />
-                                    </Button>
-                                  </div>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </Card>
-                    <Pagination
-                      page={currentPage}
-                      pageSize={pageSize}
-                      total={sortedSubjects.length}
-                      onPageChange={setCurrentPage}
-                      onPageSizeChange={setPageSize}
-                      disabled={isLoadingSubjects}
-                    />
-                  </>
-                )}
-              </CardContent>
-            </Card>
-          )}
-        </>
+                </Card>
+                <Pagination
+                  page={currentPage}
+                  pageSize={pageSize}
+                  total={sortedSubjects.length}
+                  onPageChange={setCurrentPage}
+                  onPageSizeChange={setPageSize}
+                  disabled={isLoadingSubjects}
+                />
+              </>
+            )}
+          </CardContent>
+</Card>
       )}
 
       <ConfirmDialog
