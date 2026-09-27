@@ -139,7 +139,13 @@ export default function AssignToSemesterPage() {
     [selectedCourse, catalogById]
   );
 
-  const regulationOptions = useMemo(() => {
+  // The FULL set of regulations this course has ever been configured with,
+  // regardless of Year - used only to detect "course has regulations at all"
+  // (noRegulationForYear below, and the regulationRequired gate) and as the
+  // fallback shown before a Year is picked. Never rendered directly as the
+  // Regulation Select's options once a Year is selected - see
+  // `regulationOptions` below, which narrows this to the Year.
+  const courseRegulationOptions = useMemo(() => {
     if (!selectedCourse) return [];
     return catalogItemForCourse?.regulations ?? [];
   }, [selectedCourse, catalogItemForCourse]);
@@ -167,6 +173,16 @@ export default function AssignToSemesterPage() {
     );
   }, [selectedCourse, selectedYear, catalogItemForCourse]);
 
+  // What the Regulation Select actually offers: narrowed to the Year-valid
+  // subset the moment one exists, so picking a regulation that doesn't even
+  // cover the selected Year is no longer possible. Falls back to the
+  // course-wide list only before a Year is chosen (Select is disabled then
+  // anyway - see its own `disabled` prop below) or for a course that's
+  // never had batch coverage configured (regulationsForCourseYearByBatch's
+  // own fallback already makes yearRegulationMatches equal the full list in
+  // that case, so this fallback rarely triggers in practice).
+  const regulationOptions = yearRegulationMatches.length > 0 ? yearRegulationMatches : courseRegulationOptions;
+
   // Auto-fill the Regulation field the moment exactly one regulation
   // resolves for the selected Year - mirrors the accurate, batch-aware
   // check Sections already enforce, so this page's default stops depending
@@ -183,11 +199,24 @@ export default function AssignToSemesterPage() {
   }, [yearRegulationMatches]);
 
   // True only when this course DOES have regulations configured at all
-  // (regulationOptions non-empty - the pre-existing "None assigned" message
-  // below already covers the other case) but none of them actually cover
-  // the selected Year for the current session - the specific, accurate
-  // "batch gap" the calculation above exists to catch.
-  const noRegulationForYear = Boolean(selectedYear) && regulationOptions.length > 0 && yearRegulationMatches.length === 0;
+  // (courseRegulationOptions non-empty - the pre-existing "None assigned"
+  // message below already covers the other case) but none of them actually
+  // cover the selected Year for the current session - the specific,
+  // accurate "batch gap" the calculation above exists to catch.
+  const noRegulationForYear = Boolean(selectedYear) && courseRegulationOptions.length > 0 && yearRegulationMatches.length === 0;
+
+  // Whether a regulation is even a concept for this course at all. A course
+  // with zero regulations ever configured (courseRegulationOptions empty)
+  // has nothing to gate on, so Semester/subjects unlock right after Year,
+  // same as before this fix - unchanged behavior for colleges that haven't
+  // set up regulations.
+  const regulationRequired = courseRegulationOptions.length > 0;
+  // Gate for Semester and the subject panels below: a course with
+  // regulations must have one actually selected before either unlocks -
+  // otherwise the Master Collection mixes subjects from every regulation
+  // together (see subjectsInRegulation below, which only filters by
+  // regulation once one is selected).
+  const regulationReady = !regulationRequired || Boolean(selectedRegulation);
 
   const semesterOptions = useMemo(() => {
     const nums = new Set<number>();
@@ -474,11 +503,15 @@ export default function AssignToSemesterPage() {
                   <div className="flex h-9 items-center rounded-md border bg-muted/30 px-3">
                     <span className="text-xs text-muted-foreground">No semesters configured for this year</span>
                   </div>
+                ) : selectedYear && !regulationReady ? (
+                  <div className="flex h-9 items-center rounded-md border bg-muted/30 px-3">
+                    <span className="text-xs text-muted-foreground">Select a regulation first</span>
+                  </div>
                 ) : (
                   <Select
                     value={effectiveSemester != null ? String(effectiveSemester) : ""}
                     onValueChange={(v) => setSelectedSemester(Number(v))}
-                    disabled={!selectedYear || semesterOptions.length === 0}
+                    disabled={!selectedYear || semesterOptions.length === 0 || !regulationReady}
                   >
                     <SelectTrigger><SelectValue placeholder="Select semester" /></SelectTrigger>
                     <SelectContent>
@@ -502,7 +535,13 @@ export default function AssignToSemesterPage() {
             </div>
           )}
 
-          {selectedYear && effectiveSemester != null && (
+          {selectedYear && semesterOptions.length > 0 && !regulationReady && (
+            <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+              Select a regulation to see subjects for this semester.
+            </div>
+          )}
+
+          {selectedYear && effectiveSemester != null && regulationReady && (
             isLoadingSubjects ? (
               <div className="grid gap-4 md:grid-cols-2">
                 {[1, 2].map((i) => <div key={i} className="h-40 rounded-lg border bg-muted/30 animate-pulse" />)}

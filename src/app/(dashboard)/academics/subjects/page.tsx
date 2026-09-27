@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { BookOpen, Plus, Pencil, Trash2, Upload, History, RefreshCw, FileSpreadsheet, FileText } from "lucide-react";
+import { BookOpen, Plus, Pencil, Trash2, Upload, FileSpreadsheet, FileText } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -65,8 +65,6 @@ export default function AcademicsSubjectsPage() {
       .catch(() => { /* non-critical */ });
   }, []);
 
-  const [showHistory, setShowHistory] = useState(false);
-  const [sessionsWithSubjects, setSessionsWithSubjects] = useState<string[]>([]);
   const hasAppliedSessionRef = useRef(false);
   useEffect(() => {
     if (hasAppliedSessionRef.current || !currentSessionLabel || searchParams.get("academicYear")) return;
@@ -118,8 +116,7 @@ export default function AcademicsSubjectsPage() {
       const res = await fetch(
         `/api/college/subjects?courseId=${encodeURIComponent(courseId)}${regulationParam}${academicYear ? `&academicYear=${encodeURIComponent(academicYear)}` : ""}`
       );
-      const data = await res.json() as { subjects: Subject[]; academicYears?: string[] };
-      setSessionsWithSubjects(data.academicYears ?? []);
+      const data = await res.json() as { subjects: Subject[] };
       setSubjects(data.subjects ?? []);
     } catch {
       toast({ variant: "destructive", title: "Failed to load subjects" });
@@ -319,6 +316,9 @@ export default function AcademicsSubjectsPage() {
             <Button variant="outline" onClick={() => void handleExportDocx()} disabled={!selectedCourseId || !selectedRegulation}>
               <FileText className="h-4 w-4 mr-2" />Export DOCX
             </Button>
+            <Button variant="outline" onClick={() => router.push(`/academics/subjects/import?courseId=${selectedCourseId}&regulation=${encodeURIComponent(selectedRegulation)}`)} disabled={!selectedCourseId || !selectedRegulation}>
+              <Upload className="h-4 w-4 mr-2" />Import Subjects
+            </Button>
           </div>
         }
       />
@@ -374,51 +374,15 @@ export default function AcademicsSubjectsPage() {
                     <BookOpen className="h-4 w-4" />
                     {selectedCourse.name}
                   </h2>
-                  <div className="flex flex-wrap items-center gap-2">
-                    {showHistory && (
-                      <Select value={selectedAcademicYear} onValueChange={setSelectedAcademicYear}>
-                        <SelectTrigger className="h-8 w-28"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {Array.from(new Set([...sessionsWithSubjects, selectedAcademicYear])).sort().reverse().map((y) => (
-                            <SelectItem key={y} value={y}>{y}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    )}
-                    <Button
-                      size="sm"
-                      variant={showHistory ? "secondary" : "outline"}
-                      onClick={() => {
-                        setShowHistory((v) => !v);
-                        setSelectedAcademicYear(academicSessionLabel(currentAcademicStartYear()));
-                      }}
-                    >
-                      <History className="h-4 w-4 mr-2" />History
-                    </Button>
-                     <Button
-                       size="sm"
-                       variant="outline"
-                       onClick={() => void loadSubjects(selectedCourseId, selectedAcademicYear, selectedRegulation)}
-                       disabled={!selectedCourseId || !selectedRegulation}
-                     >
-                       <RefreshCw className="h-4 w-4 mr-2" />Load
-                     </Button>
-                     <Button
-                       size="sm"
-                       variant="outline"
-                       onClick={() => router.push(`/academics/subjects/import?courseId=${selectedCourseId}&regulation=${encodeURIComponent(selectedRegulation)}`)}
-                       disabled={!selectedCourseId || !selectedRegulation}
-                     >
-                       <Upload className="h-4 w-4 mr-2" />Import Subjects
-                     </Button>
-                     <Button
-                       size="sm"
-                       onClick={() => router.push(`/academics/subjects/new?courseId=${selectedCourseId}&academicYear=${encodeURIComponent(selectedAcademicYear)}&regulation=${encodeURIComponent(selectedRegulation)}&nextSerialNumber=${nextSerialNumber}&catalogId=${encodeURIComponent(selectedCourse.catalogId ?? "")}`)}
-                       disabled={!selectedCourseId || !selectedRegulation}
-                     >
-                      <Plus className="h-4 w-4 mr-2" />Add Subject
-                    </Button>
-                  </div>
+<div className="flex flex-wrap items-center gap-2">
+                      <Button
+                        size="sm"
+                        onClick={() => router.push(`/academics/subjects/new?courseId=${selectedCourseId}&academicYear=${encodeURIComponent(selectedAcademicYear)}&regulation=${encodeURIComponent(selectedRegulation)}&nextSerialNumber=${nextSerialNumber}&catalogId=${encodeURIComponent(selectedCourse.catalogId ?? "")}`)}
+                        disabled={!selectedCourseId || !selectedRegulation}
+                      >
+                       <Plus className="h-4 w-4 mr-2" />Add Subject
+                      </Button>
+                    </div>
                 </div>
 
                 {isLoadingSubjects ? (
