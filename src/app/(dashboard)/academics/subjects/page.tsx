@@ -2,12 +2,12 @@
 
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { BookOpen, Plus, Pencil, Trash2, Upload, History, RefreshCw, FileSpreadsheet, FileText } from "lucide-react";
+import { BookOpen, Plus, Pencil, Trash2, Upload, FileSpreadsheet, FileText } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { Pagination } from "@/components/shared/Pagination";
@@ -26,15 +26,14 @@ export default function AcademicsSubjectsPage() {
   const [isLoadingCourses, setIsLoadingCourses] = useState(false);
   const [isLoadingSubjects, setIsLoadingSubjects] = useState(false);
 
-  const [selectedCourseId, setSelectedCourseId] = useState("");
-  const [selectedRegulation, setSelectedRegulation] = useState("");
   const [selectedAcademicYear, setSelectedAcademicYear] = useState(academicSessionLabel(currentAcademicStartYear()));
   const [currentSessionLabel, setCurrentSessionLabel] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Subject | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
-  useEffect(() => { setCurrentPage(1); }, [selectedCourseId, selectedAcademicYear]);
+  const selectedCourseId = searchParams.get("courseId") ?? "";
+  const selectedRegulation = searchParams.get("regulation") ?? "";
 
   useEffect(() => {
     fetch("/api/college/courses")
@@ -65,8 +64,6 @@ export default function AcademicsSubjectsPage() {
       .catch(() => { /* non-critical */ });
   }, []);
 
-  const [showHistory, setShowHistory] = useState(false);
-  const [sessionsWithSubjects, setSessionsWithSubjects] = useState<string[]>([]);
   const hasAppliedSessionRef = useRef(false);
   useEffect(() => {
     if (hasAppliedSessionRef.current || !currentSessionLabel || searchParams.get("academicYear")) return;
@@ -83,7 +80,20 @@ export default function AcademicsSubjectsPage() {
     () => selectedCatalogItem?.regulations ?? [],
     [selectedCatalogItem]
   );
-  const singleRegulation = allowedRegulations.length === 1 ? allowedRegulations[0] : "";
+
+  function selectCourse(courseId: string) {
+    const course = courses.find((c) => c.id === courseId);
+    const catalogItem = catalogItems.find((ci) => ci.id === course?.catalogId);
+    const regs = catalogItem?.regulations ?? [];
+    const regulation = regs.length > 0 ? regs[0] : "";
+    const newAcademicYear = searchParams.get("academicYear") ?? academicSessionLabel(currentAcademicStartYear());
+    router.push(`/academics/subjects?courseId=${courseId}&regulation=${encodeURIComponent(regulation)}${newAcademicYear ? `&academicYear=${encodeURIComponent(newAcademicYear)}` : ""}`);
+  }
+
+  function selectRegulation(regulation: string) {
+    const newAcademicYear = searchParams.get("academicYear") ?? academicSessionLabel(currentAcademicStartYear());
+    router.push(`/academics/subjects?courseId=${selectedCourseId}&regulation=${encodeURIComponent(regulation)}${newAcademicYear ? `&academicYear=${encodeURIComponent(newAcademicYear)}` : ""}`);
+  }
 
   const sortedSubjects = useMemo(
     () => [...subjects].sort((a, b) => {
@@ -101,53 +111,38 @@ export default function AcademicsSubjectsPage() {
   const totalPages = Math.max(1, Math.ceil(sortedSubjects.length / pageSize));
   const paginatedSubjects = sortedSubjects.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
-  const loadSubjects = useCallback(async (courseId: string, academicYear: string, regulation: string) => {
-    if (!courseId) { setSubjects([]); return; }
+  // Master subjects are course+regulation scoped, shared by every department
+  // that teaches this catalog course - not owned by whichever department's
+  // Course doc happens to be `courseId` (see /api/college/subjects GET's own
+  // doc-comment). Queried by `catalogId` so the list is the same regardless
+  // of which department's doc `courseId` (still needed to file a NEW subject
+  // against a real Course doc, below) resolves to. Falls back to `courseId`
+  // only for the rare legacy Course doc with no catalogId set.
+  const loadSubjects = useCallback(async (courseId: string, academicYear: string, regulation: string, catalogId?: string) => {
+    if (!courseId || !regulation) { setSubjects([]); return; }
     setIsLoadingSubjects(true);
     try {
-      const regulationsParam = allowedRegulations.length ? `&regulations=${encodeURIComponent(allowedRegulations.join(","))}` : "";
-      const regulationParam = regulation ? `&regulation=${encodeURIComponent(regulation)}` : "";
+      const scopeParam = catalogId ? `catalogId=${encodeURIComponent(catalogId)}` : `courseId=${encodeURIComponent(courseId)}`;
+      const regulationParam = `&regulation=${encodeURIComponent(regulation)}`;
       const res = await fetch(
-        `/api/college/subjects?courseId=${encodeURIComponent(courseId)}${regulationsParam}${regulationParam}${academicYear ? `&academicYear=${encodeURIComponent(academicYear)}` : ""}`
+        `/api/college/subjects?${scopeParam}${regulationParam}${academicYear ? `&academicYear=${encodeURIComponent(academicYear)}` : ""}`
       );
-      const data = await res.json() as { subjects: Subject[]; academicYears?: string[] };
-      setSessionsWithSubjects(data.academicYears ?? []);
+      const data = await res.json() as { subjects: Subject[] };
       setSubjects(data.subjects ?? []);
     } catch {
       toast({ variant: "destructive", title: "Failed to load subjects" });
     } finally {
       setIsLoadingSubjects(false);
     }
-  }, [allowedRegulations]);
+  }, []);
 
   useEffect(() => {
-    if (selectedCourseId) {
-      void loadSubjects(selectedCourseId, selectedAcademicYear, selectedRegulation);
+    if (selectedCourseId && selectedRegulation) {
+      void loadSubjects(selectedCourseId, selectedAcademicYear, selectedRegulation, selectedCourse?.catalogId);
+    } else {
+      setSubjects([]);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedCourseId, selectedAcademicYear, selectedRegulation, allowedRegulations.join(","), loadSubjects]);
-
-  const regulationsKey = allowedRegulations.join(",");
-  const hasRestoredRef = useRef(false);
-  useEffect(() => {
-    if (hasRestoredRef.current || isLoading || courses.length === 0) return;
-    hasRestoredRef.current = true;
-    const courseId = searchParams.get("courseId");
-    const academicYear = searchParams.get("academicYear") || selectedAcademicYear;
-    const regulation = searchParams.get("regulation") || "";
-    if (!courseId) return;
-    if (courses.some((c) => c.id === courseId)) {
-      setSelectedCourseId(courseId);
-      setSelectedAcademicYear(academicYear);
-      if (regulation) setSelectedRegulation(regulation);
-    }
-  }, [isLoading, courses, searchParams, loadSubjects, selectedAcademicYear]);
-
-  function selectCourse(courseId: string) {
-    setSelectedCourseId(courseId);
-    setSelectedRegulation("");
-    setSubjects([]);
-  }
+  }, [selectedCourseId, selectedAcademicYear, selectedRegulation, selectedCourse, loadSubjects]);
 
   async function handleDelete() {
     if (!deleteTarget) return;
@@ -156,7 +151,7 @@ export default function AcademicsSubjectsPage() {
       const json = await res.json() as { error?: string };
       if (!res.ok) throw new Error(json.error ?? "Failed to delete subject");
       toast({ variant: "success", title: `${deleteTarget.name} removed` });
-      await loadSubjects(selectedCourseId, selectedAcademicYear, selectedRegulation);
+      await loadSubjects(selectedCourseId, selectedAcademicYear, selectedRegulation, selectedCourse?.catalogId);
     } catch (err) {
       toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to delete subject" });
     } finally {
@@ -302,11 +297,14 @@ export default function AcademicsSubjectsPage() {
         description="Manage subjects offered for each regulation of every course"
         actions={
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => void handleExportXlsx()} disabled={!selectedCourseId}>
+            <Button variant="outline" onClick={() => void handleExportXlsx()} disabled={!selectedCourseId || !selectedRegulation}>
               <FileSpreadsheet className="h-4 w-4 mr-2" />Export XLSX
             </Button>
-            <Button variant="outline" onClick={() => void handleExportDocx()} disabled={!selectedCourseId}>
+            <Button variant="outline" onClick={() => void handleExportDocx()} disabled={!selectedCourseId || !selectedRegulation}>
               <FileText className="h-4 w-4 mr-2" />Export DOCX
+            </Button>
+            <Button variant="outline" onClick={() => router.push(`/academics/subjects/import?courseId=${selectedCourseId}&regulation=${encodeURIComponent(selectedRegulation)}`)}>
+              <Upload className="h-4 w-4 mr-2" />Import Subjects
             </Button>
           </div>
         }
@@ -321,11 +319,11 @@ export default function AcademicsSubjectsPage() {
       ) : (
         <>
           <Card>
-            <CardContent className="p-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <CardContent className="p-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label>Course</Label>
-                <Select value={selectedCourseId} onValueChange={selectCourse} disabled={isLoadingCourses}>
-                  <SelectTrigger><SelectValue placeholder={isLoadingCourses ? "Loading…" : "Select course"} /></SelectTrigger>
+                <Select value={selectedCourseId} onValueChange={selectCourse}>
+                  <SelectTrigger><SelectValue placeholder="Select course" /></SelectTrigger>
                   <SelectContent>
                     {courses.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
                   </SelectContent>
@@ -333,12 +331,16 @@ export default function AcademicsSubjectsPage() {
               </div>
               <div className="space-y-1.5">
                 <Label>Regulation</Label>
-                <Select value={selectedRegulation} onValueChange={setSelectedRegulation}>
+                <Select
+                  value={selectedRegulation}
+                  onValueChange={selectRegulation}
+                  disabled={!selectedCourseId || allowedRegulations.length === 0}
+                >
                   <SelectTrigger>
                     <SelectValue placeholder={
                       !selectedCourseId ? "Pick a course first" :
-                      allowedRegulations.length === 0 ? "None assigned" :
-                      selectedRegulation || "All regulations"
+                      allowedRegulations.length === 0 ? "No regulations assigned" :
+                      "Select regulation"
                     } />
                   </SelectTrigger>
                   <SelectContent>
@@ -360,47 +362,14 @@ export default function AcademicsSubjectsPage() {
                     {selectedCourse.name}
                   </h2>
                   <div className="flex flex-wrap items-center gap-2">
-                    {showHistory && (
-                      <Select value={selectedAcademicYear} onValueChange={setSelectedAcademicYear}>
-                        <SelectTrigger className="h-8 w-28"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {Array.from(new Set([...sessionsWithSubjects, selectedAcademicYear])).sort().reverse().map((y) => (
-                            <SelectItem key={y} value={y}>{y}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    )}
-                    <Button
-                      size="sm"
-                      variant={showHistory ? "secondary" : "outline"}
-                      onClick={() => {
-                        setShowHistory((v) => !v);
-                        setSelectedAcademicYear(academicSessionLabel(currentAcademicStartYear()));
-                      }}
-                    >
-                      <History className="h-4 w-4 mr-2" />History
-                    </Button>
-                     <Button
-                       size="sm"
-                       variant="outline"
-                       onClick={() => void loadSubjects(selectedCourseId, selectedAcademicYear, selectedRegulation)}
-                     >
-                       <RefreshCw className="h-4 w-4 mr-2" />Load
-                     </Button>
-                     <Button
-                       size="sm"
-                       variant="outline"
-                       onClick={() => router.push(`/academics/subjects/import?courseId=${selectedCourseId}`)}
-                     >
-                       <Upload className="h-4 w-4 mr-2" />Import Subjects
-                     </Button>
-                     <Button
-                       size="sm"
-                       onClick={() => router.push(`/academics/subjects/new?courseId=${selectedCourseId}&academicYear=${encodeURIComponent(selectedAcademicYear)}&regulation=${encodeURIComponent(selectedRegulation || singleRegulation)}&nextSerialNumber=${nextSerialNumber}&catalogId=${encodeURIComponent(selectedCourse.catalogId ?? "")}`)}
-                     >
-                      <Plus className="h-4 w-4 mr-2" />Add Subject
-                    </Button>
-                  </div>
+                      <Button
+                        size="sm"
+                        onClick={() => router.push(`/academics/subjects/new?courseId=${selectedCourseId}&academicYear=${encodeURIComponent(selectedAcademicYear)}&regulation=${encodeURIComponent(selectedRegulation)}&nextSerialNumber=${nextSerialNumber}&catalogId=${encodeURIComponent(selectedCourse.catalogId ?? "")}`)}
+                        disabled={!selectedCourseId || !selectedRegulation}
+                      >
+                       <Plus className="h-4 w-4 mr-2" />Add Subject
+                      </Button>
+                    </div>
                 </div>
 
                 {isLoadingSubjects ? (
@@ -408,81 +377,84 @@ export default function AcademicsSubjectsPage() {
                     {[1, 2, 3].map((i) => <div key={i} className="h-16 rounded-lg border bg-muted/30 animate-pulse" />)}
                   </div>
                  ) : subjects.length === 0 ? (
-                   <p className="text-sm text-muted-foreground py-6 text-center">
-                     {selectedRegulation
-                       ? `No subjects found for ${selectedRegulation}. Add one above.`
-                       : "No subjects added yet. Select a regulation above and click Load."}
-                   </p>
-                 ) : (
-                  <>
-                    <Card className="overflow-hidden">
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-sm">
-                          <thead className="bg-muted/50 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                            <tr>
-                              <th className="px-4 py-3">S.No.</th>
-                              <th className="px-4 py-3">Category</th>
-                              <th className="px-4 py-3">Name of the Subject</th>
-                              <th className="px-4 py-3 text-center">L</th>
-                              <th className="px-4 py-3 text-center">T</th>
-                              <th className="px-4 py-3 text-center">P</th>
-                              <th className="px-4 py-3 text-center">Credits</th>
-                              <th className="px-4 py-3" />
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y">
-                            {paginatedSubjects.map((s) => (
-                              <tr key={s.id}>
-                                <td className="px-4 py-2.5">{s.serialNumber ?? "—"}</td>
-                                <td className="px-4 py-2.5">
-                                  {s.category ? <Badge variant="outline" className="text-xs">{s.category === "OTHER" ? (s.customCategory || "Other") : s.category}</Badge> : "—"}
-                                </td>
-                                <td className="px-4 py-2.5">
-                                  <div className="font-medium text-foreground">{s.name}</div>
-                                  <div className="flex flex-wrap items-center gap-2 mt-1">
-                                    <Badge variant="secondary" className="text-xs font-mono">{s.code}</Badge>
-                                    <Badge variant="outline" className="text-xs">{SUBJECT_TYPE_LABELS[s.type]}</Badge>
-                                    {s.regulation && <Badge variant="secondary" className="text-xs">{s.regulation}</Badge>}
-                                    {s.academicYear && <Badge variant="outline" className="text-xs">{s.academicYear}</Badge>}
-                                    <span className="text-xs text-muted-foreground">{s.hoursPerWeek} hrs/week</span>
-                                  </div>
-                                </td>
-                                <td className="px-4 py-2.5 text-center">{s.lectureHours ?? "—"}</td>
-                                <td className="px-4 py-2.5 text-center">{s.tutorialHours ?? "—"}</td>
-                                <td className="px-4 py-2.5 text-center">{s.practicalHours ?? "—"}</td>
-                                <td className="px-4 py-2.5 text-center">{s.credits}</td>
-                                <td className="px-4 py-2.5 text-right">
-                                  <div className="flex justify-end gap-1">
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      className="h-8 w-8"
-                                      aria-label={`Edit ${s.name}`}
-                                       onClick={() => router.push(`/academics/subjects/${s.id}/edit?courseId=${selectedCourseId}&academicYear=${encodeURIComponent(selectedAcademicYear)}&regulation=${encodeURIComponent(selectedRegulation || singleRegulation)}`)}
-                                    >
-                                      <Pencil className="h-3.5 w-3.5" />
-                                    </Button>
-                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" aria-label={`Delete ${s.name}`} onClick={() => setDeleteTarget(s)}>
-                                      <Trash2 className="h-3.5 w-3.5" />
-                                    </Button>
-                                  </div>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </Card>
-                    <Pagination
-                      page={currentPage}
-                      pageSize={pageSize}
-                      total={sortedSubjects.length}
-                      onPageChange={setCurrentPage}
-                      onPageSizeChange={setPageSize}
-                      disabled={isLoadingSubjects}
-                    />
-                  </>
-                )}
+                    <p className="text-sm text-muted-foreground py-6 text-center">
+                      {!selectedRegulation
+                        ? "Select a regulation above to view and add subjects."
+                        : allowedRegulations.length === 0
+                        ? "No regulations have been configured for this course in Course Catalog."
+                        : `No subjects found for ${selectedRegulation}. Add one above.`}
+                    </p>
+                  ) : (
+                   <>
+                     <Card className="overflow-hidden">
+                       <div className="overflow-x-auto">
+                         <table className="w-full text-sm">
+                           <thead className="bg-muted/50 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                             <tr>
+                               <th className="px-4 py-3">S.No.</th>
+                               <th className="px-4 py-3">Category</th>
+                               <th className="px-4 py-3">Name of the Subject</th>
+                               <th className="px-4 py-3 text-center">L</th>
+                               <th className="px-4 py-3 text-center">T</th>
+                               <th className="px-4 py-3 text-center">P</th>
+                               <th className="px-4 py-3 text-center">Credits</th>
+                               <th className="px-4 py-3" />
+                             </tr>
+                           </thead>
+                           <tbody className="divide-y">
+                             {paginatedSubjects.map((s) => (
+                               <tr key={s.id}>
+                                 <td className="px-4 py-2.5">{s.serialNumber ?? "—"}</td>
+                                 <td className="px-4 py-2.5">
+                                   {s.category ? <Badge variant="outline" className="text-xs">{s.category === "OTHER" ? (s.customCategory || "Other") : s.category}</Badge> : "—"}
+                                 </td>
+                                 <td className="px-4 py-2.5">
+                                   <div className="font-medium text-foreground">{s.name}</div>
+                                   <div className="flex flex-wrap items-center gap-2 mt-1">
+                                     <Badge variant="secondary" className="text-xs font-mono">{s.code}</Badge>
+                                     {s.shortCode && <Badge variant="outline" className="text-xs font-mono">{s.shortCode}</Badge>}
+                                     <Badge variant="outline" className="text-xs">{SUBJECT_TYPE_LABELS[s.type]}</Badge>
+                                     {s.regulation && <Badge variant="secondary" className="text-xs">{s.regulation}</Badge>}
+                                     {s.academicYear && <Badge variant="outline" className="text-xs">{s.academicYear}</Badge>}
+                                     <span className="text-xs text-muted-foreground">{s.hoursPerWeek} hrs/week</span>
+                                   </div>
+                                 </td>
+                                 <td className="px-4 py-2.5 text-center">{s.lectureHours ?? "—"}</td>
+                                 <td className="px-4 py-2.5 text-center">{s.tutorialHours ?? "—"}</td>
+                                 <td className="px-4 py-2.5 text-center">{s.practicalHours ?? "—"}</td>
+                                 <td className="px-4 py-2.5 text-center">{s.credits}</td>
+                                 <td className="px-4 py-2.5 text-right">
+                                   <div className="flex justify-end gap-1">
+                                     <Button
+                                       variant="ghost"
+                                       size="icon"
+                                       className="h-8 w-8"
+                                       aria-label={`Edit ${s.name}`}
+                                        onClick={() => router.push(`/academics/subjects/${s.id}/edit?courseId=${encodeURIComponent(selectedCourseId)}&catalogId=${encodeURIComponent(selectedCourse?.catalogId ?? "")}&academicYear=${encodeURIComponent(selectedAcademicYear)}&regulation=${encodeURIComponent(selectedRegulation || s.regulation || "")}`)}
+                                     >
+                                       <Pencil className="h-3.5 w-3.5" />
+                                     </Button>
+                                     <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" aria-label={`Delete ${s.name}`} onClick={() => setDeleteTarget(s)}>
+                                       <Trash2 className="h-3.5 w-3.5" />
+                                     </Button>
+                                   </div>
+                                 </td>
+                               </tr>
+                             ))}
+                           </tbody>
+                         </table>
+                       </div>
+                     </Card>
+                     <Pagination
+                       page={currentPage}
+                       pageSize={pageSize}
+                       total={sortedSubjects.length}
+                       onPageChange={setCurrentPage}
+                       onPageSizeChange={setPageSize}
+                       disabled={isLoadingSubjects}
+                     />
+                   </>
+                 )}
               </CardContent>
             </Card>
           )}

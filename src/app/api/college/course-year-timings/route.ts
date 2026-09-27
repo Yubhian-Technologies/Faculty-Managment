@@ -31,7 +31,15 @@ export async function GET(request: Request) {
     if (courseId) query = query.where("courseId", "==", courseId);
 
     const snap = await query.get();
-    const timings = snap.docs.map((d) => ({ id: d.id, ...d.data() })) as (CourseYearTiming & { id: string })[];
+    let timings = snap.docs.map((d) => ({ id: d.id, ...d.data() })) as (CourseYearTiming & { id: string })[];
+
+    // Read access scoped the same way PATCH already restricts writes below -
+    // an HOD may only see their own department's (or a sub-department's/
+    // managed branch's) course-year timings, never an arbitrary department's.
+    if (session.role === "HOD") {
+      const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
+      timings = timings.filter((t) => canHodEditDepartmentId(scope, t.departmentId));
+    }
 
     // A shared first year is configured once, on the common department that
     // runs it (e.g. Basic Science), but a section routed to a managed branch
@@ -163,6 +171,40 @@ export async function POST(request: Request) {
     }
 
     const db = getAdminDb();
+
+    // Semester date ranges must not run outside the college's current
+    // academic session, when the Principal has actually set that session's
+    // own dates (AcademicSession.startDate/endDate - optional; see that
+    // type's own doc-comment on why most consumers deliberately don't
+    // compare on it, `label` being the real interop key there. This check is
+    // the exception: a semester dated into the wrong academic year by
+    // mistake is exactly the kind of gap this route's own overlap/ordering
+    // checks above exist to catch, and this is the one boundary they never
+    // covered). Skipped entirely when no current session has both dates set,
+    // same leniency every other "optional config, don't block on it" check
+    // in this codebase already gives.
+    if (semesters.length > 0) {
+      const currentSessionSnap = await db.collection("colleges").doc(session.collegeId)
+        .collection("academicSessions").where("isCurrent", "==", true).limit(1).get();
+      const currentSession = currentSessionSnap.docs[0]?.data() as
+        { label?: string; startDate?: string; endDate?: string } | undefined;
+      if (currentSession?.startDate && currentSession?.endDate) {
+        const sessionStart = new Date(currentSession.startDate);
+        const sessionEnd = new Date(currentSession.endDate);
+        const fmt = (d: Date) => d.toISOString().slice(0, 10);
+        for (const s of semesters) {
+          if (s.startDate < sessionStart || s.endDate > sessionEnd) {
+            return NextResponse.json(
+              {
+                error: `Semester ${s.semester} (${fmt(s.startDate)} to ${fmt(s.endDate)}) must fall within the ${currentSession.label ?? "current"} academic year (${currentSession.startDate} to ${currentSession.endDate})`,
+              },
+              { status: 400 },
+            );
+          }
+        }
+      }
+    }
+
     const now = new Date();
     const docId = `${courseId}_year${year}`;
     const ref = db.collection("colleges").doc(session.collegeId).collection("courseYearTimings").doc(docId);

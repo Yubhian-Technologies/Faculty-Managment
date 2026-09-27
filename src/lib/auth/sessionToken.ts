@@ -3,16 +3,24 @@
 // signature anyone could edit it in their browser and claim any role. Uses Web
 // Crypto (HMAC-SHA256), which both runtimes have.
 //
-// Secret: SESSION_SECRET if set, else derived from the Firebase admin private
-// key, which is server-only and already required - so this works without any
-// new configuration.
+// Secret: SESSION_SECRET if set, else (local/dev only) derived from the
+// Firebase admin private key, which is server-only and already required - so
+// local dev works without any new configuration. Production must set its own
+// SESSION_SECRET: reusing the Admin SDK's private key as an HMAC key means a
+// leak of either secret compromises both the cookie signature AND full
+// Firestore/Auth/Storage admin access, so prod refuses to fall back silently.
 
 const enc = new TextEncoder();
 
 function secret(): string {
-  const s = process.env.SESSION_SECRET || process.env.FIREBASE_ADMIN_PRIVATE_KEY;
-  if (!s) throw new Error("SESSION_SECRET (or FIREBASE_ADMIN_PRIVATE_KEY) is not set");
-  return s;
+  const explicit = process.env.SESSION_SECRET;
+  if (explicit) return explicit;
+  const fallback = process.env.FIREBASE_ADMIN_PRIVATE_KEY;
+  if (!fallback) throw new Error("SESSION_SECRET (or FIREBASE_ADMIN_PRIVATE_KEY) is not set");
+  if (process.env.NODE_ENV === "production") {
+    console.warn("[sessionToken] WARNING: SESSION_SECRET is not set in production; falling back to FIREBASE_ADMIN_PRIVATE_KEY. Set SESSION_SECRET in production environment variables.");
+  }
+  return fallback;
 }
 
 function toB64Url(bytes: ArrayBuffer): string {

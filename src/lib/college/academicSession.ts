@@ -151,6 +151,35 @@ export function parseBatchStartYears(batch: string): number[] {
     .filter((y): y is number => y != null);
 }
 
+/**
+ * Every admission start-year that more than one regulation in
+ * `regulationBatches` claims - the ambiguous state regulationsForBatchStartYear's
+ * own doc-comment warns callers to treat as "ask Academics to fix the
+ * batches", but nothing actually stopped it from being SAVED in the first
+ * place. The two writers of this field (course-catalog/route.ts POST and
+ * [id]/route.ts PATCH) call this right before writing and reject if it's
+ * non-empty, so the ambiguous state can no longer be created going forward -
+ * this never touches a catalog entry already saved with an overlap, only a
+ * new write.
+ */
+export function findOverlappingRegulationBatches(
+  regulationBatches: Record<string, string>
+): { year: number; regulations: string[] }[] {
+  const regsByYear = new Map<number, string[]>();
+  for (const [reg, ranges] of Object.entries(regulationBatches ?? {})) {
+    for (const year of parseBatchStartYears(ranges)) {
+      const list = regsByYear.get(year) ?? [];
+      list.push(reg);
+      regsByYear.set(year, list);
+    }
+  }
+  const conflicts: { year: number; regulations: string[] }[] = [];
+  for (const [year, regs] of regsByYear) {
+    if (regs.length > 1) conflicts.push({ year, regulations: regs });
+  }
+  return conflicts.sort((a, b) => a.year - b.year);
+}
+
 // Which regulation code(s) cover a SPECIFIC intake batch (by its start year) -
 // the direct, ground-truth resolution: a batch's own admission year is fixed
 // forever once picked, so the regulation governing it never depends on "what
@@ -213,6 +242,34 @@ export function regulationsForCourseYearByBatch(
   fallbackRegulations?: string[],
 ): string[] {
   return regulationsForBatchStartYear(regulationBatches, admissionStartYearForCourseYear(asOfStartYear, courseYear), fallbackRegulations);
+}
+
+export interface CourseYearCoverage {
+  year: number;
+  admissionYear: number;
+  regulations: string[];
+}
+
+/**
+ * regulationsForCourseYearByBatch, looped across every ordinal year of a
+ * course, as of a session - lets an editor show the whole Year 1..N picture
+ * (and any uncovered year - `regulations` empty) in one place instead of
+ * resolving one year at a time. `regulations.length === 0` is the exact gap
+ * that silently empties a Year dropdown for every department teaching this
+ * course; `regulations.length > 1` is the ambiguous state
+ * findOverlappingRegulationBatches is meant to prevent at write time.
+ */
+export function courseYearCoverage(
+  durationYears: number,
+  regulationBatches: Record<string, string>,
+  fallbackRegulations?: string[],
+  asOfStartYear: number = currentAcademicStartYear(),
+): CourseYearCoverage[] {
+  return Array.from({ length: durationYears }, (_, i) => i + 1).map((year) => ({
+    year,
+    admissionYear: admissionStartYearForCourseYear(asOfStartYear, year),
+    regulations: regulationsForCourseYearByBatch(regulationBatches, year, asOfStartYear, fallbackRegulations),
+  }));
 }
 
 // A handful of sessions to choose from - two years back through one year

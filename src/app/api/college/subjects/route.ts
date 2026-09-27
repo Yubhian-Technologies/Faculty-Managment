@@ -6,13 +6,13 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import type { SubjectCategory, SubjectType } from "@/types";
 import { SUBJECT_CATEGORY_LABELS } from "@/types";
 import { getRelatedDepartmentNames } from "@/lib/departments/scope";
-import { regulationsForCourseYearByBatch } from "@/lib/college/academicStructure";
 
 export async function GET(request: Request) {
   try {
     const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "COLLEGE_OFFICE", "PANEL_MEMBER", "COLLEGE_STAFF", "EXAM_CELL", "ACADEMICS");
     const { searchParams } = new URL(request.url);
     const courseId = searchParams.get("courseId");
+    const catalogId = searchParams.get("catalogId");
     const academicYear = searchParams.get("academicYear");
     const regulation = searchParams.get("regulation");
     const sessionRegulations = (searchParams.get("regulations") ?? "").split(",").map((r) => r.trim()).filter(Boolean);
@@ -20,7 +20,14 @@ export async function GET(request: Request) {
     const db = getAdminDb();
     let query: FirebaseFirestore.Query = db.collection("colleges").doc(session.collegeId).collection("subjects");
 
-    if (session.role === "HOD") {
+    // Master subjects (courseId present) never carry a `department` field -
+    // they're course+regulation scoped, department-independent by design
+    // (see this file's POST for the two creation shapes) - so this filter
+    // only applies to the semester-scoped shape. Applying it unconditionally
+    // used to AND it onto the courseId query below, which a master subject
+    // (no `department` field at all) can never match - every HOD got an
+    // empty Master Collection for every course, always.
+    if (session.role === "HOD" && !courseId && !catalogId) {
       // Viewing is bidirectional: a parent HOD sees their own
       // department's subjects and every sub-department's, AND a sub-HOD
       // (e.g. BS-Chemistry, BS-Mathematics) sees their parent's (Basic
@@ -40,7 +47,29 @@ export async function GET(request: Request) {
       }
     }
 
-    if (courseId) query = query.where("courseId", "==", courseId);
+    if (catalogId) {
+      // Which specific department's Course doc a master subject's courseId
+      // happens to point to is an implementation detail, not a real
+      // ownership boundary - every department teaching this same catalog
+      // course (same CourseCatalogItem, different departmentId, different
+      // Course doc) is meant to share one subject pool (see this file's
+      // POST doc-comment). Resolve every department's Course doc for this
+      // catalogId first, then match subjects against the whole set, so a
+      // subject entered once (under any one department's Course doc) is
+      // visible - and, via Assign to Semester, assignable - to every other
+      // department offering the same course, not just whichever one
+      // happened to receive it. Firestore caps `in` at 30 values, same as
+      // the department fan-out above.
+      const coursesSnap = await db.collection("colleges").doc(session.collegeId)
+        .collection("courses").where("catalogId", "==", catalogId).get();
+      const courseIds = coursesSnap.docs.map((d) => d.id).slice(0, 30);
+      if (courseIds.length === 0) {
+        return NextResponse.json({ subjects: [], academicYears: [] });
+      }
+      query = query.where("courseId", "in", courseIds);
+    } else if (courseId) {
+      query = query.where("courseId", "==", courseId);
+    }
 
     const snap = await query.get();
     let subjects = snap.docs
@@ -105,6 +134,7 @@ export async function POST(request: Request) {
       semester?: number;
       name: string;
       code: string;
+      shortCode?: string;
       hoursPerWeek?: number;
       totalHoursPerSemester?: number;
       credits?: number;
@@ -134,47 +164,25 @@ export async function POST(request: Request) {
       const course = courseSnap.data() as { name: string; departmentId: string; durationYears: number; catalogId?: string };
 
       // Optional - a subject can be added for a course even when no
-      // regulation currently resolves for it. When one IS provided,
-      // it must still belong to this course's own Course Catalog
-      // entry - a Pharmacy-only code should never be accepted for
-      // a B.Tech subject. The master subject is scoped by course
-      // + regulation only (no year), so we check against all
-      // regulations assigned to this course.
+      // regulation currently resolves for it. When one IS provided, it must
+      // belong to this course's own Course Catalog entry - a Pharmacy-only
+      // code should never be accepted for a B.Tech subject. A master
+      // subject has no ordinal year of its own (see this route's own POST
+      // body type), so there's no batch/year to resolve it against here -
+      // that congruence check only makes sense once a real batch exists
+      // (Section.batch - see sections/route.ts POST, which is where it's
+      // actually enforced). Here we only check "is this regulation one the
+      // catalog has ever assigned to this course at all".
       const regulation = body.regulation?.trim();
       if (regulation) {
         const catalogSnap = course.catalogId
           ? await db.collection("colleges").doc(session.collegeId).collection("courseCatalog").doc(course.catalogId).get()
           : null;
         const catalogData = catalogSnap?.exists
-          ? (catalogSnap.data() as { regulations?: string[]; regulationBatches?: Record<string, string> })
+          ? (catalogSnap.data() as { regulations?: string[] })
           : undefined;
         const catalogRegulations = catalogData?.regulations ?? [];
-        // When regulationBatches data exists, resolve which regulations
-        // apply to this course (all of them, since the master subject
-        // has no year). Otherwise fall back to the catalog's own
-        // regulation list.
-        let applicableRegulations: string[];
-        if (catalogData?.regulationBatches && Object.keys(catalogData.regulationBatches).length > 0) {
-          const allBatchYears = Object.values(catalogData.regulationBatches).map(Number);
-          const minYear = Math.min(...allBatchYears);
-          const maxYear = Math.max(...allBatchYears);
-          applicableRegulations = regulationsForCourseYearByBatch(
-            catalogData.regulationBatches,
-            minYear,
-            undefined,
-            catalogData?.regulations,
-          );
-        } else {
-          applicableRegulations = catalogRegulations;
-        }
-        if (applicableRegulations.length > 0) {
-          if (!applicableRegulations.includes(regulation)) {
-            return NextResponse.json(
-              { error: `That regulation isn't assigned to ${course.name}. Check Course Catalog.` },
-              { status: 400 },
-            );
-          }
-        } else if (!catalogRegulations.includes(regulation)) {
+        if (!catalogRegulations.includes(regulation)) {
           return NextResponse.json(
             { error: `That regulation isn't assigned to ${course.name}. Check Course Catalog.` },
             { status: 400 },
@@ -185,7 +193,7 @@ export async function POST(request: Request) {
       if (body.serialNumber == null || Number.isNaN(Number(body.serialNumber))) {
         return NextResponse.json({ error: "S.No. is required" }, { status: 400 });
       }
-      if (!body.category || !(body.category in SUBJECT_CATEGORY_LABELS)) {
+      if (!body.category || !body.category.trim()) {
         return NextResponse.json({ error: "A valid category is required" }, { status: 400 });
       }
       if (body.category === "OTHER" && !body.customCategory?.trim()) {
@@ -203,6 +211,45 @@ export async function POST(request: Request) {
         );
       }
 
+      // ── Duplicate-code check ────────────────────────────────────────────
+      // Same regulation+code within this catalog course, in ANY department
+      // that teaches it - a master subject is department-independent (see
+      // this route's own GET doc-comment), so a duplicate created under a
+      // sibling department's Course doc must be caught too, matching
+      // MasterSubjectImportService's own duplicate detection (bulk import).
+      // This single-add path (also used by the Import page's "Fix and
+      // retry" dialog) previously had no check at all. Falls back to just
+      // this courseId for a legacy Course doc with no catalogId.
+      const code = body.code.toUpperCase().trim();
+      let siblingCourseIds = [courseId];
+      if (course.catalogId) {
+        const siblingSnap = await db.collection("colleges").doc(session.collegeId)
+          .collection("courses").where("catalogId", "==", course.catalogId).get();
+        siblingCourseIds = siblingSnap.docs.map((d) => d.id).slice(0, 30);
+      }
+      // Single-field `in` filter only (no compound where) - courseId+code
+      // together would need a composite index this collection doesn't have
+      // (firestore.indexes.json has none for `subjects`, and index deploys
+      // here are manual - see CLAUDE.md - so a compound query would throw
+      // FAILED_PRECONDITION in production). Matches MasterSubjectImportService's
+      // own dupe check: fetch broadly, compare code+regulation in memory.
+      const dupeSnap = await db.collection("colleges").doc(session.collegeId)
+        .collection("subjects")
+        .where("courseId", "in", siblingCourseIds)
+        .select("code", "regulation")
+        .get();
+      const regKey = (regulation ?? "").trim();
+      const hasDupe = dupeSnap.docs.some((d) => {
+        const data = d.data() as { code?: string; regulation?: string };
+        return (data.code ?? "").toUpperCase() === code && (data.regulation ?? "").trim() === regKey;
+      });
+      if (hasDupe) {
+        return NextResponse.json(
+          { error: `A subject with code "${code}" already exists for this course and regulation.` },
+          { status: 409 },
+        );
+      }
+
       const ref = await db
         .collection("colleges")
         .doc(session.collegeId)
@@ -217,7 +264,8 @@ export async function POST(request: Request) {
           category: body.category,
           ...(body.category === "OTHER" ? { customCategory: body.customCategory!.trim() } : {}),
           name: body.name.trim(),
-          code: body.code.toUpperCase().trim(),
+          code,
+          ...(body.shortCode?.trim() ? { shortCode: body.shortCode.trim().toUpperCase() } : {}),
           hoursPerWeek: body.hoursPerWeek != null ? Number(body.hoursPerWeek) : 0,
           totalHoursPerSemester: body.totalHoursPerSemester != null ? Number(body.totalHoursPerSemester) : null,
           lectureHours: Number(body.lectureHours),
@@ -265,6 +313,7 @@ export async function POST(request: Request) {
       department,
       name: body.name.trim(),
       code: body.code.trim().toUpperCase(),
+      ...(body.shortCode?.trim() ? { shortCode: body.shortCode.trim().toUpperCase() } : {}),
       semester: Number(body.semester),
       hoursPerWeek: Number(body.hoursPerWeek) || 0,
       credits: Number(body.credits) || 0,

@@ -2,8 +2,8 @@ import { describe, it, expect } from "vitest";
 import { resolveCurrentSemester, matchesCurrentSemester } from "@/lib/college/semester";
 import type { CourseYearTiming } from "@/types";
 
-function makeTiming(semesters: { semester: number; startDate: Date; endDate: Date }): CourseYearTiming {
-  return { semesters } as CourseYearTiming;
+function makeTiming(semesters: { semester: number; startDate: Date | string; endDate: Date | string }[]): CourseYearTiming {
+  return { semesters } as unknown as CourseYearTiming;
 }
 
 describe("resolveCurrentSemester", () => {

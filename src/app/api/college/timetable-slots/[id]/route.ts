@@ -11,7 +11,9 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await requireCollegeMember("HOD", "PRINCIPAL", "SUPER_ADMIN", "PANEL_MEMBER", "COLLEGE_STAFF");
+    // VICE_PRINCIPAL included to match the sibling draft/publish routes -
+    // see timetable-slots/route.ts POST's own comment for why.
+    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "PANEL_MEMBER", "COLLEGE_STAFF");
     const { id } = await params;
 
     const db = getAdminDb();

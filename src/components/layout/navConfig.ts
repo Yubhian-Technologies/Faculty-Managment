@@ -140,8 +140,18 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Adjustment Requests", href: "/leave/adjustments", iconName: "UserCheck", roles: ["EXAM_CELL"] },
   { label: "My Attendance", href: "/exam-cell/attendance", iconName: "ClipboardCheck", roles: ["EXAM_CELL"], section: "My Work" },
 
+  // Location Staff Admin
+  { label: "Dashboard", href: "/location-staff-admin", iconName: "LayoutDashboard", roles: ["LOCATION_STAFF_ADMIN"] },
+  { label: "Departments", href: "/location-staff-admin/departments", iconName: "Building2", roles: ["LOCATION_STAFF_ADMIN", "ADMINISTRATION"], section: "Location Staff" },
+  { label: "Staff Directory", href: "/location-staff-admin/staff", iconName: "UsersRound", roles: ["LOCATION_STAFF_ADMIN", "ADMINISTRATION"], section: "Location Staff" },
+  { label: "Attendance Overview", href: "/location-staff-admin/attendance", iconName: "ClipboardCheck", roles: ["LOCATION_STAFF_ADMIN", "ADMINISTRATION"], section: "Location Staff" },
+  { label: "My Profile", href: "/location-staff-admin/profile", iconName: "UserCircle", roles: ["LOCATION_STAFF_ADMIN"], section: "Personal" },
+
   // Location Dept Head
   { label: "Dashboard", href: "/location-dept-head", iconName: "LayoutDashboard", roles: ["LOCATION_DEPT_HEAD"] },
+  { label: "Staff Roster", href: "/location-dept-head/staff", iconName: "UsersRound", roles: ["LOCATION_DEPT_HEAD"], section: "Department Staff" },
+  { label: "Daily Attendance", href: "/location-dept-head/attendance", iconName: "ClipboardCheck", roles: ["LOCATION_DEPT_HEAD"], section: "Department Staff" },
+  { label: "Shift Schedule", href: "/location-dept-head/shifts", iconName: "Clock", roles: ["LOCATION_DEPT_HEAD"], section: "Department Staff" },
   { label: "Hiring Requests", href: "/location-dept-head/vacancies", iconName: "ClipboardPlus", roles: ["LOCATION_DEPT_HEAD"], section: "Hiring" },
   { label: "My Candidates", href: "/location-dept-head/candidates", iconName: "Users", roles: ["LOCATION_DEPT_HEAD"] },
   { label: "My Interviews", href: "/location-dept-head/interviews", iconName: "CalendarCheck", roles: ["LOCATION_DEPT_HEAD"] },
@@ -265,7 +275,6 @@ export const NAV_ITEMS: NavItem[] = [
   // (unlinked, not deleted) for any existing notification links/bookmarks.
   { label: "Attendance", href: "/hod/faculty-attendance", iconName: "ClipboardCheck", roles: ["HOD"], module: "attendance" },
   { label: "Attendance Reports", href: "/hod/attendance-reports", iconName: "CalendarRange", roles: ["HOD"], module: "attendance" },
-  { label: "Circulars", href: "/hod/circulars", iconName: "Megaphone", roles: ["HOD"] },
   { label: "Leave Profiles", href: "/hod/leave/profiles", iconName: "ClipboardList", roles: ["HOD"] },
   { label: "Budget", href: "/hod/budget", iconName: "PiggyBank", roles: ["HOD"], section: "Budget & Purchase" },
   { label: "Indents", href: "/hod/indents", iconName: "ShoppingCart", roles: ["HOD"] },
@@ -404,7 +413,6 @@ export const NAV_ITEMS: NavItem[] = [
   // Faculty Incharge's own equivalent, not offered to HOD here.
   { label: "Lab Batches", href: "/panel/students/batches", iconName: "Layers", roles: ["PANEL_MEMBER"], module: "lab-batches" },
   { label: "My Feedback", href: "/panel/feedback", iconName: "MessageSquare", roles: ["PANEL_MEMBER"] },
-  { label: "Circulars", href: "/panel/circulars", iconName: "Megaphone", roles: ["PANEL_MEMBER"] },
   { label: "Leave", href: "/panel/leave", iconName: "CalendarClock", roles: ["PANEL_MEMBER"], section: "Leave & Attendance" },
   { label: "Adjustment Requests", href: "/leave/adjustments", iconName: "UserCheck", roles: ["PANEL_MEMBER"] },
   { label: "My Attendance", href: "/panel/attendance", iconName: "ClipboardCheck", roles: ["PANEL_MEMBER"], module: "attendance" },
@@ -849,11 +857,18 @@ export const BOTTOM_NAV_ITEMS: Record<UserRole, NavItem[]> = {
     { label: "Staff", href: "/exam-cell/staff-attendance", iconName: "ClipboardCheck", roles: ["EXAM_CELL"] },
     { label: "Profile", href: "/exam-cell/profile", iconName: "UserCircle", roles: ["EXAM_CELL"] },
   ],
+  LOCATION_STAFF_ADMIN: [
+    { label: "Home", href: "/location-staff-admin", iconName: "LayoutDashboard", roles: ["LOCATION_STAFF_ADMIN"] },
+    { label: "Depts", href: "/location-staff-admin/departments", iconName: "Building2", roles: ["LOCATION_STAFF_ADMIN"] },
+    { label: "Staff", href: "/location-staff-admin/staff", iconName: "UsersRound", roles: ["LOCATION_STAFF_ADMIN"] },
+    { label: "Attendance", href: "/location-staff-admin/attendance", iconName: "ClipboardCheck", roles: ["LOCATION_STAFF_ADMIN"] },
+    { label: "Profile", href: "/location-staff-admin/profile", iconName: "UserCircle", roles: ["LOCATION_STAFF_ADMIN"] },
+  ],
   LOCATION_DEPT_HEAD: [
     { label: "Home", href: "/location-dept-head", iconName: "LayoutDashboard", roles: ["LOCATION_DEPT_HEAD"] },
-    { label: "Vacancies", href: "/location-dept-head/vacancies", iconName: "ClipboardPlus", roles: ["LOCATION_DEPT_HEAD"] },
-    { label: "Candidates", href: "/location-dept-head/candidates", iconName: "Users", roles: ["LOCATION_DEPT_HEAD"] },
-    { label: "Interviews", href: "/location-dept-head/interviews", iconName: "CalendarCheck", roles: ["LOCATION_DEPT_HEAD"] },
+    { label: "Attendance", href: "/location-dept-head/attendance", iconName: "ClipboardCheck", roles: ["LOCATION_DEPT_HEAD"] },
+    { label: "Staff", href: "/location-dept-head/staff", iconName: "UsersRound", roles: ["LOCATION_DEPT_HEAD"] },
+    { label: "Shifts", href: "/location-dept-head/shifts", iconName: "Clock", roles: ["LOCATION_DEPT_HEAD"] },
     { label: "Profile", href: "/location-dept-head/profile", iconName: "UserCircle", roles: ["LOCATION_DEPT_HEAD"] },
   ],
   PRINCIPAL: [

@@ -262,7 +262,17 @@ export function isCommonYearDepartment(d: DepartmentWithId): boolean {
   if (d.isActive === false) return false;
   if (d.parentDepartmentId) return false; // sub-departments never qualify
   if (!allClaimedYears(d).includes(1)) return false;
-  return Boolean(d.hasSubDepartments) || (d.secondaryDepartments ?? []).length > 0;
+  if (Boolean(d.hasSubDepartments) || (d.secondaryDepartments ?? []).length > 0) return true;
+  // Cross-listing set per-course (Department.courseScopes[catalogId].secondaryDepartments)
+  // rather than the legacy flat field - same precedence allClaimedYears above
+  // already gives assignedYears, but this check was never updated to match
+  // when courseScopes was introduced. Without this, a department cross-listed
+  // ONLY this way (the correct, modern per-course shape) could claim Year 1
+  // yet never be recognized as a shared-first-year department at all - Year 1
+  // then gets stripped from it everywhere a freshman-landing check applies
+  // (see RosterFieldInputs.tsx's own Year field), even though it's
+  // structurally exactly the shape this function exists to detect.
+  return Object.values(d.courseScopes ?? {}).some((s) => (s.secondaryDepartments ?? []).length > 0);
 }
 
 /**

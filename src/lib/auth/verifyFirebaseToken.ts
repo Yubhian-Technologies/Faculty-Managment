@@ -93,5 +93,6 @@ export async function verifyFirebaseToken(token: string): Promise<FirebaseTokenP
 
   // Normalise uid - Firebase uses both sub and user_id
   payload.uid = payload.user_id ?? payload.sub;
+
   return payload;
 }

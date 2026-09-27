@@ -20,6 +20,7 @@ type SubjectForm = {
   customCategory: string;
   name: string;
   code: string;
+  shortCode: string;
   type: SubjectType;
   lectureHours: string;
   tutorialHours: string;
@@ -30,7 +31,7 @@ type SubjectForm = {
 };
 
 const EMPTY_SUBJECT_FORM: SubjectForm = {
-  serialNumber: "", category: "", customCategory: "", name: "", code: "", type: "THEORY",
+  serialNumber: "", category: "", customCategory: "", name: "", code: "", shortCode: "", type: "THEORY",
   lectureHours: "", tutorialHours: "", practicalHours: "",
   hoursPerWeek: "", totalHoursPerSemester: "", credits: "",
 };
@@ -40,28 +41,50 @@ export default function EditAcademicsSubjectPage() {
   const params = useParams<{ id: string }>();
   const subjectId = params.id;
   const searchParams = useSearchParams();
-  const departmentId = searchParams.get("departmentId") ?? "";
   const courseId = searchParams.get("courseId") ?? "";
-  const year = searchParams.get("year") ?? "";
+  // Used only for the lookup fetch below - `courseId` above stays whatever
+  // the list page's OWN Course filter was (needed unchanged for Cancel/Save
+  // to land back on a courseId the list's deduped-by-catalog Course dropdown
+  // actually recognizes - see backHref below). A subject reached from the
+  // list can be physically filed under a DIFFERENT department's Course doc
+  // than whichever one the list happens to be showing as "the" course for
+  // this catalog entry (master subjects are catalog-shared - see
+  // /api/college/subjects GET's own doc-comment) - looking it up by that
+  // mismatched courseId 404s a subject that genuinely exists.
+  const catalogId = searchParams.get("catalogId") ?? "";
   const academicYear = searchParams.get("academicYear") ?? "";
   const regulationFromList = searchParams.get("regulation") ?? "";
   // Carried through to Cancel/Save so the Subjects list lands back on this
-  // same department/course/year/session/regulation instead of the blank pickers.
-  const backHref = `/academics/subjects?departmentId=${encodeURIComponent(departmentId)}&courseId=${encodeURIComponent(courseId)}&year=${encodeURIComponent(year)}&academicYear=${encodeURIComponent(academicYear)}&regulation=${encodeURIComponent(regulationFromList)}`;
+  // same course/session/regulation instead of the blank pickers - matching
+  // exactly the 3 params the list page itself reads (academics/subjects/
+  // page.tsx) and the Edit link sends. `year`/`departmentId` never belonged
+  // here at all: master subjects are courseId+regulation scoped with no
+  // ordinal year or department (see types/teaching.ts's own Subject.year
+  // comment) - that's the semester-scoped HOD subjects model instead. Reading
+  // them made this page's load guard fire on every visit (they were never
+  // sent), so Edit Subject could never actually open.
+  const backHref = `/academics/subjects?courseId=${encodeURIComponent(courseId)}&academicYear=${encodeURIComponent(academicYear)}&regulation=${encodeURIComponent(regulationFromList)}`;
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<SubjectForm>(EMPTY_SUBJECT_FORM);
-  // Set at creation, immutable here (like courseId/year) - shown for context only.
+  // Set at creation, immutable here (like courseId) - shown for context only.
   const [regulation, setRegulation] = useState("");
 
   useEffect(() => {
-    if (!courseId || !year) {
-      toast({ variant: "destructive", title: "Select a course and year first" });
+    if (!courseId) {
+      toast({ variant: "destructive", title: "Select a course first" });
       router.push(backHref);
       return;
     }
-    fetch(`/api/college/subjects?courseId=${encodeURIComponent(courseId)}&year=${encodeURIComponent(year)}`)
+    // catalogId (when the list page had one) finds this subject regardless of
+    // which department's Course doc it's physically filed under - see
+    // catalogId's own doc-comment above. courseId-only remains the fallback
+    // for a legacy course with no catalogId, same as new/page.tsx's own
+    // course-verify fetch.
+    fetch(catalogId
+      ? `/api/college/subjects?catalogId=${encodeURIComponent(catalogId)}`
+      : `/api/college/subjects?courseId=${encodeURIComponent(courseId)}`)
       .then((r) => r.json() as Promise<{ subjects: Subject[] }>)
       .then((d) => {
         const s = (d.subjects ?? []).find((x) => x.id === subjectId);
@@ -76,6 +99,7 @@ export default function EditAcademicsSubjectPage() {
           customCategory: s.customCategory ?? "",
           name: s.name,
           code: s.code,
+          shortCode: s.shortCode ?? "",
           type: s.type,
           lectureHours: s.lectureHours != null ? String(s.lectureHours) : "",
           tutorialHours: s.tutorialHours != null ? String(s.tutorialHours) : "",
@@ -88,7 +112,7 @@ export default function EditAcademicsSubjectPage() {
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load subject" }))
       .finally(() => setLoading(false));
-  }, [courseId, year, subjectId, router, backHref]);
+  }, [courseId, subjectId, router, backHref]);
 
   function setF(patch: Partial<SubjectForm>) {
     setForm((f) => ({ ...f, ...patch }));
@@ -127,6 +151,7 @@ export default function EditAcademicsSubjectPage() {
           customCategory: form.category === "OTHER" ? form.customCategory.trim() : undefined,
           name: form.name.trim(),
           code: form.code.trim(),
+          shortCode: form.shortCode.trim(),
           type: form.type,
           lectureHours: Number(form.lectureHours),
           tutorialHours: Number(form.tutorialHours),
@@ -236,6 +261,20 @@ export default function EditAcademicsSubjectPage() {
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Short Code</Label>
+              <Input
+                value={form.shortCode}
+                onChange={(e) => setF({ shortCode: e.target.value.toUpperCase() })}
+                placeholder="e.g. DS"
+                maxLength={8}
+                className="uppercase"
+              />
+              <p className="text-xs text-muted-foreground">
+                A compact mnemonic shown in the timetable and other tight spaces (e.g. &quot;CHE&quot; for Chemistry) - optional, falls back to Code when blank.
+              </p>
             </div>
 
             <div className="space-y-2">
