@@ -490,8 +490,16 @@ export interface LocationDepartment {
   id: string;
   locationId: string;
   name: string; // Electrical, Civil, Accounts, etc.
+  code?: string;
+  headUid?: string;
   deptHeadUid?: string;
+  headStaffId?: string;
+  headName?: string;
   deptHeadName?: string;
+  headEmail?: string;
+  headPhone?: string;
+  description?: string;
+  staffCount?: number;
   isActive: boolean;
   createdAt: Timestamp;
   updatedAt?: Timestamp;
