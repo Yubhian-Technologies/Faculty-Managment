@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -19,6 +19,8 @@ import { isPathHidden } from "@/components/layout/navConfig";
 import { toast } from "@/hooks/useToast";
 import { ordinalYear, resolveTimetableDays } from "@/lib/timetable/gridModel";
 import { formatTime12h } from "@/lib/timetable/facultyTimetablePdf";
+import { toRoman, formatAcademicShortNotation } from "@/lib/academic/format";
+import { WeeklyTimetableMatrix } from "@/components/timetable/WeeklyTimetableMatrix";
 import type { Course, CourseYearTiming, Department, Section, TimetableSlot, TeachingAssignment, SubjectType, DayOfWeek } from "@/types";
 import { DAY_LABELS } from "@/types";
 
@@ -176,16 +178,21 @@ export default function ClassLeaderDashboardPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="min-w-0">
           <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold tracking-tight text-foreground break-words">
-            {section ? `Section ${section.name} Dashboard` : "Class Leader Dashboard"}
+            {section
+              ? `${formatAcademicShortNotation({
+                  year: section.year,
+                  courseName: course?.name,
+                  courseCode: course?.code,
+                  semester: resolvedSemester,
+                  sectionName: section.name,
+                })} Dashboard`
+              : "Class Leader Dashboard"}
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5 break-words">
             {section && course
               ? [
-                  course.name,
                   departmentName,
-                  ordinalYear(section.year),
                   section.batch,
-                  resolvedSemester ? `Semester ${resolvedSemester}` : undefined,
                   section.facultyInchargeName ? `In-charge: ${section.facultyInchargeName}` : undefined,
                 ]
                   .filter(Boolean)
@@ -350,7 +357,7 @@ export default function ClassLeaderDashboardPage() {
             <div className="flex items-center gap-2">
               <BookOpen className="h-4 w-4 text-primary" />
               <h2 className="text-base font-bold text-foreground">
-                Current Semester Subjects
+                {resolvedSemester ? `${toRoman(resolvedSemester)} Sem Subjects` : "Current Semester Subjects"}
               </h2>
             </div>
 

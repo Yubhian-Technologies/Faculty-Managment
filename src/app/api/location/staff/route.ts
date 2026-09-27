@@ -17,7 +17,13 @@ export async function GET(request: Request) {
     );
 
     const { searchParams } = new URL(request.url);
-    const locationId = searchParams.get("locationId") || session.locationId;
+    let locationId = searchParams.get("locationId") || session.locationId;
+    if (!locationId) {
+      const firstLoc = await getAdminDb().collection("locations").limit(1).get();
+      if (!firstLoc.empty) {
+        locationId = firstLoc.docs[0].id;
+      }
+    }
     if (!locationId) {
       return NextResponse.json({ error: "locationId required" }, { status: 400 });
     }

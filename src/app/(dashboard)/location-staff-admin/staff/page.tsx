@@ -8,6 +8,7 @@ import {
   Plus,
   Search,
   Shield,
+  Upload,
   UsersRound,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -137,10 +138,21 @@ export default function CampusStaffDirectoryPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <Badge variant="outline" className="text-xs px-2.5 py-1">
             {filteredStaff.length} of {staffList.length} Staff Shown
           </Badge>
+          <Button
+            asChild
+            variant="outline"
+            size="sm"
+            className="rounded-full gap-1.5 h-9 text-xs font-semibold px-4 shadow-sm"
+          >
+            <Link href="/location-staff-admin/staff/import">
+              <Upload className="h-4 w-4" />
+              <span>Bulk Import (CSV)</span>
+            </Link>
+          </Button>
           <Button
             asChild
             size="sm"

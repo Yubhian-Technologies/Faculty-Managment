@@ -11,6 +11,8 @@ import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/store/authStore";
 import { CollegeSwitcher } from "@/components/layout/CollegeSwitcher";
 
+import { VISHNU_LOGO_URL } from "@/lib/pdf/logo";
+
 interface TopBarProps {
   title?: string;
   hiddenItems?: string[];
@@ -27,15 +29,36 @@ export function TopBar({ title, hiddenItems }: TopBarProps) {
   return (
     <header className="h-16 border-b bg-background flex items-center justify-between px-4 md:px-6 sticky top-0 z-20">
       <div className="flex items-center gap-3">
-        {!isClassLeader && (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="md:hidden"
-            onClick={toggleSidebar}
-          >
-            <Menu className="h-5 w-5" />
-          </Button>
+        {isClassLeader ? (
+          <Link href="/class-leader" className="flex items-center gap-2.5 hover:opacity-90 transition-opacity">
+            <img
+              src={VISHNU_LOGO_URL}
+              alt="Vishnu Logo"
+              className="h-8 w-8 rounded-md object-contain shrink-0"
+            />
+            <div className="flex flex-col">
+              <span className="text-sm font-bold leading-tight tracking-tight">Vishnu People</span>
+              <span className="text-[10px] text-muted-foreground font-semibold leading-none">Class Leader</span>
+            </div>
+          </Link>
+        ) : (
+          <>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="md:hidden"
+              onClick={toggleSidebar}
+            >
+              <Menu className="h-5 w-5" />
+            </Button>
+            <div className="md:hidden flex items-center gap-2">
+              <img
+                src={VISHNU_LOGO_URL}
+                alt="Vishnu Logo"
+                className="h-7 w-7 rounded-md object-contain shrink-0"
+              />
+            </div>
+          </>
         )}
         {title && <h2 className="text-base font-semibold hidden sm:block">{title}</h2>}
       </div>
