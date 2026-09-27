@@ -81,12 +81,8 @@ export class MasterSubjectImportService {
         continue;
       }
 
-      // ── Resolve Academic Year ─────────────────────────────────────────────
-      const academicYear = row.academicYear?.toString().trim() || payload.academicYear?.trim();
-      if (!academicYear) {
-        failed.push({ row: rowNum, code: codeLabel, error: "Academic Year is required" });
-        continue;
-      }
+      // ── Resolve Academic Year (optional) ──────────────────────────────────
+      const academicYear = row.academicYear?.toString().trim() || payload.academicYear?.trim() || undefined;
 
       // ── Validate Row with SubjectCatalogValidator ─────────────────────────
       const validation = SubjectCatalogValidator.validateRow(row, {
@@ -171,7 +167,7 @@ export class MasterSubjectImportService {
         collegeId,
         courseId: course.id,
         courseName: course.name,
-        academicYear,
+        ...(academicYear ? { academicYear } : {}),
         ...(regulation ? { regulation } : {}),
         serialNumber: validData.serialNumber,
         category: validData.category,

@@ -19,7 +19,6 @@ import { IMPORT_COLUMNS, IMPORT_HINTS as HINTS } from "@/lib/subjects/csvColumns
 import { resolveSubjectCategory, resolveSubjectType } from "@/lib/subjects/normalize";
 import type { Course, CourseCatalogItem, Subject, SubjectCategory, SubjectType } from "@/types";
 import { SUBJECT_CATEGORY_LABELS, SUBJECT_TYPE_LABELS } from "@/types";
-import { recentAcademicSessions } from "@/lib/college/academicSession";
 import { stripLeadingZeros } from "@/lib/utils";
 import { Download, Upload, CheckCircle2, XCircle, FileSpreadsheet, ArrowLeft, AlertTriangle, Pencil, BookOpen } from "lucide-react";
 
@@ -46,7 +45,7 @@ type FailedRow = { row: number; code: string; error: string; data: ParsedRow; st
 
   type FixForm = {
     courseId: string;
-    academicYear: string;
+    academicYear?: string;
     regulation: string;
     serialNumber: string;
     category: SubjectCategory | "";
@@ -73,9 +72,7 @@ export default function ImportAcademicsSubjectsPage() {
   const [catalogItems, setCatalogItems] = useState<CourseCatalogItem[]>([]);
   const [selectedCourseId, setSelectedCourseId] = useState(urlCourseId);
   const [selectedRegulation, setSelectedRegulation] = useState(urlRegulation);
-  const [selectedAcademicYear, setSelectedAcademicYear] = useState(
-    urlAcademicYear || recentAcademicSessions()[0] || "2026-27"
-  );
+  const selectedAcademicYear = urlAcademicYear;
 
   useEffect(() => {
     Promise.all([
@@ -143,11 +140,11 @@ export default function ImportAcademicsSubjectsPage() {
   }, [allowedRegulations, selectedRegulation]);
 
   const backHref = selectedCourseId
-    ? `/academics/subjects?courseId=${encodeURIComponent(selectedCourseId)}&academicYear=${encodeURIComponent(selectedAcademicYear)}&regulation=${encodeURIComponent(selectedRegulation)}`
+    ? `/academics/subjects?courseId=${encodeURIComponent(selectedCourseId)}${selectedRegulation ? `&regulation=${encodeURIComponent(selectedRegulation)}` : ""}${selectedAcademicYear ? `&academicYear=${encodeURIComponent(selectedAcademicYear)}` : ""}`
     : "/academics/subjects";
 
-  // When Course, Regulation, and Academic Year are selected in the scope header,
-  // those 3 columns are locked/omitted from the individual row requirements.
+  // When Course and Regulation are selected in the scope header,
+  // those columns are locked/omitted from the individual row requirements.
   const columns = useMemo(
     () => IMPORT_COLUMNS.filter((c) => !LOCKED_KEYS.includes(c.key)),
     []
@@ -157,7 +154,8 @@ export default function ImportAcademicsSubjectsPage() {
   useEffect(() => {
     if (!selectedCourseId) return;
     const regParam = selectedRegulation ? `&regulation=${encodeURIComponent(selectedRegulation)}` : "";
-    fetch(`/api/college/subjects?courseId=${encodeURIComponent(selectedCourseId)}&academicYear=${encodeURIComponent(selectedAcademicYear)}${regParam}`)
+    const yearParam = selectedAcademicYear ? `&academicYear=${encodeURIComponent(selectedAcademicYear)}` : "";
+    fetch(`/api/college/subjects?courseId=${encodeURIComponent(selectedCourseId)}${regParam}${yearParam}`)
       .then((r) => r.json() as Promise<{ subjects?: Subject[] }>)
       .then((d) => {
         setNextSerialNumber(Math.max(0, ...(d.subjects ?? []).map((s) => s.serialNumber ?? 0)) + 1);
@@ -256,7 +254,7 @@ export default function ImportAcademicsSubjectsPage() {
       const records = rows.map((r) => ({
         ...r,
         course: r.course?.trim() || selectedCourse.name,
-        academicYear: r.academicYear?.trim() || selectedAcademicYear,
+        ...(r.academicYear?.trim() || selectedAcademicYear ? { academicYear: r.academicYear?.trim() || selectedAcademicYear } : {}),
         regulation: r.regulation?.trim() || selectedRegulation || undefined,
       }));
       const res = await fetch("/api/college/subjects/import", {
@@ -266,7 +264,7 @@ export default function ImportAcademicsSubjectsPage() {
           courseId: selectedCourse.id,
           course: selectedCourse.name,
           regulation: selectedRegulation || undefined,
-          academicYear: selectedAcademicYear,
+          academicYear: selectedAcademicYear || undefined,
           records,
         }),
       });
@@ -280,7 +278,8 @@ export default function ImportAcademicsSubjectsPage() {
         setRows([]);
         if (selectedCourseId) {
           const regParam = selectedRegulation ? `&regulation=${encodeURIComponent(selectedRegulation)}` : "";
-          fetch(`/api/college/subjects?courseId=${encodeURIComponent(selectedCourseId)}&academicYear=${encodeURIComponent(selectedAcademicYear)}${regParam}`)
+          const yearParam = selectedAcademicYear ? `&academicYear=${encodeURIComponent(selectedAcademicYear)}` : "";
+          fetch(`/api/college/subjects?courseId=${encodeURIComponent(selectedCourseId)}${regParam}${yearParam}`)
             .then((r) => r.json() as Promise<{ subjects?: Subject[] }>)
             .then((d) => {
               setNextSerialNumber(Math.max(0, ...(d.subjects ?? []).map((s) => s.serialNumber ?? 0)) + 1);
@@ -342,18 +341,12 @@ export default function ImportAcademicsSubjectsPage() {
   const fixAllowedRegulations = useMemo(() => {
     return fixCatalogItem?.regulations ?? [];
   }, [fixCatalogItem]);
-  const fixAcademicYearOptions = useMemo(() => {
-    const base = recentAcademicSessions();
-    const cur = fixTarget?.form.academicYear;
-    return cur && !base.includes(cur) ? [cur, ...base] : base;
-  }, [fixTarget?.form.academicYear]);
 
   async function handleFixSave() {
     if (!fixTarget) return;
     const form = fixTarget.form;
     const course = courses.find((c) => c.id === form.courseId);
     if (!course) { setFixError("Course is required"); return; }
-    if (!form.academicYear) { setFixError("Academic Year is required"); return; }
     if (!form.name.trim() || !form.code.trim()) { setFixError("Name and code are required"); return; }
     if (form.serialNumber === "") { setFixError("S.No. is required"); return; }
     if (!form.category) { setFixError("Select a category"); return; }
@@ -367,7 +360,7 @@ export default function ImportAcademicsSubjectsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           courseId: form.courseId,
-          academicYear: form.academicYear,
+          academicYear: form.academicYear || undefined,
           regulation: form.regulation || undefined,
           serialNumber: Number(form.serialNumber),
           category: form.category,
@@ -406,7 +399,7 @@ export default function ImportAcademicsSubjectsPage() {
       <PageHeader
         title="Import Subjects"
         description={selectedCourse
-          ? `Bulk upload subjects for ${selectedCourse.name} · ${selectedAcademicYear}${selectedRegulation ? ' · Regulation: ' + selectedRegulation : ''}`
+          ? `Bulk upload subjects for ${selectedCourse.name}${selectedRegulation ? ' · Regulation: ' + selectedRegulation : ''}`
           : "Bulk upload subjects from a CSV or Excel file for your selected Course and Regulation"}
         actions={
           <Button variant="outline" asChild>
@@ -430,7 +423,7 @@ export default function ImportAcademicsSubjectsPage() {
             )}
           </CardTitle>
         </CardHeader>
-        <CardContent className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <CardContent className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label>Course *</Label>
             <Select
@@ -478,22 +471,6 @@ export default function ImportAcademicsSubjectsPage() {
                 {allowedRegulations.map((r) => (
                   <SelectItem key={r} value={r}>
                     {r}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label>Academic Year *</Label>
-            <Select value={selectedAcademicYear} onValueChange={setSelectedAcademicYear}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select academic year" />
-              </SelectTrigger>
-              <SelectContent>
-                {recentAcademicSessions().map((y) => (
-                  <SelectItem key={y} value={y}>
-                    {y}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -717,36 +694,26 @@ export default function ImportAcademicsSubjectsPage() {
 
           {fixTarget && (
             <div className="space-y-4">
-           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                 <div className="space-y-2">
-                   <Label>Course</Label>
-                   <Select value={fixTarget.form.courseId} onValueChange={(v) => setFixField("courseId", v)}>
-                     <SelectTrigger><SelectValue placeholder="Select course" /></SelectTrigger>
-                     <SelectContent>
-                       {courses.filter((c) => c.isActive).map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                     </SelectContent>
-                   </Select>
-                 </div>
-                 <div className="space-y-2">
-                   <Label>Academic Year</Label>
-                   <Select value={fixTarget.form.academicYear} onValueChange={(v) => setFixField("academicYear", v)}>
-                     <SelectTrigger><SelectValue placeholder="Select academic year" /></SelectTrigger>
-                     <SelectContent>
-                       {fixAcademicYearOptions.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                     </SelectContent>
-                   </Select>
-                 </div>
-               </div>
-
-               <div className="space-y-2">
-                 <Label>Regulation</Label>
-                 <Select value={fixTarget.form.regulation} onValueChange={(v) => setFixField("regulation", v)} disabled={fixAllowedRegulations.length === 0}>
-                   <SelectTrigger><SelectValue placeholder={fixAllowedRegulations.length ? "Select regulation (optional)" : "None resolved for this course"} /></SelectTrigger>
-                   <SelectContent>
-                     {fixAllowedRegulations.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
-                   </SelectContent>
-                 </Select>
-               </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Course</Label>
+                <Select value={fixTarget.form.courseId} onValueChange={(v) => setFixField("courseId", v)}>
+                  <SelectTrigger><SelectValue placeholder="Select course" /></SelectTrigger>
+                  <SelectContent>
+                    {courses.filter((c) => c.isActive).map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Regulation</Label>
+                <Select value={fixTarget.form.regulation} onValueChange={(v) => setFixField("regulation", v)} disabled={fixAllowedRegulations.length === 0}>
+                  <SelectTrigger><SelectValue placeholder={fixAllowedRegulations.length ? "Select regulation (optional)" : "None resolved for this course"} /></SelectTrigger>
+                  <SelectContent>
+                    {fixAllowedRegulations.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
