@@ -5,6 +5,9 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodManageFacultyDepartment } from "@/lib/departments/scope";
 import { SUPPORTING_STAFF_ROLE_CATEGORY, canRolePostCategory } from "@/lib/supportingStaff/roleCategory";
+import { resolveDesignation } from "@/lib/designations/validate";
+import { designationLabel } from "@/lib/designations/config";
+import { syncLinkedLoginName } from "@/lib/roles/loginSync";
 import { supportingStaffDisplayName } from "@/lib/supportingStaff/supportingStaffDisplayName";
 import { normalizeSupportingStaffProfile } from "@/lib/faculty/academicProfileCompat";
 import { migrateSupportingStaffDoc } from "@/lib/faculty/fieldRenames";
@@ -204,6 +207,20 @@ export async function PATCH(
       if (body[key] !== undefined) updates[key] = body[key];
     }
 
+    // Held to this college's own admin-curated Designation Catalog for the
+    // effective category (the new one if this same PATCH is also changing
+    // staffCategory, else the record's current one) - same check the Add
+    // Staff route and bulk-import route run; previously only the Edit
+    // dropdown restricted this.
+    if (typeof updates.designation === "string") {
+      const effectiveCategory = (body.staffCategory ?? currentCategory) as SupportingStaffCategory;
+      const designationResult = await resolveDesignation(db, session.collegeId, effectiveCategory, updates.designation);
+      if ("error" in designationResult) {
+        return NextResponse.json({ error: designationResult.error }, { status: 400 });
+      }
+      updates.designation = designationResult.name;
+    }
+
     if (body.panNo !== undefined) updates.panNo = body.panNo.toUpperCase();
     if (body.ifscCode !== undefined) updates.ifscCode = body.ifscCode.toUpperCase();
 
@@ -246,7 +263,10 @@ export async function PATCH(
     // Drop the old-named twin of any personal key written above on a not-yet-migrated doc.
     await ref.update(withLegacyPersonalKeysDeleted(updates, FieldValue.delete()));
 
-    if (body.profilePhotoUrl !== undefined || body.nameAsPerPan !== undefined || body.legalName !== undefined) {
+    if (
+      body.profilePhotoUrl !== undefined || body.nameAsPerPan !== undefined || body.legalName !== undefined
+      || body.department !== undefined || body.designation !== undefined
+    ) {
       const linkedUid = (snap.data() as { userUid?: string }).userUid;
       if (linkedUid) {
         const loginSync: Record<string, string> = {};
@@ -262,11 +282,29 @@ export async function PATCH(
           const effectiveName = body.nameAsPerPan !== undefined ? body.nameAsPerPan : current.nameAsPerPan;
           loginSync.name = effectiveLegalName?.trim() || effectiveName?.trim() || "";
         }
-        try {
-          await db.collection("colleges").doc(session.collegeId).collection("users").doc(linkedUid)
-            .set(loginSync, { merge: true });
-          await db.collection("systemUsers").doc(linkedUid).set(loginSync, { merge: true });
-        } catch { /* non-fatal */ }
+        // The login doc's own `department` (colleges/{id}/users/{uid}) is what
+        // resolveCollegeStaffUnitRoster (src/lib/attendance/rosterMonthlyExport.ts)
+        // reads to build a unit head's monthly attendance-export roster for
+        // this COLLEGE_STAFF login - left unsynced, a department reassignment
+        // here (e.g. College Office moving a Non-Technical staff member to a
+        // different unit) silently left them filed under their old unit for
+        // that export. "" is a valid, intentional value (cleared back to
+        // "Centrally managed / no department"), so this is keyed on
+        // `!== undefined`, not truthiness, same as every other field here.
+        if (body.department !== undefined) loginSync.department = body.department;
+        // The login doc's own `designation` is display-only everywhere it's
+        // read today, but left stale there too on the same principle as
+        // department/name above - a promotion/title change here must
+        // propagate rather than leave the login showing the pre-edit title
+        // indefinitely. `updates.designation` (not `body.designation`) is
+        // used here - it's already been resolved to its canonical catalog
+        // value by resolveDesignation above, same as what POST stores on the
+        // login at creation (designationLabel(resolvedDesignation)).
+        if (body.designation !== undefined) loginSync.designation = designationLabel(updates.designation as string);
+        // A failure is logged and stamped on this record (loginSyncStatus/
+        // loginSyncError) rather than silently dropped - see
+        // syncLinkedLoginName's own doc-comment.
+        await syncLinkedLoginName(db, session.collegeId, ref, linkedUid, loginSync);
       }
     }
 

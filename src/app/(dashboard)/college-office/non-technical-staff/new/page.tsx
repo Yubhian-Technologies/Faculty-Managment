@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -19,9 +19,9 @@ import { getMissingRequiredPersonalFields, SUPPORTING_STAFF_REQUIRED_PERSONAL_FI
 import { SupportingStaffModuleEditor, type SupportingStaffEditRecord } from "@/components/supportingStaff/SupportingStaffModuleEditor";
 import { getSupportingStaffProfileModules } from "@/lib/supportingStaff/profileModules";
 import { useCollegeType } from "@/hooks/useCollegeType";
+import { useActiveDepartments } from "@/hooks/useActiveDepartments";
 import { toast } from "@/hooks/useToast";
 import { PHONE_REGEX, EMAIL_REGEX, APAAR_REGEX } from "@/lib/validations";
-import type { Department } from "@/types";
 
 const schema = z.object({
   employeeId: z.string().min(1, "Employee ID is required"),
@@ -48,23 +48,22 @@ interface WizardStep {
 // Steps beyond "core" reuse SupportingStaffModuleEditor, the same per-module
 // field renderer the View/Edit hub uses (SUPPORTING_STAFF_MODULES) - so the
 // wizard's modules match what Edit later shows, 1:1.
+//
+// College Office only - Principal/VP no longer have a create path for
+// Supporting Staff of either category (see canRoleCreateSupportingStaff in
+// lib/supportingStaff/roleCategory.ts); their /principal/staff/non-technical/new
+// page was removed rather than kept around to always 403.
 export default function NewNonTechnicalStaffPage() {
   const router = useRouter();
   const { collegeType } = useCollegeType();
-  const [departments, setDepartments] = useState<Department[]>([]);
+  const listPath = "/college-office/non-technical-staff";
+  const departments = useActiveDepartments();
   const [record, setRecord] = useState<SupportingStaffEditRecord>({});
   const [extraPhones, setExtraPhones] = useState<{ label?: string; number: string }[]>([]);
   const [photoUrl, setPhotoUrl] = useState<string | undefined>(undefined);
   const [tempPhotoId] = useState(() => crypto.randomUUID());
   const [stepIndex, setStepIndex] = useState(0);
   const [submitting, setSubmitting] = useState(false);
-
-  useEffect(() => {
-    fetch("/api/college/departments")
-      .then((r) => r.json() as Promise<{ departments: Department[] }>)
-      .then((d) => setDepartments((d.departments ?? []).filter((dep) => dep.isActive)))
-      .catch(() => { /* department assignment is optional */ });
-  }, []);
 
   const {
     register,
@@ -161,7 +160,7 @@ export default function NewNonTechnicalStaffPage() {
       }
 
       toast({ variant: "success", title: "Non-Technical staff added", description: `${record.legalName || "The staff member"} has been added.` });
-      router.push("/college-office/non-technical-staff");
+      router.push(listPath);
     } catch {
       toast({ variant: "destructive", title: "Network error", description: "Please try again." });
     } finally {

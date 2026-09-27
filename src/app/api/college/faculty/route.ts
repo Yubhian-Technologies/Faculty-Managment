@@ -7,6 +7,7 @@ import { createFirebaseUser } from "@/lib/firebase/authRest";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
 import { getHodDepartmentScope, getDepartmentTreeNames, canHodManageFacultyDepartment, facultyManageableDepartmentNames } from "@/lib/departments/scope";
 import { LEGACY_TECHNICAL_DESIGNATIONS } from "@/lib/designations/config";
+import { resolveDesignation } from "@/lib/designations/validate";
 import { experienceBreakdown, allPreviousExperienceEntries } from "@/lib/faculty/experienceCalc";
 import { normalizeAcademicProfile } from "@/lib/faculty/academicProfileCompat";
 import { degreeTypeError } from "@/lib/faculty/degreeType";
@@ -271,6 +272,17 @@ export async function POST(request: Request) {
     const db = getAdminDb();
     const collegeId = session.collegeId;
 
+    // Held to this college's own admin-curated Designation Catalog (category
+    // FACULTY), same as the bulk-import route - previously only the Add
+    // Faculty dropdown restricted this, so a direct/malformed request could
+    // write any string. matchOption normalizes case/punctuation, but only a
+    // catalog entry is accepted.
+    const designationResult = await resolveDesignation(db, collegeId, "FACULTY", designation);
+    if ("error" in designationResult) {
+      return NextResponse.json({ error: designationResult.error }, { status: 400 });
+    }
+    const resolvedDesignation = designationResult.name;
+
     // Resolve the owning department. A parent HOD may add faculty straight into
     // one of their sub-departments by naming it; anything else falls back to
     // their own department. A sub-HOD has no children, so they always land on
@@ -386,7 +398,7 @@ export async function POST(request: Request) {
           .filter((p) => p.number);
         return numbers.length > 0 ? { additionalPhoneNumbers: numbers } : {};
       })()),
-      designation,
+      designation: resolvedDesignation,
       employeeCategory,
       highestQualification: normalizeHighestQualification(highestQualification),
       specialization: body.specialization ?? "",

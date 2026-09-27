@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
@@ -9,12 +9,22 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Avatar } from "@/components/shared/Avatar";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
+import { ExportFacultyDialog } from "@/components/faculty/ExportFacultyDialog";
 import { toast } from "@/hooks/useToast";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { DESIGNATION_LABELS, FACULTY_STATUS_LABELS } from "@/types";
 import type { Department, Designation, FacultyMember, FacultyStatus, FMSUser } from "@/types";
+
+// Selection checkboxes on this list (header "select all" + every row) - same
+// sizing as the HOD Faculty Register's own export selection so both read
+// consistently (hod/faculty/page.tsx SELECT_CHECKBOX_CLASS).
+const SELECT_CHECKBOX_CLASS =
+  "h-5 w-5 border-2 border-slate-500 bg-white hover:border-primary [&_svg]:h-3.5 [&_svg]:w-3.5 " +
+  "data-[state=checked]:border-primary data-[state=indeterminate]:border-primary " +
+  "data-[state=indeterminate]:bg-primary data-[state=indeterminate]:text-primary-foreground";
 
 type FacultyRow = Record<string, unknown> & FacultyMember;
 
@@ -44,6 +54,10 @@ export default function PrincipalDepartmentFacultyPage() {
   const [statusFilter, setStatusFilter] = useState("");
   const [removingHod, setRemovingHod] = useState(false);
   const [isRemoving, setIsRemoving] = useState(false);
+  // Export-only selection - when empty, ExportFacultyDialog exports everyone
+  // currently shown (unchanged default behavior); picking specific rows here
+  // narrows it to just those faculty members. Same pattern as hod/faculty/page.tsx.
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const { data: departments = [] } = useQuery({
     queryKey: ["principal-faculty-departments"],
@@ -83,6 +97,19 @@ export default function PrincipalDepartmentFacultyPage() {
   // Staff view only for a bare HOD login with no Faculty record at all.
   const hodFaculty = faculty.find((f) => (f as unknown as { userUid?: string }).userUid === hod?.uid);
 
+  // Switching status tabs (or departments) changes which rows exist at all -
+  // a stale selection from before would otherwise silently export rows no
+  // longer even shown.
+  useEffect(() => {
+    // Wrapped so the setState call isn't reachable synchronously from the
+    // effect body (react-hooks/set-state-in-effect) - same pattern as
+    // hod/faculty/page.tsx's own tab-switch selection reset.
+    void Promise.resolve().then(() => setSelectedIds(new Set()));
+  }, [statusFilter, deptId]);
+
+  const allSelected = faculty.length > 0 && faculty.every((f) => selectedIds.has(f.id as string));
+  const someSelected = faculty.some((f) => selectedIds.has(f.id as string)) && !allSelected;
+
   // Clears the department's HOD assignment. Deliberately NOT a delete of the
   // person: the same PATCH the Assign HOD dropdown already uses (hodUid: "")
   // also drops this department from their own profile's `departments`, so they
@@ -115,6 +142,33 @@ export default function PrincipalDepartmentFacultyPage() {
   }
 
   const columns: Column<FacultyRow>[] = [
+    {
+      key: "select",
+      header: (
+        <Checkbox
+          checked={allSelected ? true : someSelected ? "indeterminate" : false}
+          onCheckedChange={(checked) => setSelectedIds(checked ? new Set(faculty.map((f) => f.id as string)) : new Set())}
+          aria-label="Select all faculty"
+          className={SELECT_CHECKBOX_CLASS}
+        />
+      ),
+      render: (row) => (
+        <div onClick={(e) => e.stopPropagation()}>
+          <Checkbox
+            checked={selectedIds.has(row.id as string)}
+            onCheckedChange={(checked) =>
+              setSelectedIds((prev) => {
+                const next = new Set(prev);
+                if (checked) next.add(row.id as string); else next.delete(row.id as string);
+                return next;
+              })
+            }
+            aria-label={`Select ${facultyDisplayName(row)}`}
+            className={SELECT_CHECKBOX_CLASS}
+          />
+        </div>
+      ),
+    },
     {
       key: "name",
       header: "Faculty Member",
@@ -162,9 +216,23 @@ export default function PrincipalDepartmentFacultyPage() {
         title={department?.name ?? "Faculty"}
         description="Faculty members in this department"
         actions={
-          <Button variant="outline" onClick={() => router.push("/principal/faculty")}>
-            <ArrowLeft className="h-4 w-4 mr-2" />Back
-          </Button>
+          <div className="flex items-center gap-2">
+            {selectedIds.size > 0 && (
+              <span className="text-xs text-muted-foreground">
+                {selectedIds.size} selected
+                <Button variant="link" size="sm" className="h-auto p-0 pl-1.5 text-xs" onClick={() => setSelectedIds(new Set())}>
+                  Clear
+                </Button>
+              </span>
+            )}
+            <ExportFacultyDialog
+              faculty={selectedIds.size > 0 ? faculty.filter((f) => selectedIds.has(f.id as string)) : faculty}
+              isSelection={selectedIds.size > 0}
+            />
+            <Button variant="outline" onClick={() => router.push("/principal/faculty")}>
+              <ArrowLeft className="h-4 w-4 mr-2" />Back
+            </Button>
+          </div>
         }
       />
 
