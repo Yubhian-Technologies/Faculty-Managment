@@ -472,16 +472,27 @@ export async function POST(request: Request) {
       // Existence of the assignment (this subject IS this department's
       // curriculum) is the one guarantee always enforced.
       if (!body.isPast) {
+        // SubjectInstanceService keys a live instance `${subjectId}_${departmentId}_${semester}`
+        // (a subject can be a separate live instance in two semesters at once - see
+        // that service's own doc-comment), and only ever DELETES the old
+        // no-semester key as one-time migration cleanup, never recreates it - so
+        // a single doc().get() on that old key here missed every instance made
+        // through the current Assign to Semester flow. Query by subjectId+departmentId
+        // instead, matching how the record is actually keyed today.
         const instanceSnap = await collegeRef.collection("subjectSemesterAssignments")
-          .doc(`${subjectId}_${course.departmentId}`)
+          .where("subjectId", "==", subjectId)
+          .where("departmentId", "==", course.departmentId)
           .get();
-        if (!instanceSnap.exists) {
+        if (instanceSnap.empty) {
           return NextResponse.json(
             { error: "This subject hasn't been assigned to this department's semester yet - use Assign to Semester first." },
             { status: 400 },
           );
         }
-        if (body.timetableSemester != null && (instanceSnap.data() as { semester?: number }).semester !== timetableSemester) {
+        if (
+          body.timetableSemester != null &&
+          !instanceSnap.docs.some((d) => (d.data() as { semester?: number }).semester === timetableSemester)
+        ) {
           return NextResponse.json(
             { error: "This subject is assigned to a different semester for this department - check Assign to Semester." },
             { status: 400 },
