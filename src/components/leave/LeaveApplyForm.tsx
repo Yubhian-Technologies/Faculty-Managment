@@ -14,7 +14,6 @@ import { toast } from "@/hooks/useToast";
 import { OD_PROOF_GRACE_DAYS } from "@/lib/leave/odProof";
 import { AlertTriangle, CalendarPlus, Users } from "lucide-react";
 import { countWorkingDays, dateKey, isoDateKey, todayISODate } from "@/lib/leave/dayCounter";
-import { HALF_DAY_ELIGIBLE_TYPES } from "@/lib/leave/seedData";
 import { toDate as toJsDate, formatDate } from "@/lib/utils";
 import { useAuthStore } from "@/store/authStore";
 import { LEAVE_TYPE_LABELS } from "@/types/leave";
@@ -26,6 +25,16 @@ interface BalanceEntry {
   label: string;
   unlimited: boolean;
   remaining?: number;
+  // Rendering hints from this college's Settings > Leave Policy - see
+  // /api/leave/balances. maxConsecutiveDays/minAdvanceNoticeDays are shown as
+  // a hint only; the server (applications/route.ts POST) is the authoritative
+  // check either way.
+  halfDayAllowed?: boolean;
+  reasonOptions?: string[];
+  allowCustomReason?: boolean;
+  maxConsecutiveDays?: number;
+  minAdvanceNoticeDays?: number;
+  sandwichRule?: boolean;
 }
 
 interface PeriodCoverageEntry {
@@ -66,6 +75,11 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
   const [fullDayMode, setFullDayMode] = useState<"ONE" | "RANGE">("ONE");
   const [halfDaySession, setHalfDaySession] = useState<"FN" | "AN">("FN");
   const [reason, setReason] = useState("");
+  // Only meaningful when the selected type has reasonOptions configured (see
+  // BalanceEntry) - true once "Other" is picked from that dropdown, revealing
+  // the free-text box below it. Irrelevant (and never shown) for a type with
+  // no reasonOptions, which just gets the plain Textarea it always had.
+  const [customReasonMode, setCustomReasonMode] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [holidayDates, setHolidayDates] = useState<Set<string>>(new Set());
   const [workingDayWeights, setWorkingDayWeights] = useState<Map<string, number>>(new Map());
@@ -93,7 +107,7 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
   // below) when nothing's been set yet.
   const [summerHoliday, setSummerHoliday] = useState<{ fromISO: string; toISO: string; from: Date; to: Date } | null>(null);
 
-  const isHalfDayEligible = HALF_DAY_ELIGIBLE_TYPES.includes(leaveTypeCode as LeaveTypeCode);
+  const isHalfDayEligible = !!types.find((t) => t.code === leaveTypeCode)?.halfDayAllowed;
   // Forenoon's window has already passed for a half-day request filed for
   // today, once it's 11am or later - only a future date still has a whole
   // forenoon ahead of it, so this never restricts those.
@@ -240,7 +254,7 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
   const selectedType = types.find((t) => t.code === leaveTypeCode);
   const previewTotalDays =
     fromDate && toDate && toDate >= fromDate
-      ? countWorkingDays(new Date(fromDate), new Date(toDate), holidayDates, isHalfDay, workingDayWeights)
+      ? countWorkingDays(new Date(fromDate), new Date(toDate), holidayDates, isHalfDay, workingDayWeights, selectedType?.sandwichRule)
       : 0;
   const lopPreviewDays =
     selectedType && !selectedType.unlimited && selectedType.remaining !== undefined && previewTotalDays > selectedType.remaining
@@ -249,7 +263,9 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
 
   function handleLeaveTypeChange(value: string) {
     setLeaveTypeCode(value);
-    if (!HALF_DAY_ELIGIBLE_TYPES.includes(value as LeaveTypeCode)) setIsHalfDay(false);
+    if (!types.find((t) => t.code === value)?.halfDayAllowed) setIsHalfDay(false);
+    setReason("");
+    setCustomReasonMode(false);
     // Summer Vacation defaults From/To to the College Office's full declared
     // range (see the effect below) - inherently a span, so the single-day
     // toggle would just fight that default.
@@ -491,6 +507,15 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
                 days of this On Duty period ending. Unproven days are treated as Loss of Pay.
               </p>
             )}
+            {/* Informational only - the server (applications/route.ts POST)
+                is the actual enforcement, this just avoids a surprise 400
+                after filling in the rest of the form. */}
+            {(selectedType?.maxConsecutiveDays !== undefined || selectedType?.minAdvanceNoticeDays !== undefined) && (
+              <p className="text-xs text-muted-foreground">
+                {selectedType.maxConsecutiveDays !== undefined && `Max ${selectedType.maxConsecutiveDays} consecutive day(s). `}
+                {selectedType.minAdvanceNoticeDays !== undefined && `Requires at least ${selectedType.minAdvanceNoticeDays} day(s) advance notice.`}
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -674,7 +699,28 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
 
           <div className="space-y-2">
             <Label>Reason</Label>
-            <Textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={4} placeholder="Reason for leave" />
+            {selectedType?.reasonOptions?.length ? (
+              <>
+                <Select
+                  value={customReasonMode ? "OTHER" : reason}
+                  onValueChange={(v) => {
+                    if (v === "OTHER") { setCustomReasonMode(true); setReason(""); }
+                    else { setCustomReasonMode(false); setReason(v); }
+                  }}
+                >
+                  <SelectTrigger><SelectValue placeholder="Select a reason" /></SelectTrigger>
+                  <SelectContent>
+                    {selectedType.reasonOptions.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                    {selectedType.allowCustomReason && <SelectItem value="OTHER">Other</SelectItem>}
+                  </SelectContent>
+                </Select>
+                {customReasonMode && (
+                  <Textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3} placeholder="Describe your reason" />
+                )}
+              </>
+            ) : (
+              <Textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={4} placeholder="Reason for leave" />
+            )}
           </div>
 
           <div className="flex justify-end gap-2 pt-2">

@@ -52,10 +52,53 @@ export const EFFECTIVE_CATEGORY_LABELS: Record<EffectiveLeaveCategory, string> =
 // register and the Leave Approvals queue.
 export const EFFECTIVE_CATEGORY_ORDER: EffectiveLeaveCategory[] = ["new-joining", "vacation", "non-vacation"];
 
+export interface LeaveTypeCarryForwardRule {
+  enabled: boolean;
+  cap?: number; // total balance (base + carried) never exceeds this - undefined = uncapped
+}
+
 export interface LeaveTypeRules {
   daysPerYear?: number;   // undefined when unlimited is true
   unlimited?: boolean;    // OD only - no balance is tracked, history is shown instead
   eligibleCategories: EffectiveLeaveCategory[];
+  // Everything below is a per-college override on top of the built-in seed
+  // (LEAVE_TYPE_SEED) - see lib/leave/resolveLeaveTypes.ts. Undefined means
+  // "use the seed's default", so an existing college that never touches
+  // Settings > Leave Policy keeps behaving exactly as before.
+  entitlementByCategory?: Partial<Record<EffectiveLeaveCategory, number>>; // overrides daysPerYear for a specific category (EL's own vacation/non-vacation split, generalized)
+  carryForward?: LeaveTypeCarryForwardRule;
+  halfDayAllowed?: boolean;
+  reasonOptions?: string[];      // ordered dropdown options offered on the Apply form for this type
+  allowCustomReason?: boolean;   // whether "Other" + free text is offered alongside reasonOptions
+  maxConsecutiveDays?: number;   // longest single request (calendar span, not working-day count)
+  minAdvanceNoticeDays?: number; // fromDate must be at least this many days out from today
+  maxRequestsPerMonth?: number;  // frequency cap, independent of the annual day balance
+  eligibleGenders?: ("Male" | "Female" | "Other")[];
+  // Sunday/a declared holiday strictly between this request's own from/to
+  // dates is normally exempt from the day count (see countWorkingDays) - this
+  // charges it too, so leave can't be used to bridge a free long weekend.
+  // Only covers the single-request case; two separate requests either side of
+  // the same off day aren't (yet) detected as a sandwich - see dayCounter.ts.
+  sandwichRule?: boolean;
+  escalateAfterDays?: number;       // beyond this many days, route straight to Principal even if this type is normally HOD-final
+  maxLopDaysBeforeEscalation?: number; // beyond this many projected Loss-of-Pay days, likewise escalate past HOD
+}
+
+// A Principal-editable subset of LeaveTypeRules stored per college (see
+// FacultyNorms.leaveTypeRuleOverrides in types/core.ts). eligibleCategories is
+// the one LeaveTypeRules field never set here - see resolveLeaveTypes.ts.
+export type LeaveTypeRuleOverride = Partial<LeaveTypeRules>;
+
+// A date range during which a leave type (or, with appliesToTypes omitted,
+// every type) can't be applied for - e.g. exam week, admission season.
+// Doc-less: stored as a plain array on FacultyNorms, same convention as
+// leaveApprovalRouting, since a college only ever has a handful of these.
+export interface LeaveBlackoutWindow {
+  id: string;
+  fromDate: string; // "YYYY-MM-DD"
+  toDate: string;   // "YYYY-MM-DD"
+  reason: string;
+  appliesToTypes?: LeaveTypeCode[]; // undefined = applies to every type
 }
 
 export interface LeaveTypeFull {

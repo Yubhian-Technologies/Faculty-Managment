@@ -1,7 +1,7 @@
 import type { Firestore } from "firebase-admin/firestore";
 import { resolveLoginUidForFacultyMember } from "@/lib/faculty/resolveFacultyMemberId";
-import { notify } from "@/lib/notify";
-import type { AdjustmentPeriodStatus, AdjustmentRequest, AdjustmentResponseStatus, LeaveRequest, PeriodSubstitution } from "@/types/leave";
+import { notify, notifyRole, getDepartmentHeadUids } from "@/lib/notify";
+import type { AdjustmentPeriodStatus, AdjustmentRequest, AdjustmentResponseStatus, LeaveRequest, LeaveRequestStatus, PeriodSubstitution } from "@/types/leave";
 
 // Builds one PENDING AdjustmentRequest per distinct substitute named in
 // `periodSubstitutions` - bundling every period they're covering into a
@@ -131,5 +131,34 @@ export async function notifyAdjustmentAssignees(
       `${req.employeeName} has asked you to ${what} while they're on leave (${req.totalDays} day(s)). Please accept or decline.`,
       "/leave/adjustments"
     );
+  }
+}
+
+// Tells whoever can actually decide a request that it's now sitting on their
+// desk - called right after submission when there's nothing to accept first
+// (applications/route.ts POST), and again once every named substitute/
+// handover has accepted and the request reaches its real approver
+// (adjustment-response/route.ts). Mirrors the HOD-forwarded-"Other" notify
+// loop in applications/[id]/route.ts, generalized to every stage a request
+// can arrive at.
+export async function notifyPendingApprover(
+  db: Firestore,
+  collegeId: string,
+  status: LeaveRequestStatus,
+  req: Pick<LeaveRequest, "employeeName" | "totalDays" | "department">
+): Promise<void> {
+  const title = "Leave Request Awaiting Approval";
+  const message = `${req.employeeName}'s leave request for ${req.totalDays} day(s) needs your decision.`;
+  if (status === "PENDING_HOD") {
+    for (const uid of await getDepartmentHeadUids(db, collegeId, req.department)) {
+      await notify(db, collegeId, uid, "LEAVE_PENDING_APPROVAL", title, message, "/hod/leave-approvals");
+    }
+  } else if (status === "PENDING_PRINCIPAL") {
+    await notifyRole(db, collegeId, "PRINCIPAL", "LEAVE_PENDING_APPROVAL", title, message, "/principal/leave-approvals");
+  } else if (status === "PENDING_VICE_PRINCIPAL") {
+    await notifyRole(db, collegeId, "PRINCIPAL", "LEAVE_PENDING_APPROVAL", title, message, "/principal/leave-approvals");
+    await notifyRole(db, collegeId, "VICE_PRINCIPAL", "LEAVE_PENDING_APPROVAL", title, message, "/principal/leave-approvals");
+  } else if (status === "PENDING_MANAGEMENT") {
+    await notifyRole(db, collegeId, "MANAGEMENT", "LEAVE_PENDING_APPROVAL", title, message, "/management/leave-approvals");
   }
 }
