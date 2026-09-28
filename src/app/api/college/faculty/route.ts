@@ -47,11 +47,37 @@ export async function GET(request: Request) {
     // regardless (see facultyManageableDepartmentNames below), so this only
     // ever narrows between "own department" and "own + true sub-departments".
     const ownOnly = searchParams.get("scope") === "own";
+    // Opt-in, additive-only for Teaching Assignments' own faculty picker
+    // (hod/teaching-assignments/page.tsx) - a SUB-department (e.g. "DS" under
+    // "Artificial Intelligence") has its own HOD/Timetable Incharge, but the
+    // main/parent department's own faculty roster wasn't offered when
+    // staffing a subject from the sub-department's side. No other existing
+    // caller passes this, so nothing else changes.
+    const includeParent = searchParams.get("includeParent") === "true";
 
     const db = getAdminDb();
     const facultyColl = db.collection("colleges").doc(session.collegeId).collection("facultyMembers");
     const withStatus = (q: FirebaseFirestore.Query): FirebaseFirestore.Query =>
       statusFilter ? q.where("status", "==", statusFilter) : q;
+
+    // The immediate parent department name(s) of `names` (deduplicated,
+    // excluding anything already in `names`) - only ever consulted when
+    // includeParent is set, above.
+    async function parentDepartmentNames(names: string[]): Promise<string[]> {
+      if (names.length === 0) return [];
+      const deptsColl = db.collection("colleges").doc(session.collegeId).collection("departments");
+      const ownSnaps = await Promise.all(names.map((n) => deptsColl.where("name", "==", n).limit(1).get()));
+      const parentIds = new Set<string>();
+      for (const snap of ownSnaps) {
+        const parentId = (snap.docs[0]?.data() as { parentDepartmentId?: string } | undefined)?.parentDepartmentId;
+        if (parentId) parentIds.add(parentId);
+      }
+      if (parentIds.size === 0) return [];
+      const parentSnaps = await Promise.all(Array.from(parentIds).map((id) => deptsColl.doc(id).get()));
+      return parentSnaps
+        .map((d) => (d.data() as { name?: string } | undefined)?.name)
+        .filter((n): n is string => !!n && !names.includes(n));
+    }
 
     let primaryQuery: FirebaseFirestore.Query = facultyColl;
     // A parent department's HOD manages its sub-departments' faculty too, so
@@ -59,6 +85,8 @@ export async function GET(request: Request) {
     // specialist when assigning a shared/parent-owned subject, and to administer
     // those faculty directly (see canHodEditDepartment in lib/departments/scope).
     let childDeptQuery: FirebaseFirestore.Query | null = null;
+    // See includeParent above - populated only for that opt-in case.
+    let parentDeptQuery: FirebaseFirestore.Query | null = null;
 
     // Deliberately does NOT cross into a feeder/fed department's own faculty
     // (e.g. Basic Science's faculty showing up under CSE, or vice versa) -
@@ -114,6 +142,14 @@ export async function GET(request: Request) {
         if (ownedNames.length > 0) {
           childDeptQuery = withStatus(facultyColl.where("department", "in", ownedNames.slice(0, 30)));
         }
+
+        if (includeParent) {
+          const parentNames = (await parentDepartmentNames(scope.ownDepartmentNames))
+            .filter((n) => !ownedNames.includes(n));
+          if (parentNames.length > 0) {
+            parentDeptQuery = withStatus(facultyColl.where("department", "in", parentNames.slice(0, 30)));
+          }
+        }
       } else {
         // An HOD with no department on file must see nothing - not the whole
         // college, which is what leaving the query unfiltered would return.
@@ -134,7 +170,14 @@ export async function GET(request: Request) {
       if (!callerDepartment || (deptFilter && callerDepartment !== deptFilter)) {
         return NextResponse.json({ error: "You can only view your own department's faculty" }, { status: 403 });
       }
-      primaryQuery = primaryQuery.where("department", "==", callerDepartment);
+      if (includeParent) {
+        const parentNames = await parentDepartmentNames([callerDepartment]);
+        primaryQuery = parentNames.length > 0
+          ? primaryQuery.where("department", "in", [callerDepartment, ...parentNames].slice(0, 30))
+          : primaryQuery.where("department", "==", callerDepartment);
+      } else {
+        primaryQuery = primaryQuery.where("department", "==", callerDepartment);
+      }
     } else if (deptFilter) {
       // Office/Principal/VP picking faculty for a specific department (e.g.
       // a section's Faculty Incharge) also see faculty registered under that
@@ -149,9 +192,10 @@ export async function GET(request: Request) {
 
     primaryQuery = withStatus(primaryQuery);
 
-    const [primarySnap, childDeptSnap] = await Promise.all([
+    const [primarySnap, childDeptSnap, parentDeptSnap] = await Promise.all([
       primaryQuery.get(),
       childDeptQuery ? childDeptQuery.get() : Promise.resolve(null),
+      parentDeptQuery ? parentDeptQuery.get() : Promise.resolve(null),
     ]);
 
     const faculty: { id: string; accessLevel: "primary"; [key: string]: unknown }[] =
@@ -161,6 +205,11 @@ export async function GET(request: Request) {
       // faculty, which they fully manage (canHodEditDepartment), so the UI
       // must not mark them view-only.
       for (const d of childDeptSnap.docs) {
+        faculty.push({ id: d.id, ...migrateFacultyDoc(d.data()), accessLevel: "primary" });
+      }
+    }
+    if (parentDeptSnap) {
+      for (const d of parentDeptSnap.docs) {
         faculty.push({ id: d.id, ...migrateFacultyDoc(d.data()), accessLevel: "primary" });
       }
     }

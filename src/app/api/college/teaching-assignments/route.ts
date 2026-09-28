@@ -413,7 +413,15 @@ export async function POST(request: Request) {
         }
 
         const facultyDept = (facultyMemberSnap.data() as { department?: string }).department ?? "";
-        if (!canHodEditDepartment(scope, facultyDept)) {
+        // A sub-department (e.g. "DS" under "Artificial Intelligence") may
+        // also staff a subject with a faculty member filed directly under its
+        // own main/parent department - mirrors the same allowance already
+        // made for the picker itself (api/college/faculty's includeParent).
+        const facultyInParentDept = allDepartments.some((d) =>
+          scope.ownDepartmentNames.includes(d.name)
+          && allDepartments.find((p) => p.id === d.parentDepartmentId)?.name === facultyDept
+        );
+        if (!canHodEditDepartment(scope, facultyDept) && !facultyInParentDept) {
           return NextResponse.json({ error: "Faculty must be in your department or one of your sub-departments" }, { status: 403 });
         }
       } else if (session.role === "PANEL_MEMBER" || session.role === "COLLEGE_STAFF") {
