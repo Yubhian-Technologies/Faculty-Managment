@@ -37,7 +37,11 @@ export async function GET(request: Request) {
 // Upsert - one doc per (courseId, year). First call for a course-year just records
 // the label (no side effects). A call against an *existing* doc is treated as an
 // "advance", logged to the audit trail with a count of every ACTIVE faculty
-// member who has a teaching assignment in this course-year.
+// member who has a teaching assignment in this course-year - unless `correction`
+// is set, which means a Principal is fixing a mistaken label (e.g. picked a
+// future year by accident): the forward-only guard is skipped and it's logged
+// as ACADEMIC_YEAR_CORRECTED instead of ACADEMIC_YEAR_ADVANCED, so the audit
+// trail still tells the two apart.
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("PRINCIPAL", "SUPER_ADMIN");
@@ -46,9 +50,10 @@ export async function POST(request: Request) {
       courseId: string;
       year: number;
       label: string;
+      correction?: boolean;
     };
 
-    const { departmentId, courseId, year, label } = body;
+    const { departmentId, courseId, year, label, correction } = body;
 
     if (!departmentId || !courseId || !year || !label?.trim()) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
@@ -72,7 +77,9 @@ export async function POST(request: Request) {
     // own top comment). If the EXISTING label itself doesn't parse (legacy
     // free text), there's nothing sane to compare against, so this is
     // skipped entirely rather than blocking every future advance on it.
-    if (isAdvance && fromLabel) {
+    // A `correction` save is exempt outright - it exists specifically to
+    // undo a mistaken forward move, so it must be allowed to go backward.
+    if (isAdvance && fromLabel && !correction) {
       const fromStart = parseAcademicYearStart(fromLabel);
       if (fromStart != null && labelStart < fromStart) {
         return NextResponse.json({ error: `"${label}" is earlier than the current "${fromLabel}" - an academic year can only move forward.` }, { status: 400 });
@@ -87,7 +94,32 @@ export async function POST(request: Request) {
 
     let facultyUpdated = 0;
 
-    if (isAdvance) {
+    if (isAdvance && correction) {
+      // A correction never counts as progressing the course-year, so it skips
+      // the faculty tally (nothing genuinely advanced) and records its own
+      // audit action rather than ACADEMIC_YEAR_ADVANCED, so the trail still
+      // shows this was a fix, not a real forward move.
+      await collegeRef.collection("auditLogs").doc().set({
+        collegeId: session.collegeId,
+        action: "ACADEMIC_YEAR_CORRECTED",
+        performedBy: session.uid,
+        performedByName: actorName,
+        targetId: docId,
+        details: { courseId, year: Number(year), fromLabel, toLabel: label },
+        timestamp: now,
+      });
+
+      await ref.set({
+        collegeId: session.collegeId,
+        departmentId,
+        courseId,
+        year: Number(year),
+        label,
+        correctedAt: now,
+        correctedByName: actorName,
+        updatedAt: now,
+      }, { merge: true });
+    } else if (isAdvance) {
       const assignmentsSnap = await collegeRef
         .collection("teachingAssignments")
         .where("courseId", "==", courseId)
@@ -145,7 +177,7 @@ export async function POST(request: Request) {
       });
     }
 
-    return NextResponse.json({ id: docId, advanced: isAdvance, facultyUpdated }, { status: 201 });
+    return NextResponse.json({ id: docId, advanced: isAdvance && !correction, corrected: isAdvance && !!correction, facultyUpdated }, { status: 201 });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
