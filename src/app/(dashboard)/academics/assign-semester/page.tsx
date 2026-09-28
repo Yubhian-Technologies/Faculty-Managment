@@ -327,7 +327,7 @@ export default function AssignToSemesterPage() {
     if (selectedCourse) void loadSubjectsAndTimings(selectedCourse, selectedDepartmentId, year);
   }
 
-  async function setSubjectSemester(subject: Subject, semester: number | null, removeFromSemester?: number) {
+  async function setSubjectSemester(subject: Subject, semester: number | null, removeFromSemester?: number, removeFromDepartmentId?: string) {
     if (!selectedCourse || !selectedDepartment) return;
     setSavingId(subject.id);
     setAssignPage(1);
@@ -351,8 +351,19 @@ export default function AssignToSemesterPage() {
         const json = await res.json() as { error?: string };
         if (!res.ok) throw new Error(json.error ?? "Failed to assign subject");
       } else {
+        // The list can show a sub-department's own instance while the
+        // PARENT department is selected (GET merges them in - see this
+        // file's own top doc-comment on sub-department support), so the
+        // instance being removed may belong to a different department than
+        // whatever's currently selected. removeFromDepartmentId (the row's
+        // own a.departmentId) must be used here instead of
+        // selectedDepartment.id - which is always the parent in that case -
+        // or this computes a DELETE for a doc that doesn't exist: Firestore
+        // no-ops instead of erroring, so it looked like a successful
+        // removal that silently didn't remove anything.
+        const targetDepartmentId = removeFromDepartmentId ?? selectedDepartment.id;
         const res = await fetch(
-          `/api/college/subject-semester-assignments?subjectId=${encodeURIComponent(subject.id)}&departmentId=${encodeURIComponent(selectedDepartment.id)}&semester=${removeFromSemester ?? effectiveSemester}`,
+          `/api/college/subject-semester-assignments?subjectId=${encodeURIComponent(subject.id)}&departmentId=${encodeURIComponent(targetDepartmentId)}&semester=${removeFromSemester ?? effectiveSemester}`,
           { method: "DELETE" }
         );
         const json = await res.json() as { error?: string };
@@ -744,7 +755,7 @@ export default function AssignToSemesterPage() {
                                 variant="ghost"
                                 className="shrink-0 text-destructive hover:text-destructive h-8 text-xs"
                                 loading={savingId === a.subjectId}
-                                onClick={() => void setSubjectSemester(subject ?? { id: a.subjectId } as Subject, null, a.semester)}
+                                onClick={() => void setSubjectSemester(subject ?? { id: a.subjectId } as Subject, null, a.semester, a.departmentId)}
                               >
                                 <ArrowLeftIcon className="h-3.5 w-3.5 mr-1.5" />Remove
                               </Button>
