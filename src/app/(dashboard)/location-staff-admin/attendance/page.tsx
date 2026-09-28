@@ -10,6 +10,7 @@ import {
   Search,
   ClipboardCheck,
   RefreshCw,
+  FileBarChart,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -38,6 +39,7 @@ interface RosterItem {
 interface Summary {
   total: number;
   present: number;
+  late?: number;
   absent: number;
   halfDay: number;
   onLeave: number;
@@ -126,10 +128,24 @@ export default function LocationStaffAttendanceOverviewPage() {
           </div>
         </div>
 
-        <Button variant="outline" size="sm" onClick={loadAttendance} className="h-8 gap-1.5 text-xs self-end sm:self-auto">
-          <RefreshCw className="h-3.5 w-3.5" />
-          <span>Refresh</span>
-        </Button>
+        <div className="flex flex-wrap items-center gap-2 self-end sm:self-auto">
+          <Button asChild size="sm" className="h-8 gap-1.5 text-xs font-semibold rounded-full shadow-xs">
+            <Link href="/location-staff-admin/attendance/shift">
+              <ClipboardCheck className="h-3.5 w-3.5" />
+              <span>Shift-Wise Attendance</span>
+            </Link>
+          </Button>
+          <Button asChild variant="outline" size="sm" className="h-8 gap-1.5 text-xs">
+            <Link href="/location-staff-admin/attendance/reports">
+              <FileBarChart className="h-3.5 w-3.5" />
+              <span>Reports</span>
+            </Link>
+          </Button>
+          <Button variant="outline" size="sm" onClick={loadAttendance} className="h-8 gap-1.5 text-xs">
+            <RefreshCw className="h-3.5 w-3.5" />
+            <span>Refresh</span>
+          </Button>
+        </div>
       </div>
 
       {/* ── Date Navigator & Filter ── */}
@@ -171,7 +187,7 @@ export default function LocationStaffAttendanceOverviewPage() {
 
       {/* ── Summary Stats ── */}
       {summary && (
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-center text-xs">
+        <div className="grid grid-cols-2 sm:grid-cols-6 gap-2 text-center text-xs">
           <div className="bg-card p-3 rounded-xl border">
             <span className="text-muted-foreground block text-[11px]">Total Staff</span>
             <span className="text-xl font-bold text-foreground mt-0.5 block">{summary.total}</span>
@@ -180,15 +196,19 @@ export default function LocationStaffAttendanceOverviewPage() {
             <span className="block text-[11px] font-medium">Present</span>
             <span className="text-xl font-bold mt-0.5 block">{summary.present}</span>
           </div>
+          <div className="bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-300 p-3 rounded-xl">
+            <span className="block text-[11px] font-medium">Late Check-In</span>
+            <span className="text-xl font-bold mt-0.5 block">{summary.late ?? 0}</span>
+          </div>
           <div className="bg-red-500/10 border border-red-500/20 text-red-700 dark:text-red-300 p-3 rounded-xl">
             <span className="block text-[11px] font-medium">Absent</span>
             <span className="text-xl font-bold mt-0.5 block">{summary.absent}</span>
           </div>
-          <div className="bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-300 p-3 rounded-xl">
+          <div className="bg-blue-500/10 border border-blue-500/20 text-blue-700 dark:text-blue-300 p-3 rounded-xl">
             <span className="block text-[11px] font-medium">Half Day</span>
             <span className="text-xl font-bold mt-0.5 block">{summary.halfDay}</span>
           </div>
-          <div className="bg-purple-500/10 border border-purple-500/20 text-purple-700 dark:text-purple-300 p-3 rounded-xl col-span-2 sm:col-span-1">
+          <div className="bg-purple-500/10 border border-purple-500/20 text-purple-700 dark:text-purple-300 p-3 rounded-xl">
             <span className="block text-[11px] font-medium">Leave</span>
             <span className="text-xl font-bold mt-0.5 block">{summary.onLeave}</span>
           </div>
@@ -254,18 +274,26 @@ export default function LocationStaffAttendanceOverviewPage() {
                       </span>
                     </div>
 
-                    <div>
-                      {attendance?.status === "PRESENT" && (
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {attendance?.status === "PRESENT" && !attendance?.isLate && (
                         <Badge className="bg-emerald-600 text-white text-xs px-2 py-0.5">Present</Badge>
+                      )}
+                      {(attendance?.status === "LATE" || attendance?.isLate) && (
+                        <Badge className="bg-amber-600 text-white text-xs px-2 py-0.5">Late</Badge>
                       )}
                       {attendance?.status === "ABSENT" && (
                         <Badge variant="destructive" className="text-xs px-2 py-0.5">Absent</Badge>
                       )}
                       {attendance?.status === "HALF_DAY" && (
-                        <Badge className="bg-amber-600 text-white text-xs px-2 py-0.5">Half Day</Badge>
+                        <Badge className="bg-blue-600 text-white text-xs px-2 py-0.5">Half Day</Badge>
                       )}
                       {attendance?.status === "ON_LEAVE" && (
                         <Badge className="bg-purple-600 text-white text-xs px-2 py-0.5">Leave</Badge>
+                      )}
+                      {attendance?.isEmergencyDuty && (
+                        <Badge className="bg-amber-600 text-white text-[10px] px-1.5 py-0 font-semibold">
+                          🚨 Emergency Duty
+                        </Badge>
                       )}
                       {!attendance?.status && (
                         <Badge variant="outline" className="text-muted-foreground text-xs px-2 py-0.5">Pending</Badge>

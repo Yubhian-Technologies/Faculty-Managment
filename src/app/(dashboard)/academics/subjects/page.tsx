@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { BookOpen, Plus, Pencil, Trash2, Upload, FileSpreadsheet, FileText } from "lucide-react";
+import { BookOpen, Plus, Pencil, Trash2, Upload, FileSpreadsheet, FileText, Power, PowerOff } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -26,7 +26,9 @@ export default function AcademicsSubjectsPage() {
   const [isLoadingCourses, setIsLoadingCourses] = useState(false);
   const [isLoadingSubjects, setIsLoadingSubjects] = useState(false);
 
-  const [selectedAcademicYear, setSelectedAcademicYear] = useState(academicSessionLabel(currentAcademicStartYear()));
+  const [selectedAcademicYear, setSelectedAcademicYear] = useState(
+    () => searchParams.get("academicYear") || academicSessionLabel(currentAcademicStartYear())
+  );
   const [currentSessionLabel, setCurrentSessionLabel] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Subject | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -66,7 +68,14 @@ export default function AcademicsSubjectsPage() {
 
   const hasAppliedSessionRef = useRef(false);
   useEffect(() => {
-    if (hasAppliedSessionRef.current || !currentSessionLabel || searchParams.get("academicYear")) return;
+    const urlAcademicYear = searchParams.get("academicYear");
+    if (urlAcademicYear) {
+      // The URL is authoritative whenever it names a session (deep links,
+      // and the import page's own back-link) - even one that isn't current.
+      setSelectedAcademicYear(urlAcademicYear);
+      return;
+    }
+    if (hasAppliedSessionRef.current || !currentSessionLabel) return;
     hasAppliedSessionRef.current = true;
     setSelectedAcademicYear(currentSessionLabel);
   }, [currentSessionLabel, searchParams]);
@@ -156,6 +165,22 @@ export default function AcademicsSubjectsPage() {
       toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to delete subject" });
     } finally {
       setDeleteTarget(null);
+    }
+  }
+
+  async function handleToggleActive(subject: Subject) {
+    try {
+      const res = await fetch(`/api/college/subjects/${subject.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isActive: !subject.isActive }),
+      });
+      const json = await res.json() as { error?: string };
+      if (!res.ok) throw new Error(json.error ?? "Failed to update subject");
+      toast({ variant: "success", title: `${subject.name} ${subject.isActive ? "deactivated" : "activated"}` });
+      await loadSubjects(selectedCourseId, selectedAcademicYear, selectedRegulation, selectedCourse?.catalogId);
+    } catch (err) {
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to update subject" });
     }
   }
 
@@ -413,7 +438,8 @@ export default function AcademicsSubjectsPage() {
                                    <div className="flex flex-wrap items-center gap-2 mt-1">
                                      <Badge variant="secondary" className="text-xs font-mono">{s.code}</Badge>
                                      {s.shortCode && <Badge variant="outline" className="text-xs font-mono">{s.shortCode}</Badge>}
-                                     <Badge variant="outline" className="text-xs">{SUBJECT_TYPE_LABELS[s.type]}</Badge>
+                                     <Badge variant="outline" className="text-xs">{SUBJECT_TYPE_LABELS[s.type] ?? s.type ?? "—"}</Badge>
+                                     {!s.isActive && <Badge variant="secondary" className="text-xs text-muted-foreground">Inactive</Badge>}
                                      {s.regulation && <Badge variant="secondary" className="text-xs">{s.regulation}</Badge>}
                                      {s.academicYear && <Badge variant="outline" className="text-xs">{s.academicYear}</Badge>}
                                      <span className="text-xs text-muted-foreground">{s.hoursPerWeek} hrs/week</span>
@@ -433,6 +459,16 @@ export default function AcademicsSubjectsPage() {
                                         onClick={() => router.push(`/academics/subjects/${s.id}/edit?courseId=${encodeURIComponent(selectedCourseId)}&catalogId=${encodeURIComponent(selectedCourse?.catalogId ?? "")}&academicYear=${encodeURIComponent(selectedAcademicYear)}&regulation=${encodeURIComponent(selectedRegulation || s.regulation || "")}`)}
                                      >
                                        <Pencil className="h-3.5 w-3.5" />
+                                     </Button>
+                                     <Button
+                                       variant="ghost"
+                                       size="icon"
+                                       className="h-8 w-8"
+                                       aria-label={s.isActive ? `Deactivate ${s.name}` : `Activate ${s.name}`}
+                                       title={s.isActive ? "Deactivate" : "Activate"}
+                                       onClick={() => void handleToggleActive(s)}
+                                     >
+                                       {s.isActive ? <PowerOff className="h-3.5 w-3.5" /> : <Power className="h-3.5 w-3.5" />}
                                      </Button>
                                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" aria-label={`Delete ${s.name}`} onClick={() => setDeleteTarget(s)}>
                                        <Trash2 className="h-3.5 w-3.5" />
