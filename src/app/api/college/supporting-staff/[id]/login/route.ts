@@ -15,10 +15,16 @@ function designationLabel(designation: SupportingStaffDesignation): string {
 }
 
 // Same "create the login after the record already exists" flow as
-// /api/college/faculty/[id]/login - needed because CSV-imported Supporting
-// Staff (see supporting-staff/import/route.ts) never get a Firebase Auth
-// account or userUid, unlike the single "Add Staff" form which always
-// creates one up front.
+// /api/college/faculty/[id]/login. Both the single "Add Staff" form
+// (POST /api/college/supporting-staff) and the bulk CSV import
+// (supporting-staff/import/route.ts) now create a Firebase Auth account and
+// userUid up front for every record - the import's own Login Password column
+// became mandatory after this route was first written, so a fresh
+// CSV-imported row no longer arrives without one. This endpoint (and the
+// "Create Login" page that calls it) is still needed for a staff record that
+// predates that change, or any other record that otherwise ended up with a
+// staffCategory-appropriate profile but no linked login.
+
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }

@@ -242,7 +242,7 @@ export default function PrincipalStudentsPage() {
       {activeTab === "promotion" ? (
         <StudentPromotionsPanel showHeader={false} />
       ) : activeTab === "graduates" ? (
-        <GraduatedStudentsView showHeader={false} />
+        <GraduatedStudentsView showHeader={false} studentDetailHref={(id) => `/principal/students/${id}`} />
       ) : (
         <>
           {hasLoaded && (

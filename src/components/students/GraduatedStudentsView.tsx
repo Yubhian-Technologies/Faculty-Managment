@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { GraduationCap, Search, Users } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
@@ -9,14 +10,9 @@ import { Badge } from "@/components/ui/badge";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
-} from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { toast } from "@/hooks/useToast";
 import { formatDate } from "@/lib/utils";
-import { RosterDetailView } from "@/components/students/RosterFieldInputs";
 import type { StudentListItem } from "@/types";
 
 const UNSPECIFIED_COURSE = "Unspecified programme";
@@ -28,14 +24,18 @@ const UNSPECIFIED_BATCH = "Unspecified batch";
 // of is later renamed or removed. Shared between Principal and College
 // Office: both read the same college-wide roster, neither can edit here.
 // showHeader=false when embedded as a sub-tab of the Students page, which
-// already renders its own header for all tabs.
-export function GraduatedStudentsView({ showHeader = true }: { showHeader?: boolean } = {}) {
+// already renders its own header for all tabs. studentDetailHref builds the
+// row's link to the canonical (role-prefixed) student profile page - this
+// component is shared by College Office and Principal, whose profile routes
+// live under different prefixes, so the caller supplies it rather than this
+// component guessing a role from the current path.
+export function GraduatedStudentsView({ showHeader = true, studentDetailHref }: { showHeader?: boolean; studentDetailHref: (studentId: string) => string }) {
+  const router = useRouter();
   const [students, setStudents] = useState<StudentListItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [courseFilter, setCourseFilter] = useState("all");
   const [batchFilter, setBatchFilter] = useState("all");
-  const [viewTarget, setViewTarget] = useState<StudentListItem | null>(null);
 
   const load = useCallback(async () => {
     setIsLoading(true);
@@ -188,7 +188,7 @@ export function GraduatedStudentsView({ showHeader = true }: { showHeader?: bool
                           {batchStudents.map((s) => (
                             <tr
                               key={s.id}
-                              onClick={() => setViewTarget(s)}
+                              onClick={() => router.push(studentDetailHref(s.id))}
                               className="border-t cursor-pointer hover:bg-muted/40 transition-colors"
                             >
                               <td className="p-2.5 whitespace-nowrap">{s.rollNumber || "—"}</td>
@@ -207,21 +207,6 @@ export function GraduatedStudentsView({ showHeader = true }: { showHeader?: bool
           ))}
         </div>
       )}
-
-      <Dialog open={!!viewTarget} onOpenChange={(o) => { if (!o) setViewTarget(null); }}>
-        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{viewTarget?.name}</DialogTitle>
-            <DialogDescription>
-              {viewTarget?.graduationCourseName || "Programme not recorded"} · {viewTarget?.graduationBatch || "Batch not recorded"} · Graduated {viewTarget ? formatDate(viewTarget.graduatedAt) : ""}
-            </DialogDescription>
-          </DialogHeader>
-          {viewTarget && <RosterDetailView student={viewTarget} />}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setViewTarget(null)}>Close</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

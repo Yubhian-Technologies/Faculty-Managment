@@ -6,7 +6,7 @@ import { requireCollegeMember, isDepartmentOffice } from "@/lib/auth/verifySessi
 import { getAdminDb } from "@/lib/firebase/admin";
 import { createFirebaseUser } from "@/lib/firebase/authRest";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
-import { syncDepartmentHod, getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
+import { syncDepartmentHod, getHodDepartmentScope, canHodEditDepartment, facultyManageableDepartmentNames } from "@/lib/departments/scope";
 import { isSeatRole } from "@/lib/roles/seatRoles";
 import { normalizeAcademicProfile } from "@/lib/faculty/academicProfileCompat";
 import { degreeTypeError } from "@/lib/faculty/degreeType";
@@ -95,11 +95,19 @@ export async function GET(request: Request) {
       });
     }
 
-    // HOD sees only their own department(s)' users unless allDepts=true
+    // HOD sees only their own department(s)' users unless allDepts=true - a
+    // parent department that is split into sub-departments (e.g. Basic
+    // Science -> BSC/BSM/BSP) has no HOD of its own, so its faculty/office/
+    // class-leader logins are filed under the CHILD department name, not the
+    // parent's. Using the raw ownDepartmentNames (parent only, no children)
+    // here silently hid them from every picker built on this endpoint -
+    // Department Office, Class Leader, etc. - even though they are squarely
+    // this HOD's to appoint (see facultyManageableDepartmentNames's own doc).
     if (session.role === "HOD" && !allDepts) {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
-      if (scope.ownDepartmentNames.length > 0) {
-        const ownSet = new Set(scope.ownDepartmentNames);
+      const scopedNames = facultyManageableDepartmentNames(scope);
+      if (scopedNames.length > 0) {
+        const ownSet = new Set(scopedNames);
         users = users.filter((u) => ownSet.has((u as unknown as { department?: string }).department ?? ""));
       } else {
         users = [];

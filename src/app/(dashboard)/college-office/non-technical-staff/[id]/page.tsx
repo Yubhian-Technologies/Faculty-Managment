@@ -3,13 +3,21 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { SupportingStaffProfileHub } from "@/components/supportingStaff/SupportingStaffProfileHub";
+import { useAuthStore } from "@/store/authStore";
 import { toast } from "@/hooks/useToast";
 import type { SupportingStaffMember } from "@/types";
 
+// Also mounted at /principal/staff/non-technical/[id] (re-exported from
+// there) - listPath/basePath below pick the right destination for whichever
+// route rendered this, same isCollegeLevel pattern as hod/faculty/new/page.tsx.
 export default function NonTechnicalStaffViewPage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
   const staffId = params.id;
+  const user = useAuthStore((s) => s.user);
+  const isCollegeLevel = user?.role === "PRINCIPAL" || user?.role === "VICE_PRINCIPAL";
+  const listPath = isCollegeLevel ? "/principal/staff" : "/college-office/non-technical-staff";
+  const detailBasePath = isCollegeLevel ? "/principal/staff/non-technical" : "/college-office/non-technical-staff";
 
   const [staff, setStaff] = useState<Partial<SupportingStaffMember> | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -20,14 +28,14 @@ export default function NonTechnicalStaffViewPage() {
       .then((d) => {
         if (!d.staff) {
           toast({ variant: "destructive", title: d.error ?? "Staff record not found" });
-          router.push("/college-office/non-technical-staff");
+          router.push(listPath);
           return;
         }
         setStaff(d.staff);
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load staff record" }))
       .finally(() => setIsLoading(false));
-  }, [staffId, router]);
+  }, [staffId, router, listPath]);
 
   if (isLoading) return <p className="text-sm text-muted-foreground">Loading…</p>;
   if (!staff) return null;
@@ -35,9 +43,9 @@ export default function NonTechnicalStaffViewPage() {
   return (
     <SupportingStaffProfileHub
       staff={staff}
-      basePath={`/college-office/non-technical-staff/${staffId}`}
-      backHref="/college-office/non-technical-staff"
-      editHref={`/college-office/non-technical-staff/${staffId}/edit`}
+      basePath={`${detailBasePath}/${staffId}`}
+      backHref={listPath}
+      editHref={`${detailBasePath}/${staffId}/edit`}
     />
   );
 }

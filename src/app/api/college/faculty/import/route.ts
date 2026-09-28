@@ -9,6 +9,7 @@ import {
   matchOption, normalizeDigits, isScientificNotation,
   GENDER_OPTIONS, RATIFICATION_STATUS_OPTIONS,
 } from "@/lib/import/fieldConstraints";
+import { fetchActiveDesignationNames, matchDesignation } from "@/lib/designations/validate";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
 import { PHONE_REGEX, EMAIL_REGEX, PAN_REGEX, AADHAR_REGEX } from "@/lib/validations";
 import { getHodDepartmentScope, facultyManageableDepartmentNames } from "@/lib/departments/scope";
@@ -167,13 +168,12 @@ export async function POST(request: Request) {
     );
 
     // The designation catalogue this college's Faculty template allows - the
-    // same admin-curated list the manual Add form's dropdown offers (see
-    // DesignationCatalogCard) - no hardcoded list, no "Other" any more.
-    const designationSnap = await db.collection("colleges").doc(collegeId).collection("designations")
-      .where("category", "==", "FACULTY").where("isActive", "==", true).get();
-    const allowedTeachingDesignations = designationSnap.docs
-      .map((d) => (d.data() as { name?: string }).name)
-      .filter((n): n is string => !!n);
+    // same admin-curated list the manual Add form's dropdown (and its own
+    // server-side validation) offers (see DesignationCatalogCard) - no
+    // hardcoded list, no "Other" any more. Fetched once here, matched per row
+    // below via matchDesignation (same shared helper the manual Add/Edit
+    // routes use, just without refetching the catalog on every row).
+    const allowedTeachingDesignations = await fetchActiveDesignationNames(db, collegeId, "FACULTY");
 
     const now = new Date();
     // Rows that passed validation and were queued for write, alongside which
@@ -251,20 +251,15 @@ export async function POST(request: Request) {
       }
 
       // Map designation - held to this college's own admin-curated catalog,
-      // not free text. matchOption normalizes case/punctuation/spacing so
-      // "assistant professor" and "Assistant Professor" resolve the same,
-      // but the admin's own chosen wording is the only thing accepted -
-      // anything else rejects the row rather than being stored as whatever
-      // text was typed.
-      const designationRaw = row.designation.trim();
-      const designation: Designation | undefined = matchOption(designationRaw, allowedTeachingDesignations);
-      if (!designation) {
-        failed.push({
-          row: rowNum, employeeId: empId,
-          error: `Designation "${designationRaw}" is not one of the titles your college allows (${allowedTeachingDesignations.join(" / ")})`,
-        });
+      // not free text (matchDesignation normalizes case/punctuation/spacing,
+      // same as the manual Add/Edit routes' resolveDesignation) - anything
+      // else rejects the row rather than being stored as whatever text was typed.
+      const designationResult = matchDesignation(row.designation, allowedTeachingDesignations, "FACULTY");
+      if ("error" in designationResult) {
+        failed.push({ row: rowNum, employeeId: empId, error: designationResult.error });
         continue;
       }
+      const designation: Designation = designationResult.name;
 
       // Employee Category - the same closed set the Add/Edit form and PATCH
       // enforce (EMPLOYEE_CATEGORY_LABELS). The cell may hold the label

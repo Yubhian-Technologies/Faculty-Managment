@@ -6,8 +6,9 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { createFirebaseUser } from "@/lib/firebase/authRest";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
 import { getHodDepartmentScope, canHodManageFacultyDepartment } from "@/lib/departments/scope";
-import { SUPPORTING_STAFF_ROLE_CATEGORY, canRolePostCategory, supportingStaffCategoryLabel } from "@/lib/supportingStaff/roleCategory";
+import { SUPPORTING_STAFF_ROLE_CATEGORY, canRoleCreateSupportingStaff, supportingStaffCategoryLabel } from "@/lib/supportingStaff/roleCategory";
 import { hasSupportingStaffSplit } from "@/lib/designations/config";
+import { resolveDesignation } from "@/lib/designations/validate";
 import { normalizeSupportingStaffProfile } from "@/lib/faculty/academicProfileCompat";
 import { migrateSupportingStaffDoc } from "@/lib/faculty/fieldRenames";
 import { experienceBreakdown } from "@/lib/faculty/experienceCalc";
@@ -123,7 +124,7 @@ export async function POST(request: Request) {
     if (!body.mobileNo || !body.legalName || !body.gender || !body.dateOfBirth || !body.aadharNo || !body.panNo) {
       return NextResponse.json({ error: "Missing required personal details - Mobile No, Full Name (as per SSC), Gender, Date of Birth, Aadhar No, and PAN No are all required" }, { status: 400 });
     }
-    if (!canRolePostCategory(session.role, staffCategory)) {
+    if (!canRoleCreateSupportingStaff(session.role, staffCategory)) {
       return NextResponse.json(
         { error: `${(ROLE_LABELS as Record<string, string>)[session.role] ?? session.role} cannot add ${supportingStaffCategoryLabel(staffCategory)}` },
         { status: 403 }
@@ -142,6 +143,15 @@ export async function POST(request: Request) {
 
     const db = getAdminDb();
     const collegeId = session.collegeId;
+
+    // Held to this college's own admin-curated Designation Catalog for this
+    // staffCategory, same check the bulk-import route runs - previously only
+    // the Add Staff dropdown restricted this.
+    const designationResult = await resolveDesignation(db, collegeId, staffCategory, designation);
+    if ("error" in designationResult) {
+      return NextResponse.json({ error: designationResult.error }, { status: 400 });
+    }
+    const resolvedDesignation = designationResult.name;
 
     // Department is optional for Non-Technical (many of those roles - Librarian,
     // Accountant, centrally-hired staff - aren't owned by any single department),
@@ -205,7 +215,7 @@ export async function POST(request: Request) {
         name: finalName,
         email: collegeEmail,
         role: "COLLEGE_STAFF",
-        designation: designationLabel(designation),
+        designation: designationLabel(resolvedDesignation),
         ...(department ? { department } : {}),
         ...(profilePhotoUrl ? { profilePhotoUrl } : {}),
         isActive: true,
@@ -234,7 +244,7 @@ export async function POST(request: Request) {
         return numbers.length > 0 ? { additionalPhoneNumbers: numbers } : {};
       })()),
       staffCategory,
-      designation,
+      designation: resolvedDesignation,
       ...(body.otherDesignationTitle ? { otherDesignationTitle: body.otherDesignationTitle } : {}),
       highestQualification,
       // Computed from Date of Joining, never trusted from client input - same
