@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Camera, CheckCircle2, FileBadge2, Shield, UploadCloud, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,12 +29,15 @@ const COMMON_ROLES = [
 
 const PAYEE_OPTIONS = [
   { value: "Voucher Payee", label: "Voucher Payee", desc: "Paid through regular office petty/daily cash voucher" },
-  { value: "Contract Payee", label: "Contract Payee", desc: "Outsourced or long-term third-party contract staff" },
+  { value: "Account Payee", label: "Account Payee", desc: "Direct payroll bank account payee / registered payee" },
 ];
 
 interface LocationStaffFormProps {
   departments: LocationDepartment[];
   shifts: LocationShift[];
+  // Pre-selected department ID (e.g. when opening from a department's page).
+  // Remains editable in the picker for Location Staff Admin.
+  initialDepartmentId?: string;
   // Set for the Location Dept Head context - department is fixed to their own
   // and the picker is replaced by a read-only display. Left unset for the
   // Location Staff Admin context, where any department (or none) is pickable.
@@ -50,7 +53,14 @@ interface LocationStaffFormProps {
 // Head (location-dept-head/staff, inline dialog) submit through, instead of
 // each maintaining its own copy with different fields and validation rigor.
 export function LocationStaffForm({
-  departments, shifts, lockedDepartmentId, lockedDepartmentName, onSuccess, onCancel, submitLabel = "Save Staff Member",
+  departments,
+  shifts,
+  initialDepartmentId,
+  lockedDepartmentId,
+  lockedDepartmentName,
+  onSuccess,
+  onCancel,
+  submitLabel = "Save Staff Member",
 }: LocationStaffFormProps) {
   const [name, setName] = useState("");
   const [fatherName, setFatherName] = useState("");
@@ -64,10 +74,20 @@ export function LocationStaffForm({
   const [payeeReference, setPayeeReference] = useState("");
   const [role, setRole] = useState("");
   const [customRole, setCustomRole] = useState("");
-  const [departmentId, setDepartmentId] = useState<string>(lockedDepartmentId ?? "__none__");
+  const [departmentId, setDepartmentId] = useState<string>(
+    initialDepartmentId || lockedDepartmentId || "__none__"
+  );
   const [shiftId, setShiftId] = useState<string>("__none__");
   const [dateOfJoining, setDateOfJoining] = useState("");
   const [photoUrl, setPhotoUrl] = useState("");
+
+  useEffect(() => {
+    if (initialDepartmentId && initialDepartmentId !== "__none__") {
+      setDepartmentId(initialDepartmentId);
+    } else if (lockedDepartmentId && lockedDepartmentId !== "__none__") {
+      setDepartmentId(lockedDepartmentId);
+    }
+  }, [initialDepartmentId, lockedDepartmentId]);
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [touched, setTouched] = useState<Record<string, boolean>>({});
@@ -88,7 +108,7 @@ export function LocationStaffForm({
     if (!aadhaar.trim()) newErrors.aadhaar = "Aadhaar number is required";
     else if (!/^\d{12}$/.test(aadhaar.trim())) newErrors.aadhaar = "Aadhaar must be exactly 12 numeric digits";
 
-    if (!payeeType || payeeType === "__none__") newErrors.payeeType = "Please select Payee Type (Voucher Payee or Contract Payee)";
+    if (!payeeType || payeeType === "__none__") newErrors.payeeType = "Please select Payee Type (Voucher Payee or Account Payee)";
 
     if (!role) newErrors.role = "Please select a role / designation";
     else if (role === "OTHER" && !customRole.trim()) newErrors.role = "Please specify the custom role title";
@@ -384,8 +404,8 @@ export function LocationStaffForm({
               {!lockedDepartmentId && <span className="text-[10px] text-muted-foreground">Can appoint as Head</span>}
             </div>
             {lockedDepartmentId ? (
-              <div className="flex h-9 items-center rounded-md border bg-muted/30 px-3 text-xs text-foreground">
-                {lockedDepartmentName ?? "Your department"}
+              <div className="flex h-9 items-center rounded-md border bg-muted/30 px-3 text-xs text-foreground font-medium">
+                {lockedDepartmentName ?? departments.find((d) => d.id === lockedDepartmentId)?.name ?? "Your department"}
               </div>
             ) : (
               <Select value={departmentId} onValueChange={setDepartmentId}>

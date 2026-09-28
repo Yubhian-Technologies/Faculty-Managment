@@ -138,6 +138,8 @@ export default function EditDepartmentPage() {
     };
   }, [params.id]);
 
+
+
   const handleStaffSelect = (staffId: string) => {
     setSelectedStaffId(staffId);
     if (staffId === "__none__") {
@@ -296,26 +298,31 @@ export default function EditDepartmentPage() {
   }
 
   return (
-    <div className="space-y-4 max-w-3xl mx-auto pb-24 md:pb-8">
+    <div className="space-y-6 max-w-3xl mx-auto pb-24 md:pb-8">
       {/* ── Top Header ── */}
-      <div className="flex items-center gap-3 bg-card p-4 rounded-xl border">
-        <Button asChild variant="ghost" size="icon" className="h-9 w-9 shrink-0">
+      <div className="flex items-center gap-3.5 bg-card/90 backdrop-blur-sm p-5 rounded-3xl border border-border/60 shadow-xs">
+        <Button asChild variant="outline" size="icon" className="h-10 w-10 rounded-full border-border/60 shrink-0 hover:bg-muted/60">
           <Link href="/location-staff-admin/departments">
             <ArrowLeft className="h-5 w-5" />
           </Link>
         </Button>
         <div>
-          <h1 className="text-lg sm:text-xl font-bold text-foreground">Edit Department</h1>
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground flex items-center gap-2.5">
+            <div className="h-8 w-8 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0 border border-primary/20">
+              <Building2 className="h-4 w-4" />
+            </div>
+            <span>Edit Department</span>
+          </h1>
           <p className="text-xs text-muted-foreground mt-0.5">
             Update department details and its supervising Department Head.
           </p>
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form onSubmit={handleSubmit} className="space-y-6">
         {/* ── Department Details Card ── */}
-        <Card className="border-border/80 shadow-xs">
-          <CardHeader className="p-4 pb-2">
+        <Card className="rounded-3xl border border-border/60 bg-card/90 shadow-xs overflow-hidden">
+          <CardHeader className="p-6 pb-2">
             <CardTitle className="text-sm font-bold flex items-center gap-2">
               <Building2 className="h-4 w-4 text-primary" />
               <span>Department Information</span>
@@ -324,49 +331,49 @@ export default function EditDepartmentPage() {
               Basic identification and classification details.
             </CardDescription>
           </CardHeader>
-          <CardContent className="p-4 pt-2 space-y-3">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="sm:col-span-2 space-y-1">
+          <CardContent className="p-6 pt-2 space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="sm:col-span-2 space-y-1.5">
                 <Label className="text-xs font-semibold">Department Name *</Label>
                 <Input
                   required
                   placeholder="e.g. Security, Housekeeping, Electrical, Transport"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="h-9 text-xs"
+                  className="h-10 text-xs rounded-xl border-border/60 bg-muted/20"
                 />
               </div>
 
-              <div className="space-y-1">
+              <div className="space-y-1.5">
                 <Label className="text-xs font-semibold">
                   Department Code <span className="text-muted-foreground font-normal">(Optional)</span>
                 </Label>
                 <Input
-                  placeholder="e.g. SEC, HSK (Optional)"
+                  placeholder="e.g. SEC, HSK"
                   value={code}
                   onChange={(e) => setCode(e.target.value.toUpperCase())}
-                  className="h-9 text-xs font-mono"
+                  className="h-10 text-xs font-mono rounded-xl border-border/60 bg-muted/20 uppercase"
                 />
               </div>
             </div>
 
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               <Label className="text-xs font-semibold">Description / Scope of Work</Label>
               <Textarea
                 rows={3}
                 placeholder="Operational responsibilities, coverage zones, shift schedules..."
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                className="text-xs"
+                className="text-xs rounded-xl border-border/60 bg-muted/20 resize-none"
               />
             </div>
           </CardContent>
         </Card>
 
         {/* ── Department Head Assignment Card ── */}
-        <Card className="border-border/80 shadow-xs">
-          <CardHeader className="p-4 pb-2">
-            <div className="flex items-center justify-between">
+        <Card className="rounded-3xl border border-border/60 bg-card/90 shadow-xs overflow-hidden">
+          <CardHeader className="p-6 pb-2">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <CardTitle className="text-sm font-bold flex items-center gap-2">
                   <Shield className="h-4 w-4 text-primary" />
@@ -377,7 +384,8 @@ export default function EditDepartmentPage() {
                 </CardDescription>
               </div>
 
-              <div className="flex items-center gap-1 bg-muted p-0.5 rounded-lg text-xs">
+              {/* Source Switcher Capsule */}
+              <div className="inline-flex p-1 bg-muted/60 rounded-full border border-border/50 shadow-xs gap-1 self-start sm:self-auto">
                 <Button
                   type="button"
                   size="sm"
@@ -386,9 +394,9 @@ export default function EditDepartmentPage() {
                     setHeadType("staff");
                     handleStaffSelect(selectedStaffId);
                   }}
-                  className="h-7 text-[11px] px-2.5 rounded-md"
+                  className="h-7 text-xs px-3 rounded-full font-medium"
                 >
-                  <Users className="h-3 w-3 mr-1" />
+                  <Users className="h-3 w-3 mr-1.5" />
                   From Staff
                 </Button>
                 <Button
@@ -399,32 +407,38 @@ export default function EditDepartmentPage() {
                     setHeadType("user");
                     handleUserSelect(selectedUserUid);
                   }}
-                  className="h-7 text-[11px] px-2.5 rounded-md"
+                  className="h-7 text-xs px-3 rounded-full font-medium"
                 >
-                  <UserCheck className="h-3 w-3 mr-1" />
+                  <UserCheck className="h-3 w-3 mr-1.5" />
                   From Users
                 </Button>
               </div>
             </div>
           </CardHeader>
 
-          <CardContent className="p-4 pt-2 space-y-3">
+          <CardContent className="p-6 pt-2 space-y-4">
             {headType === "staff" && (
               <div className="space-y-2">
                 <Label className="text-xs font-semibold">Select Staff Member</Label>
-                <Select value={selectedStaffId} onValueChange={handleStaffSelect}>
-                  <SelectTrigger className="h-9 text-xs">
-                    <SelectValue placeholder="Select staff member to lead this department" />
-                  </SelectTrigger>
-                  <SelectContent className="max-h-72">
-                    <SelectItem value="__none__">None (Leave Unassigned for now)</SelectItem>
-                    {staffList.map((s) => (
-                      <SelectItem key={s.id} value={s.id}>
-                        {s.name} — {s.role} ({s.contactNumber})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {isLoading ? (
+                  <div className="h-10 rounded-xl border border-border/40 bg-muted/20 animate-pulse" />
+                ) : (
+                  <Select value={selectedStaffId} onValueChange={handleStaffSelect}>
+                    <SelectTrigger className="h-10 text-xs rounded-xl border-border/60 bg-muted/20">
+                      <SelectValue placeholder="Select staff member to lead this department" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-72 rounded-2xl border-border/60 shadow-lg">
+                      <SelectItem value="__none__" className="text-xs rounded-xl">None (Leave Unassigned for now)</SelectItem>
+                      {staffList.map((s) => (
+                        <SelectItem key={s.id} value={s.id} className="text-xs rounded-xl">
+                          {s.name} — {s.role}{s.departmentName ? ` · ${s.departmentName}` : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+
+
               </div>
             )}
 
@@ -432,13 +446,13 @@ export default function EditDepartmentPage() {
               <div className="space-y-2">
                 <Label className="text-xs font-semibold">Select Location User</Label>
                 <Select value={selectedUserUid} onValueChange={handleUserSelect}>
-                  <SelectTrigger className="h-9 text-xs">
+                  <SelectTrigger className="h-10 text-xs rounded-xl border-border/60 bg-muted/20">
                     <SelectValue placeholder="Choose a system user account" />
                   </SelectTrigger>
-                  <SelectContent className="max-h-72">
-                    <SelectItem value="__none__">None (Leave Unassigned)</SelectItem>
+                  <SelectContent className="max-h-72 rounded-2xl border-border/60 shadow-lg">
+                    <SelectItem value="__none__" className="text-xs rounded-xl">None (Leave Unassigned)</SelectItem>
                     {users.map((u) => (
-                      <SelectItem key={u.uid} value={u.uid}>
+                      <SelectItem key={u.uid} value={u.uid} className="text-xs rounded-xl">
                         {u.name} ({u.role}) — {u.email}
                       </SelectItem>
                     ))}
@@ -447,49 +461,68 @@ export default function EditDepartmentPage() {
               </div>
             )}
 
-            <div className="p-3 bg-muted/30 rounded-xl border border-border/60 space-y-2">
+            {/* Display / edit details of selected head */}
+            <div className="p-4 bg-muted/30 rounded-2xl border border-border/60 space-y-3">
               <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block">
                 Department Head Contact Details
               </span>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <div className="space-y-1">
-                  <Label className="text-[11px] text-muted-foreground">Full Name</Label>
-                  <Input placeholder="Head Name" value={headName} onChange={(e) => setHeadName(e.target.value)} className="h-8 text-xs" />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-[11px] text-muted-foreground font-medium">Full Name</Label>
+                  <Input
+                    placeholder="Head Name"
+                    value={headName}
+                    onChange={(e) => setHeadName(e.target.value)}
+                    className="h-9 text-xs rounded-xl border-border/60 bg-background"
+                  />
                 </div>
-                <div className="space-y-1">
-                  <Label className="text-[11px] text-muted-foreground">Contact Phone</Label>
-                  <Input placeholder="Head Phone" type="tel" value={headPhone} onChange={(e) => setHeadPhone(e.target.value)} className="h-8 text-xs" />
+                <div className="space-y-1.5">
+                  <Label className="text-[11px] text-muted-foreground font-medium">Contact Phone</Label>
+                  <Input
+                    placeholder="Head Phone"
+                    type="tel"
+                    value={headPhone}
+                    onChange={(e) => setHeadPhone(e.target.value)}
+                    className="h-9 text-xs rounded-xl border-border/60 bg-background"
+                  />
                 </div>
               </div>
 
               {headType === "user" && selectedUserUid !== "__none__" && (
-                <div className="space-y-1">
-                  <Label className="text-[11px] text-muted-foreground">User Email</Label>
-                  <Input placeholder="Head Email" type="email" value={headEmail} disabled className="h-8 text-xs bg-muted/50" />
+                <div className="space-y-1.5">
+                  <Label className="text-[11px] text-muted-foreground font-medium">User Email</Label>
+                  <Input
+                    placeholder="Head Email"
+                    type="email"
+                    value={headEmail}
+                    disabled
+                    className="h-9 text-xs rounded-xl bg-muted/50 border-border/40"
+                  />
                 </div>
               )}
 
               {headName && (
                 <div className="mt-2 flex items-center gap-2">
-                  <Badge variant="outline" className="text-[11px] bg-primary/10 text-primary border-primary/20">
+                  <Badge variant="outline" className="text-[11px] bg-primary/10 text-primary border-primary/20 rounded-full px-3 py-0.5">
                     Selected Head: {headName} {headPhone && `(${headPhone})`}
                   </Badge>
                 </div>
               )}
             </div>
 
+            {/* ── Login Account Section for Staff Head ── */}
             {headType === "staff" && selectedStaffId !== "__none__" && (
               <div className="mt-3">
                 {(() => {
                   const staff = staffList.find((s) => s.id === selectedStaffId);
                   if (staff?.userUid && staff?.userEmail) {
                     return (
-                      <div className="flex items-center gap-2 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-700 dark:text-emerald-400">
-                        <ShieldCheck className="h-4 w-4 shrink-0 text-emerald-500" />
+                      <div className="flex items-center gap-3 p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-700 dark:text-emerald-400">
+                        <ShieldCheck className="h-5 w-5 shrink-0 text-emerald-500" />
                         <div>
-                          <p className="font-semibold">Portal Account Active</p>
-                          <p className="text-[11px] opacity-90">
+                          <p className="font-semibold text-sm">Portal Account Active</p>
+                          <p className="text-xs opacity-90 mt-0.5">
                             This staff member already has login credentials: <strong>{staff.userEmail}</strong>.
                           </p>
                         </div>
@@ -498,10 +531,12 @@ export default function EditDepartmentPage() {
                   }
 
                   return (
-                    <div className="p-3.5 bg-primary/5 rounded-xl border border-primary/20 space-y-3">
+                    <div className="p-4 bg-primary/5 rounded-2xl border border-primary/20 space-y-3">
                       <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <KeyRound className="h-4 w-4 text-primary shrink-0" />
+                        <div className="flex items-center gap-2.5">
+                          <div className="h-8 w-8 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0 border border-primary/20">
+                            <KeyRound className="h-4 w-4" />
+                          </div>
                           <div>
                             <p className="text-xs font-bold text-foreground">Create Department Head Login Account</p>
                             <p className="text-[11px] text-muted-foreground">
@@ -513,21 +548,21 @@ export default function EditDepartmentPage() {
                       </div>
 
                       {createLogin && (
-                        <div className="space-y-3 pt-2 border-t border-primary/10">
-                          <div className="space-y-1">
-                            <Label className="text-[11px] font-semibold">Login Email *</Label>
+                        <div className="space-y-3 pt-3 border-t border-primary/10">
+                          <div className="space-y-1.5">
+                            <Label className="text-xs font-semibold">Login Email *</Label>
                             <Input
                               type="email"
                               required
                               placeholder="head@campus.local"
                               value={loginEmail}
                               onChange={(e) => setLoginEmail(e.target.value)}
-                              className="h-8 text-xs bg-background"
+                              className="h-9 text-xs rounded-xl bg-background border-border/60"
                             />
                           </div>
 
-                          <div className="space-y-1">
-                            <Label className="text-[11px] font-semibold">Password *</Label>
+                          <div className="space-y-1.5">
+                            <Label className="text-xs font-semibold">Password *</Label>
                             <div className="relative">
                               <Input
                                 type={showPassword ? "text" : "password"}
@@ -535,12 +570,12 @@ export default function EditDepartmentPage() {
                                 placeholder="Enter password (min 6 characters)"
                                 value={loginPassword}
                                 onChange={(e) => setLoginPassword(e.target.value)}
-                                className="h-8 text-xs font-mono pr-8 bg-background"
+                                className="h-9 text-xs font-mono pr-8 rounded-xl bg-background border-border/60"
                               />
                               <button
                                 type="button"
                                 onClick={() => setShowPassword(!showPassword)}
-                                className="absolute right-2 top-2 text-muted-foreground hover:text-foreground"
+                                className="absolute right-2.5 top-2.5 text-muted-foreground hover:text-foreground"
                               >
                                 {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                               </button>
@@ -556,11 +591,11 @@ export default function EditDepartmentPage() {
           </CardContent>
         </Card>
 
-        <div className="flex items-center justify-end gap-2 pt-2">
-          <Button asChild type="button" variant="outline" size="sm">
+        <div className="flex items-center justify-end gap-3 pt-2">
+          <Button asChild type="button" variant="outline" className="h-10 px-5 rounded-full border-border/60">
             <Link href="/location-staff-admin/departments">Cancel</Link>
           </Button>
-          <Button type="submit" size="sm" disabled={isSubmitting} className="px-5">
+          <Button type="submit" disabled={isSubmitting} className="h-10 px-6 rounded-full font-semibold shadow-xs">
             {isSubmitting ? "Saving..." : "Save Changes"}
           </Button>
         </div>
@@ -576,7 +611,7 @@ export default function EditDepartmentPage() {
           }
         }}
       >
-        <DialogContent className="max-w-md p-5">
+        <DialogContent className="max-w-md p-6 rounded-3xl border-border/60 shadow-lg">
           <DialogHeader>
             <DialogTitle className="text-base font-bold flex items-center gap-2 text-primary">
               <KeyRound className="h-5 w-5" />
@@ -587,40 +622,40 @@ export default function EditDepartmentPage() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="p-3 bg-muted/40 rounded-xl border space-y-2.5 my-2">
-            <div className="flex items-center justify-between p-2.5 rounded-lg bg-background border">
+          <div className="p-4 bg-muted/40 rounded-2xl border border-border/60 space-y-3 my-2">
+            <div className="flex items-center justify-between p-3 rounded-xl bg-background border border-border/60 shadow-2xs">
               <div>
-                <span className="text-[10px] uppercase font-bold text-muted-foreground block">Login Email</span>
+                <span className="text-[10px] uppercase font-bold text-muted-foreground block tracking-wider">Login Email</span>
                 <span className="text-xs font-mono font-medium text-foreground">{createdCredentials?.email}</span>
               </div>
-              <Button type="button" size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => handleCopy(createdCredentials?.email || "", "email")}>
+              <Button type="button" size="sm" variant="outline" className="h-8 text-xs gap-1.5 rounded-full px-3" onClick={() => handleCopy(createdCredentials?.email || "", "email")}>
                 {copiedField === "email" ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
                 {copiedField === "email" ? "Copied" : "Copy"}
               </Button>
             </div>
 
-            <div className="flex items-center justify-between p-2.5 rounded-lg bg-background border">
+            <div className="flex items-center justify-between p-3 rounded-xl bg-background border border-border/60 shadow-2xs">
               <div>
-                <span className="text-[10px] uppercase font-bold text-muted-foreground block">Password</span>
+                <span className="text-[10px] uppercase font-bold text-muted-foreground block tracking-wider">Password</span>
                 <span className="text-xs font-mono font-medium text-foreground">{createdCredentials?.password}</span>
               </div>
-              <Button type="button" size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => handleCopy(createdCredentials?.password || "", "password")}>
+              <Button type="button" size="sm" variant="outline" className="h-8 text-xs gap-1.5 rounded-full px-3" onClick={() => handleCopy(createdCredentials?.password || "", "password")}>
                 {copiedField === "password" ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
                 {copiedField === "password" ? "Copied" : "Copy"}
               </Button>
             </div>
 
-            <div className="text-[11px] text-muted-foreground bg-primary/5 p-2 rounded-lg border border-primary/10">
-              Role: <strong className="text-foreground">LOCATION_DEPT_HEAD</strong>. They can immediately log in at <code className="text-xs">/login</code> to manage staff and attendance.
+            <div className="text-xs text-muted-foreground bg-primary/5 p-3 rounded-xl border border-primary/10">
+              Role: <strong className="text-foreground">LOCATION_DEPT_HEAD</strong>. They can immediately log in at <code className="text-xs px-1.5 py-0.5 rounded bg-muted">/login</code> to manage staff and attendance.
             </div>
           </div>
 
-          <DialogFooter className="gap-2 sm:gap-0">
+          <DialogFooter className="gap-2 sm:gap-0 pt-2">
             <Button
               type="button"
               variant="outline"
               size="sm"
-              className="gap-1.5"
+              className="gap-1.5 h-10 px-4 rounded-full border-border/60"
               onClick={() => {
                 const credsText = `Department: ${createdCredentials?.deptName}\nHead: ${createdCredentials?.headName}\nLogin Email: ${createdCredentials?.email}\nPassword: ${createdCredentials?.password}\nRole: Location Dept Head`;
                 handleCopy(credsText, "all");
@@ -633,6 +668,7 @@ export default function EditDepartmentPage() {
             <Button
               type="button"
               size="sm"
+              className="h-10 px-5 rounded-full font-semibold shadow-xs"
               onClick={() => {
                 setCreatedCredentials(null);
                 router.push("/location-staff-admin/departments");

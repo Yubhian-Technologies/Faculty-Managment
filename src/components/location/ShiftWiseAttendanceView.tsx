@@ -41,6 +41,7 @@ import {
 import { toast } from "@/hooks/useToast";
 import { istDateKey } from "@/lib/attendance/istTime";
 import { getShiftCurrentState } from "@/lib/location/shiftTiming";
+import { GoogleSearchInput } from "@/components/shared/GoogleSearchInput";
 import type {
   LocationDepartment,
   LocationShift,
@@ -399,35 +400,37 @@ export function ShiftWiseAttendanceView({
     : "ACTIVE";
 
   return (
-    <div className="space-y-4 max-w-6xl mx-auto pb-24 md:pb-8">
+    <div className="space-y-6 max-w-6xl mx-auto pb-24 md:pb-8">
       {/* ── Top Header ── */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-card p-4 rounded-xl border shadow-xs">
-        <div className="flex items-center gap-3">
-          <Button asChild variant="ghost" size="icon" className="h-9 w-9 shrink-0">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-card/90 backdrop-blur-sm p-5 rounded-3xl border border-border/60 shadow-xs">
+        <div className="flex items-center gap-3.5">
+          <Button asChild variant="outline" size="icon" className="h-10 w-10 rounded-full border-border/60 shrink-0 hover:bg-muted/60">
             <Link href={backHref}>
               <ArrowLeft className="h-5 w-5" />
             </Link>
           </Button>
           <div>
-            <h1 className="text-lg sm:text-xl font-bold text-foreground flex items-center gap-2">
-              <ClipboardCheck className="h-5 w-5 text-primary" />
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
+              <div className="h-8 w-8 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                <ClipboardCheck className="h-4 w-4" />
+              </div>
               <span>Shift-Wise Attendance</span>
             </h1>
             <p className="text-xs text-muted-foreground mt-0.5">
-              <span>{departmentName || "Department"}</span> · Automated timing validation (late check-in / out-of-time check-out).
+              <span className="font-semibold text-foreground">{departmentName || "Department"}</span> · Automated timing validation (late check-in / out-of-time check-out).
             </p>
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2.5">
           {departments && onDepartmentChange && (
             <Select value={departmentId} onValueChange={onDepartmentChange}>
-              <SelectTrigger className="h-9 w-44 text-xs bg-background">
+              <SelectTrigger className="h-10 w-44 rounded-full text-xs bg-muted/30 border-border/60 focus:ring-primary/20">
                 <SelectValue placeholder="Department" />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="rounded-2xl border-border/60 shadow-lg">
                 {departments.map((d) => (
-                  <SelectItem key={d.id} value={d.id} className="text-xs">
+                  <SelectItem key={d.id} value={d.id} className="text-xs rounded-xl">
                     {d.name}
                   </SelectItem>
                 ))}
@@ -435,12 +438,12 @@ export function ShiftWiseAttendanceView({
             </Select>
           )}
 
-          {/* Date Picker */}
-          <div className="flex items-center gap-1 bg-muted/40 p-1 rounded-lg border">
+          {/* Date Picker Pill */}
+          <div className="flex items-center gap-1 bg-muted/40 p-1 rounded-full border border-border/60 shadow-xs">
             <Button
               variant="ghost"
               size="icon"
-              className="h-7 w-7"
+              className="h-8 w-8 rounded-full"
               onClick={() => changeDateByDays(-1)}
             >
               <ChevronLeft className="h-4 w-4" />
@@ -450,13 +453,13 @@ export function ShiftWiseAttendanceView({
                 type="date"
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
-                className="h-7 text-xs border-0 bg-transparent px-2 font-mono font-medium focus-visible:ring-0"
+                className="h-8 text-xs border-0 bg-transparent px-2 font-mono font-medium focus-visible:ring-0 w-32"
               />
             </div>
             <Button
               variant="ghost"
               size="icon"
-              className="h-7 w-7"
+              className="h-8 w-8 rounded-full"
               onClick={() => changeDateByDays(1)}
             >
               <ChevronRight className="h-4 w-4" />
@@ -464,9 +467,8 @@ export function ShiftWiseAttendanceView({
           </div>
 
           <Button
-            size="sm"
             onClick={() => setEmergencyDialogOpen(true)}
-            className="rounded-full gap-1.5 text-xs font-semibold bg-amber-600 hover:bg-amber-700 text-white shadow-xs"
+            className="h-10 rounded-full px-5 gap-2 text-xs font-semibold bg-amber-600 hover:bg-amber-700 text-white shadow-xs"
           >
             <ShieldAlert className="h-4 w-4" />
             <span>+ Emergency Duty</span>
@@ -474,8 +476,8 @@ export function ShiftWiseAttendanceView({
         </div>
       </div>
 
-      {/* ── Shift Selection Tabs / Pills ── */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+      {/* ── Shift Selection Tabs / Pills (Google Segmented Capsule) ── */}
+      <div className="inline-flex p-1.5 bg-muted/60 rounded-full border border-border/50 shadow-xs gap-1.5 overflow-x-auto max-w-full">
         {shifts.map((s) => {
           const isSelected = s.id === selectedShiftId;
           const assignedCount = departmentStaff.filter((st) => st.shiftId === s.id).length;
@@ -484,10 +486,10 @@ export function ShiftWiseAttendanceView({
               key={s.id}
               type="button"
               onClick={() => setSelectedShiftId(s.id)}
-              className={`shrink-0 flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all border ${
+              className={`shrink-0 flex items-center gap-2 px-4 py-2 rounded-full text-xs font-semibold transition-all ${
                 isSelected
-                  ? "bg-primary text-primary-foreground border-primary shadow-xs"
-                  : "bg-card text-foreground hover:bg-muted/50 border-border"
+                  ? "bg-primary text-primary-foreground shadow-xs"
+                  : "text-muted-foreground hover:text-foreground hover:bg-background/60"
               }`}
             >
               <Clock className="h-3.5 w-3.5" />
@@ -495,7 +497,7 @@ export function ShiftWiseAttendanceView({
               <span className="font-mono text-[11px] opacity-80">({s.startTime}–{s.endTime})</span>
               <Badge
                 variant={isSelected ? "secondary" : "outline"}
-                className="text-[10px] px-1.5 py-0 rounded-full"
+                className="text-[10px] px-2 py-0.5 rounded-full"
               >
                 {assignedCount}
               </Badge>
@@ -507,17 +509,17 @@ export function ShiftWiseAttendanceView({
         <button
           type="button"
           onClick={() => setSelectedShiftId("EMERGENCY")}
-          className={`shrink-0 flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all border ${
+          className={`shrink-0 flex items-center gap-2 px-4 py-2 rounded-full text-xs font-semibold transition-all ${
             isEmergencyTab
-              ? "bg-amber-600 text-white border-amber-600 shadow-xs"
-              : "bg-card text-amber-700 dark:text-amber-400 hover:bg-amber-500/10 border-amber-500/30"
+              ? "bg-amber-600 text-white shadow-xs"
+              : "text-amber-700 dark:text-amber-400 hover:bg-amber-500/10"
           }`}
         >
           <ShieldAlert className="h-3.5 w-3.5" />
-          <span>🚨 Emergency Duty</span>
+          <span>Emergency Duty</span>
           <Badge
             variant={isEmergencyTab ? "secondary" : "outline"}
-            className="text-[10px] px-1.5 py-0 rounded-full"
+            className="text-[10px] px-2 py-0.5 rounded-full"
           >
             {roster.filter((r) => r.attendance?.isEmergencyDuty).length}
           </Badge>
@@ -526,29 +528,29 @@ export function ShiftWiseAttendanceView({
 
       {/* ── Active Shift Info Banner ── */}
       {currentShift && (
-        <Card className="border shadow-xs bg-linear-to-r from-card to-muted/20">
-          <CardContent className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
-                <Clock className="h-5 w-5" />
+        <Card className="rounded-3xl border border-border/60 bg-card/90 shadow-xs">
+          <CardContent className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3.5">
+              <div className="h-12 w-12 rounded-2xl bg-primary/10 text-primary flex items-center justify-center shrink-0 border border-primary/20">
+                <Clock className="h-6 w-6" />
               </div>
               <div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <h3 className="font-bold text-base text-foreground">{currentShift.name}</h3>
                   {shiftStatus === "ACTIVE" && (
-                    <Badge className="bg-emerald-600 text-white text-[10px] px-2 py-0.5 gap-1">
+                    <Badge className="bg-emerald-600 text-white text-[10px] px-2.5 py-0.5 rounded-full gap-1.5 font-medium">
                       <span className="h-1.5 w-1.5 rounded-full bg-white animate-pulse" />
                       Active Shift Now
                     </Badge>
                   )}
                   {shiftStatus === "UPCOMING" && (
-                    <Badge variant="outline" className="text-xs text-muted-foreground">Upcoming Shift</Badge>
+                    <Badge variant="outline" className="text-xs rounded-full text-muted-foreground">Upcoming Shift</Badge>
                   )}
                   {shiftStatus === "COMPLETED" && (
-                    <Badge variant="outline" className="text-xs text-muted-foreground">Shift Ended</Badge>
+                    <Badge variant="outline" className="text-xs rounded-full text-muted-foreground">Shift Ended</Badge>
                   )}
                 </div>
-                <p className="text-xs text-muted-foreground mt-0.5">
+                <p className="text-xs text-muted-foreground mt-1">
                   Shift Timing: <span className="font-mono font-semibold text-foreground">{currentShift.startTime} – {currentShift.endTime}</span> · Grace Period: <span className="font-semibold text-foreground">{currentShift.gracePeriodMinutes ?? 15} minutes</span> (Check-ins after grace marked as <span className="text-destructive font-semibold">Late</span>).
                 </p>
               </div>
@@ -559,7 +561,7 @@ export function ShiftWiseAttendanceView({
                 variant="outline"
                 size="sm"
                 onClick={() => handleBulkMarkShift("PRESENT")}
-                className="h-8 text-xs font-semibold rounded-full gap-1"
+                className="h-9 text-xs font-semibold rounded-full px-4 gap-1.5 border-border/60 hover:bg-emerald-500/10 hover:text-emerald-600"
               >
                 <UserCheck className="h-3.5 w-3.5 text-emerald-600" />
                 <span>Mark Rest Present</span>
@@ -568,7 +570,7 @@ export function ShiftWiseAttendanceView({
                 variant="outline"
                 size="sm"
                 onClick={() => handleBulkMarkShift("ABSENT")}
-                className="h-8 text-xs font-semibold rounded-full gap-1 text-destructive"
+                className="h-9 text-xs font-semibold rounded-full px-4 gap-1.5 border-border/60 text-destructive hover:bg-destructive/10"
               >
                 <span>Mark Rest Absent</span>
               </Button>
@@ -577,89 +579,80 @@ export function ShiftWiseAttendanceView({
         </Card>
       )}
 
-      {/* ── KPI Summary Cards ── */}
-      <div className="grid grid-cols-2 sm:grid-cols-6 gap-2.5">
-        <Card className="border shadow-xs">
-          <CardContent className="p-3">
-            <span className="text-[10px] font-semibold text-muted-foreground uppercase">Shift Total</span>
-            <p className="text-xl font-bold text-foreground mt-0.5">{metrics.total}</p>
-          </CardContent>
+      {/* ── KPI Summary Cards (Google Cloud Metric Strip) ── */}
+      <div className="grid grid-cols-2 sm:grid-cols-6 gap-3">
+        <Card className="rounded-2xl border border-border/60 bg-card/80 p-4 shadow-xs">
+          <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Shift Total</span>
+          <p className="text-2xl font-bold tracking-tight text-foreground mt-1">{metrics.total}</p>
         </Card>
-        <Card className="border shadow-xs border-emerald-500/30 bg-emerald-500/5">
-          <CardContent className="p-3">
-            <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 uppercase">Present</span>
-            <p className="text-xl font-bold text-emerald-700 dark:text-emerald-300 mt-0.5">{metrics.present}</p>
-          </CardContent>
+        <Card className="rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-4 shadow-xs">
+          <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Present</span>
+          <p className="text-2xl font-bold tracking-tight text-emerald-700 dark:text-emerald-300 mt-1">{metrics.present}</p>
         </Card>
-        <Card className="border shadow-xs border-amber-500/30 bg-amber-500/5">
-          <CardContent className="p-3">
-            <span className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 uppercase">Late Check-In</span>
-            <p className="text-xl font-bold text-amber-700 dark:text-amber-300 mt-0.5">{metrics.late}</p>
-          </CardContent>
+        <Card className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4 shadow-xs">
+          <span className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wider">Late Check-In</span>
+          <p className="text-2xl font-bold tracking-tight text-amber-700 dark:text-amber-300 mt-1">{metrics.late}</p>
         </Card>
-        <Card className="border shadow-xs border-destructive/30 bg-destructive/5">
-          <CardContent className="p-3">
-            <span className="text-[10px] font-semibold text-destructive uppercase">Absent</span>
-            <p className="text-xl font-bold text-destructive mt-0.5">{metrics.absent}</p>
-          </CardContent>
+        <Card className="rounded-2xl border border-destructive/30 bg-destructive/5 p-4 shadow-xs">
+          <span className="text-[10px] font-semibold text-destructive uppercase tracking-wider">Absent</span>
+          <p className="text-2xl font-bold tracking-tight text-destructive mt-1">{metrics.absent}</p>
         </Card>
-        <Card className="border shadow-xs border-blue-500/30 bg-blue-500/5">
-          <CardContent className="p-3">
-            <span className="text-[10px] font-semibold text-blue-600 dark:text-blue-400 uppercase">Half / Leave</span>
-            <p className="text-xl font-bold text-blue-700 dark:text-blue-300 mt-0.5">{metrics.halfDay + metrics.onLeave}</p>
-          </CardContent>
+        <Card className="rounded-2xl border border-blue-500/30 bg-blue-500/5 p-4 shadow-xs">
+          <span className="text-[10px] font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wider">Half / Leave</span>
+          <p className="text-2xl font-bold tracking-tight text-blue-700 dark:text-blue-300 mt-1">{metrics.halfDay + metrics.onLeave}</p>
         </Card>
-        <Card className="border shadow-xs border-muted">
-          <CardContent className="p-3">
-            <span className="text-[10px] font-semibold text-muted-foreground uppercase">Unmarked</span>
-            <p className="text-xl font-bold text-muted-foreground mt-0.5">{metrics.unmarked}</p>
-          </CardContent>
+        <Card className="rounded-2xl border border-border/60 bg-card/80 p-4 shadow-xs">
+          <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Unmarked</span>
+          <p className="text-2xl font-bold tracking-tight text-muted-foreground mt-1">{metrics.unmarked}</p>
         </Card>
       </div>
 
       {/* ── Attendance Roster Table ── */}
-      <Card className="border shadow-xs">
-        <CardContent className="p-4 space-y-4">
+      <Card className="rounded-3xl border border-border/60 bg-card/90 shadow-xs overflow-hidden">
+        <CardContent className="p-5 space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="relative w-full sm:w-72">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search shift staff..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-8 h-9 text-xs"
-              />
-            </div>
+            <GoogleSearchInput
+              value={search}
+              onChange={setSearch}
+              placeholder="Search shift staff by name, role or phone..."
+              className="max-w-md"
+            />
             <div className="flex items-center gap-2">
               <span className="text-xs text-muted-foreground">
-                Showing {filteredRoster.length} staff members for this shift
+                Showing {filteredRoster.length} staff members
               </span>
-              <Button variant="ghost" size="icon" onClick={reload} className="h-8 w-8 text-muted-foreground" title="Refresh">
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={reload}
+                className="h-9 w-9 rounded-full border-border/60 text-muted-foreground hover:text-foreground"
+                title="Refresh"
+              >
                 <RefreshCw className="h-3.5 w-3.5" />
               </Button>
             </div>
           </div>
 
           {isLoading ? (
-            <div className="space-y-2 py-4">
+            <div className="space-y-3 py-4">
               {[1, 2, 3].map((i) => (
-                <div key={i} className="h-16 rounded-xl border bg-muted/30 animate-pulse" />
+                <div key={i} className="h-20 rounded-2xl border border-border/40 bg-muted/20 animate-pulse" />
               ))}
             </div>
           ) : filteredRoster.length === 0 ? (
-            <div className="rounded-xl border border-dashed p-8 text-center bg-card/30">
-              <Users className="h-8 w-8 text-muted-foreground mx-auto mb-2 opacity-50" />
+            <div className="rounded-2xl border border-dashed border-border/60 p-12 text-center bg-card/30">
+              <Users className="h-10 w-10 text-muted-foreground mx-auto mb-2 opacity-40" />
               <p className="font-semibold text-foreground text-sm">
                 {isEmergencyTab ? "No staff currently on emergency duty" : "No staff found for this shift"}
               </p>
               <p className="text-xs text-muted-foreground mt-1">
                 {isEmergencyTab
-                  ? "Click '+ Emergency Duty' to call in an off-duty staff member."
+                  ? "Click '+ Emergency Duty' to deploy an off-duty staff member."
                   : "Assign staff to this shift via the Shift Roster."}
               </p>
             </div>
           ) : (
-            <div className="divide-y border rounded-xl overflow-hidden bg-card">
+            <div className="divide-y divide-border/60 border border-border/60 rounded-2xl overflow-hidden bg-card/40">
               {filteredRoster.map((item) => {
                 const { staff, attendance } = item;
                 const isPresent = attendance?.status === "PRESENT";
@@ -672,11 +665,11 @@ export function ShiftWiseAttendanceView({
                 return (
                   <div
                     key={staff.id}
-                    className="p-3.5 flex flex-col lg:flex-row lg:items-center justify-between gap-3 hover:bg-muted/30 transition-colors"
+                    className="p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-4 hover:bg-muted/30 transition-colors"
                   >
                     {/* Left: Avatar, Name, Role, Phone */}
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="h-11 w-11 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0 overflow-hidden font-bold text-primary text-xs">
+                    <div className="flex items-center gap-3.5 min-w-0">
+                      <div className="h-12 w-12 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0 overflow-hidden font-bold text-primary text-sm shadow-2xs">
                         {staff.photoUrl ? (
                           // eslint-disable-next-line @next/next/no-img-element
                           <img src={staff.photoUrl} alt={staff.name} className="h-full w-full object-cover" />
@@ -688,11 +681,11 @@ export function ShiftWiseAttendanceView({
                       <div className="min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-semibold text-sm text-foreground truncate">{staff.name}</span>
-                          <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-primary/30 text-primary">
+                          <Badge variant="outline" className="text-[10px] px-2 py-0.5 rounded-full border-primary/30 text-primary">
                             {staff.role}
                           </Badge>
                           {isEmergency && (
-                            <Badge className="bg-amber-600 text-white text-[10px] px-1.5 py-0 gap-1 font-semibold">
+                            <Badge className="bg-amber-600 text-white text-[10px] px-2 py-0.5 rounded-full gap-1 font-semibold">
                               <ShieldAlert className="h-3 w-3" />
                               Emergency Duty
                             </Badge>
@@ -711,61 +704,61 @@ export function ShiftWiseAttendanceView({
                     <div className="flex items-center gap-3 flex-wrap">
                       {/* Check-In indicator */}
                       {attendance?.checkInTime ? (
-                        <div className="flex items-center gap-1.5 bg-muted/40 px-2.5 py-1 rounded-lg border text-xs">
+                        <div className="flex items-center gap-1.5 bg-muted/40 px-3 py-1 rounded-full border border-border/60 text-xs">
                           <LogIn className="h-3.5 w-3.5 text-emerald-600" />
                           <span className="font-mono font-medium">{attendance.checkInTime}</span>
                           {attendance.isLateCheckIn ? (
-                            <Badge variant="destructive" className="text-[10px] px-1 py-0">Late</Badge>
+                            <Badge variant="destructive" className="text-[10px] px-2 py-0 rounded-full">Late</Badge>
                           ) : (
-                            <Badge className="bg-emerald-600 text-white text-[10px] px-1 py-0">On Time</Badge>
+                            <Badge className="bg-emerald-600 text-white text-[10px] px-2 py-0 rounded-full">On Time</Badge>
                           )}
                         </div>
                       ) : (
-                        <span className="text-xs text-muted-foreground italic">No Check-in</span>
+                        <span className="text-xs text-muted-foreground italic px-2">No Check-in</span>
                       )}
 
                       {/* Check-Out indicator */}
                       {attendance?.checkOutTime ? (
-                        <div className="flex items-center gap-1.5 bg-muted/40 px-2.5 py-1 rounded-lg border text-xs">
+                        <div className="flex items-center gap-1.5 bg-muted/40 px-3 py-1 rounded-full border border-border/60 text-xs">
                           <LogOut className="h-3.5 w-3.5 text-blue-600" />
                           <span className="font-mono font-medium">{attendance.checkOutTime}</span>
                           {attendance.isOutOfTimeCheckOut ? (
-                            <Badge variant="destructive" className="text-[10px] px-1 py-0">Out of Time</Badge>
+                            <Badge variant="destructive" className="text-[10px] px-2 py-0 rounded-full">Out of Time</Badge>
                           ) : (
-                            <Badge className="bg-blue-600 text-white text-[10px] px-1 py-0">On Time</Badge>
+                            <Badge className="bg-blue-600 text-white text-[10px] px-2 py-0 rounded-full">On Time</Badge>
                           )}
                         </div>
                       ) : attendance?.checkInTime ? (
-                        <span className="text-xs text-amber-600 dark:text-amber-400 font-medium">On Shift Now</span>
+                        <span className="text-xs text-amber-600 dark:text-amber-400 font-medium px-2">On Shift Now</span>
                       ) : null}
 
                       {/* Overall Status Badge */}
                       {isPresent && !isLate && (
-                        <Badge className="bg-emerald-600 text-white text-xs">Present</Badge>
+                        <Badge className="bg-emerald-600 text-white text-xs rounded-full px-3 py-0.5">Present</Badge>
                       )}
                       {isLate && (
-                        <Badge className="bg-amber-600 text-white text-xs">Late</Badge>
+                        <Badge className="bg-amber-600 text-white text-xs rounded-full px-3 py-0.5">Late</Badge>
                       )}
                       {isAbsent && (
-                        <Badge variant="destructive" className="text-xs">Absent</Badge>
+                        <Badge variant="destructive" className="text-xs rounded-full px-3 py-0.5">Absent</Badge>
                       )}
                       {isHalfDay && (
-                        <Badge className="bg-blue-600 text-white text-xs">Half Day</Badge>
+                        <Badge className="bg-blue-600 text-white text-xs rounded-full px-3 py-0.5">Half Day</Badge>
                       )}
                       {isOnLeave && (
-                        <Badge variant="outline" className="text-xs border-blue-400 text-blue-600">On Leave</Badge>
+                        <Badge variant="outline" className="text-xs rounded-full px-3 py-0.5 border-blue-400 text-blue-600">On Leave</Badge>
                       )}
                     </div>
 
                     {/* Right: Actions */}
-                    <div className="flex items-center gap-1.5 self-end lg:self-auto shrink-0 flex-wrap">
+                    <div className="flex items-center gap-2 self-end lg:self-auto shrink-0 flex-wrap">
                       {/* Check-In Button */}
                       {!attendance?.checkInTime ? (
                         <Button
                           size="sm"
                           onClick={() => handleCheckIn(staff.id)}
                           disabled={actionLoadingId === `${staff.id}_in`}
-                          className="h-8 text-xs font-semibold rounded-full gap-1 bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs"
+                          className="h-8 text-xs font-semibold rounded-full px-4 gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs"
                         >
                           <LogIn className="h-3.5 w-3.5" />
                           <span>Check In</span>
@@ -779,7 +772,7 @@ export function ShiftWiseAttendanceView({
                           variant="outline"
                           onClick={() => handleCheckOut(staff.id)}
                           disabled={actionLoadingId === `${staff.id}_out`}
-                          className="h-8 text-xs font-semibold rounded-full gap-1 border-blue-400 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950"
+                          className="h-8 text-xs font-semibold rounded-full px-4 gap-1.5 border-blue-400 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950"
                         >
                           <LogOut className="h-3.5 w-3.5" />
                           <span>Check Out</span>
@@ -787,36 +780,38 @@ export function ShiftWiseAttendanceView({
                       ) : null}
 
                       {/* Quick Status Toggles */}
-                      <Button
-                        size="sm"
-                        variant={isAbsent ? "destructive" : "ghost"}
-                        onClick={() => handleSetStatus(staff.id, "ABSENT")}
-                        disabled={actionLoadingId === `${staff.id}_ABSENT`}
-                        className="h-8 text-xs px-2.5 rounded-full"
-                        title="Mark Absent"
-                      >
-                        A
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant={isHalfDay ? "default" : "ghost"}
-                        onClick={() => handleSetStatus(staff.id, "HALF_DAY")}
-                        disabled={actionLoadingId === `${staff.id}_HALF_DAY`}
-                        className="h-8 text-xs px-2.5 rounded-full"
-                        title="Mark Half Day"
-                      >
-                        ½
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant={isOnLeave ? "default" : "ghost"}
-                        onClick={() => handleSetStatus(staff.id, "ON_LEAVE")}
-                        disabled={actionLoadingId === `${staff.id}_ON_LEAVE`}
-                        className="h-8 text-xs px-2.5 rounded-full"
-                        title="Mark Leave"
-                      >
-                        L
-                      </Button>
+                      <div className="flex items-center bg-muted/40 p-0.5 rounded-full border border-border/60">
+                        <Button
+                          size="sm"
+                          variant={isAbsent ? "destructive" : "ghost"}
+                          onClick={() => handleSetStatus(staff.id, "ABSENT")}
+                          disabled={actionLoadingId === `${staff.id}_ABSENT`}
+                          className="h-7 w-7 p-0 text-xs font-bold rounded-full"
+                          title="Mark Absent"
+                        >
+                          A
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant={isHalfDay ? "default" : "ghost"}
+                          onClick={() => handleSetStatus(staff.id, "HALF_DAY")}
+                          disabled={actionLoadingId === `${staff.id}_HALF_DAY`}
+                          className="h-7 w-7 p-0 text-xs font-bold rounded-full"
+                          title="Mark Half Day"
+                        >
+                          ½
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant={isOnLeave ? "default" : "ghost"}
+                          onClick={() => handleSetStatus(staff.id, "ON_LEAVE")}
+                          disabled={actionLoadingId === `${staff.id}_ON_LEAVE`}
+                          className="h-7 w-7 p-0 text-xs font-bold rounded-full"
+                          title="Mark Leave"
+                        >
+                          L
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 );
@@ -826,15 +821,15 @@ export function ShiftWiseAttendanceView({
         </CardContent>
       </Card>
 
-      {/* ── Emergency Duty Entry Dialog (Separate Action Modal) ── */}
+      {/* ── Emergency Duty Entry Dialog ── */}
       <Dialog open={emergencyDialogOpen} onOpenChange={setEmergencyDialogOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md rounded-3xl border-border/60 shadow-lg p-6">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-amber-600">
+            <DialogTitle className="flex items-center gap-2 text-amber-600 text-base font-bold">
               <ShieldAlert className="h-5 w-5" />
               <span>Record Emergency Duty Entry</span>
             </DialogTitle>
-            <DialogDescription className="text-xs">
+            <DialogDescription className="text-xs text-muted-foreground">
               Call in an employee urgently outside or beyond their scheduled shift. This enters them under Emergency Duty with immediate on-time validation.
             </DialogDescription>
           </DialogHeader>
@@ -843,12 +838,12 @@ export function ShiftWiseAttendanceView({
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-foreground">Select Staff Member *</label>
               <Select value={emergencyStaffId} onValueChange={setEmergencyStaffId}>
-                <SelectTrigger className="h-9 text-xs">
+                <SelectTrigger className="h-10 text-xs rounded-xl border-border/60 bg-muted/20">
                   <SelectValue placeholder="Choose an employee..." />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="rounded-2xl border-border/60 shadow-lg">
                   {departmentStaff.map((st) => (
-                    <SelectItem key={st.id} value={st.id} className="text-xs">
+                    <SelectItem key={st.id} value={st.id} className="text-xs rounded-xl">
                       {st.name} ({st.role}) · {st.shiftName || "No Shift"}
                     </SelectItem>
                   ))}
@@ -862,18 +857,18 @@ export function ShiftWiseAttendanceView({
                 placeholder="e.g. Campus power outage, water pipeline burst, urgent security backup"
                 value={emergencyReason}
                 onChange={(e) => setEmergencyReason(e.target.value)}
-                className="h-9 text-xs"
+                className="h-10 text-xs rounded-xl border-border/60 bg-muted/20"
               />
             </div>
           </div>
 
-          <DialogFooter className="gap-2 sm:gap-0">
+          <DialogFooter className="gap-2 sm:gap-0 pt-2">
             <Button
               type="button"
-              variant="ghost"
+              variant="outline"
               size="sm"
               onClick={() => setEmergencyDialogOpen(false)}
-              className="text-xs"
+              className="text-xs rounded-full h-10 px-5 border-border/60"
             >
               Cancel
             </Button>
@@ -882,7 +877,7 @@ export function ShiftWiseAttendanceView({
               size="sm"
               onClick={handleSubmitEmergencyDuty}
               disabled={isSubmittingEmergency || !emergencyStaffId}
-              className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold"
+              className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold rounded-full h-10 px-5 shadow-xs"
             >
               {isSubmittingEmergency ? "Recording..." : "Check In on Emergency Duty"}
             </Button>

@@ -35,6 +35,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { GoogleSearchInput } from "@/components/shared/GoogleSearchInput";
 import {
   Select,
   SelectContent,
@@ -150,6 +151,8 @@ export default function DepartmentDetailPage() {
   const [reportShiftFilter, setReportShiftFilter] = useState("ALL");
   const [reportRows, setReportRows] = useState<StaffReportRow[]>([]);
   const [isLoadingReports, setIsLoadingReports] = useState(false);
+  const [reportPage, setReportPage] = useState(1);
+  const REPORT_PAGE_SIZE = 10;
 
   // 1. Fetch Department Details
   const fetchDeptDetails = useCallback(() => {
@@ -431,50 +434,54 @@ export default function DepartmentDetailPage() {
   const otherDepts = deptData?.otherManagedDepts ?? [];
 
   return (
-    <div className="space-y-4 max-w-6xl mx-auto pb-24 md:pb-8">
+    <div className="space-y-6 max-w-6xl mx-auto pb-24 md:pb-12 animate-in fade-in duration-300">
       {/* ── Top Header ── */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-card p-4 rounded-xl border">
-        <div className="flex items-center gap-3">
-          <Button asChild variant="ghost" size="icon" className="h-9 w-9 shrink-0">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-card/90 backdrop-blur-sm p-5 sm:p-6 rounded-3xl border border-border/60 shadow-xs">
+        <div className="flex items-center gap-3.5">
+          <Button asChild variant="ghost" size="icon" className="h-10 w-10 rounded-full hover:bg-muted/80 shrink-0">
             <Link href="/location-staff-admin/departments">
-              <ArrowLeft className="h-5 w-5" />
+              <ArrowLeft className="h-5 w-5 text-foreground" />
             </Link>
           </Button>
           <div>
             <div className="flex items-center gap-2 mb-1">
-              <Badge variant="outline" className="text-primary border-primary/30 text-[10px] font-semibold px-1.5 py-0">
-                Location Department Hub
+              <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 text-[11px] font-semibold px-2.5 py-0.5 rounded-full">
+                Department Hub
               </Badge>
               {dept?.code && (
-                <Badge variant="outline" className="text-[10px] font-mono px-1.5 py-0">
+                <Badge variant="outline" className="text-[10px] font-mono px-2 py-0 bg-muted/40 rounded-full">
                   {dept.code}
                 </Badge>
               )}
               {dept?.isActive !== undefined && (
                 <Badge
-                  className={
+                  className={`rounded-full text-[10px] font-semibold px-2.5 py-0.5 border ${
                     dept.isActive
-                      ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-[10px] px-1.5 py-0"
-                      : "bg-muted text-muted-foreground text-[10px] px-1.5 py-0"
-                  }
+                      ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
+                      : "bg-muted text-muted-foreground border-border/50"
+                  }`}
                 >
                   {dept.isActive ? "Active" : "Inactive"}
                 </Badge>
               )}
             </div>
-            <h1 className="text-xl sm:text-2xl font-bold text-foreground">
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
               {isLoadingDept ? "Loading Department..." : dept?.name || "Department"}
             </h1>
-            {dept?.description && (
-              <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
+            {dept?.description ? (
+              <p className="text-xs sm:text-sm text-muted-foreground mt-0.5 line-clamp-1">
                 {dept.description}
+              </p>
+            ) : (
+              <p className="text-xs sm:text-sm text-muted-foreground mt-0.5 italic">
+                Operational campus department
               </p>
             )}
           </div>
         </div>
 
         <div className="flex items-center gap-2 self-start sm:self-auto">
-          <Button size="sm" asChild variant="outline" className="h-9 text-xs rounded-xl gap-1.5">
+          <Button size="sm" asChild variant="outline" className="h-10 text-xs font-semibold rounded-full px-4 gap-1.5 border-border/60">
             <Link href={`/location-staff-admin/departments/${deptId}/edit`}>
               <Edit2 className="h-3.5 w-3.5" />
               <span>Edit Department</span>
@@ -483,44 +490,45 @@ export default function DepartmentDetailPage() {
         </div>
       </div>
 
-      {/* ── Department Head Profile Card ── */}
-      <Card className="border-border/80 shadow-xs bg-linear-to-r from-card via-card to-primary/5">
-        <CardContent className="p-4 sm:p-5">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div className="flex items-start sm:items-center gap-3.5">
-              <div className="h-12 w-12 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-bold text-lg shrink-0 border border-primary/20">
-                {dept?.headName ? dept.headName.charAt(0).toUpperCase() : <Shield className="h-6 w-6" />}
+      {/* ── Department Head Google Contact Profile Card ── */}
+      <Card className="rounded-3xl border-border/60 shadow-xs bg-linear-to-r from-card via-card to-primary/5 overflow-hidden">
+        <CardContent className="p-5 sm:p-6">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-5">
+            <div className="flex items-start sm:items-center gap-4">
+              <div className="h-14 w-14 rounded-2xl bg-primary/10 text-primary flex items-center justify-center font-bold text-xl shrink-0 border border-primary/20 shadow-xs">
+                {dept?.headName ? dept.headName.charAt(0).toUpperCase() : <Shield className="h-7 w-7" />}
               </div>
-              <div className="space-y-1">
+              <div className="space-y-1.5">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-xs font-semibold text-muted-foreground uppercase flex items-center gap-1">
+                  <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
                     <Shield className="h-3.5 w-3.5 text-primary" />
-                    <span>Department Head</span>
+                    <span>Appointed Department Head</span>
                   </span>
                   {dept?.headUid ? (
-                    <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px] px-1.5 py-0">
+                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-600 bg-emerald-500/10 px-2 py-0.5 rounded-full">
+                      <CheckCircle2 className="h-2.5 w-2.5" />
                       Assigned
-                    </Badge>
+                    </span>
                   ) : (
-                    <Badge variant="outline" className="text-amber-600 border-amber-500/30 text-[10px] px-1.5 py-0">
+                    <span className="text-[10px] font-medium text-amber-600 bg-amber-500/10 px-2 py-0.5 rounded-full">
                       Unassigned
-                    </Badge>
+                    </span>
                   )}
                 </div>
 
                 {dept?.headName ? (
                   <div>
-                    <h2 className="text-base sm:text-lg font-bold text-foreground">{dept.headName}</h2>
-                    <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap mt-0.5">
+                    <h2 className="text-lg sm:text-xl font-bold text-foreground">{dept.headName}</h2>
+                    <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap mt-1">
                       {(dept.headEmail || head?.email) && (
-                        <span className="flex items-center gap-1">
-                          <Mail className="h-3.5 w-3.5" />
+                        <span className="inline-flex items-center gap-1.5 bg-muted/40 px-2.5 py-0.5 rounded-full border border-border/40">
+                          <Mail className="h-3 w-3 text-primary" />
                           <span>{dept.headEmail || head?.email}</span>
                         </span>
                       )}
                       {(dept.headPhone || head?.phone) && (
-                        <span className="flex items-center gap-1">
-                          <Phone className="h-3.5 w-3.5" />
+                        <span className="inline-flex items-center gap-1.5 bg-muted/40 px-2.5 py-0.5 rounded-full border border-border/40">
+                          <Phone className="h-3 w-3 text-primary" />
                           <span>{dept.headPhone || head?.phone}</span>
                         </span>
                       )}
@@ -536,8 +544,8 @@ export default function DepartmentDetailPage() {
 
             {/* Multi-Department Alert Badge */}
             {otherDepts.length > 0 && (
-              <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 text-xs md:max-w-xs shrink-0 space-y-1">
-                <div className="flex items-center gap-1.5 font-semibold text-primary text-[11px]">
+              <div className="rounded-2xl border border-primary/20 bg-primary/5 p-3.5 text-xs md:max-w-xs shrink-0 space-y-1">
+                <div className="flex items-center gap-1.5 font-bold text-primary text-[11px]">
                   <ExternalLink className="h-3.5 w-3.5" />
                   <span>Heads Multiple Departments</span>
                 </div>
@@ -559,24 +567,24 @@ export default function DepartmentDetailPage() {
           </div>
 
           {/* Quick Stats Strip */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-4 mt-4 border-t border-border/60">
-            <div className="bg-muted/40 p-2.5 rounded-lg text-center">
-              <p className="text-[11px] text-muted-foreground">Department Staff</p>
-              <p className="text-lg font-bold text-foreground">{staffList.length}</p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-5 mt-5 border-t border-border/60">
+            <div className="bg-muted/40 p-3.5 rounded-2xl text-center border border-border/40">
+              <p className="text-xs text-muted-foreground font-medium">Department Staff</p>
+              <p className="text-xl font-bold text-foreground mt-0.5">{staffList.length}</p>
             </div>
-            <div className="bg-muted/40 p-2.5 rounded-lg text-center">
-              <p className="text-[11px] text-muted-foreground">Active Shifts</p>
-              <p className="text-lg font-bold text-foreground">{shifts.length}</p>
+            <div className="bg-muted/40 p-3.5 rounded-2xl text-center border border-border/40">
+              <p className="text-xs text-muted-foreground font-medium">Active Shifts</p>
+              <p className="text-xl font-bold text-foreground mt-0.5">{shifts.length}</p>
             </div>
-            <div className="bg-muted/40 p-2.5 rounded-lg text-center">
-              <p className="text-[11px] text-muted-foreground">Today Present</p>
-              <p className="text-lg font-bold text-emerald-600">
+            <div className="bg-emerald-500/10 p-3.5 rounded-2xl text-center border border-emerald-500/20">
+              <p className="text-xs text-emerald-700 dark:text-emerald-400 font-medium">Today Present</p>
+              <p className="text-xl font-bold text-emerald-600 dark:text-emerald-400 mt-0.5">
                 {attendanceSummary?.present ?? 0}
               </p>
             </div>
-            <div className="bg-muted/40 p-2.5 rounded-lg text-center">
-              <p className="text-[11px] text-muted-foreground">Late / Emergency</p>
-              <p className="text-lg font-bold text-amber-600">
+            <div className="bg-amber-500/10 p-3.5 rounded-2xl text-center border border-amber-500/20">
+              <p className="text-xs text-amber-700 dark:text-amber-400 font-medium">Late / Emergency</p>
+              <p className="text-xl font-bold text-amber-600 dark:text-amber-400 mt-0.5">
                 {(attendanceSummary?.late ?? 0)}
               </p>
             </div>
@@ -584,11 +592,11 @@ export default function DepartmentDetailPage() {
         </CardContent>
       </Card>
 
-      {/* ── Navigation Tabs ── */}
+      {/* ── Google Capsule Navigation Tabs ── */}
       <div
         role="tablist"
         aria-label="Department sections"
-        className="flex items-center gap-1 p-1 bg-muted/60 rounded-xl border border-border/80 overflow-x-auto"
+        className="inline-flex p-1 bg-muted/60 rounded-full border border-border/50 shadow-xs overflow-x-auto max-w-full"
       >
         <button
           type="button"
@@ -597,14 +605,17 @@ export default function DepartmentDetailPage() {
           aria-selected={activeTab === "staff"}
           aria-controls="panel-staff"
           onClick={() => setActiveTab("staff")}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
+          className={`flex items-center gap-2 px-5 py-2 rounded-full text-xs font-semibold whitespace-nowrap transition-all duration-200 ${
             activeTab === "staff"
-              ? "bg-card text-foreground shadow-xs border"
+              ? "bg-card text-foreground shadow-xs border border-border/40 font-bold"
               : "text-muted-foreground hover:text-foreground"
           }`}
         >
-          <Users className="h-4 w-4" />
-          <span>Staff ({staffList.length})</span>
+          <Users className="h-3.5 w-3.5" />
+          <span>Staff</span>
+          <span className="ml-1 px-1.5 py-0.2 rounded-full bg-primary/10 text-primary text-[10px]">
+            {staffList.length}
+          </span>
         </button>
 
         <button
@@ -614,14 +625,17 @@ export default function DepartmentDetailPage() {
           aria-selected={activeTab === "shifts"}
           aria-controls="panel-shifts"
           onClick={() => setActiveTab("shifts")}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
+          className={`flex items-center gap-2 px-5 py-2 rounded-full text-xs font-semibold whitespace-nowrap transition-all duration-200 ${
             activeTab === "shifts"
-              ? "bg-card text-foreground shadow-xs border"
+              ? "bg-card text-foreground shadow-xs border border-border/40 font-bold"
               : "text-muted-foreground hover:text-foreground"
           }`}
         >
-          <Clock className="h-4 w-4" />
-          <span>Shifts ({shifts.length})</span>
+          <Clock className="h-3.5 w-3.5" />
+          <span>Shifts</span>
+          <span className="ml-1 px-1.5 py-0.2 rounded-full bg-primary/10 text-primary text-[10px]">
+            {shifts.length}
+          </span>
         </button>
 
         <button
@@ -631,13 +645,13 @@ export default function DepartmentDetailPage() {
           aria-selected={activeTab === "attendance"}
           aria-controls="panel-attendance"
           onClick={() => setActiveTab("attendance")}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
+          className={`flex items-center gap-2 px-5 py-2 rounded-full text-xs font-semibold whitespace-nowrap transition-all duration-200 ${
             activeTab === "attendance"
-              ? "bg-card text-foreground shadow-xs border"
+              ? "bg-card text-foreground shadow-xs border border-border/40 font-bold"
               : "text-muted-foreground hover:text-foreground"
           }`}
         >
-          <CheckCircle2 className="h-4 w-4" />
+          <CheckCircle2 className="h-3.5 w-3.5" />
           <span>Current Attendance</span>
         </button>
 
@@ -648,13 +662,13 @@ export default function DepartmentDetailPage() {
           aria-selected={activeTab === "reports"}
           aria-controls="panel-reports"
           onClick={() => setActiveTab("reports")}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
+          className={`flex items-center gap-2 px-5 py-2 rounded-full text-xs font-semibold whitespace-nowrap transition-all duration-200 ${
             activeTab === "reports"
-              ? "bg-card text-foreground shadow-xs border"
+              ? "bg-card text-foreground shadow-xs border border-border/40 font-bold"
               : "text-muted-foreground hover:text-foreground"
           }`}
         >
-          <FileBarChart className="h-4 w-4" />
+          <FileBarChart className="h-3.5 w-3.5" />
           <span>Attendance Reports</span>
         </button>
       </div>
@@ -665,23 +679,21 @@ export default function DepartmentDetailPage() {
       {activeTab === "staff" && (
         <div role="tabpanel" id="panel-staff" aria-labelledby="tab-staff" className="space-y-4">
           {/* Staff Filters & Actions */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 bg-card p-3 rounded-xl border">
-            <div className="flex-1 relative">
-              <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search staff by name, role, phone, Aadhaar, voucher..."
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-card/80 backdrop-blur-sm p-3.5 sm:p-4 rounded-3xl border border-border/60 shadow-xs">
+            <div className="flex-1">
+              <GoogleSearchInput
                 value={staffSearch}
-                onChange={(e) => setStaffSearch(e.target.value)}
-                className="pl-9 h-9 text-xs rounded-xl"
+                onChange={setStaffSearch}
+                placeholder="Search staff by name, role, phone, Aadhaar, voucher..."
               />
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <Select value={selectedStaffRole} onValueChange={setSelectedStaffRole}>
-                <SelectTrigger className="h-9 text-xs w-[130px] rounded-xl">
+                <SelectTrigger className="h-10 text-xs w-[140px] rounded-full border-border/60 bg-muted/30 focus:bg-background">
                   <SelectValue placeholder="All Roles" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="rounded-2xl">
                   <SelectItem value="ALL">All Roles</SelectItem>
                   {distinctRoles.map((r) => (
                     <SelectItem key={r} value={r}>
@@ -692,10 +704,10 @@ export default function DepartmentDetailPage() {
               </Select>
 
               <Select value={selectedStaffShift} onValueChange={setSelectedStaffShift}>
-                <SelectTrigger className="h-9 text-xs w-[130px] rounded-xl">
+                <SelectTrigger className="h-10 text-xs w-[140px] rounded-full border-border/60 bg-muted/30 focus:bg-background">
                   <SelectValue placeholder="All Shifts" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="rounded-2xl">
                   <SelectItem value="ALL">All Shifts</SelectItem>
                   {shifts.map((s) => (
                     <SelectItem key={s.id} value={s.id}>
@@ -705,9 +717,9 @@ export default function DepartmentDetailPage() {
                 </SelectContent>
               </Select>
 
-              <Button asChild size="sm" className="h-9 text-xs rounded-xl gap-1.5 shrink-0">
+              <Button asChild size="default" className="h-10 text-xs font-semibold rounded-full px-4 gap-1.5 bg-primary text-primary-foreground shrink-0 shadow-xs hover:shadow">
                 <Link href={`/location-staff-admin/staff/new?departmentId=${deptId}`}>
-                  <Plus className="h-3.5 w-3.5" />
+                  <Plus className="h-4 w-4" />
                   <span>Add Staff</span>
                 </Link>
               </Button>
@@ -716,61 +728,64 @@ export default function DepartmentDetailPage() {
 
           {/* Staff Roster Cards */}
           {isLoadingStaff ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="h-36 rounded-xl border bg-card/60 animate-pulse" />
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {[1, 2, 3, 4, 5, 6].map((i) => (
+                <div key={i} className="h-40 rounded-3xl border border-border/50 bg-card/60 animate-pulse" />
               ))}
             </div>
           ) : filteredStaff.length === 0 ? (
-            <div className="rounded-xl border border-dashed p-8 text-center bg-card/30">
-              <UsersRound className="h-8 w-8 text-muted-foreground mx-auto mb-2 opacity-50" />
-              <p className="font-semibold text-foreground text-sm">No staff members found</p>
-              <p className="text-xs text-muted-foreground mt-0.5">
+            <div className="rounded-3xl border border-dashed border-border/80 p-12 text-center bg-card/40">
+              <div className="h-14 w-14 rounded-2xl bg-muted/60 text-muted-foreground flex items-center justify-center mx-auto mb-3">
+                <UsersRound className="h-7 w-7 opacity-70" />
+              </div>
+              <h3 className="font-bold text-foreground text-base">No staff members found</h3>
+              <p className="text-xs sm:text-sm text-muted-foreground mt-1 max-w-md mx-auto">
                 {staffSearch || selectedStaffRole !== "ALL" || selectedStaffShift !== "ALL"
                   ? "Try clearing filters to see all department staff."
                   : "Add staff members to this department to track assignments and attendance."}
               </p>
-              <Button size="sm" asChild variant="outline" className="mt-3 text-xs rounded-full">
+              <Button size="sm" asChild className="mt-4 text-xs font-semibold rounded-full px-5">
                 <Link href={`/location-staff-admin/staff/new?departmentId=${deptId}`}>
+                  <Plus className="h-3.5 w-3.5 mr-1.5" />
                   Add First Staff Member
                 </Link>
               </Button>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {filteredStaff.map((staff) => {
                 const assignedShift = staff.shiftId ? shiftMap.get(staff.shiftId) : null;
                 return (
-                  <Card key={staff.id} className="border-border/80 shadow-xs hover:border-primary/40 transition-colors">
-                    <CardContent className="p-4 space-y-3">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          <div className="h-10 w-10 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-sm shrink-0">
+                  <Card key={staff.id} className="rounded-3xl border-border/60 shadow-xs hover:shadow-md hover:border-primary/40 transition-all duration-200 bg-card overflow-hidden">
+                    <CardContent className="p-5 space-y-3.5">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="h-11 w-11 rounded-2xl bg-primary/10 text-primary flex items-center justify-center font-bold text-sm shrink-0 shadow-xs">
                             {staff.name.charAt(0).toUpperCase()}
                           </div>
                           <div className="min-w-0">
                             <h3 className="font-bold text-sm text-foreground truncate">{staff.name}</h3>
                             <p className="text-[11px] text-muted-foreground truncate">
-                              {staff.fatherName ? `S/o ${staff.fatherName}` : "Staff Member"}
+                              {staff.fatherName ? `S/o ${staff.fatherName}` : "Department Staff"}
                             </p>
                           </div>
                         </div>
 
                         <Badge
-                          className={
+                          className={`rounded-full text-[10px] font-semibold px-2.5 py-0.5 border ${
                             staff.status === "ACTIVE"
-                              ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-[10px] px-1.5 py-0"
-                              : "bg-muted text-muted-foreground text-[10px] px-1.5 py-0"
-                          }
+                              ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
+                              : "bg-muted text-muted-foreground border-border/50"
+                          }`}
                         >
                           {staff.status}
                         </Badge>
                       </div>
 
-                      <div className="space-y-1.5 text-xs">
+                      <div className="space-y-2 text-xs bg-muted/30 p-3 rounded-2xl border border-border/40">
                         <div className="flex items-center justify-between">
                           <span className="text-muted-foreground text-[11px]">Role / Designation:</span>
-                          <Badge variant="outline" className="text-[10px] font-medium px-1.5 py-0">
+                          <Badge variant="outline" className="text-[10px] font-semibold px-2 py-0.5 bg-card rounded-full border-border/60">
                             {staff.role}
                           </Badge>
                         </div>
@@ -778,34 +793,34 @@ export default function DepartmentDetailPage() {
                         <div className="flex items-center justify-between">
                           <span className="text-muted-foreground text-[11px]">Assigned Shift:</span>
                           {assignedShift ? (
-                            <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px] px-1.5 py-0">
+                            <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px] px-2 py-0.5 rounded-full font-medium">
                               {assignedShift.name} ({assignedShift.startTime} - {assignedShift.endTime})
                             </Badge>
                           ) : (
-                            <Badge variant="outline" className="text-muted-foreground text-[10px] px-1.5 py-0">
+                            <span className="text-muted-foreground text-[11px] italic">
                               No Shift Assigned
-                            </Badge>
+                            </span>
                           )}
                         </div>
 
-                        <div className="flex items-center justify-between pt-1 border-t border-border/40 text-[11px]">
-                          <span className="text-muted-foreground flex items-center gap-1">
-                            <Phone className="h-3 w-3" />
+                        <div className="flex items-center justify-between pt-1.5 border-t border-border/40 text-[11px]">
+                          <span className="text-muted-foreground flex items-center gap-1.5">
+                            <Phone className="h-3 w-3 text-primary" />
                             <span>{staff.contactNumber}</span>
                           </span>
                           {staff.aadhaar && (
-                            <span className="font-mono text-muted-foreground">
-                              Aadhaar: •••• {staff.aadhaar.slice(-4)}
+                            <span className="font-mono text-muted-foreground text-[10px] bg-card px-1.5 py-0.5 rounded-md border border-border/40">
+                              •••• {staff.aadhaar.slice(-4)}
                             </span>
                           )}
                         </div>
                       </div>
 
-                      <div className="pt-2 border-t border-border/40 flex items-center justify-between text-xs">
+                      <div className="pt-2 flex items-center justify-between text-xs">
                         <span className="text-[11px] text-muted-foreground">
                           {staff.payeeVoucher ? `Voucher: ${staff.payeeVoucher}` : "Regular"}
                         </span>
-                        <Button asChild size="sm" variant="ghost" className="h-7 text-xs text-primary px-2">
+                        <Button asChild size="sm" variant="ghost" className="h-8 text-xs font-semibold text-primary hover:bg-primary/10 rounded-full px-3">
                           <Link href={`/location-staff-admin/staff/${staff.id}`}>
                             View Profile →
                           </Link>
@@ -825,10 +840,10 @@ export default function DepartmentDetailPage() {
       {/* ═════════════════════════════════════════════════════════════════════ */}
       {activeTab === "shifts" && (
         <div role="tabpanel" id="panel-shifts" aria-labelledby="tab-shifts" className="space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-card p-3 rounded-xl border">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-card/80 backdrop-blur-sm p-4 sm:p-5 rounded-3xl border border-border/60 shadow-xs">
             <div>
-              <h2 className="text-sm font-bold text-foreground">Department Shifts</h2>
-              <p className="text-xs text-muted-foreground">
+              <h2 className="text-base font-bold text-foreground">Department Shifts</h2>
+              <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
                 Work shifts available for {dept?.name || "this department"} (dedicated, shared, and campus-wide).
               </p>
             </div>
@@ -841,15 +856,15 @@ export default function DepartmentDetailPage() {
                   fetchCampusShifts();
                   setIsLinkShiftModalOpen(true);
                 }}
-                className="h-8 text-xs rounded-xl gap-1.5"
+                className="h-10 text-xs font-semibold rounded-full px-4 gap-1.5 border-border/60"
               >
                 <Link2 className="h-3.5 w-3.5 text-primary" />
                 <span>Reuse Campus Shift</span>
               </Button>
 
-              <Button asChild size="sm" className="h-8 text-xs rounded-xl gap-1.5">
+              <Button asChild size="default" className="h-10 text-xs font-semibold rounded-full px-4 gap-1.5 bg-primary text-primary-foreground shadow-xs hover:shadow">
                 <Link href={`/location-staff-admin/shifts/new?departmentId=${deptId}`}>
-                  <Plus className="h-3.5 w-3.5" />
+                  <Plus className="h-4 w-4" />
                   <span>Create Shift</span>
                 </Link>
               </Button>
@@ -857,21 +872,23 @@ export default function DepartmentDetailPage() {
           </div>
 
           {isLoadingShifts ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {[1, 2].map((i) => (
-                <div key={i} className="h-36 rounded-xl border bg-card/60 animate-pulse" />
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="h-44 rounded-3xl border border-border/50 bg-card/60 animate-pulse" />
               ))}
             </div>
           ) : shifts.length === 0 ? (
-            <div className="rounded-xl border border-dashed p-8 text-center bg-card/30 space-y-3">
-              <Clock className="h-8 w-8 text-muted-foreground mx-auto opacity-50" />
+            <div className="rounded-3xl border border-dashed border-border/80 p-12 text-center bg-card/40 space-y-3">
+              <div className="h-14 w-14 rounded-2xl bg-muted/60 text-muted-foreground flex items-center justify-center mx-auto mb-2">
+                <Clock className="h-7 w-7 opacity-70" />
+              </div>
               <div>
-                <p className="font-semibold text-foreground text-sm">No shifts configured for this department</p>
-                <p className="text-xs text-muted-foreground mt-0.5 max-w-sm mx-auto">
-                  Create a new dedicated shift, or reuse an existing shift already configured for another campus department.
+                <h3 className="font-bold text-foreground text-base">No shifts configured for this department</h3>
+                <p className="text-xs sm:text-sm text-muted-foreground mt-1 max-w-sm mx-auto">
+                  Create a dedicated shift, or reuse an existing shift already configured for another campus department.
                 </p>
               </div>
-              <div className="flex items-center justify-center gap-2 pt-1">
+              <div className="flex items-center justify-center gap-2 pt-2">
                 <Button
                   size="sm"
                   variant="outline"
@@ -879,12 +896,12 @@ export default function DepartmentDetailPage() {
                     fetchCampusShifts();
                     setIsLinkShiftModalOpen(true);
                   }}
-                  className="text-xs rounded-full gap-1.5"
+                  className="text-xs font-semibold rounded-full px-4 gap-1.5"
                 >
                   <Link2 className="h-3.5 w-3.5 text-primary" />
                   <span>Reuse Existing Shift</span>
                 </Button>
-                <Button size="sm" asChild className="text-xs rounded-full gap-1.5">
+                <Button size="sm" asChild className="text-xs font-semibold rounded-full px-4 gap-1.5">
                   <Link href={`/location-staff-admin/shifts/new?departmentId=${deptId}`}>
                     <Plus className="h-3.5 w-3.5" />
                     <span>Create New Shift</span>
@@ -893,35 +910,35 @@ export default function DepartmentDetailPage() {
               </div>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {shifts.map((shift) => {
                 const isCampusWide = !!shift.isCampusWide || shift.departmentId === "ALL" || (Array.isArray(shift.departmentIds) && shift.departmentIds.includes("ALL"));
                 const isShared = !isCampusWide && Array.isArray(shift.departmentIds) && shift.departmentIds.length > 1;
 
                 return (
-                  <Card key={shift.id} className="border-border/80 shadow-xs hover:border-primary/40 transition-colors">
-                    <CardContent className="p-4 space-y-3">
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <div className="flex items-center gap-1.5">
-                            <h3 className="font-bold text-base text-foreground">{shift.name}</h3>
+                  <Card key={shift.id} className="rounded-3xl border-border/60 shadow-xs hover:shadow-md hover:border-primary/40 transition-all duration-200 bg-card overflow-hidden">
+                    <CardContent className="p-5 space-y-3.5">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <h3 className="font-bold text-base text-foreground truncate">{shift.name}</h3>
                             {isCampusWide ? (
-                              <Badge className="bg-purple-500/10 text-purple-600 border-purple-500/20 text-[10px] px-1.5 py-0 gap-1">
-                                <Globe className="h-3 w-3" />
+                              <Badge className="bg-purple-500/10 text-purple-600 border-purple-500/20 text-[10px] px-2 py-0.5 rounded-full gap-1">
+                                <Globe className="h-2.5 w-2.5" />
                                 <span>Campus-Wide</span>
                               </Badge>
                             ) : isShared ? (
-                              <Badge className="bg-blue-500/10 text-blue-600 border-blue-500/20 text-[10px] px-1.5 py-0 gap-1">
-                                <Link2 className="h-3 w-3" />
+                              <Badge className="bg-blue-500/10 text-blue-600 border-blue-500/20 text-[10px] px-2 py-0.5 rounded-full gap-1">
+                                <Link2 className="h-2.5 w-2.5" />
                                 <span>Shared ({shift.departmentIds?.length})</span>
                               </Badge>
                             ) : (
-                              <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-muted-foreground">
+                              <Badge variant="outline" className="text-[10px] px-2 py-0.5 rounded-full text-muted-foreground bg-muted/40">
                                 Dedicated
                               </Badge>
                             )}
                           </div>
-                          <div className="flex items-center gap-1.5 mt-0.5">
+                          <div className="flex items-center gap-1.5 mt-1">
                             <Clock className="h-3.5 w-3.5 text-primary" />
                             <span className="text-xs font-mono font-semibold text-foreground">
                               {shift.startTime} – {shift.endTime}
@@ -929,39 +946,39 @@ export default function DepartmentDetailPage() {
                           </div>
                         </div>
                         <Badge
-                          className={
+                          className={`rounded-full text-[10px] font-semibold px-2.5 py-0.5 border shrink-0 ${
                             shift.isActive
-                              ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-[10px] px-1.5 py-0"
-                              : "bg-muted text-muted-foreground text-[10px] px-1.5 py-0"
-                          }
+                              ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
+                              : "bg-muted text-muted-foreground border-border/50"
+                          }`}
                         >
                           {shift.isActive ? "Active" : "Inactive"}
                         </Badge>
                       </div>
 
-                      <div className="p-2.5 rounded-lg bg-muted/40 border border-border/50 text-xs space-y-1">
+                      <div className="p-3 rounded-2xl bg-muted/30 border border-border/40 text-xs space-y-1.5">
                         <div className="flex items-center justify-between text-[11px]">
                           <span className="text-muted-foreground">Grace Period:</span>
-                          <span className="font-medium text-foreground">{shift.gracePeriodMinutes ?? 15} mins</span>
+                          <span className="font-semibold text-foreground">{shift.gracePeriodMinutes ?? 15} mins</span>
                         </div>
                         <div className="flex items-center justify-between text-[11px]">
                           <span className="text-muted-foreground">Assigned Staff:</span>
-                          <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-semibold">
+                          <Badge variant="outline" className="text-[10px] px-2 py-0.5 font-semibold rounded-full bg-card">
                             {isCampusWide || isShared
                               ? `${shift.deptAssignedStaffCount ?? 0} in this Dept (${shift.assignedStaffCount ?? 0} total)`
                               : `${shift.assignedStaffCount ?? 0} Staff`}
                           </Badge>
                         </div>
                         {shift.description && (
-                          <p className="text-[11px] text-muted-foreground pt-1 border-t border-border/40 line-clamp-2">
+                          <p className="text-[11px] text-muted-foreground pt-1.5 border-t border-border/40 line-clamp-2">
                             {shift.description}
                           </p>
                         )}
                       </div>
 
-                      <div className="pt-2 border-t border-border/50 flex items-center justify-between text-xs">
+                      <div className="pt-2 border-t border-border/40 flex items-center justify-between text-xs">
                         <div className="flex items-center gap-1">
-                          <Button asChild size="sm" variant="ghost" className="h-7 text-xs text-muted-foreground hover:text-foreground px-2">
+                          <Button asChild size="sm" variant="ghost" className="h-8 text-xs text-muted-foreground hover:text-foreground rounded-full px-3">
                             <Link href={`/location-staff-admin/shifts/${shift.id}/edit`}>
                               <Edit2 className="h-3 w-3 mr-1" />
                               Edit
@@ -974,7 +991,7 @@ export default function DepartmentDetailPage() {
                               size="sm"
                               variant="ghost"
                               onClick={() => handleUnlinkShift(shift)}
-                              className="h-7 text-xs text-destructive hover:bg-destructive/10 px-2 gap-1"
+                              className="h-8 text-xs text-destructive hover:bg-destructive/10 rounded-full px-2.5 gap-1"
                               title="Remove shift from this department"
                             >
                               <Unlink className="h-3 w-3" />
@@ -983,7 +1000,7 @@ export default function DepartmentDetailPage() {
                           )}
                         </div>
 
-                        <Button asChild size="sm" variant="ghost" className="h-7 text-xs text-primary px-2">
+                        <Button asChild size="sm" variant="ghost" className="h-8 text-xs font-semibold text-primary hover:bg-primary/10 rounded-full px-3">
                           <Link href={`/location-staff-admin/shifts/${shift.id}/staff?departmentId=${deptId}`}>
                             Staff ({shift.deptAssignedStaffCount ?? shift.assignedStaffCount ?? 0}) →
                           </Link>
@@ -998,7 +1015,7 @@ export default function DepartmentDetailPage() {
 
           {/* ── Link Existing Shift Dialog ── */}
           <Dialog open={isLinkShiftModalOpen} onOpenChange={setIsLinkShiftModalOpen}>
-            <DialogContent className="sm:max-w-md p-5 bg-card border shadow-xl">
+            <DialogContent className="sm:max-w-md p-6 bg-card border border-border/60 shadow-xl rounded-3xl">
               <DialogHeader className="pb-2">
                 <DialogTitle className="text-base font-bold flex items-center gap-2">
                   <Link2 className="h-4 w-4 text-primary" />
@@ -1016,27 +1033,27 @@ export default function DepartmentDetailPage() {
                   <p className="text-[11px] text-muted-foreground max-w-xs mx-auto">
                     All other shifts on campus are already linked to this department or are configured as campus-wide.
                   </p>
-                  <Button asChild size="sm" className="text-xs mt-2" onClick={() => setIsLinkShiftModalOpen(false)}>
+                  <Button asChild size="sm" className="text-xs mt-2 rounded-full px-4" onClick={() => setIsLinkShiftModalOpen(false)}>
                     <Link href={`/location-staff-admin/shifts/new?departmentId=${deptId}`}>
                       Create New Shift
                     </Link>
                   </Button>
                 </div>
               ) : (
-                <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                <div className="space-y-2.5 max-h-72 overflow-y-auto pr-1">
                   {availableShiftsToReuse.map((s) => (
                     <div
                       key={s.id}
-                      className="flex items-center justify-between p-3 rounded-xl border bg-muted/20 hover:bg-muted/40 transition-colors"
+                      className="flex items-center justify-between p-3.5 rounded-2xl border border-border/50 bg-muted/20 hover:bg-muted/40 transition-colors"
                     >
                       <div className="space-y-1">
                         <div className="flex items-center gap-2">
                           <span className="font-bold text-xs text-foreground">{s.name}</span>
-                          <Badge variant="outline" className="text-[10px] font-mono px-1 py-0">
+                          <Badge variant="outline" className="text-[10px] font-mono px-2 py-0 rounded-full">
                             {s.startTime} – {s.endTime}
                           </Badge>
                         </div>
-                        <p className="text-[10px] text-muted-foreground">
+                        <p className="text-[11px] text-muted-foreground">
                           Used by: {s.departmentName || "Another department"} • Grace: {s.gracePeriodMinutes ?? 15}m
                         </p>
                       </div>
@@ -1044,7 +1061,7 @@ export default function DepartmentDetailPage() {
                         size="sm"
                         disabled={isLinkingShift}
                         onClick={() => handleLinkShift(s)}
-                        className="h-8 text-xs font-semibold rounded-lg gap-1 shrink-0"
+                        className="h-8 text-xs font-semibold rounded-full px-3.5 gap-1 shrink-0"
                       >
                         <Plus className="h-3 w-3" />
                         <span>Reuse</span>
@@ -1064,31 +1081,31 @@ export default function DepartmentDetailPage() {
       {activeTab === "attendance" && (
         <div role="tabpanel" id="panel-attendance" aria-labelledby="tab-attendance" className="space-y-4">
           {/* Date & Shift Controls */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 bg-card p-3 rounded-xl border">
-            <div className="flex items-center gap-1.5">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-card/80 backdrop-blur-sm p-4 rounded-3xl border border-border/60 shadow-xs">
+            <div className="flex items-center gap-2">
               <Button
                 variant="outline"
                 size="icon"
-                className="h-8 w-8"
+                className="h-9 w-9 rounded-full border-border/60"
                 onClick={() => shiftAttendanceDate(-1)}
                 title="Previous Day"
               >
                 <ChevronLeft className="h-4 w-4" />
               </Button>
 
-              <div className="relative">
+              <div>
                 <Input
                   type="date"
                   value={attendanceDate}
                   onChange={(e) => setAttendanceDate(e.target.value)}
-                  className="h-8 text-xs font-semibold px-2 w-[140px]"
+                  className="h-9 text-xs font-semibold px-3 w-[150px] rounded-full border-border/60 bg-muted/30 focus:bg-background"
                 />
               </div>
 
               <Button
                 variant="outline"
                 size="icon"
-                className="h-8 w-8"
+                className="h-9 w-9 rounded-full border-border/60"
                 onClick={() => shiftAttendanceDate(1)}
                 title="Next Day"
               >
@@ -1098,7 +1115,7 @@ export default function DepartmentDetailPage() {
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-8 text-xs px-2"
+                className="h-9 text-xs font-semibold rounded-full px-3 hover:bg-muted"
                 onClick={() => setAttendanceDate(istDateKey())}
               >
                 Today
@@ -1107,10 +1124,10 @@ export default function DepartmentDetailPage() {
 
             <div className="flex items-center gap-2">
               <Select value={attendanceShiftFilter} onValueChange={setAttendanceShiftFilter}>
-                <SelectTrigger className="h-8 text-xs w-[140px]">
+                <SelectTrigger className="h-9 text-xs w-[160px] rounded-full border-border/60 bg-muted/30 focus:bg-background">
                   <SelectValue placeholder="All Shifts" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="rounded-2xl">
                   <SelectItem value="ALL">All Shifts</SelectItem>
                   {shifts.map((s) => (
                     <SelectItem key={s.id} value={s.id}>
@@ -1123,7 +1140,7 @@ export default function DepartmentDetailPage() {
               <Button
                 variant="outline"
                 size="icon"
-                className="h-8 w-8"
+                className="h-9 w-9 rounded-full border-border/60"
                 onClick={fetchAttendance}
                 disabled={isLoadingAttendance}
                 title="Refresh Attendance"
@@ -1134,48 +1151,48 @@ export default function DepartmentDetailPage() {
           </div>
 
           {/* Attendance KPI Summary Chips */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
-            <div className="bg-card p-2.5 rounded-xl border text-center">
-              <span className="text-[10px] text-muted-foreground uppercase font-semibold">Total Staff</span>
-              <p className="text-base font-bold text-foreground mt-0.5">{attendanceSummary?.total ?? 0}</p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2.5">
+            <div className="bg-card p-3 rounded-2xl border border-border/60 text-center shadow-xs">
+              <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Total Staff</span>
+              <p className="text-lg font-bold text-foreground mt-0.5">{attendanceSummary?.total ?? 0}</p>
             </div>
-            <div className="bg-emerald-500/10 border border-emerald-500/20 p-2.5 rounded-xl text-center">
-              <span className="text-[10px] text-emerald-600 uppercase font-semibold">Present</span>
-              <p className="text-base font-bold text-emerald-700 dark:text-emerald-400 mt-0.5">
+            <div className="bg-emerald-500/10 border border-emerald-500/20 p-3 rounded-2xl text-center shadow-xs">
+              <span className="text-[10px] text-emerald-700 dark:text-emerald-400 uppercase font-bold tracking-wider">Present</span>
+              <p className="text-lg font-bold text-emerald-600 dark:text-emerald-400 mt-0.5">
                 {attendanceSummary?.present ?? 0}
               </p>
             </div>
-            <div className="bg-amber-500/10 border border-amber-500/20 p-2.5 rounded-xl text-center">
-              <span className="text-[10px] text-amber-600 uppercase font-semibold">Late</span>
-              <p className="text-base font-bold text-amber-700 dark:text-amber-400 mt-0.5">
+            <div className="bg-amber-500/10 border border-amber-500/20 p-3 rounded-2xl text-center shadow-xs">
+              <span className="text-[10px] text-amber-700 dark:text-amber-400 uppercase font-bold tracking-wider">Late</span>
+              <p className="text-lg font-bold text-amber-600 dark:text-amber-400 mt-0.5">
                 {attendanceSummary?.late ?? 0}
               </p>
             </div>
-            <div className="bg-red-500/10 border border-red-500/20 p-2.5 rounded-xl text-center">
-              <span className="text-[10px] text-red-600 uppercase font-semibold">Absent</span>
-              <p className="text-base font-bold text-red-700 dark:text-red-400 mt-0.5">
+            <div className="bg-red-500/10 border border-red-500/20 p-3 rounded-2xl text-center shadow-xs">
+              <span className="text-[10px] text-red-700 dark:text-red-400 uppercase font-bold tracking-wider">Absent</span>
+              <p className="text-lg font-bold text-red-600 dark:text-red-400 mt-0.5">
                 {attendanceSummary?.absent ?? 0}
               </p>
             </div>
-            <div className="bg-blue-500/10 border border-blue-500/20 p-2.5 rounded-xl text-center">
-              <span className="text-[10px] text-blue-600 uppercase font-semibold">On Leave</span>
-              <p className="text-base font-bold text-blue-700 dark:text-blue-400 mt-0.5">
+            <div className="bg-blue-500/10 border border-blue-500/20 p-3 rounded-2xl text-center shadow-xs">
+              <span className="text-[10px] text-blue-700 dark:text-blue-400 uppercase font-bold tracking-wider">On Leave</span>
+              <p className="text-lg font-bold text-blue-600 dark:text-blue-400 mt-0.5">
                 {attendanceSummary?.onLeave ?? 0}
               </p>
             </div>
-            <div className="bg-muted/60 border p-2.5 rounded-xl text-center">
-              <span className="text-[10px] text-muted-foreground uppercase font-semibold">Half Day</span>
-              <p className="text-base font-bold text-foreground mt-0.5">{attendanceSummary?.halfDay ?? 0}</p>
+            <div className="bg-muted/60 border border-border/50 p-3 rounded-2xl text-center shadow-xs">
+              <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Half Day</span>
+              <p className="text-lg font-bold text-foreground mt-0.5">{attendanceSummary?.halfDay ?? 0}</p>
             </div>
-            <div className="bg-muted/60 border p-2.5 rounded-xl text-center">
-              <span className="text-[10px] text-muted-foreground uppercase font-semibold">Pending</span>
-              <p className="text-base font-bold text-foreground mt-0.5">{attendanceSummary?.pending ?? 0}</p>
+            <div className="bg-muted/60 border border-border/50 p-3 rounded-2xl text-center shadow-xs">
+              <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Pending</span>
+              <p className="text-lg font-bold text-foreground mt-0.5">{attendanceSummary?.pending ?? 0}</p>
             </div>
           </div>
 
           {/* Attendance Roster Table & Responsive Mobile Cards */}
-          <Card className="border-border/80 shadow-xs">
-            <CardHeader className="p-4 pb-2">
+          <Card className="rounded-3xl border-border/60 shadow-xs overflow-hidden bg-card">
+            <CardHeader className="p-5 pb-3">
               <CardTitle className="text-sm font-bold flex items-center justify-between">
                 <span>Roster for {attendanceDate}</span>
                 <span className="text-xs font-normal text-muted-foreground">
@@ -1185,11 +1202,11 @@ export default function DepartmentDetailPage() {
             </CardHeader>
             <CardContent className="p-0">
               {isLoadingAttendance ? (
-                <div className="p-8 text-center text-xs text-muted-foreground">
+                <div className="p-12 text-center text-xs text-muted-foreground">
                   Loading attendance records...
                 </div>
               ) : roster.length === 0 ? (
-                <div className="p-8 text-center text-xs text-muted-foreground">
+                <div className="p-12 text-center text-xs text-muted-foreground">
                   No staff roster found for this department.
                 </div>
               ) : (
@@ -1197,17 +1214,17 @@ export default function DepartmentDetailPage() {
                   {/* Desktop Table View */}
                   <div className="hidden md:block overflow-x-auto">
                     <table className="w-full text-xs">
-                      <thead className="bg-muted/40 border-b border-border/80 text-muted-foreground text-[11px]">
+                      <thead className="bg-muted/40 border-b border-border/60 text-muted-foreground text-[11px]">
                         <tr>
-                          <th className="text-left font-semibold p-3 pl-4">Staff Member</th>
-                          <th className="text-left font-semibold p-3">Duty Shift</th>
-                          <th className="text-left font-semibold p-3">Status</th>
-                          <th className="text-left font-semibold p-3">Check-In</th>
-                          <th className="text-left font-semibold p-3">Check-Out</th>
-                          <th className="text-left font-semibold p-3 pr-4">Details & Notes</th>
+                          <th className="text-left font-semibold p-3.5 pl-5">Staff Member</th>
+                          <th className="text-left font-semibold p-3.5">Duty Shift</th>
+                          <th className="text-left font-semibold p-3.5">Status</th>
+                          <th className="text-left font-semibold p-3.5">Check-In</th>
+                          <th className="text-left font-semibold p-3.5">Check-Out</th>
+                          <th className="text-left font-semibold p-3.5 pr-5">Details & Notes</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-border/60">
+                      <tbody className="divide-y divide-border/50">
                         {roster.map(({ staff, attendance }) => {
                           const shift = staff.shiftId ? shiftMap.get(staff.shiftId) : null;
                           const isLate = attendance?.isLate || attendance?.isLateCheckIn;
@@ -1215,61 +1232,61 @@ export default function DepartmentDetailPage() {
 
                           return (
                             <tr key={staff.id} className="hover:bg-muted/20 transition-colors">
-                              <td className="p-3 pl-4">
+                              <td className="p-3.5 pl-5">
                                 <div className="font-semibold text-foreground">{staff.name}</div>
                                 <div className="text-[11px] text-muted-foreground">{staff.role}</div>
                               </td>
 
-                              <td className="p-3">
+                              <td className="p-3.5">
                                 {attendance?.shiftName ? (
-                                  <Badge variant="outline" className="text-[10px] font-medium px-1.5 py-0">
+                                  <Badge variant="outline" className="text-[10px] font-medium px-2 py-0.5 rounded-full">
                                     {attendance.shiftName}
                                   </Badge>
                                 ) : shift ? (
-                                  <Badge variant="outline" className="text-[10px] font-medium px-1.5 py-0">
+                                  <Badge variant="outline" className="text-[10px] font-medium px-2 py-0.5 rounded-full">
                                     {shift.name}
                                   </Badge>
                                 ) : (
-                                  <span className="text-muted-foreground text-[11px]">Unassigned</span>
+                                  <span className="text-muted-foreground text-[11px] italic">Unassigned</span>
                                 )}
                               </td>
 
-                              <td className="p-3">
+                              <td className="p-3.5">
                                 {!attendance ? (
-                                  <Badge variant="outline" className="text-muted-foreground text-[10px] px-1.5 py-0">
+                                  <Badge variant="outline" className="text-muted-foreground text-[10px] px-2 py-0.5 rounded-full bg-muted/40">
                                     Not Marked
                                   </Badge>
                                 ) : attendance.status === "PRESENT" ? (
-                                  <Badge className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-[10px] px-1.5 py-0">
+                                  <Badge className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-[10px] px-2 py-0.5 rounded-full">
                                     Present
                                   </Badge>
                                 ) : attendance.status === "LATE" ? (
-                                  <Badge className="bg-amber-500/10 text-amber-600 border-amber-500/20 text-[10px] px-1.5 py-0">
+                                  <Badge className="bg-amber-500/10 text-amber-600 border-amber-500/20 text-[10px] px-2 py-0.5 rounded-full">
                                     Late
                                   </Badge>
                                 ) : attendance.status === "ABSENT" ? (
-                                  <Badge className="bg-red-500/10 text-red-600 border-red-500/20 text-[10px] px-1.5 py-0">
+                                  <Badge className="bg-red-500/10 text-red-600 border-red-500/20 text-[10px] px-2 py-0.5 rounded-full">
                                     Absent
                                   </Badge>
                                 ) : attendance.status === "ON_LEAVE" ? (
-                                  <Badge className="bg-blue-500/10 text-blue-600 border-blue-500/20 text-[10px] px-1.5 py-0">
+                                  <Badge className="bg-blue-500/10 text-blue-600 border-blue-500/20 text-[10px] px-2 py-0.5 rounded-full">
                                     On Leave
                                   </Badge>
                                 ) : (
-                                  <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                                  <Badge variant="outline" className="text-[10px] px-2 py-0.5 rounded-full">
                                     {attendance.status}
                                   </Badge>
                                 )}
                               </td>
 
-                              <td className="p-3">
+                              <td className="p-3.5">
                                 {attendance?.checkInTime ? (
                                   <div className="space-y-0.5">
                                     <span className="font-mono font-medium text-foreground">
                                       {attendance.checkInTime}
                                     </span>
                                     {isLate && (
-                                      <Badge className="ml-1.5 bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30 text-[9px] px-1 py-0">
+                                      <Badge className="ml-1.5 bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30 text-[9px] px-1.5 py-0 rounded-full">
                                         Late
                                       </Badge>
                                     )}
@@ -1279,15 +1296,15 @@ export default function DepartmentDetailPage() {
                                 )}
                               </td>
 
-                              <td className="p-3">
+                              <td className="p-3.5">
                                 {attendance?.checkOutTime ? (
                                   <div className="space-y-0.5">
                                     <span className="font-mono font-medium text-foreground">
                                       {attendance.checkOutTime}
                                     </span>
                                     {attendance.isOutOfTimeCheckOut && (
-                                      <Badge className="ml-1.5 bg-orange-500/15 text-orange-700 dark:text-orange-400 border-orange-500/30 text-[9px] px-1 py-0">
-                                        Early/Out of Time
+                                      <Badge className="ml-1.5 bg-orange-500/15 text-orange-700 dark:text-orange-400 border-orange-500/30 text-[9px] px-1.5 py-0 rounded-full">
+                                        Early
                                       </Badge>
                                     )}
                                   </div>
@@ -1296,11 +1313,11 @@ export default function DepartmentDetailPage() {
                                 )}
                               </td>
 
-                              <td className="p-3 pr-4">
+                              <td className="p-3.5 pr-5">
                                 <div className="space-y-1">
                                   {isEmergency && (
                                     <div className="flex items-center gap-1">
-                                      <Badge className="bg-purple-500/10 text-purple-700 dark:text-purple-300 border-purple-500/20 text-[10px] px-1.5 py-0">
+                                      <Badge className="bg-purple-500/10 text-purple-700 dark:text-purple-300 border-purple-500/20 text-[10px] px-2 py-0.5 rounded-full">
                                         Emergency Duty
                                       </Badge>
                                       {attendance.emergencyReason && (
@@ -1328,13 +1345,13 @@ export default function DepartmentDetailPage() {
                   </div>
 
                   {/* Mobile Stacked Card View */}
-                  <div className="block md:hidden divide-y divide-border/60">
+                  <div className="block md:hidden divide-y divide-border/50">
                     {roster.map(({ staff, attendance }) => {
                       const isLate = attendance?.isLate || attendance?.isLateCheckIn;
                       const isEmergency = attendance?.isEmergencyDuty;
 
                       return (
-                        <div key={staff.id} className="p-3.5 space-y-2">
+                        <div key={staff.id} className="p-4 space-y-2.5">
                           <div className="flex items-start justify-between gap-2">
                             <div>
                               <p className="font-bold text-sm text-foreground">{staff.name}</p>
@@ -1342,37 +1359,37 @@ export default function DepartmentDetailPage() {
                             </div>
                             <div>
                               {!attendance ? (
-                                <Badge variant="outline" className="text-muted-foreground text-[10px] px-1.5 py-0">
+                                <Badge variant="outline" className="text-muted-foreground text-[10px] px-2 py-0.5 rounded-full bg-muted/40">
                                   Not Marked
                                 </Badge>
                               ) : attendance.status === "PRESENT" ? (
-                                <Badge className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-[10px] px-1.5 py-0">
+                                <Badge className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-[10px] px-2 py-0.5 rounded-full">
                                   Present
                                 </Badge>
                               ) : attendance.status === "LATE" ? (
-                                <Badge className="bg-amber-500/10 text-amber-600 border-amber-500/20 text-[10px] px-1.5 py-0">
+                                <Badge className="bg-amber-500/10 text-amber-600 border-amber-500/20 text-[10px] px-2 py-0.5 rounded-full">
                                   Late
                                 </Badge>
                               ) : attendance.status === "ABSENT" ? (
-                                <Badge className="bg-red-500/10 text-red-600 border-red-500/20 text-[10px] px-1.5 py-0">
+                                <Badge className="bg-red-500/10 text-red-600 border-red-500/20 text-[10px] px-2 py-0.5 rounded-full">
                                   Absent
                                 </Badge>
                               ) : (
-                                <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                                <Badge variant="outline" className="text-[10px] px-2 py-0.5 rounded-full">
                                   {attendance.status}
                                 </Badge>
                               )}
                             </div>
                           </div>
 
-                          <div className="grid grid-cols-2 gap-2 text-xs bg-muted/30 p-2 rounded-lg border border-border/40">
+                          <div className="grid grid-cols-2 gap-2 text-xs bg-muted/30 p-2.5 rounded-2xl border border-border/40">
                             <div>
                               <span className="text-[10px] text-muted-foreground block">Check-In:</span>
                               <span className="font-mono font-medium text-foreground">
                                 {attendance?.checkInTime || "—"}
                               </span>
                               {isLate && (
-                                <Badge className="ml-1 bg-amber-500/15 text-amber-700 text-[8px] px-1 py-0">
+                                <Badge className="ml-1 bg-amber-500/15 text-amber-700 text-[8px] px-1 py-0 rounded-full">
                                   Late
                                 </Badge>
                               )}
@@ -1383,7 +1400,7 @@ export default function DepartmentDetailPage() {
                                 {attendance?.checkOutTime || "—"}
                               </span>
                               {attendance?.isOutOfTimeCheckOut && (
-                                <Badge className="ml-1 bg-orange-500/15 text-orange-700 text-[8px] px-1 py-0">
+                                <Badge className="ml-1 bg-orange-500/15 text-orange-700 text-[8px] px-1 py-0 rounded-full">
                                   Early
                                 </Badge>
                               )}
@@ -1391,8 +1408,8 @@ export default function DepartmentDetailPage() {
                           </div>
 
                           {isEmergency && (
-                            <div className="bg-purple-500/10 border border-purple-500/20 p-2 rounded-lg text-xs space-y-0.5">
-                              <Badge className="bg-purple-500/20 text-purple-700 border-purple-500/30 text-[9px] px-1 py-0">
+                            <div className="bg-purple-500/10 border border-purple-500/20 p-2.5 rounded-2xl text-xs space-y-0.5">
+                              <Badge className="bg-purple-500/20 text-purple-700 border-purple-500/30 text-[9px] px-1.5 py-0 rounded-full">
                                 Emergency Duty
                               </Badge>
                               {attendance.emergencyReason && (
@@ -1419,37 +1436,37 @@ export default function DepartmentDetailPage() {
       {activeTab === "reports" && (
         <div role="tabpanel" id="panel-reports" aria-labelledby="tab-reports" className="space-y-4">
           {/* Range & Filters bar */}
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 bg-card p-3 rounded-xl border shadow-xs items-end">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 bg-card/80 backdrop-blur-sm p-4 sm:p-5 rounded-3xl border border-border/60 shadow-xs items-end">
             <div className="space-y-1">
-              <Label className="text-[11px] text-muted-foreground">From Date</Label>
+              <Label className="text-[11px] text-muted-foreground font-medium">From Date</Label>
               <Input
                 type="date"
                 value={reportFrom}
                 max={reportTo}
-                onChange={(e) => setReportFrom(e.target.value)}
-                className="h-9 text-xs"
+                onChange={(e) => { setReportFrom(e.target.value); setReportPage(1); }}
+                className="h-10 text-xs rounded-full border-border/60 bg-muted/30 focus:bg-background"
               />
             </div>
 
             <div className="space-y-1">
-              <Label className="text-[11px] text-muted-foreground">To Date</Label>
+              <Label className="text-[11px] text-muted-foreground font-medium">To Date</Label>
               <Input
                 type="date"
                 value={reportTo}
                 min={reportFrom}
                 max={istDateKey()}
-                onChange={(e) => setReportTo(e.target.value)}
-                className="h-9 text-xs"
+                onChange={(e) => { setReportTo(e.target.value); setReportPage(1); }}
+                className="h-10 text-xs rounded-full border-border/60 bg-muted/30 focus:bg-background"
               />
             </div>
 
             <div className="space-y-1">
-              <Label className="text-[11px] text-muted-foreground">Filter Shift</Label>
-              <Select value={reportShiftFilter} onValueChange={setReportShiftFilter}>
-                <SelectTrigger className="h-9 text-xs">
+              <Label className="text-[11px] text-muted-foreground font-medium">Filter Shift</Label>
+              <Select value={reportShiftFilter} onValueChange={(v) => { setReportShiftFilter(v); setReportPage(1); }}>
+                <SelectTrigger className="h-10 text-xs rounded-full border-border/60 bg-muted/30 focus:bg-background">
                   <SelectValue placeholder="All Shifts" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="rounded-2xl">
                   <SelectItem value="ALL">All Shifts</SelectItem>
                   {shifts.map((s) => (
                     <SelectItem key={s.id} value={s.id}>
@@ -1460,14 +1477,15 @@ export default function DepartmentDetailPage() {
               </Select>
             </div>
 
-            <div className="flex items-center gap-1 col-span-2 sm:col-span-2">
+            <div className="flex items-center gap-1.5 col-span-2 sm:col-span-2 flex-wrap">
               <Button
                 variant="outline"
                 size="sm"
-                className="h-9 text-xs flex-1"
+                className="h-10 text-xs font-semibold rounded-full flex-1 border-border/60"
                 onClick={() => {
                   setReportFrom(istDateKey());
                   setReportTo(istDateKey());
+                  setReportPage(1);
                 }}
               >
                 Today
@@ -1475,12 +1493,13 @@ export default function DepartmentDetailPage() {
               <Button
                 variant="outline"
                 size="sm"
-                className="h-9 text-xs flex-1"
+                className="h-10 text-xs font-semibold rounded-full flex-1 border-border/60"
                 onClick={() => {
                   const d = new Date();
                   d.setDate(d.getDate() - 7);
                   setReportFrom(d.toISOString().split("T")[0]);
                   setReportTo(istDateKey());
+                  setReportPage(1);
                 }}
               >
                 7 Days
@@ -1488,20 +1507,21 @@ export default function DepartmentDetailPage() {
               <Button
                 variant="outline"
                 size="sm"
-                className="h-9 text-xs flex-1"
+                className="h-10 text-xs font-semibold rounded-full flex-1 border-border/60"
                 onClick={() => {
                   setReportFrom(firstOfMonth());
                   setReportTo(istDateKey());
+                  setReportPage(1);
                 }}
               >
                 This Month
               </Button>
 
               <Button
-                size="sm"
+                size="default"
                 onClick={handleDownloadCsv}
                 disabled={reportRows.length === 0}
-                className="h-9 text-xs gap-1.5 bg-primary text-primary-foreground font-semibold px-3"
+                className="h-10 text-xs gap-1.5 bg-primary text-primary-foreground font-semibold px-4 rounded-full shadow-xs hover:shadow"
                 title="Download CSV Report"
               >
                 <Download className="h-3.5 w-3.5" />
@@ -1511,14 +1531,14 @@ export default function DepartmentDetailPage() {
           </div>
 
           {/* Report Summary Cards */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            <div className="bg-card p-3 rounded-xl border">
-              <span className="text-[11px] text-muted-foreground">Staff Members</span>
-              <p className="text-xl font-bold text-foreground mt-0.5">{reportRows.length}</p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="bg-card p-4 rounded-2xl border border-border/60 shadow-xs">
+              <span className="text-[11px] text-muted-foreground font-medium">Staff Members</span>
+              <p className="text-2xl font-bold text-foreground mt-0.5">{reportRows.length}</p>
             </div>
-            <div className="bg-card p-3 rounded-xl border">
-              <span className="text-[11px] text-muted-foreground">Avg Attendance %</span>
-              <p className="text-xl font-bold text-primary mt-0.5">
+            <div className="bg-card p-4 rounded-2xl border border-border/60 shadow-xs">
+              <span className="text-[11px] text-muted-foreground font-medium">Avg Attendance %</span>
+              <p className="text-2xl font-bold text-primary mt-0.5">
                 {reportRows.length > 0
                   ? Math.round(
                       reportRows.reduce((acc, r) => acc + r.attendancePercent, 0) / reportRows.length
@@ -1527,23 +1547,23 @@ export default function DepartmentDetailPage() {
                 %
               </p>
             </div>
-            <div className="bg-card p-3 rounded-xl border">
-              <span className="text-[11px] text-muted-foreground">Total Present Count</span>
-              <p className="text-xl font-bold text-emerald-600 mt-0.5">
+            <div className="bg-emerald-500/10 p-4 rounded-2xl border border-emerald-500/20 shadow-xs">
+              <span className="text-[11px] text-emerald-700 dark:text-emerald-400 font-medium">Total Present</span>
+              <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 mt-0.5">
                 {reportRows.reduce((acc, r) => acc + r.present, 0)}
               </p>
             </div>
-            <div className="bg-card p-3 rounded-xl border">
-              <span className="text-[11px] text-muted-foreground">Total Late Count</span>
-              <p className="text-xl font-bold text-amber-600 mt-0.5">
+            <div className="bg-amber-500/10 p-4 rounded-2xl border border-amber-500/20 shadow-xs">
+              <span className="text-[11px] text-amber-700 dark:text-amber-400 font-medium">Total Late</span>
+              <p className="text-2xl font-bold text-amber-600 dark:text-amber-400 mt-0.5">
                 {reportRows.reduce((acc, r) => acc + r.late, 0)}
               </p>
             </div>
           </div>
 
           {/* Report Table & Responsive Mobile Cards */}
-          <Card className="border-border/80 shadow-xs">
-            <CardHeader className="p-4 pb-2 flex flex-row items-center justify-between">
+          <Card className="rounded-3xl border-border/60 shadow-xs overflow-hidden bg-card">
+            <CardHeader className="p-5 pb-3 flex flex-row items-center justify-between">
               <CardTitle className="text-sm font-bold">
                 Attendance Breakdown ({reportFrom} to {reportTo})
               </CardTitle>
@@ -1552,19 +1572,19 @@ export default function DepartmentDetailPage() {
                 size="sm"
                 onClick={handleDownloadCsv}
                 disabled={reportRows.length === 0}
-                className="h-8 text-xs gap-1.5"
+                className="h-8 text-xs font-semibold rounded-full gap-1.5 border-border/60"
               >
                 <Download className="h-3.5 w-3.5" />
-                <span>Download Report (.csv)</span>
+                <span>Export (.csv)</span>
               </Button>
             </CardHeader>
             <CardContent className="p-0">
               {isLoadingReports ? (
-                <div className="p-8 text-center text-xs text-muted-foreground">
+                <div className="p-12 text-center text-xs text-muted-foreground">
                   Generating attendance report...
                 </div>
               ) : reportRows.length === 0 ? (
-                <div className="p-8 text-center text-xs text-muted-foreground">
+                <div className="p-12 text-center text-xs text-muted-foreground">
                   No attendance records found for this date range.
                 </div>
               ) : (
@@ -1572,40 +1592,40 @@ export default function DepartmentDetailPage() {
                   {/* Desktop Table View */}
                   <div className="hidden md:block overflow-x-auto">
                     <table className="w-full text-xs">
-                      <thead className="bg-muted/40 border-b border-border/80 text-muted-foreground text-[11px]">
+                      <thead className="bg-muted/40 border-b border-border/60 text-muted-foreground text-[11px]">
                         <tr>
-                          <th className="text-left font-semibold p-3 pl-4">Staff Member</th>
-                          <th className="text-left font-semibold p-3">Role</th>
-                          <th className="text-left font-semibold p-3">Shift</th>
-                          <th className="text-center font-semibold p-3">Present</th>
-                          <th className="text-center font-semibold p-3">Late</th>
-                          <th className="text-center font-semibold p-3">Absent</th>
-                          <th className="text-center font-semibold p-3">Leave</th>
-                          <th className="text-center font-semibold p-3">Marked</th>
-                          <th className="text-center font-semibold p-3 pr-4">Attendance %</th>
+                          <th className="text-left font-semibold p-3.5 pl-5">Staff Member</th>
+                          <th className="text-left font-semibold p-3.5">Role</th>
+                          <th className="text-left font-semibold p-3.5">Shift</th>
+                          <th className="text-center font-semibold p-3.5">Present</th>
+                          <th className="text-center font-semibold p-3.5">Late</th>
+                          <th className="text-center font-semibold p-3.5">Absent</th>
+                          <th className="text-center font-semibold p-3.5">Leave</th>
+                          <th className="text-center font-semibold p-3.5">Marked</th>
+                          <th className="text-center font-semibold p-3.5 pr-5">Attendance %</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-border/60">
-                        {reportRows.map((r) => (
+                      <tbody className="divide-y divide-border/50">
+                        {reportRows.slice((reportPage - 1) * REPORT_PAGE_SIZE, reportPage * REPORT_PAGE_SIZE).map((r) => (
                           <tr key={r.staffId} className="hover:bg-muted/20 transition-colors">
-                            <td className="p-3 pl-4 font-semibold text-foreground">{r.staffName}</td>
-                            <td className="p-3 text-muted-foreground">{r.role}</td>
-                            <td className="p-3 font-mono text-[11px] text-muted-foreground">{r.shiftName || "—"}</td>
-                            <td className="p-3 text-center font-semibold text-emerald-600">{r.present}</td>
-                            <td className="p-3 text-center font-semibold text-amber-600">{r.late}</td>
-                            <td className="p-3 text-center font-semibold text-red-600">{r.absent}</td>
-                            <td className="p-3 text-center text-blue-600">{r.onLeave}</td>
-                            <td className="p-3 text-center font-medium text-foreground">{r.marked}</td>
-                            <td className="p-3 pr-4 text-center">
+                            <td className="p-3.5 pl-5 font-semibold text-foreground">{r.staffName}</td>
+                            <td className="p-3.5 text-muted-foreground">{r.role}</td>
+                            <td className="p-3.5 font-mono text-[11px] text-muted-foreground">{r.shiftName || "—"}</td>
+                            <td className="p-3.5 text-center font-semibold text-emerald-600">{r.present}</td>
+                            <td className="p-3.5 text-center font-semibold text-amber-600">{r.late}</td>
+                            <td className="p-3.5 text-center font-semibold text-red-600">{r.absent}</td>
+                            <td className="p-3.5 text-center text-blue-600">{r.onLeave}</td>
+                            <td className="p-3.5 text-center font-medium text-foreground">{r.marked}</td>
+                            <td className="p-3.5 pr-5 text-center">
                               <Badge
                                 variant="outline"
-                                className={
+                                className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold ${
                                   r.attendancePercent >= 90
-                                    ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-[10px]"
+                                    ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
                                     : r.attendancePercent >= 75
-                                    ? "bg-amber-500/10 text-amber-600 border-amber-500/20 text-[10px]"
-                                    : "bg-red-500/10 text-red-600 border-red-500/20 text-[10px]"
-                                }
+                                    ? "bg-amber-500/10 text-amber-600 border-amber-500/20"
+                                    : "bg-red-500/10 text-red-600 border-red-500/20"
+                                }`}
                               >
                                 {r.attendancePercent}%
                               </Badge>
@@ -1617,9 +1637,9 @@ export default function DepartmentDetailPage() {
                   </div>
 
                   {/* Mobile Stacked Card View */}
-                  <div className="block md:hidden divide-y divide-border/60">
-                    {reportRows.map((r) => (
-                      <div key={r.staffId} className="p-3.5 space-y-2">
+                  <div className="block md:hidden divide-y divide-border/50">
+                    {reportRows.slice((reportPage - 1) * REPORT_PAGE_SIZE, reportPage * REPORT_PAGE_SIZE).map((r) => (
+                      <div key={r.staffId} className="p-4 space-y-2.5">
                         <div className="flex items-start justify-between gap-2">
                           <div>
                             <p className="font-bold text-sm text-foreground">{r.staffName}</p>
@@ -1627,19 +1647,19 @@ export default function DepartmentDetailPage() {
                           </div>
                           <Badge
                             variant="outline"
-                            className={
+                            className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
                               r.attendancePercent >= 90
-                                ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-[10px]"
+                                ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
                                 : r.attendancePercent >= 75
-                                ? "bg-amber-500/10 text-amber-600 border-amber-500/20 text-[10px]"
-                                : "bg-red-500/10 text-red-600 border-red-500/20 text-[10px]"
-                            }
+                                ? "bg-amber-500/10 text-amber-600 border-amber-500/20"
+                                : "bg-red-500/10 text-red-600 border-red-500/20"
+                            }`}
                           >
                             {r.attendancePercent}% Attended
                           </Badge>
                         </div>
 
-                        <div className="grid grid-cols-4 gap-1.5 text-center text-xs bg-muted/30 p-2 rounded-lg border border-border/40">
+                        <div className="grid grid-cols-4 gap-2 text-center text-xs bg-muted/30 p-2.5 rounded-2xl border border-border/40">
                           <div>
                             <span className="text-[10px] text-emerald-600 font-semibold block">Present</span>
                             <span className="font-bold text-foreground">{r.present}</span>
@@ -1660,6 +1680,38 @@ export default function DepartmentDetailPage() {
                       </div>
                     ))}
                   </div>
+
+                  {/* Pagination Footer */}
+                  {reportRows.length > REPORT_PAGE_SIZE && (
+                    <div className="flex items-center justify-between px-5 py-3 border-t border-border/50 bg-muted/20">
+                      <p className="text-xs text-muted-foreground">
+                        Showing {Math.min((reportPage - 1) * REPORT_PAGE_SIZE + 1, reportRows.length)}–{Math.min(reportPage * REPORT_PAGE_SIZE, reportRows.length)} of {reportRows.length} staff
+                      </p>
+                      <div className="flex items-center gap-1.5">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 px-2.5 text-xs rounded-lg"
+                          disabled={reportPage <= 1}
+                          onClick={() => setReportPage((p) => Math.max(1, p - 1))}
+                        >
+                          ← Prev
+                        </Button>
+                        <span className="text-xs font-medium text-foreground px-1">
+                          {reportPage} / {Math.ceil(reportRows.length / REPORT_PAGE_SIZE)}
+                        </span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 px-2.5 text-xs rounded-lg"
+                          disabled={reportPage >= Math.ceil(reportRows.length / REPORT_PAGE_SIZE)}
+                          onClick={() => setReportPage((p) => p + 1)}
+                        >
+                          Next →
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </>
               )}
             </CardContent>
