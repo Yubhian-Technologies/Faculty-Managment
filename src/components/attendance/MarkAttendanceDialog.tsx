@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { Camera, CheckCircle2, Loader2, MapPin, ScanFace, XCircle } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import { CampusBoundaryMap } from "@/components/attendance/CampusBoundaryMap";
 import {
   loadFaceModels, getFaceDescriptor, compareFaceDescriptors, captureVideoFrame,
@@ -11,6 +13,8 @@ import {
   FACE_MATCH_THRESHOLD,
 } from "@/lib/attendance/faceMatch";
 import { checkCampusGeofence, type CampusLocation } from "@/lib/attendance/geofence";
+import { isLateCheckIn } from "@/lib/attendance/lateStatus";
+import { nowInIndia } from "@/lib/leave/dayCounter";
 
 // Same 3-step guided liveness sequence for both Register and Check-in/out —
 // one instruction on screen at a time, in this order. "Tilt" accepts a head
@@ -53,6 +57,14 @@ export function MarkAttendanceDialog({ mode, open, onOpenChange, onSuccess }: Ma
   const [stepIndex, setStepIndex] = useState(0);
   const [stepHint, setStepHint] = useState<string | null>(null);
   const [stepConfirmed, setStepConfirmed] = useState(false);
+  // Best-effort client-side read of "is it past 09:05 IST right now" (see
+  // lib/attendance/lateStatus.ts) - just gates whether this dialog asks for a
+  // reason up front. The server (api/college/attendance/check-in) re-checks
+  // with its own clock and the person's actual permittedCheckInTime (not
+  // known here) and is the real authority - it rejects a late check-in with
+  // no reason regardless of what this flag decided.
+  const [isLate, setIsLate] = useState(false);
+  const [lateReason, setLateReason] = useState("");
 
   const isRegister = mode === "register";
   const label = mode === "check-in" ? "Check In" : mode === "check-out" ? "Check Out" : "Register Face";
@@ -85,6 +97,10 @@ export function MarkAttendanceDialog({ mode, open, onOpenChange, onSuccess }: Ma
     setStage("init");
     setErrorMsg("");
     setUserCoords(null);
+
+    if (mode === "check-in") {
+      setIsLate(isLateCheckIn(nowInIndia().timeHHMM));
+    }
 
     if (!isRegister) {
       if (!navigator.geolocation) {
@@ -132,6 +148,8 @@ export function MarkAttendanceDialog({ mode, open, onOpenChange, onSuccess }: Ma
         setStage("init");
         setErrorMsg("");
         setResultTime("");
+        setIsLate(false);
+        setLateReason("");
       }
     })();
     return () => { cancelledRef.current = true; stopCamera(); };
@@ -304,6 +322,7 @@ export function MarkAttendanceDialog({ mode, open, onOpenChange, onSuccess }: Ma
           longitude: coordsRef.current.longitude,
           faceMatchDistance: distance,
           faceVerified: true,
+          ...(mode === "check-in" && isLate ? { lateReason: lateReason.trim() } : {}),
         }),
       });
       const json = await res.json() as { error?: string; checkIn?: string; checkOut?: string };
@@ -344,6 +363,22 @@ export function MarkAttendanceDialog({ mode, open, onOpenChange, onSuccess }: Ma
             </div>
           );
         })()}
+
+        {mode === "check-in" && isLate && (stage === "init" || stage === "camera-ready") && (
+          <div className="space-y-1.5">
+            <Label htmlFor="late-reason" className="text-sm font-medium text-amber-700">
+              You&rsquo;re checking in late — why?
+            </Label>
+            <Textarea
+              id="late-reason"
+              rows={2}
+              placeholder="e.g. traffic, a personal errand, a delayed bus..."
+              value={lateReason}
+              onChange={(e) => setLateReason(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">Your HOD/Principal will see this reason on the attendance report.</p>
+          </div>
+        )}
 
         <div className="space-y-4">
           {stage === "success" ? (
@@ -400,7 +435,10 @@ export function MarkAttendanceDialog({ mode, open, onOpenChange, onSuccess }: Ma
             <Button variant="outline" onClick={() => void startCamera()}>Try Again</Button>
           )}
           {stage === "camera-ready" && (
-            <Button onClick={() => void handleStart()}>
+            <Button
+              onClick={() => void handleStart()}
+              disabled={mode === "check-in" && isLate && !lateReason.trim()}
+            >
               {isRegister ? <ScanFace className="h-4 w-4 mr-1.5" /> : <Camera className="h-4 w-4 mr-1.5" />}
               {isRegister ? "Start Registration" : `Start & ${label}`}
             </Button>

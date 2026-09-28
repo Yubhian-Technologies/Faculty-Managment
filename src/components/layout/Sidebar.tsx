@@ -16,6 +16,7 @@ import { isNavItemActive, filterVisibleNavItems, isPathHidden, ROLES_WITH_EMBEDD
 import { useIsTimetableIncharge } from "@/hooks/useIsTimetableIncharge";
 import { NavIcon } from "./NavIcon";
 import { WorkContextSwitcher } from "./WorkContextSwitcher";
+import { LocationDeptSwitcher } from "./LocationDeptSwitcher";
 import { useWorkContext } from "@/hooks/useWorkContext";
 import { OrgScopeTree } from "./OrgScopeTree";
 import { ROLE_LABELS } from "@/types";
@@ -115,6 +116,7 @@ export function Sidebar({ hiddenModules, hiddenItems }: SidebarProps) {
       </div>
 
       <WorkContextSwitcher />
+      <LocationDeptSwitcher />
 
       {/* Navigation */}
       <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">

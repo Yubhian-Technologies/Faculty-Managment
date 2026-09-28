@@ -14,9 +14,9 @@ import { toast } from "@/hooks/useToast";
 import { OD_PROOF_GRACE_DAYS } from "@/lib/leave/odProof";
 import { AlertTriangle, CalendarPlus, Users } from "lucide-react";
 import { countWorkingDays, dateKey, isoDateKey, todayISODate } from "@/lib/leave/dayCounter";
-import { HALF_DAY_ELIGIBLE_TYPES } from "@/lib/leave/seedData";
 import { toDate as toJsDate, formatDate } from "@/lib/utils";
 import { useAuthStore } from "@/store/authStore";
+import { PeriodCoverageGrid, type PeriodCoverageEntry } from "@/components/leave/PeriodCoverageGrid";
 import { LEAVE_TYPE_LABELS } from "@/types/leave";
 import type { LeaveRequest, LeaveTypeCode } from "@/types/leave";
 import type { Holiday, SummerHoliday, WorkingDayOverride } from "@/types";
@@ -26,16 +26,15 @@ interface BalanceEntry {
   label: string;
   unlimited: boolean;
   remaining?: number;
-}
-
-interface PeriodCoverageEntry {
-  date: string;
-  day: string;
-  periodNumber: number;
-  timetableSlotId: string;
-  sectionName?: string;
-  subjectName: string;
-  candidates: { facultyId: string; facultyName: string; facultyDepartment?: string }[];
+  // Rendering hints from this college's Settings > Leave Policy - see
+  // /api/leave/balances. maxConsecutiveDays/minAdvanceNoticeDays are shown as
+  // a hint only; the server (applications/route.ts POST) is the authoritative
+  // check either way.
+  halfDayAllowed?: boolean;
+  reasonOptions?: string[];
+  allowCustomReason?: boolean;
+  maxConsecutiveDays?: number;
+  minAdvanceNoticeDays?: number;
 }
 
 interface LeaveApplyFormProps {
@@ -66,6 +65,14 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
   const [fullDayMode, setFullDayMode] = useState<"ONE" | "RANGE">("ONE");
   const [halfDaySession, setHalfDaySession] = useState<"FN" | "AN">("FN");
   const [reason, setReason] = useState("");
+  // Only meaningful when the selected type has reasonOptions configured (see
+  // BalanceEntry) - true once "Other" is picked from that dropdown, revealing
+  // the free-text box below it. Irrelevant (and never shown) for a type with
+  // no reasonOptions, which just gets the plain Textarea it always had.
+  const [customReasonMode, setCustomReasonMode] = useState(false);
+  // On Duty only - see types/leave.ts's placeOfVisit/pointOfContact.
+  const [placeOfVisit, setPlaceOfVisit] = useState("");
+  const [pointOfContact, setPointOfContact] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [holidayDates, setHolidayDates] = useState<Set<string>>(new Set());
   const [workingDayWeights, setWorkingDayWeights] = useState<Map<string, number>>(new Map());
@@ -93,7 +100,7 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
   // below) when nothing's been set yet.
   const [summerHoliday, setSummerHoliday] = useState<{ fromISO: string; toISO: string; from: Date; to: Date } | null>(null);
 
-  const isHalfDayEligible = HALF_DAY_ELIGIBLE_TYPES.includes(leaveTypeCode as LeaveTypeCode);
+  const isHalfDayEligible = !!types.find((t) => t.code === leaveTypeCode)?.halfDayAllowed;
   // Forenoon's window has already passed for a half-day request filed for
   // today, once it's 11am or later - only a future date still has a whole
   // forenoon ahead of it, so this never restricts those.
@@ -249,7 +256,10 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
 
   function handleLeaveTypeChange(value: string) {
     setLeaveTypeCode(value);
-    if (!HALF_DAY_ELIGIBLE_TYPES.includes(value as LeaveTypeCode)) setIsHalfDay(false);
+    if (!types.find((t) => t.code === value)?.halfDayAllowed) setIsHalfDay(false);
+    setReason("");
+    setCustomReasonMode(false);
+    if (value !== "OD") { setPlaceOfVisit(""); setPointOfContact(""); }
     // Summer Vacation defaults From/To to the College Office's full declared
     // range (see the effect below) - inherently a span, so the single-day
     // toggle would just fight that default.
@@ -400,6 +410,10 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
       toast({ variant: "destructive", title: "Select a substitute for every affected period before submitting" });
       return;
     }
+    if (leaveTypeCode === "OD" && (!placeOfVisit.trim() || !pointOfContact.trim())) {
+      toast({ variant: "destructive", title: "Place of visit and point of contact are required for On Duty" });
+      return;
+    }
     setIsSubmitting(true);
     try {
       const res = await fetch("/api/leave/applications", {
@@ -415,6 +429,7 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
           reason: reason.trim(),
           extendsRequestId: extendId ?? undefined,
           handoverToUid: handoverToUid || undefined,
+          ...(leaveTypeCode === "OD" ? { placeOfVisit: placeOfVisit.trim(), pointOfContact: pointOfContact.trim() } : {}),
           periodSubstitutions: periods.length > 0
             ? periods.map((p) => ({
                 date: p.date,
@@ -486,9 +501,40 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
             {/* Set the expectation before they apply, not after they're
                 already overdue. Shared by all 17 apply routes for free. */}
             {leaveTypeCode === "OD" && (
+              <>
+                <p className="text-xs text-muted-foreground">
+                  You&rsquo;ll need to upload proof of duty (certificate, letter or order) within {OD_PROOF_GRACE_DAYS}{" "}
+                  days of this On Duty period ending. Unproven days are treated as Loss of Pay.
+                </p>
+                <div className="grid gap-3 sm:grid-cols-2 pt-1">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="place-of-visit" className="text-xs">Place of Visit</Label>
+                    <Input
+                      id="place-of-visit"
+                      value={placeOfVisit}
+                      onChange={(e) => setPlaceOfVisit(e.target.value)}
+                      placeholder="e.g. XYZ College, Hyderabad"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="point-of-contact" className="text-xs">Point of Contact</Label>
+                    <Input
+                      id="point-of-contact"
+                      value={pointOfContact}
+                      onChange={(e) => setPointOfContact(e.target.value)}
+                      placeholder="Name and phone number"
+                    />
+                  </div>
+                </div>
+              </>
+            )}
+            {/* Informational only - the server (applications/route.ts POST)
+                is the actual enforcement, this just avoids a surprise 400
+                after filling in the rest of the form. */}
+            {(selectedType?.maxConsecutiveDays !== undefined || selectedType?.minAdvanceNoticeDays !== undefined) && (
               <p className="text-xs text-muted-foreground">
-                You&rsquo;ll need to upload proof of duty (certificate, letter or order) within {OD_PROOF_GRACE_DAYS}{" "}
-                days of this On Duty period ending. Unproven days are treated as Loss of Pay.
+                {selectedType.maxConsecutiveDays !== undefined && `Max ${selectedType.maxConsecutiveDays} consecutive day(s). `}
+                {selectedType.minAdvanceNoticeDays !== undefined && `Requires at least ${selectedType.minAdvanceNoticeDays} day(s) advance notice.`}
               </p>
             )}
           </div>
@@ -605,40 +651,41 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
                   </Select>
                 </div>
               )}
-              <div className="space-y-2 rounded-lg border p-3">
-                {periods.map((p) => {
-                  const key = `${p.date}|${p.timetableSlotId}`;
-                  const candidates = substituteDeptFilter
-                    ? p.candidates.filter((c) => c.facultyDepartment === substituteDeptFilter)
-                    : p.candidates;
-                  return (
-                    <div key={key} className="flex items-center justify-between gap-3 flex-wrap">
-                      <div className="text-sm min-w-0">
-                        <span className="font-medium">{p.subjectName}</span>
-                        {p.sectionName && <span className="text-muted-foreground"> · {p.sectionName}</span>}
-                        <span className="text-muted-foreground"> · {formatDate(new Date(p.date))} P{p.periodNumber}</span>
+              <div className="rounded-lg border p-3">
+                <PeriodCoverageGrid
+                  periods={periods}
+                  renderPeriod={(p, key) => {
+                    const candidates = substituteDeptFilter
+                      ? p.candidates.filter((c) => c.facultyDepartment === substituteDeptFilter)
+                      : p.candidates;
+                    return (
+                      <div key={key} className="space-y-1 rounded-md border p-2">
+                        <p className="text-xs font-medium leading-tight">
+                          P{p.periodNumber} · {p.subjectName}
+                          {p.sectionName && <span className="text-muted-foreground"> · {p.sectionName}</span>}
+                        </p>
+                        <Select
+                          value={substituteByPeriod[key] ?? ""}
+                          onValueChange={(v) => setSubstituteByPeriod((prev) => ({ ...prev, [key]: v }))}
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder={candidates.length === 0 ? "None available" : "Select faculty"} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {candidates.map((c) => (
+                              <SelectItem key={c.facultyId} value={c.facultyId}>
+                                {c.facultyName}
+                                {c.facultyDepartment && (
+                                  <span className="text-muted-foreground"> · {c.facultyDepartment}</span>
+                                )}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
-                      <Select
-                        value={substituteByPeriod[key] ?? ""}
-                        onValueChange={(v) => setSubstituteByPeriod((prev) => ({ ...prev, [key]: v }))}
-                      >
-                        <SelectTrigger className="w-48">
-                          <SelectValue placeholder={candidates.length === 0 ? "None available" : "Select faculty"} />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {candidates.map((c) => (
-                            <SelectItem key={c.facultyId} value={c.facultyId}>
-                          {c.facultyName}
-                          {c.facultyDepartment && (
-                            <span className="text-muted-foreground"> · {c.facultyDepartment}</span>
-                          )}
-                        </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  );
-                })}
+                    );
+                  }}
+                />
               </div>
             </div>
           )}
@@ -674,7 +721,28 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
 
           <div className="space-y-2">
             <Label>Reason</Label>
-            <Textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={4} placeholder="Reason for leave" />
+            {selectedType?.reasonOptions?.length ? (
+              <>
+                <Select
+                  value={customReasonMode ? "OTHER" : reason}
+                  onValueChange={(v) => {
+                    if (v === "OTHER") { setCustomReasonMode(true); setReason(""); }
+                    else { setCustomReasonMode(false); setReason(v); }
+                  }}
+                >
+                  <SelectTrigger><SelectValue placeholder="Select a reason" /></SelectTrigger>
+                  <SelectContent>
+                    {selectedType.reasonOptions.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                    {selectedType.allowCustomReason && <SelectItem value="OTHER">Other</SelectItem>}
+                  </SelectContent>
+                </Select>
+                {customReasonMode && (
+                  <Textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3} placeholder="Describe your reason" />
+                )}
+              </>
+            ) : (
+              <Textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={4} placeholder="Reason for leave" />
+            )}
           </div>
 
           <div className="flex justify-end gap-2 pt-2">

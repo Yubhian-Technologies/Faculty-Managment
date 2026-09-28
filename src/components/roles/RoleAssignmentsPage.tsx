@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Check, ChevronsUpDown, History, Mail, Plus, Trash2, UserCog, UserMinus } from "lucide-react";
+import { Check, ChevronsUpDown, History, Plus, Trash2, UserCog, UserMinus } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { Badge } from "@/components/ui/badge";
@@ -128,11 +128,6 @@ export function RoleAssignmentsPage({ collegeId }: { collegeId?: string }) {
                         {seat.holderUid
                           ? <>{seat.holderName}{seat.holderSince && <span className="text-muted-foreground"> · since {formatDate(seat.holderSince)}</span>}</>
                           : <span className="text-amber-600">Vacant</span>}
-                      </p>
-                      <p className="flex items-center gap-1 text-xs text-muted-foreground">
-                        <Mail className="h-3 w-3" />
-                        {seat.roleEmail ? seat.roleEmail : "No role email set"}
-                        <span className="text-[10px]">(contact address, not a login)</span>
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-1">
@@ -288,15 +283,15 @@ function AssignDialog({
 
   return (
     <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent>
-        <DialogHeader>
+      <DialogContent className="flex max-h-[85dvh] flex-col overflow-hidden">
+        <DialogHeader className="shrink-0">
           <DialogTitle>{seat.holderUid ? "Change" : "Assign"} - {seat.label}</DialogTitle>
           <DialogDescription>
             The person keeps their own login and dashboard; this seat&apos;s modules are added to it.
             {seat.holderUid && ` ${seat.holderName} loses this role's modules straight away - their own profile and history are untouched.`}
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-3">
+        <div className="space-y-3 overflow-y-auto px-1 -mx-1">
           <div className="space-y-2">
             <Label>Person</Label>
             {/* `modal` because this picker lives inside a Dialog. A Radix
@@ -362,7 +357,7 @@ function AssignDialog({
           </div>
           {outgoingNeeded && <OutgoingChoice value={outgoing} onChange={setOutgoing} />}
         </div>
-        <DialogFooter>
+        <DialogFooter className="shrink-0">
           <Button variant="outline" onClick={onClose}>Cancel</Button>
           <Button onClick={submit} loading={busy} disabled={!uid}>{seat.holderUid ? "Change holder" : "Assign"}</Button>
         </DialogFooter>

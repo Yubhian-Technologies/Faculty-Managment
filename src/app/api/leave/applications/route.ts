@@ -9,16 +9,17 @@ import { resolveEmployeeIdentity } from "@/lib/leave/identity";
 import { loadCollegeSettings } from "@/lib/firestore/collegeSettings";
 import { resolveStaffGender } from "@/lib/leave/identity";
 import { computeEffectiveCategory } from "@/lib/leave/categoryEngine";
-import { REQUESTS_COL } from "@/lib/leave/balanceEngine";
+import { REQUESTS_COL, splitLeaveDays } from "@/lib/leave/balanceEngine";
 import { countWorkingDays, todayISODate, yearsOfService, isoDateKey } from "@/lib/leave/dayCounter";
 import { loadUnavailability } from "@/lib/leave/availability";
 import { getHolidayDateKeys } from "@/lib/leave/holidaysCount";
 import { getWorkingDayWeightsForRole } from "@/lib/attendance/workingDays";
-import { LEAVE_TYPE_SEED, HALF_DAY_ELIGIBLE_TYPES } from "@/lib/leave/seedData";
+import { resolveLeaveType } from "@/lib/leave/resolveLeaveTypes";
+import { evaluateODProof } from "@/lib/leave/odProof";
 import { resolveHodDepartments } from "@/lib/budget/departmentScope";
 import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 import { validatePeriodSubstitutions, type PeriodSubstitutionInput } from "@/lib/leave/periodCoverage";
-import { buildAdjustmentRequests, notifyAdjustmentAssignees } from "@/lib/leave/adjustmentRequests";
+import { buildAdjustmentRequests, notifyAdjustmentAssignees, notifyPendingApprover } from "@/lib/leave/adjustmentRequests";
 import { approverStageToStatus, resolveApproverStageForHeldRoles } from "@/lib/leave/approvalRouting";
 import { listHandoverCandidates } from "@/lib/leave/handoverPool";
 import type { AdjustmentRequest, LeaveRequest, LeaveTypeCode, PeriodSubstitution } from "@/types/leave";
@@ -154,6 +155,39 @@ export async function GET(request: Request) {
       return NextResponse.json({ requests: [] });
     }
 
+    // On Duty missing-proof list: APPROVED ODs whose period has ended 24h+
+    // ago with nothing currently on file (never uploaded, or uploaded and
+    // rejected and not yet fixed) - the same requests the automatic reminder
+    // cron (api/cron/od-proof-reminders) has already nudged, or is about to.
+    // Lets this caller see who's still outstanding and send a manual nudge
+    // (PATCH action REQUEST_OD_PROOF) rather than only waiting on the cron.
+    if (url.searchParams.get("scope") === "od-missing-proof") {
+      const snap = await REQUESTS_COL(session.collegeId, db)
+        .where("leaveTypeCode", "==", "OD")
+        .where("status", "==", "APPROVED")
+        .where("odProofRequired", "==", true)
+        .get();
+      const all = snap.docs
+        .map((d) => ({ id: d.id, ...d.data() }) as LeaveRequest)
+        .filter((r) => {
+          const evaluation = evaluateODProof(r);
+          return evaluation.canUpload && !evaluation.awaitingVerification;
+        });
+
+      if (session.role === "HOD") {
+        const depts = await resolveHodDepartments(db, session.collegeId, session.uid);
+        return NextResponse.json({
+          requests: sortByCreatedAtDesc(
+            all.filter((r) => !!r.hodAction && !!r.department && depts.includes(r.department))
+          ),
+        });
+      }
+      if (session.role === "PRINCIPAL" || session.role === "VICE_PRINCIPAL") {
+        return NextResponse.json({ requests: sortByCreatedAtDesc(all.filter((r) => !r.hodAction)) });
+      }
+      return NextResponse.json({ requests: [] });
+    }
+
     const targetUid = url.searchParams.get("uid") || session.uid;
     if (!(await canAccessLeaveProfile(db, session.collegeId, session.role, session.uid, targetUid))) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -193,6 +227,8 @@ export async function POST(request: Request) {
       extendsRequestId?: string;
       periodSubstitutions?: PeriodSubstitutionInput[];
       handoverToUid?: string;
+      placeOfVisit?: string;
+      pointOfContact?: string;
     };
 
     if (!body.fromDate || !body.toDate || !body.reason?.trim()) {
@@ -200,6 +236,9 @@ export async function POST(request: Request) {
     }
     if (!body.leaveTypeCode && !body.isOtherRequest) {
       return NextResponse.json({ error: "leaveTypeCode or isOtherRequest is required" }, { status: 400 });
+    }
+    if (body.leaveTypeCode === "OD" && (!body.placeOfVisit?.trim() || !body.pointOfContact?.trim())) {
+      return NextResponse.json({ error: "Place of visit and point of contact are required for On Duty" }, { status: 400 });
     }
 
     const db = getAdminDb();
@@ -258,13 +297,24 @@ export async function POST(request: Request) {
 
     let leaveType = null;
     if (body.leaveTypeCode) {
-      leaveType = LEAVE_TYPE_SEED.find((lt) => lt.code === body.leaveTypeCode && lt.isActive) ?? null;
-      if (!leaveType || !leaveType.rules.eligibleCategories.includes(effectiveCategory)) {
+      leaveType = resolveLeaveType(settings.leaveTypeRuleOverrides, body.leaveTypeCode) ?? null;
+      if (!leaveType?.isActive || !leaveType.rules.eligibleCategories.includes(effectiveCategory)) {
         return NextResponse.json({ error: "This leave type isn't available for your leave profile" }, { status: 400 });
       }
+      if (leaveType.rules.eligibleGenders) {
+        const gender = await resolveStaffGender(db, session.collegeId, session.uid);
+        if (!gender || !leaveType.rules.eligibleGenders.includes(gender)) {
+          return NextResponse.json({ error: "This leave type isn't available for your gender profile" }, { status: 400 });
+        }
+      }
+      if (leaveType.rules.reasonOptions?.length && !leaveType.rules.allowCustomReason) {
+        if (!leaveType.rules.reasonOptions.includes(body.reason.trim())) {
+          return NextResponse.json({ error: "Pick one of the listed reasons for this leave type" }, { status: 400 });
+        }
+      }
     }
-    if (body.isHalfDay && !(body.leaveTypeCode && HALF_DAY_ELIGIBLE_TYPES.includes(body.leaveTypeCode))) {
-      return NextResponse.json({ error: "Half day is only available for Sick Leave, Special Casual Leave, and On Duty" }, { status: 400 });
+    if (body.isHalfDay && !leaveType?.rules.halfDayAllowed) {
+      return NextResponse.json({ error: "Half day isn't available for this leave type" }, { status: 400 });
     }
     if (body.isHalfDay && body.halfDaySession !== "FN" && body.halfDaySession !== "AN") {
       return NextResponse.json({ error: "Select forenoon or afternoon for a half day request" }, { status: 400 });
@@ -274,6 +324,54 @@ export async function POST(request: Request) {
     const toDate = new Date(body.toDate);
     if (Number.isNaN(fromDate.getTime()) || Number.isNaN(toDate.getTime()) || toDate < fromDate) {
       return NextResponse.json({ error: "Invalid date range" }, { status: 400 });
+    }
+    // Calendar span, not the working-day count - a stretch across a weekend
+    // is still one long request even though Saturday/Sunday may not draw
+    // down balance.
+    const requestSpanDays = Math.round((toDate.getTime() - fromDate.getTime()) / 86400000) + 1;
+    if (!body.isHalfDay && leaveType?.rules.maxConsecutiveDays && requestSpanDays > leaveType.rules.maxConsecutiveDays) {
+      return NextResponse.json(
+        { error: `This leave type can't be applied for more than ${leaveType.rules.maxConsecutiveDays} consecutive day(s)` },
+        { status: 400 }
+      );
+    }
+    if (
+      leaveType?.rules.minAdvanceNoticeDays && !body.extendsRequestId && body.leaveTypeCode !== "SH"
+    ) {
+      const noticeDays = Math.round((fromDate.getTime() - new Date(todayISODate()).getTime()) / 86400000);
+      if (noticeDays < leaveType.rules.minAdvanceNoticeDays) {
+        return NextResponse.json(
+          { error: `This leave type requires at least ${leaveType.rules.minAdvanceNoticeDays} day(s) advance notice` },
+          { status: 400 }
+        );
+      }
+    }
+    if (leaveType?.rules.maxRequestsPerMonth) {
+      const sameMonthCount = existingSnap.docs.filter((d) => {
+        const r = d.data() as LeaveRequest;
+        if (r.leaveTypeCode !== body.leaveTypeCode || r.status === "REJECTED" || r.status === "CANCELLED") return false;
+        const rFrom = (r.fromDate as unknown as { toDate(): Date }).toDate();
+        return rFrom.getFullYear() === fromDate.getFullYear() && rFrom.getMonth() === fromDate.getMonth();
+      }).length;
+      if (sameMonthCount >= leaveType.rules.maxRequestsPerMonth) {
+        return NextResponse.json(
+          { error: `You've already reached this leave type's limit of ${leaveType.rules.maxRequestsPerMonth} request(s) this month` },
+          { status: 400 }
+        );
+      }
+    }
+    // A window with no appliesToTypes blocks everything, including an "Other"
+    // request (no leaveTypeCode); one scoped to specific types never blocks
+    // an Other request, since there's no code to match against.
+    const blackoutHit = (settings.leaveBlackoutWindows ?? []).find((w) => {
+      if (w.appliesToTypes && !(body.leaveTypeCode && w.appliesToTypes.includes(body.leaveTypeCode))) return false;
+      return body.fromDate! <= w.toDate && w.fromDate <= body.toDate!;
+    });
+    if (blackoutHit) {
+      return NextResponse.json(
+        { error: `Leave can't be applied between ${blackoutHit.fromDate} and ${blackoutHit.toDate} - ${blackoutHit.reason}` },
+        { status: 400 }
+      );
     }
     // Summer Vacation is bounded by whatever range(s) College Office has
     // declared (see the Holidays page's "Summer Vacation" section) rather
@@ -410,9 +508,24 @@ export async function POST(request: Request) {
     // Which tier a request goes to first is now the college's own setting
     // (Settings > Leave Approval Routing) - the defaults are exactly the rule
     // described above. See lib/leave/approvalRouting.ts.
-    const postAcceptanceStatus = approverStageToStatus(
-      resolveApproverStageForHeldRoles(settings.leaveApprovalRouting, session.roles ?? [session.role], session.role, !!identity.department)
+    let approverStage = resolveApproverStageForHeldRoles(
+      settings.leaveApprovalRouting, session.roles ?? [session.role], session.role, !!identity.department
     );
+    // A type can force escalation past HOD - either a request that's simply
+    // too long, or (checked via a balance preview, since nothing's reserved
+    // at submission time - see splitLeaveDays) one whose Loss-of-Pay exposure
+    // is too high for an HOD to sign off alone. Only ever escalates HOD ->
+    // PRINCIPAL; a request already routed above HOD is left untouched.
+    if (approverStage === "HOD" && leaveType && !leaveType.rules.unlimited) {
+      const tooLong = leaveType.rules.escalateAfterDays !== undefined && totalDays > leaveType.rules.escalateAfterDays;
+      let tooMuchLop = false;
+      if (!tooLong && leaveType.rules.maxLopDaysBeforeEscalation !== undefined) {
+        const preview = await splitLeaveDays(db, session.collegeId, session.uid, leaveType, fromDate.getFullYear(), totalDays);
+        tooMuchLop = preview.lopDays > leaveType.rules.maxLopDaysBeforeEscalation;
+      }
+      if (tooLong || tooMuchLop) approverStage = "PRINCIPAL";
+    }
+    const postAcceptanceStatus = approverStageToStatus(approverStage);
 
     // Every named substitute/handover person must accept before this can
     // reach postAcceptanceStatus's actual approver - see types/leave.ts's
@@ -432,6 +545,7 @@ export async function POST(request: Request) {
       ...(body.leaveTypeCode ? { leaveTypeCode: body.leaveTypeCode } : {}),
       isOtherRequest: body.isOtherRequest || false,
       ...(body.extendsRequestId ? { extendsRequestId: body.extendsRequestId } : {}),
+      ...(body.leaveTypeCode === "OD" ? { placeOfVisit: body.placeOfVisit!.trim(), pointOfContact: body.pointOfContact!.trim() } : {}),
       ...(periodSubstitutions ? { periodSubstitutions } : {}),
       ...(handover ? { handoverToUid: handover.uid, handoverToName: handover.name } : {}),
       ...(adjustmentRequests.length > 0 ? { adjustmentRequests, postAcceptanceStatus } : {}),
@@ -449,6 +563,11 @@ export async function POST(request: Request) {
     const ref = await REQUESTS_COL(session.collegeId, db).add(newRequest);
     if (adjustmentRequests.length > 0) {
       await notifyAdjustmentAssignees(db, session.collegeId, newRequest);
+    } else {
+      // Nothing named to accept first - it's already sitting with its
+      // approver, so they need to hear about it now, not just via
+      // LEAVE_APPLIED's audit-log trail.
+      await notifyPendingApprover(db, session.collegeId, initialStatus, newRequest);
     }
 
     // Balance is only committed on final approval (see [id]/route.ts) - a

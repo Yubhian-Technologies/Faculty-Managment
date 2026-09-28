@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { REQUESTS_COL } from "@/lib/leave/balanceEngine";
-import { allAdjustmentsAccepted, deriveSubstituteStatus } from "@/lib/leave/adjustmentRequests";
+import { allAdjustmentsAccepted, deriveSubstituteStatus, notifyPendingApprover } from "@/lib/leave/adjustmentRequests";
 import { loadUnavailability, findSubstituteConflicts, describeSubstituteConflict } from "@/lib/leave/availability";
 import { notify } from "@/lib/notify";
 import type { LeaveRequest, PeriodSubstitution } from "@/types/leave";
@@ -163,6 +163,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           (nowAllAccepted ? " Your leave request is now with your approver." : ""),
         "/panel/leave"
       );
+      if (nowAllAccepted && req.postAcceptanceStatus) {
+        await notifyPendingApprover(db, session.collegeId, req.postAcceptanceStatus, req);
+      }
     } else {
       const partial = entry.kind === "SUBSTITUTE" && declinedCount < (entry.periods?.length ?? 0);
       await notify(

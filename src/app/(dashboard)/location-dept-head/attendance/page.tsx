@@ -12,14 +12,26 @@ import {
   Search,
   AlertCircle,
   RefreshCw,
+  Clock,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { toast } from "@/hooks/useToast";
+
+const EXTRA_DUTY_SHIFT_ID = "ED";
+const EXTRA_DUTY_SHIFT_NAME = "Extra Duty (ED)";
+const EMERGENCY_DUTY_SHIFT_ID = "EMERGENCY";
+const EMERGENCY_DUTY_SHIFT_NAME = "Emergency Duty (ED)";
 import { useActiveLocationDept } from "@/hooks/useActiveLocationDept";
-import { LocationDeptSwitcher } from "@/components/layout/LocationDeptSwitcher";
 import { istDateKey } from "@/lib/attendance/istTime";
 import type {
   LocationStaffMember,
@@ -37,6 +49,7 @@ interface Summary {
   total: number;
   marked: number;
   present: number;
+  late?: number;
   absent: number;
   halfDay: number;
   onLeave: number;
@@ -54,6 +67,10 @@ export default function LocationDeptAttendancePage() {
   const [summary, setSummary] = useState<Summary | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
+
+  // Check-in shift picker: which staff row is expanded, and the shift chosen for it.
+  const [checkInPromptId, setCheckInPromptId] = useState<string | null>(null);
+  const [checkInShiftId, setCheckInShiftId] = useState<string>("");
 
   // Fetch shifts for active department
   useEffect(() => {
@@ -116,8 +133,26 @@ export default function LocationDeptAttendancePage() {
     setDate(`${ny}-${nm}-${nd}`);
   };
 
-  // Check In action (1-tap auto time)
+  // Open the shift picker for a row, defaulting to the staff's own assigned shift
+  const openCheckInPrompt = (staff: LocationStaffMember) => {
+    setCheckInPromptId(staff.id);
+    setCheckInShiftId(staff.shiftId || "");
+  };
+
+  // Confirm check-in with the chosen shift (or Extra Duty)
   const handleCheckIn = async (staffId: string) => {
+    if (!checkInShiftId) {
+      toast({ variant: "destructive", title: "Select a shift", description: "Choose the assigned shift, or Extra Duty (ED), to check in." });
+      return;
+    }
+    const isEmergency = checkInShiftId === EMERGENCY_DUTY_SHIFT_ID;
+    const shiftName =
+      checkInShiftId === EXTRA_DUTY_SHIFT_ID
+        ? EXTRA_DUTY_SHIFT_NAME
+        : isEmergency
+        ? EMERGENCY_DUTY_SHIFT_NAME
+        : shifts.find((s) => s.id === checkInShiftId)?.name || "";
+
     setActionLoadingId(`${staffId}_in`);
     try {
       const res = await fetch(`/api/location/staff-attendance`, {
@@ -127,12 +162,24 @@ export default function LocationDeptAttendancePage() {
           action: "CHECK_IN",
           staffId,
           date,
+          shiftId: checkInShiftId,
+          shiftName,
+          isEmergencyDuty: isEmergency,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to check in");
 
-      toast({ title: "Checked in", description: `Time recorded: ${data.record.checkInTime}` });
+      if (data.record?.isLate) {
+        toast({
+          variant: "destructive",
+          title: "Checked in (Late)",
+          description: `Time recorded: ${data.record.checkInTime} — marked as Late.`,
+        });
+      } else {
+        toast({ title: "Checked in", description: `Time recorded: ${data.record.checkInTime}` });
+      }
+      setCheckInPromptId(null);
       reload();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to check in";
@@ -264,7 +311,6 @@ export default function LocationDeptAttendancePage() {
         </div>
 
         <div className="flex items-center gap-2 self-end sm:self-auto">
-          <LocationDeptSwitcher />
           <Button variant="outline" size="sm" onClick={loadAttendance} className="h-8 w-8 p-0" title="Refresh">
             <RefreshCw className="h-3.5 w-3.5" />
           </Button>
@@ -295,8 +341,19 @@ export default function LocationDeptAttendancePage() {
           )}
         </div>
 
-        {/* Shift Filter Tabs (Horizontal Scroll) */}
+        {/* Shift Filter Tabs & Shift-Wise Link */}
         <div className="flex items-center gap-1 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
+          <Button
+            asChild
+            size="sm"
+            variant="secondary"
+            className="h-7 text-xs px-2.5 rounded-full shrink-0 font-semibold gap-1 bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20"
+          >
+            <Link href="/location-dept-head/attendance/shift">
+              <Clock className="h-3.5 w-3.5" />
+              <span>Shift-Wise View</span>
+            </Link>
+          </Button>
           <Button
             size="sm"
             variant={selectedShiftId === "ALL" ? "default" : "outline"}
@@ -340,14 +397,19 @@ export default function LocationDeptAttendancePage() {
           </div>
 
           {/* Mini Status Breakdown Chips */}
-          <div className="grid grid-cols-4 gap-1.5 text-center text-xs">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 text-center text-xs">
             <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 dark:text-emerald-300 py-1 px-1.5 rounded-lg">
               <span className="font-bold">{summary.present}</span> Present
             </div>
+            {summary.late !== undefined && summary.late > 0 && (
+              <div className="bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-300 py-1 px-1.5 rounded-lg">
+                <span className="font-bold">{summary.late}</span> Late
+              </div>
+            )}
             <div className="bg-red-500/10 border border-red-500/20 text-red-700 dark:text-red-300 py-1 px-1.5 rounded-lg">
               <span className="font-bold">{summary.absent}</span> Absent
             </div>
-            <div className="bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-300 py-1 px-1.5 rounded-lg">
+            <div className="bg-blue-500/10 border border-blue-500/20 text-blue-700 dark:text-blue-300 py-1 px-1.5 rounded-lg">
               <span className="font-bold">{summary.halfDay}</span> Half Day
             </div>
             <div className="bg-purple-500/10 border border-purple-500/20 text-purple-700 dark:text-purple-300 py-1 px-1.5 rounded-lg">
@@ -421,10 +483,15 @@ export default function LocationDeptAttendancePage() {
                     </div>
 
                     {/* Current Status Badge */}
-                    <div>
-                      {status === "PRESENT" && (
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {status === "PRESENT" && !attendance?.isLate && (
                         <Badge className="bg-emerald-600 text-white text-xs px-2 py-0.5 font-semibold">
                           Present
+                        </Badge>
+                      )}
+                      {(status === "LATE" || attendance?.isLate) && (
+                        <Badge className="bg-amber-600 text-white text-xs px-2 py-0.5 font-semibold">
+                          Late
                         </Badge>
                       )}
                       {status === "ABSENT" && (
@@ -433,13 +500,18 @@ export default function LocationDeptAttendancePage() {
                         </Badge>
                       )}
                       {status === "HALF_DAY" && (
-                        <Badge className="bg-amber-600 text-white text-xs px-2 py-0.5 font-semibold">
+                        <Badge className="bg-blue-600 text-white text-xs px-2 py-0.5 font-semibold">
                           Half Day
                         </Badge>
                       )}
                       {status === "ON_LEAVE" && (
                         <Badge className="bg-purple-600 text-white text-xs px-2 py-0.5 font-semibold">
                           Leave
+                        </Badge>
+                      )}
+                      {attendance?.isEmergencyDuty && (
+                        <Badge className="bg-amber-600 text-white text-[10px] px-1.5 py-0 font-semibold">
+                          🚨 Emergency Duty
                         </Badge>
                       )}
                       {!status && (
@@ -458,7 +530,7 @@ export default function LocationDeptAttendancePage() {
                       size="sm"
                       variant={checkIn ? "secondary" : "outline"}
                       disabled={actionLoadingId === `${staff.id}_in`}
-                      onClick={() => handleCheckIn(staff.id)}
+                      onClick={() => openCheckInPrompt(staff)}
                       className={`h-9 text-xs justify-center gap-1.5 font-semibold rounded-lg ${
                         checkIn ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30" : "hover:border-emerald-500"
                       }`}
@@ -490,6 +562,50 @@ export default function LocationDeptAttendancePage() {
                       )}
                     </Button>
                   </div>
+
+                  {/* ── Check-In Shift Picker (required before confirming) ── */}
+                  {checkInPromptId === staff.id && (
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mt-2 p-2.5 rounded-lg border border-primary/30 bg-primary/5">
+                      <Select value={checkInShiftId} onValueChange={setCheckInShiftId}>
+                        <SelectTrigger className="h-8 text-xs flex-1">
+                          <SelectValue placeholder="Select shift for check-in" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {shifts.map((s) => (
+                            <SelectItem key={s.id} value={s.id}>
+                              {s.name} ({s.startTime} - {s.endTime})
+                            </SelectItem>
+                          ))}
+                          <SelectItem value={EMERGENCY_DUTY_SHIFT_ID} className="text-amber-600 font-semibold">
+                            🚨 {EMERGENCY_DUTY_SHIFT_NAME}
+                          </SelectItem>
+                          {!staff.shiftId && (
+                            <SelectItem value={EXTRA_DUTY_SHIFT_ID}>{EXTRA_DUTY_SHIFT_NAME}</SelectItem>
+                          )}
+                        </SelectContent>
+                      </Select>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className="h-8 text-xs"
+                          onClick={() => setCheckInPromptId(null)}
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="h-8 text-xs"
+                          disabled={actionLoadingId === `${staff.id}_in`}
+                          onClick={() => handleCheckIn(staff.id)}
+                        >
+                          Confirm Check-In
+                        </Button>
+                      </div>
+                    </div>
+                  )}
 
                   {/* ── Status Toggles Row ── */}
                   <div className="flex items-center justify-between gap-1 mt-2.5">
