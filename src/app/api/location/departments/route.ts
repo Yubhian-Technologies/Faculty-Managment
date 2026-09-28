@@ -11,48 +11,54 @@ export async function GET(request: Request) {
     if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const { searchParams } = new URL(request.url);
-    let locationId = searchParams.get("locationId") ?? session.locationId;
+    const locationId = searchParams.get("locationId") ?? session.locationId;
     if (!locationId) {
-      const firstLoc = await getAdminDb().collection("locations").limit(1).get();
-      if (!firstLoc.empty) {
-        locationId = firstLoc.docs[0].id;
-      }
+      return NextResponse.json({ error: "locationId required" }, { status: 400 });
     }
-    if (!locationId) return NextResponse.json({ error: "locationId required" }, { status: 400 });
+
+    if (session.role !== "SUPER_ADMIN" && session.locationId !== locationId) {
+      return NextResponse.json({ error: "Unauthorized for this location" }, { status: 403 });
+    }
 
     const db = getAdminDb();
-    const [deptsSnap, staffSnap] = await Promise.all([
-      db
-        .collection("locations")
-        .doc(locationId)
-        .collection("locationDepts")
-        .orderBy("name")
-        .get(),
-      db
-        .collection("locations")
-        .doc(locationId)
-        .collection("staff")
-        .where("status", "==", "ACTIVE")
-        .get()
-        .catch(() => ({ docs: [] })),
-    ]);
+    const deptsSnap = await db
+      .collection("locations")
+      .doc(locationId)
+      .collection("locationDepts")
+      .orderBy("name")
+      .get();
 
-    const staffCountsByDept = new Map<string, number>();
-    for (const doc of staffSnap.docs) {
-      const data = doc.data() as { departmentId?: string };
-      if (data.departmentId) {
-        staffCountsByDept.set(data.departmentId, (staffCountsByDept.get(data.departmentId) ?? 0) + 1);
-      }
-    }
-
-    const depts = deptsSnap.docs.map((d) => {
-      const data = d.data();
-      return {
-        id: d.id,
-        ...data,
-        staffCount: staffCountsByDept.get(d.id) ?? data.staffCount ?? 0,
-      };
-    });
+    // Always count live via aggregation queries (cheap - billed as one query
+    // regardless of collection size, not an N+1 full-document-scan concern).
+    // The department doc's own `staffCount` field is written by the single-add
+    // and bulk-import routes, but anything that touches `staff` outside those
+    // two paths (a seed script, a future admin tool, a manual Firestore edit)
+    // leaves it stale with no way for a reader to tell - trusting it here was
+    // silently showing 0 for departments that actually have staff.
+    const depts = await Promise.all(
+      deptsSnap.docs.map(async (d) => {
+        const data = d.data();
+        let staffCount = 0;
+        try {
+          const countSnap = await db
+            .collection("locations")
+            .doc(locationId)
+            .collection("staff")
+            .where("departmentId", "==", d.id)
+            .where("status", "==", "ACTIVE")
+            .count()
+            .get();
+          staffCount = countSnap.data().count;
+        } catch (err) {
+          console.error("[location/departments GET] staff count failed for", d.id, err);
+        }
+        return {
+          id: d.id,
+          ...data,
+          staffCount,
+        };
+      })
+    );
 
     return NextResponse.json({ departments: depts });
   } catch (err) {

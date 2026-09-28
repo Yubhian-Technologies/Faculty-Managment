@@ -413,7 +413,15 @@ export async function POST(request: Request) {
         }
 
         const facultyDept = (facultyMemberSnap.data() as { department?: string }).department ?? "";
-        if (!canHodEditDepartment(scope, facultyDept)) {
+        // A sub-department (e.g. "DS" under "Artificial Intelligence") may
+        // also staff a subject with a faculty member filed directly under its
+        // own main/parent department - mirrors the same allowance already
+        // made for the picker itself (api/college/faculty's includeParent).
+        const facultyInParentDept = allDepartments.some((d) =>
+          scope.ownDepartmentNames.includes(d.name)
+          && allDepartments.find((p) => p.id === d.parentDepartmentId)?.name === facultyDept
+        );
+        if (!canHodEditDepartment(scope, facultyDept) && !facultyInParentDept) {
           return NextResponse.json({ error: "Faculty must be in your department or one of your sub-departments" }, { status: 403 });
         }
       } else if (session.role === "PANEL_MEMBER" || session.role === "COLLEGE_STAFF") {
@@ -473,8 +481,16 @@ export async function POST(request: Request) {
       // Existence of the assignment (this subject IS this department's
       // curriculum) is the one guarantee always enforced.
       if (!body.isPast) {
+        // SubjectInstanceService keys a live instance `${subjectId}_${departmentId}_${semester}`
+        // (a subject can be a separate live instance in two semesters at once - see
+        // that service's own doc-comment), and only ever DELETES the old
+        // no-semester key as one-time migration cleanup, never recreates it - so
+        // a single doc().get() on that old key missed every instance made
+        // through the current Assign to Semester flow. Query by subjectId+departmentId
+        // instead, matching how the record is actually keyed today.
         let instanceSnap = await collegeRef.collection("subjectSemesterAssignments")
-          .doc(`${subjectId}_${course.departmentId}`)
+          .where("subjectId", "==", subjectId)
+          .where("departmentId", "==", course.departmentId)
           .get();
         // Same shared-year gap as CourseYearTiming (see
         // lib/college/semester.ts's loadEffectiveTiming): a branch reached
@@ -484,23 +500,27 @@ export async function POST(request: Request) {
         // department (Basic Science Maths), never to every branch it feeds
         // individually - so the exact-department lookup above finds nothing
         // even though the subject genuinely was assigned for this year.
-        if (!instanceSnap.exists) {
+        if (instanceSnap.empty) {
           const deptsSnap = await collegeRef.collection("departments").get();
           const allDepts = deptsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as (Department & { id: string })[];
           const inheritedDeptId = inheritedAssignmentDepartmentId(course, section.year, allDepts);
           if (inheritedDeptId) {
             instanceSnap = await collegeRef.collection("subjectSemesterAssignments")
-              .doc(`${subjectId}_${inheritedDeptId}`)
+              .where("subjectId", "==", subjectId)
+              .where("departmentId", "==", inheritedDeptId)
               .get();
           }
         }
-        if (!instanceSnap.exists) {
+        if (instanceSnap.empty) {
           return NextResponse.json(
             { error: "This subject hasn't been assigned to this department's semester yet - use Assign to Semester first." },
             { status: 400 },
           );
         }
-        if (body.timetableSemester != null && (instanceSnap.data() as { semester?: number }).semester !== timetableSemester) {
+        if (
+          body.timetableSemester != null &&
+          !instanceSnap.docs.some((d) => (d.data() as { semester?: number }).semester === timetableSemester)
+        ) {
           return NextResponse.json(
             { error: "This subject is assigned to a different semester for this department - check Assign to Semester." },
             { status: 400 },

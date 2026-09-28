@@ -100,7 +100,11 @@ export default function TeachingAssignmentsPage() {
   function load() {
     setIsLoading(true);
     Promise.all([
-      fetch("/api/college/faculty?availableOnly=true").then((r) => r.json() as Promise<{ faculty: FacultyRow[] }>).then((d) => setFaculty((d.faculty ?? []).map((f) => ({ ...f, name: facultyDisplayName(f) })))),
+      // includeParent: a sub-department (e.g. "DS" under "Artificial
+      // Intelligence") should also offer its main/parent department's own
+      // faculty when staffing a subject - see api/college/faculty's own
+      // doc-comment on this param.
+      fetch("/api/college/faculty?availableOnly=true&includeParent=true").then((r) => r.json() as Promise<{ faculty: FacultyRow[] }>).then((d) => setFaculty((d.faculty ?? []).map((f) => ({ ...f, name: facultyDisplayName(f) })))),
       fetch("/api/college/teaching-assignments?dept=true").then((r) => r.json() as Promise<{ assignments: AssignmentRow[] }>).then((d) => setAssignments(d.assignments ?? [])),
       fetch("/api/college/departments").then((r) => r.json() as Promise<{ departments: Department[] }>).then((d) => setDepartments(d.departments ?? [])),
       fetch("/api/college/faculty-assignment-requests").then((r) => r.json() as Promise<{ requests: FacultyAssignmentRequest[] }>).then((d) => setAssignmentRequests(d.requests ?? [])),

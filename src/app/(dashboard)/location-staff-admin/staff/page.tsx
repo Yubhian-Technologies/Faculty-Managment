@@ -22,13 +22,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
 import type { LocationStaffMember, LocationDepartment, LocationShift } from "@/types/locationStaff";
 
@@ -45,10 +38,6 @@ export default function CampusStaffDirectoryPage() {
   const [selectedShiftId, setSelectedShiftId] = useState("ALL");
   const [selectedPayee, setSelectedPayee] = useState("ALL");
   const [selectedStatus, setSelectedStatus] = useState("ACTIVE");
-
-  // Profile modal
-  const [selectedStaff, setSelectedStaff] = useState<LocationStaffMember | null>(null);
-  const [isProfileOpen, setIsProfileOpen] = useState(false);
 
   useEffect(() => {
     let isCancelled = false;
@@ -91,7 +80,7 @@ export default function CampusStaffDirectoryPage() {
       if (selectedPayee !== "ALL") {
         const p = s.payeeVoucher?.toLowerCase() || "";
         if (selectedPayee === "VOUCHER" && !p.includes("voucher")) return false;
-        if (selectedPayee === "CONTRACT" && !p.includes("contract")) return false;
+        if (selectedPayee === "ACCOUNT" && !p.includes("account") && !p.includes("contract")) return false;
       }
 
       if (search.trim()) {
@@ -114,12 +103,6 @@ export default function CampusStaffDirectoryPage() {
     return Array.from(new Set(staffList.map((s) => s.role).filter(Boolean)));
   }, [staffList]);
 
-  // Map department head for profile view
-  const activeDeptForProfile = useMemo(() => {
-    if (!selectedStaff) return null;
-    return departments.find((d) => d.id === selectedStaff.departmentId) ?? null;
-  }, [departments, selectedStaff]);
-
   return (
     <div className="space-y-4 max-w-6xl mx-auto pb-24 md:pb-8">
       {/* ── Header ── */}
@@ -131,6 +114,9 @@ export default function CampusStaffDirectoryPage() {
             </Link>
           </Button>
           <div>
+            <Badge variant="outline" className="text-primary border-primary/30 text-[10px] font-semibold px-1.5 py-0 mb-1">
+              Location Staff Admin
+            </Badge>
             <h1 className="text-lg sm:text-xl font-bold text-foreground">Campus Staff Directory</h1>
             <p className="text-xs text-muted-foreground mt-0.5">
               Comprehensive registry of all location departments, supervising heads, and staff profiles.
@@ -217,7 +203,7 @@ export default function CampusStaffDirectoryPage() {
           <SelectContent>
             <SelectItem value="ALL">All Payees</SelectItem>
             <SelectItem value="VOUCHER">Voucher Payee</SelectItem>
-            <SelectItem value="CONTRACT">Contract Payee</SelectItem>
+            <SelectItem value="ACCOUNT">Account Payee</SelectItem>
           </SelectContent>
         </Select>
 
@@ -277,13 +263,9 @@ export default function CampusStaffDirectoryPage() {
               staff.isDeptHead ||
               departments.some((d) => d.headStaffId === staff.id || d.headUid === staff.id);
             return (
+              <Link key={staff.id} href={`/location-staff-admin/staff/${staff.id}`} className="block">
               <Card
-                key={staff.id}
                 className="border-border/80 shadow-xs hover:border-primary/40 transition-colors cursor-pointer flex flex-col justify-between"
-                onClick={() => {
-                  setSelectedStaff(staff);
-                  setIsProfileOpen(true);
-                }}
               >
                 <CardContent className="p-4 space-y-3">
                   <div className="flex items-start gap-3">
@@ -351,150 +333,11 @@ export default function CampusStaffDirectoryPage() {
                   </div>
                 </CardContent>
               </Card>
+              </Link>
             );
           })}
         </div>
       )}
-
-      {/* ── Full Staff Profile Drawer / Modal ── */}
-      <Dialog open={isProfileOpen} onOpenChange={setIsProfileOpen}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto p-5">
-          {selectedStaff && (
-            <div className="space-y-4">
-              <DialogHeader>
-                <div className="flex items-center gap-3">
-                  <div className="h-16 w-16 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0 overflow-hidden font-bold text-primary text-xl">
-                    {selectedStaff.photoUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={selectedStaff.photoUrl} alt={selectedStaff.name} className="h-full w-full object-cover" />
-                    ) : (
-                      selectedStaff.name.slice(0, 2).toUpperCase()
-                    )}
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <DialogTitle className="text-base font-bold">{selectedStaff.name}</DialogTitle>
-                      {selectedStaff.status === "ACTIVE" ? (
-                        <Badge className="bg-emerald-600 text-white text-[10px] px-1.5 py-0">Active</Badge>
-                      ) : (
-                        <Badge variant="destructive" className="text-[10px] px-1.5 py-0">Inactive</Badge>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1.5 mt-1">
-                      <Badge variant="outline" className="text-xs border-primary/30 text-primary">
-                        {selectedStaff.role}
-                      </Badge>
-                      <span className="text-xs text-muted-foreground">· {selectedStaff.departmentName || "Unassigned"}</span>
-                      {(selectedStaff.isDeptHead || departments.some((d) => d.headStaffId === selectedStaff.id || d.headUid === selectedStaff.id)) && (
-                        <Badge className="bg-primary/15 text-primary border-primary/30 text-[10px] px-1.5 py-0 flex items-center gap-1">
-                          <Shield className="h-3 w-3" />
-                          <span>Department Head</span>
-                        </Badge>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </DialogHeader>
-
-              <div className="space-y-3 pt-2 text-xs divide-y divide-border/50">
-                {/* Department & Supervising Head */}
-                <div className="space-y-1.5 pb-2">
-                  <span className="font-semibold text-muted-foreground uppercase text-[10px] tracking-wider block">
-                    Department & Supervision
-                  </span>
-                  <div className="grid grid-cols-2 gap-2 bg-muted/30 p-2.5 rounded-lg border border-border/50">
-                    <div>
-                      <span className="text-muted-foreground block text-[11px]">Department:</span>
-                      <strong className="text-foreground">{selectedStaff.departmentName || "Unassigned"}</strong>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground block text-[11px]">Supervising Head:</span>
-                      <strong className="text-foreground">
-                        {activeDeptForProfile?.headName || "Unassigned"}
-                      </strong>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Personal Information */}
-                <div className="space-y-1.5 py-2">
-                  <span className="font-semibold text-muted-foreground uppercase text-[10px] tracking-wider block">
-                    Personal Information
-                  </span>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <span className="text-muted-foreground block text-[11px]">Father&rsquo;s Name:</span>
-                      <strong className="text-foreground">{selectedStaff.fatherName || "—"}</strong>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground block text-[11px]">Contact Number:</span>
-                      <strong className="text-foreground">{selectedStaff.contactNumber}</strong>
-                    </div>
-                  </div>
-
-                  <div className="mt-2">
-                    <span className="text-muted-foreground block text-[11px]">Aadhaar Number:</span>
-                    <strong className="font-mono text-foreground text-sm tracking-wider">{selectedStaff.aadhaar}</strong>
-                  </div>
-
-                  <div className="mt-2">
-                    <span className="text-muted-foreground block text-[11px]">Residential Address:</span>
-                    <p className="text-foreground">{selectedStaff.address || "Not provided"}</p>
-                  </div>
-                </div>
-
-                {/* Work & Payroll */}
-                <div className="space-y-1.5 py-2">
-                  <span className="font-semibold text-muted-foreground uppercase text-[10px] tracking-wider block">
-                    Employment & Payroll
-                  </span>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <span className="text-muted-foreground block text-[11px]">Payee Category:</span>
-                      <strong className="text-foreground">{selectedStaff.payeeVoucher}</strong>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground block text-[11px]">Assigned Shift:</span>
-                      <strong className="text-foreground">{selectedStaff.shiftName || "Flexible / Unassigned"}</strong>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Spouse / Guardian Information */}
-                {(selectedStaff.spouseGuardianName || selectedStaff.spouseGuardianPhone || selectedStaff.spouseGuardianAadhaar) && (
-                  <div className="space-y-1.5 pt-2">
-                    <span className="font-semibold text-muted-foreground uppercase text-[10px] tracking-wider block">
-                      Spouse / Guardian Information
-                    </span>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <span className="text-muted-foreground block text-[11px]">Name:</span>
-                        <strong className="text-foreground">{selectedStaff.spouseGuardianName || "—"}</strong>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground block text-[11px]">Phone:</span>
-                        <strong className="text-foreground">{selectedStaff.spouseGuardianPhone || "—"}</strong>
-                      </div>
-                    </div>
-                    {selectedStaff.spouseGuardianAadhaar && (
-                      <div className="mt-1">
-                        <span className="text-muted-foreground block text-[11px]">Aadhaar:</span>
-                        <strong className="font-mono text-foreground">{selectedStaff.spouseGuardianAadhaar}</strong>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              <DialogFooter className="pt-2">
-                <Button size="sm" variant="outline" onClick={() => setIsProfileOpen(false)}>
-                  Close
-                </Button>
-              </DialogFooter>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

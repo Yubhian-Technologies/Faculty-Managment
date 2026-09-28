@@ -1,6 +1,7 @@
 import type { Firestore } from "firebase-admin/firestore";
 import type { EffectiveLeaveCategory, LeaveBalance, LeaveRequest, LeaveTypeCode } from "@/types/leave";
 import { LEAVE_TYPE_SEED } from "./seedData";
+import { resolveLeaveTypes } from "./resolveLeaveTypes";
 import { unprovenODLopDays } from "./odProof";
 import { REQUESTS_COL, computeEntitlement, loadBalances, initBalancesForYear } from "./balanceEngine";
 import { computeEffectiveCategory } from "./categoryEngine";
@@ -200,7 +201,7 @@ async function loadEmployeeLeaveData(db: Firestore, collegeId: string, uid: stri
   // carried-forward total - see initBalancesForYear's own recursive backfill
   // for why a whole chain of skipped years doesn't lose it either.
   if (profile) {
-    await initBalancesForYear(db, collegeId, uid, profile, settings.newJoiningYears, year);
+    await initBalancesForYear(db, collegeId, uid, profile, settings.newJoiningYears, year, resolveLeaveTypes(settings.leaveTypeRuleOverrides));
   }
 
   const [balances, reqSnap] = await Promise.all([

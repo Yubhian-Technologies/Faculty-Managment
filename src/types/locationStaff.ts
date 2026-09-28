@@ -55,6 +55,10 @@ export interface LocationShift {
   locationId: string;
   departmentId: string;
   departmentName?: string;
+  departmentIds?: string[];
+  departmentNames?: string[];
+  isCampusWide?: boolean;
+  deptAssignedStaffCount?: number;
   name: string; // e.g. "Morning Shift", "Night Shift", "General"
   startTime: string; // 24-hr format "06:00"
   endTime: string; // 24-hr format "14:00"
@@ -67,13 +71,14 @@ export interface LocationShift {
 }
 
 // ─── Staff Attendance ──────────────────────────────────────────────────────────
-export type StaffAttendanceStatus = "PRESENT" | "ABSENT" | "HALF_DAY" | "ON_LEAVE";
+export type StaffAttendanceStatus = "PRESENT" | "ABSENT" | "HALF_DAY" | "ON_LEAVE" | "LATE";
 
 export const STAFF_ATTENDANCE_STATUS_LABELS: Record<StaffAttendanceStatus, string> = {
   PRESENT: "Present",
   ABSENT: "Absent",
   HALF_DAY: "Half Day",
   ON_LEAVE: "On Leave",
+  LATE: "Late",
 };
 
 export interface LocationStaffAttendanceRecord {
@@ -89,6 +94,14 @@ export interface LocationStaffAttendanceRecord {
   status: StaffAttendanceStatus;
   checkInTime?: string; // e.g. "08:45 AM"
   checkOutTime?: string; // e.g. "05:10 PM"
+  isLate?: boolean;
+  isLateCheckIn?: boolean;
+  isOutOfTimeCheckOut?: boolean;
+  checkInTimingStatus?: "ON_TIME" | "LATE" | "EARLY";
+  checkOutTimingStatus?: "ON_TIME" | "EARLY" | "OVERTIME" | "OUT_OF_TIME";
+  isEmergencyDuty?: boolean;
+  emergencyReason?: string;
+  dutyType?: "REGULAR" | "EMERGENCY" | "EXTRA";
   markedByUid: string;
   markedByName: string;
   notes?: string;

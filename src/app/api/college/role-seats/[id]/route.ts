@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { forgetHeldRoles } from "@/lib/auth/liveRoles";
-import { assignSeat, deactivateSeat, listSeatHistory, SeatError, seatsCol, updateSeat } from "@/lib/roles/seats";
+import { assignSeat, deactivateSeat, listSeatHistory, reactivateSeat, SeatError, seatsCol, updateSeat } from "@/lib/roles/seats";
 import { assertCanAssign, requireSeatManager } from "@/lib/roles/seatContext";
 import type { OutgoingHolderAction, RoleSeat } from "@/types/roleSeats";
 
@@ -24,7 +24,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const ctx = await requireSeatManager(request);
     const db = getAdminDb();
     const body = (await request.json()) as {
-      action?: "ASSIGN" | "VACATE" | "UPDATE" | "REMOVE";
+      action?: "ASSIGN" | "VACATE" | "UPDATE" | "REMOVE" | "REACTIVATE";
       uid?: string;
       outgoing?: OutgoingHolderAction;
       note?: string;
@@ -47,8 +47,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       await updateSeat(db, ctx.collegeId, id, { roleEmail: body.roleEmail, label: body.label }, ctx.actor);
     } else if (body.action === "REMOVE") {
       await deactivateSeat(db, ctx.collegeId, id, ctx.actor);
+    } else if (body.action === "REACTIVATE") {
+      await reactivateSeat(db, ctx.collegeId, id, ctx.actor);
     } else {
-      return NextResponse.json({ error: "action must be ASSIGN, VACATE, UPDATE or REMOVE" }, { status: 400 });
+      return NextResponse.json({ error: "action must be ASSIGN, VACATE, UPDATE, REMOVE or REACTIVATE" }, { status: 400 });
     }
 
     // Take effect immediately for everyone involved, not after the cache window.

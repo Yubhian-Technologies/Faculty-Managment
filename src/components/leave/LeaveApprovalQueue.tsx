@@ -11,22 +11,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/useToast";
 import { PermissionApprovalQueue } from "@/components/leave/PermissionApprovalQueue";
+import { PeriodCoverageGrid, type PeriodCoverageEntry } from "@/components/leave/PeriodCoverageGrid";
 import { cn, formatDate } from "@/lib/utils";
-import { CalendarClock, Check, X, ChevronDown, ChevronUp, FileCheck } from "lucide-react";
+import { CalendarClock, Check, X, ChevronDown, ChevronUp, FileCheck, BellRing } from "lucide-react";
 import { EFFECTIVE_CATEGORY_LABELS, EFFECTIVE_CATEGORY_ORDER, LEAVE_TYPE_LABELS, OTHER_LEAVE_CATEGORY_DESCRIPTIONS, OTHER_LEAVE_CATEGORY_LABELS, OTHER_LEAVE_CATEGORY_ORDER } from "@/types/leave";
 import type { EffectiveLeaveCategory, LeaveRequest, OtherLeaveCategory } from "@/types/leave";
 
 const CATEGORY_TABS = EFFECTIVE_CATEGORY_ORDER.map((key) => ({ key, label: EFFECTIVE_CATEGORY_LABELS[key] }));
-
-interface PeriodCoverageEntry {
-  date: string;
-  day: string;
-  periodNumber: number;
-  timetableSlotId: string;
-  sectionName?: string;
-  subjectName: string;
-  candidates: { facultyId: string; facultyName: string; facultyDepartment?: string }[];
-}
 
 // "Replacement" mode needs ONE faculty member who is actually free for every
 // affected period, not just some of them - each period's own eligibility
@@ -82,6 +73,14 @@ export function LeaveApprovalQueue() {
   const [odProofReasonById, setOdProofReasonById] = useState<Record<string, string>>({});
   const [odProofActingId, setOdProofActingId] = useState<string | null>(null);
 
+  // Approved On Duty leaves with nothing uploaded yet (never submitted, or
+  // rejected and not fixed) - see the section below the proof-verification
+  // one. Separate list from odProofs above: that one is "review what's been
+  // uploaded", this one is "chase what hasn't".
+  const [odMissingProofs, setOdMissingProofs] = useState<LeaveRequest[]>([]);
+  const [odRequestingId, setOdRequestingId] = useState<string | null>(null);
+  const [odRequestedIds, setOdRequestedIds] = useState<Set<string>>(new Set());
+
   const load = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -111,6 +110,37 @@ export function LeaveApprovalQueue() {
       setOdProofs([]);
     }
   }, []);
+
+  const loadOdMissingProofs = useCallback(async () => {
+    try {
+      const res = await fetch("/api/leave/applications?scope=od-missing-proof");
+      const data = (await res.json()) as { requests?: LeaveRequest[]; error?: string };
+      if (!res.ok) throw new Error(data.error ?? "Failed to load missing-proof list");
+      setOdMissingProofs(data.requests ?? []);
+    } catch {
+      // Deliberately quiet - same reasoning as loadOdProofs above.
+      setOdMissingProofs([]);
+    }
+  }, []);
+
+  async function requestOdProof(request: LeaveRequest) {
+    setOdRequestingId(request.id);
+    try {
+      const res = await fetch(`/api/leave/applications/${request.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "REQUEST_OD_PROOF" }),
+      });
+      const json = (await res.json()) as { error?: string };
+      if (!res.ok) throw new Error(json.error ?? "Failed to send the request");
+      toast({ variant: "success", title: `${request.employeeName} has been notified` });
+      setOdRequestedIds((prev) => new Set(prev).add(request.id));
+    } catch (err) {
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to send the request" });
+    } finally {
+      setOdRequestingId(null);
+    }
+  }
 
   async function reviewOdProof(request: LeaveRequest, verify: boolean) {
     const reason = (odProofReasonById[request.id] ?? "").trim();
@@ -148,9 +178,10 @@ export function LeaveApprovalQueue() {
   useEffect(() => {
     load();
     // Fetched alongside the pending queue rather than from its own effect -
-    // two independent lists, but one mount-time load.
+    // three independent lists, but one mount-time load.
     loadOdProofs();
-  }, [load, loadOdProofs]);
+    loadOdMissingProofs();
+  }, [load, loadOdProofs, loadOdMissingProofs]);
 
   useEffect(() => {
     if (!expandedId) return;
@@ -404,6 +435,19 @@ export function LeaveApprovalQueue() {
                       <p className="text-sm">{r.reason || <span className="text-muted-foreground italic">No reason provided</span>}</p>
                     </div>
 
+                    {r.leaveTypeCode === "OD" && (r.placeOfVisit || r.pointOfContact) && (
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <div className="space-y-1">
+                          <label className="text-xs text-muted-foreground">Place of Visit</label>
+                          <p className="text-sm">{r.placeOfVisit || "—"}</p>
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-xs text-muted-foreground">Point of Contact</label>
+                          <p className="text-sm">{r.pointOfContact || "—"}</p>
+                        </div>
+                      </div>
+                    )}
+
                     {isOtherRequest && (isHodOtherDecision || isPrincipalOtherDecision) && (
                       <div className="max-w-xs space-y-1.5">
                         <label className="text-xs text-muted-foreground">Paid or unpaid?</label>
@@ -480,14 +524,14 @@ export function LeaveApprovalQueue() {
                             );
                           })()
                         ) : (
-                          <div className="space-y-2 rounded-lg border p-2.5">
-                            {periodsById[r.id]!.map((p) => {
-                              const key = `${p.date}|${p.timetableSlotId}`;
-                              return (
-                                <div key={key} className="flex items-center justify-between gap-3 flex-wrap">
-                                  <span className="text-sm">
-                                    {p.subjectName}{p.sectionName ? ` · ${p.sectionName}` : ""} · {formatDate(new Date(p.date))} P{p.periodNumber}
-                                  </span>
+                          <div className="rounded-lg border p-2.5">
+                            <PeriodCoverageGrid
+                              periods={periodsById[r.id]!}
+                              renderPeriod={(p, key) => (
+                                <div key={key} className="space-y-1 rounded-md border p-2">
+                                  <p className="text-xs font-medium leading-tight">
+                                    P{p.periodNumber} · {p.subjectName}{p.sectionName ? ` · ${p.sectionName}` : ""}
+                                  </p>
                                   <Select
                                     value={substitutionsById[r.id]?.[key] ?? ""}
                                     onValueChange={(v) =>
@@ -497,23 +541,23 @@ export function LeaveApprovalQueue() {
                                       }))
                                     }
                                   >
-                                    <SelectTrigger className="w-44">
+                                    <SelectTrigger className="w-full">
                                       <SelectValue placeholder="Not covered" />
                                     </SelectTrigger>
                                     <SelectContent>
                                       {p.candidates.map((c) => (
                                         <SelectItem key={c.facultyId} value={c.facultyId}>
-                          {c.facultyName}
-                          {c.facultyDepartment && (
-                            <span className="text-muted-foreground"> · {c.facultyDepartment}</span>
-                          )}
-                        </SelectItem>
+                                          {c.facultyName}
+                                          {c.facultyDepartment && (
+                                            <span className="text-muted-foreground"> · {c.facultyDepartment}</span>
+                                          )}
+                                        </SelectItem>
                                       ))}
                                     </SelectContent>
                                   </Select>
                                 </div>
-                              );
-                            })}
+                              )}
+                            />
                           </div>
                         )}
                       </div>
@@ -670,6 +714,50 @@ export function LeaveApprovalQueue() {
               </CardContent>
             </Card>
           ))}
+        </div>
+      )}
+
+      {/* Approved On Duty leaves whose requester hasn't uploaded proof at all
+          (or was rejected and hasn't fixed it) - separate from the
+          verification list above, which is only ever "review what's already
+          been uploaded". The system already reminds them automatically 24h
+          after their period ends (see api/cron/od-proof-reminders); this is
+          for chasing it further, not the only way it happens. */}
+      {odMissingProofs.length > 0 && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <BellRing className="h-4 w-4 text-muted-foreground" />
+            <h3 className="text-sm font-semibold">On Duty Proof Not Uploaded ({odMissingProofs.length})</h3>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            These On Duty leaves have ended with no proof of duty on file yet. They&rsquo;ve already had (or will get) an
+            automatic reminder - send one yourself if it&rsquo;s still overdue.
+          </p>
+          <div className="divide-y rounded-lg border">
+            {odMissingProofs.map((r) => (
+              <div key={r.id} className="flex items-center justify-between gap-3 p-3 flex-wrap">
+                <div className="flex items-center gap-3 min-w-0">
+                  <Avatar name={r.employeeName} size="sm" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium leading-tight">{r.employeeName}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {formatDate(r.fromDate)} – {formatDate(r.toDate)}
+                      {r.department ? ` · ${r.department}` : ""}
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={odRequestingId === r.id || odRequestedIds.has(r.id)}
+                  onClick={() => void requestOdProof(r)}
+                >
+                  <BellRing className="h-4 w-4 mr-1" />
+                  {odRequestedIds.has(r.id) ? "Requested" : "Request Upload"}
+                </Button>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { FieldValue } from "firebase-admin/firestore";
 import type { LocationStaffMember } from "@/types/locationStaff";
 
 export async function GET(
@@ -22,6 +23,9 @@ export async function GET(
     const locationId = searchParams.get("locationId") || session.locationId;
     if (!locationId) {
       return NextResponse.json({ error: "locationId required" }, { status: 400 });
+    }
+    if (session.role !== "SUPER_ADMIN" && session.locationId !== locationId) {
+      return NextResponse.json({ error: "Unauthorized for this location" }, { status: 403 });
     }
 
     const db = getAdminDb();
@@ -59,6 +63,9 @@ export async function PATCH(
     const locationId = body.locationId || session.locationId;
     if (!locationId) {
       return NextResponse.json({ error: "locationId required" }, { status: 400 });
+    }
+    if (session.role !== "SUPER_ADMIN" && session.locationId !== locationId) {
+      return NextResponse.json({ error: "Unauthorized for this location" }, { status: 403 });
     }
 
     const db = getAdminDb();
@@ -111,6 +118,38 @@ export async function PATCH(
     }
 
     await docRef.set(updates, { merge: true });
+
+    // Handle department staffCount adjustment if department or active status changed
+    const oldDept = current.departmentId;
+    const newDept = body.departmentId !== undefined ? body.departmentId : oldDept;
+    const wasActive = current.status === "ACTIVE";
+    const isActive = body.status !== undefined ? body.status === "ACTIVE" : wasActive;
+
+    if (wasActive && !isActive && oldDept) {
+      await db.collection("locations").doc(locationId).collection("locationDepts").doc(oldDept).set(
+        { staffCount: FieldValue.increment(-1), updatedAt: new Date() },
+        { merge: true }
+      ).catch(() => {});
+    } else if (!wasActive && isActive && newDept) {
+      await db.collection("locations").doc(locationId).collection("locationDepts").doc(newDept).set(
+        { staffCount: FieldValue.increment(1), updatedAt: new Date() },
+        { merge: true }
+      ).catch(() => {});
+    } else if (wasActive && isActive && oldDept !== newDept) {
+      if (oldDept) {
+        await db.collection("locations").doc(locationId).collection("locationDepts").doc(oldDept).set(
+          { staffCount: FieldValue.increment(-1), updatedAt: new Date() },
+          { merge: true }
+        ).catch(() => {});
+      }
+      if (newDept) {
+        await db.collection("locations").doc(locationId).collection("locationDepts").doc(newDept).set(
+          { staffCount: FieldValue.increment(1), updatedAt: new Date() },
+          { merge: true }
+        ).catch(() => {});
+      }
+    }
+
     return NextResponse.json({ ok: true });
   } catch (err) {
     if (err instanceof Error && err.message === "UNAUTHORIZED") {
@@ -139,6 +178,9 @@ export async function DELETE(
     if (!locationId) {
       return NextResponse.json({ error: "locationId required" }, { status: 400 });
     }
+    if (session.role !== "SUPER_ADMIN" && session.locationId !== locationId) {
+      return NextResponse.json({ error: "Unauthorized for this location" }, { status: 403 });
+    }
 
     const db = getAdminDb();
     const docRef = db.collection("locations").doc(locationId).collection("staff").doc(id);
@@ -147,8 +189,22 @@ export async function DELETE(
       return NextResponse.json({ error: "Staff member not found" }, { status: 404 });
     }
 
+    const staffData = docSnap.data() as LocationStaffMember;
+
     // Soft delete: mark INACTIVE
     await docRef.set({ status: "INACTIVE", updatedAt: new Date() }, { merge: true });
+
+    // Decrement department staff count if previously active
+    if (staffData.status === "ACTIVE" && staffData.departmentId) {
+      await db
+        .collection("locations")
+        .doc(locationId)
+        .collection("locationDepts")
+        .doc(staffData.departmentId)
+        .set({ staffCount: FieldValue.increment(-1), updatedAt: new Date() }, { merge: true })
+        .catch(() => {});
+    }
+
     return NextResponse.json({ ok: true });
   } catch (err) {
     if (err instanceof Error && err.message === "UNAUTHORIZED") {

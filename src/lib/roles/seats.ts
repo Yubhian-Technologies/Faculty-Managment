@@ -310,6 +310,37 @@ export async function deactivateSeat(db: Firestore, collegeId: string, seatId: s
   await auditSeat(db, collegeId, "ROLE_SEAT_REMOVED", actor, seatId, { seat: seat.label });
 }
 
+// Retired seats never resurface on their own: ensureHodSeatForDepartment
+// below only creates one when NONE exists yet for that department (active or
+// not), so a department whose seat was retired (e.g. via deactivateSeat, or
+// retireDepartmentSeat when the department itself was deleted and later
+// recreated) is permanently stuck without an appointable HOD seat unless
+// something explicitly reactivates the old one. This is that explicit path.
+export async function listRetiredSeats(db: Firestore, collegeId: string): Promise<RoleSeat[]> {
+  const snap = await seatsCol(db, collegeId).get();
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as RoleSeat).filter((s) => s.isActive === false).sort(seatSort);
+}
+
+export async function reactivateSeat(db: Firestore, collegeId: string, seatId: string, actor: SeatActor): Promise<void> {
+  const ref = seatsCol(db, collegeId).doc(seatId);
+  const snap = await ref.get();
+  if (!snap.exists) throw new SeatError("Seat not found", 404);
+  const seat = { id: snap.id, ...snap.data() } as RoleSeat;
+  if (seat.isActive !== false) throw new SeatError("This seat is already active");
+  // Same invariants createSeat enforces going forward - a retired seat
+  // reactivating into a slot something else already fills would silently
+  // create the exact duplicate createSeat exists to prevent.
+  const active = await listSeats(db, collegeId);
+  if (isSingletonSeatRole(seat.role) && active.some((s) => s.role === seat.role)) {
+    throw new SeatError(`${ROLE_LABELS[seat.role as UserRole] ?? seat.role} already has an active seat`);
+  }
+  if (seat.departmentId && active.some((s) => s.role === seat.role && s.departmentId === seat.departmentId)) {
+    throw new SeatError("This department already has an active seat for this role");
+  }
+  await ref.update({ isActive: true, updatedAt: new Date() });
+  await auditSeat(db, collegeId, "ROLE_SEAT_REACTIVATED", actor, seatId, { seat: seat.label });
+}
+
 // Existing HOD / Principal / VP / Academics / ... logins are role-based accounts:
 // the account itself IS the role. This turns each into a seat held by that
 // account (its login email becomes the seat's role email), so from then on a

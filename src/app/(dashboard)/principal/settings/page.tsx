@@ -15,6 +15,7 @@ import { FinancialYearSettingsCard } from "@/components/academics/FinancialYearS
 import { DesignationCatalogCard } from "@/components/academics/DesignationCatalogCard";
 import { LeaveApprovalRoutingCard } from "@/components/leave/LeaveApprovalRoutingCard";
 import { LeaveVacationStaffCard } from "@/components/leave/LeaveVacationStaffCard";
+import { LeaveTypeRulesCard } from "@/components/leave/LeaveTypeRulesCard";
 import { AttendanceNotPostedSettingsCard } from "@/components/attendance/AttendanceNotPostedSettingsCard";
 import type { FacultyNorms } from "@/types/core";
 
@@ -214,6 +215,8 @@ export default function PrincipalSettingsPage() {
       <LeaveApprovalRoutingCard />
 
       <LeaveVacationStaffCard />
+
+      <LeaveTypeRulesCard />
 
       <AttendanceNotPostedSettingsCard />
 

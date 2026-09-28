@@ -83,8 +83,7 @@ export const NAV_ITEMS: NavItem[] = [
 
   // Administration
   { label: "Dashboard", href: "/administration", iconName: "LayoutDashboard", roles: ["ADMINISTRATION"] },
-  { label: "Location Staff", href: "/administration/users", iconName: "Users", roles: ["ADMINISTRATION"], section: "Management" },
-  { label: "Departments", href: "/administration/departments", iconName: "Settings2", roles: ["ADMINISTRATION"] },
+  { label: "Staff & Role Assignments", href: "/administration/users", iconName: "Users", roles: ["ADMINISTRATION"], section: "Management" },
   { label: "Colleges", href: "/administration/colleges", iconName: "Building2", roles: ["ADMINISTRATION"] },
   { label: "Hiring Requests", href: "/administration/vacancies", iconName: "ClipboardList", roles: ["ADMINISTRATION"], section: "Hiring" },
   { label: "Interview Plans", href: "/administration/interviews", iconName: "CalendarCheck", roles: ["ADMINISTRATION"] },
@@ -143,8 +142,8 @@ export const NAV_ITEMS: NavItem[] = [
   // Location Staff Admin
   { label: "Dashboard", href: "/location-staff-admin", iconName: "LayoutDashboard", roles: ["LOCATION_STAFF_ADMIN"] },
   { label: "Departments", href: "/location-staff-admin/departments", iconName: "Building2", roles: ["LOCATION_STAFF_ADMIN", "ADMINISTRATION"], section: "Location Staff" },
-  { label: "Staff Directory", href: "/location-staff-admin/staff", iconName: "UsersRound", roles: ["LOCATION_STAFF_ADMIN", "ADMINISTRATION"], section: "Location Staff" },
-  { label: "Attendance Overview", href: "/location-staff-admin/attendance", iconName: "ClipboardCheck", roles: ["LOCATION_STAFF_ADMIN", "ADMINISTRATION"], section: "Location Staff" },
+  { label: "Shifts", href: "/location-staff-admin/shifts", iconName: "Clock", roles: ["LOCATION_STAFF_ADMIN", "ADMINISTRATION"], section: "Location Staff" },
+  { label: "Attendance Reports", href: "/location-staff-admin/attendance/reports", iconName: "BarChart3", roles: ["LOCATION_STAFF_ADMIN", "ADMINISTRATION"], section: "Location Staff" },
   { label: "My Profile", href: "/location-staff-admin/profile", iconName: "UserCircle", roles: ["LOCATION_STAFF_ADMIN"], section: "Personal" },
 
   // Location Dept Head
@@ -254,6 +253,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Subjects", href: "/hod/subjects", iconName: "Library", roles: ["HOD"] },
   { label: "Teaching Assignments", href: "/hod/teaching-assignments", iconName: "BookOpen", roles: ["HOD"], module: "timetable-incharge" },
   { label: "Assignment Requests", href: "/hod/assignment-requests", iconName: "Send", roles: ["HOD"], module: "assignment-requests" },
+  { label: "Faculty Timetable", href: "/hod/faculty-timetable", iconName: "CalendarSearch", roles: ["HOD"], module: "assignment-requests" },
   { label: "Internal Exam", href: "/hod/internal-exam", iconName: "ClipboardCheck", roles: ["HOD"] },
   { label: "Mid Paper Setter", href: "/hod/mid-paper-setter", iconName: "UserCog", roles: ["HOD"] },
   // Sits directly below Teaching Assignments: subjects are assigned there first,
@@ -335,6 +335,7 @@ export const NAV_ITEMS: NavItem[] = [
   // empty state for anyone else, same convention as Leave/Attendance.
   { label: "Timetable Incharge", href: "/college-staff/timetable-incharge", iconName: "UserCog", roles: ["COLLEGE_STAFF"], module: "timetable-incharge" },
   { label: "Assignment Requests", href: "/college-staff/assignment-requests", iconName: "Send", roles: ["COLLEGE_STAFF"], module: "assignment-requests" },
+  { label: "Faculty Timetable", href: "/college-staff/faculty-timetable", iconName: "CalendarSearch", roles: ["COLLEGE_STAFF"], module: "assignment-requests" },
   { label: "My Profile", href: "/college-staff/profile", iconName: "UserCircle", roles: ["COLLEGE_STAFF"], section: "Personal" },
   { label: "My Leave", href: "/college-staff/leave", iconName: "CalendarClock", roles: ["COLLEGE_STAFF"] },
   { label: "Adjustment Requests", href: "/leave/adjustments", iconName: "UserCheck", roles: ["COLLEGE_STAFF"] },
@@ -400,6 +401,7 @@ export const NAV_ITEMS: NavItem[] = [
   // department (see isTimetableInchargeForDepartment) - shown unconditionally
   // like the entry above, same empty-state convention.
   { label: "Assignment Requests", href: "/panel/assignment-requests", iconName: "Send", roles: ["PANEL_MEMBER"], module: "assignment-requests" },
+  { label: "Faculty Timetable", href: "/panel/faculty-timetable", iconName: "CalendarSearch", roles: ["PANEL_MEMBER"], module: "assignment-requests" },
   { label: "Internal Exam", href: "/panel/internal-exam", iconName: "ClipboardList", roles: ["PANEL_MEMBER"] },
   { label: "Add Mid Bank", href: "/panel/mid-bank", iconName: "BookOpen", roles: ["PANEL_MEMBER"] },
   { label: "Student Attendance", href: "/panel/mark-attendance", iconName: "CalendarCheck", roles: ["PANEL_MEMBER"], module: "attendance" },
@@ -860,8 +862,8 @@ export const BOTTOM_NAV_ITEMS: Record<UserRole, NavItem[]> = {
   LOCATION_STAFF_ADMIN: [
     { label: "Home", href: "/location-staff-admin", iconName: "LayoutDashboard", roles: ["LOCATION_STAFF_ADMIN"] },
     { label: "Depts", href: "/location-staff-admin/departments", iconName: "Building2", roles: ["LOCATION_STAFF_ADMIN"] },
-    { label: "Staff", href: "/location-staff-admin/staff", iconName: "UsersRound", roles: ["LOCATION_STAFF_ADMIN"] },
-    { label: "Attendance", href: "/location-staff-admin/attendance", iconName: "ClipboardCheck", roles: ["LOCATION_STAFF_ADMIN"] },
+    { label: "Shifts", href: "/location-staff-admin/shifts", iconName: "Clock", roles: ["LOCATION_STAFF_ADMIN"] },
+    { label: "Reports", href: "/location-staff-admin/attendance/reports", iconName: "BarChart3", roles: ["LOCATION_STAFF_ADMIN"] },
     { label: "Profile", href: "/location-staff-admin/profile", iconName: "UserCircle", roles: ["LOCATION_STAFF_ADMIN"] },
   ],
   LOCATION_DEPT_HEAD: [

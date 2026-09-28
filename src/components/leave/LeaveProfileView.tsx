@@ -10,6 +10,7 @@ import { formatDate, toDate } from "@/lib/utils";
 import { Plus, ChevronRight, History, CalendarPlus } from "lucide-react";
 import { evaluateODProof } from "@/lib/leave/odProof";
 import { PermissionRequestDialog } from "@/components/leave/PermissionRequestDialog";
+import { LeaveCalendar } from "@/components/leave/LeaveCalendar";
 import { LEAVE_REQUEST_STATUS_LABELS, EFFECTIVE_CATEGORY_LABELS, LEAVE_TYPE_LABELS } from "@/types/leave";
 import type { EffectiveLeaveCategory, LeaveRequest, LeaveRequestStatus, LeaveTypeCode, PeriodSubstitution } from "@/types/leave";
 
@@ -230,6 +231,8 @@ export function LeaveProfileView({ uid, applyHref, historyBaseHref }: LeaveProfi
         {applyHref && <PermissionRequestDialog onSubmitted={() => void load()} />}
         </div>
       </div>
+
+      <LeaveCalendar uid={uid} />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {trackedBalances.map((b) => (

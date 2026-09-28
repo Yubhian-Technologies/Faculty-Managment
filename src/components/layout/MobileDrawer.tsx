@@ -16,6 +16,7 @@ import { isNavItemActive, filterVisibleNavItems, isPathHidden, ROLES_WITH_EMBEDD
 import { useIsTimetableIncharge } from "@/hooks/useIsTimetableIncharge";
 import { NavIcon } from "./NavIcon";
 import { WorkContextSwitcher } from "./WorkContextSwitcher";
+import { LocationDeptSwitcher } from "./LocationDeptSwitcher";
 import { useWorkContext } from "@/hooks/useWorkContext";
 import { ROLE_LABELS } from "@/types";
 
@@ -120,6 +121,7 @@ export function MobileDrawer({ hiddenModules, hiddenItems }: MobileDrawerProps) 
         </div>
 
         <WorkContextSwitcher />
+        <LocationDeptSwitcher />
 
         <nav className={cn("flex-1 px-3 py-4 space-y-1 overflow-y-auto", contexts.length > 0 ? "h-[calc(100vh-13rem)]" : "h-[calc(100vh-8rem)]")}>
           {navItems.map((item) => {
