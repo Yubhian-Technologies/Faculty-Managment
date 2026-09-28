@@ -15,6 +15,7 @@ import { loadUnavailability } from "@/lib/leave/availability";
 import { getHolidayDateKeys } from "@/lib/leave/holidaysCount";
 import { getWorkingDayWeightsForRole } from "@/lib/attendance/workingDays";
 import { resolveLeaveType } from "@/lib/leave/resolveLeaveTypes";
+import { evaluateODProof } from "@/lib/leave/odProof";
 import { resolveHodDepartments } from "@/lib/budget/departmentScope";
 import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 import { validatePeriodSubstitutions, type PeriodSubstitutionInput } from "@/lib/leave/periodCoverage";
@@ -149,6 +150,39 @@ export async function GET(request: Request) {
       if (session.role === "PRINCIPAL" || session.role === "VICE_PRINCIPAL") {
         // Only the ones they approved themselves, so the two queues stay
         // disjoint and a Principal isn't handed every department's backlog.
+        return NextResponse.json({ requests: sortByCreatedAtDesc(all.filter((r) => !r.hodAction)) });
+      }
+      return NextResponse.json({ requests: [] });
+    }
+
+    // On Duty missing-proof list: APPROVED ODs whose period has ended 24h+
+    // ago with nothing currently on file (never uploaded, or uploaded and
+    // rejected and not yet fixed) - the same requests the automatic reminder
+    // cron (api/cron/od-proof-reminders) has already nudged, or is about to.
+    // Lets this caller see who's still outstanding and send a manual nudge
+    // (PATCH action REQUEST_OD_PROOF) rather than only waiting on the cron.
+    if (url.searchParams.get("scope") === "od-missing-proof") {
+      const snap = await REQUESTS_COL(session.collegeId, db)
+        .where("leaveTypeCode", "==", "OD")
+        .where("status", "==", "APPROVED")
+        .where("odProofRequired", "==", true)
+        .get();
+      const all = snap.docs
+        .map((d) => ({ id: d.id, ...d.data() }) as LeaveRequest)
+        .filter((r) => {
+          const evaluation = evaluateODProof(r);
+          return evaluation.canUpload && !evaluation.awaitingVerification;
+        });
+
+      if (session.role === "HOD") {
+        const depts = await resolveHodDepartments(db, session.collegeId, session.uid);
+        return NextResponse.json({
+          requests: sortByCreatedAtDesc(
+            all.filter((r) => !!r.hodAction && !!r.department && depts.includes(r.department))
+          ),
+        });
+      }
+      if (session.role === "PRINCIPAL" || session.role === "VICE_PRINCIPAL") {
         return NextResponse.json({ requests: sortByCreatedAtDesc(all.filter((r) => !r.hodAction)) });
       }
       return NextResponse.json({ requests: [] });
