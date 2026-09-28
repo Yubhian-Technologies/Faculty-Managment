@@ -8,7 +8,9 @@ import { getHodDepartmentScope, canHodEditDepartment, ownDepartmentNames } from 
 import { isTimetableInchargeForDepartment } from "@/lib/departments/timetableIncharge";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { isFacultyAvailable } from "@/types";
-import type { FacultyAssignmentRequest } from "@/types";
+import type { DayOfWeek, FacultyAssignmentRequest } from "@/types";
+
+const VALID_DAYS = new Set<DayOfWeek>(["MON", "TUE", "WED", "THU", "FRI", "SAT"]);
 
 // Fulfills (allocate) or declines an incoming faculty-assignment request -
 // the target department's HOD (or someone who edits that department, e.g.
@@ -17,18 +19,23 @@ import type { FacultyAssignmentRequest } from "@/types";
 // tied to one specific course-year, it's "does this department have anyone
 // free"), may act on it. Allocating creates the actual TeachingAssignment
 // record directly, filed under the *requesting* section's own department
-// (matching how a normal direct assignment is filed) - the requester then
-// picks weekly periods for it the usual way, via the Timetable page's "Add a
-// subject".
+// (matching how a normal direct assignment is filed). The lending side never
+// places periods on the requester's timetable themselves - they only declare
+// (via set_busy_periods) when the allocated faculty is already busy with
+// their own department's classes; the requester places the subject on their
+// own Timetable page via the usual "Add a subject" flow, which is blocked
+// from those declared-busy cells the same way a real double-booking is (see
+// busyPeriods merging into busyFaculty in src/lib/timetable/loadContext.ts).
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await requireCollegeMember("HOD", "PANEL_MEMBER", "COLLEGE_STAFF");
     const { id } = await params;
     const body = (await request.json()) as {
-      action?: "allocate" | "decline" | "notify_timetable_updated";
+      action?: "allocate" | "decline" | "notify_timetable_updated" | "set_busy_periods";
       facultyId?: string;
       facultyName?: string;
       declineReason?: string;
+      busyPeriods?: { day?: string; period?: number }[];
     };
 
     const db = getAdminDb();
@@ -43,31 +50,69 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       // Own department/sub-departments only, not managed branches (see
       // ownDepartmentNames doc) - matches the GET route's incoming-list
       // filter, so a request that isn't listed here can't be acted on either.
+      // Names the request's actual target department in the error - the most
+      // common cause is the "Working As" switcher having moved to a
+      // different department since the (now-stale) request list was loaded,
+      // not a real permissions gap, and that's invisible without saying so.
       if (!ownDepartmentNames(scope).includes(reqData.targetDepartmentName)) {
-        return NextResponse.json({ error: "This request wasn't sent to your department" }, { status: 403 });
+        return NextResponse.json(
+          { error: `This request was sent to ${reqData.targetDepartmentName}, not ${scope.departmentName || "your department"} - switch "Working As" and reload if you meant to act on it` },
+          { status: 403 },
+        );
       }
     } else {
       const ok = await isTimetableInchargeForDepartment(db, session.collegeId, session.uid, reqData.targetDepartmentName);
       if (!ok) {
-        return NextResponse.json({ error: "This request wasn't sent to your department" }, { status: 403 });
+        return NextResponse.json({ error: `This request was sent to ${reqData.targetDepartmentName}, not a department you're Timetable Incharge for` }, { status: 403 });
       }
     }
 
     const now = new Date();
 
-    // Fired by the Timetable page's "Update" button (in place of the normal
-    // "Publish") once the lending HOD has placed their allocated faculty's
-    // weekly periods on the requester's timetable - a lightweight notify-only
-    // step, no state change here (the timetable publish already happened via
-    // its own endpoint).
+    // The lending side's declaration of when the allocated faculty is
+    // already busy (their own department's classes), expressed in the
+    // REQUESTING section's own period numbering - see the doc-comment on
+    // FacultyAssignmentRequest.busyPeriods. Always a full replace (same
+    // convention as course-year-timings' semesters list), so removing an
+    // entry client-side is just resubmitting the trimmed array.
+    if (body.action === "set_busy_periods") {
+      if (reqData.status !== "ALLOCATED") {
+        return NextResponse.json({ error: "This request hasn't been allocated yet" }, { status: 409 });
+      }
+      const raw = body.busyPeriods ?? [];
+      if (raw.length > 100) {
+        return NextResponse.json({ error: "Too many busy periods" }, { status: 400 });
+      }
+      const busyPeriods: { day: DayOfWeek; period: number }[] = [];
+      for (const bp of raw) {
+        if (!bp.day || !VALID_DAYS.has(bp.day as DayOfWeek)) {
+          return NextResponse.json({ error: `Invalid day: ${bp.day}` }, { status: 400 });
+        }
+        if (!Number.isInteger(bp.period) || (bp.period as number) < 1) {
+          return NextResponse.json({ error: "Each period must be a positive number" }, { status: 400 });
+        }
+        busyPeriods.push({ day: bp.day as DayOfWeek, period: bp.period as number });
+      }
+      // De-dupe by day+period - a re-added entry shouldn't double up.
+      const deduped = Array.from(
+        new Map(busyPeriods.map((bp) => [`${bp.day}:${bp.period}`, bp])).values()
+      );
+      await reqRef.update({ busyPeriods: deduped, updatedAt: now });
+      return NextResponse.json({ ok: true, busyPeriods: deduped });
+    }
+
+    // Fired once the lending side considers this lend "ready" - whether or
+    // not they declared any busy periods (none can legitimately mean "fully
+    // free") - so the requesting department knows they can go place the
+    // subject on their own Timetable page.
     if (body.action === "notify_timetable_updated") {
       if (reqData.status !== "ALLOCATED") {
         return NextResponse.json({ error: "This request hasn't been allocated yet" }, { status: 409 });
       }
       await notify(
         db, session.collegeId, reqData.requestedBy, "FACULTY_ASSIGNMENT_ALLOCATED",
-        "Timetable updated",
-        `${reqData.targetDepartmentName} placed ${reqData.allocatedFacultyName ?? "the allocated faculty"}'s weekly periods for ${reqData.subjectName} (Section ${reqData.sectionName})`,
+        "Ready to schedule",
+        `${reqData.targetDepartmentName} shared ${reqData.allocatedFacultyName ?? "the allocated faculty"}'s busy periods for ${reqData.subjectName} (Section ${reqData.sectionName}) - you can now place it on your Timetable page`,
         `/hod/timetable/${reqData.courseId}/${reqData.year}/${reqData.sectionId}`
       );
       return NextResponse.json({ ok: true });

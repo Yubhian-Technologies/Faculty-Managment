@@ -229,6 +229,15 @@ export interface FacultyAssignmentRequest {
   allocatedFacultyName?: string;
   allocatedBy?: string;           // uid of the target department's HOD who fulfilled it
   teachingAssignmentId?: string;  // the TeachingAssignment created once allocated
+  // The lending department's own declaration of when this faculty member is
+  // already busy (their own department's classes) - expressed in the
+  // REQUESTING section's own period numbering (see AssignmentRequestsPanel,
+  // which shows each period's clock time so the lending side can pick the
+  // right one), not the lending department's. Merged into loadTimetableContext's
+  // busyFaculty so the requesting HOD's own "Add a subject" placement is
+  // blocked at these cells exactly like a real double-booking - see
+  // src/lib/timetable/loadContext.ts.
+  busyPeriods?: { day: DayOfWeek; period: number }[];
   declineReason?: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;

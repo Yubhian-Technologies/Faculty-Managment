@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
-  ArrowLeft, Clock, Coffee, FileDown, FileSpreadsheet, Lock, PencilLine, Plus, Send, Trash2, Upload, Utensils, X,
+  ArrowLeft, ChevronDown, ChevronRight, Clock, Coffee, FileDown, FileSpreadsheet, Lock, PencilLine, Plus, Send,
+  Trash2, Upload, Utensils, X,
 } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
@@ -41,6 +42,40 @@ function formatTime12h(hhmm: string) {
 
 /** What the grid is currently showing. */
 type Mode = "published" | "draft";
+
+// Mirrors ImportPlacement from src/lib/timetable/import/parseGrid.ts (a
+// server-only module - it pulls in mammoth/cheerio/firebase-admin, so this
+// client component defines its own copy of the shape rather than importing
+// it) plus the one client-side field (`included`) driving the preview's
+// checkboxes.
+interface ImportRow {
+  day: DayOfWeek;
+  startPeriod: number;
+  blockSize: number;
+  rawText: string;
+  status: "matched" | "unmatched" | "ambiguous" | "conflict" | "unparsed";
+  assignmentId?: string;
+  subjectName?: string;
+  facultyName?: string;
+  candidates?: { assignmentId: string; subjectName: string; facultyName: string }[];
+  error?: string;
+  included: boolean;
+}
+
+const IMPORT_STATUS_LABEL: Record<ImportRow["status"], string> = {
+  matched: "Matched",
+  unmatched: "No match",
+  ambiguous: "Ambiguous",
+  conflict: "Conflict",
+  unparsed: "Could not read",
+};
+const IMPORT_STATUS_VARIANT: Record<ImportRow["status"], "approved" | "rejected" | "pending"> = {
+  matched: "approved",
+  unmatched: "rejected",
+  ambiguous: "pending",
+  conflict: "rejected",
+  unparsed: "pending",
+};
 
 interface TimetableGridEditorProps {
   courseId: string;
@@ -91,6 +126,17 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref }: Tim
   const { collegeInfo } = useCollegeInfo();
   const [section, setSection] = useState<Section | null>(null);
   const [timing, setTiming] = useState<CourseYearTiming | null>(null);
+  // Every year's own CourseYearTiming for this course (not just the one
+  // being viewed) - powers the "Period Timings" summary at the top of the
+  // page, so an HOD can see how every year's day is shaped (start/end time,
+  // periods, breaks) without switching the year in the URL. The GET already
+  // returns the whole course's timings in one call; this just keeps the
+  // rest of them instead of discarding everything but the current year.
+  const [allTimings, setAllTimings] = useState<CourseYearTiming[]>([]);
+  // Which years' rows in the Period Timings summary have their period-by-
+  // period breakdown expanded - collapsed by default so the summary stays a
+  // short, scannable table, with the full per-period detail one click away.
+  const [expandedTimingYears, setExpandedTimingYears] = useState<Set<number>>(new Set());
   const [slots, setSlots] = useState<TimetableSlot[]>([]);
   // The college's configured working days + subject codes, so the grid and
   // every export show the same days the server accepts and the same subject
@@ -124,15 +170,18 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref }: Tim
   // the assignments taught by faculty they're responsible for. See
   // myAssignmentIds below.
   const [myFacultyIds, setMyFacultyIds] = useState<Set<string>>(new Set());
-  // Assignment ids on this section that were created by fulfilling a
-  // cross-department Assignment Request (cross-referenced via
-  // facultyAssignmentRequests.teachingAssignmentId, not by comparing faculty
-  // departments - a feeder like Basic Science can legitimately share its
-  // faculty with every department it feeds, so "faculty belongs to a
-  // different department" alone isn't a reliable signal). The lending HOD
-  // places these periods themselves from their own cross-department view of
-  // this same page, so myAssignmentIds/pickableAssignments below exclude them
-  // here regardless of who's currently viewing this section.
+  // Assignment ids on this section fulfilled via a cross-department
+  // Assignment Request (facultyAssignmentRequests.teachingAssignmentId, see
+  // AssignmentRequestsPanel) - explicitly folded INTO myAssignmentIds below
+  // for the "viewing cross-department, no specific request context" branch.
+  // That branch otherwise scopes to myFacultyIds (this HOD's own/managed
+  // faculty roster), which by definition can never include a lent-in
+  // assignment's faculty - they're always from a genuinely different,
+  // unrelated department (that's the whole point of lending). Without this,
+  // a managed-branch HOD (e.g. a CS branch manager on a shared first-year
+  // section actually owned by a common department like Basic Sciences) can
+  // never see a lent-in subject in "Add a subject" at all, even though
+  // they're the one who's supposed to place it now.
   const [lentInAssignmentIds, setLentInAssignmentIds] = useState<Set<string>>(new Set());
   // Editing state for the "Edit Period Timings" dialog - each period's own
   // start/end, within the college day the Principal already set
@@ -142,6 +191,17 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref }: Tim
   const [showPeriodDialog, setShowPeriodDialog] = useState(false);
   const [editPeriods, setEditPeriods] = useState<{ startTime: string; endTime: string }[]>([]);
   const [savingPeriods, setSavingPeriods] = useState(false);
+
+  // Import-from-document: upload a Word/Excel timetable grid, preview what
+  // it resolves to against this section's real teaching assignments, then
+  // write only the rows the HOD kept checked into the draft (see
+  // handleImportFile/handleImportConfirm below).
+  const [showImportDialog, setShowImportDialog] = useState(false);
+  const [importUploading, setImportUploading] = useState(false);
+  const [importConfirming, setImportConfirming] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [importRows, setImportRows] = useState<ImportRow[] | null>(null);
+  const importFileRef = useRef<HTMLInputElement>(null);
 
   // The days this grid can offer, in one place, for both published and draft
   // mode. Order comes from the college's TimetableRules.workingDays (the same
@@ -181,6 +241,7 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref }: Tim
       setCourse((coursesData.courses ?? []).find((c) => c.id === courseId) ?? null);
       setSection((sectionsData.sections ?? []).find((s) => s.id === sectionId) ?? null);
       setTiming((timingsData.timings ?? []).find((t) => t.year === Number(year)) ?? null);
+      setAllTimings(timingsData.timings ?? []);
       setSlots(slotsData.slots ?? []);
       setSubjects(slotsData.subjects ?? []);
       setWorkingDays(slotsData.workingDays ?? DEFAULT_TIMETABLE_RULES.workingDays);
@@ -233,24 +294,27 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref }: Tim
   // Which assignments on this section this HOD may actually place/move/remove
   // periods for - both here and in the "Add a subject" picker below, so
   // "Update"/"Publish" only ever touches their own subjects. Cross-department
-  // splits into two distinct visits that must NOT be merged into one broad
-  // set: arriving via a specific "Place on timetable" link
-  // (fulfillingAssignmentId) is a one-off fulfillment of exactly that lend
-  // request - scoped to only that one assignment, even if this HOD's own
-  // administered faculty pool (myFacultyIds) also happens to teach other
-  // subjects on this same section, so the requesting department's unrelated
-  // subjects never show up in the picker. Arriving with no request context
+  // still splits by how the viewer got here: arriving with no request context
   // (e.g. a BS sub-HOD opening a CSE section they fully manage straight from
-  // the sidebar) falls back to their own faculty's assignments across the
-  // whole section, as before. Own section: everything except a subject lent
-  // in through a cross-department Assignment Request (lentInAssignmentIds) -
-  // the lending HOD manages its periods from their own cross-department view
-  // of this same page, so this HOD can see it on the grid but not touch it.
+  // the sidebar) is scoped to their own administered faculty's assignments
+  // (myFacultyIds) PLUS any lent-in assignment on this section - myFacultyIds
+  // can never cover a lent-in one (its faculty is always from a genuinely
+  // different, unrelated department; that's the whole point of lending), so
+  // without folding lentInAssignmentIds in here too, a managed-branch HOD
+  // (e.g. a CS branch manager on a shared first-year section actually owned
+  // by a common department like Basic Sciences) would never see a lent-in
+  // subject in "Add a subject" at all, even though placing it is now their
+  // job. Own section: every assignment, including a lent-in one - placing
+  // its periods is this section's own HOD/Timetable Incharge's job like any
+  // other subject now (the lending side only declares that faculty's busy
+  // periods - see AssignmentRequestsPanel).
   const myAssignmentIds = isCrossDepartment
     ? fulfillingAssignmentId
       ? [fulfillingAssignmentId]
-      : assignments.filter((a) => myFacultyIds.has(a.facultyId)).map((a) => a.id)
-    : assignments.filter((a) => !lentInAssignmentIds.has(a.id)).map((a) => a.id);
+      : assignments
+          .filter((a) => myFacultyIds.has(a.facultyId) || lentInAssignmentIds.has(a.id))
+          .map((a) => a.id)
+    : assignments.map((a) => a.id);
   // Same restriction, applied to the "Add a subject" picker - also excludes
   // whatever's already occupying the target cell (rawCellEntriesFor, not the
   // Theory/Practical-filtered cellEntriesFor - a cell hidden by the view
@@ -321,6 +385,76 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref }: Tim
   function cellEntriesFor(day: DayOfWeek, period: number): { slot: TimetableSlot | DraftSlot; isPinned: boolean }[] {
     const entries = rawCellEntriesFor(day, period);
     return typeFilter === "ALL" ? entries : entries.filter((e) => e.slot.subjectType === typeFilter);
+  }
+
+  /** Opens the import dialog fresh - any previous preview/error is cleared. */
+  function openImportDialog() {
+    setImportRows(null);
+    setImportError(null);
+    setShowImportDialog(true);
+  }
+
+  /** Uploads a Word/Excel timetable grid and previews what it resolves to. Writes nothing yet. */
+  async function handleImportFile(file: File) {
+    setImportUploading(true);
+    setImportError(null);
+    setImportRows(null);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("sectionId", sectionId);
+      const res = await fetch("/api/college/timetable/import", { method: "POST", body: formData });
+      const json = (await res.json()) as { placements?: Omit<ImportRow, "included">[]; error?: string };
+      if (!res.ok) {
+        setImportError(json.error ?? "Could not read this file");
+        return;
+      }
+      // Pre-check only the cleanly matched rows - unmatched/ambiguous/conflict/
+      // unparsed rows need the HOD's own judgment, never a default-on checkbox.
+      setImportRows((json.placements ?? []).map((p) => ({ ...p, included: p.status === "matched" })));
+    } catch {
+      setImportError("Could not read this file");
+    } finally {
+      setImportUploading(false);
+      if (importFileRef.current) importFileRef.current.value = "";
+    }
+  }
+
+  /** Writes the checked, matched rows from the import preview into the draft. */
+  async function handleImportConfirm() {
+    if (!importRows) return;
+    const toImport = importRows.filter((r) => r.included && r.status === "matched" && r.assignmentId);
+    if (toImport.length === 0) return;
+    setImportConfirming(true);
+    try {
+      const res = await fetch("/api/college/timetable/import/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sectionId,
+          placements: toImport.map((r) => ({
+            assignmentId: r.assignmentId, day: r.day, startPeriod: r.startPeriod, blockSize: r.blockSize,
+          })),
+        }),
+      });
+      const json = (await res.json()) as { imported?: number; failed?: { error?: string }[]; error?: string };
+      if (!res.ok) {
+        toast({ variant: "destructive", title: json.error ?? "Import failed" });
+        return;
+      }
+      await loadAll();
+      setModeState("draft");
+      setIsEditing(true);
+      setShowImportDialog(false);
+      toast({
+        title: `Imported ${json.imported ?? 0} period${json.imported === 1 ? "" : "s"}`,
+        description: json.failed && json.failed.length > 0
+          ? `${json.failed.length} row(s) could not be placed - they may now conflict with something else on the grid.`
+          : undefined,
+      });
+    } finally {
+      setImportConfirming(false);
+    }
   }
 
   /** Starts an empty draft so the whole timetable can be built by hand. */
@@ -717,6 +851,16 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref }: Tim
                 {slots.length > 0 ? "Edit Timetable" : "Build manually"}
               </Button>
             )}
+            {/* Upload an existing Word/Excel timetable grid instead of
+                clicking every period by hand - same cross-department
+                availability as Build manually above, and works whether or
+                not a draft already exists (it appends into one either way,
+                creating it first if needed - see the import/confirm route). */}
+            {timing && (
+              <Button variant="outline" onClick={openImportDialog}>
+                <Upload className="h-4 w-4 mr-2" />Import
+              </Button>
+            )}
             {/* The college day's outer bounds are Principal-set - this only
                 fills in this HOD's own period-by-period breakdown within
                 them (see PATCH /api/college/course-year-timings), so it needs
@@ -729,6 +873,107 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref }: Tim
           </div>
         }
       />
+
+      {/* Every year's college-day shape for this course, at a glance - handy
+          at the start of a semester to see all years' periods/breaks without
+          switching the year in the URL one at a time. Shows Year 1 through
+          the course's own duration (falling back to 4 before `course` has
+          loaded), with "Not configured yet" for a year the Principal hasn't
+          set up. */}
+      {!isLoading && allTimings.length > 0 && (
+        <div className="rounded-lg border overflow-hidden">
+          <div className="bg-muted/40 px-4 py-2 border-b">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Period Timings - {course?.name ?? "This Course"}
+            </p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b bg-muted/20">
+                  <th className="p-2 text-left font-medium text-muted-foreground w-8" />
+                  <th className="p-2 text-left font-medium text-muted-foreground">Year</th>
+                  <th className="p-2 text-left font-medium text-muted-foreground">College Hours</th>
+                  <th className="p-2 text-left font-medium text-muted-foreground">Periods</th>
+                  <th className="p-2 text-left font-medium text-muted-foreground">Lunch Break</th>
+                  <th className="p-2 text-left font-medium text-muted-foreground">Short Breaks</th>
+                </tr>
+              </thead>
+              <tbody>
+                {Array.from({ length: course?.durationYears ?? 4 }, (_, i) => i + 1).map((y) => {
+                  const t = allTimings.find((at) => Number(at.year) === y);
+                  const isCurrentYear = y === Number(year);
+                  const isExpanded = expandedTimingYears.has(y);
+                  const periodTimes = t
+                    ? (t.periods && t.periods.length > 0 ? t.periods : defaultPeriodTimings(t))
+                    : [];
+                  return (
+                    <Fragment key={y}>
+                      <tr className={`${isExpanded ? "" : "border-b last:border-b-0"} ${isCurrentYear ? "bg-primary/5" : ""}`}>
+                        <td className="p-2">
+                          {t && (
+                            <button
+                              type="button"
+                              onClick={() => setExpandedTimingYears((prev) => {
+                                const next = new Set(prev);
+                                if (next.has(y)) next.delete(y); else next.add(y);
+                                return next;
+                              })}
+                              className="text-muted-foreground hover:text-foreground"
+                              aria-label={isExpanded ? "Hide period times" : "Show period times"}
+                            >
+                              {isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                            </button>
+                          )}
+                        </td>
+                        <td className="p-2 font-medium text-foreground whitespace-nowrap">
+                          {ordinalYear(y)}
+                          {isCurrentYear && <span className="ml-1.5 text-[10px] font-normal text-primary">(current)</span>}
+                        </td>
+                        {t ? (
+                          <>
+                            <td className="p-2 text-muted-foreground whitespace-nowrap">
+                              {formatTime12h(t.collegeStartTime)}&ndash;{formatTime12h(t.collegeEndTime)}
+                            </td>
+                            <td className="p-2 text-muted-foreground whitespace-nowrap">
+                              {t.numberOfPeriods} &times; {t.periodDurationMinutes}m
+                            </td>
+                            <td className="p-2 text-muted-foreground whitespace-nowrap">
+                              {t.lunchBreak ? `After P${t.lunchBreak.afterPeriod} · ${t.lunchBreak.durationMinutes}m` : "—"}
+                            </td>
+                            <td className="p-2 text-muted-foreground">
+                              {t.shortBreaks && t.shortBreaks.length > 0
+                                ? t.shortBreaks.map((sb) => `After P${sb.afterPeriod} · ${sb.durationMinutes}m`).join(", ")
+                                : "—"}
+                            </td>
+                          </>
+                        ) : (
+                          <td className="p-2 text-muted-foreground/60 italic" colSpan={4}>Not configured yet</td>
+                        )}
+                      </tr>
+                      {isExpanded && t && (
+                        <tr className={`border-b last:border-b-0 ${isCurrentYear ? "bg-primary/5" : ""}`}>
+                          <td className="p-2" />
+                          <td className="p-2 pt-0 pb-2.5 text-muted-foreground" colSpan={5}>
+                            <div className="flex flex-wrap gap-x-3 gap-y-1">
+                              {periodTimes.map((p) => (
+                                <span key={p.period} className="whitespace-nowrap">
+                                  <span className="font-medium text-foreground">P{p.period}</span>{" "}
+                                  {formatTime12h(p.startTime)}&ndash;{formatTime12h(p.endTime)}
+                                </span>
+                              ))}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       <SegmentedTabs
         value={activeView}
@@ -850,52 +1095,61 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref }: Tim
           <table className="w-full text-sm border-collapse">
             <thead>
               <tr className="bg-muted/50">
-                <th className="p-2.5 text-left font-medium text-muted-foreground border-b w-24">Period</th>
-                {days.map((d) => (
-                  <th key={d} className="p-2.5 text-left font-medium text-muted-foreground border-b min-w-35">
-                    {DAY_LABELS[d]}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row, idx) => {
-                if (row.kind === "lunch" || row.kind === "short") {
-                  const Icon = row.kind === "lunch" ? Utensils : Coffee;
-                  const label = row.kind === "lunch" ? "Lunch Break" : "Short Break";
-                  return (
-                    <tr key={`break_${idx}`} className="bg-amber-50/60">
-                      <td colSpan={days.length + 1} className="p-2 text-center text-xs font-medium text-amber-700">
-                        <span className="inline-flex items-center gap-1.5">
+                <th className="p-2.5 text-left font-medium text-muted-foreground border-b w-20 sticky left-0 z-[5] bg-muted/95 backdrop-blur">
+                  Day
+                </th>
+                {rows.map((row, idx) => {
+                  if (row.kind === "lunch" || row.kind === "short") {
+                    const Icon = row.kind === "lunch" ? Utensils : Coffee;
+                    const label = row.kind === "lunch" ? "Lunch Break" : "Short Break";
+                    return (
+                      <th key={`break_${idx}`} className="p-2 text-center font-medium border-b bg-amber-50/60 min-w-[70px]">
+                        <span className="flex flex-col items-center gap-0.5 text-amber-700">
                           <Icon className="h-3.5 w-3.5" />
-                          {label} · {row.durationMinutes} min
+                          <span className="text-[10px] font-semibold uppercase tracking-wide whitespace-nowrap">{label}</span>
+                          <span className="text-[9.5px] font-normal text-amber-700/80">{row.durationMinutes} min</span>
                         </span>
-                      </td>
-                    </tr>
-                  );
-                }
-                return (
-                  <tr key={`period_${row.period}`} className="border-b last:border-b-0">
-                    <td className="p-2.5 font-medium text-muted-foreground">
-                      {row.period}
+                      </th>
+                    );
+                  }
+                  return (
+                    <th key={`period_${row.period}`} className="p-2.5 text-center font-medium text-muted-foreground border-b min-w-[110px]">
+                      Period {row.period}
                       {row.startTime && row.endTime && (
                         <p className="text-[10px] font-normal whitespace-nowrap">
                           {formatTime12h(row.startTime)}&ndash;{formatTime12h(row.endTime)}
                         </p>
                       )}
-                    </td>
-                    {days.map((d) => {
-                      const entries = cellEntriesFor(d, row.period);
-                      // A cell already holding something can still take another
-                      // subject (a split period) - shown as a small action below
-                      // the existing entries, never replacing the "empty cell"
-                      // Add button below, and never available in move-mode
-                      // (a slot is selected) to avoid ambiguity with "Place here".
-                      const canAddAnother = mode === "draft" && isEditing && !selected;
-
+                    </th>
+                  );
+                })}
+              </tr>
+            </thead>
+            <tbody>
+              {days.map((d) => (
+                <tr key={d} className="border-b last:border-b-0">
+                  <td className="p-2.5 font-medium text-muted-foreground sticky left-0 z-[5] bg-background">
+                    {DAY_LABELS[d]}
+                  </td>
+                  {rows.map((row, idx) => {
+                    if (row.kind === "lunch" || row.kind === "short") {
                       return (
-                        <td key={d} className="p-2 align-top">
-                          <div className="space-y-1">
+                        <td key={`break_${idx}`} className="p-2 text-center bg-amber-50/30 text-amber-700/40 font-mono">
+                          &mdash;
+                        </td>
+                      );
+                    }
+                    const entries = cellEntriesFor(d, row.period);
+                    // A cell already holding something can still take another
+                    // subject (a split period) - shown as a small action below
+                    // the existing entries, never replacing the "empty cell"
+                    // Add button below, and never available in move-mode
+                    // (a slot is selected) to avoid ambiguity with "Place here".
+                    const canAddAnother = mode === "draft" && isEditing && !selected;
+
+                    return (
+                      <td key={`period_${row.period}`} className="p-2 align-top">
+                        <div className="space-y-1">
                             {entries.map((entry) => {
                               const { slot, isPinned } = entry;
                               const dSlot = !isPinned && mode === "draft" ? (slot as DraftSlot) : undefined;
@@ -999,8 +1253,7 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref }: Tim
                       );
                     })}
                   </tr>
-                );
-              })}
+                ))}
             </tbody>
           </table>
         </div>
@@ -1050,6 +1303,123 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref }: Tim
                 </button>
               ))}
             </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Upload a Word/Excel timetable grid, preview what it resolves to
+          against this section's real teaching assignments, then write only
+          the checked rows into the draft (see handleImportFile/
+          handleImportConfirm above). */}
+      <Dialog
+        open={showImportDialog}
+        onOpenChange={(o) => { if (!o && !importUploading && !importConfirming) setShowImportDialog(false); }}
+      >
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Import Timetable</DialogTitle>
+            <DialogDescription>
+              Upload a Word (.docx) or Excel (.xlsx) timetable grid for this section - the same Day x Period
+              layout the department already keeps it in. Each cell is matched against this section&apos;s
+              teaching assignments; only cleanly matched periods are pre-selected below.
+            </DialogDescription>
+          </DialogHeader>
+
+          <input
+            ref={importFileRef}
+            type="file"
+            accept=".docx,.xlsx"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) void handleImportFile(file);
+            }}
+          />
+
+          {!importRows && (
+            <button
+              type="button"
+              disabled={importUploading}
+              onClick={() => importFileRef.current?.click()}
+              className="w-full border-2 border-dashed border-border rounded-lg p-8 flex flex-col items-center gap-3 hover:border-primary hover:bg-primary/5 transition-colors cursor-pointer disabled:opacity-50"
+            >
+              <Upload className="h-10 w-10 text-muted-foreground" />
+              <p className="font-medium text-sm">
+                {importUploading ? "Reading file…" : "Click to select a .docx or .xlsx file"}
+              </p>
+            </button>
+          )}
+
+          {importError && <p className="text-sm text-destructive">{importError}</p>}
+
+          {importRows && (
+            <>
+              {importRows.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No filled-in periods were found in this document.</p>
+              ) : (
+                <div className="max-h-96 space-y-1.5 overflow-y-auto">
+                  {importRows.map((row, i) => (
+                    <label
+                      key={i}
+                      className="flex items-start gap-3 rounded-md border p-2.5 text-sm has-[:disabled]:opacity-60"
+                    >
+                      <input
+                        type="checkbox"
+                        className="mt-1"
+                        checked={row.included}
+                        disabled={row.status !== "matched"}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setImportRows((rows) => rows?.map((r, idx) => (idx === i ? { ...r, included: checked } : r)) ?? rows);
+                        }}
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span className="flex flex-wrap items-center gap-2">
+                          <span className="font-medium">
+                            {DAY_LABELS[row.day]}, period {row.startPeriod}
+                            {row.blockSize > 1 ? `-${row.startPeriod + row.blockSize - 1}` : ""}
+                          </span>
+                          <Badge variant={IMPORT_STATUS_VARIANT[row.status]} className="text-xs">
+                            {IMPORT_STATUS_LABEL[row.status]}
+                          </Badge>
+                        </span>
+                        <span className="block truncate text-xs text-muted-foreground">&quot;{row.rawText}&quot;</span>
+                        {row.status === "matched" && (
+                          <span className="block text-xs text-muted-foreground">{row.subjectName} - {row.facultyName}</span>
+                        )}
+                        {row.error && <span className="block text-xs text-destructive">{row.error}</span>}
+                        {row.candidates && row.candidates.length > 0 && (
+                          <span className="block text-xs text-muted-foreground">
+                            Matches: {row.candidates.map((c) => `${c.subjectName} (${c.facultyName})`).join(", ")}
+                          </span>
+                        )}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              )}
+              <div className="flex items-center justify-between gap-2 pt-2">
+                <p className="text-xs text-muted-foreground">
+                  {importRows.filter((r) => r.included).length} of {importRows.length} selected
+                </p>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => { setImportRows(null); setImportError(null); }}
+                    disabled={importConfirming}
+                  >
+                    Choose a different file
+                  </Button>
+                  <Button
+                    onClick={() => void handleImportConfirm()}
+                    loading={importConfirming}
+                    disabled={importConfirming || importRows.filter((r) => r.included).length === 0}
+                  >
+                    Import {importRows.filter((r) => r.included).length} row(s)
+                  </Button>
+                </div>
+              </div>
+            </>
           )}
         </DialogContent>
       </Dialog>
