@@ -93,6 +93,18 @@ export async function GET(request: Request) {
     const snap = await query.get();
     let staffList = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as LocationStaffMember);
 
+    // Resolve reportAtLocationName for each staff member
+    for (const s of staffList) {
+      if (s.reportAtLocationId) {
+        try {
+          const locSnap = await db.collection("locations").doc(locationId).collection("reportLocations").doc(s.reportAtLocationId).get();
+          if (locSnap.exists) {
+            (s as { reportAtLocationName?: string }).reportAtLocationName = (locSnap.data() as { name?: string })?.name || "";
+          }
+        } catch { /* ignore */ }
+      }
+    }
+
     // Apply allowedDeptIds filter if Dept Head without specific targetDeptId
     if (session.role === "LOCATION_DEPT_HEAD" && !targetDeptId && allowedDeptIds) {
       staffList = staffList.filter((s) => allowedDeptIds!.includes(s.departmentId));
@@ -146,14 +158,39 @@ export async function POST(request: Request) {
     const aadhaar = body.aadhaar?.trim();
     const address = body.address?.trim() || "";
     const payeeVoucher = body.payeeVoucher?.trim();
+    const payeeType = body.payeeType?.trim();
+    const accountNumber = body.accountNumber?.trim();
+    const branchName = body.branchName?.trim();
+    const ifscCode = body.ifscCode?.trim();
+    const pfEnabled = body.pfEnabled || false;
+    const esiEnabled = body.esiEnabled || false;
     const role = body.role?.trim();
     const departmentId = body.departmentId?.trim() || "";
+    const dateOfJoining = body.dateOfJoining?.trim();
+    const reportAtLocationId = body.reportAtLocationId?.trim() || undefined;
+    const leaveBalance = body.leaveBalance ?? 0;
+    const leaveTaken = body.leaveTaken ?? 0;
 
     if (!name || !contactNumber || !aadhaar || !payeeVoucher || !role) {
       return NextResponse.json(
         { error: "Missing required fields: Name, Contact Number, Aadhaar, Payee Type, Role" },
         { status: 400 }
       );
+    }
+    if (!dateOfJoining) {
+      return NextResponse.json({ error: "Date of Joining is required" }, { status: 400 });
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateOfJoining)) {
+      return NextResponse.json({ error: "Date of Joining must be YYYY-MM-DD format" }, { status: 400 });
+    }
+    if (payeeType === "Account Payee" && !accountNumber) {
+      return NextResponse.json({ error: "Account Number is required for Account Payee" }, { status: 400 });
+    }
+    if (accountNumber && !/^\d{9,18}$/.test(accountNumber)) {
+      return NextResponse.json({ error: "Account Number must be 9-18 digits" }, { status: 400 });
+    }
+    if (ifscCode && !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(ifscCode)) {
+      return NextResponse.json({ error: "Invalid IFSC code format" }, { status: 400 });
     }
 
     if (!/^\d{10}$/.test(contactNumber)) {
@@ -235,12 +272,21 @@ export async function POST(request: Request) {
       spouseGuardianPhone: body.spouseGuardianPhone?.trim() || "",
       spouseGuardianAadhaar: body.spouseGuardianAadhaar?.trim() || "",
       address,
-      payeeVoucher,
+       payeeVoucher,
+       payeeType: (body.payeeType?.trim() || undefined) as "Voucher Payee" | "Account Payee" | undefined,
+       accountNumber,
+      branchName,
+      ifscCode,
+      pfEnabled,
+      esiEnabled,
       role,
       shiftId: body.shiftId || "",
       shiftName,
       status: body.status || "ACTIVE",
-      dateOfJoining: body.dateOfJoining || new Date().toISOString().split("T")[0],
+      dateOfJoining: dateOfJoining!,
+      reportAtLocationId,
+      leaveBalance,
+      leaveTaken,
       createdAt: now,
       updatedAt: now,
     };

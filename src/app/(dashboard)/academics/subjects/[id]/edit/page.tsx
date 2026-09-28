@@ -176,14 +176,14 @@ export default function EditAcademicsSubjectPage() {
 
   if (loading) {
     return (
-      <div className="max-w-xl">
+      <div className="max-w-2xl">
         <PageHeader title="Edit Subject" description="Loading…" />
       </div>
     );
   }
 
   return (
-    <div className="max-w-xl">
+    <div className="max-w-2xl">
       <PageHeader
         title="Edit Subject"
         description="Update this subject's details"
@@ -195,20 +195,24 @@ export default function EditAcademicsSubjectPage() {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-5">
+            <p className="text-xs text-muted-foreground" id="form-required-note">Fields marked <abbr title="required" className="no-underline font-semibold text-foreground">*</abbr> are required.</p>
+
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label>S.No. *</Label>
+                <Label htmlFor="sno">S.No. *</Label>
                 <Input
+                  id="sno"
                   type="number"
                   min={0}
                   value={form.serialNumber}
                   onChange={(e) => setF({ serialNumber: stripLeadingZeros(e.target.value) })}
+                  aria-required="true"
                 />
               </div>
               <div className="space-y-2">
-                <Label>Category *</Label>
+                <Label htmlFor="category">Category *</Label>
                 <Select value={form.category} onValueChange={(v) => setF({ category: v as SubjectCategory })}>
-                  <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
+                  <SelectTrigger id="category" aria-required="true"><SelectValue placeholder="Select category" /></SelectTrigger>
                   <SelectContent>
                     {(Object.entries(SUBJECT_CATEGORY_LABELS) as [SubjectCategory, string][]).map(([value, label]) => (
                       <SelectItem key={value} value={value}>{label}</SelectItem>
@@ -220,14 +224,16 @@ export default function EditAcademicsSubjectPage() {
                     value={form.customCategory}
                     onChange={(e) => setF({ customCategory: e.target.value })}
                     placeholder="Enter category name"
+                    aria-label="Custom category name"
+                    aria-required="true"
                   />
                 )}
               </div>
             </div>
 
             <div className="space-y-2">
-              <Label>Name of the Subject *</Label>
-              <Input value={form.name} onChange={(e) => setF({ name: e.target.value })} placeholder="e.g. Data Structures" />
+              <Label htmlFor="subject-name">Name of the Subject *</Label>
+              <Input id="subject-name" value={form.name} onChange={(e) => setF({ name: e.target.value })} placeholder="e.g. Data Structures" aria-required="true" />
             </div>
 
             {regulation && (
@@ -242,18 +248,20 @@ export default function EditAcademicsSubjectPage() {
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label>Code *</Label>
+                <Label htmlFor="subject-code">Code *</Label>
                 <Input
+                  id="subject-code"
                   value={form.code}
                   onChange={(e) => setF({ code: e.target.value.toUpperCase() })}
                   placeholder="e.g. CS201"
                   className="uppercase"
+                  aria-required="true"
                 />
               </div>
               <div className="space-y-2">
-                <Label>Type</Label>
+                <Label htmlFor="subject-type">Type</Label>
                 <Select value={form.type} onValueChange={(v) => setF({ type: v as SubjectType })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger id="subject-type"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {(Object.entries(SUBJECT_TYPE_LABELS) as [SubjectType, string][]).map(([value, label]) => (
                       <SelectItem key={value} value={value}>{label}</SelectItem>
@@ -264,53 +272,72 @@ export default function EditAcademicsSubjectPage() {
             </div>
 
             <div className="space-y-2">
-              <Label>Short Code</Label>
+              <Label htmlFor="short-code">Short Code</Label>
               <Input
+                id="short-code"
                 value={form.shortCode}
                 onChange={(e) => setF({ shortCode: e.target.value.toUpperCase() })}
                 placeholder="e.g. DS"
                 maxLength={8}
                 className="uppercase"
+                aria-describedby="short-code-desc"
               />
-              <p className="text-xs text-muted-foreground">
+              <p id="short-code-desc" className="text-xs text-muted-foreground">
                 A compact mnemonic shown in the timetable and other tight spaces (e.g. &quot;CHE&quot; for Chemistry) - optional, falls back to Code when blank.
               </p>
             </div>
 
             <div className="space-y-2">
-              <Label>L / T / P *</Label>
-              <div className="grid grid-cols-3 gap-4">
-                <Input
-                  type="number"
-                  min={0}
-                  placeholder="L"
-                  aria-label="Lecture hours"
-                  value={form.lectureHours}
-                  onChange={(e) => setF({ lectureHours: stripLeadingZeros(e.target.value) })}
-                />
-                <Input
-                  type="number"
-                  min={0}
-                  placeholder="T"
-                  aria-label="Tutorial hours"
-                  value={form.tutorialHours}
-                  onChange={(e) => setF({ tutorialHours: stripLeadingZeros(e.target.value) })}
-                />
-                <Input
-                  type="number"
-                  min={0}
-                  placeholder="P"
-                  aria-label="Practical hours"
-                  value={form.practicalHours}
-                  onChange={(e) => setF({ practicalHours: stripLeadingZeros(e.target.value) })}
-                />
+              <Label>Contact Hours (L / T / P) *</Label>
+              <p className="text-xs text-muted-foreground -mt-1" id="ltp-description">Lecture / Tutorial / Practical hours per week</p>
+              <div className="grid grid-cols-3 gap-4" aria-describedby="ltp-description" role="group" aria-label="Contact hours">
+                <div className="space-y-1.5">
+                  <Label htmlFor="lecture-hours" className="text-xs text-muted-foreground">Lecture (L)</Label>
+                  <Input
+                    id="lecture-hours"
+                    type="number"
+                    min={0}
+                    placeholder="0"
+                    aria-label="Lecture hours"
+                    aria-required="true"
+                    value={form.lectureHours}
+                    onChange={(e) => setF({ lectureHours: stripLeadingZeros(e.target.value) })}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="tutorial-hours" className="text-xs text-muted-foreground">Tutorial (T)</Label>
+                  <Input
+                    id="tutorial-hours"
+                    type="number"
+                    min={0}
+                    placeholder="0"
+                    aria-label="Tutorial hours"
+                    aria-required="true"
+                    value={form.tutorialHours}
+                    onChange={(e) => setF({ tutorialHours: stripLeadingZeros(e.target.value) })}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="practical-hours" className="text-xs text-muted-foreground">Practical (P)</Label>
+                  <Input
+                    id="practical-hours"
+                    type="number"
+                    min={0}
+                    placeholder="0"
+                    aria-label="Practical hours"
+                    aria-required="true"
+                    value={form.practicalHours}
+                    onChange={(e) => setF({ practicalHours: stripLeadingZeros(e.target.value) })}
+                  />
+                </div>
               </div>
             </div>
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label>Hours / Week</Label>
+                <Label htmlFor="hours-per-week">Hours / Week</Label>
                 <Input
+                  id="hours-per-week"
                   type="number"
                   min={0}
                   value={form.hoursPerWeek}
@@ -318,8 +345,9 @@ export default function EditAcademicsSubjectPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>Hours / Semester</Label>
+                <Label htmlFor="hours-per-semester">Hours / Semester</Label>
                 <Input
+                  id="hours-per-semester"
                   type="number"
                   min={0}
                   value={form.totalHoursPerSemester}
@@ -330,8 +358,9 @@ export default function EditAcademicsSubjectPage() {
             </div>
 
             <div className="space-y-2">
-              <Label>Credits</Label>
+              <Label htmlFor="credits">Credits</Label>
               <Input
+                id="credits"
                 type="number"
                 min={0}
                 step="any"

@@ -7,6 +7,7 @@ import { createFirebaseUser } from "@/lib/firebase/authRest";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
 import { getHodDepartmentScope, canHodManageFacultyDepartment } from "@/lib/departments/scope";
 import { SUPPORTING_STAFF_ROLE_CATEGORY, canRoleCreateSupportingStaff, supportingStaffCategoryLabel } from "@/lib/supportingStaff/roleCategory";
+import { unitLabelForHeadRole } from "@/lib/attendance/collegeStaffUnits";
 import { hasSupportingStaffSplit } from "@/lib/designations/config";
 import { resolveDesignation } from "@/lib/designations/validate";
 import { normalizeSupportingStaffProfile } from "@/lib/faculty/academicProfileCompat";
@@ -24,7 +25,7 @@ function designationLabel(designation: SupportingStaffDesignation): string {
 
 export async function GET(request: Request) {
   try {
-    const session = await requireCollegeMember("SUPER_ADMIN", "COLLEGE_OFFICE", "PRINCIPAL", "VICE_PRINCIPAL", "HOD");
+    const session = await requireCollegeMember("SUPER_ADMIN", "COLLEGE_OFFICE", "PRINCIPAL", "VICE_PRINCIPAL", "HOD", "LIBRARY");
     const { searchParams } = new URL(request.url);
     const statusFilter = searchParams.get("status");
     const categoryFilter = SUPPORTING_STAFF_ROLE_CATEGORY[session.role] ?? searchParams.get("staffCategory");
@@ -67,6 +68,13 @@ export async function GET(request: Request) {
       }
     }
 
+    // Library only ever sees its own unit's staff - a single fixed name,
+    // never a client-supplied one, mirroring HOD's own-department scoping
+    // above but with no dynamic scope lookup needed (Library is one unit).
+    if (session.role === "LIBRARY") {
+      query = query.where("department", "==", unitLabelForHeadRole("LIBRARY"));
+    }
+
     const snap = await query.get();
     const staff = snap.docs
       .map((d) => ({ id: d.id, ...migrateSupportingStaffDoc(d.data()) }))
@@ -88,7 +96,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember("COLLEGE_OFFICE", "HOD", "PRINCIPAL", "VICE_PRINCIPAL");
+    const session = await requireCollegeMember("COLLEGE_OFFICE", "HOD", "PRINCIPAL", "VICE_PRINCIPAL", "LIBRARY");
 
     const body = (await request.json()) as {
       employeeId: string;
@@ -188,6 +196,12 @@ export async function POST(request: Request) {
       if (!department) {
         return NextResponse.json({ error: "Department is required for Technical staff" }, { status: 400 });
       }
+    }
+
+    // Library always creates its own unit's staff - fixed, never the
+    // client-supplied `body.department` (which is ignored here entirely).
+    if (session.role === "LIBRARY") {
+      department = unitLabelForHeadRole("LIBRARY") ?? "Library";
     }
 
     const existing = await db

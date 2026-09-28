@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowRight, ArrowLeft as ArrowLeftIcon, Search, Layers, CheckSquare } from "lucide-react";
+import { ArrowRight, ArrowLeft as ArrowLeftIcon, Search, Layers, CheckSquare, BookOpen, GraduationCap, Info } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -35,7 +35,7 @@ function ordinalYear(year: number) {
 //
 // Picker order: Regulation -> Course -> Department -> Year -> Semester.
 // Regulation and Course are picked at the CATALOG level first (mirrors
-// Master Subjects' own Regulation-first picker) - the Master Collection they
+// Master Subjects' own Regulation-first picker) - the Available Subjects they
 // resolve is genuinely department-independent, so which department eventually
 // receives the "copy to semester" doesn't matter until that step. Only once
 // Department is chosen does this page need one department's own Course doc
@@ -466,29 +466,45 @@ export default function AssignToSemesterPage() {
       ) : (
         <>
           <Card>
-            <CardContent className="p-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            <CardContent className="p-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
               <div className="space-y-1.5">
-                <Label>Regulation</Label>
+                <Label htmlFor="assign-regulation" className="flex items-center gap-1.5">
+                  <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-primary text-[10px] font-bold shrink-0" aria-hidden="true">1</span>
+                  Regulation
+                </Label>
                 <Select value={selectedRegulation} onValueChange={selectRegulation}>
-                  <SelectTrigger><SelectValue placeholder="Select regulation" /></SelectTrigger>
+                  <SelectTrigger id="assign-regulation" aria-label="Select regulation">
+                    <SelectValue placeholder="Select regulation" />
+                  </SelectTrigger>
                   <SelectContent>
                     {topLevelRegulationOptions.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <Label>Course</Label>
+                <Label htmlFor="assign-course" className="flex items-center gap-1.5">
+                  <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-primary text-[10px] font-bold shrink-0" aria-hidden="true">2</span>
+                  Course
+                </Label>
                 <Select value={selectedCatalogId} onValueChange={selectCatalog} disabled={!selectedRegulation}>
-                  <SelectTrigger><SelectValue placeholder="Select course" /></SelectTrigger>
+                  <SelectTrigger id="assign-course" aria-label="Select course">
+                    <SelectValue placeholder={!selectedRegulation ? "Select a regulation first" : "Select course"} />
+                  </SelectTrigger>
                   <SelectContent>
                     {catalogOptions.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
+                {!selectedRegulation && <p className="text-[11px] text-muted-foreground">Select a regulation first.</p>}
               </div>
               <div className="space-y-1.5">
-                <Label>Department</Label>
+                <Label htmlFor="assign-department" className="flex items-center gap-1.5">
+                  <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-primary text-[10px] font-bold shrink-0" aria-hidden="true">3</span>
+                  Department
+                </Label>
                 <Select value={selectedDepartmentId} onValueChange={selectDepartment} disabled={!selectedCatalogId}>
-                  <SelectTrigger><SelectValue placeholder="Select department" /></SelectTrigger>
+                  <SelectTrigger id="assign-department" aria-label="Select department">
+                    <SelectValue placeholder={!selectedCatalogId ? "Select a course first" : "Select department"} />
+                  </SelectTrigger>
                   <SelectContent>
                     {departments.flatMap((d) => [
                       <SelectItem key={d.id} value={d.id}>
@@ -502,18 +518,30 @@ export default function AssignToSemesterPage() {
                     ])}
                   </SelectContent>
                 </Select>
+                {!selectedCatalogId && <p className="text-[11px] text-muted-foreground">Select a course first.</p>}
               </div>
               <div className="space-y-1.5">
-                <Label>Year</Label>
+                <Label htmlFor="assign-year" className="flex items-center gap-1.5">
+                  <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-primary text-[10px] font-bold shrink-0" aria-hidden="true">4</span>
+                  Year
+                </Label>
                 <Select value={selectedYear} onValueChange={selectYear} disabled={!selectedCourse || isLoadingCourses}>
-                  <SelectTrigger><SelectValue placeholder={isLoadingCourses ? "Loading…" : "Select year"} /></SelectTrigger>
+                  <SelectTrigger id="assign-year" aria-label="Select year">
+                    <SelectValue placeholder={isLoadingCourses ? "Loading…" : !selectedDepartmentId ? "Select a department first" : "Select year"} />
+                  </SelectTrigger>
                   <SelectContent>
                     {yearOptions.map((y) => <SelectItem key={y} value={String(y)}>{ordinalYear(y)}</SelectItem>)}
                   </SelectContent>
                 </Select>
+                {!selectedCourse && selectedDepartmentId && !isLoadingCourses && (
+                  <p className="text-[11px] text-amber-600">This department doesn&apos;t teach this course.</p>
+                )}
               </div>
               <div className="space-y-1.5">
-                <Label>Semester</Label>
+                <Label htmlFor="assign-semester" className="flex items-center gap-1.5">
+                  <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-primary text-[10px] font-bold shrink-0" aria-hidden="true">5</span>
+                  Semester
+                </Label>
                 {selectedYear && semesterOptions.length === 0 ? (
                   <div className="flex h-9 items-center rounded-md border bg-muted/30 px-3">
                     <span className="text-xs text-muted-foreground">No semesters configured for this year</span>
@@ -524,12 +552,15 @@ export default function AssignToSemesterPage() {
                     onValueChange={(v) => setSelectedSemester(Number(v))}
                     disabled={!selectedYear || semesterOptions.length === 0}
                   >
-                    <SelectTrigger><SelectValue placeholder="Select semester" /></SelectTrigger>
+                    <SelectTrigger id="assign-semester" aria-label="Select semester">
+                      <SelectValue placeholder={!selectedYear ? "Select a year first" : "Select semester"} />
+                    </SelectTrigger>
                     <SelectContent>
                       {semesterOptions.map((s) => <SelectItem key={s} value={String(s)}>Semester {s}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 )}
+                {!selectedYear && <p className="text-[11px] text-muted-foreground">Select a year first.</p>}
               </div>
             </CardContent>
           </Card>
@@ -569,8 +600,8 @@ export default function AssignToSemesterPage() {
                   <CardHeader className="pb-3 space-y-2">
                     <div className="flex items-center justify-between flex-wrap gap-2">
                       <CardTitle className="text-base flex items-center gap-2">
-                        <Layers className="h-4 w-4" />
-                        Master Collection
+                        <Layers className="h-4 w-4" aria-hidden="true" />
+                        Available Subjects
                       </CardTitle>
                       {selectedSubjectIds.length > 0 && (
                         <Button
@@ -579,14 +610,14 @@ export default function AssignToSemesterPage() {
                           loading={isBulkAssigning}
                           onClick={() => void handleBulkAssign()}
                         >
-                          <CheckSquare className="h-3.5 w-3.5 mr-1.5" />
+                          <CheckSquare className="h-3.5 w-3.5 mr-1.5" aria-hidden="true" />
                           Assign {selectedSubjectIds.length} to Sem {effectiveSemester}
                         </Button>
                       )}
                     </div>
                     <div className="flex items-center gap-2">
                       <div className="relative flex-1">
-                        <Search className="h-3.5 w-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                        <Search className="h-3.5 w-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
                         <Input
                           value={searchText}
                           onChange={(e) => setSearchText(e.target.value)}
@@ -617,7 +648,7 @@ export default function AssignToSemesterPage() {
                   <CardContent>
                     {masterPool.length === 0 ? (
                       <p className="text-sm text-muted-foreground text-center py-6">
-                        Nothing left to add - every master subject already has an instance in Semester {effectiveSemester} for {selectedDepartment?.name ?? ""}.
+                        All subjects are already assigned to Semester {effectiveSemester} for {selectedDepartment?.name ?? ""}.
                       </p>
                      ) : paginatedMasterPool.length === 0 ? (
                        <p className="text-sm text-muted-foreground text-center py-6">
@@ -625,6 +656,12 @@ export default function AssignToSemesterPage() {
                        </p>
                      ) : (
                        <>
+                         {selectedSubjectIds.length === 0 && paginatedMasterPool.length > 0 && (
+                           <div className="flex items-center gap-1.5 mb-3 text-xs text-muted-foreground">
+                             <Info className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                             Check subjects to select them for bulk assignment to Semester {effectiveSemester}.
+                           </div>
+                         )}
                          <div className="space-y-2">
                            {paginatedMasterPool.map((s) => {
                              const isChecked = selectedSubjectIds.includes(s.id);
@@ -684,7 +721,7 @@ export default function AssignToSemesterPage() {
                                    loading={savingId === s.id}
                                    onClick={() => void setSubjectSemester(s, effectiveSemester)}
                                  >
-                                   Add<ArrowRight className="h-3.5 w-3.5 ml-1.5" />
+                                   Add<ArrowRight className="h-3.5 w-3.5 ml-1.5" aria-hidden="true" />
                                  </Button>
                                </div>
                              );
@@ -707,14 +744,15 @@ export default function AssignToSemesterPage() {
                    <CardHeader className="pb-3">
                      <CardTitle className="text-base">
                        {isSubDept
-                         ? `Semester ${effectiveSemester} Instances - ${selectedDepartment?.name} (sub-department)`
-                         : `Semester ${effectiveSemester} Instances - ${selectedDepartment?.name ?? ""}`}
+                         ? `Semester ${effectiveSemester} — ${selectedDepartment?.name} (sub-department)`
+                         : `Semester ${effectiveSemester} — ${selectedDepartment?.name ?? ""}`}
                      </CardTitle>
+                     <p className="text-xs text-muted-foreground">Subjects currently mapped to this semester for this department.</p>
                    </CardHeader>
                    <CardContent>
                      {paginatedAssignments.length === 0 ? (
                       <p className="text-sm text-muted-foreground text-center py-6">
-                        No subjects assigned to this semester yet. Select from Master Collection and click Add or Bulk Assign.
+                        No subjects assigned to this semester yet. Select subjects from the left panel and click Add, or use bulk assign.
                       </p>
                     ) : (
                       <>
@@ -757,7 +795,7 @@ export default function AssignToSemesterPage() {
                                 loading={savingId === a.subjectId}
                                 onClick={() => void setSubjectSemester(subject ?? { id: a.subjectId } as Subject, null, a.semester, a.departmentId)}
                               >
-                                <ArrowLeftIcon className="h-3.5 w-3.5 mr-1.5" />Remove
+                                <ArrowLeftIcon className="h-3.5 w-3.5 mr-1.5" aria-hidden="true" />Remove
                               </Button>
                             </div>
                           );

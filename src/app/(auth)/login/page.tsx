@@ -2,13 +2,10 @@
 
 import { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { signInWithEmailAndPassword } from "firebase/auth";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
+import { signInWithEmailAndPassword, type UserCredential } from "firebase/auth";
 import { Eye, EyeOff } from "lucide-react";
 import { auth } from "@/lib/firebase/client";
 import { getUserById } from "@/lib/firestore/users";
-import { loginSchema, type LoginFormData } from "@/lib/validations";
 import { ROLE_DASHBOARD_PATHS, LOCATION_SCOPED_ROLES, ROLE_SCOPE } from "@/types";
 import type { FMSUser, UserRole } from "@/types";
 import { useAuthStore } from "@/store/authStore";
@@ -18,160 +15,220 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { toast } from "@/hooks/useToast";
 
+import { studentLoginEmail } from "@/lib/students/loginDefaults";
+
 const FIREBASE_ERROR_MESSAGES: Record<string, string> = {
-  "auth/invalid-credential": "Invalid email or password. Please try again.",
+  "auth/invalid-credential": "Invalid username or password. Please try again.",
   "auth/user-disabled": "This account has been disabled. Contact your administrator.",
   "auth/too-many-requests": "Too many failed attempts. Please try again later.",
   "auth/network-request-failed": "Network error. Please check your connection.",
-  "auth/user-not-found": "No account found with this email.",
+  "auth/user-not-found": "No account found with this username or email.",
   "auth/wrong-password": "Incorrect password.",
 };
 
+// Shared continuation once Firebase Auth accepts the credential - resolving
+// role/collegeId/profile and redirecting to the right dashboard is identical
+// whether the caller signed in as staff (email) or a student (resolved
+// synthetic email).
+async function completeLogin(
+  credential: UserCredential,
+  redirect: string | null,
+  router: ReturnType<typeof useRouter>,
+  setUser: (user: FMSUser | null) => void,
+  setFirebaseToken: (token: string | null) => void
+) {
+  const token = await credential.user.getIdToken();
+  setFirebaseToken(token);
+
+  // Set session cookie - the server resolves role/collegeId from JWT claims
+  // or from the Firestore systemUsers collection (for users created without claims)
+  const sessionRes = await fetch("/api/auth/session", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token }),
+  });
+  if (!sessionRes.ok) {
+    const errBody = (await sessionRes.json()) as { error?: string; detail?: string };
+    throw new Error(`Session error: ${errBody.detail ?? errBody.error ?? sessionRes.status}`);
+  }
+
+  const sessionData = (await sessionRes.json()) as {
+    ok: boolean;
+    role?: string;
+    collegeId?: string;
+    locationId?: string;
+    name?: string;
+    email?: string;
+    profile?: FMSUser;
+    refreshToken?: boolean;
+  };
+
+  // Server just backfilled custom claims - force a token refresh so the new
+  // claims are included in the client's Firebase Auth token. This makes
+  // client-side Firestore security rules work on first login.
+  if (sessionData.refreshToken) {
+    try {
+      await credential.user.getIdToken(true);
+    } catch {
+      /* non-fatal */
+    }
+  }
+  const role = sessionData.role ?? "";
+  const collegeId = sessionData.collegeId ?? "";
+  const locationId = sessionData.locationId ?? "";
+
+  if (!role || role === "UNKNOWN") {
+    throw new Error("Account not configured. Contact your administrator.");
+  }
+
+  const LOCATION_ROLES = LOCATION_SCOPED_ROLES as string[];
+
+  if (role === "SUPER_ADMIN") {
+    setUser({
+      uid: credential.user.uid,
+      collegeId: "",
+      name: sessionData.name ?? credential.user.displayName ?? "Admin",
+      email: sessionData.email ?? credential.user.email ?? "",
+      role: "SUPER_ADMIN",
+      isActive: true,
+      createdAt: {} as never,
+    });
+    router.push(redirect ?? "/super-admin");
+  } else if (ROLE_SCOPE[role as UserRole] === "GLOBAL") {
+    // MANAGEMENT, FINANCE, PURCHASE_DEPT - global roles with no college/location
+    // scope. Their profile lives only in systemUsers; act on colleges via an
+    // explicit college context chosen inside the dashboard.
+    setUser({
+      uid: credential.user.uid,
+      collegeId: "",
+      name: sessionData.name ?? credential.user.displayName ?? "User",
+      email: sessionData.email ?? credential.user.email ?? "",
+      role: role as UserRole,
+      isActive: true,
+      createdAt: {} as never,
+    });
+    router.push(redirect ?? ROLE_DASHBOARD_PATHS[role as UserRole] ?? "/login");
+  } else if (LOCATION_ROLES.includes(role) && locationId) {
+    // Location-scoped role - profile comes from locations/{id}/locationUsers/{uid}
+    const profile: FMSUser = sessionData.profile ?? {
+      uid: credential.user.uid,
+      collegeId: "",
+      locationId,
+      name: sessionData.name ?? credential.user.displayName ?? "User",
+      email: sessionData.email ?? credential.user.email ?? "",
+      role: role as UserRole,
+      isActive: true,
+      createdAt: {} as never,
+    };
+    setUser(profile);
+    const dashboardPath = ROLE_DASHBOARD_PATHS[profile.role] ?? "/administration";
+    router.push(redirect ?? dashboardPath);
+  } else if (collegeId) {
+    // Server already fetched the profile via Admin SDK (bypasses Firestore rules).
+    // Fall back to client-side fetch for users with proper JWT custom claims.
+    let profile: FMSUser | null = sessionData.profile ?? null;
+    if (!profile) {
+      try {
+        profile = await getUserById(collegeId, credential.user.uid);
+      } catch {
+        /* blocked by Firestore rules - use session data fallback */
+      }
+    }
+    if (!profile) {
+      profile = {
+        uid: credential.user.uid,
+        collegeId,
+        locationId,
+        name: sessionData.name ?? credential.user.displayName ?? "User",
+        email: sessionData.email ?? credential.user.email ?? "",
+        role: role as UserRole,
+        isActive: true,
+        createdAt: {} as never,
+      };
+    }
+    setUser(profile);
+    const dashboardPath = ROLE_DASHBOARD_PATHS[profile.role] ?? "/hod";
+    router.push(redirect ?? dashboardPath);
+  } else {
+    throw new Error("Account not configured. Contact your administrator.");
+  }
+}
+
+function loginFailureMessage(err: unknown): string {
+  const code = (err as { code?: string }).code ?? "";
+  return (
+    FIREBASE_ERROR_MESSAGES[code] ?? (err instanceof Error ? err.message : "Sign in failed. Please try again.")
+  );
+}
+
+// Single, plain-looking form for both staff and students - no mode switch,
+// no college picker, and nothing on screen names "Roll Number" specifically.
+// The identifier field auto-routes purely on its own shape: containing "@"
+// signs in directly as a staff email; anything else is resolved server-side
+// (across every college - see resolve-student-login/route.ts) to a student's
+// real (synthetic) sign-in email + the shared default password (see
+// lib/students/loginDefaults.ts).
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirect = searchParams.get("redirect");
   const { setUser, setFirebaseToken } = useAuthStore();
+
+  const [identifier, setIdentifier] = useState("");
+  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const {
-    register,
-    handleSubmit,
-    formState: { errors, isSubmitting },
-  } = useForm<LoginFormData>({
-    resolver: zodResolver(loginSchema),
-  });
+  const isEmail = identifier.includes("@");
 
-  const onSubmit = async (data: LoginFormData) => {
-    try {
-      const credential = await signInWithEmailAndPassword(
-        auth,
-        data.email,
-        data.password
-      );
-
-      const token = await credential.user.getIdToken();
-      setFirebaseToken(token);
-
-      // Set session cookie - the server resolves role/collegeId from JWT claims
-      // or from the Firestore systemUsers collection (for users created without claims)
-      const sessionRes = await fetch("/api/auth/session", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token }),
-      });
-      if (!sessionRes.ok) {
-        const errBody = await sessionRes.json() as { error?: string; detail?: string };
-        throw new Error(`Session error: ${errBody.detail ?? errBody.error ?? sessionRes.status}`);
-      }
-
-      const sessionData = await sessionRes.json() as {
-        ok: boolean;
-        role?: string;
-        collegeId?: string;
-        locationId?: string;
-        name?: string;
-        email?: string;
-        profile?: FMSUser;
-        refreshToken?: boolean;
-      };
-
-      // Server just backfilled custom claims - force a token refresh so the new
-      // claims are included in the client's Firebase Auth token. This makes
-      // client-side Firestore security rules work on first login.
-      if (sessionData.refreshToken) {
-        try { await credential.user.getIdToken(true); } catch { /* non-fatal */ }
-      }
-      const role = sessionData.role ?? "";
-      const collegeId = sessionData.collegeId ?? "";
-      const locationId = sessionData.locationId ?? "";
-
-      if (!role || role === "UNKNOWN") {
-        throw new Error("Account not configured. Contact your administrator.");
-      }
-
-      const LOCATION_ROLES = LOCATION_SCOPED_ROLES as string[];
-
-      if (role === "SUPER_ADMIN") {
-        setUser({
-          uid: credential.user.uid,
-          collegeId: "",
-          name: sessionData.name ?? credential.user.displayName ?? "Admin",
-          email: sessionData.email ?? credential.user.email ?? "",
-          role: "SUPER_ADMIN",
-          isActive: true,
-          createdAt: {} as never,
-        });
-        router.push(redirect ?? "/super-admin");
-      } else if (ROLE_SCOPE[role as UserRole] === "GLOBAL") {
-        // MANAGEMENT, FINANCE, PURCHASE_DEPT - global roles with no college/location
-        // scope. Their profile lives only in systemUsers; act on colleges via an
-        // explicit college context chosen inside the dashboard.
-        setUser({
-          uid: credential.user.uid,
-          collegeId: "",
-          name: sessionData.name ?? credential.user.displayName ?? "User",
-          email: sessionData.email ?? credential.user.email ?? "",
-          role: role as UserRole,
-          isActive: true,
-          createdAt: {} as never,
-        });
-        router.push(redirect ?? ROLE_DASHBOARD_PATHS[role as UserRole] ?? "/login");
-      } else if (LOCATION_ROLES.includes(role) && locationId) {
-        // Location-scoped role - profile comes from locations/{id}/locationUsers/{uid}
-        const profile: FMSUser = sessionData.profile ?? {
-          uid: credential.user.uid,
-          collegeId: "",
-          locationId,
-          name: sessionData.name ?? credential.user.displayName ?? "User",
-          email: sessionData.email ?? credential.user.email ?? "",
-          role: role as UserRole,
-          isActive: true,
-          createdAt: {} as never,
-        };
-        setUser(profile);
-        const dashboardPath = ROLE_DASHBOARD_PATHS[profile.role] ?? "/administration";
-        router.push(redirect ?? dashboardPath);
-      } else if (collegeId) {
-        // Server already fetched the profile via Admin SDK (bypasses Firestore rules).
-        // Fall back to client-side fetch for users with proper JWT custom claims.
-        let profile: FMSUser | null = sessionData.profile ?? null;
-        if (!profile) {
-          try {
-            profile = await getUserById(collegeId, credential.user.uid);
-          } catch { /* blocked by Firestore rules - use session data fallback */ }
-        }
-        if (!profile) {
-          profile = {
-            uid: credential.user.uid,
-            collegeId,
-            locationId,
-            name: sessionData.name ?? credential.user.displayName ?? "User",
-            email: sessionData.email ?? credential.user.email ?? "",
-            role: role as UserRole,
-            isActive: true,
-            createdAt: {} as never,
-          };
-        }
-        setUser(profile);
-        const dashboardPath = ROLE_DASHBOARD_PATHS[profile.role] ?? "/hod";
-        router.push(redirect ?? dashboardPath);
-      } else {
-        throw new Error("Account not configured. Contact your administrator.");
-      }
-    } catch (err: unknown) {
-      const code = (err as { code?: string }).code ?? "";
-      const message =
-        FIREBASE_ERROR_MESSAGES[code] ??
-        (err instanceof Error ? err.message : "Sign in failed. Please try again.");
-
-      toast({
-        variant: "destructive",
-        title: "Sign in failed",
-        description: message,
-      });
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!identifier.trim() || !password) {
+      toast({ variant: "destructive", title: "Sign in failed", description: "Both fields are required." });
+      return;
     }
-  };
+
+    setIsSubmitting(true);
+    try {
+      let credential: UserCredential;
+
+      if (isEmail) {
+        // Staff/Admin direct email sign-in
+        credential = await signInWithEmailAndPassword(auth, identifier.trim(), password);
+      } else {
+        // Student Roll Number sign-in:
+        // 1. Try direct deterministic Auth email: <rollNumber>@students.internal (0 database reads!)
+        const directEmail = studentLoginEmail(identifier.trim());
+        try {
+          credential = await signInWithEmailAndPassword(auth, directEmail, password);
+        } catch (directErr: unknown) {
+          // 2. Fallback: resolve legacy accounts through backend resolver
+          const errCode = (directErr as { code?: string })?.code;
+          if (errCode === "auth/user-not-found" || errCode === "auth/invalid-credential") {
+            const resolveRes = await fetch("/api/auth/resolve-student-login", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ rollNumber: identifier.trim() }),
+            });
+            const resolveBody = (await resolveRes.json()) as { loginEmail?: string; error?: string };
+            if (resolveRes.ok && resolveBody.loginEmail) {
+              credential = await signInWithEmailAndPassword(auth, resolveBody.loginEmail, password);
+            } else {
+              throw directErr;
+            }
+          } else {
+            throw directErr;
+          }
+        }
+      }
+
+      await completeLogin(credential, redirect, router, setUser, setFirebaseToken);
+    } catch (err: unknown) {
+      toast({ variant: "destructive", title: "Sign in failed", description: loginFailureMessage(err) });
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
@@ -182,34 +239,29 @@ function LoginForm() {
             <img src="https://res.cloudinary.com/dl88qtudz/image/upload/v1781675822/vishnulogo_r2jsjl.png" alt="Vishnu Logo" className="h-20 w-20 object-contain" />
           </div>
           <h1 className="text-2xl font-bold text-foreground">Vishnu People</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Sign in to continue to your dashboard
-          </p>
+          <p className="text-sm text-muted-foreground mt-1">Sign in to continue to your dashboard</p>
         </div>
 
         {/* Login Card */}
         <Card className="shadow-xl border-0">
           <CardHeader className="space-y-1 pb-4">
             <CardTitle className="text-xl">Welcome back</CardTitle>
-            <CardDescription>Enter your credentials to access Vishnu People</CardDescription>
+            <CardDescription>Enter your email or roll number to sign in</CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
+            <form onSubmit={onSubmit} className="space-y-4" noValidate>
               <div className="space-y-2">
-                <Label htmlFor="email">Email address</Label>
+                <Label htmlFor="identifier">Username</Label>
                 <Input
-                  id="email"
-                  type="email"
-                  placeholder="you@college.edu"
-                  autoComplete="email"
+                  id="identifier"
+                  type="text"
+                  placeholder="Email or Roll Number"
+                  autoComplete="username"
                   autoFocus
-                  {...register("email")}
-                  aria-invalid={!!errors.email}
+                  value={identifier}
+                  onChange={(e) => setIdentifier(e.target.value)}
                   suppressHydrationWarning
                 />
-                {errors.email && (
-                  <p className="text-sm text-destructive">{errors.email.message}</p>
-                )}
               </div>
 
               <div className="space-y-2">
@@ -220,8 +272,8 @@ function LoginForm() {
                     type={showPassword ? "text" : "password"}
                     placeholder="Enter your password"
                     autoComplete="current-password"
-                    {...register("password")}
-                    aria-invalid={!!errors.password}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
                     className="pr-10"
                     suppressHydrationWarning
                   />
@@ -232,34 +284,19 @@ function LoginForm() {
                     aria-label={showPassword ? "Hide password" : "Show password"}
                     suppressHydrationWarning
                   >
-                    {showPassword ? (
-                      <EyeOff className="h-4 w-4" />
-                    ) : (
-                      <Eye className="h-4 w-4" />
-                    )}
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
                 </div>
-                {errors.password && (
-                  <p className="text-sm text-destructive">{errors.password.message}</p>
-                )}
               </div>
 
-              <Button
-                type="submit"
-                className="w-full"
-                size="lg"
-                loading={isSubmitting}
-                suppressHydrationWarning
-              >
+              <Button type="submit" className="w-full" size="lg" loading={isSubmitting} suppressHydrationWarning>
                 {isSubmitting ? "Signing in..." : "Sign in"}
               </Button>
             </form>
           </CardContent>
         </Card>
 
-        <p className="text-center text-xs text-muted-foreground">
-          Having trouble signing in? Contact your college administrator.
-        </p>
+        <p className="text-center text-xs text-muted-foreground">Having trouble signing in? Contact your college administrator.</p>
       </div>
     </div>
   );
@@ -267,11 +304,13 @@ function LoginForm() {
 
 export default function LoginPage() {
   return (
-    <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="h-8 w-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-      </div>
-    }>
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="h-8 w-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+        </div>
+      }
+    >
       <LoginForm />
     </Suspense>
   );

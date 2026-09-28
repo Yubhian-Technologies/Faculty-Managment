@@ -29,7 +29,16 @@ function validateRange(startDate?: string, endDate?: string): { error: string } 
 // from the session (Principal/VP) or the query param (Super Admin).
 export async function GET(request: Request) {
   try {
-    const session = await requireCollegeContext(request, "SUPER_ADMIN", "PRINCIPAL", "VICE_PRINCIPAL", "HOD", "COLLEGE_OFFICE");
+    const session = await requireCollegeContext(
+      request,
+      "SUPER_ADMIN",
+      "PRINCIPAL",
+      "VICE_PRINCIPAL",
+      "HOD",
+      "COLLEGE_OFFICE",
+      "ACADEMICS",
+      "EXAM_CELL"
+    );
     const db = getAdminDb();
 
     const snap = await db
