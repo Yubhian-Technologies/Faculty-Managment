@@ -68,7 +68,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     );
     const body = (await request.json()) as {
       action?: "APPROVE" | "REJECT" | "CANCEL" | "PROPOSE_COVERAGE" | "REVISE_ADJUSTMENT"
-        | "SUBMIT_OD_PROOF" | "VERIFY_OD_PROOF" | "REJECT_OD_PROOF";
+        | "SUBMIT_OD_PROOF" | "VERIFY_OD_PROOF" | "REJECT_OD_PROOF" | "REQUEST_OD_PROOF";
       remarks?: string;
       isPaidLeave?: boolean;
       otherLeaveCategory?: OtherLeaveCategory;
@@ -512,6 +512,50 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         details: { reason: body.reason ?? null }, timestamp: now,
       });
       await notifyODProofDecision(db, session.collegeId, { ...req, id }, verified, body.reason);
+      return NextResponse.json({ ok: true });
+    }
+
+    // Manual nudge - same audience as VERIFY_OD_PROOF/REJECT_OD_PROOF above
+    // (whoever would actually review this proof), but firing BEFORE anything
+    // has been uploaded rather than after: the requester's period has ended,
+    // nothing usable is on file yet, and this approver doesn't want to wait
+    // on the automatic 24h reminder (api/cron/od-proof-reminders) alone.
+    if (body.action === "REQUEST_OD_PROOF") {
+      if (req.uid === session.uid) {
+        return NextResponse.json({ error: "You cannot request proof for your own leave" }, { status: 403 });
+      }
+      const evaluation = evaluateODProof(req, now);
+      if (!evaluation.canUpload || evaluation.awaitingVerification) {
+        return NextResponse.json({ error: "There's nothing outstanding to request proof for on this request" }, { status: 400 });
+      }
+      if (req.hodAction) {
+        if (session.role === "HOD") {
+          const hodDepts = await resolveHodDepartments(db, session.collegeId, session.uid);
+          if (!req.department || !hodDepts.includes(req.department)) {
+            return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+          }
+        } else if (session.role !== "PRINCIPAL" && session.role !== "VICE_PRINCIPAL") {
+          return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+        } else if (isCollegeAdmin(session)) {
+          return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+        }
+      } else if (session.role !== "PRINCIPAL" && session.role !== "VICE_PRINCIPAL") {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      } else if (isCollegeAdmin(session)) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+
+      const requestedByLabel = session.role === "HOD" ? "Your HOD" : (session.email || session.role);
+      await notify(
+        db, session.collegeId, req.uid, "LEAVE_OD_PROOF_REQUESTED_BY_HOD",
+        "Upload requested: On Duty proof",
+        `${requestedByLabel} has requested you to upload your On Duty proof of duty document.`,
+        `/leave/od-proof/${id}`
+      );
+      await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
+        collegeId: session.collegeId, action: "LEAVE_OD_PROOF_REQUESTED", performedBy: session.uid,
+        performedByName: session.email || session.role, targetId: id, details: {}, timestamp: now,
+      });
       return NextResponse.json({ ok: true });
     }
 

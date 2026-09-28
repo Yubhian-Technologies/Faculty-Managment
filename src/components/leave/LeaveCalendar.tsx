@@ -113,7 +113,7 @@ export function LeaveCalendar({ uid }: LeaveCalendarProps) {
   }
 
   return (
-    <Card>
+    <Card className="max-w-sm">
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between gap-2 flex-wrap">
           <CardTitle className="flex items-center gap-2 text-base">

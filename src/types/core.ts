@@ -2939,6 +2939,14 @@ export type NotificationType =
   | "PERMISSION_REJECTED"
   | "LEAVE_OD_PROOF_VERIFIED"
   | "LEAVE_OD_PROOF_REJECTED"
+  // Automatic reminder to the requester, sent once 24h after their On Duty
+  // period ends with nothing uploaded yet (see api/cron/od-proof-reminders).
+  | "LEAVE_OD_PROOF_UPLOAD_REMINDER"
+  // A manual nudge - the HOD/Principal/VP who'd otherwise have to verify this
+  // proof asks for it directly (see applications/[id]/route.ts's
+  // REQUEST_OD_PROOF action), for whenever the automatic reminder above
+  // wasn't enough.
+  | "LEAVE_OD_PROOF_REQUESTED_BY_HOD"
   | "ATTENDANCE_MANUALLY_MARKED"
   // Fired by the scheduled not-posted-attendance sweep (see
   // lib/attendance/notPostedSettings.ts + api/cron/attendance-not-posted) -
