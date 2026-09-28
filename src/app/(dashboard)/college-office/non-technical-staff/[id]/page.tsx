@@ -7,17 +7,19 @@ import { useAuthStore } from "@/store/authStore";
 import { toast } from "@/hooks/useToast";
 import type { SupportingStaffMember } from "@/types";
 
-// Also mounted at /principal/staff/non-technical/[id] (re-exported from
-// there) - listPath/basePath below pick the right destination for whichever
-// route rendered this, same isCollegeLevel pattern as hod/faculty/new/page.tsx.
+// Also mounted at /principal/staff/non-technical/[id] and /library/staff/[id]
+// (both re-exported from there) - listPath/basePath below pick the right
+// destination for whichever route rendered this, same isCollegeLevel pattern
+// as hod/faculty/new/page.tsx.
 export default function NonTechnicalStaffViewPage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
   const staffId = params.id;
   const user = useAuthStore((s) => s.user);
   const isCollegeLevel = user?.role === "PRINCIPAL" || user?.role === "VICE_PRINCIPAL";
-  const listPath = isCollegeLevel ? "/principal/staff" : "/college-office/non-technical-staff";
-  const detailBasePath = isCollegeLevel ? "/principal/staff/non-technical" : "/college-office/non-technical-staff";
+  const isLibrary = user?.role === "LIBRARY";
+  const listPath = isLibrary ? "/library/staff" : isCollegeLevel ? "/principal/staff" : "/college-office/non-technical-staff";
+  const detailBasePath = isLibrary ? "/library/staff" : isCollegeLevel ? "/principal/staff/non-technical" : "/college-office/non-technical-staff";
 
   const [staff, setStaff] = useState<Partial<SupportingStaffMember> | null>(null);
   const [isLoading, setIsLoading] = useState(true);

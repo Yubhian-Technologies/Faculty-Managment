@@ -10,6 +10,7 @@ import { useAuthStore } from "@/store/authStore";
 export default function NonTechnicalStaffModuleEditPage() {
   const user = useAuthStore((s) => s.user);
   const isCollegeLevel = user?.role === "PRINCIPAL" || user?.role === "VICE_PRINCIPAL";
-  const basePath = isCollegeLevel ? "/principal/staff/non-technical" : "/college-office/non-technical-staff";
+  const isLibrary = user?.role === "LIBRARY";
+  const basePath = isLibrary ? "/library/staff" : isCollegeLevel ? "/principal/staff/non-technical" : "/college-office/non-technical-staff";
   return <SupportingStaffModuleEditPage basePath={basePath} />;
 }

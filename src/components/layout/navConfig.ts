@@ -114,6 +114,10 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", href: "/library", iconName: "LayoutDashboard", roles: ["LIBRARY"] },
   { label: "Staff Attendance", href: "/library/staff-attendance", iconName: "ClipboardCheck", roles: ["LIBRARY"] },
   { label: "Import Attendance", href: "/library/attendance-import", iconName: "Upload", roles: ["LIBRARY"] },
+  { label: "Book Catalog", href: "/library/books", iconName: "BookOpen", roles: ["LIBRARY"], section: "Library Management" },
+  { label: "Loans", href: "/library/loans", iconName: "Undo2", roles: ["LIBRARY"] },
+  { label: "Reservations", href: "/library/reservations", iconName: "Clock", roles: ["LIBRARY"] },
+  { label: "Staff", href: "/library/staff", iconName: "Users", roles: ["LIBRARY"] },
   { label: "My Profile", href: "/library/profile", iconName: "UserCircle", roles: ["LIBRARY"], section: "Personal" },
   { label: "My Leave", href: "/library/leave", iconName: "CalendarClock", roles: ["LIBRARY"] },
   { label: "Adjustment Requests", href: "/leave/adjustments", iconName: "UserCheck", roles: ["LIBRARY"] },
@@ -141,15 +145,20 @@ export const NAV_ITEMS: NavItem[] = [
 
   // Location Staff Admin
   { label: "Dashboard", href: "/location-staff-admin", iconName: "LayoutDashboard", roles: ["LOCATION_STAFF_ADMIN"] },
+  { label: "Locations", href: "/location-staff-admin/locations", iconName: "MapPin", roles: ["LOCATION_STAFF_ADMIN", "ADMINISTRATION"], section: "Location Staff" },
   { label: "Departments", href: "/location-staff-admin/departments", iconName: "Building2", roles: ["LOCATION_STAFF_ADMIN", "ADMINISTRATION"], section: "Location Staff" },
   { label: "Shifts", href: "/location-staff-admin/shifts", iconName: "Clock", roles: ["LOCATION_STAFF_ADMIN", "ADMINISTRATION"], section: "Location Staff" },
+  { label: "Attendance", href: "/location-staff-admin/attendance", iconName: "ClipboardCheck", roles: ["LOCATION_STAFF_ADMIN", "ADMINISTRATION"], section: "Location Staff" },
   { label: "Attendance Reports", href: "/location-staff-admin/attendance/reports", iconName: "BarChart3", roles: ["LOCATION_STAFF_ADMIN", "ADMINISTRATION"], section: "Location Staff" },
+  { label: "Leave Requests", href: "/location-staff-admin/leave", iconName: "CalendarClock", roles: ["LOCATION_STAFF_ADMIN", "ADMINISTRATION"], section: "Location Staff" },
   { label: "My Profile", href: "/location-staff-admin/profile", iconName: "UserCircle", roles: ["LOCATION_STAFF_ADMIN"], section: "Personal" },
 
   // Location Dept Head
   { label: "Dashboard", href: "/location-dept-head", iconName: "LayoutDashboard", roles: ["LOCATION_DEPT_HEAD"] },
   { label: "Staff Roster", href: "/location-dept-head/staff", iconName: "UsersRound", roles: ["LOCATION_DEPT_HEAD"], section: "Department Staff" },
   { label: "Daily Attendance", href: "/location-dept-head/attendance", iconName: "ClipboardCheck", roles: ["LOCATION_DEPT_HEAD"], section: "Department Staff" },
+  { label: "Attendance Reports", href: "/location-dept-head/attendance/reports", iconName: "BarChart3", roles: ["LOCATION_DEPT_HEAD"], section: "Department Staff" },
+  { label: "Leave Requests", href: "/location-dept-head/leave", iconName: "CalendarClock", roles: ["LOCATION_DEPT_HEAD"], section: "Department Staff" },
   { label: "Shift Schedule", href: "/location-dept-head/shifts", iconName: "Clock", roles: ["LOCATION_DEPT_HEAD"], section: "Department Staff" },
   { label: "Hiring Requests", href: "/location-dept-head/vacancies", iconName: "ClipboardPlus", roles: ["LOCATION_DEPT_HEAD"], section: "Hiring" },
   { label: "My Candidates", href: "/location-dept-head/candidates", iconName: "Users", roles: ["LOCATION_DEPT_HEAD"] },
@@ -452,6 +461,13 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", href: "/class-leader", iconName: "LayoutDashboard", roles: ["CLASS_LEADER"] },
   { label: "Timetable", href: "/class-leader/timetable", iconName: "CalendarDays", roles: ["CLASS_LEADER"] },
   { label: "My Profile", href: "/class-leader/profile", iconName: "UserCircle", roles: ["CLASS_LEADER"], section: "Personal" },
+
+  // Student
+  { label: "Dashboard", href: "/student", iconName: "LayoutDashboard", roles: ["STUDENT"] },
+  { label: "Timetable", href: "/student/timetable", iconName: "CalendarDays", roles: ["STUDENT"] },
+  { label: "Attendance", href: "/student/attendance", iconName: "TrendingUp", roles: ["STUDENT"] },
+  { label: "Library", href: "/student/library", iconName: "BookOpen", roles: ["STUDENT"] },
+  { label: "Documents", href: "/student/documents", iconName: "FileText", roles: ["STUDENT"] },
 
   // Webmaster
   { label: "Dashboard", href: "/webmaster", iconName: "LayoutDashboard", roles: ["WEBMASTER"] },
@@ -842,8 +858,8 @@ export const BOTTOM_NAV_ITEMS: Record<UserRole, NavItem[]> = {
   ],
   LIBRARY: [
     { label: "Home", href: "/library", iconName: "LayoutDashboard", roles: ["LIBRARY"] },
-    { label: "Attendance", href: "/library/attendance", iconName: "ClipboardCheck", roles: ["LIBRARY"] },
-    { label: "Staff", href: "/library/staff-attendance", iconName: "ClipboardCheck", roles: ["LIBRARY"] },
+    { label: "Books", href: "/library/books", iconName: "BookOpen", roles: ["LIBRARY"] },
+    { label: "Loans", href: "/library/loans", iconName: "Undo2", roles: ["LIBRARY"] },
     { label: "Profile", href: "/library/profile", iconName: "UserCircle", roles: ["LIBRARY"] },
   ],
   COLLEGE_ACCOUNTS: [
@@ -1010,7 +1026,12 @@ export const BOTTOM_NAV_ITEMS: Record<UserRole, NavItem[]> = {
     { label: "Accounts", href: "/webmaster/users", iconName: "Users", roles: ["WEBMASTER"] },
     { label: "Profile", href: "/webmaster/profile", iconName: "UserCircle", roles: ["WEBMASTER"] },
   ],
-  STUDENT: [],
+  STUDENT: [
+    { label: "Home", href: "/student", iconName: "LayoutDashboard", roles: ["STUDENT"] },
+    { label: "Timetable", href: "/student/timetable", iconName: "CalendarDays", roles: ["STUDENT"] },
+    { label: "Attendance", href: "/student/attendance", iconName: "TrendingUp", roles: ["STUDENT"] },
+    { label: "Library", href: "/student/library", iconName: "BookOpen", roles: ["STUDENT"] },
+  ],
   CLASS_LEADER: [
     { label: "Home", href: "/class-leader", iconName: "LayoutDashboard", roles: ["CLASS_LEADER"] },
     { label: "Timetable", href: "/class-leader/timetable", iconName: "CalendarDays", roles: ["CLASS_LEADER"] },

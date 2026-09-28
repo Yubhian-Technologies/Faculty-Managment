@@ -43,3 +43,27 @@ export interface FacultyDocument {
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
+
+// ─── Student Document ───────────────────────────────────────────────────────
+// colleges/{collegeId}/studentDocuments/{docId} - a top-level collection
+// (not a per-student subcollection like students/{id}/departmentHistory)
+// because College Office needs a cross-student "recently uploaded" browse
+// view, which a flat collection + `studentId` field supports with a plain
+// query. `studentUid` is denormalized (set once at creation, never edited) so
+// the Firestore rule for a student reading their OWN documents can match
+// directly on request.auth.uid without a cross-document join.
+export interface StudentDocument {
+  id: string;
+  collegeId: string;
+  studentId: string;
+  studentUid: string;
+  title: string;
+  description?: string;
+  fileName: string;
+  fileUrl: string;
+  fileType?: string;
+  fileSize?: number;
+  uploadedByUid: string;
+  uploadedByName: string;
+  createdAt: Timestamp;
+}

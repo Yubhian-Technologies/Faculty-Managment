@@ -13,6 +13,10 @@ import { STAFF_CATEGORY_LABELS } from "@/types/supportingStaff";
 export const SUPPORTING_STAFF_ROLE_CATEGORY: Partial<Record<string, SupportingStaffCategory>> = {
   HOD: "TECHNICAL",
   COLLEGE_OFFICE: "NON_TECHNICAL",
+  // Library manages its own unit's Non-Technical staff, department-scoped to
+  // "Library" the same way HOD is scoped to their own department - see the
+  // LIBRARY branches in api/college/supporting-staff/route.ts and [id]/route.ts.
+  LIBRARY: "NON_TECHNICAL",
 };
 
 // POST-only category permission - separate from SUPPORTING_STAFF_ROLE_CATEGORY

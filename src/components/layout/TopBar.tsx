@@ -78,7 +78,7 @@ export function TopBar({ title, hiddenItems }: TopBarProps) {
             )}
           </Button>
         )}
-        {!isClassLeader && <TopBarSettingsMenu hiddenItems={hiddenItems} />}
+        {!isClassLeader && user?.role !== "STUDENT" && <TopBarSettingsMenu hiddenItems={hiddenItems} />}
         {user && (() => {
           const avatar = (
             <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary text-sm font-semibold overflow-hidden">

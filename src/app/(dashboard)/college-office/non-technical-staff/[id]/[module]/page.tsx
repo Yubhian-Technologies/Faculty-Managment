@@ -25,8 +25,9 @@ export default function NonTechnicalStaffModulePage() {
   const moduleDef = SUPPORTING_STAFF_MODULES[moduleKey];
   const user = useAuthStore((s) => s.user);
   const isCollegeLevel = user?.role === "PRINCIPAL" || user?.role === "VICE_PRINCIPAL";
-  const listPath = isCollegeLevel ? "/principal/staff" : "/college-office/non-technical-staff";
-  const detailBasePath = isCollegeLevel ? "/principal/staff/non-technical" : "/college-office/non-technical-staff";
+  const isLibrary = user?.role === "LIBRARY";
+  const listPath = isLibrary ? "/library/staff" : isCollegeLevel ? "/principal/staff" : "/college-office/non-technical-staff";
+  const detailBasePath = isLibrary ? "/library/staff" : isCollegeLevel ? "/principal/staff/non-technical" : "/college-office/non-technical-staff";
 
   const [staff, setStaff] = useState<Partial<SupportingStaffMember> | null>(null);
   const [isLoading, setIsLoading] = useState(true);
