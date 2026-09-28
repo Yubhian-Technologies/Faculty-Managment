@@ -608,10 +608,14 @@ export const DOCUMENT_STYLES = `
   .fitem .fk::after { content: ": "; }
   .fitem .fv { color: #111827; }
 
+  /* vertical-align: middle explicitly - table cells default to middle in a real
+     browser, but html2canvas doesn't reliably resolve that implicit default
+     (same class of measurement quirk as .section-title above), so text drifts
+     down to sit on the bottom border instead of centering in the cell. */
   table.data-table { width: 100%; border-collapse: collapse; margin: 4px 0 10px; }
   table.data-table tr { break-inside: avoid-page; }
-  table.data-table th { background: #e5e7eb; color: #111827; padding: 4px 8px; font-size: 11.5px; text-align: left; border: 1px solid #9ca3af; }
-  table.data-table td { padding: 4px 8px; font-size: 11.5px; border: 1px solid #d1d5db; }
+  table.data-table th { background: #e5e7eb; color: #111827; padding: 4px 8px; font-size: 11.5px; text-align: left; vertical-align: middle; border: 1px solid #9ca3af; }
+  table.data-table td { padding: 4px 8px; font-size: 11.5px; vertical-align: middle; border: 1px solid #d1d5db; }
 
   .doc-link { margin: 2px 0 6px; font-size: 11px; }
   .doc-link a { color: #1d4ed8; text-decoration: none; }

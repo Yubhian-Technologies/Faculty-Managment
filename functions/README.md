@@ -18,6 +18,14 @@ submitted attendance session. It only sweeps once per college per day
 tick rate just controls how soon after the cutoff it fires, not how often it
 re-notifies.
 
+`odProofReminderSweep` runs hourly and calls `POST /api/cron/od-proof-reminders`.
+That route (`src/app/api/cron/od-proof-reminders/route.ts`) finds every
+approved On Duty leave whose period ended 24h+ ago with no proof of duty
+uploaded yet, and sends the requester one reminder each - deduped per request
+(not per day) via a stable notification doc id, so re-running this every tick
+never re-sends it once it's gone out. Both scheduled functions share the same
+`CRON_SECRET`/`APP_URL` setup below.
+
 ## Requirements
 
 - **Firebase Blaze (pay-as-you-go) plan.** Scheduled functions need Cloud

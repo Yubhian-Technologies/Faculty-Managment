@@ -1,4 +1,5 @@
 import type { Timestamp } from "firebase/firestore";
+import type { LeaveTypeCode, LeaveTypeRuleOverride, LeaveBlackoutWindow } from "./leave";
 
 // ─── Roles ────────────────────────────────────────────────────────────────────
 
@@ -900,6 +901,14 @@ export interface FacultyNorms {
   // non-vacation (see src/lib/leave/staffCategoryRouting.ts). A role with no
   // entry keeps its built-in default.
   leaveVacationRoles?: Partial<Record<UserRole, boolean>>;
+  // Per-college customization of the 6 built-in leave types' rules (limits,
+  // carry-forward, half-day, reason dropdown, consecutive-day/notice/frequency
+  // caps, ...) - see LeaveTypeRuleOverride in types/leave.ts and
+  // lib/leave/resolveLeaveTypes.ts. A type with no entry (or a field left
+  // unset within its entry) keeps the built-in seed's default.
+  leaveTypeRuleOverrides?: Partial<Record<LeaveTypeCode, LeaveTypeRuleOverride>>;
+  // Date ranges leave can't be applied over - see LeaveBlackoutWindow.
+  leaveBlackoutWindows?: LeaveBlackoutWindow[];
   updatedAt?: Timestamp;
   updatedByName?: string;
 }
@@ -2930,6 +2939,14 @@ export type NotificationType =
   | "PERMISSION_REJECTED"
   | "LEAVE_OD_PROOF_VERIFIED"
   | "LEAVE_OD_PROOF_REJECTED"
+  // Automatic reminder to the requester, sent once 24h after their On Duty
+  // period ends with nothing uploaded yet (see api/cron/od-proof-reminders).
+  | "LEAVE_OD_PROOF_UPLOAD_REMINDER"
+  // A manual nudge - the HOD/Principal/VP who'd otherwise have to verify this
+  // proof asks for it directly (see applications/[id]/route.ts's
+  // REQUEST_OD_PROOF action), for whenever the automatic reminder above
+  // wasn't enough.
+  | "LEAVE_OD_PROOF_REQUESTED_BY_HOD"
   | "ATTENDANCE_MANUALLY_MARKED"
   // Fired by the scheduled not-posted-attendance sweep (see
   // lib/attendance/notPostedSettings.ts + api/cron/attendance-not-posted) -

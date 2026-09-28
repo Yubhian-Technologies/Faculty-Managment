@@ -8,9 +8,14 @@ export const DEFAULT_NAV_VISIBILITY: Pick<NavVisibilitySettings, "hiddenModules"
   hiddenModules: {},
   hiddenItems: {
     HOD: ["/hod/payslips", "/hod/appraisal", "/hod/training", "/hod/grievance", "/hod/documents"],
-    PRINCIPAL: ["/principal/attendance", "/principal/training", "/principal/grievance", "/principal/payslips"],
-    VICE_PRINCIPAL: ["/principal/attendance", "/principal/training", "/principal/grievance", "/principal/payslips"],
-    PANEL_MEMBER: ["/panel/attendance", "/panel/payslips", "/panel/appraisal", "/panel/training", "/panel/grievance", "/panel/documents"],
+    // "/principal/attendance" and "/panel/attendance" (My Attendance) were
+    // mistakenly bundled in here alongside the still-unbuilt placeholder
+    // pages below - the self-attendance feature (face+geofence check-in/out)
+    // had already fully shipped a month before this default-hidden list was
+    // written, so it was never actually a "coming soon" page.
+    PRINCIPAL: ["/principal/training", "/principal/grievance", "/principal/payslips"],
+    VICE_PRINCIPAL: ["/principal/training", "/principal/grievance", "/principal/payslips"],
+    PANEL_MEMBER: ["/panel/payslips", "/panel/appraisal", "/panel/training", "/panel/grievance", "/panel/documents"],
   },
 };
 
