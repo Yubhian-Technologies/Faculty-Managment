@@ -1,7 +1,7 @@
 "use client";
 
-import { useRef, useState } from "react";
-import { Camera, CheckCircle2, FileBadge2, Shield, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Camera, CheckCircle2, FileBadge2, Shield, UploadCloud, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/useToast";
+import { CameraCaptureModal } from "@/components/shared/CameraCaptureModal";
 import type { LocationDepartment, LocationShift, LocationStaffMember } from "@/types/locationStaff";
 
 const COMMON_ROLES = [
@@ -28,12 +29,15 @@ const COMMON_ROLES = [
 
 const PAYEE_OPTIONS = [
   { value: "Voucher Payee", label: "Voucher Payee", desc: "Paid through regular office petty/daily cash voucher" },
-  { value: "Contract Payee", label: "Contract Payee", desc: "Outsourced or long-term third-party contract staff" },
+  { value: "Account Payee", label: "Account Payee", desc: "Direct payroll bank account payee / registered payee" },
 ];
 
 interface LocationStaffFormProps {
   departments: LocationDepartment[];
   shifts: LocationShift[];
+  // Pre-selected department ID (e.g. when opening from a department's page).
+  // Remains editable in the picker for Location Staff Admin.
+  initialDepartmentId?: string;
   // Set for the Location Dept Head context - department is fixed to their own
   // and the picker is replaced by a read-only display. Left unset for the
   // Location Staff Admin context, where any department (or none) is pickable.
@@ -49,7 +53,14 @@ interface LocationStaffFormProps {
 // Head (location-dept-head/staff, inline dialog) submit through, instead of
 // each maintaining its own copy with different fields and validation rigor.
 export function LocationStaffForm({
-  departments, shifts, lockedDepartmentId, lockedDepartmentName, onSuccess, onCancel, submitLabel = "Save Staff Member",
+  departments,
+  shifts,
+  initialDepartmentId,
+  lockedDepartmentId,
+  lockedDepartmentName,
+  onSuccess,
+  onCancel,
+  submitLabel = "Save Staff Member",
 }: LocationStaffFormProps) {
   const [name, setName] = useState("");
   const [fatherName, setFatherName] = useState("");
@@ -63,14 +74,25 @@ export function LocationStaffForm({
   const [payeeReference, setPayeeReference] = useState("");
   const [role, setRole] = useState("");
   const [customRole, setCustomRole] = useState("");
-  const [departmentId, setDepartmentId] = useState<string>(lockedDepartmentId ?? "__none__");
+  const [departmentId, setDepartmentId] = useState<string>(
+    initialDepartmentId || lockedDepartmentId || "__none__"
+  );
   const [shiftId, setShiftId] = useState<string>("__none__");
   const [dateOfJoining, setDateOfJoining] = useState("");
   const [photoUrl, setPhotoUrl] = useState("");
 
+  useEffect(() => {
+    if (initialDepartmentId && initialDepartmentId !== "__none__") {
+      setDepartmentId(initialDepartmentId);
+    } else if (lockedDepartmentId && lockedDepartmentId !== "__none__") {
+      setDepartmentId(lockedDepartmentId);
+    }
+  }, [initialDepartmentId, lockedDepartmentId]);
+
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -86,7 +108,7 @@ export function LocationStaffForm({
     if (!aadhaar.trim()) newErrors.aadhaar = "Aadhaar number is required";
     else if (!/^\d{12}$/.test(aadhaar.trim())) newErrors.aadhaar = "Aadhaar must be exactly 12 numeric digits";
 
-    if (!payeeType || payeeType === "__none__") newErrors.payeeType = "Please select Payee Type (Voucher Payee or Contract Payee)";
+    if (!payeeType || payeeType === "__none__") newErrors.payeeType = "Please select Payee Type (Voucher Payee or Account Payee)";
 
     if (!role) newErrors.role = "Please select a role / designation";
     else if (role === "OTHER" && !customRole.trim()) newErrors.role = "Please specify the custom role title";
@@ -102,9 +124,7 @@ export function LocationStaffForm({
     return Object.keys(newErrors).length === 0;
   };
 
-  const handlePhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const uploadPhotoFile = async (file: File) => {
     setIsUploadingPhoto(true);
     try {
       const fd = new FormData();
@@ -113,12 +133,23 @@ export function LocationStaffForm({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Photo upload failed");
       setPhotoUrl(data.url);
-      toast({ title: "Photo uploaded successfully" });
+      toast({ title: "Photo saved successfully" });
     } catch (err: unknown) {
-      toast({ variant: "destructive", title: "Upload failed", description: err instanceof Error ? err.message : "Upload failed" });
+      toast({
+        variant: "destructive",
+        title: "Upload failed",
+        description: err instanceof Error ? err.message : "Upload failed",
+      });
     } finally {
       setIsUploadingPhoto(false);
     }
+  };
+
+  const handlePhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    await uploadPhotoFile(file);
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -170,9 +201,19 @@ export function LocationStaffForm({
     }
   };
 
+  const applicableShifts = shifts.filter((s) => {
+    if (!departmentId || departmentId === "__none__") return true;
+    if (s.isCampusWide || s.departmentId === "ALL") return true;
+    if (s.departmentId === departmentId) return true;
+    if (Array.isArray(s.departmentIds) && (s.departmentIds.includes("ALL") || s.departmentIds.includes(departmentId))) {
+      return true;
+    }
+    return false;
+  });
+
   return (
     <form onSubmit={handleSubmit} className="space-y-5" noValidate>
-      {/* Photo Upload */}
+      {/* Photo Upload & Camera Capture */}
       <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-3.5 bg-muted/20 rounded-xl border">
         <div className="relative h-20 w-20 rounded-full bg-muted border-2 border-dashed border-border flex items-center justify-center overflow-hidden shrink-0 mx-auto sm:mx-0 shadow-xs">
           {photoUrl ? (
@@ -184,21 +225,66 @@ export function LocationStaffForm({
         </div>
         <div className="space-y-1.5 flex-1 text-center sm:text-left">
           <Label className="text-xs font-semibold text-foreground">Staff Profile Photo</Label>
-          <div className="flex items-center justify-center sm:justify-start gap-2">
-            <input type="file" ref={fileInputRef} onChange={handlePhotoSelect} accept="image/png,image/jpeg,image/webp" className="hidden" />
-            <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} disabled={isUploadingPhoto} className="h-8 text-xs gap-1.5">
-              <Camera className="h-3.5 w-3.5" />
-              <span>{isUploadingPhoto ? "Uploading..." : photoUrl ? "Change Photo" : "Upload Photo"}</span>
+          <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handlePhotoSelect}
+              accept="image/png,image/jpeg,image/webp"
+              className="hidden"
+            />
+            {/* Upload File */}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isUploadingPhoto}
+              className="h-8 text-xs gap-1.5"
+            >
+              <UploadCloud className="h-3.5 w-3.5" />
+              <span>{isUploadingPhoto ? "Uploading..." : photoUrl ? "Change File" : "Upload Photo"}</span>
             </Button>
+
+            {/* Take Photo with Camera */}
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => setIsCameraOpen(true)}
+              disabled={isUploadingPhoto}
+              className="h-8 text-xs gap-1.5 font-medium"
+            >
+              <Camera className="h-3.5 w-3.5 text-primary" />
+              <span>Take Photo</span>
+            </Button>
+
             {photoUrl && (
-              <Button type="button" variant="ghost" size="sm" onClick={() => setPhotoUrl("")} className="h-8 text-xs text-destructive hover:bg-destructive/10 gap-1">
-                <X className="h-3.5 w-3.5" /><span>Remove</span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setPhotoUrl("")}
+                className="h-8 text-xs text-destructive hover:bg-destructive/10 gap-1"
+              >
+                <X className="h-3.5 w-3.5" />
+                <span>Remove</span>
               </Button>
             )}
           </div>
-          <p className="text-[10px] text-muted-foreground">Optional. Supported formats: PNG, JPG, WEBP up to 5 MB.</p>
+          <p className="text-[10px] text-muted-foreground">
+            Optional. Take a photo using camera or upload a file (PNG, JPG, WEBP up to 5 MB).
+          </p>
         </div>
       </div>
+
+      <CameraCaptureModal
+        isOpen={isCameraOpen}
+        onClose={() => setIsCameraOpen(false)}
+        onCapture={uploadPhotoFile}
+        title="Capture Staff Photo"
+        description="Position the staff member's face in the frame and click capture."
+      />
 
       {/* Identification */}
       <div className="space-y-3">
@@ -318,8 +404,8 @@ export function LocationStaffForm({
               {!lockedDepartmentId && <span className="text-[10px] text-muted-foreground">Can appoint as Head</span>}
             </div>
             {lockedDepartmentId ? (
-              <div className="flex h-9 items-center rounded-md border bg-muted/30 px-3 text-xs text-foreground">
-                {lockedDepartmentName ?? "Your department"}
+              <div className="flex h-9 items-center rounded-md border bg-muted/30 px-3 text-xs text-foreground font-medium">
+                {lockedDepartmentName ?? departments.find((d) => d.id === lockedDepartmentId)?.name ?? "Your department"}
               </div>
             ) : (
               <Select value={departmentId} onValueChange={setDepartmentId}>
@@ -341,7 +427,16 @@ export function LocationStaffForm({
               <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Choose shift (optional)" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="__none__">Flexible / No Shift Assigned</SelectItem>
-                {shifts.map((s) => <SelectItem key={s.id} value={s.id}>{s.name} ({s.startTime} - {s.endTime})</SelectItem>)}
+                {applicableShifts.map((s) => {
+                  const isCampus = !!s.isCampusWide || s.departmentId === "ALL" || (Array.isArray(s.departmentIds) && s.departmentIds.includes("ALL"));
+                  const isShared = !isCampus && Array.isArray(s.departmentIds) && s.departmentIds.length > 1;
+                  const tag = isCampus ? " • Campus-wide" : isShared ? " • Shared" : "";
+                  return (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.name} ({s.startTime} - {s.endTime}){tag}
+                    </SelectItem>
+                  );
+                })}
               </SelectContent>
             </Select>
           </div>

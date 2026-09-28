@@ -62,9 +62,20 @@ export function useActiveLocationDept() {
   const myDepartments = useMemo(() => {
     if (!user) return [];
     if (user.role === "LOCATION_DEPT_HEAD") {
-      return departments.filter((d) => d.headUid === user.uid || (user.locationDeptIds ?? []).includes(d.id));
+      const uEmail = user.email?.trim().toLowerCase();
+      const uDeptIds = user.locationDeptIds ?? [];
+      const uSingleDeptId = user.locationDeptId;
+
+      return departments.filter((d) => {
+        if (d.headUid && d.headUid === user.uid) return true;
+        if (d.deptHeadUid && d.deptHeadUid === user.uid) return true;
+        if (uDeptIds.includes(d.id)) return true;
+        if (uSingleDeptId && uSingleDeptId === d.id) return true;
+        if (d.headEmail && uEmail && d.headEmail.trim().toLowerCase() === uEmail) return true;
+        return false;
+      });
     }
-    return departments;
+    return [];
   }, [departments, user]);
 
   // Active department ID

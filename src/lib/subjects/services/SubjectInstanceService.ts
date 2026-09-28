@@ -176,9 +176,20 @@ export class SubjectInstanceService {
     const hoursPerWeek = lectureHours + tutorialHours + practicalHours;
     const credits = customOverrides?.credits ?? master.credits ?? 0;
 
-    const instanceDocId = `${subjectId}_${departmentId}`;
+    // Keyed by semester too (not just subject+department) so the same
+    // subject can be a live instance in two different semesters for one
+    // department at once (a year-long / shared subject spanning S1+S2) -
+    // collapsing them onto one doc silently moved the subject to whichever
+    // semester was assigned most recently instead of holding both.
+    const instanceDocId = `${subjectId}_${departmentId}_${semester}`;
     const instanceRef = collegeRef.collection("subjectSemesterAssignments").doc(instanceDocId);
-    const existing = await instanceRef.get();
+    // Pre-migration instances were keyed without the semester suffix (see
+    // above) - reconciled below once the new-key doc is written, so a
+    // subject assigned before this change doesn't linger as an
+    // invisible-by-id duplicate that a later Add re-creates under the new
+    // key, or that Remove (which only knows the new key) can't reach.
+    const legacyRef = collegeRef.collection("subjectSemesterAssignments").doc(`${subjectId}_${departmentId}`);
+    const [existing, legacy] = await Promise.all([instanceRef.get(), legacyRef.get()]);
     const now = new Date();
 
     const instancePayload: SubjectSemesterAssignment = {
@@ -210,11 +221,22 @@ export class SubjectInstanceService {
       credits,
       isCustomized: !!customOverrides,
       isActive: true,
-      createdAt: (existing.exists ? (existing.data() as { createdAt?: unknown }).createdAt : now) as any,
+      createdAt: (existing.exists
+        ? (existing.data() as { createdAt?: unknown }).createdAt
+        : legacy.exists && (legacy.data() as { semester?: number }).semester === semester
+          ? (legacy.data() as { createdAt?: unknown }).createdAt
+          : now) as any,
       updatedAt: now as any,
     };
 
     await instanceRef.set(instancePayload);
+    // Only the legacy doc for THIS semester is superseded - one made under
+    // the old key for a different semester is still a live, distinct
+    // instance (that's the whole reason the key gained a semester suffix)
+    // and must be left alone.
+    if (legacy.exists && !existing.exists && (legacy.data() as { semester?: number }).semester === semester) {
+      await legacyRef.delete();
+    }
 
     return { id: instanceDocId, instance: instancePayload };
   }
@@ -257,15 +279,23 @@ export class SubjectInstanceService {
   }
 
   /**
-   * Removes an instance copy for a given subject and department
+   * Removes an instance copy for a given subject, department and semester
+   * (the same subject may have a separate live instance in another semester).
    */
-  public async unassignSubjectInstance(collegeId: string, subjectId: string, departmentId: string): Promise<void> {
-    const instanceDocId = `${subjectId}_${departmentId}`;
-    await this.db
-      .collection("colleges")
-      .doc(collegeId)
-      .collection("subjectSemesterAssignments")
-      .doc(instanceDocId)
-      .delete();
+  public async unassignSubjectInstance(collegeId: string, subjectId: string, departmentId: string, semester: number): Promise<void> {
+    const collegeRef = this.db.collection("colleges").doc(collegeId);
+    const instanceDocId = `${subjectId}_${departmentId}_${semester}`;
+    // A pre-migration instance for this exact subject+department+semester
+    // may still sit under the old (semester-less) key - delete it too, or
+    // it survives this Remove and reappears as the "same" subject on the
+    // next load. A legacy doc for a DIFFERENT semester is left alone (still
+    // a live, distinct instance - see assignSubjectInstance's own comment).
+    const legacyRef = collegeRef.collection("subjectSemesterAssignments").doc(`${subjectId}_${departmentId}`);
+    const legacy = await legacyRef.get();
+    const deletes = [collegeRef.collection("subjectSemesterAssignments").doc(instanceDocId).delete()];
+    if (legacy.exists && (legacy.data() as { semester?: number }).semester === semester) {
+      deletes.push(legacyRef.delete());
+    }
+    await Promise.all(deletes);
   }
 }

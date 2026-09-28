@@ -14,7 +14,7 @@ npm run test     # vitest run (unit)
 npm run test:e2e # playwright test (e2e)
 ```
 
-* `node scripts/bootstrap-admin.mjs` — one-time SUPER_ADMIN promotion (edit UID/EMAIL + service-account path first). `scripts/` now trimmed to 4 files (`ensure-deps.mjs`, `bootstrap-admin.mjs`, `create-admin.mjs`, `lib/departmentRefs.mjs`); historical migrate/backfill/diagnose scripts archived/deleted per 2026-09 cleanup.
+* `node scripts/bootstrap-admin.mjs` — one-time SUPER_ADMIN promotion (edit UID/EMAIL + service-account path first). `scripts/` trimmed to 3 files (`ensure-deps.mjs`, `bootstrap-admin.mjs`, `create-admin.mjs`); historical migrate/backfill/diagnose scripts (incl. `lib/departmentRefs.mjs`, unused) deleted per 2026-09-28 cleanup.
 * Firestore rules/indexes + Storage rules: `firebase deploy --only firestore:rules` etc.; config in `firebase.json` / `firestore.rules` / `firestore.indexes.json` / `storage.rules`. Indexes now include 8 composites for `studentAttendance` (status+sectionId/date, facultyId/date, subjectId/date, department/date, date).
 
 ## Stack
@@ -75,4 +75,4 @@ Cross-cutting writes create `AuditLog` + `AppNotification` per `src/types/core.t
 
 ### Docs
 
-Root context is this `AGENTS.md` (single source). `CLAUDE.md` (hiring pipeline) and `PROJECT_OVERVIEW.md` removed 2026-09 — see git history `git log --follow -- CLAUDE.md`. No `README.md` at root.
+Root context is this `AGENTS.md` (single source); `CLAUDE.md` is kept as a supplementary ground-truth reference (regenerated 2026-09-26) — keep the two in sync when they disagree, `AGENTS.md` wins. `PROJECT_OVERVIEW.md` removed 2026-09 — see git history `git log --follow -- PROJECT_OVERVIEW.md`. One-off audit/QA dumps (`*.md` audit reports, `ACADEMICSMODULE_TESTPLAN.md`), `run-tests.mjs`, `scratch/`, `.opencode/`, `test-reports/`, `orig.indexes.json` and the root `*.excalidraw` were removed 2026-09-28; do not re-commit generated reports or one-off scripts at the repo root. No `README.md` at root.

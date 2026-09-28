@@ -95,8 +95,20 @@ export default function ClassLeaderDashboardPage() {
     return departments.find((d) => d.id === section.department || d.name === section.department)?.name || section.department;
   }, [departments, section]);
 
-  // Group teaching assignments cleanly by subject to prevent duplicate messy rows
+  // Group teaching assignments cleanly by subject to prevent duplicate messy rows.
+  // Scoped to what is actually timetabled this semester: `assignments` from the
+  // API covers every non-past assignment on this section (legacy rows with no
+  // timetableSemester always pass the server's null-matches-everything filter),
+  // while `slots` are strictly current-semester. When slots exist, only keep
+  // assignments for subjects present in those slots so prior/other-semester
+  // subjects don't leak into this card. With no slots yet (pre-timetable),
+  // fall back to all assignments so early assignments still show.
   const groupedSubjects = useMemo(() => {
+    const slotKeys = new Set(slots.map((s) => s.subjectId || s.subjectCode || s.subjectName));
+    const relevant =
+      slotKeys.size > 0
+        ? assignments.filter((a) => slotKeys.has(a.subjectId || a.subjectCode || a.subjectName))
+        : assignments;
     const map = new Map<
       string,
       {
@@ -110,7 +122,7 @@ export default function ClassLeaderDashboardPage() {
       }
     >();
 
-    for (const a of assignments) {
+    for (const a of relevant) {
       const key = a.subjectId || a.subjectCode || a.subjectName;
       const existing = map.get(key);
       const facultyEntry = {
@@ -136,7 +148,7 @@ export default function ClassLeaderDashboardPage() {
     }
 
     return Array.from(map.values());
-  }, [assignments]);
+  }, [assignments, slots]);
 
   // Only the days this college actually teaches (the API resolves them from
   // the college's TimetableRules.workingDays, unioned with any day a slot
