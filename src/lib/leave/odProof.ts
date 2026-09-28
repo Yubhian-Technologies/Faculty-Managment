@@ -172,8 +172,8 @@ export function evaluateODProof(
  *
  * `daysInWindow` is passed in rather than reading `totalDays` so the window
  * math stays with the caller and the OD policy stays here - and it gets
- * half-day OD right for free, since OD is in HALF_DAY_ELIGIBLE_TYPES and the
- * caller's helper already returns 0.5 for one.
+ * half-day OD right for free, since OD's seed default has halfDayAllowed:true
+ * (see seedData.ts) and the caller's helper already returns 0.5 for one.
  */
 export function unprovenODLopDays(
   approved: LeaveRequest[],

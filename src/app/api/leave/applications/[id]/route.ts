@@ -16,6 +16,7 @@ import { OTHER_CATEGORIES_COL } from "@/lib/leave/otherCategories";
 import { LEAVE_TYPE_SEED } from "@/lib/leave/seedData";
 import { evaluateODProof } from "@/lib/leave/odProof";
 import { notifyODProofSubmitted, notifyODProofDecision } from "@/lib/leave/odProofNotify";
+import { syncApprovedLeaveToAttendance, revokeFutureLeaveFromAttendance } from "@/lib/leave/attendanceSync";
 import { notify, notifyRole } from "@/lib/notify";
 import { emitWorkflowNotification } from "@/lib/notifications/workflowNotifications";
 import { validatePeriodSubstitutions, notifySubstitutes, type PeriodSubstitutionInput } from "@/lib/leave/periodCoverage";
@@ -145,6 +146,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       }
       const cancelReason = body.reason!.trim();
       await ref.update({ status: "CANCELLED", cancelReason, updatedAt: now });
+      if (wasApproved) {
+        await revokeFutureLeaveFromAttendance(db, session.collegeId, req, id);
+      }
       await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
         collegeId: session.collegeId, action: "LEAVE_CANCELLED", performedBy: session.uid,
         performedByName: req.employeeName, targetId: id, details: { wasApproved, cancelReason }, timestamp: now,
@@ -518,17 +522,25 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     // forward to the Principal for the real decision (Other is never
     // balance-tracked, so nothing is reserved/committed for it here).
     if (req.status === "PENDING_HOD") {
-      if (session.role !== "HOD") {
+      // Authorised off whichever tier the request is currently sitting at.
+      // Principal/VP are allowed on an HOD-tier decision too (the same
+      // allowance PROPOSE_COVERAGE and VERIFY_OD_PROOF make), so a department
+      // with no sitting HOD isn't stuck waiting on a seat nobody holds.
+      if (session.role === "HOD") {
+        const hodDepts = await resolveHodDepartments(db, session.collegeId, session.uid);
+        if (!req.department || !hodDepts.includes(req.department)) {
+          return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+        }
+      } else if (session.role !== "PRINCIPAL" && session.role !== "VICE_PRINCIPAL") {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      } else if (isCollegeAdmin(session)) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       }
-      const hodDepts = await resolveHodDepartments(db, session.collegeId, session.uid);
-      if (!req.department || !hodDepts.includes(req.department)) {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-      }
+      const decidedByLabel = session.role === "HOD" ? "HOD" : (session.email || session.role);
 
       const actionRecord: LeaveActionRecord = {
         action: body.action === "APPROVE" ? "APPROVED" : "REJECTED",
-        by: session.uid, byName: session.email || "HOD", at: now as unknown as LeaveActionRecord["at"],
+        by: session.uid, byName: session.email || decidedByLabel, at: now as unknown as LeaveActionRecord["at"],
         ...(body.remarks ? { remarks: body.remarks } : {}),
       };
 
@@ -542,10 +554,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         await ref.update({ status: "REJECTED", hodAction: actionRecord, updatedAt: now });
         await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
           collegeId: session.collegeId, action: "LEAVE_REJECTED", performedBy: session.uid,
-          performedByName: session.email || "HOD", targetId: id, details: {}, timestamp: now,
+          performedByName: session.email || decidedByLabel, targetId: id, details: {}, timestamp: now,
         });
         await notify(db, session.collegeId, req.uid, "LEAVE_REJECTED", "Leave Request Rejected",
-          `Your leave request for ${req.totalDays} day(s) was rejected by your HOD.`, "/panel/leave");
+          `Your leave request for ${req.totalDays} day(s) was rejected by ${decidedByLabel === "HOD" ? "your HOD" : decidedByLabel}.`, "/panel/leave");
         return NextResponse.json({ ok: true });
       }
 
@@ -578,7 +590,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         });
         await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
           collegeId: session.collegeId, action: "LEAVE_HOD_FORWARDED", performedBy: session.uid,
-          performedByName: session.email || "HOD", targetId: id, details: { isPaidLeave: body.isPaidLeave }, timestamp: now,
+          performedByName: session.email || decidedByLabel, targetId: id, details: { isPaidLeave: body.isPaidLeave }, timestamp: now,
         });
 
         const principalsSnap = await findUsersSnapshot(db, session.collegeId, ["PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_ADMIN"]);
@@ -587,7 +599,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
             db, collegeId: session.collegeId, toUid: p.id,
             type: "LEAVE_PENDING_APPROVAL",
             title: "Leave Request Awaiting Approval",
-            message: `${req.employeeName}'s "Other" leave request (${body.isPaidLeave ? "paid" : "unpaid"}) was forwarded by their HOD and needs your decision.`,
+            message: `${req.employeeName}'s "Other" leave request (${body.isPaidLeave ? "paid" : "unpaid"}) was forwarded by ${decidedByLabel === "HOD" ? "their HOD" : decidedByLabel} and needs your decision.`,
             link: "/principal/leave-approvals",
             entityType: "leaveRequest", entityId: id,
             dedupeKey: `leave-request-review:${id}:${p.id}`,
@@ -626,10 +638,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       });
       await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
         collegeId: session.collegeId, action: "LEAVE_HOD_APPROVED", performedBy: session.uid,
-        performedByName: session.email || "HOD", targetId: id, details: { lopDays }, timestamp: now,
+        performedByName: session.email || decidedByLabel, targetId: id, details: { lopDays }, timestamp: now,
       });
       await notify(db, session.collegeId, req.uid, "LEAVE_APPROVED", "Leave Request Approved",
-        `Your leave request for ${req.totalDays} day(s) was approved by your HOD` +
+        `Your leave request for ${req.totalDays} day(s) was approved by ${decidedByLabel === "HOD" ? "your HOD" : decidedByLabel}` +
           (lopDays > 0 ? ` — ${lopDays} day(s) exceed your balance and will be treated as Loss of Pay.` : "."),
         "/panel/leave");
       // Notified against the FINAL periodSubstitutions (post-adjustment),
@@ -637,6 +649,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       // HOD override here would notify the requester's original pick
       // instead of whoever's actually covering now.
       await notifySubstitutes(db, session.collegeId, { ...req, periodSubstitutions });
+      await syncApprovedLeaveToAttendance(db, session.collegeId, req, id);
       return NextResponse.json({ ok: true });
     }
 
