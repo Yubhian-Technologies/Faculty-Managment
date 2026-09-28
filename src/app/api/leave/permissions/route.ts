@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { canAccessLeaveProfile } from "@/lib/leave/access";
 import { loadCollegeSettings } from "@/lib/firestore/collegeSettings";
 import { resolveEmployeeIdentity } from "@/lib/leave/identity";
 import { resolveApproverStage, approverStageToStatus } from "@/lib/leave/approvalRouting";
@@ -64,7 +65,15 @@ export async function GET(request: Request) {
         rows = [];
       }
     } else {
-      const snap = await col.where("uid", "==", session.uid).get();
+      // `?uid=` lets an approver browsing someone else's leave profile (see
+      // LeaveCalendar's own uid prop) see that person's permission count too
+      // - same access rule every other "view someone's leave profile" read
+      // uses. Defaults to the caller's own.
+      const targetUid = new URL(request.url).searchParams.get("uid") || session.uid;
+      if (targetUid !== session.uid && !(await canAccessLeaveProfile(db, session.collegeId, session.role, session.uid, targetUid))) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+      const snap = await col.where("uid", "==", targetUid).get();
       rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as PermissionRequest & { id: string });
     }
 

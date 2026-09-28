@@ -17,7 +17,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAuthStore } from "@/store/authStore";
 import { useActiveLocationDept } from "@/hooks/useActiveLocationDept";
-import { LocationDeptSwitcher } from "@/components/layout/LocationDeptSwitcher";
 import { istDateKey } from "@/lib/attendance/istTime";
 
 interface AttendanceSummary {
@@ -78,9 +77,6 @@ export default function LocationDeptHeadDashboard() {
             <Building2 className="h-3.5 w-3.5 text-primary" />
             <span>Managing: <strong className="text-foreground">{departmentName}</strong></span>
           </p>
-        </div>
-        <div className="flex items-center gap-2 self-start sm:self-auto">
-          <LocationDeptSwitcher />
         </div>
       </div>
 

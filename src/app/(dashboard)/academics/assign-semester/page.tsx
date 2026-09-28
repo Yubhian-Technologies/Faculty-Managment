@@ -26,10 +26,12 @@ function ordinalYear(year: number) {
 // A master subject (courseId + regulation, department-independent - see its
 // own doc-comment in types/teaching.ts and /api/college/subjects GET's own)
 // can be mapped into a DIFFERENT semester by different departments - Physics
-// might be Semester 1 for CSE and Semester 2 for ECE. That's a real
-// many-to-many relationship, so it's its own collection
-// (SubjectSemesterAssignment, doc id `${subjectId}_${departmentId}`) rather
-// than a single field on Subject.
+// might be Semester 1 for CSE and Semester 2 for ECE - and even into two
+// semesters for the SAME department (a year-long/shared subject spanning
+// S1+S2). That's a real many-to-many relationship, so it's its own
+// collection (SubjectSemesterAssignment, doc id
+// `${subjectId}_${departmentId}_${semester}`) rather than a single field on
+// Subject.
 //
 // Picker order: Regulation -> Course -> Department -> Year -> Semester.
 // Regulation and Course are picked at the CATALOG level first (mirrors
@@ -325,7 +327,7 @@ export default function AssignToSemesterPage() {
     if (selectedCourse) void loadSubjectsAndTimings(selectedCourse, selectedDepartmentId, year);
   }
 
-  async function setSubjectSemester(subject: Subject, semester: number | null) {
+  async function setSubjectSemester(subject: Subject, semester: number | null, removeFromSemester?: number, removeFromDepartmentId?: string) {
     if (!selectedCourse || !selectedDepartment) return;
     setSavingId(subject.id);
     setAssignPage(1);
@@ -349,8 +351,19 @@ export default function AssignToSemesterPage() {
         const json = await res.json() as { error?: string };
         if (!res.ok) throw new Error(json.error ?? "Failed to assign subject");
       } else {
+        // The list can show a sub-department's own instance while the
+        // PARENT department is selected (GET merges them in - see this
+        // file's own top doc-comment on sub-department support), so the
+        // instance being removed may belong to a different department than
+        // whatever's currently selected. removeFromDepartmentId (the row's
+        // own a.departmentId) must be used here instead of
+        // selectedDepartment.id - which is always the parent in that case -
+        // or this computes a DELETE for a doc that doesn't exist: Firestore
+        // no-ops instead of erroring, so it looked like a successful
+        // removal that silently didn't remove anything.
+        const targetDepartmentId = removeFromDepartmentId ?? selectedDepartment.id;
         const res = await fetch(
-          `/api/college/subject-semester-assignments?subjectId=${encodeURIComponent(subject.id)}&departmentId=${encodeURIComponent(selectedDepartment.id)}`,
+          `/api/college/subject-semester-assignments?subjectId=${encodeURIComponent(subject.id)}&departmentId=${encodeURIComponent(targetDepartmentId)}&semester=${removeFromSemester ?? effectiveSemester}`,
           { method: "DELETE" }
         );
         const json = await res.json() as { error?: string };
@@ -409,7 +422,13 @@ export default function AssignToSemesterPage() {
     }
   }
 
-  const assignedSubjectIds = useMemo(() => new Set(assignments.map((a) => a.subjectId)), [assignments]);
+  // Scoped to the semester tab currently open - a subject already instanced
+  // in Semester 1 must still be offered here while viewing Semester 2 (a
+  // year-long subject can be a live instance in both), not just once ever.
+  const assignedSubjectIds = useMemo(
+    () => new Set(assignments.filter((a) => a.semester === effectiveSemester).map((a) => a.subjectId)),
+    [assignments, effectiveSemester]
+  );
   const subjectsInRegulation = useMemo(
     () => (selectedRegulation ? subjects.filter((s) => !s.regulation || s.regulation === selectedRegulation) : subjects),
     [subjects, selectedRegulation]
@@ -598,7 +617,7 @@ export default function AssignToSemesterPage() {
                   <CardContent>
                     {masterPool.length === 0 ? (
                       <p className="text-sm text-muted-foreground text-center py-6">
-                        Nothing left to add - every master subject already has a semester for {selectedDepartment?.name ?? ""}.
+                        Nothing left to add - every master subject already has an instance in Semester {effectiveSemester} for {selectedDepartment?.name ?? ""}.
                       </p>
                      ) : paginatedMasterPool.length === 0 ? (
                        <p className="text-sm text-muted-foreground text-center py-6">
@@ -736,7 +755,7 @@ export default function AssignToSemesterPage() {
                                 variant="ghost"
                                 className="shrink-0 text-destructive hover:text-destructive h-8 text-xs"
                                 loading={savingId === a.subjectId}
-                                onClick={() => void setSubjectSemester(subject ?? { id: a.subjectId } as Subject, null)}
+                                onClick={() => void setSubjectSemester(subject ?? { id: a.subjectId } as Subject, null, a.semester, a.departmentId)}
                               >
                                 <ArrowLeftIcon className="h-3.5 w-3.5 mr-1.5" />Remove
                               </Button>

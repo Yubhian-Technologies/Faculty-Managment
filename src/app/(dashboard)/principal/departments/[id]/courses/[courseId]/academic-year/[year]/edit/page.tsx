@@ -32,6 +32,9 @@ export default function CourseAcademicYearPage() {
   const [collegeYear, setCollegeYear] = useState("");
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  // Set only while correcting a mistaken label (e.g. the wrong future year
+  // got picked) - overrides the forward-only lock below for this one save.
+  const [isCorrecting, setIsCorrecting] = useState(false);
 
   // Advancing an existing, well-formed label has exactly one sane next value
   // (suggestNextLabel) - the field is locked to it rather than left freely
@@ -39,12 +42,13 @@ export default function CourseAcademicYearPage() {
   // that case (and first-time setup) instead offers the same small,
   // well-formed option list every other session picker in the app uses,
   // pre-selected on the college's real current session - it's never left as
-  // a blank free-text box.
+  // a blank free-text box. isCorrecting lifts the lock so a mistaken label
+  // can be fixed instead of only ever advanced.
   const suggestedNext = existing ? suggestNextLabel(existing.label) : "";
-  const isLocked = !!existing && !!suggestedNext;
+  const isLocked = !!existing && !!suggestedNext && !isCorrecting;
   const labelOptions = isLocked
     ? [suggestedNext]
-    : Array.from(new Set([collegeYear, ...recentAcademicYearOptions()].filter(Boolean)));
+    : Array.from(new Set([collegeYear, existing?.label, ...recentAcademicYearOptions()].filter(Boolean))) as string[];
 
   useEffect(() => {
     async function load() {
@@ -96,15 +100,18 @@ export default function CourseAcademicYearPage() {
           courseId,
           year: yearNum,
           label: label.trim(),
+          correction: isCorrecting,
         }),
       });
-      const json = await res.json() as { error?: string; advanced?: boolean; facultyUpdated?: number };
+      const json = await res.json() as { error?: string; advanced?: boolean; corrected?: boolean; facultyUpdated?: number };
       if (!res.ok) throw new Error(json.error ?? "Failed to save academic year");
       toast({
         variant: "success",
-        title: json.advanced
-          ? `Advanced to ${label.trim()} - ${json.facultyUpdated ?? 0} faculty member${json.facultyUpdated === 1 ? "" : "s"} updated`
-          : `Academic year set for ${course?.name ?? "course"} - Year ${yearNum}`,
+        title: json.corrected
+          ? `Corrected to ${label.trim()}`
+          : json.advanced
+            ? `Advanced to ${label.trim()} - ${json.facultyUpdated ?? 0} faculty member${json.facultyUpdated === 1 ? "" : "s"} updated`
+            : `Academic year set for ${course?.name ?? "course"} - Year ${yearNum}`,
       });
       router.push(`/principal/departments/${id}`);
     } catch (err) {
@@ -126,7 +133,7 @@ export default function CourseAcademicYearPage() {
     <div className="max-w-xl">
       <PageHeader
         title={`${course?.name ?? "Course"} - Year ${yearNum} Academic Year`}
-        description={existing ? "Advance the academic year for this course-year" : "Set the academic year for this course-year"}
+        description={isCorrecting ? "Correct a mistaken academic year label" : existing ? "Advance the academic year for this course-year" : "Set the academic year for this course-year"}
       />
 
       <Card>
@@ -138,7 +145,12 @@ export default function CourseAcademicYearPage() {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
-            {existing ? (
+            {isCorrecting ? (
+              <p className="text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded-md p-2">
+                Fixing a mistaken label for <strong>{existing?.label}</strong>. This is a correction,
+                not an advance - it can move the year backward and won&rsquo;t touch faculty experience.
+              </p>
+            ) : existing ? (
               <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md p-2">
                 Currently <strong>{existing.label}</strong>. Saving a new label here
                 will be treated as advancing the academic year - every active faculty member with a teaching assignment in this course/year will have
@@ -158,11 +170,28 @@ export default function CourseAcademicYearPage() {
                   {labelOptions.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
                 </SelectContent>
               </Select>
+              {isLocked && !isCorrecting ? (
+                <button
+                  type="button"
+                  className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                  onClick={() => { setIsCorrecting(true); setLabel(existing!.label); }}
+                >
+                  Picked the wrong year by mistake? Edit it directly
+                </button>
+              ) : isCorrecting ? (
+                <button
+                  type="button"
+                  className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                  onClick={() => { setIsCorrecting(false); setLabel(suggestedNext); }}
+                >
+                  Cancel correction
+                </button>
+              ) : null}
             </div>
 
             <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end pt-4 border-t">
               <Button type="button" variant="outline" onClick={() => router.back()}>Cancel</Button>
-              <Button type="submit" loading={isSaving}>{existing ? "Advance" : "Save"}</Button>
+              <Button type="submit" loading={isSaving}>{isCorrecting ? "Save correction" : existing ? "Advance" : "Save"}</Button>
             </div>
           </form>
         </CardContent>

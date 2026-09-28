@@ -5,6 +5,96 @@ import { verifySession } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { createFirebaseUser } from "@/lib/firebase/authRest";
 
+export async function GET(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const session = await verifySession();
+    if (
+      !session ||
+      !["SUPER_ADMIN", "ADMINISTRATION", "LOCATION_STAFF_ADMIN", "LOCATION_DEPT_HEAD"].includes(
+        session.role
+      )
+    ) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { id } = await params;
+    const { searchParams } = new URL(request.url);
+    const locationId = searchParams.get("locationId") || session.locationId;
+    if (!locationId) {
+      return NextResponse.json({ error: "locationId required" }, { status: 400 });
+    }
+
+    const db = getAdminDb();
+    const deptRef = db.collection("locations").doc(locationId).collection("locationDepts").doc(id);
+    const deptSnap = await deptRef.get();
+    if (!deptSnap.exists) {
+      return NextResponse.json({ error: "Department not found" }, { status: 404 });
+    }
+
+    const deptData = { id: deptSnap.id, ...deptSnap.data() };
+
+    // Check dept head user details & multi-dept management
+    let headUser: Record<string, unknown> | null = null;
+    let otherManagedDepts: Array<{ id: string; name: string }> = [];
+
+    const headUid = (deptData as { headUid?: string; deptHeadUid?: string }).headUid || (deptData as { headUid?: string; deptHeadUid?: string }).deptHeadUid;
+    if (headUid) {
+      const uDoc = await db.collection("locations").doc(locationId).collection("locationUsers").doc(headUid).get();
+      if (uDoc.exists) {
+        headUser = { id: uDoc.id, ...uDoc.data() };
+      }
+      // Check other depts headed by this person
+      const [h1, h2] = await Promise.all([
+        db.collection("locations").doc(locationId).collection("locationDepts").where("headUid", "==", headUid).get(),
+        db.collection("locations").doc(locationId).collection("locationDepts").where("deptHeadUid", "==", headUid).get(),
+      ]);
+      const otherMap = new Map<string, string>();
+      for (const doc of [...h1.docs, ...h2.docs]) {
+        if (doc.id !== id) {
+          otherMap.set(doc.id, (doc.data().name as string) || doc.id);
+        }
+      }
+      otherManagedDepts = Array.from(otherMap.entries()).map(([dId, name]) => ({ id: dId, name }));
+    }
+
+    // Stats
+    const [staffSnap, allShiftsSnap] = await Promise.all([
+      db.collection("locations").doc(locationId).collection("staff").where("departmentId", "==", id).get(),
+      db.collection("locations").doc(locationId).collection("shifts").get(),
+    ]);
+
+    const staffCount = staffSnap.size;
+    const shiftCount = allShiftsSnap.docs.filter((d) => {
+      const data = d.data();
+      if (data.isCampusWide || data.departmentId === "ALL") return true;
+      if (data.departmentId === id) return true;
+      if (Array.isArray(data.departmentIds) && (data.departmentIds.includes("ALL") || data.departmentIds.includes(id))) {
+        return true;
+      }
+      return false;
+    }).length;
+
+    return NextResponse.json({
+      department: {
+        ...deptData,
+        staffCount,
+      },
+      headUser,
+      otherManagedDepts,
+      stats: {
+        staffCount,
+        shiftCount,
+      },
+    });
+  } catch (err) {
+    console.error("[location/departments/[id] GET]", err);
+    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+  }
+}
+
 // Rename and/or activate/deactivate a location department. Same
 // authorization shape as this collection's own POST: SUPER_ADMIN can act on
 // any location, ADMINISTRATION (Location Admin) only on its own.

@@ -5,7 +5,6 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
 import type { SubjectCategory, SubjectType } from "@/types";
-import { SUBJECT_CATEGORY_LABELS } from "@/types";
 
 export async function PATCH(
   request: Request,
@@ -31,7 +30,13 @@ export async function PATCH(
       practicalHours?: number;
     };
 
-    if (body.category != null && !(body.category in SUBJECT_CATEGORY_LABELS)) {
+    // Import accepts any free-text category as a valid custom category (see
+    // SubjectValidator.ts) and stores it raw - SubjectCategory is typed as
+    // StandardSubjectCategory | (string & {}) for exactly this reason. Gating
+    // on SUBJECT_CATEGORY_LABELS membership here rejected every subsequent
+    // edit to an import-created subject that kept its custom category,
+    // including edits that didn't touch category at all.
+    if (body.category != null && !body.category.trim()) {
       return NextResponse.json({ error: "Invalid category" }, { status: 400 });
     }
     if (body.category === "OTHER" && !body.customCategory?.trim()) {

@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import { Timestamp } from "firebase-admin/firestore";
+import { Timestamp, FieldValue } from "firebase-admin/firestore";
 import { narrowToActiveLocationDept } from "@/lib/location/activeLocationDept";
 import type { LocationStaffMember } from "@/types/locationStaff";
 
@@ -17,15 +17,12 @@ export async function GET(request: Request) {
     );
 
     const { searchParams } = new URL(request.url);
-    let locationId = searchParams.get("locationId") || session.locationId;
-    if (!locationId) {
-      const firstLoc = await getAdminDb().collection("locations").limit(1).get();
-      if (!firstLoc.empty) {
-        locationId = firstLoc.docs[0].id;
-      }
-    }
+    const locationId = searchParams.get("locationId") || session.locationId;
     if (!locationId) {
       return NextResponse.json({ error: "locationId required" }, { status: 400 });
+    }
+    if (session.role !== "SUPER_ADMIN" && session.locationId !== locationId) {
+      return NextResponse.json({ error: "Unauthorized for this location" }, { status: 403 });
     }
 
     const db = getAdminDb();
@@ -254,14 +251,20 @@ export async function POST(request: Request) {
       .collection("staff")
       .add(staffPayload);
 
-    // Increment department staff count if assigned
+    // Atomically increment department staff count if assigned
     if (departmentId) {
       await db
         .collection("locations")
         .doc(locationId)
         .collection("locationDepts")
         .doc(departmentId)
-        .set({ updatedAt: now }, { merge: true });
+        .set(
+          {
+            staffCount: FieldValue.increment(1),
+            updatedAt: now,
+          },
+          { merge: true }
+        );
     }
 
     return NextResponse.json({ id: ref.id, ...staffPayload }, { status: 201 });

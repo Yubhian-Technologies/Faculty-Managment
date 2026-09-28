@@ -4,6 +4,7 @@ import { LEAVE_TYPE_SEED } from "@/lib/leave/seedData";
 import { notify } from "@/lib/notify";
 import { resolveWorkflowNotifications } from "@/lib/notifications/workflowNotifications";
 import { notifySubstitutes } from "@/lib/leave/periodCoverage";
+import { syncApprovedLeaveToAttendance } from "@/lib/leave/attendanceSync";
 import type { LeaveRequest, LeaveActionRecord } from "@/types/leave";
 
 export type FinalStageDecider = "PRINCIPAL" | "MANAGEMENT";
@@ -109,6 +110,7 @@ export async function decideFinalStageLeave(params: {
   );
   if (action === "APPROVE") {
     await notifySubstitutes(db, collegeId, req);
+    await syncApprovedLeaveToAttendance(db, collegeId, req, id);
   }
 
   return { lopDays };

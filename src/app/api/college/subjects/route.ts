@@ -93,6 +93,7 @@ export async function GET(request: Request) {
         const isElective = category === "PEC" || category === "OEC";
         if (!isElective && sr && sessionRegulations.length > 0) {
           if (!sessionRegulations.includes(sr)) return false;
+          if (sy && sy !== academicYear) return false;
           const key = `${sr}|${(code ?? "").trim().toLowerCase()}`;
           if (code && seenCore.has(key)) return false;
           seenCore.add(key);
