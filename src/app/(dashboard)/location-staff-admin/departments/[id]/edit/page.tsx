@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import {
@@ -137,6 +137,16 @@ export default function EditDepartmentPage() {
       isCancelled = true;
     };
   }, [params.id]);
+
+  // Only staff belonging to this department (or currently appointed head) are visible for head assignment
+  const departmentStaff = useMemo(() => {
+    return staffList.filter((s) => {
+      const matchDeptId = s.departmentId === params.id;
+      const matchDeptName = department?.name && s.departmentName?.toLowerCase() === department.name.toLowerCase();
+      const isCurrentHead = s.id === selectedStaffId;
+      return matchDeptId || matchDeptName || isCurrentHead;
+    });
+  }, [staffList, params.id, department?.name, selectedStaffId]);
 
   const handleStaffSelect = (staffId: string) => {
     setSelectedStaffId(staffId);
@@ -427,13 +437,22 @@ export default function EditDepartmentPage() {
                     </SelectTrigger>
                     <SelectContent className="max-h-72 rounded-2xl border-border/60 shadow-lg">
                       <SelectItem value="__none__" className="text-xs rounded-xl">None (Leave Unassigned for now)</SelectItem>
-                      {staffList.map((s) => (
+                      {departmentStaff.map((s) => (
                         <SelectItem key={s.id} value={s.id} className="text-xs rounded-xl">
                           {s.name} — {s.role} ({s.contactNumber})
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
+                )}
+
+                {departmentStaff.length === 0 && !isLoading && (
+                  <p className="text-xs text-muted-foreground flex items-center justify-between p-3 rounded-2xl bg-muted/30 border border-border/60">
+                    <span>No staff members in this department yet.</span>
+                    <Button asChild size="sm" variant="link" className="h-auto p-0 text-xs font-semibold text-primary">
+                      <Link href={`/location-staff-admin/staff/new?departmentId=${params.id}`}>Add Department Staff First →</Link>
+                    </Button>
+                  </p>
                 )}
               </div>
             )}

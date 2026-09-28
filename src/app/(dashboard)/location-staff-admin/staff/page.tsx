@@ -80,7 +80,7 @@ export default function CampusStaffDirectoryPage() {
       if (selectedPayee !== "ALL") {
         const p = s.payeeVoucher?.toLowerCase() || "";
         if (selectedPayee === "VOUCHER" && !p.includes("voucher")) return false;
-        if (selectedPayee === "CONTRACT" && !p.includes("contract")) return false;
+        if (selectedPayee === "ACCOUNT" && !p.includes("account") && !p.includes("contract")) return false;
       }
 
       if (search.trim()) {
@@ -203,7 +203,7 @@ export default function CampusStaffDirectoryPage() {
           <SelectContent>
             <SelectItem value="ALL">All Payees</SelectItem>
             <SelectItem value="VOUCHER">Voucher Payee</SelectItem>
-            <SelectItem value="CONTRACT">Contract Payee</SelectItem>
+            <SelectItem value="ACCOUNT">Account Payee</SelectItem>
           </SelectContent>
         </Select>
 

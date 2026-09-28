@@ -240,6 +240,8 @@ export default function StaffAttendanceReportsPage() {
           searchKeys={["staffName", "role", "departmentName"]}
           csvFilename={`staff-attendance-report_${from}_to_${to}`}
           emptyTitle="No attendance records for this range"
+          paginate
+          defaultPageSize={10}
           columns={[
             { key: "staffName", header: "Staff Member" },
             { key: "departmentName", header: "Department" },

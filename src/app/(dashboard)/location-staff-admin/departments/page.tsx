@@ -336,15 +336,24 @@ export default function LocationDepartmentsPage() {
                           <Shield className="h-3 w-3 text-primary" />
                           <span>Appointed Head</span>
                         </span>
-                        {dept.headUid ? (
+                        {dept.headUid || dept.headName ? (
                           <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-600 bg-emerald-500/10 px-2 py-0.5 rounded-full">
                             <CheckCircle2 className="h-2.5 w-2.5" />
                             Assigned
                           </span>
                         ) : (
-                          <span className="text-[10px] font-medium text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
-                            Unassigned
-                          </span>
+                          <Button
+                            asChild
+                            size="sm"
+                            variant="outline"
+                            className="h-6 text-[10px] font-semibold rounded-full px-2.5 gap-1 border-primary/40 text-primary hover:bg-primary/10 hover:text-primary shadow-2xs"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <Link href={`/location-staff-admin/departments/${dept.id}/edit`}>
+                              <Plus className="h-3 w-3" />
+                              <span>Head +</span>
+                            </Link>
+                          </Button>
                         )}
                       </div>
                       {dept.headName ? (
@@ -356,7 +365,21 @@ export default function LocationDepartmentsPage() {
                           </p>
                         </div>
                       ) : (
-                        <p className="text-muted-foreground italic text-[11px]">No department head assigned.</p>
+                        <div className="flex items-center justify-between pt-0.5">
+                          <p className="text-muted-foreground italic text-[11px]">No department head assigned.</p>
+                          <Button
+                            asChild
+                            size="sm"
+                            variant="ghost"
+                            className="h-6 text-[10px] font-semibold rounded-full px-2 gap-1 text-primary hover:text-primary hover:bg-primary/10"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <Link href={`/location-staff-admin/departments/${dept.id}/edit`}>
+                              <Plus className="h-3 w-3" />
+                              <span>Assign</span>
+                            </Link>
+                          </Button>
+                        </div>
                       )}
                     </div>
 

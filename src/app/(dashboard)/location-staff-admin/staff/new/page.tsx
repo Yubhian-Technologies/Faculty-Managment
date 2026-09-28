@@ -90,7 +90,7 @@ export default function NewStaffMemberPage() {
             <LocationStaffForm
               departments={departments}
               shifts={shifts}
-              lockedDepartmentId={targetDeptId || undefined}
+              initialDepartmentId={targetDeptId || undefined}
               onCancel={() => router.push(fallbackHref)}
               onSuccess={(created) =>
                 router.push(

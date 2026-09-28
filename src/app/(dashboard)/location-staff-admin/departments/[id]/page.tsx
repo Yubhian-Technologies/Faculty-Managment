@@ -151,6 +151,8 @@ export default function DepartmentDetailPage() {
   const [reportShiftFilter, setReportShiftFilter] = useState("ALL");
   const [reportRows, setReportRows] = useState<StaffReportRow[]>([]);
   const [isLoadingReports, setIsLoadingReports] = useState(false);
+  const [reportPage, setReportPage] = useState(1);
+  const REPORT_PAGE_SIZE = 10;
 
   // 1. Fetch Department Details
   const fetchDeptDetails = useCallback(() => {
@@ -1441,7 +1443,7 @@ export default function DepartmentDetailPage() {
                 type="date"
                 value={reportFrom}
                 max={reportTo}
-                onChange={(e) => setReportFrom(e.target.value)}
+                onChange={(e) => { setReportFrom(e.target.value); setReportPage(1); }}
                 className="h-10 text-xs rounded-full border-border/60 bg-muted/30 focus:bg-background"
               />
             </div>
@@ -1453,14 +1455,14 @@ export default function DepartmentDetailPage() {
                 value={reportTo}
                 min={reportFrom}
                 max={istDateKey()}
-                onChange={(e) => setReportTo(e.target.value)}
+                onChange={(e) => { setReportTo(e.target.value); setReportPage(1); }}
                 className="h-10 text-xs rounded-full border-border/60 bg-muted/30 focus:bg-background"
               />
             </div>
 
             <div className="space-y-1">
               <Label className="text-[11px] text-muted-foreground font-medium">Filter Shift</Label>
-              <Select value={reportShiftFilter} onValueChange={setReportShiftFilter}>
+              <Select value={reportShiftFilter} onValueChange={(v) => { setReportShiftFilter(v); setReportPage(1); }}>
                 <SelectTrigger className="h-10 text-xs rounded-full border-border/60 bg-muted/30 focus:bg-background">
                   <SelectValue placeholder="All Shifts" />
                 </SelectTrigger>
@@ -1483,6 +1485,7 @@ export default function DepartmentDetailPage() {
                 onClick={() => {
                   setReportFrom(istDateKey());
                   setReportTo(istDateKey());
+                  setReportPage(1);
                 }}
               >
                 Today
@@ -1496,6 +1499,7 @@ export default function DepartmentDetailPage() {
                   d.setDate(d.getDate() - 7);
                   setReportFrom(d.toISOString().split("T")[0]);
                   setReportTo(istDateKey());
+                  setReportPage(1);
                 }}
               >
                 7 Days
@@ -1507,6 +1511,7 @@ export default function DepartmentDetailPage() {
                 onClick={() => {
                   setReportFrom(firstOfMonth());
                   setReportTo(istDateKey());
+                  setReportPage(1);
                 }}
               >
                 This Month
@@ -1601,7 +1606,7 @@ export default function DepartmentDetailPage() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border/50">
-                        {reportRows.map((r) => (
+                        {reportRows.slice((reportPage - 1) * REPORT_PAGE_SIZE, reportPage * REPORT_PAGE_SIZE).map((r) => (
                           <tr key={r.staffId} className="hover:bg-muted/20 transition-colors">
                             <td className="p-3.5 pl-5 font-semibold text-foreground">{r.staffName}</td>
                             <td className="p-3.5 text-muted-foreground">{r.role}</td>
@@ -1633,7 +1638,7 @@ export default function DepartmentDetailPage() {
 
                   {/* Mobile Stacked Card View */}
                   <div className="block md:hidden divide-y divide-border/50">
-                    {reportRows.map((r) => (
+                    {reportRows.slice((reportPage - 1) * REPORT_PAGE_SIZE, reportPage * REPORT_PAGE_SIZE).map((r) => (
                       <div key={r.staffId} className="p-4 space-y-2.5">
                         <div className="flex items-start justify-between gap-2">
                           <div>
@@ -1675,6 +1680,38 @@ export default function DepartmentDetailPage() {
                       </div>
                     ))}
                   </div>
+
+                  {/* Pagination Footer */}
+                  {reportRows.length > REPORT_PAGE_SIZE && (
+                    <div className="flex items-center justify-between px-5 py-3 border-t border-border/50 bg-muted/20">
+                      <p className="text-xs text-muted-foreground">
+                        Showing {Math.min((reportPage - 1) * REPORT_PAGE_SIZE + 1, reportRows.length)}–{Math.min(reportPage * REPORT_PAGE_SIZE, reportRows.length)} of {reportRows.length} staff
+                      </p>
+                      <div className="flex items-center gap-1.5">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 px-2.5 text-xs rounded-lg"
+                          disabled={reportPage <= 1}
+                          onClick={() => setReportPage((p) => Math.max(1, p - 1))}
+                        >
+                          ← Prev
+                        </Button>
+                        <span className="text-xs font-medium text-foreground px-1">
+                          {reportPage} / {Math.ceil(reportRows.length / REPORT_PAGE_SIZE)}
+                        </span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 px-2.5 text-xs rounded-lg"
+                          disabled={reportPage >= Math.ceil(reportRows.length / REPORT_PAGE_SIZE)}
+                          onClick={() => setReportPage((p) => p + 1)}
+                        >
+                          Next →
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </>
               )}
             </CardContent>
