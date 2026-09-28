@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Plus, Pencil, Trash2, Clock, GraduationCap, CheckCircle2, CalendarClock, Layers, GitBranch, RotateCcw } from "lucide-react";
+import { ArrowLeft, Plus, Pencil, Trash2, Clock, GraduationCap, CheckCircle2, CalendarClock, Layers, GitBranch, RotateCcw, ChevronRight, AlertCircle } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -485,47 +485,73 @@ export default function DepartmentDetailPage() {
                         </div>
                       </div>
 
-                      <div className="space-y-1.5 border-t pt-2">
-                        <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Year Timings</p>
+                      <div className="space-y-2 border-t pt-2">
+                        <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Year Setup</p>
                         {years.length === 0 ? (
                           <p className="text-xs text-muted-foreground">No years assigned to this department yet.</p>
                         ) : years.map((y) => {
                           const t = getTiming(c.id, y);
                           const ay = getAcademicYear(c.id, y);
+                          const timingReady = !!t;
+                          const ayReady = !!ay;
+                          const bothReady = timingReady && ayReady;
                           return (
-                            <div
-                              key={y}
-                              onClick={inherited ? undefined : () => router.push(`/principal/departments/${id}/courses/${c.id}/timing/${y}/edit`)}
-                              className={`flex w-full flex-col gap-1 rounded-md border px-2 py-1.5 text-xs ${inherited ? "" : "hover:bg-muted/50 transition-colors cursor-pointer"}`}
-                            >
-                              <div className="flex items-center justify-between gap-2">
-                                <span className="flex items-center gap-1.5 font-medium">
-                                  <Clock className="h-3 w-3 text-muted-foreground shrink-0" />
-                                  Year {y}
-                                </span>
-                                {t ? (
-                                  <span className="flex items-center gap-1 text-emerald-600 font-medium">
-                                    <CheckCircle2 className="h-3 w-3" />
-                                    {t.collegeStartTime}–{t.collegeEndTime} · {t.numberOfPeriods} periods
+                            <div key={y} className="rounded-md border overflow-hidden">
+                              <div className="flex items-center justify-between gap-2 bg-muted/40 px-2 py-1">
+                                <span className="text-xs font-semibold">Year {y}</span>
+                                {!inherited && (
+                                  <span className={`flex items-center gap-1 text-[10px] font-medium ${bothReady ? "text-emerald-600" : "text-orange-500"}`}>
+                                    {bothReady ? (
+                                      <><CheckCircle2 className="h-3 w-3" />Fully set up</>
+                                    ) : (
+                                      <><AlertCircle className="h-3 w-3" />{timingReady || ayReady ? "1 of 2 set up" : "Setup needed"}</>
+                                    )}
                                   </span>
-                                ) : (
-                                  <span className="text-muted-foreground">{isSubDepartment ? "Not configured" : "Not configured - tap to add"}</span>
                                 )}
                               </div>
-                              <span
-                                onClick={inherited ? undefined : (e) => {
-                                  e.stopPropagation();
-                                  router.push(`/principal/departments/${id}/courses/${c.id}/academic-year/${y}/edit`);
-                                }}
-                                className={`flex items-center gap-1.5 self-start ${isSubDepartment ? "" : "hover:underline"}`}
-                              >
-                                <CalendarClock className="h-3 w-3 shrink-0" />
-                                {ay ? (
-                                  <span className="text-emerald-600 font-medium">{ay.label}{isSubDepartment ? "" : " - tap to advance"}</span>
-                                ) : (
-                                  <span className="text-orange-500 font-medium">{isSubDepartment ? "Academic year not set" : "Academic year required - tap to set"}</span>
-                                )}
-                              </span>
+                              <div className="divide-y">
+                                {/* Independent action: class hours/periods for this year. */}
+                                <button
+                                  type="button"
+                                  onClick={inherited ? undefined : () => router.push(`/principal/departments/${id}/courses/${c.id}/timing/${y}/edit`)}
+                                  className={`flex w-full items-center justify-between gap-2 px-2 py-1.5 text-left text-xs ${inherited ? "cursor-default" : "hover:bg-muted/50 transition-colors cursor-pointer"}`}
+                                >
+                                  <span className="flex items-center gap-1.5 min-w-0 shrink-0">
+                                    <Clock className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                                    <span className="font-medium">Timings</span>
+                                  </span>
+                                  <span className="flex items-center gap-1.5 justify-end min-w-0">
+                                    {timingReady ? (
+                                      <span className="flex items-center gap-1 text-emerald-600 font-medium text-right">
+                                        <CheckCircle2 className="h-3 w-3 shrink-0" />
+                                        {t.collegeStartTime}–{t.collegeEndTime} · {t.numberOfPeriods} periods
+                                      </span>
+                                    ) : (
+                                      <span className="text-orange-500 font-medium">{inherited ? "Not configured" : "Not set · tap to add"}</span>
+                                    )}
+                                    {!inherited && <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
+                                  </span>
+                                </button>
+                                {/* Independent action: which academic session/cohort this year is currently running. */}
+                                <button
+                                  type="button"
+                                  onClick={inherited ? undefined : () => router.push(`/principal/departments/${id}/courses/${c.id}/academic-year/${y}/edit`)}
+                                  className={`flex w-full items-center justify-between gap-2 px-2 py-1.5 text-left text-xs ${inherited ? "cursor-default" : "hover:bg-muted/50 transition-colors cursor-pointer"}`}
+                                >
+                                  <span className="flex items-center gap-1.5 min-w-0 shrink-0">
+                                    <CalendarClock className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                                    <span className="font-medium">Academic Year</span>
+                                  </span>
+                                  <span className="flex items-center gap-1.5 justify-end min-w-0">
+                                    {ayReady ? (
+                                      <span className="text-emerald-600 font-medium">{ay.label}{inherited ? "" : " · tap to advance"}</span>
+                                    ) : (
+                                      <span className="text-orange-500 font-medium">{inherited ? "Not set" : "Required · tap to set"}</span>
+                                    )}
+                                    {!inherited && <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
+                                  </span>
+                                </button>
+                              </div>
                             </div>
                           );
                         })}
