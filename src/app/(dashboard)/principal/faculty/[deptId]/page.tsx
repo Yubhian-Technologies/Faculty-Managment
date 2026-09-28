@@ -4,17 +4,19 @@ import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Eye, Trash2, UsersRound, History } from "lucide-react";
+import { ArrowLeft, BookOpen, ChevronRight, Eye, Trash2, UsersRound, History } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Avatar } from "@/components/shared/Avatar";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { ExportFacultyDialog } from "@/components/faculty/ExportFacultyDialog";
 import { toast } from "@/hooks/useToast";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
+import { isFacultyDestination } from "@/lib/departments/facultyDepartmentOptions";
 import { DESIGNATION_LABELS, FACULTY_STATUS_LABELS } from "@/types";
 import type { Department, Designation, FacultyMember, FacultyStatus, FMSUser } from "@/types";
 
@@ -68,6 +70,14 @@ export default function PrincipalDepartmentFacultyPage() {
   });
   const department = departments.find((d) => d.id === deptId);
 
+  // A department split into sub-departments (e.g. Basic Science ->
+  // BSC/BSM/BSP/BSE) is shown here as a picker into its children, since
+  // faculty are actually filed under the sub-department, not the parent
+  // (see isFacultyDestination's own comment) - unless the parent ALSO runs
+  // its own sections/faculty directly, in which case both are shown.
+  const subDepartments = department ? departments.filter((d) => d.parentDepartmentId === department.id) : [];
+  const departmentIsFacultyDestination = department ? isFacultyDestination(department, departments) : true;
+
   const { data: hod } = useQuery({
     queryKey: ["principal-dept-hod", department?.hodUid],
     queryFn: () =>
@@ -85,7 +95,7 @@ export default function PrincipalDepartmentFacultyPage() {
       )
         .then((r) => r.json() as Promise<{ faculty: FacultyRow[] }>)
         .then((d) => d.faculty ?? []),
-    enabled: !!department,
+    enabled: !!department && departmentIsFacultyDestination,
   });
 
   // An HOD is almost always ALSO a teaching Faculty member of their own
@@ -286,39 +296,71 @@ export default function PrincipalDepartmentFacultyPage() {
         </div>
       )}
 
-      <div className="flex gap-2 flex-wrap">
-        {STATUS_TABS.map((tab) => (
-          <button
-            key={tab.key}
-            onClick={() => setStatusFilter(tab.key)}
-            className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
-              statusFilter === tab.key ? "bg-primary text-primary-foreground border-primary" : "bg-background border-border hover:bg-muted"
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
+      {subDepartments.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-sm font-medium">Sub-departments</p>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {subDepartments.map((sd) => (
+              <Card
+                key={sd.id}
+                className="cursor-pointer hover:border-primary hover:shadow-md transition-all duration-200"
+                onClick={() => router.push(`/principal/faculty/${sd.id}`)}
+              >
+                <CardContent className="p-4 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center">
+                      <BookOpen className="h-4 w-4 text-primary" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-sm">{sd.name}</p>
+                      <p className="text-xs text-muted-foreground">{sd.code}</p>
+                    </div>
+                  </div>
+                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      )}
 
-      <DataTable
-        data={faculty}
-        columns={columns}
-        isLoading={isLoading}
-        keyExtractor={(f) => f.id}
-        searchPlaceholder="Search by name, employee ID, or email..."
-        searchKeys={["legalName", "nameAsPerPan", "employeeId", "email"] as (keyof FacultyRow)[]}
-        // Same historical date-range view as hod/faculty's own Faculty
-        // Timeline, scoped to this department - kept beside the search box
-        // via DataTable's own filterComponent slot, same placement as hod/faculty.
-        filterComponent={
-          <Button variant="outline" size="sm" onClick={() => router.push(`/principal/faculty/${deptId}/timeline`)}>
-            <History className="h-4 w-4 mr-1" />Faculty Timeline
-          </Button>
-        }
-        emptyTitle="No faculty in this department"
-        emptyDescription="Faculty added by the HOD for this department will appear here."
-        onRowClick={(f) => router.push(`/principal/faculty/${deptId}/${f.id}`)}
-      />
+      {departmentIsFacultyDestination && (
+        <>
+          <div className="flex gap-2 flex-wrap">
+            {STATUS_TABS.map((tab) => (
+              <button
+                key={tab.key}
+                onClick={() => setStatusFilter(tab.key)}
+                className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
+                  statusFilter === tab.key ? "bg-primary text-primary-foreground border-primary" : "bg-background border-border hover:bg-muted"
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          <DataTable
+            data={faculty}
+            columns={columns}
+            isLoading={isLoading}
+            keyExtractor={(f) => f.id}
+            searchPlaceholder="Search by name, employee ID, or email..."
+            searchKeys={["legalName", "nameAsPerPan", "employeeId", "email"] as (keyof FacultyRow)[]}
+            // Same historical date-range view as hod/faculty's own Faculty
+            // Timeline, scoped to this department - kept beside the search box
+            // via DataTable's own filterComponent slot, same placement as hod/faculty.
+            filterComponent={
+              <Button variant="outline" size="sm" onClick={() => router.push(`/principal/faculty/${deptId}/timeline`)}>
+                <History className="h-4 w-4 mr-1" />Faculty Timeline
+              </Button>
+            }
+            emptyTitle="No faculty in this department"
+            emptyDescription="Faculty added by the HOD for this department will appear here."
+            onRowClick={(f) => router.push(`/principal/faculty/${deptId}/${f.id}`)}
+          />
+        </>
+      )}
 
       {!department && (
         <p className="text-sm text-muted-foreground flex items-center gap-2">
