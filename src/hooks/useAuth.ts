@@ -164,7 +164,20 @@ export function useAuth() {
           }
           setUser(
             profile
-              ? { ...profile, realRole: (realRole as UserRole | undefined) ?? profile.role, roles: serverRoles }
+              ? {
+                  ...profile,
+                  // The login-token email (the actual college/login email a
+                  // Firebase ID token carries) always wins over whatever
+                  // happens to be stored on the profile doc's own `email`
+                  // field - that field has been overwritten with a personal
+                  // contact email by a stray self-service edit before (see
+                  // api/college/faculty/me PATCH's own fix), so this is a
+                  // defensive backstop against the sidebar ever showing the
+                  // wrong email again the same way.
+                  email: serverEmail ?? profile.email,
+                  realRole: (realRole as UserRole | undefined) ?? profile.role,
+                  roles: serverRoles,
+                }
               : {
                   uid: firebaseUser.uid,
                   collegeId,

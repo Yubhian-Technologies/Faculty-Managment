@@ -11,7 +11,13 @@ export async function GET(request: Request) {
     if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const { searchParams } = new URL(request.url);
-    const locationId = searchParams.get("locationId") ?? session.locationId;
+    let locationId = searchParams.get("locationId") ?? session.locationId;
+    if (!locationId) {
+      const firstLoc = await getAdminDb().collection("locations").limit(1).get();
+      if (!firstLoc.empty) {
+        locationId = firstLoc.docs[0].id;
+      }
+    }
     if (!locationId) return NextResponse.json({ error: "locationId required" }, { status: 400 });
 
     const db = getAdminDb();

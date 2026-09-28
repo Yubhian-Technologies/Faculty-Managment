@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Plus, Trash2, Upload, Download, Search, Users, Pencil } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
@@ -18,14 +19,9 @@ import {
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { Pagination } from "@/components/shared/Pagination";
 import { toast } from "@/hooks/useToast";
-import {
-  RosterFormFields, RosterDetailView, departmentsOfferingCourse, yearOptionsForDepartment, yearOptionsForCourse,
-} from "@/components/students/RosterFieldInputs";
-import { freshmanPickerDepartmentNames, type DepartmentWithId } from "@/lib/college/academicStructure";
-import {
-  EDITABLE_ROSTER_FIELDS, LIST_ROSTER_FIELDS,
-  rosterFieldDisplay, rosterFieldFormValue, rosterFormToPayload,
-} from "@/lib/students/rosterFields";
+import { departmentsOfferingCourse, yearOptionsForDepartment, yearOptionsForCourse } from "@/components/students/RosterFieldInputs";
+import { StudentFormDialog } from "@/components/students/StudentFormDialog";
+import { EDITABLE_ROSTER_FIELDS, LIST_ROSTER_FIELDS, rosterFieldDisplay } from "@/lib/students/rosterFields";
 import { toCSV, downloadCSV } from "@/lib/utils/csv";
 import { GraduatedStudentsView } from "@/components/students/GraduatedStudentsView";
 import { StudentPromotionsPanel } from "@/components/students/StudentPromotionsPanel";
@@ -41,11 +37,9 @@ import type { StudentListItem, Department, AcademicYear, Course } from "@/types"
 // IS offered at intake (it's a template column, provisional only), but is
 // read-only when editing - correcting it afterwards is the department's, and
 // theirs is the only path that checks it for uniqueness.
-type RosterForm = Record<string, string>;
-
-const EMPTY_FORM: RosterForm = Object.fromEntries(
-  EDITABLE_ROSTER_FIELDS.map((f) => [f.key, ""])
-);
+// The Add/Edit form itself (fields, validation, save request) lives in
+// StudentFormDialog - the single canonical implementation this page and the
+// Student profile page's own Edit button both use.
 
 const DEFAULT_PAGE_SIZE = 20;
 const SEARCH_DEBOUNCE_MS = 350;
@@ -70,6 +64,7 @@ function ordinalYear(year: number) {
 }
 
 export default function OfficeStudentsPage() {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<StudentTabKey>("roster");
   const [students, setStudents] = useState<StudentListItem[]>([]);
   const [total, setTotal] = useState(0);
@@ -98,12 +93,9 @@ export default function OfficeStudentsPage() {
 
   const [addOpen, setAddOpen] = useState(false);
   // Set when the dialog is editing an existing student rather than adding one -
-  // both use the same form body, so this is what tells them apart.
+  // StudentFormDialog tells them apart the same way.
   const [editTarget, setEditTarget] = useState<StudentListItem | null>(null);
-  const [form, setForm] = useState<RosterForm>(EMPTY_FORM);
-  const [saving, setSaving] = useState(false);
 
-  const [viewTarget, setViewTarget] = useState<StudentListItem | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<StudentListItem | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -444,83 +436,14 @@ export default function OfficeStudentsPage() {
     return list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
   }
 
-  function setF(key: string, value: string) { setForm((f) => ({ ...f, [key]: value })); }
-
   function openAdd() {
     setEditTarget(null);
-    setForm(EMPTY_FORM);
     setAddOpen(true);
   }
 
   function openEdit(s: StudentListItem) {
     setEditTarget(s);
-    setForm(
-      Object.fromEntries(
-        EDITABLE_ROSTER_FIELDS.map((f) => [f.key, rosterFieldFormValue(f, s)])
-      ) as RosterForm
-    );
-    setViewTarget(null);
     setAddOpen(true);
-  }
-
-  async function handleSave() {
-    if (!form.name?.trim()) { toast({ variant: "destructive", title: "Name is required" }); return; }
-    if (!form.course) { toast({ variant: "destructive", title: "Course is required" }); return; }
-    if (!form.department) { toast({ variant: "destructive", title: "Department is required" }); return; }
-    if (!form.year) { toast({ variant: "destructive", title: "Academic Year is required" }); return; }
-    // Add only - department/year aren't editable via this form on Edit (see
-    // its own comment below). A 1st-year student at a college that runs a
-    // shared first year must land under a Basic Science (Freshman)
-    // department with a Core Department named - same rule RosterFieldInputs
-    // already steers the pickers toward and the server enforces on submit.
-    if (!editTarget && form.year === "1") {
-      const freshmanNames = freshmanPickerDepartmentNames(departments as DepartmentWithId[]);
-      if (freshmanNames.size > 0 && !freshmanNames.has(form.department)) {
-        toast({ variant: "destructive", title: `"${form.department}" is a real branch - set it as Core Department instead of Department for a 1st Year student` });
-        return;
-      }
-      if (freshmanNames.size > 0 && !form.secondaryDepartment) {
-        toast({ variant: "destructive", title: "Core Department is required for 1st Year students" });
-        return;
-      }
-    }
-
-    setSaving(true);
-    try {
-      // On Edit, a blank field must overwrite (clear) whatever the student
-      // currently has - not be silently dropped as if never provided (which
-      // previously made "clear Secondary Department" a no-op with a
-      // deceptive "updated" success toast).
-      const payload = rosterFormToPayload(form, { writeBlanksAsNull: !!editTarget });
-      // Editing sends only the detail fields - name/department/year stay as
-      // they are, since moving a student between departments or years is the
-      // promotion/section flow's job, not a field edit.
-      const res = editTarget
-        ? await fetch(`/api/college/students/${editTarget.id}`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ details: payload }),
-          })
-        : await fetch("/api/college/students", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
-          });
-      const json = await res.json() as { id?: string; error?: string };
-      if (!res.ok) {
-        toast({ variant: "destructive", title: json.error ?? (editTarget ? "Failed to save changes" : "Failed to add student") });
-        return;
-      }
-      toast({ variant: "success", title: `${form.name.trim()} ${editTarget ? "updated" : "added"}` });
-      setAddOpen(false);
-      setEditTarget(null);
-      setForm(EMPTY_FORM);
-      void loadStudents();
-    } catch {
-      toast({ variant: "destructive", title: "Network error - please try again" });
-    } finally {
-      setSaving(false);
-    }
   }
 
   async function handleDelete() {
@@ -630,7 +553,7 @@ export default function OfficeStudentsPage() {
       {activeTab === "promotion" ? (
         <StudentPromotionsPanel showHeader={false} />
       ) : activeTab === "graduates" ? (
-        <GraduatedStudentsView showHeader={false} />
+        <GraduatedStudentsView showHeader={false} studentDetailHref={(id) => `/college-office/students/${id}`} />
       ) : (
         <>
       {/* Summary */}
@@ -754,7 +677,7 @@ export default function OfficeStudentsPage() {
                   {students.map((s, i) => (
                     <tr
                       key={s.id}
-                      onClick={() => setViewTarget(s)}
+                      onClick={() => router.push(`/college-office/students/${s.id}`)}
                       className={`border-b last:border-0 cursor-pointer hover:bg-muted/40 transition-colors ${i % 2 === 0 ? "" : "bg-muted/20"}`}
                     >
                       <td className="p-3" onClick={(e) => e.stopPropagation()}>
@@ -869,84 +792,13 @@ export default function OfficeStudentsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* ── Student detail ── */}
-      <Dialog open={!!viewTarget} onOpenChange={(o) => { if (!o) setViewTarget(null); }}>
-        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{viewTarget?.name}</DialogTitle>
-            <DialogDescription>
-              Every field the roster template carries, in its order - identity first,
-              then the rest of the admission detail.
-            </DialogDescription>
-          </DialogHeader>
-
-          {/* Section and status aren't roster-template fields (the department
-              assigns the section later, so the sheet has no column for it) but
-              they're the Office's cue for who still needs sectioning - shown
-              here since the list no longer carries a Section column. */}
-          {viewTarget && (
-            <div className="flex flex-wrap items-center gap-2 text-sm">
-              <span className="text-muted-foreground">Section:</span>
-              {viewTarget.section
-                ? <Badge variant="secondary" className="text-xs">{viewTarget.section}</Badge>
-                : <span className="italic text-muted-foreground">Unassigned</span>}
-              <span className="text-muted-foreground ml-3">Status:</span>
-              <Badge variant="secondary" className="text-xs">{viewTarget.status}</Badge>
-            </div>
-          )}
-
-          {viewTarget && <RosterDetailView student={viewTarget} />}
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setViewTarget(null)}>Close</Button>
-            {viewTarget && (
-              <Button onClick={() => openEdit(viewTarget)}>
-                <Pencil className="h-4 w-4 mr-2" />Edit
-              </Button>
-            )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       {/* ── Add / Edit Student dialog ── */}
-      <Dialog open={addOpen} onOpenChange={(o) => { setAddOpen(o); if (!o) setEditTarget(null); }}>
-        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{editTarget ? `Edit ${editTarget.name}` : "Add Student"}</DialogTitle>
-            <DialogDescription>
-              {editTarget
-                ? "The same fields as the roster import. Department and Academic Year are shown for context - moving a student between them is done through sectioning and promotion, not here."
-                : "The same fields as the roster import. The student is added as unassigned - the department assigns their section later."}
-            </DialogDescription>
-          </DialogHeader>
-
-          <RosterFormFields
-            values={form}
-            onChange={setF}
-            departments={activeDepartments}
-            courseNames={courseNames}
-            courses={courses}
-            years={years}
-            // Department and Year are read-only on Edit to match what this
-            // dialog's own description already promises ("shown for context") -
-            // students/[id] PATCH's roster-detail-edit path silently drops both
-            // (see ROSTER_DETAIL_KEYS), so leaving them as live Selects let an
-            // office user click a different department and, on Save, have that
-            // click silently discarded while its side effect of clearing
-            // Secondary Department (and, now, Course when it no longer matches)
-            // was NOT discarded - a confusing partial save. Locking them stops
-            // that click from happening at all.
-            readOnlyKeys={editTarget ? ["rollNumber", "department", "year"] : []}
-          />
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => { setAddOpen(false); setEditTarget(null); }}>Cancel</Button>
-            <Button onClick={() => void handleSave()} loading={saving}>
-              {editTarget ? "Save Changes" : "Add Student"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <StudentFormDialog
+        open={addOpen}
+        onOpenChange={(o) => { setAddOpen(o); if (!o) setEditTarget(null); }}
+        student={editTarget}
+        onSaved={() => { setAddOpen(false); setEditTarget(null); void loadStudents(); }}
+      />
 
       {/* ── Remove confirm ── */}
       <ConfirmDialog

@@ -13,8 +13,9 @@ import { ImportFixField } from "@/components/import/ImportFixField";
 import { toast } from "@/hooks/useToast";
 import { parseCSV, matchHeaders, getUnmatchedHeaders, parseExcelFile, readFileAsText } from "@/lib/utils/csv";
 import { getSupportingStaffColumns, getSupportingStaffHints, getSupportingStaffSampleRows } from "@/lib/supportingStaff/csvColumns";
+import { useActiveDepartments } from "@/hooks/useActiveDepartments";
 import { Download, Upload, CheckCircle2, XCircle, FileSpreadsheet, ArrowLeft, AlertTriangle, Pencil } from "lucide-react";
-import type { Department, DesignationCatalogItem } from "@/types";
+import type { DesignationCatalogItem } from "@/types";
 
 type ParsedRow = Record<string, string>;
 type ImportResult = {
@@ -60,13 +61,8 @@ export default function CollegeOfficeNonTechnicalStaffImportPage() {
   // staff/new/page.tsx), which is the only one of the three Add forms that
   // has one (Faculty has no Department column; HOD's Supporting Staff
   // defaults it automatically with no picker).
-  const [departmentNames, setDepartmentNames] = useState<string[]>([]);
-  useEffect(() => {
-    fetch("/api/college/departments")
-      .then((r) => r.json() as Promise<{ departments: Department[] }>)
-      .then((d) => setDepartmentNames((d.departments ?? []).filter((dep) => dep.isActive).map((dep) => dep.name)))
-      .catch(() => { /* Department stays a free-text field if this fails */ });
-  }, []);
+  const activeDepartments = useActiveDepartments();
+  const departmentNames = useMemo(() => activeDepartments.map((dep) => dep.name), [activeDepartments]);
 
   // A two-sheet .xlsx rather than a flat CSV: sheet one is the template to fill
   // in (headers + the per-column guidance row), sheet two shows five completed

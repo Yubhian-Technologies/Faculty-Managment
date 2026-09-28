@@ -11,6 +11,7 @@ import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { getActiveSubstitutionsForDates, currentWeekDateKeys } from "@/lib/leave/periodCoverage";
 import { resolveSectionCurrentSemester, resolveRequestedSemester, matchesCurrentSemester } from "@/lib/college/semester";
+import { inheritedAssignmentDepartmentId } from "@/lib/timetable/sharedYearTiming";
 import { matchesCurrentAcademicYear } from "@/lib/college/academicSession";
 import { isTimetableIncharge } from "@/lib/departments/timetableIncharge";
 import { isFacultyAvailable } from "@/types";
@@ -472,9 +473,27 @@ export async function POST(request: Request) {
       // Existence of the assignment (this subject IS this department's
       // curriculum) is the one guarantee always enforced.
       if (!body.isPast) {
-        const instanceSnap = await collegeRef.collection("subjectSemesterAssignments")
+        let instanceSnap = await collegeRef.collection("subjectSemesterAssignments")
           .doc(`${subjectId}_${course.departmentId}`)
           .get();
+        // Same shared-year gap as CourseYearTiming (see
+        // lib/college/semester.ts's loadEffectiveTiming): a branch reached
+        // through a shared-first-year manager (e.g. "BSM-CSE-A") is keyed
+        // under the BRANCH's own department here, but Assign to Semester
+        // curricularly assigns a shared year's subjects to the MANAGING
+        // department (Basic Science Maths), never to every branch it feeds
+        // individually - so the exact-department lookup above finds nothing
+        // even though the subject genuinely was assigned for this year.
+        if (!instanceSnap.exists) {
+          const deptsSnap = await collegeRef.collection("departments").get();
+          const allDepts = deptsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as (Department & { id: string })[];
+          const inheritedDeptId = inheritedAssignmentDepartmentId(course, section.year, allDepts);
+          if (inheritedDeptId) {
+            instanceSnap = await collegeRef.collection("subjectSemesterAssignments")
+              .doc(`${subjectId}_${inheritedDeptId}`)
+              .get();
+          }
+        }
         if (!instanceSnap.exists) {
           return NextResponse.json(
             { error: "This subject hasn't been assigned to this department's semester yet - use Assign to Semester first." },

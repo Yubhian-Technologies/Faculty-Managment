@@ -271,10 +271,15 @@ export async function PATCH(request: Request) {
     // Keep the thin users/{uid} doc in sync so auth store reflects latest name/photo -
     // `name` follows the record's display name (legalName, newDisplayName above) and only
     // changes when displayNameChanged - so editing something else (including the PAN
-    // name) doesn't touch it.
+    // name) doesn't touch it. `body.email` here is the faculty's PERSONAL contact
+    // email (see the request body's own doc-comment above and the Edit form's
+    // "Personal Email" label) - it must never be written to users/{uid}.email,
+    // which is the login's own college-email identity that Sidebar/MobileDrawer
+    // display straight off the auth store (see useAuth.ts). That was a real bug:
+    // saving a Personal Email here silently overwrote the sidebar's login-email
+    // display with it.
     const userUpdates: Record<string, unknown> = { updatedAt: now };
     if (displayNameChanged) userUpdates.name = newDisplayName;
-    if (body.email?.trim()) userUpdates.email = body.email.trim();
     // The login's own contact field (users.phone) is a different entity and keeps its name.
     if (mobileNoFromBody(body) !== undefined) userUpdates.phone = mobileNoFromBody(body);
     if (body.profilePhotoUrl !== undefined) userUpdates.profilePhotoUrl = body.profilePhotoUrl;

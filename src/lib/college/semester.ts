@@ -1,5 +1,6 @@
 import type { Firestore } from "firebase-admin/firestore";
-import type { CourseYearTiming } from "@/types";
+import type { Course, CourseYearTiming, Department } from "@/types";
+import { inheritedTimingCourseId } from "@/lib/timetable/sharedYearTiming";
 
 function toJsDate(v: unknown): Date | null {
   const ts = v as { toDate?: () => Date } | undefined;
@@ -116,11 +117,52 @@ export function draftDocId(sectionId: string, semester: number | null): string {
   return semester == null ? sectionId : `${sectionId}_sem${semester}`;
 }
 
+// A section/assignment routed through the managed-branch flow (e.g.
+// "BSM-CSE-A", owned by Computer Science but reached because Basic Science
+// Maths manages it for the shared first year) stores the BRANCH's own
+// courseId - while the shared year's CourseYearTiming is configured once, on
+// the managing department (Basic Science Maths), never on the branch itself.
+// An exact (courseId, year) lookup then finds no doc at all even though the
+// year is configured exactly where it belongs - see inheritedTimingCourseId's
+// own doc-comment, and loadTimetableContext (lib/timetable/loadContext.ts),
+// which already applies this same fallback for the Timetable editor. Mirrored
+// here so every OTHER caller of this file's resolution functions (Teaching
+// Assignments, Class Work Records, Student Attendance History) agrees with
+// the Timetable editor about which CourseYearTiming doc actually governs a
+// shared-year branch instead of reporting it as unconfigured.
+async function loadEffectiveTiming(
+  db: Firestore,
+  collegeId: string,
+  courseId: string,
+  year: number
+): Promise<CourseYearTiming | null> {
+  const collegeRef = db.collection("colleges").doc(collegeId);
+  const directSnap = await collegeRef.collection("courseYearTimings").doc(`${courseId}_year${year}`).get();
+  if (directSnap.exists) return directSnap.data() as CourseYearTiming;
+
+  const courseSnap = await collegeRef.collection("courses").doc(courseId).get();
+  if (!courseSnap.exists) return null;
+  const ownCourse = { id: courseSnap.id, ...(courseSnap.data() as object) } as Course;
+
+  const [coursesSnap, deptsSnap] = await Promise.all([
+    collegeRef.collection("courses").get(),
+    collegeRef.collection("departments").get(),
+  ]);
+  const courses = coursesSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as Course[];
+  const departments = deptsSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as (Department & { id: string })[];
+
+  const inheritedId = inheritedTimingCourseId(ownCourse, year, departments, courses);
+  if (!inheritedId) return null;
+  const inheritedSnap = await collegeRef.collection("courseYearTimings").doc(`${inheritedId}_year${year}`).get();
+  return inheritedSnap.exists ? (inheritedSnap.data() as CourseYearTiming) : null;
+}
+
 // One-off, single-course-year resolution for routes that don't already have
 // loadTimetableContext's full TimetableContext loaded (a plain draft
 // GET/PATCH, or a read-only timetable view) - fetches just that one
-// CourseYearTiming doc rather than the whole collection. Null when no timing
-// doc exists at all for this course-year (same as no semesters configured).
+// CourseYearTiming doc rather than the whole collection (falling back to the
+// shared-year manager's, see loadEffectiveTiming). Null when no timing exists
+// anywhere for this course-year (same as no semesters configured).
 export async function resolveSectionCurrentSemester(
   db: Firestore,
   collegeId: string,
@@ -128,12 +170,9 @@ export async function resolveSectionCurrentSemester(
   year: number,
   now: Date = new Date()
 ): Promise<number | null> {
-  const snap = await db
-    .collection("colleges").doc(collegeId)
-    .collection("courseYearTimings").doc(`${courseId}_year${year}`)
-    .get();
-  if (!snap.exists) return null;
-  return resolveCurrentSemester(snap.data() as CourseYearTiming, now);
+  const timing = await loadEffectiveTiming(db, collegeId, courseId, year);
+  if (!timing) return null;
+  return resolveCurrentSemester(timing, now);
 }
 
 // Shared resolution for any route that lets its caller deliberately pick a
@@ -157,11 +196,7 @@ export async function resolveRequestedSemester(
   requested: number | null | undefined,
   now: Date = new Date()
 ): Promise<{ ok: true; semester: number | null } | { ok: false; error: string }> {
-  const snap = await db
-    .collection("colleges").doc(collegeId)
-    .collection("courseYearTimings").doc(`${courseId}_year${year}`)
-    .get();
-  const timing = snap.exists ? (snap.data() as CourseYearTiming) : null;
+  const timing = await loadEffectiveTiming(db, collegeId, courseId, year);
 
   if (requested == null) {
     return { ok: true, semester: resolveCurrentSemester(timing, now) };

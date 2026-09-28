@@ -1,21 +1,25 @@
-import type { Timestamp } from "firebase/firestore";
+import type { Timestamp as ClientTimestamp } from "firebase/firestore";
+import type { Timestamp as AdminTimestamp } from "firebase-admin/firestore";
 
-// ─── Location Department ───────────────────────────────────────────────────────
+export type Timestamp = ClientTimestamp | AdminTimestamp;
+
 export interface LocationDepartment {
   id: string;
   locationId: string;
   name: string;
-  code: string;
+  code?: string;
   headUid?: string;
+  deptHeadUid?: string;
   headStaffId?: string;
   headName?: string;
+  deptHeadName?: string;
   headEmail?: string;
   headPhone?: string;
   description?: string;
   staffCount: number;
   isActive: boolean;
   createdAt: Timestamp;
-  updatedAt: Timestamp;
+  updatedAt?: Timestamp;
 }
 
 // ─── Location Staff Member ─────────────────────────────────────────────────────
