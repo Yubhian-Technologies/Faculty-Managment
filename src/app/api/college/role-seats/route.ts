@@ -2,7 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebase/admin";
-import { convertLegacyAccounts, createSeat, listSeats, SeatError } from "@/lib/roles/seats";
+import { convertLegacyAccounts, createSeat, listRetiredSeats, listSeats, SeatError } from "@/lib/roles/seats";
 import { assertCanAssign, requireSeatManager } from "@/lib/roles/seatContext";
 import { SEAT_ROLES, normalizeStoredRole } from "@/lib/roles/seatRoles";
 
@@ -24,8 +24,9 @@ export async function GET(request: Request) {
       await collegeRef.set({ seatsConvertedAt: new Date() }, { merge: true });
     }
 
-    const [seats, usersSnap, deptsSnap] = await Promise.all([
+    const [seats, retiredSeats, usersSnap, deptsSnap] = await Promise.all([
       listSeats(db, ctx.collegeId),
+      listRetiredSeats(db, ctx.collegeId),
       db.collection("colleges").doc(ctx.collegeId).collection("users").get(),
       db.collection("colleges").doc(ctx.collegeId).collection("departments").get(),
     ]);
@@ -48,7 +49,7 @@ export async function GET(request: Request) {
       .map((d) => ({ id: d.id, name: (d.data() as { name?: string }).name ?? "" }))
       .sort((a, b) => a.name.localeCompare(b.name));
 
-    return NextResponse.json({ seats, people, departments });
+    return NextResponse.json({ seats, retiredSeats, people, departments });
   } catch (err) {
     return handle(err, "GET");
   }

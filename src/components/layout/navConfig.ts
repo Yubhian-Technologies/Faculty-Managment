@@ -262,6 +262,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Subjects", href: "/hod/subjects", iconName: "Library", roles: ["HOD"] },
   { label: "Teaching Assignments", href: "/hod/teaching-assignments", iconName: "BookOpen", roles: ["HOD"], module: "timetable-incharge" },
   { label: "Assignment Requests", href: "/hod/assignment-requests", iconName: "Send", roles: ["HOD"], module: "assignment-requests" },
+  { label: "Faculty Timetable", href: "/hod/faculty-timetable", iconName: "CalendarSearch", roles: ["HOD"], module: "assignment-requests" },
   { label: "Internal Exam", href: "/hod/internal-exam", iconName: "ClipboardCheck", roles: ["HOD"] },
   { label: "Mid Paper Setter", href: "/hod/mid-paper-setter", iconName: "UserCog", roles: ["HOD"] },
   // Sits directly below Teaching Assignments: subjects are assigned there first,
@@ -343,6 +344,7 @@ export const NAV_ITEMS: NavItem[] = [
   // empty state for anyone else, same convention as Leave/Attendance.
   { label: "Timetable Incharge", href: "/college-staff/timetable-incharge", iconName: "UserCog", roles: ["COLLEGE_STAFF"], module: "timetable-incharge" },
   { label: "Assignment Requests", href: "/college-staff/assignment-requests", iconName: "Send", roles: ["COLLEGE_STAFF"], module: "assignment-requests" },
+  { label: "Faculty Timetable", href: "/college-staff/faculty-timetable", iconName: "CalendarSearch", roles: ["COLLEGE_STAFF"], module: "assignment-requests" },
   { label: "My Profile", href: "/college-staff/profile", iconName: "UserCircle", roles: ["COLLEGE_STAFF"], section: "Personal" },
   { label: "My Leave", href: "/college-staff/leave", iconName: "CalendarClock", roles: ["COLLEGE_STAFF"] },
   { label: "Adjustment Requests", href: "/leave/adjustments", iconName: "UserCheck", roles: ["COLLEGE_STAFF"] },
@@ -408,6 +410,7 @@ export const NAV_ITEMS: NavItem[] = [
   // department (see isTimetableInchargeForDepartment) - shown unconditionally
   // like the entry above, same empty-state convention.
   { label: "Assignment Requests", href: "/panel/assignment-requests", iconName: "Send", roles: ["PANEL_MEMBER"], module: "assignment-requests" },
+  { label: "Faculty Timetable", href: "/panel/faculty-timetable", iconName: "CalendarSearch", roles: ["PANEL_MEMBER"], module: "assignment-requests" },
   { label: "Internal Exam", href: "/panel/internal-exam", iconName: "ClipboardList", roles: ["PANEL_MEMBER"] },
   { label: "Add Mid Bank", href: "/panel/mid-bank", iconName: "BookOpen", roles: ["PANEL_MEMBER"] },
   { label: "Student Attendance", href: "/panel/mark-attendance", iconName: "CalendarCheck", roles: ["PANEL_MEMBER"], module: "attendance" },
