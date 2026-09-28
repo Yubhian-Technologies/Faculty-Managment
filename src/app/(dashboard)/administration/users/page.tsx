@@ -123,8 +123,8 @@ export default function AdministrationUsersPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Location Staff"
-        description="HR Admin, Admin Office and Accounts staff for this location"
+        title="Staff & Role Assignments"
+        description="Provision the Location Staff Admin (head of all location depts), Dept Heads, HR Admin, Admin Office and Accounts roles for this location"
         actions={
           <Button asChild>
             <Link href="/administration/users/new">+ Add Staff</Link>

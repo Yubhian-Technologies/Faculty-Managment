@@ -175,6 +175,7 @@ export default function ImportAcademicsSubjectsPage() {
   const fileRef = useRef<HTMLInputElement>(null);
   const [rows, setRows] = useState<ParsedRow[]>([]);
   const [parseError, setParseError] = useState("");
+  const [parseWarning, setParseWarning] = useState("");
   const [isImporting, setIsImporting] = useState(false);
   const [result, setResult] = useState<ImportResult | null>(null);
   const [failedRows, setFailedRows] = useState<FailedRow[]>([]);
@@ -190,6 +191,7 @@ export default function ImportAcademicsSubjectsPage() {
     const file = e.target.files?.[0];
     if (!file) return;
     setParseError("");
+    setParseWarning("");
     setRows([]);
     setResult(null);
     setFailedRows([]);
@@ -226,8 +228,7 @@ export default function ImportAcademicsSubjectsPage() {
       }
       const unmatched = getUnmatchedHeaders(headers, keyMap);
       if (unmatched.length > 0) {
-        setParseError(`These column(s) don't match any template column, so nothing was imported: ${unmatched.map((h) => `"${h}"`).join(", ")}. Rename them to match the template (see the hints above) or remove them, then re-upload.`);
-        return;
+        setParseWarning(`These column(s) don't match any template column and were ignored: ${unmatched.map((h) => `"${h}"`).join(", ")}.`);
       }
 
       const dataRows = parsed.slice(1).map((cells) => {
@@ -528,6 +529,12 @@ export default function ImportAcademicsSubjectsPage() {
             <div className="flex items-start gap-2 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
               <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
               {parseError}
+            </div>
+          )}
+          {!parseError && parseWarning && (
+            <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-700 text-sm">
+              <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+              {parseWarning}
             </div>
           )}
           {rows.length > 0 && (

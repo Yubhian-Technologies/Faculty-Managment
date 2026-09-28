@@ -8,6 +8,8 @@ import {
   ClipboardCheck,
   Plus,
   UserCheck,
+  Clock,
+  ArrowRightLeft,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -76,7 +78,19 @@ export default function LocationStaffAdminDashboard() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Button asChild variant="outline" size="sm" className="rounded-full gap-1.5 text-xs font-semibold">
+            <Link href="/location-staff-admin/shifts">
+              <Clock className="h-4 w-4" />
+              <span>Shifts & Rosters</span>
+            </Link>
+          </Button>
+          <Button asChild variant="outline" size="sm" className="rounded-full gap-1.5 text-xs font-semibold">
+            <Link href="/location-staff-admin/attendance/shift">
+              <ClipboardCheck className="h-4 w-4 text-primary" />
+              <span>Shift Attendance</span>
+            </Link>
+          </Button>
           <Button asChild size="sm" className="rounded-full gap-1.5 shadow-sm text-xs font-semibold">
             <Link href="/location-staff-admin/departments">
               <Plus className="h-4 w-4" />
@@ -187,9 +201,9 @@ export default function LocationStaffAdminDashboard() {
               <div className="h-10 w-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center mb-3">
                 <UsersRound className="h-5 w-5" />
               </div>
-              <h3 className="font-bold text-base text-foreground">Staff Directory</h3>
+              <h3 className="font-bold text-base text-foreground">Departments & Staff Hub</h3>
               <p className="text-xs text-muted-foreground mt-1">
-                Browse and filter all campus staff across departments, view full profiles, Aadhaar, and vouchers.
+                Browse departments, inspect appointed heads, staff rosters, active shifts, and live attendance.
               </p>
             </div>
             <div className="mt-4 pt-3 border-t flex items-center justify-between">
@@ -197,30 +211,76 @@ export default function LocationStaffAdminDashboard() {
                 {totalStaff} Members
               </span>
               <Button asChild size="sm" variant="outline" className="rounded-full text-xs">
-                <Link href="/location-staff-admin/staff">Directory</Link>
+                <Link href="/location-staff-admin/departments">Open Hub</Link>
               </Button>
             </div>
           </CardContent>
         </Card>
 
-        {/* Daily Attendance Insights */}
+        {/* Attendance Reports */}
         <Card className="hover:shadow-md transition-all">
           <CardContent className="p-5 flex flex-col justify-between h-full">
             <div>
               <div className="h-10 w-10 rounded-xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center mb-3">
                 <ClipboardCheck className="h-5 w-5" />
               </div>
-              <h3 className="font-bold text-base text-foreground">Attendance Overview</h3>
+              <h3 className="font-bold text-base text-foreground">Attendance Reports</h3>
               <p className="text-xs text-muted-foreground mt-1">
-                Monitor real-time campus attendance, check-in timestamps, and department-level compliance.
+                Generate and download comprehensive campus attendance reports across date ranges.
               </p>
             </div>
             <div className="mt-4 pt-3 border-t flex items-center justify-between">
               <span className="text-xs font-medium text-muted-foreground">
-                Live Daily Sheet
+                Reports & Export
               </span>
               <Button asChild size="sm" variant="outline" className="rounded-full text-xs">
-                <Link href="/location-staff-admin/attendance">Overview</Link>
+                <Link href="/location-staff-admin/attendance/reports">Reports</Link>
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Shifts & Rosters */}
+        <Card className="hover:shadow-md transition-all">
+          <CardContent className="p-5 flex flex-col justify-between h-full">
+            <div>
+              <div className="h-10 w-10 rounded-xl bg-amber-500/10 text-amber-600 flex items-center justify-center mb-3">
+                <Clock className="h-5 w-5" />
+              </div>
+              <h3 className="font-bold text-base text-foreground">Shifts & Roster Rotation</h3>
+              <p className="text-xs text-muted-foreground mt-1">
+                Configure department shift hours, grace periods, assign workers, and rotate staff between shifts.
+              </p>
+            </div>
+            <div className="mt-4 pt-3 border-t flex items-center justify-between">
+              <span className="text-xs font-medium text-muted-foreground">
+                Schedules & Roster
+              </span>
+              <Button asChild size="sm" variant="outline" className="rounded-full text-xs">
+                <Link href="/location-staff-admin/shifts">Manage Shifts</Link>
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Shift-Wise Attendance Taking */}
+        <Card className="hover:shadow-md transition-all">
+          <CardContent className="p-5 flex flex-col justify-between h-full">
+            <div>
+              <div className="h-10 w-10 rounded-xl bg-purple-500/10 text-purple-600 flex items-center justify-center mb-3">
+                <ArrowRightLeft className="h-5 w-5" />
+              </div>
+              <h3 className="font-bold text-base text-foreground">Shift-Wise Attendance</h3>
+              <p className="text-xs text-muted-foreground mt-1">
+                Take attendance focused per shift with automated late arrival and out-of-time checkout detection.
+              </p>
+            </div>
+            <div className="mt-4 pt-3 border-t flex items-center justify-between">
+              <span className="text-xs font-medium text-muted-foreground">
+                Per-Shift Sessions
+              </span>
+              <Button asChild size="sm" variant="outline" className="rounded-full text-xs">
+                <Link href="/location-staff-admin/attendance/shift">Open Shift View</Link>
               </Button>
             </div>
           </CardContent>

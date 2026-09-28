@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, UserPlus } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -12,9 +12,16 @@ import type { LocationDepartment, LocationShift } from "@/types/locationStaff";
 
 export default function NewStaffMemberPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const targetDeptId = searchParams.get("departmentId") || "";
+
   const [departments, setDepartments] = useState<LocationDepartment[]>([]);
   const [shifts, setShifts] = useState<LocationShift[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  const fallbackHref = targetDeptId
+    ? `/location-staff-admin/departments/${targetDeptId}?tab=staff`
+    : "/location-staff-admin/departments";
 
   useEffect(() => {
     let isCancelled = false;
@@ -24,7 +31,7 @@ export default function NewStaffMemberPage() {
         .then((d) => {
           if (!isCancelled) setDepartments(d.departments ?? []);
         }),
-      fetch(`/api/location/shifts`)
+      fetch(`/api/location/shifts${targetDeptId ? `?departmentId=${targetDeptId}` : ""}`)
         .then((r) => (r.ok ? r.json() : Promise.resolve({ shifts: [] })))
         .then((d) => {
           if (!isCancelled) setShifts(d.shifts ?? []);
@@ -40,7 +47,7 @@ export default function NewStaffMemberPage() {
     return () => {
       isCancelled = true;
     };
-  }, []);
+  }, [targetDeptId]);
 
   return (
     <div className="space-y-4 max-w-3xl mx-auto pb-24 md:pb-8">
@@ -48,7 +55,7 @@ export default function NewStaffMemberPage() {
       <div className="flex items-center justify-between gap-3 bg-card p-4 rounded-xl border shadow-xs">
         <div className="flex items-center gap-3">
           <Button asChild variant="ghost" size="icon" className="h-9 w-9 shrink-0">
-            <Link href="/location-staff-admin/staff">
+            <Link href={fallbackHref}>
               <ArrowLeft className="h-5 w-5" />
             </Link>
           </Button>
@@ -78,8 +85,15 @@ export default function NewStaffMemberPage() {
             <LocationStaffForm
               departments={departments}
               shifts={shifts}
-              onCancel={() => router.push("/location-staff-admin/staff")}
-              onSuccess={() => router.push("/location-staff-admin/staff")}
+              lockedDepartmentId={targetDeptId || undefined}
+              onCancel={() => router.push(fallbackHref)}
+              onSuccess={(created) =>
+                router.push(
+                  created.departmentId
+                    ? `/location-staff-admin/departments/${created.departmentId}?tab=staff`
+                    : fallbackHref
+                )
+              }
             />
           )}
         </CardContent>

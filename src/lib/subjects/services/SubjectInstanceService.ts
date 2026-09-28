@@ -176,7 +176,12 @@ export class SubjectInstanceService {
     const hoursPerWeek = lectureHours + tutorialHours + practicalHours;
     const credits = customOverrides?.credits ?? master.credits ?? 0;
 
-    const instanceDocId = `${subjectId}_${departmentId}`;
+    // Keyed by semester too (not just subject+department) so the same
+    // subject can be a live instance in two different semesters for one
+    // department at once (a year-long / shared subject spanning S1+S2) -
+    // collapsing them onto one doc silently moved the subject to whichever
+    // semester was assigned most recently instead of holding both.
+    const instanceDocId = `${subjectId}_${departmentId}_${semester}`;
     const instanceRef = collegeRef.collection("subjectSemesterAssignments").doc(instanceDocId);
     const existing = await instanceRef.get();
     const now = new Date();
@@ -257,10 +262,11 @@ export class SubjectInstanceService {
   }
 
   /**
-   * Removes an instance copy for a given subject and department
+   * Removes an instance copy for a given subject, department and semester
+   * (the same subject may have a separate live instance in another semester).
    */
-  public async unassignSubjectInstance(collegeId: string, subjectId: string, departmentId: string): Promise<void> {
-    const instanceDocId = `${subjectId}_${departmentId}`;
+  public async unassignSubjectInstance(collegeId: string, subjectId: string, departmentId: string, semester: number): Promise<void> {
+    const instanceDocId = `${subjectId}_${departmentId}_${semester}`;
     await this.db
       .collection("colleges")
       .doc(collegeId)
