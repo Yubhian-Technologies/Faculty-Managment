@@ -1,6 +1,6 @@
 import { FieldPath, type Firestore } from "firebase-admin/firestore";
 import type {
-  CourseYearTiming, Section, Subject, TeachingAssignment, TimetableRules, TimetableSlot,
+  CourseYearTiming, FacultyAssignmentRequest, Section, Subject, TeachingAssignment, TimetableRules, TimetableSlot,
 } from "@/types";
 import { DEFAULT_TIMETABLE_RULES } from "@/types";
 import { resolveCurrentSemester, matchesCurrentSemester } from "@/lib/college/semester";
@@ -21,6 +21,15 @@ export interface TimetableContext {
   pinnedSlots: TimetableSlot[];
   /** facultyId -> "DAY:period" cells busy in ANY other section. */
   busyFaculty: Map<string, Set<string>>;
+  /**
+   * Subset of busyFaculty's cells that came from a lending department's own
+   * busyPeriods declaration (see FacultyAssignmentRequest.busyPeriods),
+   * rather than a real TimetableSlot elsewhere - lets validatePlacement give
+   * a clearer rejection message ("already has a period declared busy") for
+   * this source instead of the generic "already teaching another section",
+   * which would be misleading (nothing was actually scheduled anywhere).
+   */
+  declaredBusyFaculty: Map<string, Set<string>>;
   // Resolved once from `timing` - null when this course-year has no
   // semesters configured (see CourseYearTiming.semesters). pinnedSlots and
   // busyFaculty above are already narrowed to this (via
@@ -52,7 +61,7 @@ export async function loadTimetableContext(
   if (!sectionSnap.exists) return null;
   const section = { id: sectionSnap.id, ...sectionSnap.data() } as Section;
 
-  const [allTimingsSnap, rulesSnap, assignmentsSnap, subjectsSnap, allSlotsSnap] = await Promise.all([
+  const [allTimingsSnap, rulesSnap, assignmentsSnap, subjectsSnap, allSlotsSnap, allocatedRequestsSnap] = await Promise.all([
     // Every course-year's timing, not just this section's own course - a
     // slot from ANOTHER section can belong to an entirely different course-
     // year with its own independent semester calendar (see "per course +
@@ -69,6 +78,12 @@ export async function loadTimetableContext(
     // sections. Generation is per-section, so this global view is what makes
     // section-at-a-time safe.
     collegeRef.collection("timetableSlots").get(),
+    // ALLOCATED cross-department lends onto this section - see
+    // FacultyAssignmentRequest.busyPeriods. The lending department never
+    // places real TimetableSlot rows for these, so without this query their
+    // declared-busy cells would be invisible to busyFaculty below.
+    collegeRef.collection("facultyAssignmentRequests")
+      .where("sectionId", "==", sectionId).where("status", "==", "ALLOCATED").get(),
   ]);
 
   const allTimings = allTimingsSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as unknown as CourseYearTiming);
@@ -187,9 +202,27 @@ export async function loadTimetableContext(
     if (!cells) { cells = new Set(); busyFaculty.set(s.facultyId, cells); }
     cells.add(`${s.day}:${s.periodNumber}`);
   }
+  // And during whatever the lending department declared busy for an
+  // allocated faculty member - see the query above and
+  // FacultyAssignmentRequest.busyPeriods' own doc-comment.
+  const declaredBusyFaculty = new Map<string, Set<string>>();
+  for (const d of allocatedRequestsSnap.docs) {
+    const req = d.data() as FacultyAssignmentRequest;
+    if (!req.allocatedFacultyId || !req.busyPeriods?.length) continue;
+    let cells = busyFaculty.get(req.allocatedFacultyId);
+    if (!cells) { cells = new Set(); busyFaculty.set(req.allocatedFacultyId, cells); }
+    let declaredCells = declaredBusyFaculty.get(req.allocatedFacultyId);
+    if (!declaredCells) { declaredCells = new Set(); declaredBusyFaculty.set(req.allocatedFacultyId, declaredCells); }
+    for (const bp of req.busyPeriods) {
+      const key = `${bp.day}:${bp.period}`;
+      cells.add(key);
+      declaredCells.add(key);
+    }
+  }
 
   return {
-    section, timing, rules, assignments, courseYearSubjects, subjectsById, pinnedSlots, busyFaculty, currentSemester,
+    section, timing, rules, assignments, courseYearSubjects, subjectsById, pinnedSlots,
+    busyFaculty, declaredBusyFaculty, currentSemester,
   };
 }
 
