@@ -6,7 +6,6 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { collegeSettingsRef, loadCollegeSettings } from "@/lib/firestore/collegeSettings";
 import { sanitizeLeaveApprovalRouting, defaultApproverStage, ROUTABLE_REQUESTER_ROLES } from "@/lib/leave/approvalRouting";
 import { sanitizeLeaveVacationRoles } from "@/lib/leave/staffCategoryRouting";
-import { sanitizeLeaveTypeRuleOverrides, sanitizeLeaveBlackoutWindows } from "@/lib/leave/resolveLeaveTypes";
 import type { FacultyNorms } from "@/types/core";
 
 // colleges/{collegeId}/settings/general - basic college info a Principal
@@ -155,34 +154,12 @@ export async function PUT(request: Request) {
       leaveVacationRoles = checked.value;
     }
 
-    // Same "sent whole, plain replace" convention as leaveApprovalRouting
-    // above - the Leave Policy card always sends every type it displays.
-    let leaveTypeRuleOverrides: FacultyNorms["leaveTypeRuleOverrides"];
-    if (body.leaveTypeRuleOverrides !== undefined) {
-      const checked = sanitizeLeaveTypeRuleOverrides(body.leaveTypeRuleOverrides);
-      if (!checked.ok) return NextResponse.json({ error: checked.error }, { status: 400 });
-      leaveTypeRuleOverrides = checked.overrides;
-    }
-
-    let leaveBlackoutWindows: FacultyNorms["leaveBlackoutWindows"];
-    if (body.leaveBlackoutWindows !== undefined) {
-      const checked = sanitizeLeaveBlackoutWindows(body.leaveBlackoutWindows);
-      if (!checked.ok) return NextResponse.json({ error: checked.error }, { status: 400 });
-      leaveBlackoutWindows = checked.windows;
-    }
-
     await collegeSettingsRef(db, collegeId).set(settings, { merge: true });
     if (leaveApprovalRouting) {
       await collegeSettingsRef(db, collegeId).update({ leaveApprovalRouting });
     }
     if (leaveVacationRoles) {
       await collegeSettingsRef(db, collegeId).update({ leaveVacationRoles });
-    }
-    if (leaveTypeRuleOverrides) {
-      await collegeSettingsRef(db, collegeId).update({ leaveTypeRuleOverrides });
-    }
-    if (leaveBlackoutWindows) {
-      await collegeSettingsRef(db, collegeId).update({ leaveBlackoutWindows });
     }
 
     await db.collection("colleges").doc(collegeId).collection("auditLogs").add({
@@ -197,8 +174,6 @@ export async function PUT(request: Request) {
         academicYearEnd: `${settings.academicYearEndDay}/${settings.academicYearEndMonth}`,
         ...(leaveApprovalRouting ? { leaveApprovalRouting } : {}),
         ...(leaveVacationRoles ? { leaveVacationRoles } : {}),
-        ...(leaveTypeRuleOverrides ? { leaveTypeRuleOverrides } : {}),
-        ...(leaveBlackoutWindows ? { leaveBlackoutWindows } : {}),
       },
       timestamp: new Date(),
     });

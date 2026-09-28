@@ -6,8 +6,17 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/useToast";
 import { formatDate } from "@/lib/utils";
-import { PeriodCoverageGrid, type PeriodCoverageEntry } from "@/components/leave/PeriodCoverageGrid";
 import type { LeaveRequest } from "@/types/leave";
+
+interface PeriodCoverageEntry {
+  date: string;
+  day: string;
+  periodNumber: number;
+  timetableSlotId: string;
+  sectionName?: string;
+  subjectName: string;
+  candidates: { facultyId: string; facultyName: string; facultyDepartment?: string }[];
+}
 
 // Every substitute pick is a snapshot taken at decision time (submission, or
 // an HOD's override while approving - see applications/[id]/route.ts). If
@@ -106,19 +115,19 @@ export function AdjustCoverageDialog({
         ) : periods.length === 0 ? (
           <p className="text-sm text-muted-foreground italic">No teaching periods fall within this leave range.</p>
         ) : (
-          <div className="max-h-80 overflow-y-auto rounded-lg border p-2.5">
-            <PeriodCoverageGrid
-              periods={periods}
-              renderPeriod={(p, key) => (
-                <div key={key} className="space-y-1 rounded-md border p-2">
-                  <p className="text-xs font-medium leading-tight">
-                    P{p.periodNumber} · {p.subjectName}{p.sectionName ? ` · ${p.sectionName}` : ""}
-                  </p>
+          <div className="max-h-80 space-y-2 overflow-y-auto rounded-lg border p-2.5">
+            {periods.map((p) => {
+              const key = `${p.date}|${p.timetableSlotId}`;
+              return (
+                <div key={key} className="flex items-center justify-between gap-3 flex-wrap">
+                  <span className="text-sm">
+                    {p.subjectName}{p.sectionName ? ` · ${p.sectionName}` : ""} · {formatDate(new Date(p.date))} P{p.periodNumber}
+                  </span>
                   <Select
                     value={picks[key] ?? ""}
                     onValueChange={(v) => setPicks((prev) => ({ ...prev, [key]: v }))}
                   >
-                    <SelectTrigger className="w-full">
+                    <SelectTrigger className="w-44">
                       <SelectValue placeholder="Not covered" />
                     </SelectTrigger>
                     <SelectContent>
@@ -133,8 +142,8 @@ export function AdjustCoverageDialog({
                     </SelectContent>
                   </Select>
                 </div>
-              )}
-            />
+              );
+            })}
           </div>
         )}
 

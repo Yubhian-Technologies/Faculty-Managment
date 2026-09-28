@@ -56,11 +56,6 @@ interface RosterEntry {
   // reviewing this roster (including Management, viewing the same data
   // elsewhere) can see why, not just what.
   remarks: string | null;
-  // The reason the faculty member themselves gave at check-in time for
-  // arriving late (see /api/college/attendance/check-in) - distinct from
-  // `remarks` above, which is an approver's own note, not the requester's.
-  // Only ever set alongside a Late checkIn (see isLateCheckIn).
-  lateReason: string | null;
 }
 
 // Daily oversight roster: every PANEL_MEMBER in scope (HOD: own department +
@@ -99,7 +94,7 @@ export async function GET(request: Request) {
           uid: d.id, name: u.name ?? "", department: u.department ?? "", role: "COLLEGE_STAFF" as const,
           status: "NOT_MARKED", checkIn: null, checkOut: null, checkInVerified: false, checkOutVerified: false,
           permittedCheckInTime: null,
-          registered: Array.isArray(u.faceEmbedding) && u.faceEmbedding.length > 0, remarks: null, lateReason: null,
+          registered: Array.isArray(u.faceEmbedding) && u.faceEmbedding.length > 0, remarks: null,
         };
       });
 
@@ -120,7 +115,6 @@ export async function GET(request: Request) {
         checkInVerified: boolean;
         checkOutVerified: boolean;
         permittedCheckInTime: string | null;
-        lateReason: string | null;
         entry: RosterEntry;
       }[] = [];
 
@@ -134,7 +128,6 @@ export async function GET(request: Request) {
           checkIn: rec.checkIn ?? null, checkOut: rec.checkOut ?? null, remarks: rec.remarks ?? null,
           checkInVerified: !!rec.checkInVerified, checkOutVerified: !!rec.checkOutVerified,
           permittedCheckInTime: rec.permittedCheckInTime ?? null,
-          lateReason: rec.lateReason ?? null,
           entry: rosterByUid.get(rec.facultyId)!,
         });
       }
@@ -149,7 +142,6 @@ export async function GET(request: Request) {
         p.entry.checkOutVerified = p.checkOutVerified;
         p.entry.permittedCheckInTime = p.permittedCheckInTime;
         p.entry.remarks = p.remarks;
-        p.entry.lateReason = p.lateReason;
       }
 
       const todayStart = istMidnightUTC(new Date());
@@ -218,7 +210,7 @@ export async function GET(request: Request) {
         uid: d.id, name: u.name ?? "", department: u.department ?? "", role: "PANEL_MEMBER" as const,
         status: "NOT_MARKED", checkIn: null, checkOut: null, checkInVerified: false, checkOutVerified: false,
         permittedCheckInTime: null,
-        registered: uidToRegistered.get(d.id) ?? false, remarks: null, lateReason: null,
+        registered: uidToRegistered.get(d.id) ?? false, remarks: null,
       };
     });
 
@@ -237,7 +229,7 @@ export async function GET(request: Request) {
           role: "HOD" as const,
           status: "NOT_MARKED", checkIn: null, checkOut: null, checkInVerified: false, checkOutVerified: false,
           permittedCheckInTime: null,
-          registered: Array.isArray(u.faceEmbedding) && u.faceEmbedding.length > 0, remarks: null, lateReason: null,
+          registered: Array.isArray(u.faceEmbedding) && u.faceEmbedding.length > 0, remarks: null,
         });
         uidToRegisteredAt.set(d.id, u.faceRegisteredAt ? u.faceRegisteredAt.toDate() : null);
       }
@@ -266,7 +258,6 @@ export async function GET(request: Request) {
       checkInVerified: boolean;
       checkOutVerified: boolean;
       permittedCheckInTime: string | null;
-      lateReason: string | null;
       entry: RosterEntry;
     }[] = [];
 
@@ -285,7 +276,6 @@ export async function GET(request: Request) {
         checkInVerified: !!rec.checkInVerified,
         checkOutVerified: !!rec.checkOutVerified,
         permittedCheckInTime: rec.permittedCheckInTime ?? null,
-        lateReason: rec.lateReason ?? null,
         entry: rosterByUid.get(rec.facultyId)!,
       });
     }
@@ -300,7 +290,6 @@ export async function GET(request: Request) {
       p.entry.checkOutVerified = p.checkOutVerified;
       p.entry.permittedCheckInTime = p.permittedCheckInTime;
       p.entry.remarks = p.remarks;
-      p.entry.lateReason = p.lateReason;
     }
 
     // "No record yet" defaults to NOT_MARKED above - refine it:

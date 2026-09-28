@@ -8,7 +8,7 @@ import { getOrCreateProfile } from "@/lib/leave/profile";
 import { loadCollegeSettings } from "@/lib/firestore/collegeSettings";
 import { loadBalances, computeEntitlement, initBalancesForYear } from "@/lib/leave/balanceEngine";
 import { computeEffectiveCategory } from "@/lib/leave/categoryEngine";
-import { resolveLeaveTypes } from "@/lib/leave/resolveLeaveTypes";
+import { LEAVE_TYPE_SEED } from "@/lib/leave/seedData";
 
 // Balances for CL/SL/SCL/EL (whichever the profile's effective category is
 // eligible for) plus an `unlimited: true` entry for OD - no balance is ever
@@ -49,28 +49,16 @@ export async function GET(request: Request) {
     // to run first. This is also where Earned Leave's carry-forward from last
     // year gets computed and persisted, the one time this year's doc is
     // first created - see initBalancesForYear.
-    const resolvedTypes = resolveLeaveTypes(settings.leaveTypeRuleOverrides);
-    await initBalancesForYear(db, session.collegeId, targetUid, profile, settings.newJoiningYears, year, resolvedTypes);
+    await initBalancesForYear(db, session.collegeId, targetUid, profile, settings.newJoiningYears, year);
 
     const balances = await loadBalances(db, session.collegeId, targetUid, year);
     const balancesByType = new Map(balances.map((b) => [b.leaveTypeCode, b]));
-    const eligibleTypes = resolvedTypes
+
+    const eligibleTypes = LEAVE_TYPE_SEED
       .filter((lt) => lt.isActive && lt.rules.eligibleCategories.includes(effectiveCategory))
       .map((lt) => {
-        // Rendering hints the Apply form needs to know what to offer for this
-        // type - halfDayAllowed/reasonOptions/allowCustomReason drive the
-        // duration toggle and reason dropdown; maxConsecutiveDays and
-        // minAdvanceNoticeDays are shown as a hint only, the server
-        // (applications/route.ts POST) is still the authoritative check.
-        const hints = {
-          halfDayAllowed: !!lt.rules.halfDayAllowed,
-          ...(lt.rules.reasonOptions?.length ? { reasonOptions: lt.rules.reasonOptions } : {}),
-          ...(lt.rules.allowCustomReason ? { allowCustomReason: true } : {}),
-          ...(lt.rules.maxConsecutiveDays !== undefined ? { maxConsecutiveDays: lt.rules.maxConsecutiveDays } : {}),
-          ...(lt.rules.minAdvanceNoticeDays !== undefined ? { minAdvanceNoticeDays: lt.rules.minAdvanceNoticeDays } : {}),
-        };
         if (lt.rules.unlimited) {
-          return { code: lt.code, label: lt.label, shortLabel: lt.shortLabel, color: lt.color, unlimited: true as const, ...hints };
+          return { code: lt.code, label: lt.label, shortLabel: lt.shortLabel, color: lt.color, unlimited: true as const };
         }
         const bal = balancesByType.get(lt.code);
         const entitled = bal?.entitled ?? computeEntitlement(lt, effectiveCategory);
@@ -87,7 +75,6 @@ export async function GET(request: Request) {
           pending,
           remaining: Math.max(0, entitled - used - pending),
           ...(bal?.carriedForward ? { carriedForward: bal.carriedForward } : {}),
-          ...hints,
         };
       });
 

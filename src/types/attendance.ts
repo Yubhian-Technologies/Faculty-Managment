@@ -56,12 +56,6 @@ export interface AttendanceRecord {
   // already-recorded day reads.
   permittedCheckInTime?: string; // "HH:MM" 24h
   remarks?: string;
-  // Given by the faculty member themselves at self check-in time, when their
-  // check-in is Late (see lib/attendance/lateStatus.ts's isLateCheckIn) -
-  // required server-side in that case (api/college/attendance/check-in).
-  // Distinct from `remarks` above, which is an approver's own note, not the
-  // requester's - visible to HOD/Principal on the attendance roster/report.
-  lateReason?: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }

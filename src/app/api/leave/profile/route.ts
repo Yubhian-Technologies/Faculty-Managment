@@ -8,7 +8,6 @@ import { getOrCreateProfile } from "@/lib/leave/profile";
 import { loadCollegeSettings } from "@/lib/firestore/collegeSettings";
 import { PROFILES_COL, initBalancesForYear } from "@/lib/leave/balanceEngine";
 import { computeEffectiveCategory } from "@/lib/leave/categoryEngine";
-import { resolveLeaveTypes } from "@/lib/leave/resolveLeaveTypes";
 import type { EmployeeLeaveProfile, StaffCategory } from "@/types/leave";
 
 export async function GET(request: Request) {
@@ -35,7 +34,7 @@ export async function GET(request: Request) {
     const effectiveCategory = computeEffectiveCategory(profile, settings.newJoiningYears);
 
     const year = new Date().getFullYear();
-    await initBalancesForYear(db, session.collegeId, targetUid, profile, settings.newJoiningYears, year, resolveLeaveTypes(settings.leaveTypeRuleOverrides));
+    await initBalancesForYear(db, session.collegeId, targetUid, profile, settings.newJoiningYears, year);
 
     return NextResponse.json({ profile, effectiveCategory, newJoiningYears: settings.newJoiningYears });
   } catch (err) {
@@ -89,7 +88,7 @@ export async function PUT(request: Request) {
     const profile = { id: updatedSnap.id, ...updatedSnap.data() } as EmployeeLeaveProfile;
     const settings = await loadCollegeSettings(db, session.collegeId);
     const year = new Date().getFullYear();
-    await initBalancesForYear(db, session.collegeId, body.uid, profile, settings.newJoiningYears, year, resolveLeaveTypes(settings.leaveTypeRuleOverrides));
+    await initBalancesForYear(db, session.collegeId, body.uid, profile, settings.newJoiningYears, year);
 
     return NextResponse.json({ ok: true, profile });
   } catch (err) {

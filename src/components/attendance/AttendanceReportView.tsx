@@ -112,14 +112,9 @@ function CheckOutCell({ row }: { row: RosterEntry }) {
 }
 
 function ReasonCell({ row }: { row: RosterEntry }) {
-  const lateReason = row.lateReason as string | null | undefined;
-  if (!row.remarks && !lateReason) return <>—</>;
-  return (
-    <span className="block space-y-0.5">
-      {row.remarks && <span className="block text-xs text-muted-foreground italic">{row.remarks}</span>}
-      {lateReason && <span className="block text-xs font-medium text-amber-700">Late: {lateReason}</span>}
-    </span>
-  );
+  return row.remarks ? (
+    <span className="text-xs text-muted-foreground italic">{row.remarks}</span>
+  ) : <>—</>;
 }
 
 function RosterTable({ rows, onMark, monthlyViewBasePath }: { rows: RosterEntry[]; onMark?: (row: RosterEntry) => void; monthlyViewBasePath?: string }) {
@@ -400,12 +395,7 @@ export function AttendanceReportView({ title, description, groupByDepartmentAndC
     },
     { key: "checkIn", header: "Check In", render: (row) => <CheckInCell row={row} /> },
     { key: "checkOut", header: "Check Out", render: (row) => <CheckOutCell row={row} /> },
-    {
-      key: "remarks",
-      header: "Reason",
-      render: (row) => <ReasonCell row={row} />,
-      csvValue: (row) => [row.remarks, row.lateReason ? `Late: ${row.lateReason}` : null].filter(Boolean).join(" | "),
-    },
+    { key: "remarks", header: "Reason", render: (row) => <ReasonCell row={row} /> },
     ...(allowManualMark || monthlyViewBasePath
       ? [{
           key: "actions",
@@ -492,7 +482,7 @@ export function AttendanceReportView({ title, description, groupByDepartmentAndC
       status: statusLabel(r.status) + (r.status === "PRESENT" && isLateCheckIn(r.checkIn, r.permittedCheckInTime) ? " (Late)" : ""),
       checkIn: r.checkIn ?? "",
       checkOut: r.checkOut ?? "",
-      reason: [r.remarks, r.lateReason ? `Late: ${r.lateReason}` : null].filter(Boolean).join(" | "),
+      reason: r.remarks ?? "",
     }));
     exportToCSV(rows, `attendance-${date}`, [
       { key: "name", header: "Faculty" },

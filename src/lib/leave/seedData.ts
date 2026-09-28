@@ -1,4 +1,7 @@
-import type { LeaveTypeFull } from "@/types/leave";
+import type { LeaveTypeCode, LeaveTypeFull } from "@/types/leave";
+
+// Half day only makes sense for these leave types.
+export const HALF_DAY_ELIGIBLE_TYPES: LeaveTypeCode[] = ["SL", "SCL", "OD"];
 
 export const LEAVE_TYPE_SEED: LeaveTypeFull[] = [
   {
@@ -24,7 +27,6 @@ export const LEAVE_TYPE_SEED: LeaveTypeFull[] = [
     sortOrder: 2,
     rules: {
       daysPerYear: 20,
-      halfDayAllowed: true,
       eligibleCategories: ["vacation", "non-vacation"],
     },
   },
@@ -38,7 +40,6 @@ export const LEAVE_TYPE_SEED: LeaveTypeFull[] = [
     sortOrder: 3,
     rules: {
       daysPerYear: 7,
-      halfDayAllowed: true,
       eligibleCategories: ["vacation"],
     },
   },
@@ -52,14 +53,8 @@ export const LEAVE_TYPE_SEED: LeaveTypeFull[] = [
     sortOrder: 4,
     rules: {
       // Category-dependent - see computeEntitlement() in balanceEngine.ts
-      // (vacation: 6, non-vacation: 30). daysPerYear is unused for EL. A
-      // college can override either number via Settings > Leave Policy's
-      // entitlementByCategory (see resolveLeaveTypes.ts).
+      // (vacation: 6, non-vacation: 30). daysPerYear is unused for EL.
       eligibleCategories: ["vacation", "non-vacation"],
-      // Default cap kept in sync with the old EL_CARRY_FORWARD_CAP constant
-      // in balanceEngine.ts - a college can raise/lower it via Settings, or
-      // turn carry-forward off entirely, through the same override.
-      carryForward: { enabled: true, cap: 300 },
     },
   },
   {
@@ -72,7 +67,6 @@ export const LEAVE_TYPE_SEED: LeaveTypeFull[] = [
     sortOrder: 5,
     rules: {
       unlimited: true,
-      halfDayAllowed: true,
       eligibleCategories: ["new-joining", "vacation", "non-vacation"],
     },
   },

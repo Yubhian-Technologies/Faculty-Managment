@@ -24,15 +24,11 @@ export const EL_CARRY_FORWARD_CAP = 300;
 // numbers instead.
 export const EL_HISTORY_START_YEAR = 2024;
 
-// entitlementByCategory (a college's Settings > Leave Policy override, or a
-// type's own seed default) takes precedence over the flat daysPerYear -
-// EL is the one seed type that varies by category out of the box (vacation/
-// teaching staff: 6 days; non-vacation/supporting staff: 30 days), but any
-// type can now be given the same per-category split via that override.
+// EL is the one leave type whose annual entitlement depends on the profile's
+// effective category (vacation/teaching staff: 6 days; non-vacation/
+// supporting staff: 30 days) rather than a flat rules.daysPerYear.
 export function computeEntitlement(leaveType: LeaveTypeFull, category: EffectiveLeaveCategory): number {
   if (leaveType.rules.unlimited) return 0;
-  const byCategory = leaveType.rules.entitlementByCategory?.[category];
-  if (byCategory !== undefined) return byCategory;
   if (leaveType.code === "EL") return category === "vacation" ? 6 : 30;
   return leaveType.rules.daysPerYear ?? 0;
 }
@@ -85,36 +81,35 @@ export async function initBalancesForYear(
     if (snap.exists) continue;
 
     let entitled = computeEntitlement(lt, effectiveCategory);
-    // Carry-forward: whatever was left unused at the end of last year is
-    // added on top of this year's base entitlement (e.g. 6 base + 3 unused
-    // last year = 9). Computed once, here, at the moment this year's doc is
-    // first created - never recomputed afterwards, so later changes to last
-    // year's `used` (e.g. an approval landing after this ran) don't
-    // retroactively change an already-settled year. EL carries forward by
-    // seed default (see seedData.ts); any type can via the same
-    // rules.carryForward override (see resolveLeaveTypes.ts).
+    // Earned Leave carries forward: whatever was left unused at the end of
+    // last year is added on top of this year's base entitlement (e.g. 6 base
+    // + 3 unused last year = 9). Computed once, here, at the moment this
+    // year's doc is first created - never recomputed afterwards, so later
+    // changes to last year's `used` (e.g. an approval landing after this ran)
+    // don't retroactively change an already-settled year.
     let carriedForward: number | undefined;
-    if (lt.rules.carryForward?.enabled) {
+    if (lt.code === "EL") {
       let prevBalances = await loadBalances(db, collegeId, uid, year - 1);
-      let prevBal = prevBalances.find((b) => b.leaveTypeCode === lt.code);
-      // Last year's own doc may never have been touched (nobody viewed their
-      // balance or applied for leave that year) - without this, the
+      let prevEL = prevBalances.find((b) => b.leaveTypeCode === "EL");
+      // Last year's own EL doc may never have been touched (nobody viewed
+      // their balance or applied for leave that year) - without this, the
       // carry-forward chain silently breaks and resets to 0 the first time a
       // gap year is skipped, understating the true running total. Backfill it
       // first (recursively, in case several years in a row were skipped),
       // bounded by earliestChainYear - there's nothing to carry from before
       // that (either they hadn't joined yet, or it's before real leave data
       // exists in this system at all).
-      if (!prevBal && year - 1 >= earliestChainYear) {
+      if (!prevEL && year - 1 >= earliestChainYear) {
         await initBalancesForYear(db, collegeId, uid, profile, newJoiningYears, year - 1, types);
         prevBalances = await loadBalances(db, collegeId, uid, year - 1);
-        prevBal = prevBalances.find((b) => b.leaveTypeCode === lt.code);
+        prevEL = prevBalances.find((b) => b.leaveTypeCode === "EL");
       }
-      if (prevBal) {
-        const prevEntitled = prevBal.entitled ?? entitled;
-        const unusedLastYear = Math.max(0, prevEntitled - (prevBal.used ?? 0));
-        const cap = lt.rules.carryForward.cap ?? Infinity;
-        carriedForward = Math.max(0, Math.min(unusedLastYear, cap - entitled));
+      if (prevEL) {
+        const prevEntitled = prevEL.entitled ?? entitled;
+        const unusedLastYear = Math.max(0, prevEntitled - (prevEL.used ?? 0));
+        // Capped so this year's total (base + carried) never exceeds
+        // EL_CARRY_FORWARD_CAP - see its own comment for why.
+        carriedForward = Math.max(0, Math.min(unusedLastYear, EL_CARRY_FORWARD_CAP - entitled));
         entitled += carriedForward;
       }
     }

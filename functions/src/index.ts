@@ -43,38 +43,3 @@ export const attendanceNotPostedSweep = onSchedule(
     }
   }
 );
-
-// Reminds an On Duty requester once 24h after their period ends with no proof
-// uploaded yet - see src/app/api/cron/od-proof-reminders/route.ts, which owns
-// the actual "who needs a reminder" logic. Hourly, not every 15 minutes like
-// the attendance sweep above: a 24h-since-completion threshold doesn't need
-// minute-level precision, and this halves the redundant Firestore reads for
-// something checked over a multi-day grace window.
-export const odProofReminderSweep = onSchedule(
-  {
-    schedule: "every 1 hours",
-    timeZone: "Asia/Kolkata",
-    secrets: [cronSecret],
-  },
-  async () => {
-    const url = appUrl.value();
-    if (!url) {
-      logger.error("APP_URL is not configured - skipping sweep. See functions/README.md.");
-      return;
-    }
-    try {
-      const res = await fetch(`${url}/api/cron/od-proof-reminders`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${cronSecret.value()}` },
-      });
-      const body = await res.text();
-      if (!res.ok) {
-        logger.error(`od-proof-reminders sweep failed: ${res.status} ${body}`);
-        return;
-      }
-      logger.info("od-proof-reminders sweep ok", { body });
-    } catch (err) {
-      logger.error("od-proof-reminders sweep threw", err);
-    }
-  }
-);

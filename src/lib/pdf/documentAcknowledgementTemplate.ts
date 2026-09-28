@@ -9,11 +9,8 @@ const BASE_STYLE = `
   .title { text-align: center; font-size: 16px; font-weight: bold; text-decoration: underline; margin: 16px 0; letter-spacing: 1px; }
   .meta { margin-bottom: 16px; font-size: 12px; color: #444; }
   table { width: 100%; border-collapse: collapse; margin: 16px 0; }
-  /* vertical-align: middle explicitly - a real browser centers table-cell text
-     by default, but html2canvas doesn't reliably resolve that implicit default,
-     so text drifts down to sit on the bottom border instead of centering. */
-  th { background: #1d4ed8; color: #fff; padding: 8px 12px; font-size: 12px; text-align: left; vertical-align: middle; }
-  td { padding: 8px 12px; font-size: 12px; vertical-align: middle; border: 1px solid #ddd; }
+  th { background: #1d4ed8; color: #fff; padding: 8px 12px; font-size: 12px; text-align: left; }
+  td { padding: 8px 12px; font-size: 12px; border: 1px solid #ddd; }
   tr:nth-child(even) td { background: #f8fafc; }
   .status-yes { color: #15803d; font-weight: bold; }
   .status-no { color: #b91c1c; font-weight: bold; }
