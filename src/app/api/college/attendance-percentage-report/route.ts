@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { getDepartmentTreeNames } from "@/lib/departments/scope";
 import { fetchSectionStudents } from "@/lib/students/sectionRoster";
 import { calcPercent } from "@/lib/studentAttendance/percentage";
 import { matchesCurrentSemester } from "@/lib/college/semester";
@@ -91,8 +92,13 @@ export async function GET(request: Request) {
       if (!snap.exists) return NextResponse.json({ error: "Section not found" }, { status: 404 });
       sections = [{ ...(snap.data() as Section), id: snap.id }];
     } else {
+      // Include sub-departments (e.g. "Basic Science" covering its child
+      // branches) so a parent-department pick doesn't silently drop their
+      // sections from the defaulter report - same expansion already used by
+      // GET /api/college/faculty and /api/college/subjects.
+      const treeNames = await getDepartmentTreeNames(db, session.collegeId, department);
       const snap = await collegeRef.collection("sections")
-        .where("department", "==", department)
+        .where("department", "in", treeNames.slice(0, 30))
         .where("courseId", "==", courseId)
         .where("year", "==", year)
         .get();

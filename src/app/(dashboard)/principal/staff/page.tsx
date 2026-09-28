@@ -120,15 +120,19 @@ export default function PrincipalStaffPage() {
   }
 
   // Group by role for a scannable layout — order roughly follows seniority/function.
-  const ROLE_ORDER: UserRole[] = ["VICE_PRINCIPAL", "COLLEGE_ADMIN", "DIRECTOR", "HOD", "DEPARTMENT_OFFICE", "COLLEGE_OFFICE", "COLLEGE_ACCOUNTS", "COLLEGE_STAFF", "ACADEMICS", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D", "WEBMASTER", "PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL"];
-  // Must match the roles PRINCIPAL/VICE_PRINCIPAL can edit in /api/college/users/[uid] (loadTargetInScope).
-  const EDITABLE_ROLES: UserRole[] = ["HOD", "COLLEGE_OFFICE", "VICE_PRINCIPAL", "PANEL_MEMBER"];
+  // DIRECTOR is deliberately excluded: it's Super-Admin-provisioned college
+  // leadership, not something Principal can view/edit/deactivate/delete (the
+  // API's loadTargetInScope 403s on every action for it - see
+  // MANAGEABLE_STAFF_ROLES in types/core.ts), so listing it here only produced
+  // dead View/Deactivate/Delete buttons.
+  const ROLE_ORDER: UserRole[] = ["VICE_PRINCIPAL", "COLLEGE_ADMIN", "HOD", "DEPARTMENT_OFFICE", "COLLEGE_OFFICE", "COLLEGE_ACCOUNTS", "COLLEGE_STAFF", "ACADEMICS", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D", "WEBMASTER", "PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL"];
   const grouped = ROLE_ORDER
     .map((role) => ({ role, users: staff.filter((u) => u.role === role) }))
     .filter((g) => g.users.length > 0);
 
-  // Non-Technical first (Principal can add/edit these), then Technical
-  // (view-only here - that stays HOD's department-scoped domain).
+  // Non-Technical first (Principal can view/edit these, but no longer create
+  // them - see the Supporting Staff section below), then Technical (view-only
+  // here - that stays HOD's department-scoped domain).
   const CATEGORY_ORDER: SupportingStaffCategory[] = ["NON_TECHNICAL", "TECHNICAL"];
   const groupedSupporting = CATEGORY_ORDER
     .map((category) => ({ category, members: supportingStaff.filter((s) => s.staffCategory === category) }))
@@ -241,19 +245,24 @@ export default function PrincipalStaffPage() {
         </div>
       )}
 
-      {!isLoading && groupedSupporting.length > 0 && (
+      {/* Principal/VP no longer get a create path here - Non-Technical Staff is
+          College Office's own paperwork to enter; Principal/VP still view and
+          may edit/deactivate existing records (see canRoleCreateSupportingStaff
+          vs canRolePostCategory in lib/supportingStaff/roleCategory.ts). The
+          section itself is shown regardless of whether there's anything in it
+          yet, so it isn't hidden the way the old "Add" button used to be. */}
+      {!isLoading && (
         <div className="space-y-6 pt-2">
-          <div className="flex items-center justify-between">
-            <h2 className="font-semibold text-lg">Supporting Staff</h2>
-            <Button asChild variant="outline" size="sm">
-              <Link href="/principal/staff/non-technical/new"><Plus className="h-4 w-4 mr-2" />Add Non-Technical Staff</Link>
-            </Button>
-          </div>
-          {groupedSupporting.map((g) => (
+          <h2 className="font-semibold text-lg">Supporting Staff</h2>
+          {groupedSupporting.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No supporting staff yet.</p>
+          ) : (
+            groupedSupporting.map((g) => (
             <div key={g.category}>
               <h3 className="font-medium text-sm mb-3 text-muted-foreground">
                 {STAFF_CATEGORY_LABELS[g.category]} <span className="font-normal">({g.members.length})</span>
                 {g.category === "TECHNICAL" && <span className="ml-2 text-xs">(managed by HOD - view only)</span>}
+                {g.category === "NON_TECHNICAL" && <span className="ml-2 text-xs">(new hires added by College Office)</span>}
               </h3>
               <Card>
                 <CardContent className="p-0">
@@ -297,7 +306,8 @@ export default function PrincipalStaffPage() {
                 </CardContent>
               </Card>
             </div>
-          ))}
+            ))
+          )}
         </div>
       )}
 

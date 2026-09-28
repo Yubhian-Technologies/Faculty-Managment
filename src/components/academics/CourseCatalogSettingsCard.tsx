@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,7 +10,7 @@ import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { Plus, Pencil, Trash2, Check, X, GraduationCap, AlertTriangle, ChevronDown } from "lucide-react";
 import { toast } from "@/hooks/useToast";
 import { stripLeadingZeros } from "@/lib/utils";
-import { currentAcademicStartYear, deriveBatch } from "@/lib/college/academicSession";
+import { currentAcademicStartYear, deriveBatch, courseYearCoverage } from "@/lib/college/academicSession";
 import type { CourseCatalogItem } from "@/types";
 
 type Draft = { name: string; code: string; durationYears: string; regulations: string[]; regulationBatches: Record<string, string> };
@@ -26,15 +26,29 @@ function computeRegulationBatches(startYear: number, numBatches: number, courseD
   return years.map((y) => deriveBatch(y, courseDurationYears)).join(",");
 }
 
+function ordinalYear(year: number): string {
+  const suffix = year === 1 ? "st" : year === 2 ? "nd" : year === 3 ? "rd" : "th";
+  return `${year}${suffix} Year`;
+}
+
+type RegFieldError = { field: "code" | "startYear" | "numBatches"; message: string };
+
 /**
- * Add/remove regulations for a course draft (used identically for the "Add
- * new course" panel and each item's Edit mode) - a regulation is created
- * right here, by giving it an intake starting year (e.g. 2023) and how many
- * consecutive intakes follow it (e.g. 3 -> 2023, 2024, 2025 all fall under
- * this regulation, until a newer one supersedes it), rather than declared
- * standalone elsewhere and attached afterward. Typing a code already used by
- * another course reuses it (`knownCodes` just offers it back via the
- * datalist); there is no separate registry to keep it in sync with.
+ * Add/edit/remove regulations for a course draft (used identically for the
+ * "Add new course" panel and each item's Edit mode) - a regulation is
+ * created right here, by giving it an intake starting year (e.g. 2023) and
+ * how many consecutive intakes follow it (e.g. 3 -> 2023, 2024, 2025 all
+ * fall under this regulation, until a newer one supersedes it), rather than
+ * declared standalone elsewhere and attached afterward. Typing a code
+ * already used by another course reuses it (`knownCodes` just offers it
+ * back via the datalist); there is no separate registry to keep it in sync
+ * with.
+ *
+ * The coverage table below the chips is computed with the exact same
+ * function (courseYearCoverage/regulationsForCourseYearByBatch) that every
+ * real Year picker (Assign to Semester, Sections, Subjects) resolves
+ * against - so a gap or an overlap shows up here, before saving, instead of
+ * surfacing later as "why is this department's Year dropdown empty."
  */
 function RegulationBatchesEditor({
   draft, setDraft, courseDurationYears, knownCodes, listId, showHint = true,
@@ -49,18 +63,51 @@ function RegulationBatchesEditor({
   const [code, setCode] = useState("");
   const [startYear, setStartYear] = useState(String(currentAcademicStartYear()));
   const [numBatches, setNumBatches] = useState("1");
+  const [editingCode, setEditingCode] = useState<string | null>(null);
+  const [fieldError, setFieldError] = useState<RegFieldError | null>(null);
+  const [removeTarget, setRemoveTarget] = useState<string | null>(null);
 
-  function addRegulation() {
+  const coverage = useMemo(
+    () => courseYearCoverage(courseDurationYears, draft.regulationBatches, draft.regulations),
+    [courseDurationYears, draft.regulationBatches, draft.regulations]
+  );
+  const hasGap = coverage.some((c) => c.regulations.length === 0);
+  const hasOverlap = coverage.some((c) => c.regulations.length > 1);
+
+  function resetForm() {
+    setCode("");
+    setStartYear(String(currentAcademicStartYear()));
+    setNumBatches("1");
+    setEditingCode(null);
+    setFieldError(null);
+  }
+
+  // Pre-fills the same three fields from an existing regulation's own batch
+  // string so extending it is "change the count", not "delete, then
+  // reconstruct from three blank inputs" - the exact slip that silently
+  // dropped a regulation's whole intake coverage on the last edit.
+  function startEditRegulation(regCode: string) {
+    const batch = draft.regulationBatches[regCode] ?? "";
+    const starts = batch.split(",").map((p) => Number(p.trim().slice(0, 4))).filter((n) => Number.isFinite(n) && n > 0);
+    setEditingCode(regCode);
+    setCode(regCode);
+    setStartYear(starts.length > 0 ? String(Math.min(...starts)) : String(currentAcademicStartYear()));
+    setNumBatches(String(Math.max(1, starts.length)));
+    setFieldError(null);
+  }
+
+  function submitRegulation(e: FormEvent) {
+    e.preventDefault();
     const trimmed = code.trim().toUpperCase();
-    if (!trimmed) { toast({ variant: "destructive", title: "Enter a regulation code" }); return; }
+    if (!trimmed) { setFieldError({ field: "code", message: "Enter a regulation code" }); return; }
     const start = Number(startYear);
     const count = Number(numBatches);
     if (!start || String(start).length !== 4) {
-      toast({ variant: "destructive", title: "Starting year must be a 4-digit year, e.g. 2023" });
+      setFieldError({ field: "startYear", message: "Starting year must be a 4-digit year, e.g. 2023" });
       return;
     }
     if (!count || count < 1) {
-      toast({ variant: "destructive", title: "Number of batches must be at least 1" });
+      setFieldError({ field: "numBatches", message: "Number of batches must be at least 1" });
       return;
     }
     const batches = computeRegulationBatches(start, count, courseDurationYears);
@@ -69,56 +116,141 @@ function RegulationBatchesEditor({
       regulations: draft.regulations.includes(trimmed) ? draft.regulations : [...draft.regulations, trimmed],
       regulationBatches: { ...draft.regulationBatches, [trimmed]: batches },
     });
-    setCode("");
-    setStartYear(String(currentAcademicStartYear()));
-    setNumBatches("1");
+    resetForm();
   }
 
-  function removeRegulation(regCode: string) {
-    const regulationBatches = { ...draft.regulationBatches };
-    delete regulationBatches[regCode];
-    setDraft({ ...draft, regulations: draft.regulations.filter((r) => r !== regCode), regulationBatches });
+  // Every year `regCode` is currently the ONLY regulation covering - exactly
+  // what removing it would blank out for every department teaching this
+  // course.
+  function yearsSolelyCoveredBy(regCode: string): number[] {
+    return coverage.filter((c) => c.regulations.length === 1 && c.regulations[0] === regCode).map((c) => c.year);
   }
+
+  function confirmRemove() {
+    if (!removeTarget) return;
+    const regulationBatches = { ...draft.regulationBatches };
+    delete regulationBatches[removeTarget];
+    setDraft({ ...draft, regulations: draft.regulations.filter((r) => r !== removeTarget), regulationBatches });
+    if (editingCode === removeTarget) resetForm();
+    setRemoveTarget(null);
+  }
+
+  const lostYears = removeTarget ? yearsSolelyCoveredBy(removeTarget) : [];
 
   return (
     <div className="space-y-2">
       {draft.regulations.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
+        <ul className="flex flex-wrap gap-1.5">
           {draft.regulations.map((r) => (
-            <span key={r} className="inline-flex items-center gap-1 rounded-full bg-secondary px-2 py-0.5 text-xs">
+            <li key={r} className="inline-flex items-center gap-1 rounded-full bg-secondary px-2 py-0.5 text-xs">
               {r}{draft.regulationBatches[r] ? ` — ${draft.regulationBatches[r]}` : ""}
-              <button type="button" onClick={() => removeRegulation(r)} className="rounded-full hover:bg-muted-foreground/20" title={`Remove ${r}`} aria-label={`Remove ${r}`}>
+              <button type="button" onClick={() => startEditRegulation(r)} className="rounded-full hover:bg-muted-foreground/20" title={`Edit ${r}`} aria-label={`Edit ${r}`}>
+                <Pencil className="h-3 w-3" />
+              </button>
+              <button type="button" onClick={() => setRemoveTarget(r)} className="rounded-full hover:bg-muted-foreground/20" title={`Remove ${r}`} aria-label={`Remove ${r}`}>
                 <X className="h-3 w-3" />
               </button>
-            </span>
+            </li>
           ))}
+        </ul>
+      )}
+
+      {courseDurationYears > 0 && (
+        <div className="rounded-md border text-[11px] overflow-hidden">
+          <div className="grid" style={{ gridTemplateColumns: `repeat(${courseDurationYears}, minmax(0, 1fr))` }}>
+            {coverage.map((c) => (
+              <div
+                key={c.year}
+                className={`p-1.5 text-center border-r last:border-r-0 ${
+                  c.regulations.length === 0
+                    ? "bg-amber-50 text-amber-700"
+                    : c.regulations.length > 1
+                      ? "bg-red-50 text-red-700"
+                      : "text-muted-foreground"
+                }`}
+              >
+                <div className="font-medium text-foreground">{ordinalYear(c.year)}</div>
+                <div>{c.regulations.length === 0 ? "Not covered" : c.regulations.length > 1 ? "Ambiguous" : c.regulations[0]}</div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
-      <div className="flex flex-wrap items-end gap-2">
+      {hasGap && (
+        <p className="flex items-start gap-1 text-[11px] text-amber-700">
+          <AlertTriangle className="h-3 w-3 mt-0.5 shrink-0" />
+          {coverage.filter((c) => c.regulations.length === 0).map((c) => ordinalYear(c.year)).join(", ")} (admission {" "}
+          {coverage.filter((c) => c.regulations.length === 0).map((c) => c.admissionYear).join(", ")}) - no regulation
+          covers this yet. Every department teaching this course shows nothing for that year until one is added.
+        </p>
+      )}
+      {hasOverlap && (
+        <p className="flex items-start gap-1 text-[11px] text-red-700">
+          <AlertTriangle className="h-3 w-3 mt-0.5 shrink-0" />
+          More than one regulation claims the same intake year - saving will be rejected until the overlap is fixed.
+        </p>
+      )}
+
+      <form onSubmit={submitRegulation} className="flex flex-wrap items-end gap-2">
         <div className="space-y-1">
           <Label htmlFor={`${listId}-code`} className="text-[11px]">Code</Label>
-          <Input id={`${listId}-code`} value={code} onChange={(e) => setCode(e.target.value)} placeholder="e.g. R23" className="w-24 uppercase" list={listId} />
+          <Input
+            id={`${listId}-code`} value={code} onChange={(e) => setCode(e.target.value)}
+            placeholder="e.g. R23" className="w-24 uppercase" list={listId} disabled={editingCode != null}
+            aria-invalid={fieldError?.field === "code" || undefined}
+            aria-describedby={fieldError ? `${listId}-error` : undefined}
+          />
           <datalist id={listId}>
             {knownCodes.map((c) => <option key={c} value={c} />)}
           </datalist>
         </div>
         <div className="space-y-1">
           <Label htmlFor={`${listId}-start-year`} className="text-[11px]">Starting Year</Label>
-          <Input id={`${listId}-start-year`} value={startYear} onChange={(e) => setStartYear(stripLeadingZeros(e.target.value))} placeholder="2023" className="w-24" maxLength={4} />
+          <Input
+            id={`${listId}-start-year`} value={startYear} onChange={(e) => setStartYear(stripLeadingZeros(e.target.value))}
+            placeholder="2023" className="w-24" maxLength={4} inputMode="numeric"
+            aria-invalid={fieldError?.field === "startYear" || undefined}
+            aria-describedby={fieldError ? `${listId}-error` : undefined}
+          />
         </div>
         <div className="space-y-1">
           <Label htmlFor={`${listId}-num-batches`} className="text-[11px]">No. of Batches</Label>
-          <Input id={`${listId}-num-batches`} type="number" min={1} value={numBatches} onChange={(e) => setNumBatches(stripLeadingZeros(e.target.value))} className="w-24" />
+          <Input
+            id={`${listId}-num-batches`} type="number" min={1} value={numBatches} onChange={(e) => setNumBatches(stripLeadingZeros(e.target.value))}
+            className="w-24"
+            aria-invalid={fieldError?.field === "numBatches" || undefined}
+            aria-describedby={fieldError ? `${listId}-error` : undefined}
+          />
         </div>
-        <Button type="button" size="sm" variant="outline" onClick={addRegulation}>
-          <Plus className="h-3.5 w-3.5 mr-1" />Add
+        <Button type="submit" size="sm" variant="outline">
+          {editingCode ? <><Check className="h-3.5 w-3.5 mr-1" />Update {editingCode}</> : <><Plus className="h-3.5 w-3.5 mr-1" />Add</>}
         </Button>
-      </div>
-      {showHint && (
+        {editingCode && (
+          <Button type="button" size="sm" variant="ghost" onClick={resetForm}>Cancel</Button>
+        )}
+      </form>
+      {fieldError && (
+        <p id={`${listId}-error`} role="alert" className="text-[11px] text-destructive">{fieldError.message}</p>
+      )}
+      {showHint && !fieldError && (
         <p className="text-[11px] text-muted-foreground">
           E.g. Starting Year 2023, 3 batches - the 2023, 2024 and 2025 intakes all follow this regulation.
         </p>
       )}
+
+      <ConfirmDialog
+        open={removeTarget !== null}
+        onOpenChange={(o) => { if (!o) setRemoveTarget(null); }}
+        title={`Remove ${removeTarget ?? ""}?`}
+        description={
+          lostYears.length > 0
+            ? `${lostYears.map(ordinalYear).join(", ")} ${lostYears.length === 1 ? "is" : "are"} only covered by ${removeTarget} right now - removing it empties Subjects, Sections and Assign to Semester for that year, in every department teaching this course, until another regulation covers it.`
+            : `${removeTarget} isn't the only regulation covering any current year - removing it won't blank out a Year dropdown right now.`
+        }
+        confirmLabel="Remove"
+        variant="destructive"
+        onConfirm={confirmRemove}
+      />
     </div>
   );
 }

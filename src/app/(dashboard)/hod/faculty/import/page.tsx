@@ -63,6 +63,10 @@ export default function FacultyImportPage() {
   const [failedRows, setFailedRows] = useState<FailedRow[]>([]);
   const user = useAuthStore((s) => s.user);
   const isHod = user?.role === "HOD";
+  // Also reached from Principal/Vice Principal's own Faculty page (same
+  // route tree re-exported at principal/faculty/import) - the two links back
+  // to the Faculty list below need to point at whichever section got here.
+  const facultyBasePath = isHod ? "/hod/faculty" : "/principal/faculty";
   const ownDepartments = useMyDepartments();
   // Every department this account may import faculty into - an HOD's own
   // department(s) plus true sub-departments (facultyDepartmentOptions), or
@@ -300,7 +304,7 @@ export default function FacultyImportPage() {
         description="Bulk upload faculty records from a CSV file"
         actions={
           <Button variant="outline" asChild>
-            <Link href="/hod/faculty"><ArrowLeft className="h-4 w-4 mr-1" />Back to Faculty</Link>
+            <Link href={facultyBasePath}><ArrowLeft className="h-4 w-4 mr-1" />Back to Faculty</Link>
           </Button>
         }
       />
@@ -524,7 +528,7 @@ export default function FacultyImportPage() {
               )}
               {(result.created > 0 || fixed.length > 0) && (
                 <Button asChild variant="outline" size="sm">
-                  <Link href="/hod/faculty">View Faculty List</Link>
+                  <Link href={facultyBasePath}>View Faculty List</Link>
                 </Button>
               )}
             </CardContent>

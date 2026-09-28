@@ -153,6 +153,20 @@ export async function POST(request: Request) {
           // secondaryDepartment would be redundant (and stale/misleading if
           // it was ever anything else, e.g. corrected mid-way).
           secondaryDepartment: null,
+          // The student is now genuinely sitting in targetSection, so its own
+          // courseId is the only correct, unambiguous value from this point on
+          // (see StudentRecord.courseId's doc-comment) - same fix already
+          // applied at every other place a student gets placed into a section
+          // (students/[id] PATCH's targetSectionId move, distribute,
+          // distribute-cohort). Left stale here before, a promotion that also
+          // changes department (the common shared-first-year -> real-branch
+          // case, which this route is explicitly used for) silently broke
+          // every courseId-scoped query for the student's new section -
+          // section student counts (sections/route.ts GET), attendance
+          // rosters/reports (sectionRoster.ts's fetchSectionStudents), and HOD
+          // department-scope resolution (catalogIdForStudent).
+          courseId: targetSection!.courseId,
+          course: targetSection!.courseName ?? null,
           updatedAt: now,
         });
         const history = departmentHistoryEntry(

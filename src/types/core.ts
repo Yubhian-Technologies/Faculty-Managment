@@ -10,6 +10,7 @@ export type UserRole =
   | "ADMINISTRATION"
   | "HR_ADMIN"
   | "ADMIN_OFFICE"
+  | "LOCATION_STAFF_ADMIN"
   | "LOCATION_DEPT_HEAD"
   // College-scoped
   | "PRINCIPAL"
@@ -64,6 +65,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   ADMINISTRATION: "Administration",
   HR_ADMIN: "HR Admin",
   ADMIN_OFFICE: "Admin Office",
+  LOCATION_STAFF_ADMIN: "Location Staff Admin",
   LOCATION_DEPT_HEAD: "Dept Head",
   PRINCIPAL: "Principal",
   VICE_PRINCIPAL: "Vice Principal",
@@ -112,6 +114,7 @@ export const ROLE_DASHBOARD_PATHS: Record<UserRole, string> = {
   ADMINISTRATION: "/administration",
   HR_ADMIN: "/hr-admin",
   ADMIN_OFFICE: "/admin-office",
+  LOCATION_STAFF_ADMIN: "/location-staff-admin",
   LOCATION_DEPT_HEAD: "/location-dept-head",
   PRINCIPAL: "/principal",
   VICE_PRINCIPAL: "/vice-principal",
@@ -154,6 +157,7 @@ export const ROLE_LEVEL: Record<UserRole, 0 | 1 | 2 | 3 | 4 | 5 | 6> = {
   ADMINISTRATION: 2,
   HR_ADMIN: 2,
   ADMIN_OFFICE: 2,
+  LOCATION_STAFF_ADMIN: 2,
   LOCATION_DEPT_HEAD: 2,
   ACCOUNTS: 2,
   PRINCIPAL: 3,
@@ -203,6 +207,7 @@ export const ROLE_SCOPE: Record<UserRole, RoleScope> = {
   ADMINISTRATION: "LOCATION",
   HR_ADMIN: "LOCATION",
   ADMIN_OFFICE: "LOCATION",
+  LOCATION_STAFF_ADMIN: "LOCATION",
   LOCATION_DEPT_HEAD: "LOCATION",
   ACCOUNTS: "LOCATION",
   PRINCIPAL: "COLLEGE",
@@ -485,8 +490,16 @@ export interface LocationDepartment {
   id: string;
   locationId: string;
   name: string; // Electrical, Civil, Accounts, etc.
+  code?: string;
+  headUid?: string;
   deptHeadUid?: string;
+  headStaffId?: string;
+  headName?: string;
   deptHeadName?: string;
+  headEmail?: string;
+  headPhone?: string;
+  description?: string;
+  staffCount?: number;
   isActive: boolean;
   createdAt: Timestamp;
   updatedAt?: Timestamp;
@@ -2763,6 +2776,12 @@ export interface StudentRecord {
   // assigned, so an unassigned student is a gap the HOD needs to notice and
   // fill in, not something the system guesses.
   labBatch?: string;
+  // Firebase Storage download URL, same field name as FacultyMember/FMSUser
+  // above - set only via the Add/Edit form's photo upload (StudentFormDialog,
+  // same AvatarUploadField Faculty uses) and its own small PATCH branch
+  // (students/[id] PATCH), never via CSV import or the roster template -
+  // deliberately not one of rosterFields.ts's ROSTER_FIELDS.
+  profilePhotoUrl?: string;
   // ─── Admission-detail fields ────────────────────────────────────────────
   // All optional, set either via the College Office bulk import (see
   // src/lib/students/importRow.ts and rosterFields.ts's ROSTER_FIELDS - the

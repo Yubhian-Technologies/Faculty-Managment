@@ -1,5 +1,23 @@
-import type { DayOfWeek, PeriodTiming, Section, Subject, TeachingAssignment, TimetableSlot } from "@/types";
-import { escapeHtml, formatTime12h } from "./facultyTimetablePdf";
+import type {
+  CourseYearTiming,
+  DayOfWeek,
+  PeriodTiming,
+  Section,
+  Subject,
+  TeachingAssignment,
+  TimetableSlot,
+} from "@/types";
+import { DAY_LABELS } from "@/types";
+import { escapeHtml } from "./facultyTimetablePdf";
+import {
+  buildAllocationList,
+  buildTimetableColumns,
+  ordinalYear,
+  periodTimeRange,
+  resolveTimetableDays,
+  slotFacultyName,
+  slotShortCode,
+} from "./gridModel";
 
 export interface SectionTimetablePdfOptions {
   collegeName?: string;
@@ -7,6 +25,7 @@ export interface SectionTimetablePdfOptions {
   affiliation?: string;
   address?: string;
   phone?: string;
+  email?: string;
   logoUrl?: string;
   departmentName?: string;
   academicYear?: string;
@@ -17,363 +36,313 @@ export interface SectionTimetablePdfOptions {
   classroom?: string;
   classInchargeName?: string;
   effectiveDate?: string;
+  /** e.g. "2026-27" - printed as a "Valid for" line so a stale handout is recognisable. */
+  sessionLabel?: string;
   days: DayOfWeek[];
   periods: number[];
   periodTimings: PeriodTiming[];
+  /**
+   * The owning CourseYearTiming, when the caller holds one. Used only as the
+   * source for derived clock times if `periodTimings` is empty; supplying it
+   * never overrides an explicit `periods` breakdown.
+   */
+  timing?: Pick<CourseYearTiming, "numberOfPeriods" | "periods" | "periodDurationMinutes" | "collegeStartTime" | "lunchBreak" | "shortBreaks">;
   slots: TimetableSlot[];
   subjects?: Subject[];
   assignments?: TeachingAssignment[];
   lunchBreak?: { afterPeriod: number; durationMinutes: number };
   shortBreaks?: { afterPeriod: number; durationMinutes: number }[];
+  /** Show the Class In-charge / Timetable In-charge / Principal signature block. */
+  showSignatures?: boolean;
+  /** Name under the rightmost signature, e.g. "Principal". Defaults to "Principal". */
+  signatureLabels?: { incharge?: string; principal?: string };
+  title?: string;
 }
 
-export const VISHNU_LOGO_SVG = `<svg width="95" height="90" viewBox="0 0 120 110" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <path d="M25 20 L55 80 L70 50 L45 20 Z" fill="#E65100"/>
-  <path d="M45 20 L70 50 L95 20 L70 20 Z" fill="#2E7D32"/>
-  <path d="M55 80 L70 50 L85 80 Z" fill="#1565C0"/>
-  <text x="60" y="96" font-family="Arial, sans-serif" font-size="10" font-weight="900" text-anchor="middle" fill="#222">VISHNU</text>
-  <text x="60" y="105" font-family="Arial, sans-serif" font-size="6.5" font-weight="700" letter-spacing="0.5" text-anchor="middle" fill="#666">UNIVERSAL LEARNING</text>
-</svg>`;
-
+/**
+ * The printable / PDF / print-window form of ONE section's weekly timetable.
+ *
+ * Everything on the page is derived from `opts` - the college's own identity
+ * block, the section's real department/course/year/batch/regulation, the
+ * course-year's configured period timings and breaks, and the days the college
+ * actually teaches. The previous version destructured only a third of its own
+ * declared options, so the printed sheet never stated which class it belonged
+ * to, and substituted literal clock times, a literal "College Name" and a
+ * fabricated Section document for anything it hadn't been given.
+ */
 export function buildSectionTimetablePdfHtml(opts: SectionTimetablePdfOptions): string {
   const {
-    collegeName = "College Name",
+    collegeName = "",
     collegeCode = "",
     affiliation = "",
     address = "",
     phone = "",
+    email = "",
     logoUrl,
-    days,
-    periods,
+    departmentName,
+    academicYear,
+    semesterLabel,
+    regulation,
+    section,
+    courseName,
+    classroom,
+    classInchargeName,
+    effectiveDate,
+    sessionLabel,
     periodTimings,
     slots,
     subjects = [],
     assignments = [],
     lunchBreak,
     shortBreaks,
+    showSignatures = true,
+    signatureLabels,
+    title,
   } = opts;
 
-  // Resolve lunch break position (default after period 4)
-  const lunchAfter = lunchBreak?.afterPeriod ?? (periods.length >= 6 ? 4 : Math.floor(periods.length / 2));
-  // Resolve short breaks
-  const shortBreakAfters = new Set(shortBreaks?.map((b) => b.afterPeriod) ?? (periods.length >= 8 ? [2] : []));
+  const sectionName = section?.name;
+  const sectionYear = section?.year;
+  const sectionBatch = section?.batch;
+  // `Section.department` holds the department NAME string, not a doc id - see
+  // the join-key comment on POST college/departments ("sections/students store
+  // the department as that name string"), so it is a legitimate display
+  // fallback when the caller didn't resolve a name of its own.
+  const resolvedDepartment = departmentName || section?.department || "";
 
-  // Map period timing by period number
-  const timingByPeriod = new Map<number, PeriodTiming>();
-  for (const t of periodTimings) timingByPeriod.set(t.period, t);
+  // Optional passthrough of the owning CourseYearTiming, so a caller that has
+  // the real doc can supply collegeStartTime/periodDurationMinutes and get
+  // derived timings when it hasn't saved an explicit `periods` breakdown.
+  const columnTiming = opts.timing;
+  const resolvedCourse = courseName || section?.courseName || "";
+  const resolvedIncharge = classInchargeName ?? section?.facultyInchargeName ?? "";
 
-  // Group columns definition
-  interface ColumnDef {
-    kind: "period" | "break";
-    periodNumber?: number;
-    title: string;
-    subText?: string;
-    widthPercent: number;
-  }
+  // Days: the caller's list when it gave one, otherwise the days these slots
+  // actually occupy - never a hardcoded Mon-Sat.
+  const days = opts.days?.length ? resolveTimetableDays(null, opts.days) : resolveTimetableDays(null, slots.map((s) => s.day));
+  const occupiedDays = new Set(slots.map((s) => s.day));
+  const visibleDays = days.filter((d) => occupiedDays.has(d) || opts.days?.length);
+  const gridDays = visibleDays.length > 0 ? visibleDays : days;
 
-  const columns: ColumnDef[] = [];
-  // Day of week column
-  columns.push({
-    kind: "period",
-    title: "Day of<br>week",
-    widthPercent: 7.5,
-  });
+  // Prefer the caller's own CourseYearTiming so an unsaved/omitted
+  // `periods` breakdown still yields real clock times; otherwise fall back to
+  // the explicit periodTimings list alone. Either way no time is invented.
+  const columns = buildTimetableColumns(
+    columnTiming ?? {
+      numberOfPeriods: opts.periods.length,
+      periods: periodTimings,
+      periodDurationMinutes: 0,
+      collegeStartTime: periodTimings[0]?.startTime ?? "",
+      // CourseYearTiming types these as non-optional, but a caller without the
+      // real doc may have neither. afterPeriod 0 matches no period (the loop
+      // starts at 1), so this yields no break column rather than a fake one.
+      lunchBreak: lunchBreak ?? { afterPeriod: 0, durationMinutes: 0 },
+      shortBreaks: shortBreaks ?? [],
+    },
+    { lunchLabel: "Lunch Break" }
+  );
 
-  for (const p of periods) {
-    const t = timingByPeriod.get(p);
-    const startStr = t ? formatTime12h(t.startTime) : "";
-    const endStr = t ? formatTime12h(t.endTime) : "";
+  const subjectMap = new Map(subjects.map((s) => [s.id, s]));
 
-    columns.push({
-      kind: "period",
-      periodNumber: p,
-      title: `Period ${p}<br>${startStr}<br>${endStr}`,
-      widthPercent: 9.5,
-    });
+  // ── Header ────────────────────────────────────────────────────────────────
+  const documentTitle = title || "TIME TABLE";
+  const identityLines = [affiliation, address, [phone, email].filter(Boolean).join("  |  ")]
+    .filter(Boolean)
+    .map((line) => `<div class="identity-line">${escapeHtml(line)}</div>`)
+    .join("");
 
-    // Check if short break occurs after this period
-    if (shortBreakAfters.has(p)) {
-      const nextT = timingByPeriod.get(p + 1);
-      const breakStart = endStr || "10:40 AM";
-      const breakEnd = nextT ? formatTime12h(nextT.startTime) : "11:00 AM";
-      columns.push({
-        kind: "break",
-        title: `${breakStart}<br>${breakEnd}`,
-        widthPercent: 7.5,
-      });
-    }
+  const metaPills = [
+    sectionYear != null ? ordinalYear(sectionYear) : undefined,
+    sectionName ? `Section ${sectionName}` : undefined,
+    sectionBatch,
+    resolvedCourse,
+    resolvedDepartment,
+    academicYear,
+    semesterLabel,
+    regulation,
+    classroom ? `Room ${classroom}` : undefined,
+  ].filter((v): v is string => !!v);
 
-    // Check if lunch break occurs after this period
-    if (p === lunchAfter) {
-      const nextT = timingByPeriod.get(p + 1);
-      const lunchStart = endStr || "12:40 PM";
-      const lunchEnd = nextT ? formatTime12h(nextT.startTime) : "01:40 PM";
-      columns.push({
-        kind: "break",
-        title: `${lunchStart}<br>${lunchEnd}`,
-        widthPercent: 8.5,
-      });
-    }
-  }
+  const inchargePill = resolvedIncharge ? `Class In-charge: ${resolvedIncharge}` : "";
+  const effectivePill = effectiveDate ? `Effective from ${effectiveDate}` : "";
+  const sessionPill = sessionLabel ? `Session ${sessionLabel}` : "";
 
-  // Build Table Header
-  const headerHtml = `<tr style="background-color: #ffffff;">
-    ${columns
-      .map(
-        (col) =>
-          `<th class="cellBorder" style="width:${col.widthPercent}%;font-weight:bold;font-size:9.5px;line-height:1.25;padding:4px 2px;background:#ffffff;">${col.title}</th>`
-      )
-      .join("")}
-  </tr>`;
+  const logoTd = logoUrl
+    ? `<td class="logo-cell"><img src="${escapeHtml(logoUrl)}" alt="${escapeHtml(collegeName)} logo"></td>`
+    : `<td class="logo-cell"></td>`;
 
-  // Map subjects
-  const subjectMap = new Map<string, Subject>();
-  for (const s of subjects) subjectMap.set(s.id, s);
+  const headerHtml = `
+  <table class="letterhead" cellspacing="0" cellpadding="0">
+    <tr>
+      ${logoTd}
+      <td class="letterhead-text">
+        ${collegeName ? `<div class="inst-name">${escapeHtml(collegeName)}${collegeCode ? ` <span class="inst-code">(Code: ${escapeHtml(collegeCode)})</span>` : ""}</div>` : ""}
+        ${identityLines}
+        <div class="doc-title">${escapeHtml(documentTitle)}</div>
+        ${metaPills.length ? `<div class="meta-line">${metaPills.map((p) => `<span class="meta-pill">${escapeHtml(p)}</span>`).join("")}</div>` : ""}
+        ${inchargePill || effectivePill || sessionPill
+          ? `<div class="meta-line meta-sub">${[inchargePill, effectivePill, sessionPill].filter(Boolean).map((p) => `<span class="meta-pill muted">${escapeHtml(p)}</span>`).join("")}</div>`
+          : ""}
+      </td>
+    </tr>
+  </table>`;
 
-  // Helper for short code: e.g. DWDM, FLAT, CN, etc.
-  function getSlotShortCode(slot: TimetableSlot): string {
-    const sObj = subjectMap.get(slot.subjectId);
-    if (sObj?.shortCode) return sObj.shortCode;
-    if (sObj?.code) return sObj.code;
-    if ((slot as any).shortCode) return (slot as any).shortCode;
-    if ((slot as any).subjectCode) return (slot as any).subjectCode;
-    // Derive abbreviation if subject name is long
-    const name = slot.subjectName || "";
-    if (name.length <= 10) return name.toUpperCase();
-    return name
-      .split(/\s+/)
-      .map((w) => w[0])
-      .join("")
-      .toUpperCase();
-  }
-
-  // Day rows
-  const DAY_SHORT: Record<DayOfWeek, string> = {
-    MON: "Mon",
-    TUE: "Tue",
-    WED: "Wed",
-    THU: "Thu",
-    FRI: "Fri",
-    SAT: "Sat",
-  };
-
-  const rowsHtml = days
-    .map((d) => {
-      const dayLabel = DAY_SHORT[d] ?? d;
-      const cells: string[] = [];
-
-      // Day name column
-      cells.push(`<td class="cellBorder" style="font-weight:500;">${dayLabel}</td>`);
-
-      for (let i = 1; i < columns.length; i++) {
-        const col = columns[i];
-        if (col.kind === "break") {
-          cells.push(`<td class="cellBorder break-cell">&nbsp;</td>`);
-        } else if (col.periodNumber != null) {
-          const slot = slots.find((s) => s.day === d && s.periodNumber === col.periodNumber);
-          if (!slot) {
-            cells.push(`<td class="cellBorder">&nbsp;</td>`);
-          } else {
-            const shortCode = getSlotShortCode(slot);
-            cells.push(`<td class="cellBorder" style="font-weight:500;">${escapeHtml(shortCode)}</td>`);
-          }
-        }
+  // ── Grid ──────────────────────────────────────────────────────────────────
+  const dayHeader = `<th class="cellBorder day-head">Day</th>`;
+  const periodHeaders = columns
+    .map((col) => {
+      if (col.kind === "break") {
+        return `<th class="cellBorder break-head">
+          <div class="break-label">${escapeHtml(col.label)}</div>
+          ${periodTimeRange(col.startTime, col.endTime) ? `<div class="col-time">${escapeHtml(periodTimeRange(col.startTime, col.endTime)!)}</div>` : ""}
+        </th>`;
       }
-
-      return `<tr>${cells.join("")}</tr>`;
+      const range = periodTimeRange(col.startTime, col.endTime);
+      return `<th class="cellBorder period-head">
+        <div>Period ${col.periodNumber}</div>
+        ${range ? `<div class="col-time">${escapeHtml(range)}</div>` : ""}
+      </th>`;
     })
     .join("");
 
-  // Build Allocation of Subjects Table
-  const seenSubj = new Set<string>();
-  interface AllocationRow {
-    code: string;
-    name: string;
-    faculty: string;
-  }
-  const allocationRows: AllocationRow[] = [];
-
-  for (const slot of slots) {
-    const key = slot.subjectId || slot.subjectName;
-    if (!key || seenSubj.has(key)) continue;
-    seenSubj.add(key);
-
-    const sObj = subjectMap.get(slot.subjectId);
-    const assign = assignments.find((a) => a.subjectId === slot.subjectId);
-
-    const code = sObj?.shortCode ?? sObj?.code ?? getSlotShortCode(slot);
-    const name = sObj?.name ?? slot.subjectName;
-    const fac = (slot.facultyName ?? assign?.facultyName ?? "Unassigned").toUpperCase();
-
-    allocationRows.push({ code, name, faculty: fac });
-  }
-
-  const allocationTableHtml = allocationRows
-    .map(
-      (r) => `<tr>
-      <td align="left" class="cellBorder">${escapeHtml(r.code)}</td>
-      <td align="left" class="cellBorder">${escapeHtml(r.name)}</td>
-      <td align="left" class="cellBorder">${escapeHtml(r.faculty)}</td>
-      <td align="left" class="cellBorder">&nbsp;</td>
-    </tr>`
-    )
+  const bodyRows = gridDays
+    .map((day) => {
+      const cells = columns
+        .map((col) => {
+          if (col.kind === "break") return `<td class="cellBorder break-cell">&nbsp;</td>`;
+          const cellSlots = slots.filter((s) => s.day === day && s.periodNumber === col.periodNumber);
+          if (cellSlots.length === 0) return `<td class="cellBorder">&nbsp;</td>`;
+          const inner = cellSlots
+            .map((s) => {
+              const code = escapeHtml(slotShortCode(s, subjectMap));
+              const faculty = slotFacultyName(s);
+              const sub = s.substituteFacultyName;
+              const batch = s.labBatch ? escapeHtml(s.labBatch) : "";
+              return `<div class="cell${sub ? " cell-sub" : ""}">
+                <div class="cell-code">${code}</div>
+                ${batch ? `<div class="cell-batch">${batch}</div>` : ""}
+                ${faculty ? `<div class="cell-faculty">${escapeHtml(faculty)}</div>` : ""}
+                ${sub ? `<div class="cell-subnote">Sub: ${escapeHtml(sub)}</div>` : ""}
+                ${s.classroom ? `<div class="cell-room">Room ${escapeHtml(s.classroom)}</div>` : ""}
+              </div>`;
+            })
+            .join("");
+          return `<td class="cellBorder">${inner}</td>`;
+        })
+        .join("");
+      return `<tr><th class="cellBorder day-cell">${escapeHtml(DAY_LABELS[day] ?? day)}</th>${cells}</tr>`;
+    })
     .join("");
 
-  // Logo Markup
-  const logoTd = logoUrl
-    ? `<td style="width: 105px; vertical-align: middle; text-align: center;"><img src="${escapeHtml(logoUrl)}" border="0" width="95px" height="85px" style="object-fit:contain;" alt="Logo"></td>`
+  const gridHtml = `
+  <table class="timetable-grid" cellspacing="0" cellpadding="0">
+    <thead><tr>${dayHeader}${periodHeaders}</tr></thead>
+    <tbody>${bodyRows}</tbody>
+  </table>`;
+
+  // ── Allocation of subjects ────────────────────────────────────────────────
+  const allocation = buildAllocationList(slots, { subjects: subjectMap, assignments });
+  const allocationHtml = allocation.length
+    ? `
+  <div class="section-title">Allocation of Subjects</div>
+  <table class="allocation-table" cellspacing="0" cellpadding="0">
+    <thead>
+      <tr>
+        <th class="cellBorder" style="width:8%">S.No</th>
+        <th class="cellBorder" style="width:14%">Subject Code</th>
+        <th class="cellBorder">Subject</th>
+        <th class="cellBorder" style="width:20%">Name of Faculty</th>
+        <th class="cellBorder" style="width:10%">Type</th>
+        <th class="cellBorder" style="width:8%">Hrs/Wk</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${allocation
+        .map(
+          (a, i) => `<tr>
+        <td class="cellBorder center">${i + 1}</td>
+        <td class="cellBorder center strong">${escapeHtml(a.code)}</td>
+        <td class="cellBorder">${escapeHtml(a.name)}${a.labBatches.length ? `<span class="muted"> (${escapeHtml(a.labBatches.join(", "))})</span>` : ""}</td>
+        <td class="cellBorder">${escapeHtml(a.faculty)}</td>
+        <td class="cellBorder center">${escapeHtml(a.subjectType === "PRACTICAL" ? "Practical" : a.subjectType === "THEORY" ? "Theory" : "—")}</td>
+        <td class="cellBorder center">${a.hoursPerWeek != null ? a.hoursPerWeek : "—"}</td>
+      </tr>`
+        )
+        .join("")}
+    </tbody>
+  </table>`
+    : "";
+
+  // ── Signature block ───────────────────────────────────────────────────────
+  const signatureHtml = showSignatures
+    ? `
+  <div class="signature-row">
+    <div class="signature-block"><div class="signature-line"></div><div class="signature-title">Class In-charge</div></div>
+    <div class="signature-block"><div class="signature-line"></div><div class="signature-title">${escapeHtml(signatureLabels?.incharge ?? "Timetable Incharge")}</div></div>
+    <div class="signature-block"><div class="signature-line"></div><div class="signature-title">${escapeHtml(signatureLabels?.principal ?? "Principal")}</div></div>
+  </div>`
     : "";
 
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>TIME TABLE - ${escapeHtml(collegeName)}</title>
+  <title>${escapeHtml(documentTitle)}${sectionName ? ` - Section ${escapeHtml(sectionName)}` : ""}${collegeName ? ` - ${escapeHtml(collegeName)}` : ""}</title>
   <style>
-    @page {
-      size: A4 portrait;
-      margin: 8mm 10mm 8mm 10mm;
-    }
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-      -webkit-print-color-adjust: exact;
-      print-color-adjust: exact;
-    }
-    body {
-      font-family: Arial, Helvetica, sans-serif;
-      color: #000000;
-      background: #ffffff;
-      font-size: 11px;
-      line-height: 1.25;
-      padding: 10px;
-    }
-    .reportMainHeading {
-      font-size: 13.5px;
-      font-weight: bold;
-      color: #000;
-      letter-spacing: 0.3px;
-    }
-    .reportHeading1 {
-      font-size: 11px;
-      font-weight: bold;
-      color: #000;
-    }
-    .cellBorder {
-      border: 1px solid #000000;
-      padding: 4px 2px;
-      text-align: center;
-      vertical-align: middle;
-      font-size: 10px;
-    }
-    th.cellBorder {
-      font-weight: bold;
-      font-size: 9.5px;
-      line-height: 1.25;
-      background-color: #ffffff;
-    }
-    table {
-      border-collapse: collapse;
-      margin: 0 auto;
-      width: 100%;
-    }
-    .timetable-grid td {
-      height: 31px;
-      font-size: 9.5px;
-    }
-    .break-cell {
-      background-color: #ffffff;
-    }
-    .allocation-table td {
-      padding: 3.5px 6px;
-      font-size: 10.5px;
-    }
-    .allocation-table th {
-      padding: 5px 6px;
-      font-weight: bold;
-      font-size: 10.5px;
-      background-color: #ffffff;
-    }
-    .page-footer {
-      margin-top: 15px;
-      display: flex;
-      justify-content: space-between;
-      font-size: 8.5px;
-      color: #333333;
-    }
+    @page { size: A4 portrait; margin: 10mm; }
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    body { font-family: Arial, Helvetica, sans-serif; color: #000; background: #fff; font-size: 11px; line-height: 1.3; }
+    .page { width: 190mm; margin: 0 auto; }
+
+    .letterhead { width: 100%; margin-bottom: 8px; }
+    .logo-cell { width: 90px; vertical-align: middle; text-align: center; }
+    .logo-cell img { max-width: 80px; max-height: 72px; object-fit: contain; }
+    .letterhead-text { vertical-align: middle; text-align: center; }
+    .inst-name { font-size: 15pt; font-weight: 800; text-transform: uppercase; letter-spacing: 0.4px; }
+    .inst-code { font-size: 9pt; font-weight: 700; }
+    .identity-line { font-size: 8.5pt; font-weight: 600; }
+    .doc-title { font-size: 13pt; font-weight: 800; letter-spacing: 1.5px; margin: 6px 0 4px; border-top: 1px solid #000; border-bottom: 1px solid #000; padding: 4px 0; }
+    .meta-line { margin-top: 2px; }
+    .meta-pill { display: inline-block; border: 1px solid #666; border-radius: 2px; padding: 1px 5px; margin: 1px 2px; font-size: 8pt; font-weight: 700; }
+    .meta-pill.muted { border-color: #bbb; font-weight: 600; color: #333; }
+    .muted { color: #555; }
+
+    .cellBorder { border: 1px solid #000; padding: 3px 2px; text-align: center; vertical-align: middle; }
+    th.cellBorder { font-weight: 800; font-size: 8.5pt; background: #f2f2f2; }
+    .col-time { font-size: 7pt; font-weight: 500; color: #333; margin-top: 1px; white-space: nowrap; }
+    .break-label { font-size: 7.5pt; font-weight: 700; text-transform: uppercase; }
+    .day-head, .day-cell { width: 11mm; font-size: 8pt; text-transform: uppercase; }
+    .day-cell { background: #f2f2f2; font-weight: 800; }
+
+    .timetable-grid { width: 100%; border-collapse: collapse; table-layout: fixed; }
+    .timetable-grid td { height: 34px; font-size: 8pt; }
+    .break-cell { background: #f7f7f7; }
+    .cell { line-height: 1.15; }
+    .cell-code { font-size: 9.5pt; font-weight: 800; text-transform: uppercase; }
+    .cell-faculty { font-size: 7pt; font-weight: 600; color: #333; }
+    .cell-batch { font-size: 6.5pt; font-weight: 700; color: #444; }
+    .cell-room { font-size: 6.5pt; font-weight: 600; color: #555; }
+    .cell-sub { background: #fff6e5; border: 1px solid #e0a800; border-radius: 2px; }
+    .cell-subnote { font-size: 6.5pt; font-weight: 700; color: #7a5200; }
+
+    .section-title { font-size: 11pt; font-weight: 800; text-transform: uppercase; text-align: center; margin: 12px 0 5px; }
+    .allocation-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+    .allocation-table td, .allocation-table th { font-size: 8.5pt; padding: 3px 5px; }
+    .center { text-align: center; }
+    .strong { font-weight: 800; }
+
+    .signature-row { display: flex; justify-content: space-around; margin-top: 20px; }
+    .signature-block { text-align: center; width: 26%; }
+    .signature-line { border-top: 1px solid #000; margin-bottom: 3px; }
+    .signature-title { font-size: 8pt; font-weight: 700; text-transform: uppercase; }
   </style>
 </head>
 <body>
-
-  <!-- Header Section with Logo and College Info -->
-  <table style="width: 100%; margin-bottom: 6px;" cellspacing="0" cellpadding="2">
-    <tbody>
-      <tr>
-        ${logoTd}
-        <td style="vertical-align: middle; text-align: center;">
-          <table width="100%" cellspacing="0" cellpadding="1">
-            <tbody>
-              <tr><td class="reportMainHeading" align="center">${escapeHtml(collegeName)}  ${collegeCode ? `( Code: ${escapeHtml(collegeCode)}  )` : ""}</td></tr>
-              ${affiliation ? `<tr><td class="reportHeading1" align="center">${escapeHtml(affiliation)}</td></tr>` : ""}
-              ${address ? `<tr><td class="reportHeading1" align="center">${escapeHtml(address)}</td></tr>` : ""}
-              ${phone ? `<tr><td class="reportHeading1" align="center">${escapeHtml(phone)}</td></tr>` : ""}
-              <tr><td style="height: 6px;"></td></tr>
-              <tr><td class="reportHeading1" align="center" style="font-size: 13px; letter-spacing: 1px;">TIME TABLE</td></tr>
-            </tbody>
-          </table>
-        </td>
-      </tr>
-    </tbody>
-  </table>
-
-  <!-- Main Timetable Grid -->
-  <table class="timetable-grid" width="100%" cellpadding="2" cellspacing="0">
-    <thead>
-      ${headerHtml}
-    </thead>
-    <tbody>
-      ${rowsHtml}
-    </tbody>
-  </table>
-
-  <!-- Allocation of Subjects Title -->
-  <div align="center" class="reportMainHeading" style="margin: 14px 0 6px 0; font-size: 13px;">Allocation of Subjects</div>
-
-  <!-- Allocation of Subjects Table -->
-  <table class="allocation-table" width="100%" cellspacing="0" cellpadding="2">
-    <thead>
-      <tr style="background-color: #ffffff;">
-        <th align="left" style="width:14%" class="cellBorder">Subject Code</th>
-        <th align="left" style="width:36%" class="cellBorder">Subject</th>
-        <th align="left" style="width:36%" class="cellBorder">Name of Faculty</th>
-        <th align="left" style="width:14%" class="cellBorder">Faculty Initials</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${allocationTableHtml}
-    </tbody>
-  </table>
-
-  <!-- Institutional Page Footer -->
-  <div class="page-footer">
-    <span>TIME TABLE REPORT</span>
-    <span>1/1</span>
+  <div class="page">
+    ${headerHtml}
+    ${gridHtml}
+    ${allocationHtml}
+    ${signatureHtml}
   </div>
-
 </body>
 </html>`;
-}
-
-/** Client-side XLS download function identical to download (2).xls */
-export function downloadTimetableAsXls(html: string, filename: string) {
-  const blob = new Blob([html], { type: "application/vnd.ms-excel;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename.endsWith(".xls") ? filename : `${filename}.xls`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
 }

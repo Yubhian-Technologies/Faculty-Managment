@@ -22,3 +22,5 @@ export * from "./budget";
 export * from "./indent";
 export * from "./webmaster";
 export * from "./midPaper";
+export * from "./locationStaff";
+export type { LocationDepartment } from "./locationStaff";

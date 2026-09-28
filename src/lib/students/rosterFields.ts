@@ -243,6 +243,41 @@ export const LIST_ROSTER_FIELDS = PRIMARY_ROSTER_FIELDS.filter((f) => !f.hideInL
 /** Everything after the identity block, in template order. */
 export const DETAIL_ROSTER_FIELDS = ROSTER_FIELDS.filter((f) => !f.primary);
 
+/**
+ * The named sections DETAIL_ROSTER_FIELDS is grouped into for display - one
+ * definition shared by the read-only profile (StudentDetailsPage) and the
+ * Add/Edit form (RosterFormFields), so both surfaces put the same field in
+ * the same section in the same order instead of carrying two groupings that
+ * could drift apart. Every DETAIL_ROSTER_FIELDS key appears in exactly one
+ * group here.
+ */
+export const ROSTER_DETAIL_GROUPS: { title: string; keys: string[] }[] = [
+  {
+    title: "Academic Details",
+    keys: ["admissionNo", "hallTicketNo", "dateOfAdmission", "admissionType", "entranceType", "entranceRank", "jeeRank", "jeePercentage", "scholarship", "lastAttendedInstitution"],
+  },
+  {
+    title: "Personal Details",
+    keys: ["gender", "dateOfBirth", "bloodGroup", "caste", "subCaste", "religion", "nationality", "motherTongue", "hosteller", "physicallyHandicapped", "handicappedType", "identificationMarks"],
+  },
+  {
+    title: "Contact & Address",
+    keys: ["mobileNo", "landLineNo", "email", "distanceFromResidenceKm", "temporaryAddress", "permanentAddressSameAsTemporary", "permanentAddress", "state", "district"],
+  },
+  {
+    title: "Family & Guardian",
+    keys: ["fatherName", "fatherContactNo", "motherName", "motherContactNo", "guardianName", "guardianContact"],
+  },
+  {
+    title: "Bank & Documents",
+    keys: ["aadharNo", "rationCardNo", "bankAccountNo", "bankName", "ifscCode"],
+  },
+  {
+    title: "Additional Information",
+    keys: ["studiedOutsideAP", "studiedOutsideAPDetails", "familyIdLinkedOtherState", "familyIdLinkedOtherStateDetails", "remarks"],
+  },
+];
+
 /** Fields the Add/Edit forms collect - every stored roster field, template order. */
 export const EDITABLE_ROSTER_FIELDS = ROSTER_FIELDS;
 

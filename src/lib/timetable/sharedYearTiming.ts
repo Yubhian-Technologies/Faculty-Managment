@@ -57,3 +57,31 @@ export function inheritedTimingCourseId(
   }
   return null;
 }
+
+/**
+ * The department whose SubjectSemesterAssignment (keyed `subjectId_departmentId`,
+ * unlike CourseYearTiming which is keyed by courseId) actually governs `year`
+ * for `course`'s department, when that year is a shared year run by someone
+ * else - same "shared year owned by a manager" rule as inheritedTimingCourseId
+ * above (a branch's own later years never fall through), just resolved one
+ * step short of it: the manager DEPARTMENT itself, not a Course doc under it.
+ * Returns null for every year the department owns itself.
+ */
+export function inheritedAssignmentDepartmentId(
+  course: Pick<Course, "departmentId" | "catalogId">,
+  year: number,
+  departments: (Department & { id: string })[]
+): string | null {
+  const ownDept = departments.find((d) => d.id === course.departmentId);
+  if (!ownDept) return null;
+
+  const manager = findBranchManager(departments as unknown as DepartmentYearRow[], ownDept.name);
+  if (!manager) return null;
+  const managerDept = departments.find((d) => d.id === manager.department.id);
+  if (!managerDept || managerDept.id === ownDept.id) return null;
+
+  if (!managerEffectiveYears(managerDept, departments, course.catalogId).includes(Number(year))) {
+    return null;
+  }
+  return managerDept.id;
+}

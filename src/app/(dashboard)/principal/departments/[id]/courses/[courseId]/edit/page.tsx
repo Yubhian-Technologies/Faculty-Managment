@@ -155,7 +155,7 @@ export default function EditCoursePage() {
                 No courses are set up yet. Add your college&apos;s courses in the Courses module first.
               </p>
               <Button asChild variant="outline">
-                <Link href="/principal/settings">Go to Settings</Link>
+                <Link href="/principal/courses">Go to Courses</Link>
               </Button>
             </div>
           ) : (
