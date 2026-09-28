@@ -4,12 +4,14 @@ import { useEffect, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
-  ArrowRightLeft,
   Clock,
   Plus,
   Trash2,
-  UserPlus,
   Users,
+  Globe,
+  Link2,
+  Edit2,
+  ChevronRight,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -86,35 +88,49 @@ export default function LocationStaffAdminShiftsPage() {
 
   const filteredShifts = useMemo(() => {
     if (selectedDeptId === "ALL") return shifts;
-    return shifts.filter((s) => s.departmentId === selectedDeptId);
+    return shifts.filter((s) => {
+      if (s.isCampusWide || s.departmentId === "ALL" || (Array.isArray(s.departmentIds) && s.departmentIds.includes("ALL"))) {
+        return true;
+      }
+      if (s.departmentId === selectedDeptId) return true;
+      if (Array.isArray(s.departmentIds) && s.departmentIds.includes(selectedDeptId)) return true;
+      return false;
+    });
   }, [shifts, selectedDeptId]);
 
   return (
-    <div className="space-y-4 max-w-5xl mx-auto pb-24 md:pb-8">
-      {/* ── Header ── */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-card p-4 rounded-xl border shadow-xs">
-        <div className="flex items-center gap-3">
-          <Button asChild variant="ghost" size="icon" className="h-9 w-9 shrink-0">
+    <div className="space-y-6 max-w-6xl mx-auto pb-24 md:pb-12 animate-in fade-in duration-300">
+      {/* ── Google Enterprise Header ── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-card/90 backdrop-blur-sm p-5 sm:p-6 rounded-3xl border border-border/60 shadow-xs">
+        <div className="flex items-center gap-3.5">
+          <Button asChild variant="ghost" size="icon" className="h-10 w-10 rounded-full hover:bg-muted/80 shrink-0">
             <Link href="/location-staff-admin">
-              <ArrowLeft className="h-5 w-5" />
+              <ArrowLeft className="h-5 w-5 text-foreground" />
             </Link>
           </Button>
           <div>
-            <h1 className="text-lg sm:text-xl font-bold text-foreground flex items-center gap-2">
-              <Clock className="h-5 w-5 text-primary" />
-              <span>Campus Shifts Configuration</span>
+            <div className="flex items-center gap-2 mb-1">
+              <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 text-[11px] font-semibold px-2.5 py-0.5 rounded-full">
+                Shift Management
+              </Badge>
+              <span className="text-xs text-muted-foreground hidden sm:inline">
+                {shifts.length} Active {shifts.length === 1 ? "Shift" : "Shifts"}
+              </span>
+            </div>
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
+              Campus Shifts Configuration
             </h1>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Create and manage shift working hours and grace periods for campus departments. Department Heads assign staff and manage rosters.
+            <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
+              Create and manage shift duty hours, grace windows, and multi-department assignments across campus.
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 self-end sm:self-auto">
+        <div className="flex items-center gap-2 self-start sm:self-auto">
           <Button
             asChild
-            size="sm"
-            className="rounded-full gap-1.5 h-9 text-xs font-semibold px-4 shadow-xs"
+            size="default"
+            className="rounded-full gap-2 h-10 text-xs font-semibold px-5 shadow-xs hover:shadow transition-all bg-primary text-primary-foreground hover:bg-primary/95"
           >
             <Link href="/location-staff-admin/shifts/new">
               <Plus className="h-4 w-4" />
@@ -124,15 +140,15 @@ export default function LocationStaffAdminShiftsPage() {
         </div>
       </div>
 
-      {/* ── Filter Bar ── */}
-      <div className="flex items-center justify-between gap-3 bg-card p-3 rounded-xl border">
+      {/* ── Google Filter Bar ── */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-card/80 backdrop-blur-sm p-3.5 sm:p-4 rounded-3xl border border-border/60 shadow-xs">
         <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold text-muted-foreground">Department:</span>
+          <span className="text-xs font-semibold text-muted-foreground ml-1">Filter by Department:</span>
           <Select value={selectedDeptId} onValueChange={setSelectedDeptId}>
-            <SelectTrigger className="h-8 w-44 sm:w-56 text-xs">
+            <SelectTrigger className="h-10 w-52 sm:w-64 text-xs rounded-full border-border/60 bg-muted/30 focus:bg-background">
               <SelectValue placeholder="All Departments" />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent className="rounded-2xl">
               <SelectItem value="ALL">All Departments ({shifts.length} Shifts)</SelectItem>
               {departments.map((d) => (
                 <SelectItem key={d.id} value={d.id}>
@@ -142,84 +158,119 @@ export default function LocationStaffAdminShiftsPage() {
             </SelectContent>
           </Select>
         </div>
-        <span className="text-xs text-muted-foreground">
+        <span className="text-xs text-muted-foreground px-2">
           Showing {filteredShifts.length} of {shifts.length} shifts
         </span>
       </div>
 
-      {/* ── Shifts List ── */}
+      {/* ── Shifts Grid ── */}
       {isLoading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="h-36 rounded-xl border bg-card/60 animate-pulse" />
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {[1, 2, 3, 4, 5, 6].map((i) => (
+            <div key={i} className="h-44 rounded-3xl border border-border/50 bg-card/60 animate-pulse" />
           ))}
         </div>
       ) : filteredShifts.length === 0 ? (
-        <div className="rounded-xl border border-dashed p-8 text-center bg-card/30">
-          <Clock className="h-8 w-8 text-muted-foreground mx-auto mb-2 opacity-50" />
-          <p className="font-semibold text-foreground text-sm">No shifts found</p>
-          <p className="text-xs text-muted-foreground mt-0.5">
+        <div className="rounded-3xl border border-dashed border-border/80 p-12 text-center bg-card/40">
+          <div className="h-14 w-14 rounded-2xl bg-muted/60 text-muted-foreground flex items-center justify-center mx-auto mb-3">
+            <Clock className="h-7 w-7 opacity-70" />
+          </div>
+          <h3 className="font-bold text-foreground text-base">No shifts found</h3>
+          <p className="text-xs sm:text-sm text-muted-foreground mt-1 max-w-sm mx-auto">
             Create shifts for campus departments to begin organizing staff schedules.
           </p>
-          <Button asChild size="sm" variant="outline" className="mt-3 text-xs rounded-full">
-            <Link href="/location-staff-admin/shifts/new">Create First Shift</Link>
+          <Button asChild size="sm" className="mt-4 text-xs font-semibold rounded-full px-5">
+            <Link href="/location-staff-admin/shifts/new">
+              <Plus className="h-3.5 w-3.5 mr-1.5" />
+              Create First Shift
+            </Link>
           </Button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredShifts.map((shift) => {
             const assignedMembers = staffList.filter((s) => s.shiftId === shift.id);
+            const isCampusWide = !!shift.isCampusWide || shift.departmentId === "ALL" || (Array.isArray(shift.departmentIds) && shift.departmentIds.includes("ALL"));
+            const isShared = !isCampusWide && Array.isArray(shift.departmentIds) && shift.departmentIds.length > 1;
 
             return (
-              <Card key={shift.id} className="border-border/80 shadow-xs flex flex-col justify-between">
-                <CardContent className="p-4 space-y-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-bold text-base text-foreground flex items-center gap-1.5">
-                          <Clock className="h-4 w-4 text-primary" />
-                          <span>{shift.name}</span>
-                        </h3>
-                        <Badge variant="outline" className="text-[10px] px-1.5 py-0">
-                          {shift.departmentName || "General"}
-                        </Badge>
+              <Card key={shift.id} className="rounded-3xl border-border/60 shadow-xs hover:shadow-md hover:border-primary/40 transition-all duration-200 bg-card overflow-hidden flex flex-col justify-between group">
+                <CardContent className="p-5 space-y-3.5">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-start gap-3 min-w-0">
+                      <div className="h-11 w-11 rounded-2xl bg-primary/10 text-primary flex items-center justify-center font-bold text-sm shrink-0 shadow-xs group-hover:scale-105 transition-transform">
+                        <Clock className="h-5 w-5" />
                       </div>
-                      <div className="flex items-center gap-2 mt-1.5">
-                        <Badge variant="outline" className="text-xs font-mono font-semibold bg-primary/5 text-primary border-primary/20">
-                          {shift.startTime} – {shift.endTime}
-                        </Badge>
-                        <span className="text-[11px] text-muted-foreground">
-                          Grace: {shift.gracePeriodMinutes ?? 15}m
-                        </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <h3 className="font-bold text-base text-foreground truncate">{shift.name}</h3>
+                          {isCampusWide ? (
+                            <Badge className="bg-purple-500/10 text-purple-600 border-purple-500/20 text-[10px] px-2 py-0.5 rounded-full gap-1">
+                              <Globe className="h-2.5 w-2.5" />
+                              <span>Campus-Wide</span>
+                            </Badge>
+                          ) : isShared ? (
+                            <Badge className="bg-blue-500/10 text-blue-600 border-blue-500/20 text-[10px] px-2 py-0.5 rounded-full gap-1">
+                              <Link2 className="h-2.5 w-2.5" />
+                              <span>Shared ({shift.departmentIds?.length})</span>
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-[10px] px-2 py-0.5 rounded-full text-muted-foreground bg-muted/40">
+                              {shift.departmentName || "Dedicated"}
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 mt-1.5">
+                          <Badge variant="outline" className="text-xs font-mono font-semibold bg-primary/5 text-primary border-primary/20 px-2 py-0.5 rounded-full">
+                            {shift.startTime} – {shift.endTime}
+                          </Badge>
+                          <span className="text-[11px] text-muted-foreground">
+                            Grace: {shift.gracePeriodMinutes ?? 15}m
+                          </span>
+                        </div>
                       </div>
                     </div>
 
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleDeleteShift(shift.id, shift.name)}
-                      className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                      title="Delete shift"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                    <div className="flex items-center gap-0.5 shrink-0 opacity-80 group-hover:opacity-100 transition-opacity">
+                      <Button
+                        asChild
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted"
+                        title="Edit Shift"
+                      >
+                        <Link href={`/location-staff-admin/shifts/${shift.id}/edit`}>
+                          <Edit2 className="h-3.5 w-3.5" />
+                        </Link>
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleDeleteShift(shift.id, shift.name)}
+                        className="h-8 w-8 rounded-full text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                        title="Delete Shift"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
                   </div>
 
-                  {/* Assigned Members Summary (Managed by Dept Head) */}
-                  <div className="pt-2 border-t border-border/50 flex items-center justify-between gap-2 text-xs">
-                    <div className="flex items-center gap-1.5 text-muted-foreground">
+                  {/* Assigned Members Summary */}
+                  <div className="pt-3 border-t border-border/40 flex items-center justify-between gap-2 text-xs">
+                    <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground bg-muted/40 px-3 py-1 rounded-full border border-border/40">
                       <Users className="h-3.5 w-3.5 text-primary" />
-                      <span>{assignedMembers.length} Staff assigned by Dept Head</span>
+                      <span>{assignedMembers.length} Assigned Staff</span>
                     </div>
 
                     <Button
                       asChild
                       size="sm"
                       variant="ghost"
-                      className="h-7 text-xs rounded-full px-2.5 text-muted-foreground hover:text-foreground"
+                      className="h-8 text-xs font-semibold rounded-full px-3 text-primary hover:bg-primary/10 gap-1"
                     >
                       <Link href={`/location-staff-admin/shifts/${shift.id}/staff`}>
                         <span>View Staff</span>
+                        <ChevronRight className="h-3.5 w-3.5" />
                       </Link>
                     </Button>
                   </div>
@@ -232,3 +283,4 @@ export default function LocationStaffAdminShiftsPage() {
     </div>
   );
 }
+
