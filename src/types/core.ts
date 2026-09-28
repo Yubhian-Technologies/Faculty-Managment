@@ -139,7 +139,7 @@ export const ROLE_DASHBOARD_PATHS: Record<UserRole, string> = {
   ACCOUNTS: "/accounts",
   FINANCE: "/finance",
   PURCHASE_DEPT: "/purchase",
-  STUDENT: "/feedback",
+  STUDENT: "/student",
   CLASS_LEADER: "/class-leader",
 };
 
@@ -909,6 +909,11 @@ export interface FacultyNorms {
   leaveTypeRuleOverrides?: Partial<Record<LeaveTypeCode, LeaveTypeRuleOverride>>;
   // Date ranges leave can't be applied over - see LeaveBlackoutWindow.
   leaveBlackoutWindows?: LeaveBlackoutWindow[];
+  // Library module config - overdue fine rate and default loan length, per
+  // college (Principal-editable, same as everything else on this settings
+  // doc). Absent means the defaults in lib/firestore/collegeSettings.ts.
+  libraryFinePerDay?: number;
+  libraryLoanDurationDays?: number;
   updatedAt?: Timestamp;
   updatedByName?: string;
 }
@@ -2707,8 +2712,10 @@ export type SectionListItem = Section & {
 };
 
 // ─── Student Record ─────────────────────────────────────────────────────────
-// Enrolled-student roster row, independent of any login account. Faculty manage
-// this for the sections they're in charge of (Section.facultyInchargeUid).
+// Enrolled-student roster row. Faculty manage this for the sections they're
+// in charge of (Section.facultyInchargeUid). A login is optional - most
+// fields exist independent of one, but see the Login linkage block below for
+// students who have been issued one (lib/students/provisionLogin.ts).
 
 export type StudentStatus = "REGULAR" | "DETAINED" | "GRADUATED";
 
@@ -2880,6 +2887,18 @@ export interface StudentRecord {
   graduationBatch?: string; // Section.batch at graduation, e.g. "2021-2025"
   graduationCourseId?: string;
   graduationCourseName?: string; // e.g. "B.Tech"
+  // ─── Login linkage ──────────────────────────────────────────────────────
+  // Absent until College Office issues this student a real login (see
+  // lib/students/provisionLogin.ts) - mirrors FacultyMember.userUid's "links
+  // to users/{uid} if they have a system login" pattern.
+  uid?: string; // colleges/{collegeId}/users/{uid} once a login exists
+  loginEmail?: string; // synthetic Firebase Auth email - never shown to the student
+  // Stamped only at login-creation time (never by the roster/import
+  // pipeline) - used solely by /api/auth/resolve-student-login and
+  // provisionLogin's own duplicate-Roll-Number check.
+  rollNumberUpper?: string;
+  loginCreatedAt?: Timestamp;
+  loginCreatedBy?: string; // uid of the Office user who issued it
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
@@ -3002,6 +3021,13 @@ export type NotificationType =
   | "FACULTY_ASSIGNMENT_REQUESTED"
   | "FACULTY_ASSIGNMENT_ALLOCATED"
   | "FACULTY_ASSIGNMENT_DECLINED"
+  // Library
+  | "BOOK_BORROWED"
+  | "BOOK_DUE_SOON"
+  | "BOOK_OVERDUE"
+  | "BOOK_RESERVATION_AVAILABLE"
+  // Student Documents
+  | "DOCUMENT_UPLOADED"
   | "GENERAL";
 
 export interface AppNotification {

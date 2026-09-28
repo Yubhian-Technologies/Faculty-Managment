@@ -64,6 +64,8 @@ export async function PUT(request: Request) {
       academicYearStartDay: Number(body.academicYearStartDay ?? current.academicYearStartDay ?? 1),
       academicYearEndMonth: Number(body.academicYearEndMonth ?? current.academicYearEndMonth ?? 3),
       academicYearEndDay: Number(body.academicYearEndDay ?? current.academicYearEndDay ?? 31),
+      libraryFinePerDay: Number(body.libraryFinePerDay ?? current.libraryFinePerDay ?? 1),
+      libraryLoanDurationDays: Number(body.libraryLoanDurationDays ?? current.libraryLoanDurationDays ?? 14),
       updatedAt: new Date() as unknown as FacultyNorms["updatedAt"],
       updatedByName: session.email || "Unknown",
     };
@@ -106,6 +108,17 @@ export async function PUT(request: Request) {
     }
     if (em === m && ed === d) {
       issues.push("The academic year cannot start and end on the same day");
+    }
+    if (!Number.isFinite(settings.libraryFinePerDay) || settings.libraryFinePerDay! < 0 || settings.libraryFinePerDay! > 1000) {
+      issues.push("libraryFinePerDay must be a finite number between 0 and 1000");
+    }
+    if (
+      !Number.isFinite(settings.libraryLoanDurationDays) ||
+      !Number.isInteger(settings.libraryLoanDurationDays) ||
+      settings.libraryLoanDurationDays! < 1 ||
+      settings.libraryLoanDurationDays! > 180
+    ) {
+      issues.push("libraryLoanDurationDays must be an integer between 1 and 180");
     }
     if (issues.length > 0) {
       return NextResponse.json({ error: "Invalid settings", issues }, { status: 400 });

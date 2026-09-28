@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -20,6 +20,7 @@ import { SupportingStaffModuleEditor, type SupportingStaffEditRecord } from "@/c
 import { getSupportingStaffProfileModules } from "@/lib/supportingStaff/profileModules";
 import { useCollegeType } from "@/hooks/useCollegeType";
 import { useActiveDepartments } from "@/hooks/useActiveDepartments";
+import { useAuthStore } from "@/store/authStore";
 import { toast } from "@/hooks/useToast";
 import { PHONE_REGEX, EMAIL_REGEX, APAAR_REGEX } from "@/lib/validations";
 
@@ -49,14 +50,21 @@ interface WizardStep {
 // field renderer the View/Edit hub uses (SUPPORTING_STAFF_MODULES) - so the
 // wizard's modules match what Edit later shows, 1:1.
 //
-// College Office only - Principal/VP no longer have a create path for
-// Supporting Staff of either category (see canRoleCreateSupportingStaff in
-// lib/supportingStaff/roleCategory.ts); their /principal/staff/non-technical/new
-// page was removed rather than kept around to always 403.
+// College Office (whole-college Non-Technical staff) or Library (its own
+// unit only, department locked to "Library" - see the LIBRARY branches in
+// api/college/supporting-staff/route.ts) - also mounted at
+// /library/staff/new (re-exported from there), same isLibrary pattern as
+// the sibling [id] view/edit pages. Principal/VP no longer have a create
+// path for Supporting Staff of either category (see
+// canRoleCreateSupportingStaff in lib/supportingStaff/roleCategory.ts);
+// their /principal/staff/non-technical/new page was removed rather than kept
+// around to always 403.
 export default function NewNonTechnicalStaffPage() {
   const router = useRouter();
   const { collegeType } = useCollegeType();
-  const listPath = "/college-office/non-technical-staff";
+  const user = useAuthStore((s) => s.user);
+  const isLibrary = user?.role === "LIBRARY";
+  const listPath = isLibrary ? "/library/staff" : "/college-office/non-technical-staff";
   const departments = useActiveDepartments();
   const [record, setRecord] = useState<SupportingStaffEditRecord>({});
   const [extraPhones, setExtraPhones] = useState<{ label?: string; number: string }[]>([]);
@@ -73,12 +81,18 @@ export default function NewNonTechnicalStaffPage() {
     formState: { errors },
   } = useForm<FormData>({
     resolver: zodResolver(schema),
-    defaultValues: { designation: "", password: "", department: "" },
+    defaultValues: { designation: "", password: "", department: isLibrary ? "Library" : "" },
   });
   const [erroredSteps, setErroredSteps] = useState<Set<WizardStepKey>>(new Set());
 
   const designation = watch("designation");
   const department = watch("department");
+
+  // Covers the rare case the persisted auth store hydrates a tick after
+  // mount (defaultValues above only runs once, at mount).
+  useEffect(() => {
+    if (isLibrary) setValue("department", "Library");
+  }, [isLibrary, setValue]);
 
   const steps: WizardStep[] = useMemo(() => [
     { key: "core", label: "Identity & Employment" },
@@ -159,7 +173,7 @@ export default function NewNonTechnicalStaffPage() {
         return;
       }
 
-      toast({ variant: "success", title: "Non-Technical staff added", description: `${record.legalName || "The staff member"} has been added.` });
+      toast({ variant: "success", title: isLibrary ? "Library staff added" : "Non-Technical staff added", description: `${record.legalName || "The staff member"} has been added.` });
       router.push(listPath);
     } catch {
       toast({ variant: "destructive", title: "Network error", description: "Please try again." });
@@ -170,7 +184,10 @@ export default function NewNonTechnicalStaffPage() {
 
   return (
     <div className="max-w-2xl">
-      <PageHeader title="Add Non-Technical Staff" description="Add a Non-Technical staff member for your college" />
+      <PageHeader
+        title={isLibrary ? "Add Library Staff" : "Add Non-Technical Staff"}
+        description={isLibrary ? "Add a staff member to your Library unit" : "Add a Non-Technical staff member for your college"}
+      />
 
       <div className="flex flex-wrap gap-2 mb-4">
         {steps.map((s, i) => (
@@ -262,17 +279,25 @@ export default function NewNonTechnicalStaffPage() {
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <Label>Department</Label>
-                  <Select value={department || "__none__"} onValueChange={(v) => setValue("department", v === "__none__" ? "" : v)}>
-                    <SelectTrigger><SelectValue placeholder="Centrally managed (no department)" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__">Centrally managed (no department)</SelectItem>
-                      {departments.map((d) => <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground">Optional - leave unassigned for centrally-managed roles like Librarian or Accountant.</p>
-                </div>
+                {isLibrary ? (
+                  <div className="space-y-2">
+                    <Label>Department</Label>
+                    <Input value="Library" disabled />
+                    <p className="text-xs text-muted-foreground">Library staff are always filed under the Library unit.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <Label>Department</Label>
+                    <Select value={department || "__none__"} onValueChange={(v) => setValue("department", v === "__none__" ? "" : v)}>
+                      <SelectTrigger><SelectValue placeholder="Centrally managed (no department)" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">Centrally managed (no department)</SelectItem>
+                        {departments.map((d) => <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">Optional - leave unassigned for centrally-managed roles like Librarian or Accountant.</p>
+                  </div>
+                )}
 
                 <div className="pt-2 pb-1 border-t">
                   <p className="text-sm font-medium text-muted-foreground">Employment Details</p>

@@ -22,7 +22,20 @@ export interface LocationDepartment {
   updatedAt?: Timestamp;
 }
 
-// ─── Location Staff Member ─────────────────────────────────────────────────────
+// ─── Location ────────────────────────────────────────────────────────────
+export interface LocationConfig {
+  id: string;
+  locationId: string;
+  name: string;
+  address: string;
+  city: string;
+  state: string;
+  isActive: boolean;
+  createdAt: Timestamp;
+  updatedAt?: Timestamp;
+}
+
+// ─── Location Staff Member ─────────────────────────────────────────────
 export interface LocationStaffMember {
   id: string;
   locationId: string;
@@ -39,17 +52,27 @@ export interface LocationStaffMember {
   spouseGuardianPhone?: string;
   address: string;
   payeeVoucher: string; // e.g. Voucher ID or payment mode / reference
+  payeeType?: "Voucher Payee" | "Account Payee";
+  accountNumber?: string;
+  branchName?: string;
+  ifscCode?: string;
+  pfEnabled?: boolean;
+  esiEnabled?: boolean;
   role: string; // e.g. Guard, Electrician, Sweeper, Plumber, Driver
   shiftId?: string;
   shiftName?: string;
   status: "ACTIVE" | "INACTIVE";
-  dateOfJoining?: string; // YYYY-MM-DD
-  userUid?: string;
-  userEmail?: string;
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
-}
-// ─── Location Shift ────────────────────────────────────────────────────────────
+  dateOfJoining: string; // YYYY-MM-DD - MANDATORY
+  reportAtLocationId?: string; // Which campus location this staff reports at
+   userUid?: string;
+   userEmail?: string;
+   reportAtLocationName?: string; // Resolved display name of the reportAtLocation
+   leaveBalance?: number; // Total configured leaves
+   leaveTaken?: number; // Leaves already taken
+   createdAt: Timestamp;
+   updatedAt: Timestamp;
+ }
+// ─── Location Shift ────────────────────────────────────────────────────
 export interface LocationShift {
   id: string;
   locationId: string;
@@ -70,7 +93,7 @@ export interface LocationShift {
   updatedAt: Timestamp;
 }
 
-// ─── Staff Attendance ──────────────────────────────────────────────────────────
+// ─── Staff Attendance ──────────────────────────────────────────────────
 export type StaffAttendanceStatus = "PRESENT" | "ABSENT" | "HALF_DAY" | "ON_LEAVE" | "LATE";
 
 export const STAFF_ATTENDANCE_STATUS_LABELS: Record<StaffAttendanceStatus, string> = {
@@ -107,4 +130,23 @@ export interface LocationStaffAttendanceRecord {
   notes?: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
+}
+
+// ─── Leave Request ──────────────────────────────────────────────────────
+export interface LeaveRequest {
+  id: string;
+  staffId: string;
+  locationId: string;
+  departmentId: string;
+  staffName: string;
+  leaveType: "CL" | "EL" | "SL" | "PL" | "OTHER";
+  startDate: string;
+  endDate: string;
+  reason: string;
+  status: "PENDING" | "APPROVED" | "REJECTED";
+  appliedByUid: string;
+  approvedByUid?: string;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+  [key: string]: unknown;
 }

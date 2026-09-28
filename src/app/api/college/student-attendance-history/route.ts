@@ -4,11 +4,27 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
-import type { CourseYearTiming, StudentAttendanceSession, StudentRecord } from "@/types";
+import { computeStudentAttendanceHistory } from "@/lib/studentAttendance/history";
+import type { CourseYearTiming, StudentRecord } from "@/types";
 
 function toDateStr(v: unknown): string {
   const d = (v as { toDate?: () => Date })?.toDate ? (v as { toDate: () => Date }).toDate() : new Date(v as string);
   return d.toISOString().slice(0, 10);
+}
+
+// Intersects two optional inclusive bounds (e.g. a Semester tab's own
+// start/end alongside an explicit from/to param) into the single tighter
+// bound computeStudentAttendanceHistory's `range` takes - date strings
+// ("YYYY-MM-DD") compare lexicographically the same as chronologically.
+function laterDate(a: string | null, b: string | null): string | null {
+  if (!a) return b;
+  if (!b) return a;
+  return a > b ? a : b;
+}
+function earlierDate(a: string | null, b: string | null): string | null {
+  if (!a) return b;
+  if (!b) return a;
+  return a < b ? a : b;
 }
 
 // Cumulative per-subject Held/Attend/% for ONE student, across a
@@ -102,53 +118,19 @@ export async function GET(request: Request) {
     // cross-department transfer's PRE-transfer history wouldn't be
     // included; every candidate is still individually confirmed by an
     // actual matching `entries` row below, never assumed from the
-    // department match alone.
-    const sessionsSnap = await collegeRef.collection("studentAttendance")
-      .where("department", "==", student.department)
-      .where("status", "==", "SUBMITTED")
-      .get();
-
-    const monthStr = monthParam ? String(Number(monthParam)).padStart(2, "0") : null;
-
-    const inRange = sessionsSnap.docs
-      .map((d) => d.data() as StudentAttendanceSession)
-      .filter((r) => {
-        if (semesterFrom && r.date < semesterFrom) return false;
-        if (semesterTo && r.date > semesterTo) return false;
-        if (yearParam && r.date.slice(0, 4) !== yearParam) return false;
-        if (monthStr && r.date.slice(5, 7) !== monthStr) return false;
-        if (fromParam && r.date < fromParam) return false;
-        if (toParam && r.date > toParam) return false;
-        return true;
-      })
-      .filter((r) => r.entries.some((e) => e.studentId === studentId));
-
-    // One session per subject per date - a faculty double-submitting the
-    // same class shouldn't double-count it (mirrors section-attendance-
-    // report's own dedupe).
-    const seen = new Set<string>();
-    const bySubject = new Map<string, { subjectName: string; subjectCode: string; held: number; attend: number }>();
-    for (const r of inRange) {
-      const key = `${r.subjectId}|${r.date}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      const entry = r.entries.find((e) => e.studentId === studentId)!;
-      const cur = bySubject.get(r.subjectId) ?? { subjectName: r.subjectName, subjectCode: r.subjectCode, held: 0, attend: 0 };
-      cur.held += 1;
-      if (entry.status === "PRESENT") cur.attend += 1;
-      bySubject.set(r.subjectId, cur);
-    }
-
-    const subjects = Array.from(bySubject.entries())
-      .map(([subjectId, v]) => ({
-        subjectId, subjectName: v.subjectName, subjectCode: v.subjectCode,
-        held: v.held, attend: v.attend,
-        percent: v.held > 0 ? Math.round((v.attend / v.held) * 10000) / 100 : 0,
-      }))
-      .sort((a, b) => a.subjectName.localeCompare(b.subjectName));
-
-    const totalHeld = subjects.reduce((a, s) => a + s.held, 0);
-    const totalAttend = subjects.reduce((a, s) => a + s.attend, 0);
+    // department match alone. (See computeStudentAttendanceHistory.)
+    const { subjects, total } = await computeStudentAttendanceHistory(
+      db,
+      session.collegeId,
+      studentId,
+      student.department,
+      {
+        from: laterDate(semesterFrom, fromParam),
+        to: earlierDate(semesterTo, toParam),
+        year: yearParam,
+        month: monthParam,
+      }
+    );
 
     return NextResponse.json({
       student: {
@@ -160,11 +142,7 @@ export async function GET(request: Request) {
         section: student.section,
       },
       subjects,
-      total: {
-        held: totalHeld,
-        attend: totalAttend,
-        percent: totalHeld > 0 ? Math.round((totalAttend / totalHeld) * 10000) / 100 : 0,
-      },
+      total,
       availableSemesters: semesterOptions,
     });
   } catch (err) {

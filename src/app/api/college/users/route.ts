@@ -22,7 +22,7 @@ import type { UserRole } from "@/types";
 // COLLEGE_STAFF is intentionally omitted - non-teaching staff are created via
 // the Supporting Staff module (which makes both a login and a profile record),
 // not as a bare login here. See principal/staff/new/page.tsx for the rationale.
-const PRINCIPAL_BASE_ROLES: UserRole[] = ["COLLEGE_OFFICE", "COLLEGE_ACCOUNTS", "WEBMASTER"];
+const PRINCIPAL_BASE_ROLES: UserRole[] = ["COLLEGE_OFFICE", "COLLEGE_ACCOUNTS", "WEBMASTER", "LIBRARY"];
 // CLASS_LEADER is included so an HOD can create their own sections' Class
 // Leader logins from hod/sections/[id]/edit - the College Office pages that
 // used to be the only place this happened were removed; this is where
@@ -39,7 +39,7 @@ const OFFICE_ROLES: UserRole[] = ["CLASS_LEADER"];
 // construction via isSingletonSeatRole, and so is Webmaster - but Webmaster
 // can ALSO still be created here as a plain login, so it needs the check too;
 // College Accounts is a plain account and always has.)
-const COLLEGE_SINGLETON_ROLES: UserRole[] = ["WEBMASTER", "COLLEGE_ACCOUNTS"];
+const COLLEGE_SINGLETON_ROLES: UserRole[] = ["WEBMASTER", "COLLEGE_ACCOUNTS", "LIBRARY"];
 
 export async function GET(request: Request) {
   try {

@@ -111,11 +111,25 @@ export async function PATCH(
         const shiftSnap = await db.collection("locations").doc(locationId).collection("shifts").doc(body.shiftId).get();
         if (shiftSnap.exists) {
           updates.shiftName = (shiftSnap.data() as { name?: string })?.name || "";
+        } else {
+          updates.shiftName = "";
         }
       } else {
         updates.shiftName = "";
       }
     }
+    // New fields
+    if (body.payeeType !== undefined) updates.payeeType = body.payeeType;
+    if (body.accountNumber !== undefined) updates.accountNumber = body.accountNumber.trim();
+    if (body.branchName !== undefined) updates.branchName = body.branchName.trim();
+    if (body.ifscCode !== undefined) updates.ifscCode = body.ifscCode.trim();
+    if (body.pfEnabled !== undefined) updates.pfEnabled = body.pfEnabled;
+    if (body.esiEnabled !== undefined) updates.esiEnabled = body.esiEnabled;
+    if (body.dateOfJoining !== undefined) updates.dateOfJoining = body.dateOfJoining;
+    if (body.reportAtLocationId !== undefined) updates.reportAtLocationId = body.reportAtLocationId;
+    if (body.leaveBalance !== undefined) updates.leaveBalance = body.leaveBalance;
+    if (body.leaveTaken !== undefined) updates.leaveTaken = body.leaveTaken;
+    if (body.reportAtLocationName !== undefined) updates.reportAtLocationName = body.reportAtLocationName;
 
     await docRef.set(updates, { merge: true });
 

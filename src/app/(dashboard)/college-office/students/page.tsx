@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Plus, Trash2, Upload, Download, Search, Users, Pencil } from "lucide-react";
+import { Plus, Trash2, Upload, Download, Search, Users, Pencil, KeyRound, FileText } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -508,6 +508,67 @@ export default function OfficeStudentsPage() {
     }
   }
 
+  // Password is a fixed, shared constant (never per-student) - the toast is a
+  // convenience reminder for Office, not the real distribution mechanism.
+  async function handleCreateOrResetLogin(s: StudentListItem) {
+    const isReset = !!s.uid;
+    const url = isReset
+      ? `/api/college/students/${s.id}/reset-login-password`
+      : `/api/college/students/${s.id}/create-login`;
+    try {
+      const res = await fetch(url, { method: "POST" });
+      const json = (await res.json()) as { ok?: boolean; error?: string; password?: string };
+      if (!res.ok || !json.ok) {
+        toast({ variant: "destructive", title: json.error ?? "Failed to update login" });
+        return;
+      }
+      toast({
+        variant: "success",
+        title: isReset ? `Password reset for ${s.name}` : `Login created for ${s.name}`,
+        description: json.password ? `Password: ${json.password}` : undefined,
+      });
+      if (!isReset) void loadStudents();
+    } catch {
+      toast({ variant: "destructive", title: "Network error - please try again" });
+    }
+  }
+
+  const [isBulkCreatingLogins, setIsBulkCreatingLogins] = useState(false);
+
+  async function handleBulkCreateLogins() {
+    if (selectedIds.length === 0) return;
+    setIsBulkCreatingLogins(true);
+    try {
+      const res = await fetch("/api/college/students/bulk-create-login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ studentIds: selectedIds }),
+      });
+      const json = (await res.json()) as {
+        ok?: boolean;
+        created?: { id: string }[];
+        skipped?: { id: string; reason: string }[];
+        error?: string;
+      };
+      if (!res.ok || !json.ok) {
+        toast({ variant: "destructive", title: json.error ?? "Failed to create logins" });
+        return;
+      }
+      const createdCount = json.created?.length ?? 0;
+      const skippedCount = json.skipped?.length ?? 0;
+      toast({
+        variant: "success",
+        title: `${createdCount} login${createdCount === 1 ? "" : "s"} created${skippedCount ? ` (${skippedCount} skipped)` : ""}`,
+      });
+      setSelected({});
+      void loadStudents();
+    } catch {
+      toast({ variant: "destructive", title: "Network error - please try again" });
+    } finally {
+      setIsBulkCreatingLogins(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -623,6 +684,9 @@ export default function OfficeStudentsPage() {
           </div>
           <div className="flex items-center gap-2">
             <Button variant="ghost" size="sm" onClick={() => setSelected({})}>Clear selection</Button>
+            <Button variant="outline" size="sm" onClick={() => void handleBulkCreateLogins()} loading={isBulkCreatingLogins}>
+              <KeyRound className="h-4 w-4 mr-2" />Create Logins
+            </Button>
             <Button variant="destructive" size="sm" onClick={() => setBulkDeleteOpen(true)}>
               <Trash2 className="h-4 w-4 mr-2" />Delete Selected
             </Button>
@@ -699,6 +763,20 @@ export default function OfficeStudentsPage() {
                       {/* stopPropagation so the row's own "open details" click
                           doesn't fire behind the action being taken. */}
                       <td className="p-3 text-right whitespace-nowrap">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); router.push(`/college-office/students/${s.id}/documents`); }}
+                          className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                          title="Documents"
+                        >
+                          <FileText className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); void handleCreateOrResetLogin(s); }}
+                          className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                          title={s.uid ? "Reset login password" : "Create login"}
+                        >
+                          <KeyRound className="h-4 w-4" />
+                        </button>
                         <button
                           onClick={(e) => { e.stopPropagation(); openEdit(s); }}
                           className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"

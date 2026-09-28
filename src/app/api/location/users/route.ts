@@ -1,18 +1,13 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
-import { requireLocationMember, requireSuperAdmin, verifySession } from "@/lib/auth/verifySession";
+import { verifySession } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { createFirebaseUser } from "@/lib/firebase/authRest";
 import type { UserRole } from "@/types";
 
-const LOCATION_ROLES: UserRole[] = ["LOCATION_STAFF_ADMIN", "HR_ADMIN", "ADMIN_OFFICE", "LOCATION_DEPT_HEAD", "ACCOUNTS"];
 const ADMIN_CREATABLE_ROLES: UserRole[] = ["LOCATION_STAFF_ADMIN", "HR_ADMIN", "ADMIN_OFFICE", "ACCOUNTS", "LOCATION_DEPT_HEAD"];
-// These roles can only have one holder per location
 const SINGLETON_ROLES: UserRole[] = ["LOCATION_STAFF_ADMIN", "HR_ADMIN", "ADMIN_OFFICE", "ACCOUNTS"];
-
-// Administration can also create Principals for colleges in their location
-// but that goes through a separate endpoint
 
 export async function GET(request: Request) {
   try {
@@ -24,7 +19,6 @@ export async function GET(request: Request) {
 
     if (!locationId) return NextResponse.json({ error: "locationId required" }, { status: 400 });
 
-    // Super Admin can query any location; Administration can only query their own
     if (session.role !== "SUPER_ADMIN" && session.locationId !== locationId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -35,11 +29,6 @@ export async function GET(request: Request) {
       .doc(locationId)
       .collection("locationUsers")
       .get();
-    // Administration viewing their OWN team shouldn't see themselves listed
-    // among HR_ADMIN/ADMIN_OFFICE/LOCATION_DEPT_HEAD/ACCOUNTS - but Super
-    // Admin querying a location (e.g. its Users list) must still see the
-    // Administration account itself. Excluding every ADMINISTRATION-role doc
-    // unconditionally (the previous behavior) hid it from Super Admin too.
     const users = snap.docs
       .map((d) => ({ uid: d.id, ...d.data() }))
       .filter((u) => !(session.role === "ADMINISTRATION" && (u as { uid?: string }).uid === session.uid));
@@ -60,28 +49,29 @@ export async function POST(request: Request) {
 
     const body = (await request.json()) as {
       name: string;
-      email: string;
+      mobile: string;
       password: string;
       role: UserRole;
       locationId: string;
       department?: string;
       locationDeptId?: string;
-      // For HR_ADMIN/ADMIN_OFFICE/ACCOUNTS only - see FMSUser's own doc-comment.
       locationDeptIds?: string[];
       allLocationDepts?: boolean;
       profilePhotoUrl?: string;
     };
 
     const {
-      name, email, password, role, locationId, department, locationDeptId,
+      name, mobile, password, role, locationId, department, locationDeptId,
       locationDeptIds, allLocationDepts, profilePhotoUrl,
     } = body;
 
-    if (!name || !email || !password || !role || !locationId) {
+    if (!name || !mobile || !password || !role || !locationId) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
-    // Uploaded before the account exists (under a temp id), so we can only check
-    // it came from our own upload endpoint, not that it names this specific uid.
+    // Mobile is the login username (not email)
+    if (!/^[6-9]\d{9}$/.test(mobile.trim())) {
+      return NextResponse.json({ error: "Valid 10-digit mobile number required" }, { status: 400 });
+    }
     if (profilePhotoUrl !== undefined && !profilePhotoUrl.startsWith("https://firebasestorage.googleapis.com/")) {
       return NextResponse.json({ error: "Invalid photo URL" }, { status: 400 });
     }
@@ -101,7 +91,7 @@ export async function POST(request: Request) {
 
     const db = getAdminDb();
 
-    // Singleton role check - only one person may hold HR_ADMIN / ADMIN_OFFICE / ACCOUNTS per location
+    // Singleton role check
     if (SINGLETON_ROLES.includes(role)) {
       const existing = await db
         .collection("locations")
@@ -119,7 +109,6 @@ export async function POST(request: Request) {
       }
     }
 
-    // For LOCATION_DEPT_HEAD, resolve the department name from the dept document
     let resolvedDepartment = department ?? "";
     if (role === "LOCATION_DEPT_HEAD" && locationDeptId && !resolvedDepartment) {
       const deptSnap = await db
@@ -129,7 +118,8 @@ export async function POST(request: Request) {
       resolvedDepartment = (deptSnap.data() as { name?: string } | undefined)?.name ?? "";
     }
 
-    const uid = await createFirebaseUser(email, password, name);
+    // Create Firebase Auth user with mobile as username (email field = mobile)
+    const uid = await createFirebaseUser(mobile.trim(), password, name);
     const now = new Date();
 
     await db
@@ -141,12 +131,11 @@ export async function POST(request: Request) {
         uid,
         locationId,
         name,
-        email,
+        email: mobile.trim(),
+        mobile,
         role,
         department: resolvedDepartment,
         locationDeptId: locationDeptId ?? "",
-        // Only meaningful for HR_ADMIN/ADMIN_OFFICE/ACCOUNTS - a Dept Head's
-        // single locationDeptId above is their whole story, never these two.
         ...(role !== "LOCATION_DEPT_HEAD"
           ? { allLocationDepts: !!allLocationDepts, locationDeptIds: allLocationDepts ? [] : (locationDeptIds ?? []) }
           : {}),
@@ -157,7 +146,7 @@ export async function POST(request: Request) {
       });
 
     await db.collection("systemUsers").doc(uid).set({
-      uid, role, locationId, collegeId: "", email, name,
+      uid, role, locationId, collegeId: "", email: mobile.trim(), name, mobile,
       ...(profilePhotoUrl ? { profilePhotoUrl } : {}),
     });
 
@@ -177,7 +166,7 @@ export async function POST(request: Request) {
       err && typeof err === "object" && "code" in err &&
       (err as { code: string }).code === "auth/email-already-exists"
     ) {
-      return NextResponse.json({ error: "An account with this email already exists" }, { status: 409 });
+      return NextResponse.json({ error: "An account with this mobile number already exists" }, { status: 409 });
     }
     console.error("[location/users POST]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });

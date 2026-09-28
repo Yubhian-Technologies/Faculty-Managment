@@ -44,21 +44,23 @@ const EMPTY_FORM: StaffForm = {
 // Others) are edited one section at a time from the view hub at
 // /college-office/non-technical-staff/[id] instead (see that page).
 //
-// Also mounted at /principal/staff/non-technical/[id]/edit (re-exported from
-// there) - Principal/VP's merged Staff page has no per-record detail hub of
-// its own, so their post-save/back destination is the list; College Office's
-// goes to this record's own detail hub. Both destinations are preserved
-// exactly via isCollegeLevel, same pattern as hod/faculty/new/page.tsx.
+// Also mounted at /principal/staff/non-technical/[id]/edit and
+// /library/staff/[id]/edit (both re-exported from there) - Principal/VP's
+// merged Staff page has no per-record detail hub of its own, so their
+// post-save/back destination is the list; College Office's and Library's
+// each go to that record's own detail hub. All destinations are preserved
+// exactly via isCollegeLevel/isLibrary, same pattern as hod/faculty/new/page.tsx.
 export default function EditNonTechnicalStaffAccountPage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
   const staffId = params.id;
   const user = useAuthStore((s) => s.user);
   const isCollegeLevel = user?.role === "PRINCIPAL" || user?.role === "VICE_PRINCIPAL";
-  const loadFailPath = isCollegeLevel ? "/principal/staff" : "/college-office/non-technical-staff";
-  const backHref = isCollegeLevel ? "/principal/staff" : `/college-office/non-technical-staff/${staffId}`;
+  const isLibrary = user?.role === "LIBRARY";
+  const loadFailPath = isCollegeLevel ? "/principal/staff" : isLibrary ? "/library/staff" : "/college-office/non-technical-staff";
+  const backHref = isCollegeLevel ? "/principal/staff" : isLibrary ? `/library/staff/${staffId}` : `/college-office/non-technical-staff/${staffId}`;
   const backLabel = isCollegeLevel ? "Back to Staff" : "Back to Profile";
-  const afterSavePath = isCollegeLevel ? "/principal/staff" : `/college-office/non-technical-staff/${staffId}`;
+  const afterSavePath = isCollegeLevel ? "/principal/staff" : isLibrary ? `/library/staff/${staffId}` : `/college-office/non-technical-staff/${staffId}`;
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -232,13 +234,17 @@ export default function EditNonTechnicalStaffAccountPage() {
               </div>
               <div className="space-y-2">
                 <Label>Department</Label>
-                <Select value={form.department || "__none__"} onValueChange={(v) => set({ department: v === "__none__" ? "" : v })}>
-                  <SelectTrigger><SelectValue placeholder="Centrally managed" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">Centrally managed (no department)</SelectItem>
-                    {departments.map((d) => <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                {isLibrary ? (
+                  <Input value="Library" disabled />
+                ) : (
+                  <Select value={form.department || "__none__"} onValueChange={(v) => set({ department: v === "__none__" ? "" : v })}>
+                    <SelectTrigger><SelectValue placeholder="Centrally managed" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">Centrally managed (no department)</SelectItem>
+                      {departments.map((d) => <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
             </div>
             {form.designation === "OTHER" && (
