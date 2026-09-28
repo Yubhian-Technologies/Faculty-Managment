@@ -6,9 +6,9 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { CardSkeleton } from "@/components/shared/SkeletonLoader";
 import { toast } from "@/hooks/useToast";
-import { buildCourseGroups } from "@/lib/departments/hodScope";
+import { buildCourseGroups, deriveHodScope } from "@/lib/departments/hodScope";
 import { SectionRoster } from "@/components/academics/SectionRoster";
-import type { Course, Section } from "@/types";
+import type { Course, Department, Section } from "@/types";
 
 // Same palettes, ratio and grouping the HOD's own Sections page uses, so a
 // section reads identically whichever dashboard it is seen from.
@@ -85,7 +85,7 @@ export function SectionCard({ sec, onOpen }: { sec: Section; onOpen: () => void 
 export function SectionsPanel() {
   const [sections, setSections] = useState<Section[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
-  const [departments, setDepartments] = useState<{ id: string; name: string; isActive?: boolean }[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [hasLoaded, setHasLoaded] = useState(false);
   const [courseKey, setCourseKey] = useState(ALL);
@@ -98,7 +98,7 @@ export function SectionsPanel() {
       try {
         const [courseRes, deptRes] = await Promise.all([
           fetch("/api/college/courses").then((r) => r.json() as Promise<{ courses?: Course[] }>),
-          fetch("/api/college/departments").then((r) => r.json() as Promise<{ departments?: { id: string; name: string; isActive?: boolean }[] }>),
+          fetch("/api/college/departments").then((r) => r.json() as Promise<{ departments?: Department[] }>),
         ]);
         setCourses(courseRes.courses ?? []);
         setDepartments(deptRes.departments ?? []);
@@ -132,17 +132,36 @@ export function SectionsPanel() {
     () => (courseKey === ALL ? sections : sections.filter((s) => courseIdsByKey.get(courseKey)?.has(s.courseId) ?? false)),
     [sections, courseKey, courseIdsByKey]
   );
-  // Derived from sections when loaded, or college departments when awaiting load.
-  const deptOptions = useMemo(() => {
-    if (sections.length > 0) {
-      return Array.from(new Set(byCourse.map((s) => s.department).filter(Boolean))).sort((a, b) => a.localeCompare(b));
-    }
-    return departments.filter((d) => d.isActive !== false).map((d) => d.name).sort((a, b) => a.localeCompare(b));
-  }, [sections, byCourse, departments]);
+  // Always every active department's own name - a structural list, not
+  // narrowed to whatever's currently loaded, so a sub-department or "no own
+  // sections" parent (e.g. Basic Science / Basic Science Maths) stays a
+  // stable, selectable option instead of disappearing (or leaving the select
+  // showing a value with no matching option) once sections happen to load.
+  const deptOptions = useMemo(
+    () => departments.filter((d) => d.isActive !== false).map((d) => d.name).sort((a, b) => a.localeCompare(b)),
+    [departments]
+  );
+
+  // A department filter never matches Section.department by literal string
+  // equality - a Section is always filed under a real branch name (e.g.
+  // "vlsi"), never under a sub-department's own name or a shared "no own
+  // sections" parent's name (e.g. "Basic Science Maths"/"Basic Science") even
+  // though that's what actually owns/manages it (Department.managedDepartments).
+  // Expand the picked department into the real branch names it structurally
+  // covers first - the exact same deriveHodScope resolution the (working) HOD
+  // Sections page and the /api/college/sections `departmentId` param both use
+  // - so picking a sub-department or shared-year parent here shows its real
+  // sections instead of silently returning none. A no-op for a plain
+  // department (deptOptions resolves to just itself).
+  const deptScopeNames = useMemo(() => {
+    if (deptFilter === ALL) return null;
+    const scope = deriveHodScope(departments, deptFilter).deptOptions.map((d) => d.name);
+    return new Set(scope.length > 0 ? scope : [deptFilter]);
+  }, [departments, deptFilter]);
 
   const byDept = useMemo(
-    () => (deptFilter === ALL ? byCourse : byCourse.filter((s) => s.department === deptFilter)),
-    [byCourse, deptFilter]
+    () => (deptScopeNames ? byCourse.filter((s) => deptScopeNames.has(s.department)) : byCourse),
+    [byCourse, deptScopeNames]
   );
   const yearOptions = useMemo(() => {
     if (sections.length > 0) {

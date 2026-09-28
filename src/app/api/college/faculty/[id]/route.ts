@@ -15,6 +15,8 @@ import {
 } from "@/lib/faculty/academicProfileChanges";
 import { PROMOTION_HISTORY_KEY, DESIGNATION_MANAGED_BY_HISTORY_MESSAGE } from "@/lib/faculty/promotionHistory";
 import { designationKey } from "@/lib/designations/config";
+import { resolveDesignation } from "@/lib/designations/validate";
+import { syncLinkedLoginName } from "@/lib/roles/loginSync";
 import { migrateFacultyDoc } from "@/lib/faculty/fieldRenames";
 import { withLegacyFacultyKeysDeleted } from "@/lib/faculty/legacyKeyDeletes";
 import { mobileNoFromBody } from "@/lib/faculty/mobileNo";
@@ -231,6 +233,18 @@ export async function PATCH(
       }
       delete updates.designation;
     }
+    // Held to this college's own admin-curated Designation Catalog (category
+    // FACULTY), same check POST /api/college/faculty runs on create -
+    // previously only the Edit dropdown restricted this. Only runs when a
+    // designation is actually still slated to be written (the Promotion
+    // History guard above may have already deleted it as a no-op resend).
+    if (typeof updates.designation === "string") {
+      const designationResult = await resolveDesignation(db, session.collegeId, "FACULTY", updates.designation);
+      if ("error" in designationResult) {
+        return NextResponse.json({ error: designationResult.error }, { status: 400 });
+      }
+      updates.designation = designationResult.name;
+    }
     // One category per faculty member, whatever spelling/casing the caller sent.
     if (typeof updates.highestQualification === "string") {
       updates.highestQualification = normalizeHighestQualification(updates.highestQualification);
@@ -329,19 +343,16 @@ export async function PATCH(
     // name/photo in sync there too - the login doc (colleges/{id}/users) is what
     // panel-member pickers, notifications, and the nav/avatar read from, so edits
     // made here on the faculty details page must propagate or those surfaces show
-    // stale data from account creation time.
+    // stale data from account creation time. A failure is logged and stamped on
+    // this record (loginSyncStatus/loginSyncError) rather than silently dropped -
+    // see syncLinkedLoginName's own doc-comment.
     if (body.profilePhotoUrl !== undefined || displayNameChanged) {
       const linkedUid = before.userUid;
       if (linkedUid) {
         const loginSync: Record<string, string> = {};
         if (body.profilePhotoUrl !== undefined) loginSync.profilePhotoUrl = body.profilePhotoUrl;
         if (displayNameChanged) loginSync.name = newDisplayName;
-        try {
-          await db.collection("colleges").doc(session.collegeId).collection("users").doc(linkedUid)
-            .set(loginSync, { merge: true });
-          await db.collection("systemUsers").doc(linkedUid)
-            .set(loginSync, { merge: true });
-        } catch { /* non-fatal */ }
+        await syncLinkedLoginName(db, session.collegeId, ref, linkedUid, loginSync);
       }
     }
 

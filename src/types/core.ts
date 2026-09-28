@@ -490,8 +490,16 @@ export interface LocationDepartment {
   id: string;
   locationId: string;
   name: string; // Electrical, Civil, Accounts, etc.
+  code?: string;
+  headUid?: string;
   deptHeadUid?: string;
+  headStaffId?: string;
+  headName?: string;
   deptHeadName?: string;
+  headEmail?: string;
+  headPhone?: string;
+  description?: string;
+  staffCount?: number;
   isActive: boolean;
   createdAt: Timestamp;
   updatedAt?: Timestamp;
@@ -2768,6 +2776,12 @@ export interface StudentRecord {
   // assigned, so an unassigned student is a gap the HOD needs to notice and
   // fill in, not something the system guesses.
   labBatch?: string;
+  // Firebase Storage download URL, same field name as FacultyMember/FMSUser
+  // above - set only via the Add/Edit form's photo upload (StudentFormDialog,
+  // same AvatarUploadField Faculty uses) and its own small PATCH branch
+  // (students/[id] PATCH), never via CSV import or the roster template -
+  // deliberately not one of rosterFields.ts's ROSTER_FIELDS.
+  profilePhotoUrl?: string;
   // ─── Admission-detail fields ────────────────────────────────────────────
   // All optional, set either via the College Office bulk import (see
   // src/lib/students/importRow.ts and rosterFields.ts's ROSTER_FIELDS - the

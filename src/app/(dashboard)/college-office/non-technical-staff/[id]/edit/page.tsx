@@ -13,11 +13,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { AvatarUploadField } from "@/components/shared/AvatarUploadField";
 import { TextInput } from "@/components/shared/ProfileFieldPrimitives";
 import { DesignationOptions } from "@/components/faculty/DesignationOptions";
+import { useAuthStore } from "@/store/authStore";
+import { useActiveDepartments } from "@/hooks/useActiveDepartments";
 import { toast } from "@/hooks/useToast";
 import { toDateInputValue } from "@/lib/utils";
 import { APAAR_REGEX } from "@/lib/validations";
 import { FACULTY_STATUS_LABELS } from "@/types";
-import type { FacultyStatus, SupportingStaffDesignation, Department } from "@/types";
+import type { FacultyStatus, SupportingStaffDesignation } from "@/types";
 
 interface StaffForm {
   legalName: string;
@@ -41,26 +43,31 @@ const EMPTY_FORM: StaffForm = {
 // (Qualifications, Job Responsibilities & Skills, Training, Achievements,
 // Others) are edited one section at a time from the view hub at
 // /college-office/non-technical-staff/[id] instead (see that page).
+//
+// Also mounted at /principal/staff/non-technical/[id]/edit (re-exported from
+// there) - Principal/VP's merged Staff page has no per-record detail hub of
+// its own, so their post-save/back destination is the list; College Office's
+// goes to this record's own detail hub. Both destinations are preserved
+// exactly via isCollegeLevel, same pattern as hod/faculty/new/page.tsx.
 export default function EditNonTechnicalStaffAccountPage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
   const staffId = params.id;
+  const user = useAuthStore((s) => s.user);
+  const isCollegeLevel = user?.role === "PRINCIPAL" || user?.role === "VICE_PRINCIPAL";
+  const loadFailPath = isCollegeLevel ? "/principal/staff" : "/college-office/non-technical-staff";
+  const backHref = isCollegeLevel ? "/principal/staff" : `/college-office/non-technical-staff/${staffId}`;
+  const backLabel = isCollegeLevel ? "Back to Staff" : "Back to Profile";
+  const afterSavePath = isCollegeLevel ? "/principal/staff" : `/college-office/non-technical-staff/${staffId}`;
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [employeeId, setEmployeeId] = useState("");
   const [email, setEmail] = useState("");
   const [form, setForm] = useState<StaffForm>(EMPTY_FORM);
-  const [departments, setDepartments] = useState<Department[]>([]);
+  const departments = useActiveDepartments();
   const [extraPhones, setExtraPhones] = useState<{ label?: string; number: string }[]>([]);
   const [photoUrl, setPhotoUrl] = useState<string | undefined>(undefined);
-
-  useEffect(() => {
-    fetch("/api/college/departments")
-      .then((r) => r.json() as Promise<{ departments: Department[] }>)
-      .then((d) => setDepartments((d.departments ?? []).filter((dep) => dep.isActive)))
-      .catch(() => { /* department assignment is optional */ });
-  }, []);
 
   useEffect(() => {
     fetch(`/api/college/supporting-staff/${staffId}`)
@@ -68,7 +75,7 @@ export default function EditNonTechnicalStaffAccountPage() {
       .then((data) => {
         if (!data.staff) {
           toast({ variant: "destructive", title: "Staff record not found" });
-          router.push("/college-office/non-technical-staff");
+          router.push(loadFailPath);
           return;
         }
         const m = data.staff;
@@ -91,7 +98,7 @@ export default function EditNonTechnicalStaffAccountPage() {
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load staff record" }))
       .finally(() => setLoading(false));
-  }, [staffId, router]);
+  }, [staffId, router, loadFailPath]);
 
   function set(patch: Partial<StaffForm>) {
     setForm((f) => ({ ...f, ...patch }));
@@ -145,7 +152,7 @@ export default function EditNonTechnicalStaffAccountPage() {
       if (!res.ok) throw new Error();
 
       toast({ variant: "success", title: "Staff record updated" });
-      router.push(`/college-office/non-technical-staff/${staffId}`);
+      router.push(afterSavePath);
     } catch {
       toast({ variant: "destructive", title: "Failed to update" });
     } finally {
@@ -164,9 +171,9 @@ export default function EditNonTechnicalStaffAccountPage() {
   return (
     <div className="max-w-xl">
       <Button variant="ghost" size="sm" className="mb-4" asChild>
-        <Link href={`/college-office/non-technical-staff/${staffId}`}>
+        <Link href={backHref}>
           <ArrowLeft className="h-4 w-4 mr-1" />
-          Back to Profile
+          {backLabel}
         </Link>
       </Button>
       <PageHeader title="Edit Non-Technical Staff" description={`Employee ID: ${employeeId} · ${email}`} />
@@ -327,7 +334,7 @@ export default function EditNonTechnicalStaffAccountPage() {
         </Card>
 
         <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end mt-6 pt-4 border-t">
-          <Button type="button" variant="outline" onClick={() => router.push(`/college-office/non-technical-staff/${staffId}`)}>Cancel</Button>
+          <Button type="button" variant="outline" onClick={() => router.push(afterSavePath)}>Cancel</Button>
           <Button type="submit" loading={saving}>Save Changes</Button>
         </div>
       </form>

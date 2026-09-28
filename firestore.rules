@@ -169,6 +169,19 @@ service cloud.firestore {
         allow read, write: if false;
       }
 
+      // Each college's own admin-curated Designation Catalog (Faculty/Technical/
+      // Non-Technical job titles - see DesignationCatalogCard and
+      // api/college/designations). Write access mirrors the union of every role
+      // MANAGE_ROLES_BY_CATEGORY permits across all three categories - the API
+      // route itself still enforces the finer per-category split (e.g. only
+      // Principal/VP/Super Admin may touch a FACULTY entry); this is a coarser
+      // collection-level gate, same granularity as departments/facultyMembers below.
+      match /designations/{designationId} {
+        allow read: if isStaff(collegeId);
+        allow create, update: if isHODorAbove(collegeId) || isPrincipalOrOffice(collegeId);
+        allow delete: if isSuperAdmin();
+      }
+
       // NOTE: faculty norms actually live at the root-level `platformConfig/facultyNorms`
       // singleton (see /api/admin/settings/faculty-norms), not a per-college subcollection —
       // there is no `colleges/{id}/facultyNorms` doc written by any code path.
@@ -265,6 +278,18 @@ service cloud.firestore {
         allow create: if isStaff(collegeId) && hasCollegeId(collegeId);
         allow update: if isHODorAbove(collegeId);
         allow delete: if isHODorAbove(collegeId);
+      }
+
+      // Non-teaching staff (Technical - HOD-owned - and Non-Technical -
+      // Principal/VP/College Office-owned) - parallel to facultyMembers above.
+      // Write set mirrors the API's own requireCollegeMember role list exactly
+      // (api/college/supporting-staff route.ts + [id]/route.ts: COLLEGE_OFFICE,
+      // HOD, PRINCIPAL, VICE_PRINCIPAL, plus SUPER_ADMIN via isHODorAbove).
+      match /supportingStaff/{staffId} {
+        allow read: if isStaff(collegeId);
+        allow create: if (isHODorAbove(collegeId) || isPrincipalOrOffice(collegeId)) && hasCollegeId(collegeId);
+        allow update: if isHODorAbove(collegeId) || isPrincipalOrOffice(collegeId);
+        allow delete: if isSuperAdmin();
       }
 
       // ─── [ RECRUITMENT MODULE ] ─────────────────────────────────────────────

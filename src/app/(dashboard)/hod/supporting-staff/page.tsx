@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { UserPlus, Eye, Trash2, Upload, LogIn, UsersRound } from "lucide-react";
+import { UserPlus, Eye, Trash2, Upload, Download, LogIn, UsersRound } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,7 @@ import { toast } from "@/hooks/useToast";
 import { useCollegeType } from "@/hooks/useCollegeType";
 import { hasSupportingStaffSplit } from "@/lib/designations/config";
 import { supportingStaffDisplayName } from "@/lib/supportingStaff/supportingStaffDisplayName";
+import { exportSupportingStaffCsv } from "@/lib/supportingStaff/exportCsv";
 import {
   NON_TECHNICAL_STAFF_DESIGNATION_LABELS,
   FACULTY_STATUS_LABELS,
@@ -175,6 +176,13 @@ export default function HODSupportingStaffPage() {
         description="Technical staff records for your department and the branches you manage"
         actions={
           <div className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={() => exportSupportingStaffCsv(staff, "supporting_staff")}
+              disabled={staff.length === 0}
+            >
+              <Download className="h-4 w-4 mr-2" />Export
+            </Button>
             <Button variant="outline" onClick={() => router.push("/hod/supporting-staff/import")}>
               <Upload className="h-4 w-4 mr-2" />Import
             </Button>

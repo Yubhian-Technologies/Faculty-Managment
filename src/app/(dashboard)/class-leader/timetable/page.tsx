@@ -11,6 +11,7 @@ import { currentWeekDates } from "@/lib/utils";
 import { isoDateKey } from "@/lib/leave/dayCounter";
 import { InstitutionalTimetableTable } from "@/components/timetable/InstitutionalTimetableTable";
 import { ordinalYear } from "@/lib/timetable/gridModel";
+import { toRoman, formatAcademicShortNotation } from "@/lib/academic/format";
 import type { Course, Department, Section, CourseYearTiming, TimetableSlot, SubjectType, Subject, TeachingAssignment, DayOfWeek } from "@/types";
 
 type TimetableSlotRow = TimetableSlot & { id: string; subjectType?: SubjectType };
@@ -128,12 +129,18 @@ export default function ClassLeaderTimetablePage() {
         <PageHeader
           title={
             section
-              ? `Section ${section.name} · Timetable`
+              ? `${formatAcademicShortNotation({
+                  year: section.year,
+                  courseName: course?.name,
+                  courseCode: course?.code,
+                  semester: selectedSemester,
+                  sectionName: section.name,
+                })} · Timetable`
               : "Class Timetable"
           }
           description={
             section && course
-              ? `${course.name} · ${departmentName} · ${ordinalYear(section.year)}`
+              ? `${departmentName} · Weekly Schedule`
               : "Your class weekly schedule"
           }
         />
@@ -178,7 +185,7 @@ export default function ClassLeaderTimetablePage() {
                       className="h-7 text-xs px-3"
                       onClick={() => changeSemester(sem.semester)}
                     >
-                      Semester {sem.semester}
+                      {toRoman(sem.semester)} Sem
                     </Button>
                   ))}
                 </div>
@@ -249,7 +256,7 @@ export default function ClassLeaderTimetablePage() {
               courseName={course?.name}
               departmentName={departmentName}
               academicYear={slots[0]?.academicYear}
-              semesterLabel={selectedSemester ? `Semester ${selectedSemester}` : undefined}
+              semesterLabel={selectedSemester ? `${toRoman(selectedSemester)} Sem Time Table` : undefined}
               workingDays={workingDays}
               weekStart={weekStart}
               onWeekChange={changeWeek}
