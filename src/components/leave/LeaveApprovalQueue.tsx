@@ -11,22 +11,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/useToast";
 import { PermissionApprovalQueue } from "@/components/leave/PermissionApprovalQueue";
+import { PeriodCoverageGrid, type PeriodCoverageEntry } from "@/components/leave/PeriodCoverageGrid";
 import { cn, formatDate } from "@/lib/utils";
 import { CalendarClock, Check, X, ChevronDown, ChevronUp, FileCheck, BellRing } from "lucide-react";
 import { EFFECTIVE_CATEGORY_LABELS, EFFECTIVE_CATEGORY_ORDER, LEAVE_TYPE_LABELS, OTHER_LEAVE_CATEGORY_DESCRIPTIONS, OTHER_LEAVE_CATEGORY_LABELS, OTHER_LEAVE_CATEGORY_ORDER } from "@/types/leave";
 import type { EffectiveLeaveCategory, LeaveRequest, OtherLeaveCategory } from "@/types/leave";
 
 const CATEGORY_TABS = EFFECTIVE_CATEGORY_ORDER.map((key) => ({ key, label: EFFECTIVE_CATEGORY_LABELS[key] }));
-
-interface PeriodCoverageEntry {
-  date: string;
-  day: string;
-  periodNumber: number;
-  timetableSlotId: string;
-  sectionName?: string;
-  subjectName: string;
-  candidates: { facultyId: string; facultyName: string; facultyDepartment?: string }[];
-}
 
 // "Replacement" mode needs ONE faculty member who is actually free for every
 // affected period, not just some of them - each period's own eligibility
@@ -444,6 +435,19 @@ export function LeaveApprovalQueue() {
                       <p className="text-sm">{r.reason || <span className="text-muted-foreground italic">No reason provided</span>}</p>
                     </div>
 
+                    {r.leaveTypeCode === "OD" && (r.placeOfVisit || r.pointOfContact) && (
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <div className="space-y-1">
+                          <label className="text-xs text-muted-foreground">Place of Visit</label>
+                          <p className="text-sm">{r.placeOfVisit || "—"}</p>
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-xs text-muted-foreground">Point of Contact</label>
+                          <p className="text-sm">{r.pointOfContact || "—"}</p>
+                        </div>
+                      </div>
+                    )}
+
                     {isOtherRequest && (isHodOtherDecision || isPrincipalOtherDecision) && (
                       <div className="max-w-xs space-y-1.5">
                         <label className="text-xs text-muted-foreground">Paid or unpaid?</label>
@@ -520,14 +524,14 @@ export function LeaveApprovalQueue() {
                             );
                           })()
                         ) : (
-                          <div className="space-y-2 rounded-lg border p-2.5">
-                            {periodsById[r.id]!.map((p) => {
-                              const key = `${p.date}|${p.timetableSlotId}`;
-                              return (
-                                <div key={key} className="flex items-center justify-between gap-3 flex-wrap">
-                                  <span className="text-sm">
-                                    {p.subjectName}{p.sectionName ? ` · ${p.sectionName}` : ""} · {formatDate(new Date(p.date))} P{p.periodNumber}
-                                  </span>
+                          <div className="rounded-lg border p-2.5">
+                            <PeriodCoverageGrid
+                              periods={periodsById[r.id]!}
+                              renderPeriod={(p, key) => (
+                                <div key={key} className="space-y-1 rounded-md border p-2">
+                                  <p className="text-xs font-medium leading-tight">
+                                    P{p.periodNumber} · {p.subjectName}{p.sectionName ? ` · ${p.sectionName}` : ""}
+                                  </p>
                                   <Select
                                     value={substitutionsById[r.id]?.[key] ?? ""}
                                     onValueChange={(v) =>
@@ -537,23 +541,23 @@ export function LeaveApprovalQueue() {
                                       }))
                                     }
                                   >
-                                    <SelectTrigger className="w-44">
+                                    <SelectTrigger className="w-full">
                                       <SelectValue placeholder="Not covered" />
                                     </SelectTrigger>
                                     <SelectContent>
                                       {p.candidates.map((c) => (
                                         <SelectItem key={c.facultyId} value={c.facultyId}>
-                          {c.facultyName}
-                          {c.facultyDepartment && (
-                            <span className="text-muted-foreground"> · {c.facultyDepartment}</span>
-                          )}
-                        </SelectItem>
+                                          {c.facultyName}
+                                          {c.facultyDepartment && (
+                                            <span className="text-muted-foreground"> · {c.facultyDepartment}</span>
+                                          )}
+                                        </SelectItem>
                                       ))}
                                     </SelectContent>
                                   </Select>
                                 </div>
-                              );
-                            })}
+                              )}
+                            />
                           </div>
                         )}
                       </div>

@@ -104,10 +104,6 @@ export function sanitizeLeaveTypeRuleOverride(input: unknown): { ok: true; rule:
       }
       rule.eligibleGenders = r.eligibleGenders as LeaveTypeRuleOverride["eligibleGenders"];
     }
-    if (r.sandwichRule !== undefined) {
-      if (typeof r.sandwichRule !== "boolean") return { ok: false, error: "sandwichRule must be a boolean" };
-      rule.sandwichRule = r.sandwichRule;
-    }
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Invalid leave type override" };
   }

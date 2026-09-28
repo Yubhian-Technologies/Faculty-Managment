@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { ChevronLeft, ChevronRight, CalendarDays } from "lucide-react";
+import { ChevronLeft, ChevronRight, CalendarDays, BarChart3 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/useToast";
@@ -44,6 +44,39 @@ const LEGEND: { status: AttendanceStatus; label: string }[] = [
   { status: "HOLIDAY", label: "Holiday" },
 ];
 
+type StatKey = "PRESENT" | "ON_LEAVE" | "ON_DUTY" | "ABSENT" | "HALF_DAY" | "LATE" | "PERMISSION";
+
+// Same status set the calendar grid/legend already colors, plus Late (a
+// modifier on PRESENT/HALF_DAY, not its own status - see CalendarDayInfo) and
+// Permission (a separate, non-leave request type - see types/permission.ts,
+// never part of AttendanceStatus), counted for whichever month is currently
+// on screen.
+const STAT_TILES: { key: StatKey; label: string }[] = [
+  { key: "PRESENT", label: "Present" },
+  { key: "ON_LEAVE", label: "Leave" },
+  { key: "ON_DUTY", label: "On Duty" },
+  { key: "ABSENT", label: "Absent" },
+  { key: "HALF_DAY", label: "Half Day" },
+  { key: "LATE", label: "Late" },
+  { key: "PERMISSION", label: "Permission" },
+];
+
+// Its own palette, not cellClass's - a deliberately bolder/darker read than
+// the calendar cells' own -100/border-200 (those stay as they are; a filled
+// grid cell needs to be light enough for its day number to stay legible, a
+// stat tile doesn't) so the summary card doesn't look washed out next to it.
+function tileClass(key: StatKey): string {
+  switch (key) {
+    case "PRESENT":    return "bg-green-100 text-green-900 border-green-300";
+    case "ON_LEAVE":   return "bg-blue-100 text-blue-900 border-blue-300";
+    case "ON_DUTY":    return "bg-purple-100 text-purple-900 border-purple-300";
+    case "ABSENT":     return "bg-red-100 text-red-900 border-red-300";
+    case "HALF_DAY":   return "bg-yellow-100 text-yellow-900 border-yellow-300";
+    case "LATE":       return "bg-orange-100 text-orange-900 border-orange-300";
+    case "PERMISSION": return "bg-cyan-100 text-cyan-900 border-cyan-300";
+  }
+}
+
 interface LeaveCalendarProps {
   // Omit to view the signed-in user's own calendar - same convention as
   // LeaveProfileView's own `uid` prop (an approver browsing someone else's
@@ -65,6 +98,7 @@ export function LeaveCalendar({ uid }: LeaveCalendarProps) {
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year, setYear] = useState(now.getFullYear());
   const [days, setDays] = useState<CalendarDayInfo[]>([]);
+  const [permissionCount, setPermissionCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
 
   const load = useCallback(async () => {
@@ -86,9 +120,33 @@ export function LeaveCalendar({ uid }: LeaveCalendarProps) {
     }
   }, [year, month, uid]);
 
+  // Permission requests aren't month-scoped server-side (see
+  // /api/leave/permissions) - filtered down to this card's own month here,
+  // and to APPROVED only, so the count reads as "how many times they actually
+  // got permission this month", not every request regardless of outcome.
+  const loadPermissions = useCallback(async () => {
+    try {
+      const params = new URLSearchParams();
+      if (uid) params.set("uid", uid);
+      const res = await fetch(`/api/leave/permissions?${params.toString()}`);
+      const json = (await res.json()) as { permissions?: { date: string; status: string }[] };
+      const monthPrefix = `${year}-${String(month).padStart(2, "0")}-`;
+      setPermissionCount(
+        (json.permissions ?? []).filter((p) => p.status === "APPROVED" && p.date.startsWith(monthPrefix)).length
+      );
+    } catch {
+      // Non-fatal - same reasoning as the attendance load above's own catch.
+      setPermissionCount(0);
+    }
+  }, [year, month, uid]);
+
   useEffect(() => {
     void (async () => { await load(); })();
   }, [load]);
+
+  useEffect(() => {
+    void (async () => { await loadPermissions(); })();
+  }, [loadPermissions]);
 
   function shiftMonth(delta: number) {
     let m = month + delta;
@@ -98,6 +156,16 @@ export function LeaveCalendar({ uid }: LeaveCalendarProps) {
     setMonth(m);
     setYear(y);
   }
+
+  const stats = {
+    PRESENT: days.filter((d) => d.status === "PRESENT").length,
+    ON_LEAVE: days.filter((d) => d.status === "ON_LEAVE").length,
+    ON_DUTY: days.filter((d) => d.status === "ON_DUTY").length,
+    ABSENT: days.filter((d) => d.status === "ABSENT").length,
+    HALF_DAY: days.filter((d) => d.status === "HALF_DAY").length,
+    LATE: days.filter((d) => d.late).length,
+    PERMISSION: permissionCount,
+  };
 
   interface Cell { day: number; inMonth: boolean; status?: AttendanceStatus; late?: boolean }
   const byDay = new Map(days.map((d) => [d.day, d]));
@@ -113,66 +181,94 @@ export function LeaveCalendar({ uid }: LeaveCalendarProps) {
   }
 
   return (
-    <Card className="max-w-sm">
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between gap-2 flex-wrap">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <CalendarDays className="h-4 w-4 text-muted-foreground" />
-            {MONTH_NAMES[month - 1]} {year}
-          </CardTitle>
-          <div className="flex items-center gap-1">
-            <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => shiftMonth(-1)}>
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => shiftMonth(1)}>
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent>
-        {isLoading ? (
-          <div className="h-56 rounded-lg bg-muted/30 animate-pulse" />
-        ) : (
-          <>
-            <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-              {WEEKDAY_LABELS.map((w, i) => (
-                <div key={w} className={i >= 5 ? "text-destructive" : ""}>{w}</div>
-              ))}
+    <div className="flex flex-col lg:flex-row items-start gap-4">
+      <Card className="max-w-sm w-full">
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <CalendarDays className="h-4 w-4 text-muted-foreground" />
+              {MONTH_NAMES[month - 1]} {year}
+            </CardTitle>
+            <div className="flex items-center gap-1">
+              <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => shiftMonth(-1)}>
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => shiftMonth(1)}>
+                <ChevronRight className="h-4 w-4" />
+              </Button>
             </div>
-            <div className="mt-1 grid grid-cols-7 gap-1">
-              {cells.map((c, i) => (
-                <div
-                  key={i}
-                  title={c.inMonth && c.status ? ATTENDANCE_STATUS_LABELS[c.status] + (c.late ? " · Late" : "") : undefined}
-                  className={[
-                    "relative aspect-square rounded-md border text-xs flex items-center justify-center",
-                    !c.inMonth ? "border-transparent" : cellClass(c.status),
-                  ].join(" ")}
-                >
-                  {c.inMonth ? c.day : ""}
-                  {c.inMonth && c.late && (
-                    <span className="absolute top-0.5 right-0.5 h-1.5 w-1.5 rounded-full bg-red-500" />
-                  )}
+          </div>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <div className="h-56 rounded-lg bg-muted/30 animate-pulse" />
+          ) : (
+            <>
+              <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                {WEEKDAY_LABELS.map((w, i) => (
+                  <div key={w} className={i >= 5 ? "text-destructive" : ""}>{w}</div>
+                ))}
+              </div>
+              <div className="mt-1 grid grid-cols-7 gap-1">
+                {cells.map((c, i) => (
+                  <div
+                    key={i}
+                    title={c.inMonth && c.status ? ATTENDANCE_STATUS_LABELS[c.status] + (c.late ? " · Late" : "") : undefined}
+                    className={[
+                      "relative aspect-square rounded-md border text-xs flex items-center justify-center",
+                      !c.inMonth ? "border-transparent" : cellClass(c.status),
+                    ].join(" ")}
+                  >
+                    {c.inMonth ? c.day : ""}
+                    {c.inMonth && c.late && (
+                      <span className="absolute top-0.5 right-0.5 h-1.5 w-1.5 rounded-full bg-red-500" />
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-4 flex flex-wrap gap-x-3 gap-y-1.5 text-xs text-muted-foreground">
+                {LEGEND.map((l) => (
+                  <span key={l.status} className="flex items-center gap-1.5">
+                    <span className={`h-2.5 w-2.5 rounded-sm border ${cellClass(l.status)}`} />
+                    {l.label}
+                  </span>
+                ))}
+                <span className="flex items-center gap-1.5">
+                  <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
+                  Late
+                </span>
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Same month's numbers as the grid on the left, just counted instead
+          of colored - fills the space a bare max-w-sm calendar would
+          otherwise leave empty next to it on a wide screen. */}
+      <Card className="max-w-xs w-full">
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <BarChart3 className="h-4 w-4 text-muted-foreground" />
+            {MONTH_NAMES[month - 1]} Summary
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <div className="h-40 rounded-lg bg-muted/30 animate-pulse" />
+          ) : (
+            <div className="grid grid-cols-2 gap-2">
+              {STAT_TILES.map((t) => (
+                <div key={t.key} className={`rounded-lg border p-2.5 ${tileClass(t.key)}`}>
+                  <p className="text-xl font-semibold leading-none">{stats[t.key]}</p>
+                  <p className="mt-1 text-[11px] font-medium">{t.label}</p>
                 </div>
               ))}
             </div>
-
-            <div className="mt-4 flex flex-wrap gap-x-3 gap-y-1.5 text-xs text-muted-foreground">
-              {LEGEND.map((l) => (
-                <span key={l.status} className="flex items-center gap-1.5">
-                  <span className={`h-2.5 w-2.5 rounded-sm border ${cellClass(l.status)}`} />
-                  {l.label}
-                </span>
-              ))}
-              <span className="flex items-center gap-1.5">
-                <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
-                Late
-              </span>
-            </div>
-          </>
-        )}
-      </CardContent>
-    </Card>
+          )}
+        </CardContent>
+      </Card>
+    </div>
   );
 }

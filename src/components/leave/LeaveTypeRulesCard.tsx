@@ -187,17 +187,6 @@ export function LeaveTypeRulesCard() {
                     <Label htmlFor={`${lt.code}-half`} className="text-sm font-normal">Half day allowed</Label>
                   </div>
 
-                  <div className="flex items-center gap-2">
-                    <Checkbox
-                      id={`${lt.code}-sandwich`}
-                      checked={!!o.sandwichRule}
-                      onCheckedChange={(c) => patch(lt.code, { sandwichRule: !!c })}
-                    />
-                    <Label htmlFor={`${lt.code}-sandwich`} className="text-sm font-normal">
-                      Sandwich rule (a Sunday/holiday between two leave days in the same request is charged too)
-                    </Label>
-                  </div>
-
                   <div className="grid gap-3 sm:grid-cols-3">
                     <div className="space-y-1">
                       <Label className="text-xs text-muted-foreground">Max consecutive days</Label>
