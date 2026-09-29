@@ -115,13 +115,17 @@ export async function POST(request: Request) {
     const departmentsByCode = new Map(manageableDepartments.map((d) => [d.code.toLowerCase(), d]));
 
     // Resolves one row's Dept Code cell to the department it should be filed
-    // under. An HOD's rows are stored by department NAME (matches every
-    // existing HOD-created faculty record and the scoping queries in
-    // lib/departments/scope.ts); Principal/Vice Principal/College Admin
-    // (normalized to Principal via its seat)/Super Admin have no department
-    // of their own, so their rows are stored by the department's short CODE
-    // instead - matching how the manual Add Faculty form and every existing
-    // Principal-created faculty/user doc already store it.
+    // under. The Dept Code column exists so one sheet can cover several
+    // departments; what gets STORED is always the department NAME.
+    //
+    // It used to store the code for a Principal/Vice Principal/College Admin
+    // /Super Admin import, on the belief that Principal-created records were
+    // already stored that way. They are not - the manual Add Faculty form
+    // sends the name whoever is using it - and every faculty query in the app
+    // filters on `department` by name (see lib/departments/scope.ts and
+    // api/college/faculty). A code-stored record therefore matched nothing:
+    // the department's own Faculty page read "No faculty in this department"
+    // while the records sat right there in Firestore.
     function resolveRowDepartment(raw: string | undefined): { name: string } | { error: string } {
       const code = raw?.trim();
       if (!code) {
@@ -141,7 +145,7 @@ export async function POST(request: Request) {
             : `"${code}" is not one of this college's departments`,
         };
       }
-      return { name: session.role === "HOD" ? matched.name : matched.code };
+      return { name: matched.name };
     }
 
     // Load existing employeeIds/collegeEmails to detect duplicates - lowercased,
