@@ -25,7 +25,6 @@ type SubjectForm = {
   lectureHours: string;
   tutorialHours: string;
   practicalHours: string;
-  hoursPerWeek: string;
   totalHoursPerSemester: string;
   credits: string;
 };
@@ -33,7 +32,7 @@ type SubjectForm = {
 const EMPTY_SUBJECT_FORM: SubjectForm = {
   serialNumber: "", category: "", customCategory: "", name: "", code: "", shortCode: "", type: "THEORY",
   lectureHours: "", tutorialHours: "", practicalHours: "",
-  hoursPerWeek: "", totalHoursPerSemester: "", credits: "",
+  totalHoursPerSemester: "", credits: "",
 };
 
 export default function EditAcademicsSubjectPage() {
@@ -104,7 +103,6 @@ export default function EditAcademicsSubjectPage() {
           lectureHours: s.lectureHours != null ? String(s.lectureHours) : "",
           tutorialHours: s.tutorialHours != null ? String(s.tutorialHours) : "",
           practicalHours: s.practicalHours != null ? String(s.practicalHours) : "",
-          hoursPerWeek: String(s.hoursPerWeek ?? ""),
           totalHoursPerSemester: s.totalHoursPerSemester != null ? String(s.totalHoursPerSemester) : "",
           credits: String(s.credits ?? ""),
         });
@@ -117,6 +115,12 @@ export default function EditAcademicsSubjectPage() {
   function setF(patch: Partial<SubjectForm>) {
     setForm((f) => ({ ...f, ...patch }));
   }
+
+  // Always L+T+P, never independently typed - see new/page.tsx's own
+  // doc-comment on why a diverged value here isn't just a display glitch
+  // (Teaching Assignments falls back to this stored value for a faculty
+  // member's weekly load whenever the assigning HOD doesn't override it).
+  const hoursPerWeek = (Number(form.lectureHours) || 0) + (Number(form.tutorialHours) || 0) + (Number(form.practicalHours) || 0);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -156,7 +160,7 @@ export default function EditAcademicsSubjectPage() {
           lectureHours: Number(form.lectureHours),
           tutorialHours: Number(form.tutorialHours),
           practicalHours: Number(form.practicalHours),
-          hoursPerWeek: form.hoursPerWeek === "" ? 0 : Number(form.hoursPerWeek),
+          hoursPerWeek,
           totalHoursPerSemester: form.totalHoursPerSemester === "" ? null : Number(form.totalHoursPerSemester),
           credits: form.credits === "" ? 0 : Number(form.credits),
         }),
@@ -336,13 +340,8 @@ export default function EditAcademicsSubjectPage() {
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="hours-per-week">Hours / Week</Label>
-                <Input
-                  id="hours-per-week"
-                  type="number"
-                  min={0}
-                  value={form.hoursPerWeek}
-                  onChange={(e) => setF({ hoursPerWeek: stripLeadingZeros(e.target.value) })}
-                />
+                <Input id="hours-per-week" type="number" value={hoursPerWeek} disabled />
+                <p className="text-xs text-muted-foreground">L + T + P, computed automatically.</p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="hours-per-semester">Hours / Semester</Label>

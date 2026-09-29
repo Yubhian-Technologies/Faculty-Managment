@@ -177,6 +177,9 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
+    if (!reportAtLocationId) {
+      return NextResponse.json({ error: "Report-at gate is required" }, { status: 400 });
+    }
     if (!dateOfJoining) {
       return NextResponse.json({ error: "Date of Joining is required" }, { status: 400 });
     }

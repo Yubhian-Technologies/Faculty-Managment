@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { DepartmentChipList } from "@/components/shared/DepartmentChipList";
 import { CourseYearRow } from "./CourseYearRow";
-import { Pencil, Trash2, GitBranch } from "lucide-react";
+import { Pencil, Trash2, GitBranch, BookOpen } from "lucide-react";
 import type {
   Course,
   Department,
@@ -81,6 +81,13 @@ export function DepartmentCourseCard({
 
               <span className="text-xs text-muted-foreground font-medium">
                 {course.durationYears} {course.durationYears !== 1 ? "years" : "year"} programme
+              </span>
+
+              <span className="text-muted-foreground/50">·</span>
+
+              <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded border bg-primary/10 text-primary border-primary/25 dark:bg-primary/20 dark:text-primary dark:border-primary/30">
+                <BookOpen className="h-3 w-3" />
+                <span>{totalCourseSubjects}</span> {totalCourseSubjects === 1 ? "Subject" : "Subjects"}
               </span>
 
               {years.length > 0 && years.length < course.durationYears && (

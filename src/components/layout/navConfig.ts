@@ -145,11 +145,11 @@ export const NAV_ITEMS: NavItem[] = [
 
   // Location Staff Admin
   { label: "Dashboard", href: "/location-staff-admin", iconName: "LayoutDashboard", roles: ["LOCATION_STAFF_ADMIN"] },
-  { label: "Locations", href: "/location-staff-admin/locations", iconName: "MapPin", roles: ["LOCATION_STAFF_ADMIN", "ADMINISTRATION"], section: "Location Staff" },
+  { label: "Gates", href: "/location-staff-admin/locations", iconName: "MapPin", roles: ["LOCATION_STAFF_ADMIN", "ADMINISTRATION"], section: "Location Staff" },
   { label: "Departments", href: "/location-staff-admin/departments", iconName: "Building2", roles: ["LOCATION_STAFF_ADMIN", "ADMINISTRATION"], section: "Location Staff" },
   { label: "Shifts", href: "/location-staff-admin/shifts", iconName: "Clock", roles: ["LOCATION_STAFF_ADMIN", "ADMINISTRATION"], section: "Location Staff" },
   { label: "Attendance", href: "/location-staff-admin/attendance", iconName: "ClipboardCheck", roles: ["LOCATION_STAFF_ADMIN", "ADMINISTRATION"], section: "Location Staff" },
-  { label: "Attendance Reports", href: "/location-staff-admin/attendance/reports", iconName: "BarChart3", roles: ["LOCATION_STAFF_ADMIN", "ADMINISTRATION"], section: "Location Staff" },
+  { label: "Reports", href: "/location-staff-admin/reports", iconName: "BarChart3", roles: ["LOCATION_STAFF_ADMIN", "ADMINISTRATION"], section: "Location Staff" },
   { label: "Leave Requests", href: "/location-staff-admin/leave", iconName: "CalendarClock", roles: ["LOCATION_STAFF_ADMIN", "ADMINISTRATION"], section: "Location Staff" },
   { label: "My Profile", href: "/location-staff-admin/profile", iconName: "UserCircle", roles: ["LOCATION_STAFF_ADMIN"], section: "Personal" },
 
@@ -880,7 +880,7 @@ export const BOTTOM_NAV_ITEMS: Record<UserRole, NavItem[]> = {
     { label: "Home", href: "/location-staff-admin", iconName: "LayoutDashboard", roles: ["LOCATION_STAFF_ADMIN"] },
     { label: "Depts", href: "/location-staff-admin/departments", iconName: "Building2", roles: ["LOCATION_STAFF_ADMIN"] },
     { label: "Shifts", href: "/location-staff-admin/shifts", iconName: "Clock", roles: ["LOCATION_STAFF_ADMIN"] },
-    { label: "Reports", href: "/location-staff-admin/attendance/reports", iconName: "BarChart3", roles: ["LOCATION_STAFF_ADMIN"] },
+    { label: "Reports", href: "/location-staff-admin/reports", iconName: "BarChart3", roles: ["LOCATION_STAFF_ADMIN"] },
     { label: "Profile", href: "/location-staff-admin/profile", iconName: "UserCircle", roles: ["LOCATION_STAFF_ADMIN"] },
   ],
   LOCATION_DEPT_HEAD: [
