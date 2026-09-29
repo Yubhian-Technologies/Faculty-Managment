@@ -66,10 +66,14 @@ const EMPTY_TIMING_FORM: TimingForm = {
 // duplicated or out of sequence. Existing rows keep whatever dates they
 // already had (by position); growing the count appends blank new rows,
 // shrinking it drops from the end.
-function resizeSemesters(current: SemesterRangeForm[], count: number): SemesterRangeForm[] {
-  const next = current.slice(0, count).map((s, i) => ({ ...s, semester: i + 1 }));
+function resizeSemesters(current: SemesterRangeForm[], count: number, year: number = 1): SemesterRangeForm[] {
+  const next = current.slice(0, count).map((s, i) => ({
+    ...s,
+    semester: s.semester || (year > 1 ? (year - 1) * 2 + (i + 1) : i + 1),
+  }));
   for (let i = next.length; i < count; i++) {
-    next.push({ semester: i + 1, startDate: "", endDate: "" });
+    const defaultSem = year > 1 ? (year - 1) * 2 + (i + 1) : i + 1;
+    next.push({ semester: defaultSem, startDate: "", endDate: "" });
   }
   return next;
 }
@@ -167,7 +171,7 @@ export function CourseYearTimingForm({ departmentId, courseId, year, onSaved, on
 
   function setNumberOfSemesters(value: string) {
     const count = Math.max(0, Number(value) || 0);
-    setTimingForm((f) => ({ ...f, numberOfSemesters: String(count), semesters: resizeSemesters(f.semesters, count) }));
+    setTimingForm((f) => ({ ...f, numberOfSemesters: String(count), semesters: resizeSemesters(f.semesters, count, year) }));
   }
   function updateSemester(idx: number, patch: Partial<SemesterRangeForm>) {
     setTimingForm((f) => {
@@ -425,7 +429,17 @@ export function CourseYearTimingForm({ departmentId, courseId, year, onSaved, on
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 {timingForm.semesters.map((s, idx) => (
                   <div key={idx} className="space-y-1.5 rounded-md border p-3">
-                    <Label className="text-xs">Semester {s.semester}</Label>
+                    <div className="flex items-center justify-between pb-1">
+                      <Label className="text-xs font-semibold">Semester Number</Label>
+                      <Input
+                        type="number"
+                        min={1}
+                        max={12}
+                        className="h-6 w-16 text-xs text-center px-1 py-0 font-bold"
+                        value={s.semester}
+                        onChange={(e) => updateSemester(idx, { semester: Math.max(1, Number(e.target.value) || 1) })}
+                      />
+                    </div>
                     <div className="grid grid-cols-2 gap-2 pt-1">
                       <div className="space-y-1">
                         <p className="text-[11px] text-muted-foreground">Start</p>

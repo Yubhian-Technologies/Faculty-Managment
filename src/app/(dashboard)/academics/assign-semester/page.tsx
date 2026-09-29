@@ -283,10 +283,20 @@ function AssignToSemesterPageInner() {
   }, [selectedCourse, selectedDepartment, allDepartments, selectedCatalogItem, selectedRegulation]);
 
   const semesterOptions = useMemo(() => {
+    if (!selectedYear) return [];
+    const yearNum = Number(selectedYear);
+    const yearTiming = timings.find((t) => t.year === yearNum);
     const nums = new Set<number>();
-    for (const t of timings) for (const s of t.semesters ?? []) nums.add(s.semester);
+    for (const s of yearTiming?.semesters ?? []) nums.add(s.semester);
+    for (const a of assignments) {
+      if (a.year === yearNum && a.semester != null) nums.add(a.semester);
+    }
+    if (selectedSemester != null) nums.add(selectedSemester);
+    const paramSem = searchParams.get("semester");
+    if (paramSem) nums.add(Number(paramSem));
+
     return Array.from(nums).sort((a, b) => a - b);
-  }, [timings]);
+  }, [timings, selectedYear, assignments, selectedSemester, searchParams]);
   const effectiveSemester = semesterOptions.length === 0
     ? null
     : selectedSemester != null && semesterOptions.includes(selectedSemester)
