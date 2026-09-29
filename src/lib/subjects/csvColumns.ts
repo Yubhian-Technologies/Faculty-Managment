@@ -1,4 +1,5 @@
-// Bulk-import template for Academics > Course Structure. One row = one subject,
+// Bulk-import template for Academics > Course Structure. Row rules live in
+// courseStructureValidation.ts (shared by the page and the server). One row = one subject,
 // auto-created as a master Subject AND auto-assigned to the selected
 // department's semester (see CourseStructureImportService) - Course,
 // Regulation and Department are all selected once via the page's own
@@ -18,6 +19,7 @@ export const IMPORT_COLUMNS: SubjectCsvColumn[] = [
   { key: "semester", label: "Semester", required: true, sample: "1", aliases: ["Sem"] },
   { key: "category", label: "Category", required: true, sample: "PCC", aliases: ["Subject Category"] },
   { key: "name", label: "Subject Name", required: true, sample: "Data Structures", aliases: ["Name of the Subject", "Subject", "Course Title"] },
+  { key: "code", label: "Subject Code", required: false, sample: "CS201", aliases: ["Code", "Course Code", "Paper Code"] },
   { key: "lectureHours", label: "L", required: true, sample: "3", aliases: ["Lecture Hours", "Lecture"] },
   { key: "tutorialHours", label: "T", required: true, sample: "0", aliases: ["Tutorial Hours", "Tutorial"] },
   { key: "practicalHours", label: "P", required: true, sample: "0", aliases: ["Practical Hours", "Practical"] },
@@ -27,14 +29,18 @@ export const IMPORT_COLUMNS: SubjectCsvColumn[] = [
   { key: "credits", label: "Credits", required: false, sample: "3", aliases: ["Credit", "Credits"] },
   { key: "shortCode", label: "Short Code", required: false, sample: "DS", aliases: ["Short Name", "Abbreviation", "Display Code"] },
   { key: "hoursPerWeek", label: "Weekly Hours", required: false, sample: "3", aliases: ["Hours Per Week", "Hours / Week"] },
+  { key: "type", label: "Type", required: false, sample: "Theory", aliases: ["Subject Type"] },
+  { key: "customCategory", label: "Custom Category", required: false, sample: "", aliases: ["Other Category"] },
 ];
 
 export const IMPORT_HINTS = [
-  "Course, Regulation and Department are selected in the page filters at the top — every row is imported and assigned for that course/regulation/department.",
-  "Year and Semester are required per row — this is what routes each subject into the correct department semester automatically, without a separate Assign to Semester step.",
-  "Category: HSMC, BSC, ESC, PCC, PEC, OEC, MC, PROJ, or Other — either the short code (e.g. \"PCC\") or the full name (e.g. \"Professional Core\") is accepted.",
-  "L, T and P (weekly Lecture/Tutorial/Practical hours) are required for every row.",
-  "Internal Marks, External Marks and Total Marks are reference-only — they're stored on the subject but don't configure the actual Exam Cell marks setup.",
-  "Short Code is a compact display name shown in the timetable and other tight spaces (e.g. \"CHE\" for Chemistry) — optional, but recommended for every subject.",
-  "Credits and Weekly Hours are optional — Weekly Hours defaults to L+T+P, and Credits defaults to L+T+0.5P if left blank.",
+  "Regulation, Course and Department are chosen above - every row is created under that regulation and assigned to that department.",
+  "Year and Semester are required per row and must be one of the years/semesters listed for this department above. \"2\", \"II\" and \"Year 2\" are all read as Year 2.",
+  "The whole file is imported together or not at all: if any row has a problem, nothing is saved until the file is fixed.",
+  "Category: HSMC, BSC, ESC, PCC, PEC, OEC, MC, PROJ or Other (short code or full name). Other needs a Custom Category.",
+  "L, T and P (weekly Lecture/Tutorial/Practical hours) are required - use 0 where there are none.",
+  "Subject Code is optional but recommended (e.g. the university's paper code). Without it, a code is made from the name, and two names that start the same way will clash.",
+  "A subject that already exists for this course and regulation (same code, name, category and L-T-P) is linked, not duplicated. The same subject may appear in two semesters.",
+  "Type (Theory / Practical / Tutorial / Project) is optional - left blank, a subject with only P hours is treated as Practical.",
+  "Credits, Weekly Hours, Short Code and the Marks columns are optional. Credits default to L+T+0.5P; Internal + External must equal Total when all three are given.",
 ];

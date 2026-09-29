@@ -38,6 +38,74 @@ export interface BulkAssignResult {
   failed: { subjectId: string; error: string }[];
 }
 
+/**
+ * The exact SubjectSemesterAssignment document a master subject becomes
+ * once placed into one department's course-year-semester. Shared by
+ * assignSubjectInstance (one subject at a time) and
+ * CourseStructureImportService (a whole file inside one transaction), so an
+ * instance written by either path is field-for-field the same shape every
+ * downstream reader (Teaching Assignments, HOD Subjects, sections) expects.
+ */
+export function buildSubjectInstancePayload(
+  master: Subject,
+  options: {
+    collegeId: string;
+    subjectId: string;
+    courseId: string;
+    departmentId: string;
+    departmentName?: string;
+    year: number;
+    semester: number;
+    customOverrides?: SubjectInstanceAssignOptions["customOverrides"];
+    createdAt: unknown;
+    now: Date;
+  }
+): SubjectSemesterAssignment {
+  const { collegeId, subjectId, courseId, departmentId, departmentName, year, semester, customOverrides } = options;
+  // Hours & credits, allowing department overrides if provided.
+  const lectureHours = customOverrides?.lectureHours ?? master.lectureHours ?? 0;
+  const tutorialHours = customOverrides?.tutorialHours ?? master.tutorialHours ?? 0;
+  const practicalHours = customOverrides?.practicalHours ?? master.practicalHours ?? 0;
+  const hoursPerWeek = lectureHours + tutorialHours + practicalHours;
+  const credits = customOverrides?.credits ?? master.credits ?? 0;
+
+  return {
+    id: `${subjectId}_${departmentId}_${semester}`,
+    collegeId,
+    subjectId,
+    masterSubjectId: subjectId,
+    subjectName: master.name ?? "",
+    subjectCode: master.code ?? "",
+    ...(master.shortCode ? { shortCode: master.shortCode } : {}),
+    courseId,
+    courseName: master.courseName ?? "",
+    academicYear: master.academicYear ?? "",
+    regulation: master.regulation ?? "",
+    year,
+    departmentId,
+    departmentName: departmentName ?? master.courseName ?? "",
+    semester,
+
+    // Snapshot attributes copied from Master
+    type: master.type ?? "THEORY",
+    ...(master.category ? { category: master.category } : {}),
+    ...(master.customCategory ? { customCategory: master.customCategory } : {}),
+    lectureHours,
+    tutorialHours,
+    practicalHours,
+    hoursPerWeek,
+    totalHoursPerSemester: master.totalHoursPerSemester ?? null,
+    credits,
+    ...(master.internalMarks != null ? { internalMarks: master.internalMarks } : {}),
+    ...(master.externalMarks != null ? { externalMarks: master.externalMarks } : {}),
+    ...(master.totalMarks != null ? { totalMarks: master.totalMarks } : {}),
+    isCustomized: !!customOverrides,
+    isActive: true,
+    createdAt: options.createdAt as SubjectSemesterAssignment["createdAt"],
+    updatedAt: options.now as unknown as SubjectSemesterAssignment["updatedAt"],
+  };
+}
+
 export class SubjectInstanceService {
   constructor(private db = getAdminDb()) {}
 
@@ -194,13 +262,6 @@ export class SubjectInstanceService {
       );
     }
 
-    // 5. Compute hours & credits (allowing department overrides if provided)
-    const lectureHours = customOverrides?.lectureHours ?? master.lectureHours ?? 0;
-    const tutorialHours = customOverrides?.tutorialHours ?? master.tutorialHours ?? 0;
-    const practicalHours = customOverrides?.practicalHours ?? master.practicalHours ?? 0;
-    const hoursPerWeek = lectureHours + tutorialHours + practicalHours;
-    const credits = customOverrides?.credits ?? master.credits ?? 0;
-
     // Keyed by semester too (not just subject+department) so the same
     // subject can be a live instance in two different semesters for one
     // department at once (a year-long / shared subject spanning S1+S2) -
@@ -217,45 +278,22 @@ export class SubjectInstanceService {
     const [existing, legacy] = await Promise.all([instanceRef.get(), legacyRef.get()]);
     const now = new Date();
 
-    const instancePayload: SubjectSemesterAssignment = {
-      id: instanceDocId,
+    const instancePayload = buildSubjectInstancePayload(master, {
       collegeId,
       subjectId,
-      masterSubjectId: subjectId,
-      subjectName: master.name ?? "",
-      subjectCode: master.code ?? "",
-      ...(master.shortCode ? { shortCode: master.shortCode } : {}),
       courseId,
-      courseName: master.courseName ?? "",
-      academicYear: master.academicYear ?? "",
-      regulation: master.regulation ?? "",
-      year: resolvedYear,
       departmentId,
-      departmentName: resolvedDeptName ?? master.courseName ?? "",
+      departmentName: resolvedDeptName,
+      year: resolvedYear,
       semester,
-
-      // Snapshot attributes copied from Master
-      type: master.type ?? "THEORY",
-      ...(master.category ? { category: master.category } : {}),
-      ...(master.customCategory ? { customCategory: master.customCategory } : {}),
-      lectureHours,
-      tutorialHours,
-      practicalHours,
-      hoursPerWeek,
-      totalHoursPerSemester: master.totalHoursPerSemester ?? null,
-      credits,
-      ...(master.internalMarks != null ? { internalMarks: master.internalMarks } : {}),
-      ...(master.externalMarks != null ? { externalMarks: master.externalMarks } : {}),
-      ...(master.totalMarks != null ? { totalMarks: master.totalMarks } : {}),
-      isCustomized: !!customOverrides,
-      isActive: true,
-      createdAt: (existing.exists
+      customOverrides,
+      createdAt: existing.exists
         ? (existing.data() as { createdAt?: unknown }).createdAt
         : legacy.exists && (legacy.data() as { semester?: number }).semester === semester
           ? (legacy.data() as { createdAt?: unknown }).createdAt
-          : now) as any,
-      updatedAt: now as any,
-    };
+          : now,
+      now,
+    });
 
     await instanceRef.set(instancePayload);
     // Only the legacy doc for THIS semester is superseded - one made under

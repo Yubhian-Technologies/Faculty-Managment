@@ -488,10 +488,41 @@ export async function POST(request: Request) {
         // a single doc().get() on that old key missed every instance made
         // through the current Assign to Semester flow. Query by subjectId+departmentId
         // instead, matching how the record is actually keyed today.
-        let instanceSnap = await collegeRef.collection("subjectSemesterAssignments")
-          .where("subjectId", "==", subjectId)
-          .where("departmentId", "==", course.departmentId)
-          .get();
+        // Instances of this subject under `deptId` that belong to this
+        // section's year - a Year 2 subject can't be staffed in a Year 3
+        // section. Instances predating the year field carry none and are
+        // accepted as before.
+        const otherYears = new Set<number>();
+        const instancesFor = async (deptId: string) => {
+          const snap = await collegeRef.collection("subjectSemesterAssignments")
+            .where("subjectId", "==", subjectId)
+            .where("departmentId", "==", deptId)
+            .get();
+          return snap.docs.filter((d) => {
+            const y = (d.data() as { year?: number }).year;
+            if (y == null || Number(y) === Number(section.year)) return true;
+            otherYears.add(Number(y));
+            return false;
+          });
+        };
+        let instanceDocs = await instancesFor(course.departmentId);
+        let deptsForLookup: (Department & { id: string })[] | null = null;
+        const loadDepts = async () => {
+          deptsForLookup ??= (await collegeRef.collection("departments").get())
+            .docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as (Department & { id: string })[];
+          return deptsForLookup;
+        };
+        // A sub-department's section may run on its PARENT's Course doc
+        // (sections/route.ts POST allows course.departmentId === parent), but
+        // Course Structure / Assign to Semester files that sub-department's
+        // subjects under the sub-department itself - so look under the
+        // section's own department too before concluding "not assigned".
+        if (instanceDocs.length === 0) {
+          const sectionDeptId = (await loadDepts()).find((d) => d.name === section.department)?.id;
+          if (sectionDeptId && sectionDeptId !== course.departmentId) {
+            instanceDocs = await instancesFor(sectionDeptId);
+          }
+        }
         // Same shared-year gap as CourseYearTiming (see
         // lib/college/semester.ts's loadEffectiveTiming): a branch reached
         // through a shared-first-year manager (e.g. "BSM-CSE-A") is keyed
@@ -500,26 +531,25 @@ export async function POST(request: Request) {
         // department (Basic Science Maths), never to every branch it feeds
         // individually - so the exact-department lookup above finds nothing
         // even though the subject genuinely was assigned for this year.
-        if (instanceSnap.empty) {
-          const deptsSnap = await collegeRef.collection("departments").get();
-          const allDepts = deptsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as (Department & { id: string })[];
-          const inheritedDeptId = inheritedAssignmentDepartmentId(course, section.year, allDepts);
+        if (instanceDocs.length === 0) {
+          const inheritedDeptId = inheritedAssignmentDepartmentId(course, section.year, await loadDepts());
           if (inheritedDeptId) {
-            instanceSnap = await collegeRef.collection("subjectSemesterAssignments")
-              .where("subjectId", "==", subjectId)
-              .where("departmentId", "==", inheritedDeptId)
-              .get();
+            instanceDocs = await instancesFor(inheritedDeptId);
           }
         }
-        if (instanceSnap.empty) {
+        if (instanceDocs.length === 0) {
           return NextResponse.json(
-            { error: "This subject hasn't been assigned to this department's semester yet - use Assign to Semester first." },
+            {
+              error: otherYears.size > 0
+                ? `This subject is assigned to Year ${Array.from(otherYears).sort().join(", ")} for this department, not Year ${section.year}.`
+                : "This subject hasn't been assigned to this department's semester yet - use Assign to Semester first.",
+            },
             { status: 400 },
           );
         }
         if (
           body.timetableSemester != null &&
-          !instanceSnap.docs.some((d) => (d.data() as { semester?: number }).semester === timetableSemester)
+          !instanceDocs.some((d) => (d.data() as { semester?: number }).semester === timetableSemester)
         ) {
           return NextResponse.json(
             { error: "This subject is assigned to a different semester for this department - check Assign to Semester." },
