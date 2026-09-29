@@ -20,6 +20,8 @@ import { OTHER_CATEGORIES_COL } from "@/lib/leave/otherCategories";
 import { LEAVE_TYPE_SEED } from "@/lib/leave/seedData";
 import { evaluateODProof } from "@/lib/leave/odProof";
 import { notifyODProofSubmitted, notifyODProofDecision } from "@/lib/leave/odProofNotify";
+import { evaluateLeaveCertificate } from "@/lib/leave/leaveCertificate";
+import { notifyCertificateSubmitted, notifyCertificateDecision, notifyCertificateRequested } from "@/lib/leave/leaveCertificateNotify";
 import { syncApprovedLeaveToAttendance, revokeFutureLeaveFromAttendance } from "@/lib/leave/attendanceSync";
 import { notify, notifyRole } from "@/lib/notify";
 import { emitWorkflowNotification } from "@/lib/notifications/workflowNotifications";
@@ -65,6 +67,42 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   }
 }
 
+// Shared by VERIFY/REJECT_CERTIFICATE (and the REQUEST_CERTIFICATE nudge)
+// below - the exact same reviewer-tier rule VERIFY/REJECT_OD_PROOF apply
+// inline (HOD only within their own department via hodAction, else
+// Principal/VP, never a self-review, never a College-Admin-as-Principal).
+// Factored out here rather than in odProof.ts's own inline copies, which stay
+// untouched to avoid any risk to that working code - this is only for the
+// post-leave SL/SCL certificate actions.
+async function assertCanReviewLeaveProof(
+  db: FirebaseFirestore.Firestore,
+  session: { uid: string; role: string; collegeId: string; realRole?: string },
+  req: Pick<LeaveRequest, "uid" | "hodAction" | "department">
+): Promise<NextResponse | null> {
+  if (req.uid === session.uid) {
+    return NextResponse.json({ error: "You cannot verify your own leave" }, { status: 403 });
+  }
+  if (req.hodAction) {
+    if (session.role === "HOD") {
+      const hodDepts = await resolveHodDepartments(db, session.collegeId, session.uid);
+      if (!req.department || !hodDepts.includes(req.department)) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+    } else if (session.role !== "PRINCIPAL" && session.role !== "VICE_PRINCIPAL") {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    } else if (isCollegeAdmin(session)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+  } else if (session.role !== "PRINCIPAL" && session.role !== "VICE_PRINCIPAL") {
+    // Approved at the Principal tier - or by Management, which has no
+    // reviewer UI for this either (see leaveCertificateNotify.ts's scope note).
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  } else if (isCollegeAdmin(session)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+  return null;
+}
+
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
@@ -76,7 +114,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     );
     const body = (await request.json()) as {
       action?: "APPROVE" | "REJECT" | "CANCEL" | "EDIT" | "PROPOSE_COVERAGE" | "REVISE_ADJUSTMENT"
-        | "SUBMIT_OD_PROOF" | "VERIFY_OD_PROOF" | "REJECT_OD_PROOF" | "REQUEST_OD_PROOF";
+        | "SUBMIT_OD_PROOF" | "VERIFY_OD_PROOF" | "REJECT_OD_PROOF" | "REQUEST_OD_PROOF"
+        | "SUBMIT_CERTIFICATE" | "VERIFY_CERTIFICATE" | "REJECT_CERTIFICATE" | "REQUEST_CERTIFICATE";
       remarks?: string;
       isPaidLeave?: boolean;
       otherLeaveCategory?: OtherLeaveCategory;
@@ -89,6 +128,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       newHandoverUid?: string;
       // SUBMIT_OD_PROOF only - the URL /api/upload/leave-proof just returned.
       odProofUrl?: string;
+      // SUBMIT_CERTIFICATE only - same upload endpoint, different field.
+      certificateUrl?: string;
       // EDIT only.
       fromDate?: string;
       toDate?: string;
@@ -791,6 +832,97 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       );
       await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
         collegeId: session.collegeId, action: "LEAVE_OD_PROOF_REQUESTED", performedBy: session.uid,
+        performedByName: session.email || session.role, targetId: id, details: {}, timestamp: now,
+      });
+      return NextResponse.json({ ok: true });
+    }
+
+    // ─── Post-leave certificate (SL, optional; SCL, chased) ─────────────────
+    // Record-keeping (see lib/leave/leaveCertificate.ts) - unlike the On Duty
+    // proof block above, nothing here ever affects lopDays, isPaidLeave, or
+    // status, for EITHER leave type. Same "already approved" placement as OD
+    // proof.
+    if (body.action === "SUBMIT_CERTIFICATE") {
+      if (req.uid !== session.uid) {
+        return NextResponse.json({ error: "You can only upload a certificate for your own leave" }, { status: 403 });
+      }
+      const evaluation = evaluateLeaveCertificate(req, now);
+      if (!evaluation.canUpload) {
+        return NextResponse.json({
+          error: evaluation.state === "VERIFIED"
+            ? "This certificate has already been verified"
+            : "A certificate can only be uploaded once the leave period has ended",
+        }, { status: 400 });
+      }
+      const expectedPrefix = `leave-proofs/${session.collegeId}/${session.uid}/${id}/`;
+      if (
+        !body.certificateUrl?.startsWith("https://firebasestorage.googleapis.com/") ||
+        !body.certificateUrl.includes(encodeURIComponent(expectedPrefix))
+      ) {
+        return NextResponse.json({ error: "Invalid certificate URL" }, { status: 400 });
+      }
+
+      const submissionCount = (req.certificateSubmissionCount ?? 0) + 1;
+      await ref.update({
+        certificateUrl: body.certificateUrl,
+        certificateUploadedAt: now,
+        certificateStatus: "PENDING_VERIFICATION",
+        certificateSubmissionCount: submissionCount,
+        // A resubmission must not keep showing the previous rejection.
+        certificateRejectionReason: "",
+        certificateReviewedBy: "",
+        certificateReviewedByName: "",
+        updatedAt: now,
+      });
+      await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
+        collegeId: session.collegeId, action: "LEAVE_CERTIFICATE_SUBMITTED", performedBy: session.uid,
+        performedByName: session.email || session.role, targetId: id, details: { submissionCount }, timestamp: now,
+      });
+      await notifyCertificateSubmitted(db, session.collegeId, { ...req, id }, submissionCount);
+      return NextResponse.json({ ok: true });
+    }
+
+    if (body.action === "VERIFY_CERTIFICATE" || body.action === "REJECT_CERTIFICATE") {
+      if (req.certificateStatus !== "PENDING_VERIFICATION") {
+        return NextResponse.json({ error: "There is no certificate awaiting verification on this request" }, { status: 400 });
+      }
+      const forbidden = await assertCanReviewLeaveProof(db, session, req);
+      if (forbidden) return forbidden;
+
+      const verified = body.action === "VERIFY_CERTIFICATE";
+      await ref.update({
+        certificateStatus: verified ? "VERIFIED" : "REJECTED",
+        certificateReviewedBy: session.uid,
+        certificateReviewedByName: session.email || session.role,
+        certificateReviewedAt: now,
+        certificateRejectionReason: verified ? "" : (body.reason ?? "").trim(),
+        updatedAt: now,
+      });
+      await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
+        collegeId: session.collegeId,
+        action: verified ? "LEAVE_CERTIFICATE_VERIFIED" : "LEAVE_CERTIFICATE_REJECTED",
+        performedBy: session.uid, performedByName: session.email || session.role, targetId: id,
+        details: { reason: body.reason ?? null }, timestamp: now,
+      });
+      await notifyCertificateDecision(db, session.collegeId, { ...req, id }, verified, body.reason);
+      return NextResponse.json({ ok: true });
+    }
+
+    // Manual nudge, SCL only in practice (SL's certificate is optional, so
+    // nothing ever needs chasing) - same audience as VERIFY/REJECT_CERTIFICATE
+    // above, mirrors REQUEST_OD_PROOF exactly.
+    if (body.action === "REQUEST_CERTIFICATE") {
+      const evaluation = evaluateLeaveCertificate(req, now);
+      if (!evaluation.required || !evaluation.canUpload || evaluation.awaitingVerification) {
+        return NextResponse.json({ error: "There's nothing outstanding to request a certificate for on this request" }, { status: 400 });
+      }
+      const forbidden = await assertCanReviewLeaveProof(db, session, req);
+      if (forbidden) return forbidden;
+
+      const requestedByLabel = session.role === "HOD" ? "Your HOD" : (session.email || session.role);
+      await notifyCertificateRequested(db, session.collegeId, { ...req, id }, requestedByLabel);
+      await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
+        collegeId: session.collegeId, action: "LEAVE_CERTIFICATE_REQUESTED", performedBy: session.uid,
         performedByName: session.email || session.role, targetId: id, details: {}, timestamp: now,
       });
       return NextResponse.json({ ok: true });

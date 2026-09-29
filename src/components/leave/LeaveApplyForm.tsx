@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DocumentUploadField } from "@/components/shared/DocumentUploadField";
 import { toast } from "@/hooks/useToast";
 import { OD_PROOF_GRACE_DAYS } from "@/lib/leave/odProof";
 import { AlertTriangle, CalendarPlus, Users } from "lucide-react";
@@ -84,6 +85,10 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
   // validation below and applications/route.ts).
   const [placeOfVisit, setPlaceOfVisit] = useState("");
   const [pointOfContact, setPointOfContact] = useState("");
+  // SCL's mandatory apply-time evidence (see applications/route.ts POST) -
+  // uploaded via /api/upload/leave-apply-proof, a separate uid-keyed route
+  // since no LeaveRequest document exists yet to upload against.
+  const [proofUrl, setProofUrl] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [holidayDates, setHolidayDates] = useState<Set<string>>(new Set());
   const [workingDayWeights, setWorkingDayWeights] = useState<Map<string, number>>(new Map());
@@ -271,6 +276,7 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
     setReason("");
     setCustomReasonMode(false);
     if (value !== "OD") { setPlaceOfVisit(""); setPointOfContact(""); }
+    if (value !== "SCL") setProofUrl("");
     // Summer Vacation defaults From/To to the College Office's full declared
     // range (see the effect below) - inherently a span, so the single-day
     // toggle would just fight that default.
@@ -475,6 +481,10 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
       toast({ variant: "destructive", title: "Place of visit and point of contact are required for On Duty" });
       return;
     }
+    if (leaveTypeCode === "SCL" && !proofUrl) {
+      toast({ variant: "destructive", title: "Supporting evidence is required for Special Casual Leave" });
+      return;
+    }
     setIsSubmitting(true);
     try {
       const periodSubstitutions = periods.length > 0
@@ -515,6 +525,7 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
               handoverToUid: HANDOVER_ENABLED ? (handoverToUid || undefined) : undefined,
               placeOfVisit: placeOfVisit.trim() || undefined,
               pointOfContact: pointOfContact.trim() || undefined,
+              proofUrl: leaveTypeCode === "SCL" ? proofUrl : undefined,
               periodSubstitutions,
             }),
           });
@@ -568,6 +579,11 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
                   // still-relevant range - otherwise there's nothing to lock
                   // the dates to (see the summerHoliday fetch above).
                   .filter((t) => t.code !== "SH" || summerHoliday)
+                  // EL is only available once CL is fully used up for the
+                  // year (see applications/route.ts POST's hard block below
+                  // this same check) - hidden rather than shown-disabled, so
+                  // this is only a nudge; the server is the actual guard.
+                  .filter((t) => t.code !== "EL" || !types.find((t2) => t2.code === "CL")?.remaining)
                   .map((t) => (
                     <SelectItem key={t.code} value={t.code}>
                       {t.code === "SH" && summerHoliday
@@ -580,6 +596,13 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
               </SelectContent>
             </Select>
             {extendId && <p className="text-xs text-muted-foreground">Kept the same as the leave you&rsquo;re extending.</p>}
+            {/* Explains why EL is missing from the list above, rather than
+                leaving it silently absent. */}
+            {!!types.find((t) => t.code === "CL")?.remaining && (
+              <p className="text-xs text-muted-foreground">
+                Earned Leave becomes available once your Casual Leave balance is fully used.
+              </p>
+            )}
             {/* Set the expectation before they apply, not after they're
                 already overdue. Shared by all 17 apply routes for free. */}
             {leaveTypeCode === "OD" && (
@@ -587,6 +610,21 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
                 You&rsquo;ll need to upload proof of duty (certificate, letter or order) within {OD_PROOF_GRACE_DAYS}{" "}
                 days of this On Duty period ending. Unproven days are treated as Loss of Pay.
               </p>
+            )}
+            {/* SCL's mandatory apply-time evidence (see the submit validation
+                below and applications/route.ts POST) - a separate, before-the-
+                leave requirement from SL's optional post-leave certificate. */}
+            {leaveTypeCode === "SCL" && (
+              <div className="space-y-1.5 pt-1">
+                <Label className="text-xs">Supporting Evidence</Label>
+                <DocumentUploadField
+                  label="Supporting evidence"
+                  value={proofUrl}
+                  uploadEndpoint="/api/upload/leave-apply-proof"
+                  onUploaded={(url) => setProofUrl(url)}
+                  onRemoved={() => setProofUrl("")}
+                />
+              </div>
             )}
             {/* Available on every leave type - required only for OD (see the
                 submit validation and applications/route.ts), optional

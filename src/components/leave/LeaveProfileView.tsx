@@ -9,6 +9,7 @@ import { toast } from "@/hooks/useToast";
 import { formatDate, toDate } from "@/lib/utils";
 import { Plus, ChevronRight, History, CalendarPlus } from "lucide-react";
 import { evaluateODProof } from "@/lib/leave/odProof";
+import { evaluateLeaveCertificate } from "@/lib/leave/leaveCertificate";
 import { PermissionRequestDialog } from "@/components/leave/PermissionRequestDialog";
 import { LeaveCalendar } from "@/components/leave/LeaveCalendar";
 import { LEAVE_REQUEST_STATUS_LABELS, EFFECTIVE_CATEGORY_LABELS, LEAVE_TYPE_LABELS } from "@/types/leave";
@@ -482,6 +483,10 @@ export function LeaveHistoryRow({
   // other type and for any OD approved before the feature existed, so the whole
   // block below simply doesn't render for them.
   const odProof = evaluateODProof(request);
+  // Post-leave certificate, SL or SCL (see lib/leave/leaveCertificate.ts).
+  // Returns NOT_APPLICABLE for every other type, so the block below simply
+  // doesn't render for them - never affects pay, for either type.
+  const certificate = evaluateLeaveCertificate(request);
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3">
       <div className="min-w-0">
@@ -552,6 +557,11 @@ export function LeaveHistoryRow({
             <span className="font-medium text-foreground/80">Proof rejected:</span> {request.odProofRejectionReason}
           </p>
         )}
+        {certificate.state === "REJECTED_REUPLOAD" && request.certificateRejectionReason && (
+          <p className="text-xs text-muted-foreground mt-0.5">
+            <span className="font-medium text-foreground/80">Certificate rejected:</span> {request.certificateRejectionReason}
+          </p>
+        )}
       </div>
       <div className="flex flex-wrap items-center gap-2">
         {request.isPaidLeave !== undefined && (
@@ -581,6 +591,30 @@ export function LeaveHistoryRow({
               {request.odProofStatus === "REJECTED" ? "Re-upload proof" : "Upload proof"}
             </Link>
           </Button>
+        )}
+        {/* NOT_DUE stays silent, same reasoning as OD's NOT_DUE above. */}
+        {certificate.state === "AWAITING_UPLOAD" && (
+          <Badge variant="outline">{certificate.required ? "Certificate required" : "Certificate optional"}</Badge>
+        )}
+        {certificate.state === "PENDING_VERIFICATION" && <Badge variant="pending">Certificate awaiting verification</Badge>}
+        {certificate.state === "VERIFIED" && <Badge variant="approved">Certificate verified</Badge>}
+        {certificate.state === "REJECTED_REUPLOAD" && <Badge variant="rejected">Certificate rejected</Badge>}
+        {isOwnHistory && certificate.canUpload && (
+          <Button size="sm" variant="outline" className="h-7 px-2 text-xs" asChild>
+            <Link href={`/leave/certificate/${request.id}`}>
+              {request.certificateStatus === "REJECTED" ? "Re-upload certificate" : "Add certificate"}
+            </Link>
+          </Button>
+        )}
+        {request.applyProofUrl && (
+          <a
+            href={request.applyProofUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs text-primary hover:underline"
+          >
+            View attached proof
+          </a>
         )}
         {!!onCancel && request.status === "PENDING_ACCEPTANCE" && request.adjustmentRequests?.some((a) => a.status === "DECLINED") && (
           <Button size="sm" variant="outline" className="h-7 px-2 text-xs" asChild>

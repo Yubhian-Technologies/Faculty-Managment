@@ -9,13 +9,14 @@ import { resolveEmployeeIdentity } from "@/lib/leave/identity";
 import { loadCollegeSettings } from "@/lib/firestore/collegeSettings";
 import { resolveStaffGender } from "@/lib/leave/identity";
 import { computeEffectiveCategory } from "@/lib/leave/categoryEngine";
-import { REQUESTS_COL, splitLeaveDays } from "@/lib/leave/balanceEngine";
+import { REQUESTS_COL, splitLeaveDays, loadBalances, computeEntitlement, initBalancesForYear } from "@/lib/leave/balanceEngine";
 import { countWorkingDays, todayISODate, yearsOfService, isoDateKey } from "@/lib/leave/dayCounter";
 import { loadUnavailability } from "@/lib/leave/availability";
 import { getHolidayDateKeys } from "@/lib/leave/holidaysCount";
 import { getWorkingDayWeightsForRole } from "@/lib/attendance/workingDays";
 import { resolveLeaveType } from "@/lib/leave/resolveLeaveTypes";
 import { evaluateODProof } from "@/lib/leave/odProof";
+import { evaluateLeaveCertificate } from "@/lib/leave/leaveCertificate";
 import { resolveHodDepartments } from "@/lib/budget/departmentScope";
 import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 import { validatePeriodSubstitutions, type PeriodSubstitutionInput } from "@/lib/leave/periodCoverage";
@@ -189,6 +190,60 @@ export async function GET(request: Request) {
       return NextResponse.json({ requests: [] });
     }
 
+    // Post-leave certificate queue: submitted SL/SCL certificates awaiting
+    // this caller's review (see lib/leave/leaveCertificate.ts) - the
+    // counterpart of `od-proofs` above.
+    if (url.searchParams.get("scope") === "leave-certificates") {
+      const snap = await REQUESTS_COL(session.collegeId, db)
+        .where("certificateStatus", "==", "PENDING_VERIFICATION")
+        .get();
+      const all = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as LeaveRequest)
+        .filter((r) => r.uid !== session.uid);
+
+      if (session.role === "HOD") {
+        const depts = await resolveHodDepartments(db, session.collegeId, session.uid);
+        return NextResponse.json({
+          requests: sortByCreatedAtDesc(
+            all.filter((r) => !!r.hodAction && !!r.department && depts.includes(r.department))
+          ),
+        });
+      }
+      if (session.role === "PRINCIPAL" || session.role === "VICE_PRINCIPAL") {
+        return NextResponse.json({ requests: sortByCreatedAtDesc(all.filter((r) => !r.hodAction)) });
+      }
+      return NextResponse.json({ requests: [] });
+    }
+
+    // SCL missing-certificate list: APPROVED SCLs whose period has ended with
+    // nothing currently on file (never uploaded, or uploaded and rejected and
+    // not yet fixed) - mirrors `od-missing-proof` above. SL never appears
+    // here: its certificate is purely optional, so there's nothing to chase.
+    if (url.searchParams.get("scope") === "scl-missing-certificate") {
+      const snap = await REQUESTS_COL(session.collegeId, db)
+        .where("leaveTypeCode", "==", "SCL")
+        .where("status", "==", "APPROVED")
+        .get();
+      const all = snap.docs
+        .map((d) => ({ id: d.id, ...d.data() }) as LeaveRequest)
+        .filter((r) => {
+          const evaluation = evaluateLeaveCertificate(r);
+          return evaluation.canUpload && !evaluation.awaitingVerification;
+        });
+
+      if (session.role === "HOD") {
+        const depts = await resolveHodDepartments(db, session.collegeId, session.uid);
+        return NextResponse.json({
+          requests: sortByCreatedAtDesc(
+            all.filter((r) => !!r.hodAction && !!r.department && depts.includes(r.department))
+          ),
+        });
+      }
+      if (session.role === "PRINCIPAL" || session.role === "VICE_PRINCIPAL") {
+        return NextResponse.json({ requests: sortByCreatedAtDesc(all.filter((r) => !r.hodAction)) });
+      }
+      return NextResponse.json({ requests: [] });
+    }
+
     const targetUid = url.searchParams.get("uid") || session.uid;
     if (!(await canAccessLeaveProfile(db, session.collegeId, session.role, session.uid, targetUid))) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -230,6 +285,8 @@ export async function POST(request: Request) {
       handoverToUid?: string;
       placeOfVisit?: string;
       pointOfContact?: string;
+      // SCL only - the URL /api/upload/leave-apply-proof just returned.
+      proofUrl?: string;
     };
 
     if (!body.fromDate || !body.toDate || !body.reason?.trim()) {
@@ -330,6 +387,49 @@ export async function POST(request: Request) {
     const toDate = new Date(body.toDate);
     if (Number.isNaN(fromDate.getTime()) || Number.isNaN(toDate.getTime()) || toDate < fromDate) {
       return NextResponse.json({ error: "Invalid date range" }, { status: 400 });
+    }
+
+    // Earned Leave is only available once Casual Leave is fully used up for
+    // the year - a hard block, not just a UI nudge (LeaveApplyForm.tsx hides
+    // EL from the dropdown for the same reason, but the server is the actual
+    // guard). Mirrors the exact `entitled - used - pending` formula GET
+    // /api/leave/balances computes, via the same two balanceEngine calls, so
+    // this can never disagree with what the Apply form displayed.
+    if (body.leaveTypeCode === "EL") {
+      const clType = resolveLeaveType(settings.leaveTypeRuleOverrides, "CL");
+      if (clType) {
+        const clYear = fromDate.getFullYear();
+        await initBalancesForYear(db, session.collegeId, session.uid, profile, settings.newJoiningYears, clYear, [clType]);
+        const clBalances = await loadBalances(db, session.collegeId, session.uid, clYear);
+        const clBalance = clBalances.find((b) => b.leaveTypeCode === "CL");
+        const entitled = clBalance?.entitled ?? computeEntitlement(clType, effectiveCategory);
+        const used = clBalance?.used ?? 0;
+        const pending = clBalance?.pending ?? 0;
+        if (Math.max(0, entitled - used - pending) > 0) {
+          return NextResponse.json(
+            { error: "Earned Leave is only available once your Casual Leave balance is fully used" },
+            { status: 400 }
+          );
+        }
+      }
+    }
+
+    // SCL requires supporting evidence attached BEFORE the leave (mandatory,
+    // unlike SL's optional POST-leave certificate - see
+    // lib/leave/leaveCertificate.ts for that separate, after-the-fact flow).
+    // Uploaded via /api/upload/leave-apply-proof, a uid-keyed route with no
+    // pre-existing LeaveRequest to validate against (there isn't one yet).
+    if (body.leaveTypeCode === "SCL") {
+      const expectedPrefix = `leave-proofs/${session.collegeId}/${session.uid}/apply/`;
+      if (
+        !body.proofUrl?.startsWith("https://firebasestorage.googleapis.com/") ||
+        !body.proofUrl.includes(encodeURIComponent(expectedPrefix))
+      ) {
+        return NextResponse.json(
+          { error: "Supporting evidence is required for Special Casual Leave" },
+          { status: 400 }
+        );
+      }
     }
     // Calendar span, not the working-day count - a stretch across a weekend
     // is still one long request even though Saturday/Sunday may not draw
@@ -555,6 +655,8 @@ export async function POST(request: Request) {
       // OD specifically (see the validation above), optional elsewhere.
       ...(body.placeOfVisit?.trim() ? { placeOfVisit: body.placeOfVisit.trim() } : {}),
       ...(body.pointOfContact?.trim() ? { pointOfContact: body.pointOfContact.trim() } : {}),
+      // SCL only - already validated as required and path-checked above.
+      ...(body.leaveTypeCode === "SCL" && body.proofUrl ? { applyProofUrl: body.proofUrl } : {}),
       ...(periodSubstitutions ? { periodSubstitutions } : {}),
       ...(handover ? { handoverToUid: handover.uid, handoverToName: handover.name } : {}),
       ...(adjustmentRequests.length > 0 ? { adjustmentRequests, postAcceptanceStatus } : {}),

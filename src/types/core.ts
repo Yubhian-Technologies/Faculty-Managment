@@ -2992,6 +2992,14 @@ export type NotificationType =
   // REQUEST_OD_PROOF action), for whenever the automatic reminder above
   // wasn't enough.
   | "LEAVE_OD_PROOF_REQUESTED_BY_HOD"
+  // Post-leave certificate (SL or SCL - see types/leave.ts
+  // LeaveCertificateStatus) - never a pay consequence, unlike the OD proof
+  // notifications above. SCL alone gets chased (the reminder/manual-nudge
+  // pair below); SL's is purely optional and never fires either.
+  | "LEAVE_CERTIFICATE_PENDING_VERIFICATION"
+  | "LEAVE_CERTIFICATE_VERIFIED"
+  | "LEAVE_CERTIFICATE_REJECTED"
+  | "LEAVE_CERTIFICATE_REQUESTED_BY_HOD"
   | "ATTENDANCE_MANUALLY_MARKED"
   // Fired by the scheduled not-posted-attendance sweep (see
   // lib/attendance/notPostedSettings.ts + api/cron/attendance-not-posted) -

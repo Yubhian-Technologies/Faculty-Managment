@@ -230,6 +230,18 @@ export const OD_PROOF_STATUS_LABELS: Record<ODProofStatus, string> = {
   REJECTED: "Proof rejected",
 };
 
+// ─── Post-leave certificate (SL, optional; SCL, chased) ─────────────────────
+// Unlike OD proof, nothing here ever affects pay, balance, or approval status
+// - a requester may attach a certificate once an APPROVED SL or SCL period
+// ends, and their approver may verify or reject it. For SL this is purely
+// optional; for SCL an approver's queue chases an unresolved one (see the
+// scl-missing-certificate scope in applications/route.ts), but even then it
+// never blocks anything or affects pay. See src/lib/leave/leaveCertificate.ts.
+// Because there's no pay consequence, this is gated purely on `leaveTypeCode`
+// at read time (no `odProofRequired`-style approval-time stamp needed to
+// grandfather old requests - there's nothing to grandfather away from).
+export type LeaveCertificateStatus = "PENDING_VERIFICATION" | "VERIFIED" | "REJECTED";
+
 // The Principal/Vice Principal must pick one of these when approving an
 // isOtherRequest at PENDING_PRINCIPAL - a further breakdown of "Other" for
 // the Principal's own record-keeping. Deliberately NOT a field on
@@ -560,6 +572,27 @@ export interface LeaveRequest {
   // Required on rejection - shown to the requester on the re-upload page so
   // they know what to fix, same contract as cancelReason above.
   odProofRejectionReason?: string;
+  // ─── Post-leave certificate (SL or SCL - see LeaveCertificateStatus above) ───
+  // Same shape as the OD proof fields above, minus anything pay-related:
+  // written only by the requester via SUBMIT_CERTIFICATE, and only ever a
+  // URL this app's own /api/upload/leave-proof produced.
+  certificateUrl?: string;
+  certificateUploadedAt?: Timestamp;
+  // Same "vary the dedupe key" purpose as odProofSubmissionCount above.
+  certificateSubmissionCount?: number;
+  certificateStatus?: LeaveCertificateStatus;
+  certificateReviewedBy?: string;
+  certificateReviewedByName?: string;
+  certificateReviewedAt?: Timestamp;
+  certificateRejectionReason?: string;
+  // ─── SCL apply-time proof ──────────────────────────────────────────────
+  // Mandatory for SCL only, attached at submission (not post-leave - that's
+  // the certificate* group above). Written once, at creation, via
+  // /api/upload/leave-apply-proof - a separate uid-keyed upload route since no
+  // LeaveRequest document exists yet to validate an upload against. Visible to
+  // the approver immediately alongside the pending request, never reviewed
+  // through the verify/reject flow the way the post-leave certificate is.
+  applyProofUrl?: string;
   hodAction?: LeaveActionRecord;
   principalAction?: LeaveActionRecord;
   // Set when a PRINCIPAL's own leave (PENDING_MANAGEMENT) is decided - see
