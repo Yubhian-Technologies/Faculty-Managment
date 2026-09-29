@@ -89,6 +89,13 @@ export default function TeachingAssignmentsPage() {
   // lists apart - see gapRows/availableSubjectsForAssign below, which mirror
   // TeachingAssignmentsEditor.tsx's per-section department narrowing.
   const [semesterAssignmentsCache, setSemesterAssignmentsCache] = useState<Record<string, SubjectSemesterAssignment[]>>({});
+  // Mirrors semesterFilteredKeys (the ref below that dedupes the actual
+  // fetch) as render-visible state - a ref mutation alone doesn't trigger a
+  // re-render, so without this the "Unstaffed Subjects"/"Assign Faculty"
+  // panels would have no way to know a filter just landed and stop trusting
+  // the interim raw (unfiltered) subjectsCache[key] they'd been rendering
+  // while it was in flight. See subjectsSemesterReady below.
+  const [semesterFilterReadyKeys, setSemesterFilterReadyKeys] = useState<Set<string>>(new Set());
   // This course+year's configured semester numbers (union across every
   // course-doc id in the group - see CourseYearTiming.semesters) - empty
   // when none are configured, which keeps the semester picker below hidden
@@ -295,6 +302,24 @@ const effectiveSemester = semesterOptions.length === 0
        ? selectedSemester
        : semesterOptions[0];
 
+  // Whether `subjects` above can be trusted as this course-year's FINAL
+  // list rather than the interim unfiltered one ensureCourseYearData seeds
+  // it with before semesters are even known (see the semesterFilteredKeys
+  // effect's own doc-comment). Two cases settle it: this course-year turned
+  // out to have no semester concept at all (timings loaded, semesterOptions
+  // empty - subjects was never going to be narrowed further), or the
+  // semester-scoped filter for the currently effective semester has
+  // actually landed. Until one of those is true, `subjects` can silently
+  // swap out from under a card that already rendered it (every subject for
+  // the year, unfiltered) for the narrower per-department/semester list -
+  // which reads as subjects "disappearing" a few seconds after first
+  // paint. Rendering a loading state instead in that window (see the
+  // "Unstaffed Subjects" card below) avoids showing data that's about to change.
+  const timingsReady = key in timingsCache;
+  const subjectsSemesterReady = timingsReady && (
+    semesterOptions.length === 0 || semesterFilterReadyKeys.has(`${key}_sem${effectiveSemester}`)
+  );
+
   const fetchKey = `${key}_sem${effectiveSemester ?? ""}`;
 
   // ensureCourseYearData's own subjects fetch (below) is unfiltered -
@@ -356,6 +381,11 @@ const effectiveSemester = semesterOptions.length === 0
       const filtered = Array.from(byId.values()).filter((s) => assignedIds.has(s.id));
       setSubjectsCache((c) => ({ ...c, [key]: filtered }));
       setSemesterAssignmentsCache((c) => ({ ...c, [key]: flatAssignments }));
+      setSemesterFilterReadyKeys((prev) => {
+        const next = new Set(prev);
+        next.add(filterKey);
+        return next;
+      });
     })();
   }, [key, year, activeCourseIds, effectiveSemester, course, courses]);
 
@@ -501,6 +531,17 @@ const effectiveSemester = semesterOptions.length === 0
     const d = departments.find((dept) => dept.name === section.department);
     if (d && deptIds.has(d.id)) return true;
     if (section.department && deptNames.has(section.department)) return true;
+    // A shared-first-year department (e.g. BS-English) owns no sections of
+    // its own - its subjects are taught inside the sections of whichever
+    // branches it feeds (CIVIL, IT, ...), named on that department's own
+    // managedDepartments and carried as each fed section's plain `department`
+    // string (mirrors filterDepartmentNames' identical managedDepartments
+    // handling above, used for the department-filter dropdown). Without
+    // this, a subject assigned to a feeder department with no sections of
+    // its own matched zero sections, so gapRows dropped it from Unstaffed
+    // Subjects entirely instead of surfacing the fed branches' real gaps.
+    const assignedDepts = departments.filter((dept) => deptIds.has(dept.id) || deptNames.has(dept.name));
+    if (assignedDepts.some((dept) => dept.managedDepartments?.includes(section.department))) return true;
     return false;
   }
 
@@ -519,20 +560,33 @@ const effectiveSemester = semesterOptions.length === 0
     // Matched against every course-doc id in the group: an assignment stores
     // whichever department's doc its section belongs to.
     const courseIdSet = new Set(activeCourseIds);
-    return subjects.map((subject) => {
-      const staffedSectionIds = new Set(
-        assignments
-          .filter((a) =>
-            a.subjectId === subject.id && courseIdSet.has(a.courseId ?? "") && a.year === Number(year) &&
-            matchesCurrentSemester(a.timetableSemester, effectiveSemester)
-          )
-          .map((a) => a.sectionId)
-      );
-      const unstaffedSections = sections
-        .filter((s) => !staffedSectionIds.has(s.id) && sectionMatchesSubjectDepartment(s, subject.id))
-        .map((s) => ({ section: s, isRequested: pendingRequestKeys.has(`${s.id}_${subject.id}`) }));
-      return { subject, unstaffedSections };
-    });
+    return subjects
+      .map((subject) => {
+        const matchedSections = sections.filter((s) => sectionMatchesSubjectDepartment(s, subject.id));
+        const staffedSectionIds = new Set(
+          assignments
+            .filter((a) =>
+              a.subjectId === subject.id && courseIdSet.has(a.courseId ?? "") && a.year === Number(year) &&
+              matchesCurrentSemester(a.timetableSemester, effectiveSemester)
+            )
+            .map((a) => a.sectionId)
+        );
+        // Every matched section still counts toward staffing, including one
+        // with studentCount 0 (a section created ahead of enrollment) - an
+        // empty section isn't exempt from needing a faculty assigned, so it
+        // stays in this list rather than being filtered out by student count.
+        const unstaffedSections = matchedSections
+          .filter((s) => !staffedSectionIds.has(s.id))
+          .map((s) => ({ section: s, isRequested: pendingRequestKeys.has(`${s.id}_${subject.id}`) }));
+        return { subject, matchedSections, unstaffedSections };
+      })
+      // A subject with zero matched sections (this department has no
+      // section for it at all - e.g. just imported, no Sections created
+      // yet) has nothing to be "fully staffed" against - dropped from the
+      // list entirely rather than falling through to the same
+      // unstaffedSections.length === 0 check a genuinely fully-staffed
+      // subject hits, which previously mislabeled it "Fully staffed".
+      .filter(({ matchedSections }) => matchedSections.length > 0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [subjects, sections, assignments, courseKey, activeCourseIds, year, pendingRequestKeys, effectiveSemester, semesterAssignments, departments]);
 
@@ -587,14 +641,25 @@ const effectiveSemester = semesterOptions.length === 0
     return names;
   }, [scope]);
 
-  // Every top-level department in the college is askable except this HOD's
-  // own scope above - only a genuinely unrelated department (with its own
-  // separate HOD to fulfill the request) makes sense to ask.  Sub-departments
-  // stay excluded regardless: they don't run their own separate faculty pool
-  // to lend from.
+  // Every department in the college is askable except this HOD's own scope
+  // above - only a genuinely unrelated department (with its own separate HOD
+  // to fulfill the request) makes sense to ask. Sub-departments are NOT
+  // excluded as a class: a true sub-department (e.g. BS-Chemistry, BS-Physics
+  // under parent Basic Science) runs its own faculty roster under its own
+  // HOD login exactly like a top-level department does (see
+  // canHodManageFacultyDepartment/ownDepartmentNames, lib/departments/
+  // scope.ts) - a sub-HOD stuck for a subject their own sub-department can't
+  // cover (e.g. BS-English) needs to be able to ask a SIBLING sub-department
+  // (BS-Chemistry, BS-Physics), not just an unrelated top-level department.
+  // ownScopeNames already excludes this HOD's own department and its own
+  // true children, so a sub-department only shows up here when it's a
+  // genuinely different one this HOD has no direct access to - the backend
+  // (faculty-assignment-requests POST/GET) already routes a request to any
+  // department by id/name regardless of level, this was purely a front-end
+  // gap.
   const requestSection = sections.find((s) => s.id === assignForm.sectionId);
   const requestableDepartments = useMemo(
-    () => departments.filter((d) => !d.parentDepartmentId && d.name !== requestSection?.department && !ownScopeNames.has(d.name)),
+    () => departments.filter((d) => d.name !== requestSection?.department && !ownScopeNames.has(d.name)),
     [departments, requestSection, ownScopeNames]
   );
 
@@ -811,6 +876,8 @@ const effectiveSemester = semesterOptions.length === 0
           <CardContent>
             {!courseKey || !year ? (
               <p className="text-sm text-muted-foreground text-center py-6">Select a course and year above to see staffing gaps.</p>
+            ) : !subjectsSemesterReady ? (
+              <div className="space-y-2">{[1, 2, 3].map((i) => <div key={i} className="h-14 bg-muted animate-pulse rounded-lg" />)}</div>
             ) : subjects.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-6">No subjects defined yet for {course?.name} · {ordinalYear(Number(year))}.</p>
             ) : sections.length === 0 ? (
@@ -920,9 +987,16 @@ const effectiveSemester = semesterOptions.length === 0
                           <SelectValue placeholder={requestableDepartments.length ? "Select department" : "No other departments"} />
                         </SelectTrigger>
                         <SelectContent>
-                          {requestableDepartments.map((d) => (
-                            <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
-                          ))}
+                          {requestableDepartments.map((d) => {
+                            const parentName = d.parentDepartmentId
+                              ? departments.find((p) => p.id === d.parentDepartmentId)?.name
+                              : null;
+                            return (
+                              <SelectItem key={d.id} value={d.id}>
+                                {d.name}{parentName ? ` (${parentName})` : ""}
+                              </SelectItem>
+                            );
+                          })}
                         </SelectContent>
                       </Select>
                       <Button

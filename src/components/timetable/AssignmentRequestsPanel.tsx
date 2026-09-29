@@ -79,11 +79,20 @@ export function AssignmentRequestsPanel({ timetableHrefFor }: AssignmentRequests
     try {
       const [reqRes, facRes] = await Promise.all([
         fetch("/api/college/faculty-assignment-requests"),
-        // scope=own: you're lending one of YOUR faculty out, not a managed
-        // branch's - see college/faculty/route.ts. Harmless no-op for a
-        // Timetable Incharge caller, which is already restricted to its own
-        // department regardless of this param.
-        fetch("/api/college/faculty?availableOnly=true&scope=own"),
+        // No scope=own here (deliberately) - that param strips out even true
+        // sub-departments (see college/faculty/route.ts's own doc-comment),
+        // which broke lending for any parent/organizer department (e.g.
+        // "Basic Science") that never files faculty directly under its own
+        // name, only under its sub-departments - the Allocate picker below
+        // came back permanently empty for exactly the departments most likely
+        // to be asked to lend someone. Omitting it still excludes a managed/
+        // "core" branch's faculty (unconditional, regardless of this param) -
+        // you're lending one of YOUR OWN faculty out (own department + true
+        // sub-departments, the same tree canHodEditDepartment grants you),
+        // never a managed branch's. Harmless no-op for a Timetable Incharge
+        // caller, which is already restricted to its own department
+        // regardless of this param.
+        fetch("/api/college/faculty?availableOnly=true"),
       ]);
       const reqData = await reqRes.json() as { requests: FacultyAssignmentRequest[] };
       const facData = await facRes.json() as { faculty: FacultyMember[] };
