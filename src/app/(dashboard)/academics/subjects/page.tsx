@@ -2,12 +2,13 @@
 
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { BookOpen, Plus, Pencil, Trash2, Upload, FileSpreadsheet, FileText, Eye, EyeOff } from "lucide-react";
+import { BookOpen, Plus, Pencil, Trash2, Upload, FileSpreadsheet, FileText, Search, X, Eye, EyeOff } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { Pagination } from "@/components/shared/Pagination";
@@ -33,6 +34,7 @@ export default function AcademicsSubjectsPage() {
   const [deleteTarget, setDeleteTarget] = useState<Subject | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [searchText, setSearchText] = useState("");
 
   const selectedCourseId = searchParams.get("courseId") ?? "";
   const selectedRegulation = searchParams.get("regulation") ?? "";
@@ -117,8 +119,43 @@ export default function AcademicsSubjectsPage() {
     () => Math.max(0, ...subjects.map((s) => s.serialNumber ?? 0)) + 1,
     [subjects]
   );
-  const totalPages = Math.max(1, Math.ceil(sortedSubjects.length / pageSize));
-  const paginatedSubjects = sortedSubjects.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+  const filteredSubjects = useMemo(() => {
+    const query = searchText.trim().toLowerCase();
+    if (!query) return sortedSubjects;
+    return sortedSubjects.filter((s) => {
+      const haystack = [
+        s.name,
+        s.code,
+        s.shortCode,
+        s.category === "OTHER" ? (s.customCategory || "Other") : s.category,
+        s.type ? SUBJECT_TYPE_LABELS[s.type] ?? s.type : undefined,
+        s.regulation,
+        s.academicYear,
+        s.courseName,
+        s.department,
+        s.credits,
+        s.hoursPerWeek,
+        s.lectureHours,
+        s.tutorialHours,
+        s.practicalHours,
+        s.semester,
+        s.year,
+        s.serialNumber,
+      ]
+        .filter((v) => v !== undefined && v !== null)
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(query);
+    });
+  }, [sortedSubjects, searchText]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchText, selectedCourseId, selectedRegulation]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredSubjects.length / pageSize));
+  const paginatedSubjects = filteredSubjects.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   // Master subjects are course+regulation scoped, shared by every department
   // that teaches this catalog course - not owned by whichever department's
@@ -424,6 +461,28 @@ export default function AcademicsSubjectsPage() {
                     </div>
                 </div>
 
+                {subjects.length > 0 && (
+                  <div className="relative max-w-sm">
+                    <Search className="h-3.5 w-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      value={searchText}
+                      onChange={(e) => setSearchText(e.target.value)}
+                      placeholder="Search subjects by name, code, category, type…"
+                      className="pl-8 pr-8 h-9"
+                    />
+                    {searchText && (
+                      <button
+                        type="button"
+                        onClick={() => setSearchText("")}
+                        aria-label="Clear search"
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+                )}
+
                 {isLoadingSubjects ? (
                   <div className="space-y-2" aria-label="Loading subjects" aria-busy="true">
                     {[1, 2, 3].map((i) => <div key={i} className="h-16 rounded-lg border bg-muted/30 animate-pulse" />)}
@@ -441,6 +500,13 @@ export default function AcademicsSubjectsPage() {
                       {selectedRegulation && allowedRegulations.length > 0 && (
                         <p className="text-xs text-muted-foreground">Use the &quot;Add Subject&quot; button above to get started.</p>
                       )}
+                    </div>
+                  ) : filteredSubjects.length === 0 ? (
+                    <div className="flex flex-col items-center gap-2 py-8 text-center">
+                      <Search className="h-8 w-8 text-muted-foreground/40" aria-hidden="true" />
+                      <p className="text-sm font-medium text-muted-foreground">
+                        No subjects match &ldquo;{searchText}&rdquo;.
+                      </p>
                     </div>
                   ) : (
                    <>
@@ -524,7 +590,7 @@ export default function AcademicsSubjectsPage() {
                      <Pagination
                        page={currentPage}
                        pageSize={pageSize}
-                       total={sortedSubjects.length}
+                       total={filteredSubjects.length}
                        onPageChange={setCurrentPage}
                        onPageSizeChange={setPageSize}
                        disabled={isLoadingSubjects}

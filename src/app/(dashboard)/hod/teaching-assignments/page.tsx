@@ -81,6 +81,14 @@ export default function TeachingAssignmentsPage() {
   // department code is what tells them apart - see sectionDisplayLabel.
   const [departments, setDepartments] = useState<Department[]>([]);
   const [subjectsCache, setSubjectsCache] = useState<Record<string, Subject[]>>({});
+  // Raw SubjectSemesterAssignment rows behind subjectsCache[key] (same key,
+  // last semester fetched wins - mirrors subjectsCache itself). Kept
+  // separately, rather than collapsed into a subjectId-only Set as before,
+  // because each row's own departmentId/departmentName is what tells two
+  // sub-departments' identically-keyed (same course+year+semester) subject
+  // lists apart - see gapRows/availableSubjectsForAssign below, which mirror
+  // TeachingAssignmentsEditor.tsx's per-section department narrowing.
+  const [semesterAssignmentsCache, setSemesterAssignmentsCache] = useState<Record<string, SubjectSemesterAssignment[]>>({});
   // This course+year's configured semester numbers (union across every
   // course-doc id in the group - see CourseYearTiming.semesters) - empty
   // when none are configured, which keeps the semester picker below hidden
@@ -265,6 +273,7 @@ export default function TeachingAssignmentsPage() {
     [editableSections, filterDepartmentNames]
   );
   const subjects = useMemo(() => subjectsCache[key] ?? [], [subjectsCache, key]);
+  const semesterAssignments = useMemo(() => semesterAssignmentsCache[key] ?? [], [semesterAssignmentsCache, key]);
   const timings = useMemo(() => timingsCache[key] ?? [], [timingsCache, key]);
   // Union across every course-doc id in the group, sorted - a shared
   // programme's docs are all expected to agree on this, but union rather
@@ -340,11 +349,13 @@ const effectiveSemester = semesterOptions.length === 0
               )
             ),
       ]);
-      const assignedIds = new Set(assignLists.flat().map((a) => a.subjectId));
+      const flatAssignments = assignLists.flat();
+      const assignedIds = new Set(flatAssignments.map((a) => a.subjectId));
       const allSubjects = subjectsLists.flat();
       const byId = new Map(allSubjects.map((s) => [s.id, s]));
       const filtered = Array.from(byId.values()).filter((s) => assignedIds.has(s.id));
       setSubjectsCache((c) => ({ ...c, [key]: filtered }));
+      setSemesterAssignmentsCache((c) => ({ ...c, [key]: flatAssignments }));
     })();
   }, [key, year, activeCourseIds, effectiveSemester, course, courses]);
 
@@ -454,6 +465,45 @@ const effectiveSemester = semesterOptions.length === 0
     [assignmentRequests]
   );
 
+  // Which department(s) a subject was actually mapped to for this semester
+  // (see academics/subjects's "Assign to Semester" tab) - a subject with NO
+  // rows here at all (no semester concept configured for this course-year,
+  // so semesterAssignments is empty) is left unrestricted, matching this
+  // page's behavior from before per-department semester mapping existed.
+  // Mirrors TeachingAssignmentsEditor.tsx's own validDeptIds/validDeptNames
+  // narrowing, which is what this page was missing - without it, a subject
+  // mapped to ONE sub-department (e.g. BS-Chemistry) showed up in every
+  // OTHER sub-department's dropdown too, as long as they shared the same
+  // course+year+semester (the shared-first-year case in academicStructure.ts).
+  function subjectDepartmentSets(subjectId: string) {
+    const deptIds = new Set<string>();
+    const deptNames = new Set<string>();
+    for (const a of semesterAssignments) {
+      if (a.subjectId !== subjectId) continue;
+      if (a.departmentId) deptIds.add(a.departmentId);
+      const n = a.departmentName ?? a.department;
+      if (n) deptNames.add(n);
+    }
+    return { deptIds, deptNames };
+  }
+  // No fallback to "show it anyway" when a subject has no rows for THIS
+  // department - that's precisely a subject nobody has assigned to this
+  // department's semester yet, and offering it would let faculty get staffed
+  // onto a subject the HOD never confirmed applies to their own students.
+  // The one legitimate "unrestricted" case is a course-year with no semester
+  // concept configured at all (effectiveSemester == null) - subjects never
+  // went through per-department semester mapping there, so nothing here can
+  // narrow them and the page behaves exactly as it did before that mapping
+  // existed.
+  function sectionMatchesSubjectDepartment(section: SectionListItem, subjectId: string) {
+    if (effectiveSemester == null) return true;
+    const { deptIds, deptNames } = subjectDepartmentSets(subjectId);
+    const d = departments.find((dept) => dept.name === section.department);
+    if (d && deptIds.has(d.id)) return true;
+    if (section.department && deptNames.has(section.department)) return true;
+    return false;
+  }
+
   // Which subject/section combos for the selected course+year (and, once
   // this course-year has semesters configured, the selected semester) have
   // no faculty assigned yet. `subjects` itself is already narrowed to the
@@ -461,7 +511,9 @@ const effectiveSemester = semesterOptions.length === 0
   // subject's own `semester` mapping (see academics/subjects's "Assign to
   // Semester" tab) - switching semesters swaps in that semester's own subject
   // list, so a gap here is always for a subject actually offered this
-  // semester, not a stale cross-semester one.
+  // semester, not a stale cross-semester one. Sections are further narrowed
+  // to only the subject's own assigned department(s) - see
+  // sectionMatchesSubjectDepartment above.
   const gapRows = useMemo(() => {
     if (!courseKey || !year) return [];
     // Matched against every course-doc id in the group: an assignment stores
@@ -477,25 +529,28 @@ const effectiveSemester = semesterOptions.length === 0
           .map((a) => a.sectionId)
       );
       const unstaffedSections = sections
-        .filter((s) => !staffedSectionIds.has(s.id))
+        .filter((s) => !staffedSectionIds.has(s.id) && sectionMatchesSubjectDepartment(s, subject.id))
         .map((s) => ({ section: s, isRequested: pendingRequestKeys.has(`${s.id}_${subject.id}`) }));
       return { subject, unstaffedSections };
     });
-  }, [subjects, sections, assignments, courseKey, activeCourseIds, year, pendingRequestKeys, effectiveSemester]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subjects, sections, assignments, courseKey, activeCourseIds, year, pendingRequestKeys, effectiveSemester, semesterAssignments, departments]);
 
   // Subjects already staffed for the section picked in the assign-faculty form shouldn't be
   // offered again there - pick a different subject or remove the existing assignment first.
   // Same for one with a pending lend-request out - see pendingRequestKeys above. Also narrowed
-  // to the picked section's own curriculum regulation, if it has one set - lenient both ways,
+  // to the picked section's own curriculum regulation, if it has one set, AND to the picked
+  // section's own department (see sectionMatchesSubjectDepartment above) - lenient both ways,
   // same as TeachingAssignmentsEditor's own filter and api/college/subjects GET.
   const availableSubjectsForAssign = assignForm.sectionId
     ? (() => {
         const selectedSection = sections.find((s) => s.id === assignForm.sectionId);
         if (!selectedSection) return subjects;
-        const hasRegulationMatches = subjects.some(
+        const deptFilteredSubjects = subjects.filter((s) => sectionMatchesSubjectDepartment(selectedSection, s.id));
+        const hasRegulationMatches = deptFilteredSubjects.some(
           (s) => !selectedSection.regulation || !s.regulation || s.regulation === selectedSection.regulation
         );
-        return subjects.filter((s) => {
+        return deptFilteredSubjects.filter((s) => {
           if (hasRegulationMatches && selectedSection.regulation && s.regulation && s.regulation !== selectedSection.regulation) {
             return false;
           }
@@ -788,6 +843,8 @@ const effectiveSemester = semesterOptions.length === 0
           <CardContent>
             {!courseKey || !year ? (
               <p className="text-sm text-muted-foreground text-center py-6">Select a course and year above to assign faculty.</p>
+            ) : sections.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-6">No sections created yet for {course?.name} · {ordinalYear(Number(year))}.</p>
             ) : (
               <form onSubmit={handleAssign} className="space-y-3">
                 <div className="space-y-2">
