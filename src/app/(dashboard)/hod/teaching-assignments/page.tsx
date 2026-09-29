@@ -486,9 +486,18 @@ const effectiveSemester = semesterOptions.length === 0
     }
     return { deptIds, deptNames };
   }
+  // No fallback to "show it anyway" when a subject has no rows for THIS
+  // department - that's precisely a subject nobody has assigned to this
+  // department's semester yet, and offering it would let faculty get staffed
+  // onto a subject the HOD never confirmed applies to their own students.
+  // The one legitimate "unrestricted" case is a course-year with no semester
+  // concept configured at all (effectiveSemester == null) - subjects never
+  // went through per-department semester mapping there, so nothing here can
+  // narrow them and the page behaves exactly as it did before that mapping
+  // existed.
   function sectionMatchesSubjectDepartment(section: SectionListItem, subjectId: string) {
+    if (effectiveSemester == null) return true;
     const { deptIds, deptNames } = subjectDepartmentSets(subjectId);
-    if (deptIds.size === 0 && deptNames.size === 0) return true;
     const d = departments.find((dept) => dept.name === section.department);
     if (d && deptIds.has(d.id)) return true;
     if (section.department && deptNames.has(section.department)) return true;
@@ -834,6 +843,8 @@ const effectiveSemester = semesterOptions.length === 0
           <CardContent>
             {!courseKey || !year ? (
               <p className="text-sm text-muted-foreground text-center py-6">Select a course and year above to assign faculty.</p>
+            ) : sections.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-6">No sections created yet for {course?.name} · {ordinalYear(Number(year))}.</p>
             ) : (
               <form onSubmit={handleAssign} className="space-y-3">
                 <div className="space-y-2">

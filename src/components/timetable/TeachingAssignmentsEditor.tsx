@@ -294,7 +294,11 @@ export function TeachingAssignmentsEditor({ courseId, year, backHref }: Teaching
           if (sectionDeptId && a.departmentId) return a.departmentId === sectionDeptId;
           const aDeptName = a.departmentName ?? a.department;
           if (selectedSection.department && aDeptName) return aDeptName === selectedSection.department;
-          return true;
+          // No department info on this assignment row at all - never
+          // assumed to belong to this section. A subject nobody mapped to
+          // this section's department shouldn't be offered here just
+          // because the mapping is ambiguous.
+          return false;
         })
         .map((a) => a.subjectId)
     );
@@ -480,6 +484,9 @@ export function TeachingAssignmentsEditor({ courseId, year, backHref }: Teaching
         <Card>
           <CardHeader className="pb-3"><CardTitle className="text-base">Assign Faculty</CardTitle></CardHeader>
           <CardContent>
+            {sections.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-6">No sections created yet for this year.</p>
+            ) : (
             <form onSubmit={handleAssign} className="space-y-3">
               <div className="space-y-2">
                 <Label>Section</Label>
@@ -569,6 +576,7 @@ export function TeachingAssignmentsEditor({ courseId, year, backHref }: Teaching
                 </div>
               )}
             </form>
+            )}
           </CardContent>
         </Card>
       </div>
