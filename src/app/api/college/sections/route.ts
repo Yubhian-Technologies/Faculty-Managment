@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodEditDepartmentId } from "@/lib/departments/scope";
-import { findBranchManager, resolveBranchYearOwner, type DepartmentYearRow } from "@/lib/departments/managedBranches";
+import { classifySectionForHod, findBranchManager, resolveBranchYearOwner, type DepartmentYearRow } from "@/lib/departments/managedBranches";
 import { getFacultyIdCandidates, resolveLoginUidForFacultyMember } from "@/lib/faculty/resolveFacultyMemberId";
 import { resolveDepartmentCourseScope, regulationsForCourseYearByBatch, regulationsForBatchStartYear, isDeclaredFeederFor } from "@/lib/college/academicStructure";
 import { parseBatchStartYear, deriveBatch, parseAcademicYearStart, currentAcademicStartYear } from "@/lib/college/academicSession";
@@ -223,8 +223,13 @@ export async function GET(request: Request) {
         let accessLevel: "primary" | "secondary" = "primary";
         if (hodDepartments.length > 0) {
           const catalogId = catalogIdByCourseId.get(data.courseId as string);
-          const owner = resolveBranchYearOwner(hodDepartments, deptName, data.year as number, catalogId);
-          if (!hodScope!.ownDepartmentNames.includes(owner) && !hodScope!.childDepartmentNames.includes(owner)) accessLevel = "secondary";
+          // primary: this year is theirs. secondary: a true sub-department whose
+          // year a shared-year manager runs (read-only). hidden: reached only via
+          // managedDepartments and the year belongs to the branch's own HOD - a
+          // manager runs the shared year and nothing else (see classifySectionForHod).
+          const visibility = classifySectionForHod(hodScope!, hodDepartments, deptName, data.year as number, catalogId);
+          if (visibility === "hidden") continue;
+          accessLevel = visibility;
         }
         seenIds.add(d.id);
         sections.push({ id: d.id, ...data, accessLevel });
