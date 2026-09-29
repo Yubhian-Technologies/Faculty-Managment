@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, X, Clock, CalendarRange } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Plus, X, Clock, CalendarRange, Coffee, CheckCircle2, AlertCircle } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -66,10 +66,14 @@ const EMPTY_TIMING_FORM: TimingForm = {
 // duplicated or out of sequence. Existing rows keep whatever dates they
 // already had (by position); growing the count appends blank new rows,
 // shrinking it drops from the end.
-function resizeSemesters(current: SemesterRangeForm[], count: number): SemesterRangeForm[] {
-  const next = current.slice(0, count).map((s, i) => ({ ...s, semester: i + 1 }));
+function resizeSemesters(current: SemesterRangeForm[], count: number, year: number = 1): SemesterRangeForm[] {
+  const next = current.slice(0, count).map((s, i) => ({
+    ...s,
+    semester: s.semester || (year > 1 ? (year - 1) * 2 + (i + 1) : i + 1),
+  }));
   for (let i = next.length; i < count; i++) {
-    next.push({ semester: i + 1, startDate: "", endDate: "" });
+    const defaultSem = year > 1 ? (year - 1) * 2 + (i + 1) : i + 1;
+    next.push({ semester: defaultSem, startDate: "", endDate: "" });
   }
   return next;
 }
@@ -167,7 +171,7 @@ export function CourseYearTimingForm({ departmentId, courseId, year, onSaved, on
 
   function setNumberOfSemesters(value: string) {
     const count = Math.max(0, Number(value) || 0);
-    setTimingForm((f) => ({ ...f, numberOfSemesters: String(count), semesters: resizeSemesters(f.semesters, count) }));
+    setTimingForm((f) => ({ ...f, numberOfSemesters: String(count), semesters: resizeSemesters(f.semesters, count, year) }));
   }
   function updateSemester(idx: number, patch: Partial<SemesterRangeForm>) {
     setTimingForm((f) => {
@@ -261,119 +265,113 @@ export function CourseYearTimingForm({ departmentId, courseId, year, onSaved, on
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base flex items-center gap-2">
-          <Clock className="h-4 w-4" />
-          Timing Details
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <form onSubmit={handleSubmit} className="space-y-5">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label>College Start Time</Label>
-              <Input
-                type="time"
-                value={timingForm.collegeStartTime}
-                onChange={(e) => setTimingForm((f) => ({ ...f, collegeStartTime: e.target.value }))}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>College End Time</Label>
-              <Input
-                type="time"
-                value={timingForm.collegeEndTime}
-                onChange={(e) => setTimingForm((f) => ({ ...f, collegeEndTime: e.target.value }))}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Number of Periods</Label>
-              <Input
-                type="number"
-                min={1}
-                value={timingForm.numberOfPeriods}
-                onChange={(e) => setTimingForm((f) => ({ ...f, numberOfPeriods: stripLeadingZeros(e.target.value) }))}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Period Duration (minutes)</Label>
-              <Input
-                type="number"
-                min={1}
-                value={timingForm.periodDurationMinutes}
-                onChange={(e) => setTimingForm((f) => ({ ...f, periodDurationMinutes: stripLeadingZeros(e.target.value) }))}
-              />
-            </div>
-          </div>
-
-          <div
-            className={`rounded-md border p-3 text-sm ${
-              exceedsAvailableTime ? "border-destructive/50 bg-destructive/10 text-destructive" : "bg-muted/30 text-muted-foreground"
-            }`}
-          >
-            <p>
-              Periods + breaks need <strong>{formatDuration(totalRequiredMinutes)}</strong>
-              {availableMinutes !== null && availableMinutes > 0 && (
-                <> of the <strong>{formatDuration(availableMinutes)}</strong> available ({timingForm.collegeStartTime}–{timingForm.collegeEndTime})</>
-              )}
-              .
-            </p>
-            {exceedsAvailableTime && (
-              <p className="mt-1 font-medium">
-                That&rsquo;s {formatDuration(totalRequiredMinutes - (availableMinutes ?? 0))} more than the college day allows - shorten the
-                periods/breaks or extend the college day before saving.
-              </p>
-            )}
-            {availableMinutes !== null && availableMinutes <= 0 && (
-              <p className="mt-1 font-medium">College End Time must be after College Start Time.</p>
-            )}
-          </div>
-
-          <div className="space-y-2">
-            <Label>Lunch Break</Label>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <p className="text-xs text-muted-foreground">After Period #</p>
-                <Input
-                  type="number"
-                  min={1}
-                  value={timingForm.lunchBreak.afterPeriod}
-                  onChange={(e) => setTimingForm((f) => ({ ...f, lunchBreak: { ...f.lunchBreak, afterPeriod: Number(e.target.value) } }))}
-                />
+    <form onSubmit={handleSubmit} className="space-y-6">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        {/* Left Column (7 cols): College Schedule & Periods */}
+        <div className="lg:col-span-7 space-y-6">
+          <Card className="rounded-xl border shadow-xs">
+            <CardHeader className="pb-4">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Clock className="h-4 w-4 text-primary" />
+                College Hours & Periods
+              </CardTitle>
+              <CardDescription>
+                Define the overall college day start/end times and individual period lengths.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>College Start Time</Label>
+                  <Input
+                    type="time"
+                    value={timingForm.collegeStartTime}
+                    onChange={(e) => setTimingForm((f) => ({ ...f, collegeStartTime: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>College End Time</Label>
+                  <Input
+                    type="time"
+                    value={timingForm.collegeEndTime}
+                    onChange={(e) => setTimingForm((f) => ({ ...f, collegeEndTime: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Number of Teaching Periods</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    value={timingForm.numberOfPeriods}
+                    onChange={(e) => setTimingForm((f) => ({ ...f, numberOfPeriods: stripLeadingZeros(e.target.value) }))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Period Duration (minutes)</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    value={timingForm.periodDurationMinutes}
+                    onChange={(e) => setTimingForm((f) => ({ ...f, periodDurationMinutes: stripLeadingZeros(e.target.value) }))}
+                  />
+                </div>
               </div>
-              <div className="space-y-1">
-                <p className="text-xs text-muted-foreground">Duration (minutes)</p>
-                <Input
-                  type="number"
-                  min={1}
-                  value={timingForm.lunchBreak.durationMinutes}
-                  onChange={(e) => setTimingForm((f) => ({ ...f, lunchBreak: { ...f.lunchBreak, durationMinutes: Number(e.target.value) } }))}
-                />
-              </div>
-            </div>
-          </div>
 
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label>Short Breaks</Label>
-              <Button type="button" variant="outline" size="sm" onClick={addShortBreak}>
-                <Plus className="h-3.5 w-3.5 mr-1" />Add Short Break
-              </Button>
-            </div>
-            {timingForm.shortBreaks.length === 0 && (
-              <p className="text-xs text-muted-foreground">No short breaks added.</p>
-            )}
-            {timingForm.shortBreaks.map((sb, idx) => (
-              <div key={idx} className="flex items-center gap-2 rounded-md bg-muted/30 p-2">
-                <div className="flex-1 grid grid-cols-2 gap-2">
+              {/* Day Time Budget Card */}
+              <div
+                className={`rounded-lg border p-3.5 text-xs ${
+                  exceedsAvailableTime
+                    ? "border-destructive/50 bg-destructive/10 text-destructive"
+                    : "border-border/60 bg-muted/20 text-muted-foreground"
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  {exceedsAvailableTime ? (
+                    <AlertCircle className="h-4 w-4 shrink-0 text-destructive" />
+                  ) : (
+                    <CheckCircle2 className="h-4 w-4 shrink-0 text-primary" />
+                  )}
+                  <p>
+                    Periods + breaks total: <strong className="text-foreground">{formatDuration(totalRequiredMinutes)}</strong>
+                    {availableMinutes !== null && availableMinutes > 0 && (
+                      <> of <strong className="text-foreground">{formatDuration(availableMinutes)}</strong> available ({timingForm.collegeStartTime} – {timingForm.collegeEndTime})</>
+                    )}
+                  </p>
+                </div>
+                {exceedsAvailableTime && (
+                  <p className="mt-1.5 pl-6 font-medium text-destructive">
+                    Exceeds the college day by {formatDuration(totalRequiredMinutes - (availableMinutes ?? 0))}. Please adjust periods or breaks.
+                  </p>
+                )}
+                {availableMinutes !== null && availableMinutes <= 0 && (
+                  <p className="mt-1.5 pl-6 font-medium text-destructive">College End Time must be after College Start Time.</p>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Breaks & Recess Card */}
+          <Card className="rounded-xl border shadow-xs">
+            <CardHeader className="pb-4">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Coffee className="h-4 w-4 text-primary" />
+                Lunch & Recess Breaks
+              </CardTitle>
+              <CardDescription>
+                Configure midday lunch break and any scheduled short recess breaks.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              <div className="space-y-2">
+                <Label className="font-semibold text-xs text-foreground uppercase tracking-wider">Lunch Break</Label>
+                <div className="grid grid-cols-2 gap-3 p-3 rounded-lg border bg-muted/15">
                   <div className="space-y-1">
                     <p className="text-xs text-muted-foreground">After Period #</p>
                     <Input
                       type="number"
                       min={1}
-                      value={sb.afterPeriod}
-                      onChange={(e) => updateShortBreak(idx, { afterPeriod: Number(e.target.value) })}
+                      value={timingForm.lunchBreak.afterPeriod}
+                      onChange={(e) => setTimingForm((f) => ({ ...f, lunchBreak: { ...f.lunchBreak, afterPeriod: Number(e.target.value) } }))}
                     />
                   </div>
                   <div className="space-y-1">
@@ -381,83 +379,156 @@ export function CourseYearTimingForm({ departmentId, courseId, year, onSaved, on
                     <Input
                       type="number"
                       min={1}
-                      value={sb.durationMinutes}
-                      onChange={(e) => updateShortBreak(idx, { durationMinutes: Number(e.target.value) })}
+                      value={timingForm.lunchBreak.durationMinutes}
+                      onChange={(e) => setTimingForm((f) => ({ ...f, lunchBreak: { ...f.lunchBreak, durationMinutes: Number(e.target.value) } }))}
                     />
                   </div>
                 </div>
-                <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => removeShortBreak(idx)}>
-                  <X className="h-3.5 w-3.5 text-destructive" />
-                </Button>
               </div>
-            ))}
-          </div>
 
-          <div className="space-y-3 border-t pt-4">
-            <Label className="flex items-center gap-1.5">
-              <CalendarRange className="h-3.5 w-3.5" />
-              Semester Durations
-            </Label>
-            <p className="text-xs text-muted-foreground">
-              Distinct from the college-day timings above - this is the academic calendar: which months make up each
-              semester. Which one is &ldquo;current&rdquo; for the timetable follows whichever semester today&rsquo;s
-              date falls within.
-            </p>
-            {sessionBounds && (
-              <p className="text-xs text-muted-foreground">
-                Must fall within the {sessionBounds.label ?? "current"} academic year: {sessionBounds.startDate} to {sessionBounds.endDate}.
-              </p>
-            )}
-            <div className="space-y-1 max-w-[10rem]">
-              <p className="text-xs text-muted-foreground">Number of Semesters</p>
-              <Input
-                type="number"
-                min={0}
-                value={timingForm.numberOfSemesters}
-                onChange={(e) => setNumberOfSemesters(stripLeadingZeros(e.target.value))}
-              />
-            </div>
-            {timingForm.semesters.length === 0 ? (
-              <p className="text-xs text-muted-foreground">
-                0 semesters - this year runs as one continuous timetable until a count is set above.
-              </p>
-            ) : (
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                {timingForm.semesters.map((s, idx) => (
-                  <div key={idx} className="space-y-1.5 rounded-md border p-3">
-                    <Label className="text-xs">Semester {s.semester}</Label>
-                    <div className="grid grid-cols-2 gap-2 pt-1">
-                      <div className="space-y-1">
-                        <p className="text-[11px] text-muted-foreground">Start</p>
-                        <Input
-                          type="date"
-                          value={s.startDate}
-                          onChange={(e) => updateSemester(idx, { startDate: e.target.value })}
-                        />
+              <div className="space-y-2 pt-2 border-t border-border/50">
+                <div className="flex items-center justify-between">
+                  <Label className="font-semibold text-xs text-foreground uppercase tracking-wider">Short Recess Breaks</Label>
+                  <Button type="button" variant="outline" size="sm" onClick={addShortBreak} className="h-7 text-xs">
+                    <Plus className="h-3 w-3 mr-1" />Add Short Break
+                  </Button>
+                </div>
+                {timingForm.shortBreaks.length === 0 ? (
+                  <p className="text-xs text-muted-foreground italic py-1">No short breaks configured for this year.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {timingForm.shortBreaks.map((sb, idx) => (
+                      <div key={idx} className="flex items-center gap-2 rounded-lg border bg-muted/15 p-2.5">
+                        <div className="flex-1 grid grid-cols-2 gap-2">
+                          <div className="space-y-1">
+                            <p className="text-xs text-muted-foreground">After Period #</p>
+                            <Input
+                              type="number"
+                              min={1}
+                              value={sb.afterPeriod}
+                              onChange={(e) => updateShortBreak(idx, { afterPeriod: Number(e.target.value) })}
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <p className="text-xs text-muted-foreground">Duration (minutes)</p>
+                            <Input
+                              type="number"
+                              min={1}
+                              value={sb.durationMinutes}
+                              onChange={(e) => updateShortBreak(idx, { durationMinutes: Number(e.target.value) })}
+                            />
+                          </div>
+                        </div>
+                        <Button type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive" onClick={() => removeShortBreak(idx)}>
+                          <X className="h-4 w-4" />
+                        </Button>
                       </div>
-                      <div className="space-y-1">
-                        <p className="text-[11px] text-muted-foreground">End</p>
-                        <Input
-                          type="date"
-                          value={s.endDate}
-                          onChange={(e) => updateSemester(idx, { endDate: e.target.value })}
-                        />
+                    ))}
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Right Column (5 cols): Semesters & Calendar Ranges */}
+        <div className="lg:col-span-5 space-y-6">
+          <Card className="rounded-xl border shadow-xs">
+            <CardHeader className="pb-4">
+              <CardTitle className="text-base flex items-center gap-2">
+                <CalendarRange className="h-4 w-4 text-primary" />
+                Semester Calendar Ranges
+              </CardTitle>
+              <CardDescription>
+                Define start and end dates for each semester of Year {year}.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {sessionBounds && (
+                <div className="rounded-md border border-border/60 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+                  <span className="font-semibold text-foreground">{sessionBounds.label ?? "Academic Session"}:</span> {sessionBounds.startDate} to {sessionBounds.endDate}
+                </div>
+              )}
+
+              <div className="space-y-1.5">
+                <Label htmlFor="num-semesters">Number of Semesters in Year {year}</Label>
+                <Input
+                  id="num-semesters"
+                  type="number"
+                  min={0}
+                  max={6}
+                  value={timingForm.numberOfSemesters}
+                  onChange={(e) => setNumberOfSemesters(stripLeadingZeros(e.target.value))}
+                  className="max-w-[12rem]"
+                />
+              </div>
+
+              {timingForm.semesters.length === 0 ? (
+                <div className="rounded-lg border border-dashed p-6 text-center text-xs text-muted-foreground">
+                  0 semesters configured. Enter a number above to define semester durations.
+                </div>
+              ) : (
+                <div className="space-y-3 pt-2">
+                  {timingForm.semesters.map((s, idx) => (
+                    <div key={idx} className="rounded-lg border bg-card p-3.5 space-y-2 shadow-2xs">
+                      <div className="flex items-center justify-between pb-1 border-b border-border/40">
+                        <span className="text-xs font-bold text-foreground">Semester #{s.semester}</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[11px] text-muted-foreground">Sem No:</span>
+                          <Input
+                            type="number"
+                            min={1}
+                            max={12}
+                            className="h-6 w-14 text-xs text-center px-1 py-0 font-bold"
+                            value={s.semester}
+                            onChange={(e) => updateSemester(idx, { semester: Math.max(1, Number(e.target.value) || 1) })}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2.5 pt-1">
+                        <div className="space-y-1">
+                          <Label className="text-[11px] text-muted-foreground">Start Date</Label>
+                          <Input
+                            type="date"
+                            value={s.startDate}
+                            onChange={(e) => updateSemester(idx, { startDate: e.target.value })}
+                            className="text-xs"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-[11px] text-muted-foreground">End Date</Label>
+                          <Input
+                            type="date"
+                            value={s.endDate}
+                            onChange={(e) => updateSemester(idx, { endDate: e.target.value })}
+                            className="text-xs"
+                          />
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
 
-          <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end pt-4 border-t">
-            <Button type="button" variant="outline" onClick={onCancel}>Cancel</Button>
-            <Button type="submit" loading={isSaving} disabled={exceedsAvailableTime || (availableMinutes !== null && availableMinutes <= 0)}>
-              Save Timings
-            </Button>
-          </div>
-        </form>
-      </CardContent>
-    </Card>
+      {/* Sticky Bottom Actions Bar */}
+      <div className="flex items-center justify-end gap-3 pt-4 border-t bg-background">
+        <Button type="button" variant="outline" onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button
+          type="submit"
+          loading={isSaving}
+          disabled={exceedsAvailableTime || (availableMinutes !== null && availableMinutes <= 0)}
+          className="min-w-[120px]"
+        >
+          Save Timings
+        </Button>
+      </div>
+    </form>
   );
 }

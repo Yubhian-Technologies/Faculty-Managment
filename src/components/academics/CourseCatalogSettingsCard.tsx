@@ -5,7 +5,6 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { Plus, Pencil, Trash2, Check, X, GraduationCap, AlertTriangle, ChevronDown } from "lucide-react";
 import { toast } from "@/hooks/useToast";
@@ -577,149 +576,153 @@ export function CourseCatalogSettingsCard({ readOnly = false, regulationsOnly = 
 
         {/* List */}
         {isLoading ? (
-          <div className="space-y-2">
-            {[1, 2].map((i) => <div key={i} className="h-12 bg-muted animate-pulse rounded-lg" />)}
+          <div className="grid gap-4 sm:grid-cols-2">
+            {[1, 2].map((i) => <div key={i} className="h-32 bg-muted animate-pulse rounded-lg" />)}
           </div>
         ) : items.length === 0 ? (
           <p className="text-sm text-muted-foreground text-center py-4">
             No courses yet. Add your college&apos;s courses above so departments can select them.
           </p>
         ) : (
-          <ul className="divide-y rounded-lg border">
+          <div className="grid gap-4 sm:grid-cols-2">
             {items.map((item) => {
               const isEditing = !readOnly && editingId === item.id;
               const busy = busyId === item.id;
+              const depts = departmentsByCatalogId.get(item.id) ?? [];
               return (
-                <li key={item.id} className="p-3 space-y-2">
-                  <div className="flex flex-wrap items-center gap-3">
+                <Card key={item.id} className={`flex flex-col ${!item.isActive ? "opacity-60" : ""}`}>
+                  <CardContent className="flex flex-col flex-1 p-4">
                     {isEditing ? (
-                      <>
+                      <div className="space-y-3">
                         {regulationsOnly ? (
-                          <div className="flex-1 min-w-40">
-                            <p className="text-sm font-medium">{item.name}</p>
+                          <div>
+                            <p className="text-sm font-semibold">{item.name}</p>
                             <p className="text-xs text-muted-foreground">
                               {item.code} · {item.durationYears} {item.durationYears === 1 ? "year" : "years"}
                             </p>
                           </div>
                         ) : (
-                          <>
-                            <Input
-                              value={editDraft.name}
-                              onChange={(e) => setEditDraft((d) => ({ ...d, name: e.target.value }))}
-                              className="flex-1 min-w-40"
-                            />
-                            <Input
-                              value={editDraft.code}
-                              onChange={(e) => setEditDraft((d) => ({ ...d, code: e.target.value.toUpperCase() }))}
-                              className="w-28 uppercase"
-                              maxLength={10}
-                            />
-                            <Input
-                              type="number"
-                              min={1}
-                              max={10}
-                              value={editDraft.durationYears}
-                              onChange={(e) => setEditDraft((d) => ({ ...d, durationYears: stripLeadingZeros(e.target.value) }))}
-                              className="w-20"
-                            />
-                          </>
-                        )}
-                        <div className="flex gap-1 ml-auto">
-                          <Button size="icon" variant="ghost" onClick={() => saveEdit(item.id)} loading={busy} aria-label="Save">
-                            <Check className="h-4 w-4" />
-                          </Button>
-                          <Button size="icon" variant="ghost" onClick={() => setEditingId(null)} disabled={busy} aria-label="Cancel">
-                            <X className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        <div className="flex-1 min-w-40">
-                          <p className="text-sm font-medium">
-                            {item.name}
-                            {!item.isActive && <Badge variant="secondary" className="ml-2 text-[10px]">Inactive</Badge>}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            {item.code} · {item.durationYears} {item.durationYears === 1 ? "year" : "years"}
-                          </p>
-                        </div>
-                        {!readOnly && (
-                          <div className="flex gap-1 ml-auto">
-                            {canCreate && (
-                              <Button size="sm" variant="ghost" onClick={() => setToggleTarget(item)} disabled={busy}>
-                                {item.isActive ? "Deactivate" : "Activate"}
-                              </Button>
-                            )}
-                            <Button size="icon" variant="ghost" onClick={() => startEdit(item)} aria-label="Edit">
-                              <Pencil className="h-4 w-4" />
-                            </Button>
-                            {canCreate && (
-                              <Button size="icon" variant="ghost" onClick={() => setDeleteTarget(item)} aria-label="Delete">
-                                <Trash2 className="h-4 w-4 text-destructive" />
-                              </Button>
-                            )}
+                          <div className="space-y-2">
+                            <div className="space-y-1">
+                              <Label className="text-xs">Course Name</Label>
+                              <Input
+                                value={editDraft.name}
+                                onChange={(e) => setEditDraft((d) => ({ ...d, name: e.target.value }))}
+                              />
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                              <div className="space-y-1">
+                                <Label className="text-xs">Code</Label>
+                                <Input
+                                  value={editDraft.code}
+                                  onChange={(e) => setEditDraft((d) => ({ ...d, code: e.target.value.toUpperCase() }))}
+                                  className="uppercase"
+                                  maxLength={10}
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <Label className="text-xs">Duration (years)</Label>
+                                <Input
+                                  type="number"
+                                  min={1}
+                                  max={10}
+                                  value={editDraft.durationYears}
+                                  onChange={(e) => setEditDraft((d) => ({ ...d, durationYears: stripLeadingZeros(e.target.value) }))}
+                                />
+                              </div>
+                            </div>
                           </div>
                         )}
+                        <div className="space-y-1">
+                          <Label className="text-[11px] text-muted-foreground">Regulations</Label>
+                          <RegulationBatchesEditor
+                            draft={editDraft}
+                            setDraft={setEditDraft}
+                            courseDurationYears={Number(editDraft.durationYears) || item.durationYears || 10}
+                            knownCodes={knownRegulationCodes}
+                            listId={`edit-course-regulations-${item.id}`}
+                            showHint={!showDepartments}
+                          />
+                        </div>
+                        <div className="flex justify-end gap-2 pt-2 border-t border-border/50">
+                          <Button size="sm" variant="outline" onClick={() => setEditingId(null)} disabled={busy}>
+                            Cancel
+                          </Button>
+                          <Button size="sm" onClick={() => saveEdit(item.id)} loading={busy}>
+                            <Check className="h-3.5 w-3.5 mr-1" /> Save
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        {/* Header: name + actions */}
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-semibold leading-snug">{item.name}</p>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              {item.code} · {item.durationYears} {item.durationYears === 1 ? "year" : "years"}
+                              {!item.isActive && <span className="ml-1.5 text-[10px] font-medium text-orange-500 uppercase tracking-wide">Inactive</span>}
+                            </p>
+                          </div>
+                          {!readOnly && (
+                            <div className="flex gap-0.5 shrink-0">
+                              {canCreate && (
+                                <Button size="sm" variant="ghost" className="h-7 text-xs px-2" onClick={() => setToggleTarget(item)} disabled={busy}>
+                                  {item.isActive ? "Deactivate" : "Activate"}
+                                </Button>
+                              )}
+                              <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => startEdit(item)} aria-label="Edit">
+                                <Pencil className="h-3.5 w-3.5" />
+                              </Button>
+                              {canCreate && (
+                                <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => setDeleteTarget(item)} aria-label="Delete">
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Departments - plain text */}
+                        {showDepartments && (
+                          <p className="text-xs text-muted-foreground mt-2 line-clamp-2">
+                            <span className="font-medium text-foreground">Departments:</span>{" "}
+                            {depts.length === 0 ? "none yet" : depts.map((d) => `${d.name} (${d.code})`).join(", ")}
+                          </p>
+                        )}
+
+                        {/* Regulations - concise text */}
+                        <div className="mt-2 flex-1">
+                          {(item.regulations ?? []).length === 0 ? (
+                            <p className="flex items-center gap-1.5 text-xs text-amber-600">
+                              <AlertTriangle className="h-3 w-3 shrink-0" /> No regulations assigned
+                            </p>
+                          ) : (
+                            <div className="space-y-1">
+                              {(item.regulations ?? []).map((r) => {
+                                const batches = item.regulationBatches?.[r];
+                                return (
+                                  <p key={r} className="text-xs text-muted-foreground">
+                                    <span className="font-mono font-medium text-foreground">{r}</span>
+                                    {batches ? <span className="ml-1.5">{batches}</span> : ""}
+                                  </p>
+                                );
+                              })}
+                              {(item.regulations ?? []).some((r) => !item.regulationBatches?.[r]) && (
+                                <p className="flex items-center gap-1 text-xs text-amber-600">
+                                  <AlertTriangle className="h-3 w-3 shrink-0" /> Some regulations need intake batches. Edit to fix.
+                                </p>
+                              )}
+                            </div>
+                          )}
+                        </div>
                       </>
                     )}
-                  </div>
-
-                  {showDepartments && !isEditing && (
-                    <div className="flex flex-wrap items-center gap-1.5 text-xs">
-                      <span className="text-muted-foreground">Departments:</span>
-                      {(departmentsByCatalogId.get(item.id) ?? []).length === 0 ? (
-                        <span className="text-muted-foreground">none yet</span>
-                      ) : (
-                        (departmentsByCatalogId.get(item.id) ?? []).map((d) => (
-                          <Badge key={d.id} variant="outline" className="text-xs">
-                            {d.name} <span className="ml-1 font-mono text-muted-foreground">{d.code}</span>
-                          </Badge>
-                        ))
-                      )}
-                    </div>
-                  )}
-
-                  {isEditing ? (
-                    <div className="space-y-1">
-                      <Label className="text-[11px] text-muted-foreground">Regulations for this course</Label>
-                      <RegulationBatchesEditor
-                        draft={editDraft}
-                        setDraft={setEditDraft}
-                        courseDurationYears={Number(editDraft.durationYears) || item.durationYears || 10}
-                        knownCodes={knownRegulationCodes}
-                        listId={`edit-course-regulations-${item.id}`}
-                        showHint={!showDepartments}
-                      />
-                    </div>
-                  ) : (item.regulations ?? []).length === 0 ? (
-                    <p className="flex items-center gap-1 text-xs text-amber-600">
-                      <AlertTriangle className="h-3 w-3" /> No regulations assigned yet - subjects can still be added without one, but won&apos;t be tagged with a curriculum regulation until you add one here.
-                    </p>
-                  ) : (
-                    <div className="space-y-1">
-                      <div className="flex flex-wrap gap-1.5">
-                        {(item.regulations ?? []).map((r) => {
-                          const batches = item.regulationBatches?.[r];
-                          return (
-                            <Badge key={r} variant="secondary" className="text-xs">
-                              {r}{batches ? ` — ${batches}` : ""}
-                            </Badge>
-                          );
-                        })}
-                      </div>
-                      {(item.regulations ?? []).some((r) => !item.regulationBatches?.[r]) && (
-                        <p className="flex items-center gap-1 text-xs text-amber-600">
-                          <AlertTriangle className="h-3 w-3" /> Some regulations have no intake batches set (carried over from the
-                          old catalog). Edit this course and re-add each one with a starting year so it shows up in Sections and Subjects.
-                        </p>
-                      )}
-                    </div>
-                  )}
-                </li>
+                  </CardContent>
+                </Card>
               );
             })}
-          </ul>
+          </div>
         )}
       </CardContent>
 

@@ -6,7 +6,9 @@ import { ArrowLeft, Download, FileText } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/useToast";
+import { resolveStudentDocumentTypeLabel } from "@/types";
 import type { StudentDocument } from "@/types";
 
 // Student's own documents - the office-uploaded certificates list, shown
@@ -51,7 +53,9 @@ export default function StudentDocumentsPage() {
             <a key={d.id} href={d.fileUrl} target="_blank" rel="noopener noreferrer">
               <Card className="hover:bg-muted/20 transition-colors cursor-pointer h-full">
                 <CardContent className="p-4 space-y-2">
-                  <p className="font-medium text-sm text-foreground line-clamp-2">{d.title}</p>
+                  <Badge variant="outline" className="rounded-full bg-primary/10 text-primary border-primary/20 font-medium">
+                    {resolveStudentDocumentTypeLabel(d)}
+                  </Badge>
                   {d.description && <p className="text-xs text-muted-foreground line-clamp-2">{d.description}</p>}
                   <div className="flex items-center gap-1.5 pt-2 border-t border-border/60 text-xs text-primary font-medium">
                     <Download className="h-3.5 w-3.5" /> Download

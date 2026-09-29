@@ -164,8 +164,16 @@ export default function AcademicsSubjectsPage() {
   // of which department's doc `courseId` (still needed to file a NEW subject
   // against a real Course doc, below) resolves to. Falls back to `courseId`
   // only for the rare legacy Course doc with no catalogId set.
+  // Guards against an out-of-order response: switching Course/Regulation
+  // quickly fires a new fetch before the previous one lands, and network
+  // order isn't call order - without this, a stale response for the OLD
+  // selection can resolve last and overwrite the list with the wrong
+  // course/regulation's subjects. Only the most recently STARTED call's
+  // response is ever applied.
+  const subjectsRequestIdRef = useRef(0);
   const loadSubjects = useCallback(async (courseId: string, academicYear: string, regulation: string, catalogId?: string) => {
     if (!courseId || !regulation) { setSubjects([]); return; }
+    const requestId = ++subjectsRequestIdRef.current;
     setIsLoadingSubjects(true);
     try {
       const scopeParam = catalogId ? `catalogId=${encodeURIComponent(catalogId)}` : `courseId=${encodeURIComponent(courseId)}`;
@@ -174,11 +182,13 @@ export default function AcademicsSubjectsPage() {
         `/api/college/subjects?${scopeParam}${regulationParam}${academicYear ? `&academicYear=${encodeURIComponent(academicYear)}` : ""}`
       );
       const data = await res.json() as { subjects: Subject[] };
+      if (requestId !== subjectsRequestIdRef.current) return;
       setSubjects(data.subjects ?? []);
     } catch {
+      if (requestId !== subjectsRequestIdRef.current) return;
       toast({ variant: "destructive", title: "Failed to load subjects" });
     } finally {
-      setIsLoadingSubjects(false);
+      if (requestId === subjectsRequestIdRef.current) setIsLoadingSubjects(false);
     }
   }, []);
 

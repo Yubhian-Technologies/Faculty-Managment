@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, TrendingDown, TrendingUp } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { TableSkeleton } from "@/components/shared/SkeletonLoader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -32,9 +33,9 @@ export default function StudentAttendancePage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <PageHeader title="My Attendance" description="Your cumulative attendance by subject" />
-        <Button asChild variant="outline" size="sm">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-card/90 backdrop-blur-sm p-5 rounded-3xl border border-border/60 shadow-xs">
+        <PageHeader title="My Attendance" description="Your cumulative attendance by subject" className="mb-0" />
+        <Button asChild variant="outline" size="sm" className="rounded-full border-border/60">
           <Link href="/student">
             <ArrowLeft className="h-4 w-4 mr-1.5" /> Back to Dashboard
           </Link>
@@ -42,15 +43,17 @@ export default function StudentAttendancePage() {
       </div>
 
       {isLoading ? (
-        <div className="h-64 rounded-xl border bg-muted/30 animate-pulse" />
+        <div className="rounded-3xl border border-border/60 bg-card/90 shadow-xs p-4">
+          <TableSkeleton rows={5} cols={5} />
+        </div>
       ) : !attendance || attendance.subjects.length === 0 ? (
-        <div className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground bg-muted/10">
+        <div className="rounded-3xl border border-dashed p-8 text-center text-sm text-muted-foreground bg-muted/10">
           <p className="font-semibold text-foreground text-base">No Attendance Records Yet</p>
           <p className="mt-1 text-xs">Attendance will appear here once your faculty start marking it.</p>
         </div>
       ) : (
         <div className="space-y-4">
-          <Card>
+          <Card className="rounded-3xl border-border/60 bg-card/90 shadow-xs">
             <CardContent className="p-4 sm:p-5 flex items-center justify-between gap-4">
               <div>
                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Overall Attendance</p>
@@ -59,7 +62,10 @@ export default function StudentAttendancePage() {
                   {attendance.total.attend} / {attendance.total.held} classes attended
                 </p>
               </div>
-              <Badge variant={overallShort ? "destructive" : "default"} className="gap-1.5 shrink-0">
+              <Badge
+                variant="outline"
+                className={`gap-1.5 shrink-0 ${overallShort ? "bg-red-500/10 text-red-600 border-red-500/20" : "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"}`}
+              >
                 {overallShort ? <TrendingDown className="h-3.5 w-3.5" /> : <TrendingUp className="h-3.5 w-3.5" />}
                 {overallShort ? `Below ${DEFAULT_SHORTAGE_THRESHOLD}%` : "On Track"}
               </Badge>
@@ -67,7 +73,7 @@ export default function StudentAttendancePage() {
           </Card>
 
           {/* Mobile: stacked cards */}
-          <div className="divide-y rounded-lg border sm:hidden">
+          <div className="divide-y rounded-2xl border border-border/60 bg-card/90 shadow-xs sm:hidden">
             {attendance.subjects.map((s) => {
               const short = isShortageByPercent(s.percent, DEFAULT_SHORTAGE_THRESHOLD);
               return (
@@ -79,7 +85,10 @@ export default function StudentAttendancePage() {
                       {s.attend} / {s.held} held
                     </p>
                   </div>
-                  <Badge variant={short ? "destructive" : "secondary"} className="shrink-0">
+                  <Badge
+                    variant="outline"
+                    className={`shrink-0 ${short ? "bg-red-500/10 text-red-600 border-red-500/20" : "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"}`}
+                  >
                     {formatPercent(s.percent)}
                   </Badge>
                 </div>
@@ -88,7 +97,7 @@ export default function StudentAttendancePage() {
           </div>
 
           {/* sm and up: table */}
-          <div className="hidden overflow-x-auto rounded-lg border sm:block">
+          <div className="hidden overflow-x-auto rounded-2xl border border-border/60 bg-card/90 shadow-xs sm:block">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b bg-muted/40 text-left text-xs text-muted-foreground">
@@ -109,7 +118,12 @@ export default function StudentAttendancePage() {
                       <td className="p-3 text-right">{s.held}</td>
                       <td className="p-3 text-right">{s.attend}</td>
                       <td className="p-3 text-right">
-                        <Badge variant={short ? "destructive" : "secondary"}>{formatPercent(s.percent)}</Badge>
+                        <Badge
+                          variant="outline"
+                          className={short ? "bg-red-500/10 text-red-600 border-red-500/20" : "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"}
+                        >
+                          {formatPercent(s.percent)}
+                        </Badge>
                       </td>
                     </tr>
                   );

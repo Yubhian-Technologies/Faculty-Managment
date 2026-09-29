@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { ArrowRight, ArrowLeft as ArrowLeftIcon, Search, Layers, CheckSquare, BookOpen, GraduationCap, Info } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -21,6 +22,22 @@ import { managerTeachingYears } from "@/lib/departments/managedBranches";
 function ordinalYear(year: number) {
   const suffix = year === 1 ? "st" : year === 2 ? "nd" : year === 3 ? "rd" : "th";
   return `${year}${suffix} Year`;
+}
+
+// Which of a catalog entry's regulations actually governs `year`, for a
+// deep-linked prefill (see the Stage 1 effect below) - same batch-aware
+// resolution yearOptions itself filters by, just run once up front instead
+// of per-candidate-year, since here the year is already fixed by the link.
+// Falls back to the catalog's first regulation for a legacy entry with no
+// batch config, so a prefill is never left with an empty Regulation.
+function resolveRegulationForYear(item: CourseCatalogItem, year: number): string {
+  const regs = regulationsForCourseYearByBatch(
+    item.regulationBatches ?? {},
+    year,
+    currentAcademicStartYear(),
+    item.regulations,
+  );
+  return regs[0] ?? item.regulations?.[0] ?? "";
 }
 
 // A master subject (courseId + regulation, department-independent - see its
@@ -49,6 +66,15 @@ function ordinalYear(year: number) {
 // shows those children under the parent so subjects can be assigned
 // to the specific sub-department, not just the parent.
 export default function AssignToSemesterPage() {
+  return (
+    <Suspense fallback={null}>
+      <AssignToSemesterPageInner />
+    </Suspense>
+  );
+}
+
+function AssignToSemesterPageInner() {
+  const searchParams = useSearchParams();
   const [allDepartments, setAllDepartments] = useState<Department[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
@@ -98,6 +124,27 @@ export default function AssignToSemesterPage() {
       .catch(() => { /* non-critical - regulation list just stays empty */ });
   }, []);
 
+  // Deep-link prefill from another page's "Sem N: K subjects - tap to fill"
+  // link (principal/departments/[id]/page.tsx's per-year status badges) -
+  // ?catalogId=&departmentId=&year=&semester= walks the same Regulation ->
+  // Catalog -> Department -> Year -> Semester chain a person would click
+  // through by hand. Read once on mount (a deep link is a one-shot
+  // instruction, not something that should re-fire if this component
+  // re-renders) and consumed in two stages below, since Department requires
+  // an async courses fetch to settle before Year/Semester can be set.
+  const prefillRef = useRef<{ catalogId: string; departmentId: string; year: string; semester: string | null } | null>(null);
+  const [prefillPending, setPrefillPending] = useState(false);
+  useEffect(() => {
+    const catalogId = searchParams.get("catalogId");
+    const departmentId = searchParams.get("departmentId");
+    const year = searchParams.get("year");
+    if (catalogId && departmentId && year) {
+      prefillRef.current = { catalogId, departmentId, year, semester: searchParams.get("semester") };
+      setPrefillPending(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const catalogById = useMemo(() => new Map(catalogItems.map((c) => [c.id, c])), [catalogItems]);
 
   // Regulation options (top-level, picked first): every regulation ANY
@@ -129,14 +176,51 @@ export default function AssignToSemesterPage() {
   // This DEPARTMENT's own Course doc for the already-chosen catalog entry -
   // resolved once Department is picked, not chosen directly (Course was
   // already fixed at the catalog level above). `courses` is this one
-  // department's own list (loadCourses, sub-department-aware) - a
-  // department that doesn't actually teach this catalog course resolves to
-  // null here rather than silently falling back to a different department's
-  // doc, surfaced below as "doesn't teach this course yet".
-  const selectedCourse = useMemo(
-    () => courses.find((c) => c.catalogId === selectedCatalogId) ?? null,
-    [courses, selectedCatalogId]
-  );
+  // department's own list (loadCourses, sub-department-aware), but for a
+  // department fed by a shared-year manager (e.g. CSE's Year 1 run by Basic
+  // Science) that list legitimately contains TWO docs for the same
+  // catalogId - the manager's own and this department's own (see
+  // /api/college/courses's own "legitimate feeder-department case" comment,
+  // which deliberately shows both rather than collapsing them). Matching by
+  // catalogId alone picked whichever happened to come first and could
+  // resolve to the MANAGER's doc even when this department has its own -
+  // e.g. CSE's own Year 2/3/4 timings/instances live under CSE's own course,
+  // never Basic Science's (which only ever has Year 1). Prefer this
+  // department's own doc; fall back to any catalog match only for a
+  // department that genuinely has none of its own (fully fed).
+  const selectedCourse = useMemo(() => {
+    const matches = courses.filter((c) => c.catalogId === selectedCatalogId);
+    return matches.find((c) => c.departmentId === selectedDepartmentId) ?? matches[0] ?? null;
+  }, [courses, selectedCatalogId, selectedDepartmentId]);
+
+  // Prefill stage 1: once the catalog is loaded, resolve Regulation from the
+  // linked year/catalog and kick off Department (selectDepartment fetches
+  // that department's own courses - selectedCourse above can't resolve
+  // until that lands, which is what stage 2 below waits on).
+  useEffect(() => {
+    if (!prefillPending || catalogItems.length === 0) return;
+    const p = prefillRef.current;
+    const item = p ? catalogItems.find((c) => c.id === p.catalogId) : null;
+    if (!p || !item) { setPrefillPending(false); return; }
+    setSelectedRegulation(resolveRegulationForYear(item, Number(p.year)));
+    setSelectedCatalogId(p.catalogId);
+    selectDepartment(p.departmentId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefillPending, catalogItems]);
+
+  // Prefill stage 2: once this department's own Course doc has resolved,
+  // finish with Year + Semester (selectYear needs selectedCourse to fire its
+  // own subjects/timings fetch - see that function's own body).
+  useEffect(() => {
+    if (!prefillPending || !selectedCourse) return;
+    const p = prefillRef.current;
+    if (!p) { setPrefillPending(false); return; }
+    selectYear(p.year);
+    if (p.semester) setSelectedSemester(Number(p.semester));
+    setPrefillPending(false);
+    prefillRef.current = null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefillPending, selectedCourse]);
 
   // Build parent → children map for the department tree
   const childrenOf = useMemo(() => {
@@ -199,10 +283,20 @@ export default function AssignToSemesterPage() {
   }, [selectedCourse, selectedDepartment, allDepartments, selectedCatalogItem, selectedRegulation]);
 
   const semesterOptions = useMemo(() => {
+    if (!selectedYear) return [];
+    const yearNum = Number(selectedYear);
+    const yearTiming = timings.find((t) => t.year === yearNum);
     const nums = new Set<number>();
-    for (const t of timings) for (const s of t.semesters ?? []) nums.add(s.semester);
+    for (const s of yearTiming?.semesters ?? []) nums.add(s.semester);
+    for (const a of assignments) {
+      if (a.year === yearNum && a.semester != null) nums.add(a.semester);
+    }
+    if (selectedSemester != null) nums.add(selectedSemester);
+    const paramSem = searchParams.get("semester");
+    if (paramSem) nums.add(Number(paramSem));
+
     return Array.from(nums).sort((a, b) => a - b);
-  }, [timings]);
+  }, [timings, selectedYear, assignments, selectedSemester, searchParams]);
   const effectiveSemester = semesterOptions.length === 0
     ? null
     : selectedSemester != null && semesterOptions.includes(selectedSemester)
@@ -223,23 +317,43 @@ export default function AssignToSemesterPage() {
   // silently showed the parent's raw list instead - identical output for a
   // sub-department that has never customized anything, since that's exactly
   // what an unfiltered inherited list already looks like.
+  // Guards against an out-of-order response: switching Department (or a
+  // fast Course->Department->Year click-through) fires a new fetch before
+  // the previous one lands, and network order isn't call order - a stale
+  // response landing last previously overwrote `courses` with the WRONG
+  // department's list, which then fed a wrong/empty `selectedCourse` and
+  // made a genuinely-configured year report "no semesters configured".
+  // Only the most recently STARTED call's response is ever applied.
+  const coursesRequestIdRef = useRef(0);
   const loadCourses = useCallback(async (departmentId: string) => {
+    const requestId = ++coursesRequestIdRef.current;
     setIsLoadingCourses(true);
     try {
       const res = await fetch(`/api/college/courses?departmentId=${encodeURIComponent(departmentId)}`);
       const data = await res.json() as { courses?: Course[] };
+      if (requestId !== coursesRequestIdRef.current) return;
       setCourses((data.courses ?? []).filter((c) => c.isActive).sort((a, b) => a.name.localeCompare(b.name)));
     } catch {
+      if (requestId !== coursesRequestIdRef.current) return;
       toast({ variant: "destructive", title: "Failed to load courses" });
     } finally {
-      setIsLoadingCourses(false);
+      if (requestId === coursesRequestIdRef.current) setIsLoadingCourses(false);
     }
   }, []);
 
   // Master Collection = every subject for this catalog course+year
   // (department-independent). Semester panel = this DEPARTMENT's own
   // mappings for that catalog+year, from the junction collection.
+  // Same out-of-order-response guard as loadCourses above - this is the
+  // exact function the reported bug traced back to: clicking Year 2 then
+  // Year 3 quickly could let Year 2's slower response land AFTER Year 3's
+  // and overwrite `timings`/`subjects`/`assignments` with Year 2's data
+  // while `selectedYear` had already moved to "3", so semesterOptions
+  // (which looks up `timings.find(t => t.year === 3)`) found nothing and
+  // reported "No semesters configured" for a year that genuinely had them.
+  const subjectsAndTimingsRequestIdRef = useRef(0);
   const loadSubjectsAndTimings = useCallback(async (course: Course, departmentId: string, year: string) => {
+    const requestId = ++subjectsAndTimingsRequestIdRef.current;
     setIsLoadingSubjects(true);
     try {
       const catalogId = course.catalogId ?? "";
@@ -266,13 +380,15 @@ export default function AssignToSemesterPage() {
       const subjectsData = await subjectsRes.json() as { subjects?: Subject[] };
       const timingsData = await timingsRes.json() as { timings?: CourseYearTiming[] };
       const assignmentsData = assignmentsRes ? await assignmentsRes.json() as { assignments?: SubjectSemesterAssignment[] } : { assignments: [] };
+      if (requestId !== subjectsAndTimingsRequestIdRef.current) return;
       setSubjects(subjectsData.subjects ?? []);
       setTimings((timingsData.timings ?? []).filter((t) => t.year === Number(year)));
       setAssignments(assignmentsData.assignments ?? []);
     } catch {
+      if (requestId !== subjectsAndTimingsRequestIdRef.current) return;
       toast({ variant: "destructive", title: "Failed to load subjects" });
     } finally {
-      setIsLoadingSubjects(false);
+      if (requestId === subjectsAndTimingsRequestIdRef.current) setIsLoadingSubjects(false);
     }
   }, []);
 
