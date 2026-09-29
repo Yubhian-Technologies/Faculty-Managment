@@ -193,9 +193,11 @@ export async function DELETE(request: Request) {
     const { searchParams } = new URL(request.url);
     const subjectId = searchParams.get("subjectId");
     const departmentId = searchParams.get("departmentId");
-    if (!subjectId || !departmentId) {
-      return NextResponse.json({ error: "subjectId and departmentId are required" }, { status: 400 });
+    const semesterParam = searchParams.get("semester");
+    if (!subjectId || !departmentId || semesterParam == null) {
+      return NextResponse.json({ error: "subjectId, departmentId and semester are required" }, { status: 400 });
     }
+    const semester = Number(semesterParam);
 
     if (session.role === "HOD") {
       const db = getAdminDb();
@@ -206,7 +208,7 @@ export async function DELETE(request: Request) {
     }
 
     const service = new SubjectInstanceService();
-    await service.unassignSubjectInstance(session.collegeId, subjectId, departmentId);
+    await service.unassignSubjectInstance(session.collegeId, subjectId, departmentId, semester);
 
     return NextResponse.json({ success: true });
   } catch (err) {

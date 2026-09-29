@@ -83,8 +83,7 @@ export const NAV_ITEMS: NavItem[] = [
 
   // Administration
   { label: "Dashboard", href: "/administration", iconName: "LayoutDashboard", roles: ["ADMINISTRATION"] },
-  { label: "Location Staff", href: "/administration/users", iconName: "Users", roles: ["ADMINISTRATION"], section: "Management" },
-  { label: "Departments", href: "/administration/departments", iconName: "Settings2", roles: ["ADMINISTRATION"] },
+  { label: "Staff & Role Assignments", href: "/administration/users", iconName: "Users", roles: ["ADMINISTRATION"], section: "Management" },
   { label: "Colleges", href: "/administration/colleges", iconName: "Building2", roles: ["ADMINISTRATION"] },
   { label: "Hiring Requests", href: "/administration/vacancies", iconName: "ClipboardList", roles: ["ADMINISTRATION"], section: "Hiring" },
   { label: "Interview Plans", href: "/administration/interviews", iconName: "CalendarCheck", roles: ["ADMINISTRATION"] },
@@ -143,8 +142,8 @@ export const NAV_ITEMS: NavItem[] = [
   // Location Staff Admin
   { label: "Dashboard", href: "/location-staff-admin", iconName: "LayoutDashboard", roles: ["LOCATION_STAFF_ADMIN"] },
   { label: "Departments", href: "/location-staff-admin/departments", iconName: "Building2", roles: ["LOCATION_STAFF_ADMIN", "ADMINISTRATION"], section: "Location Staff" },
-  { label: "Staff Directory", href: "/location-staff-admin/staff", iconName: "UsersRound", roles: ["LOCATION_STAFF_ADMIN", "ADMINISTRATION"], section: "Location Staff" },
-  { label: "Attendance Overview", href: "/location-staff-admin/attendance", iconName: "ClipboardCheck", roles: ["LOCATION_STAFF_ADMIN", "ADMINISTRATION"], section: "Location Staff" },
+  { label: "Shifts", href: "/location-staff-admin/shifts", iconName: "Clock", roles: ["LOCATION_STAFF_ADMIN", "ADMINISTRATION"], section: "Location Staff" },
+  { label: "Attendance Reports", href: "/location-staff-admin/attendance/reports", iconName: "BarChart3", roles: ["LOCATION_STAFF_ADMIN", "ADMINISTRATION"], section: "Location Staff" },
   { label: "My Profile", href: "/location-staff-admin/profile", iconName: "UserCircle", roles: ["LOCATION_STAFF_ADMIN"], section: "Personal" },
 
   // Location Dept Head
@@ -860,8 +859,8 @@ export const BOTTOM_NAV_ITEMS: Record<UserRole, NavItem[]> = {
   LOCATION_STAFF_ADMIN: [
     { label: "Home", href: "/location-staff-admin", iconName: "LayoutDashboard", roles: ["LOCATION_STAFF_ADMIN"] },
     { label: "Depts", href: "/location-staff-admin/departments", iconName: "Building2", roles: ["LOCATION_STAFF_ADMIN"] },
-    { label: "Staff", href: "/location-staff-admin/staff", iconName: "UsersRound", roles: ["LOCATION_STAFF_ADMIN"] },
-    { label: "Attendance", href: "/location-staff-admin/attendance", iconName: "ClipboardCheck", roles: ["LOCATION_STAFF_ADMIN"] },
+    { label: "Shifts", href: "/location-staff-admin/shifts", iconName: "Clock", roles: ["LOCATION_STAFF_ADMIN"] },
+    { label: "Reports", href: "/location-staff-admin/attendance/reports", iconName: "BarChart3", roles: ["LOCATION_STAFF_ADMIN"] },
     { label: "Profile", href: "/location-staff-admin/profile", iconName: "UserCircle", roles: ["LOCATION_STAFF_ADMIN"] },
   ],
   LOCATION_DEPT_HEAD: [

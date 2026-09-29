@@ -11,48 +11,50 @@ export async function GET(request: Request) {
     if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const { searchParams } = new URL(request.url);
-    let locationId = searchParams.get("locationId") ?? session.locationId;
+    const locationId = searchParams.get("locationId") ?? session.locationId;
     if (!locationId) {
-      const firstLoc = await getAdminDb().collection("locations").limit(1).get();
-      if (!firstLoc.empty) {
-        locationId = firstLoc.docs[0].id;
-      }
+      return NextResponse.json({ error: "locationId required" }, { status: 400 });
     }
-    if (!locationId) return NextResponse.json({ error: "locationId required" }, { status: 400 });
+
+    if (session.role !== "SUPER_ADMIN" && session.locationId !== locationId) {
+      return NextResponse.json({ error: "Unauthorized for this location" }, { status: 403 });
+    }
 
     const db = getAdminDb();
-    const [deptsSnap, staffSnap] = await Promise.all([
-      db
-        .collection("locations")
-        .doc(locationId)
-        .collection("locationDepts")
-        .orderBy("name")
-        .get(),
-      db
-        .collection("locations")
-        .doc(locationId)
-        .collection("staff")
-        .where("status", "==", "ACTIVE")
-        .get()
-        .catch(() => ({ docs: [] })),
-    ]);
+    const deptsSnap = await db
+      .collection("locations")
+      .doc(locationId)
+      .collection("locationDepts")
+      .orderBy("name")
+      .get();
 
-    const staffCountsByDept = new Map<string, number>();
-    for (const doc of staffSnap.docs) {
-      const data = doc.data() as { departmentId?: string };
-      if (data.departmentId) {
-        staffCountsByDept.set(data.departmentId, (staffCountsByDept.get(data.departmentId) ?? 0) + 1);
-      }
-    }
-
-    const depts = deptsSnap.docs.map((d) => {
-      const data = d.data();
-      return {
-        id: d.id,
-        ...data,
-        staffCount: staffCountsByDept.get(d.id) ?? data.staffCount ?? 0,
-      };
-    });
+    // Use count aggregations or stored counts to avoid N+1 full document scans
+    const depts = await Promise.all(
+      deptsSnap.docs.map(async (d) => {
+        const data = d.data();
+        let staffCount = data.staffCount;
+        if (typeof staffCount !== "number") {
+          try {
+            const countSnap = await db
+              .collection("locations")
+              .doc(locationId)
+              .collection("staff")
+              .where("departmentId", "==", d.id)
+              .where("status", "==", "ACTIVE")
+              .count()
+              .get();
+            staffCount = countSnap.data().count;
+          } catch {
+            staffCount = 0;
+          }
+        }
+        return {
+          id: d.id,
+          ...data,
+          staffCount,
+        };
+      })
+    );
 
     return NextResponse.json({ departments: depts });
   } catch (err) {
