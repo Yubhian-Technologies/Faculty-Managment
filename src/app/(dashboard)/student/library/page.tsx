@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, BookOpen } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { TableSkeleton } from "@/components/shared/SkeletonLoader";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/useToast";
@@ -37,9 +38,9 @@ export default function StudentLibraryPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <PageHeader title="My Library" description="Books you've borrowed and your reservation queue" />
-        <Button asChild variant="outline" size="sm">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-card/90 backdrop-blur-sm p-5 rounded-3xl border border-border/60 shadow-xs">
+        <PageHeader title="My Library" description="Books you've borrowed and your reservation queue" className="mb-0" />
+        <Button asChild variant="outline" size="sm" className="rounded-full border-border/60">
           <Link href="/student">
             <ArrowLeft className="h-4 w-4 mr-1.5" /> Back to Dashboard
           </Link>
@@ -47,7 +48,9 @@ export default function StudentLibraryPage() {
       </div>
 
       {isLoading ? (
-        <div className="h-64 rounded-xl border bg-muted/30 animate-pulse" />
+        <div className="rounded-3xl border border-border/60 bg-card/90 shadow-xs p-4">
+          <TableSkeleton rows={4} cols={3} />
+        </div>
       ) : (
         <div className="space-y-6">
           <div className="space-y-3">
@@ -55,11 +58,11 @@ export default function StudentLibraryPage() {
               <BookOpen className="h-4 w-4 text-primary" /> Borrowed Books
             </h2>
             {loans.length === 0 ? (
-              <div className="rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground bg-muted/10">
+              <div className="rounded-2xl border border-dashed p-6 text-center text-sm text-muted-foreground bg-muted/10">
                 You have no books currently borrowed.
               </div>
             ) : (
-              <div className="divide-y rounded-lg border sm:hidden">
+              <div className="divide-y rounded-2xl border border-border/60 bg-card/90 shadow-xs sm:hidden">
                 {loans.map((l) => (
                   <div key={l.id} className="p-3.5 flex items-center justify-between gap-3">
                     <div className="min-w-0">
@@ -67,18 +70,18 @@ export default function StudentLibraryPage() {
                       <p className="text-xs text-muted-foreground mt-0.5">Due {toDate(l.dueAt).toDateString()}</p>
                     </div>
                     {l.isOverdue ? (
-                      <Badge variant="destructive" className="shrink-0">
+                      <Badge variant="outline" className="shrink-0 bg-red-500/10 text-red-600 border-red-500/20">
                         {l.daysOverdue}d overdue{l.liveFineAmount ? ` · ₹${l.liveFineAmount}` : ""}
                       </Badge>
                     ) : (
-                      <Badge variant="secondary" className="shrink-0">Active</Badge>
+                      <Badge variant="outline" className="shrink-0 bg-emerald-500/10 text-emerald-600 border-emerald-500/20">Active</Badge>
                     )}
                   </div>
                 ))}
               </div>
             )}
             {loans.length > 0 && (
-              <div className="hidden overflow-x-auto rounded-lg border sm:block">
+              <div className="hidden overflow-x-auto rounded-2xl border border-border/60 bg-card/90 shadow-xs sm:block">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b bg-muted/40 text-left text-xs text-muted-foreground">
@@ -94,11 +97,11 @@ export default function StudentLibraryPage() {
                         <td className="p-3 text-muted-foreground">{toDate(l.dueAt).toDateString()}</td>
                         <td className="p-3 text-right">
                           {l.isOverdue ? (
-                            <Badge variant="destructive">
+                            <Badge variant="outline" className="bg-red-500/10 text-red-600 border-red-500/20">
                               {l.daysOverdue}d overdue{l.liveFineAmount ? ` · ₹${l.liveFineAmount}` : ""}
                             </Badge>
                           ) : (
-                            <Badge variant="secondary">Active</Badge>
+                            <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20">Active</Badge>
                           )}
                         </td>
                       </tr>
@@ -112,15 +115,18 @@ export default function StudentLibraryPage() {
           <div className="space-y-3">
             <h2 className="text-base font-bold text-foreground">My Reservations</h2>
             {reservations.length === 0 ? (
-              <div className="rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground bg-muted/10">
+              <div className="rounded-2xl border border-dashed p-6 text-center text-sm text-muted-foreground bg-muted/10">
                 You&rsquo;re not waiting for any books right now.
               </div>
             ) : (
-              <div className="divide-y rounded-lg border">
+              <div className="divide-y rounded-2xl border border-border/60 bg-card/90 shadow-xs">
                 {reservations.map((r) => (
                   <div key={r.id} className="p-3.5 flex items-center justify-between gap-3">
                     <p className="font-medium text-sm text-foreground truncate">{r.bookTitle}</p>
-                    <Badge variant={r.status === "NOTIFIED" ? "default" : "secondary"} className="shrink-0">
+                    <Badge
+                      variant={r.status === "NOTIFIED" ? "outline" : "secondary"}
+                      className={r.status === "NOTIFIED" ? "shrink-0 bg-amber-500/10 text-amber-600 border-amber-500/20" : "shrink-0"}
+                    >
                       {r.status === "NOTIFIED" ? "Available - visit the library" : "Waiting"}
                     </Badge>
                   </div>
