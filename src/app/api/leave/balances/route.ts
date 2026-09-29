@@ -68,7 +68,6 @@ export async function GET(request: Request) {
           ...(lt.rules.allowCustomReason ? { allowCustomReason: true } : {}),
           ...(lt.rules.maxConsecutiveDays !== undefined ? { maxConsecutiveDays: lt.rules.maxConsecutiveDays } : {}),
           ...(lt.rules.minAdvanceNoticeDays !== undefined ? { minAdvanceNoticeDays: lt.rules.minAdvanceNoticeDays } : {}),
-          ...(lt.rules.sandwichRule ? { sandwichRule: true } : {}),
         };
         if (lt.rules.unlimited) {
           return { code: lt.code, label: lt.label, shortLabel: lt.shortLabel, color: lt.color, unlimited: true as const, ...hints };

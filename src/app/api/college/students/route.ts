@@ -21,7 +21,7 @@ const PAGE_SIZES = [10, 20, 30, 50];
 // Roles that already see the whole college unscoped (no HOD/PANEL_MEMBER
 // fan-out - see the role branching below) - the only ones server-side
 // pagination is offered to.
-const UNSCOPED_ROLES = ["PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "COLLEGE_OFFICE"];
+const UNSCOPED_ROLES = ["PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "COLLEGE_OFFICE", "LIBRARY"];
 
 // Sections a PANEL_MEMBER (faculty) is in charge of - students are only visible/
 // editable within these. Returns [] if the faculty isn't assigned to any section.
@@ -42,7 +42,7 @@ async function getInchargeSections(
 
 export async function GET(request: Request) {
   try {
-    const session = await requireCollegeMember("PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "COLLEGE_OFFICE");
+    const session = await requireCollegeMember("PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "COLLEGE_OFFICE", "LIBRARY");
     const { searchParams } = new URL(request.url);
     const sectionFilter = searchParams.get("section");
     const yearFilter = searchParams.get("year");

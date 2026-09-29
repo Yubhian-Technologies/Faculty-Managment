@@ -1,6 +1,7 @@
-import type { Firestore } from "firebase-admin/firestore";
+import { FieldPath, type Firestore } from "firebase-admin/firestore";
 import type {
-  CourseYearTiming, Section, Subject, TeachingAssignment, TimetableRules, TimetableSlot,
+  CourseYearTiming, FacultyAssignmentRequest, Section, Subject, TeachingAssignment, TimetableDraft, TimetableRules,
+  TimetableSlot,
 } from "@/types";
 import { DEFAULT_TIMETABLE_RULES } from "@/types";
 import { resolveCurrentSemester, matchesCurrentSemester } from "@/lib/college/semester";
@@ -19,8 +20,27 @@ export interface TimetableContext {
   subjectsById: Map<string, Subject>;
   /** This section's existing pinned/manual slots - the generator works around them. */
   pinnedSlots: TimetableSlot[];
-  /** facultyId -> "DAY:period" cells busy in ANY other section. */
+  /**
+   * facultyId -> "DAY:period" cells busy in ANY other section - from that
+   * section's own PUBLISHED timetableSlots, AND from its still-unpublished
+   * timetableDrafts (see the draft query below). Without the latter, two
+   * HODs (or one HOD editing two sections back to back) could each place the
+   * same faculty into an overlapping period because neither section's
+   * in-progress draft is visible to the other until someone actually
+   * publishes - the publish-time re-check (publish/route.ts) only catches it
+   * once ONE of the two has already gone live, not while both are still
+   * drafts.
+   */
   busyFaculty: Map<string, Set<string>>;
+  /**
+   * Subset of busyFaculty's cells that came from a lending department's own
+   * busyPeriods declaration (see FacultyAssignmentRequest.busyPeriods),
+   * rather than a real TimetableSlot elsewhere - lets validatePlacement give
+   * a clearer rejection message ("already has a period declared busy") for
+   * this source instead of the generic "already teaching another section",
+   * which would be misleading (nothing was actually scheduled anywhere).
+   */
+  declaredBusyFaculty: Map<string, Set<string>>;
   // Resolved once from `timing` - null when this course-year has no
   // semesters configured (see CourseYearTiming.semesters). pinnedSlots and
   // busyFaculty above are already narrowed to this (via
@@ -52,7 +72,7 @@ export async function loadTimetableContext(
   if (!sectionSnap.exists) return null;
   const section = { id: sectionSnap.id, ...sectionSnap.data() } as Section;
 
-  const [allTimingsSnap, rulesSnap, assignmentsSnap, subjectsSnap, allSlotsSnap] = await Promise.all([
+  const [allTimingsSnap, rulesSnap, assignmentsSnap, subjectsSnap, allSlotsSnap, allocatedRequestsSnap, allDraftsSnap] = await Promise.all([
     // Every course-year's timing, not just this section's own course - a
     // slot from ANOTHER section can belong to an entirely different course-
     // year with its own independent semester calendar (see "per course +
@@ -69,6 +89,19 @@ export async function loadTimetableContext(
     // sections. Generation is per-section, so this global view is what makes
     // section-at-a-time safe.
     collegeRef.collection("timetableSlots").get(),
+    // ALLOCATED cross-department lends onto this section - see
+    // FacultyAssignmentRequest.busyPeriods. The lending department never
+    // places real TimetableSlot rows for these, so without this query their
+    // declared-busy cells would be invisible to busyFaculty below.
+    collegeRef.collection("facultyAssignmentRequests")
+      .where("sectionId", "==", sectionId).where("status", "==", "ALLOCATED").get(),
+    // Every OTHER section's in-progress draft, for the same reason as
+    // allSlotsSnap above - a faculty already placed into another section's
+    // still-unpublished draft is just as unavailable as one on a live
+    // timetable, but invisible there until someone publishes it. Small
+    // collection (one doc per section+semester in the college), same as
+    // allTimingsSnap.
+    collegeRef.collection("timetableDrafts").get(),
   ]);
 
   const allTimings = allTimingsSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as unknown as CourseYearTiming);
@@ -130,6 +163,29 @@ export async function loadTimetableContext(
   );
   const subjectsById = new Map(allCourseSubjects.map((s) => [s.id, s]));
 
+  // A cross-department lend (see faculty-assignment-requests) puts an
+  // assignment on this section whose subject belongs to the LENDING
+  // department's own Course doc, never section.courseId - the query above
+  // misses it entirely, so subjectsById.get() below falls back to undefined
+  // and callers (draft/route.ts's PRACTICAL blockSize/allowSplit gating)
+  // silently treat a lent-in lab as THEORY. Back-fill by id whatever's
+  // still missing rather than widening the query above and losing its
+  // courseId scoping for courseYearSubjects (the "what should this course-
+  // year run" list, which a lent-in subject never belongs on).
+  const missingSubjectIds = Array.from(
+    new Set(assignments.map((a) => a.subjectId).filter((id): id is string => Boolean(id) && !subjectsById.has(id))),
+  );
+  if (missingSubjectIds.length > 0) {
+    const chunks: string[][] = [];
+    for (let i = 0; i < missingSubjectIds.length; i += 30) chunks.push(missingSubjectIds.slice(i, i + 30));
+    const extraSnaps = await Promise.all(
+      chunks.map((ids) => collegeRef.collection("subjects").where(FieldPath.documentId(), "in", ids).get()),
+    );
+    for (const extraSnap of extraSnaps) {
+      for (const d of extraSnap.docs) subjectsById.set(d.id, { id: d.id, ...d.data() } as Subject);
+    }
+  }
+
   const allSlotsRaw = allSlotsSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as TimetableSlot);
 
   // A slot from a DIFFERENT, prior semester of ITS OWN course-year (see
@@ -164,9 +220,48 @@ export async function loadTimetableContext(
     if (!cells) { cells = new Set(); busyFaculty.set(s.facultyId, cells); }
     cells.add(`${s.day}:${s.periodNumber}`);
   }
+  // And during whatever ANOTHER section's own still-unpublished draft has
+  // already placed them into - see allDraftsSnap's own doc-comment above.
+  // Same current-semester narrowing as allSlots, but resolved from each
+  // draft doc's own courseId/year (a draft can predate the section doc being
+  // reloaded, so this doesn't reuse `section`'s course-year). Every status
+  // is included, not just "DRAFT" - a draft doc flips to "PUBLISHED" in
+  // place and is reused for the next edit (see TimetableDraft.id's own
+  // doc-comment), so its slots stay just as real a commitment either way;
+  // double-counting a published one already covered by allSlots above is
+  // harmless (busyFaculty cells are a Set).
+  for (const d of allDraftsSnap.docs) {
+    const otherDraft = d.data() as TimetableDraft;
+    if (otherDraft.sectionId === sectionId) continue; // this section's own draft - handled via pinnedSlots/the caller's own `draft` argument
+    const draftCurrentSemester = currentSemesterByCourseYear.get(`${otherDraft.courseId}_${otherDraft.year}`) ?? null;
+    if (!matchesCurrentSemester(otherDraft.semester ?? null, draftCurrentSemester)) continue;
+    for (const s of otherDraft.slots ?? []) {
+      let cells = busyFaculty.get(s.facultyId);
+      if (!cells) { cells = new Set(); busyFaculty.set(s.facultyId, cells); }
+      cells.add(`${s.day}:${s.periodNumber}`);
+    }
+  }
+  // And during whatever the lending department declared busy for an
+  // allocated faculty member - see the query above and
+  // FacultyAssignmentRequest.busyPeriods' own doc-comment.
+  const declaredBusyFaculty = new Map<string, Set<string>>();
+  for (const d of allocatedRequestsSnap.docs) {
+    const req = d.data() as FacultyAssignmentRequest;
+    if (!req.allocatedFacultyId || !req.busyPeriods?.length) continue;
+    let cells = busyFaculty.get(req.allocatedFacultyId);
+    if (!cells) { cells = new Set(); busyFaculty.set(req.allocatedFacultyId, cells); }
+    let declaredCells = declaredBusyFaculty.get(req.allocatedFacultyId);
+    if (!declaredCells) { declaredCells = new Set(); declaredBusyFaculty.set(req.allocatedFacultyId, declaredCells); }
+    for (const bp of req.busyPeriods) {
+      const key = `${bp.day}:${bp.period}`;
+      cells.add(key);
+      declaredCells.add(key);
+    }
+  }
 
   return {
-    section, timing, rules, assignments, courseYearSubjects, subjectsById, pinnedSlots, busyFaculty, currentSemester,
+    section, timing, rules, assignments, courseYearSubjects, subjectsById, pinnedSlots,
+    busyFaculty, declaredBusyFaculty, currentSemester,
   };
 }
 

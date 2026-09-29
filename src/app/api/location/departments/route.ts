@@ -28,25 +28,29 @@ export async function GET(request: Request) {
       .orderBy("name")
       .get();
 
-    // Use count aggregations or stored counts to avoid N+1 full document scans
+    // Always count live via aggregation queries (cheap - billed as one query
+    // regardless of collection size, not an N+1 full-document-scan concern).
+    // The department doc's own `staffCount` field is written by the single-add
+    // and bulk-import routes, but anything that touches `staff` outside those
+    // two paths (a seed script, a future admin tool, a manual Firestore edit)
+    // leaves it stale with no way for a reader to tell - trusting it here was
+    // silently showing 0 for departments that actually have staff.
     const depts = await Promise.all(
       deptsSnap.docs.map(async (d) => {
         const data = d.data();
-        let staffCount = data.staffCount;
-        if (typeof staffCount !== "number") {
-          try {
-            const countSnap = await db
-              .collection("locations")
-              .doc(locationId)
-              .collection("staff")
-              .where("departmentId", "==", d.id)
-              .where("status", "==", "ACTIVE")
-              .count()
-              .get();
-            staffCount = countSnap.data().count;
-          } catch {
-            staffCount = 0;
-          }
+        let staffCount = 0;
+        try {
+          const countSnap = await db
+            .collection("locations")
+            .doc(locationId)
+            .collection("staff")
+            .where("departmentId", "==", d.id)
+            .where("status", "==", "ACTIVE")
+            .count()
+            .get();
+          staffCount = countSnap.data().count;
+        } catch (err) {
+          console.error("[location/departments GET] staff count failed for", d.id, err);
         }
         return {
           id: d.id,

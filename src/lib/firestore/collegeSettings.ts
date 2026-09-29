@@ -20,6 +20,8 @@ export const DEFAULT_COLLEGE_SETTINGS: Omit<FacultyNorms, "updatedAt" | "updated
   academicYearStartDay: 1,
   academicYearEndMonth: 3,
   academicYearEndDay: 31,
+  libraryFinePerDay: 1,
+  libraryLoanDurationDays: 14,
 };
 
 export function collegeSettingsRef(db: Firestore, collegeId: string) {

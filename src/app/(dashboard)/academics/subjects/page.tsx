@@ -2,12 +2,13 @@
 
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { BookOpen, Plus, Pencil, Trash2, Upload, FileSpreadsheet, FileText, Power, PowerOff } from "lucide-react";
+import { BookOpen, Plus, Pencil, Trash2, Upload, FileSpreadsheet, FileText, Search, X, Eye, EyeOff } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { Pagination } from "@/components/shared/Pagination";
@@ -33,6 +34,7 @@ export default function AcademicsSubjectsPage() {
   const [deleteTarget, setDeleteTarget] = useState<Subject | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [searchText, setSearchText] = useState("");
 
   const selectedCourseId = searchParams.get("courseId") ?? "";
   const selectedRegulation = searchParams.get("regulation") ?? "";
@@ -117,8 +119,43 @@ export default function AcademicsSubjectsPage() {
     () => Math.max(0, ...subjects.map((s) => s.serialNumber ?? 0)) + 1,
     [subjects]
   );
-  const totalPages = Math.max(1, Math.ceil(sortedSubjects.length / pageSize));
-  const paginatedSubjects = sortedSubjects.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+  const filteredSubjects = useMemo(() => {
+    const query = searchText.trim().toLowerCase();
+    if (!query) return sortedSubjects;
+    return sortedSubjects.filter((s) => {
+      const haystack = [
+        s.name,
+        s.code,
+        s.shortCode,
+        s.category === "OTHER" ? (s.customCategory || "Other") : s.category,
+        s.type ? SUBJECT_TYPE_LABELS[s.type] ?? s.type : undefined,
+        s.regulation,
+        s.academicYear,
+        s.courseName,
+        s.department,
+        s.credits,
+        s.hoursPerWeek,
+        s.lectureHours,
+        s.tutorialHours,
+        s.practicalHours,
+        s.semester,
+        s.year,
+        s.serialNumber,
+      ]
+        .filter((v) => v !== undefined && v !== null)
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(query);
+    });
+  }, [sortedSubjects, searchText]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchText, selectedCourseId, selectedRegulation]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredSubjects.length / pageSize));
+  const paginatedSubjects = filteredSubjects.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   // Master subjects are course+regulation scoped, shared by every department
   // that teaches this catalog course - not owned by whichever department's
@@ -315,21 +352,37 @@ export default function AcademicsSubjectsPage() {
     }
   }
 
+  const exportDisabledReason = !selectedCourseId ? "Select a course first" : !selectedRegulation ? "Select a regulation first" : undefined;
+
   return (
     <div className="space-y-6">
       <PageHeader
         title="Subjects"
         description="Manage subjects offered for each regulation of every course"
         actions={
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={() => void handleExportXlsx()} disabled={!selectedCourseId || !selectedRegulation}>
-              <FileSpreadsheet className="h-4 w-4 mr-2" />Export XLSX
-            </Button>
-            <Button variant="outline" onClick={() => void handleExportDocx()} disabled={!selectedCourseId || !selectedRegulation}>
-              <FileText className="h-4 w-4 mr-2" />Export DOCX
-            </Button>
+          <div className="flex gap-2 flex-wrap">
+            <span title={exportDisabledReason} aria-label={exportDisabledReason}>
+              <Button
+                variant="outline"
+                onClick={() => void handleExportXlsx()}
+                disabled={!!exportDisabledReason}
+                aria-disabled={!!exportDisabledReason}
+              >
+                <FileSpreadsheet className="h-4 w-4 mr-2" aria-hidden="true" />Export XLSX
+              </Button>
+            </span>
+            <span title={exportDisabledReason} aria-label={exportDisabledReason}>
+              <Button
+                variant="outline"
+                onClick={() => void handleExportDocx()}
+                disabled={!!exportDisabledReason}
+                aria-disabled={!!exportDisabledReason}
+              >
+                <FileText className="h-4 w-4 mr-2" aria-hidden="true" />Export DOCX
+              </Button>
+            </span>
             <Button variant="outline" onClick={() => router.push(`/academics/subjects/import?courseId=${selectedCourseId}&regulation=${encodeURIComponent(selectedRegulation)}`)}>
-              <Upload className="h-4 w-4 mr-2" />Import Subjects
+              <Upload className="h-4 w-4 mr-2" aria-hidden="true" />Import Subjects
             </Button>
           </div>
         }
@@ -344,28 +397,36 @@ export default function AcademicsSubjectsPage() {
       ) : (
         <>
           <Card>
-            <CardContent className="p-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <CardContent className="p-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
-                <Label>Course</Label>
+                <Label htmlFor="subject-course-select" className="flex items-center gap-1.5">
+                  <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-primary text-[10px] font-bold shrink-0" aria-hidden="true">1</span>
+                  Course
+                </Label>
                 <Select value={selectedCourseId} onValueChange={selectCourse}>
-                  <SelectTrigger><SelectValue placeholder="Select course" /></SelectTrigger>
+                  <SelectTrigger id="subject-course-select" aria-label="Select course">
+                    <SelectValue placeholder="Select a course" />
+                  </SelectTrigger>
                   <SelectContent>
                     {courses.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <Label>Regulation</Label>
+                <Label htmlFor="subject-regulation-select" className="flex items-center gap-1.5">
+                  <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-primary text-[10px] font-bold shrink-0" aria-hidden="true">2</span>
+                  Regulation
+                </Label>
                 <Select
                   value={selectedRegulation}
                   onValueChange={selectRegulation}
                   disabled={!selectedCourseId || allowedRegulations.length === 0}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger id="subject-regulation-select" aria-label="Select regulation">
                     <SelectValue placeholder={
-                      !selectedCourseId ? "Pick a course first" :
-                      allowedRegulations.length === 0 ? "No regulations assigned" :
-                      "Select regulation"
+                      !selectedCourseId ? "Select a course first" :
+                      allowedRegulations.length === 0 ? "No regulations assigned to this course" :
+                      "Select a regulation"
                     } />
                   </SelectTrigger>
                   <SelectContent>
@@ -374,6 +435,9 @@ export default function AcademicsSubjectsPage() {
                     ))}
                   </SelectContent>
                 </Select>
+                {!selectedCourseId && (
+                  <p className="text-[11px] text-muted-foreground">Select a course above to see available regulations.</p>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -397,86 +461,128 @@ export default function AcademicsSubjectsPage() {
                     </div>
                 </div>
 
+                {subjects.length > 0 && (
+                  <div className="relative max-w-sm">
+                    <Search className="h-3.5 w-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      value={searchText}
+                      onChange={(e) => setSearchText(e.target.value)}
+                      placeholder="Search subjects by name, code, category, type…"
+                      className="pl-8 pr-8 h-9"
+                    />
+                    {searchText && (
+                      <button
+                        type="button"
+                        onClick={() => setSearchText("")}
+                        aria-label="Clear search"
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+                )}
+
                 {isLoadingSubjects ? (
-                  <div className="space-y-2">
+                  <div className="space-y-2" aria-label="Loading subjects" aria-busy="true">
                     {[1, 2, 3].map((i) => <div key={i} className="h-16 rounded-lg border bg-muted/30 animate-pulse" />)}
                   </div>
                  ) : subjects.length === 0 ? (
-                    <p className="text-sm text-muted-foreground py-6 text-center">
-                      {!selectedRegulation
-                        ? "Select a regulation above to view and add subjects."
-                        : allowedRegulations.length === 0
-                        ? "No regulations have been configured for this course in Course Catalog."
-                        : `No subjects found for ${selectedRegulation}. Add one above.`}
-                    </p>
+                    <div className="flex flex-col items-center gap-2 py-8 text-center">
+                      <BookOpen className="h-8 w-8 text-muted-foreground/40" aria-hidden="true" />
+                      <p className="text-sm font-medium text-muted-foreground">
+                        {!selectedRegulation
+                          ? "Select a regulation above to view and add subjects."
+                          : allowedRegulations.length === 0
+                          ? "No regulations have been configured for this course in Course Catalog."
+                          : `No subjects found for ${selectedRegulation}.`}
+                      </p>
+                      {selectedRegulation && allowedRegulations.length > 0 && (
+                        <p className="text-xs text-muted-foreground">Use the &quot;Add Subject&quot; button above to get started.</p>
+                      )}
+                    </div>
+                  ) : filteredSubjects.length === 0 ? (
+                    <div className="flex flex-col items-center gap-2 py-8 text-center">
+                      <Search className="h-8 w-8 text-muted-foreground/40" aria-hidden="true" />
+                      <p className="text-sm font-medium text-muted-foreground">
+                        No subjects match &ldquo;{searchText}&rdquo;.
+                      </p>
+                    </div>
                   ) : (
                    <>
                      <Card className="overflow-hidden">
                        <div className="overflow-x-auto">
-                         <table className="w-full text-sm">
+                         <table className="w-full text-sm" aria-label={`Subjects for ${selectedCourse?.name ?? "selected course"}`}>
                            <thead className="bg-muted/50 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
                              <tr>
-                               <th className="px-4 py-3">S.No.</th>
-                               <th className="px-4 py-3">Category</th>
-                               <th className="px-4 py-3">Name of the Subject</th>
-                               <th className="px-4 py-3 text-center">L</th>
-                               <th className="px-4 py-3 text-center">T</th>
-                               <th className="px-4 py-3 text-center">P</th>
-                               <th className="px-4 py-3 text-center">Credits</th>
-                               <th className="px-4 py-3" />
+                               <th scope="col" className="px-4 py-3">S.No.</th>
+                               <th scope="col" className="px-4 py-3">Category</th>
+                               <th scope="col" className="px-4 py-3">Name of the Subject</th>
+                               <th scope="col" className="px-4 py-3 text-center" title="Lecture hours">L</th>
+                               <th scope="col" className="px-4 py-3 text-center" title="Tutorial hours">T</th>
+                               <th scope="col" className="px-4 py-3 text-center" title="Practical hours">P</th>
+                               <th scope="col" className="px-4 py-3 text-center">Credits</th>
+                               <th scope="col" className="px-4 py-3 sr-only">Actions</th>
                              </tr>
                            </thead>
                            <tbody className="divide-y">
                              {paginatedSubjects.map((s) => (
-                               <tr key={s.id}>
-                                 <td className="px-4 py-2.5">{s.serialNumber ?? "—"}</td>
-                                 <td className="px-4 py-2.5">
-                                   {s.category ? <Badge variant="outline" className="text-xs">{s.category === "OTHER" ? (s.customCategory || "Other") : s.category}</Badge> : "—"}
-                                 </td>
-                                 <td className="px-4 py-2.5">
-                                   <div className="font-medium text-foreground">{s.name}</div>
-                                   <div className="flex flex-wrap items-center gap-2 mt-1">
-                                     <Badge variant="secondary" className="text-xs font-mono">{s.code}</Badge>
-                                     {s.shortCode && <Badge variant="outline" className="text-xs font-mono">{s.shortCode}</Badge>}
-                                     <Badge variant="outline" className="text-xs">{SUBJECT_TYPE_LABELS[s.type] ?? s.type ?? "—"}</Badge>
-                                     {!s.isActive && <Badge variant="secondary" className="text-xs text-muted-foreground">Inactive</Badge>}
-                                     {s.regulation && <Badge variant="secondary" className="text-xs">{s.regulation}</Badge>}
-                                     {s.academicYear && <Badge variant="outline" className="text-xs">{s.academicYear}</Badge>}
-                                     <span className="text-xs text-muted-foreground">{s.hoursPerWeek} hrs/week</span>
-                                   </div>
-                                 </td>
-                                 <td className="px-4 py-2.5 text-center">{s.lectureHours ?? "—"}</td>
-                                 <td className="px-4 py-2.5 text-center">{s.tutorialHours ?? "—"}</td>
-                                 <td className="px-4 py-2.5 text-center">{s.practicalHours ?? "—"}</td>
-                                 <td className="px-4 py-2.5 text-center">{s.credits}</td>
-                                 <td className="px-4 py-2.5 text-right">
-                                   <div className="flex justify-end gap-1">
-                                     <Button
-                                       variant="ghost"
-                                       size="icon"
-                                       className="h-8 w-8"
-                                       aria-label={`Edit ${s.name}`}
+                                <tr key={s.id} className={!s.isActive ? "opacity-60 bg-muted/20" : undefined}>
+                                  <td className="px-4 py-3 tabular-nums text-muted-foreground">{s.serialNumber ?? "—"}</td>
+                                  <td className="px-4 py-3">
+                                    {s.category ? <Badge variant="outline" className="text-xs whitespace-nowrap">{s.category === "OTHER" ? (s.customCategory || "Other") : s.category}</Badge> : <span className="text-muted-foreground">—</span>}
+                                  </td>
+                                  <td className="px-4 py-3">
+                                    <div className="font-medium text-foreground flex items-center gap-2">{s.name}{!s.isActive && <Badge variant="secondary" className="text-[10px] font-normal">Inactive</Badge>}</div>
+                                    <div className="flex flex-wrap items-center gap-2 mt-1">
+                                      <Badge variant="secondary" className="text-xs font-mono">{s.code}</Badge>
+                                      {s.shortCode && <Badge variant="outline" className="text-xs font-mono">{s.shortCode}</Badge>}
+                                      <Badge variant="outline" className="text-xs">{SUBJECT_TYPE_LABELS[s.type] ?? s.type ?? "—"}</Badge>
+                                      {s.hoursPerWeek != null && <span className="text-xs text-muted-foreground">{s.hoursPerWeek} hrs/wk</span>}
+                                    </div>
+                                  </td>
+                                  <td className="px-4 py-3 text-center tabular-nums">{s.lectureHours ?? "—"}</td>
+                                  <td className="px-4 py-3 text-center tabular-nums">{s.tutorialHours ?? "—"}</td>
+                                  <td className="px-4 py-3 text-center tabular-nums">{s.practicalHours ?? "—"}</td>
+                                  <td className="px-4 py-3 text-center tabular-nums font-medium">{s.credits}</td>
+                                  <td className="px-4 py-3 text-right">
+                                    <div className="flex justify-end gap-1">
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-9 w-9"
+                                        aria-label={`Edit ${s.name}`}
+                                        title={`Edit ${s.name}`}
                                         onClick={() => router.push(`/academics/subjects/${s.id}/edit?courseId=${encodeURIComponent(selectedCourseId)}&catalogId=${encodeURIComponent(selectedCourse?.catalogId ?? "")}&academicYear=${encodeURIComponent(selectedAcademicYear)}&regulation=${encodeURIComponent(selectedRegulation || s.regulation || "")}`)}
-                                     >
-                                       <Pencil className="h-3.5 w-3.5" />
-                                     </Button>
-                                     <Button
-                                       variant="ghost"
-                                       size="icon"
-                                       className="h-8 w-8"
-                                       aria-label={s.isActive ? `Deactivate ${s.name}` : `Activate ${s.name}`}
-                                       title={s.isActive ? "Deactivate" : "Activate"}
-                                       onClick={() => void handleToggleActive(s)}
-                                     >
-                                       {s.isActive ? <PowerOff className="h-3.5 w-3.5" /> : <Power className="h-3.5 w-3.5" />}
-                                     </Button>
-                                     <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" aria-label={`Delete ${s.name}`} onClick={() => setDeleteTarget(s)}>
-                                       <Trash2 className="h-3.5 w-3.5" />
-                                     </Button>
-                                   </div>
-                                 </td>
-                               </tr>
-                             ))}
+                                      >
+                                        <Pencil className="h-4 w-4" aria-hidden="true" />
+                                      </Button>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-9 w-9"
+                                        aria-label={s.isActive ? `Deactivate ${s.name}` : `Activate ${s.name}`}
+                                        title={s.isActive ? `Deactivate ${s.name}` : `Activate ${s.name}`}
+                                        onClick={() => void handleToggleActive(s)}
+                                      >
+                                        {s.isActive
+                                          ? <EyeOff className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                                          : <Eye className="h-4 w-4 text-emerald-600" aria-hidden="true" />}
+                                      </Button>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-9 w-9 text-destructive hover:text-destructive"
+                                        aria-label={`Delete ${s.name}`}
+                                        title={`Delete ${s.name}`}
+                                        onClick={() => setDeleteTarget(s)}
+                                      >
+                                        <Trash2 className="h-4 w-4" aria-hidden="true" />
+                                      </Button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              ))}
                            </tbody>
                          </table>
                        </div>
@@ -484,7 +590,7 @@ export default function AcademicsSubjectsPage() {
                      <Pagination
                        page={currentPage}
                        pageSize={pageSize}
-                       total={sortedSubjects.length}
+                       total={filteredSubjects.length}
                        onPageChange={setCurrentPage}
                        onPageSizeChange={setPageSize}
                        disabled={isLoadingSubjects}

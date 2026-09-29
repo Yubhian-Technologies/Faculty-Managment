@@ -50,6 +50,7 @@ export async function POST(request: Request) {
       longitude?: number;
       faceMatchDistance?: number;
       faceVerified?: boolean;
+      lateReason?: string;
     };
 
     const { latitude, longitude, faceMatchDistance, faceVerified } = body;
@@ -80,6 +81,11 @@ export async function POST(request: Request) {
     const recordRef = collegeRef.collection("attendanceRecords").doc(recordId);
     const now = new Date();
     const permittedCheckInTime = await resolveCheckInPermission(db, session.collegeId, session.uid, docSuffix);
+    const late = isLateCheckIn(checkIn, permittedCheckInTime);
+    const lateReason = body.lateReason?.trim();
+    if (late && !lateReason) {
+      return NextResponse.json({ error: "A reason is required when checking in late" }, { status: 400 });
+    }
 
     // Transactional check-then-set so a double-tapped/retried request cannot
     // double-write and double-fire recordLateCheckIn for one physical check-in.
@@ -102,6 +108,7 @@ export async function POST(request: Request) {
           checkInFaceMatchDistance: faceMatchDistance ?? null,
           checkInVerified: true,
           ...(permittedCheckInTime ? { permittedCheckInTime } : {}),
+          ...(late && lateReason ? { lateReason } : {}),
           updatedAt: now,
           ...(snap.exists ? {} : { createdAt: now }),
         }, { merge: true });
@@ -116,7 +123,7 @@ export async function POST(request: Request) {
       throw e;
     }
 
-    if (isLateCheckIn(checkIn, permittedCheckInTime)) {
+    if (late) {
       try {
         await recordLateCheckIn(db, session.collegeId, session.uid, user?.name ?? "", user?.department ?? "", date);
       } catch (err) {

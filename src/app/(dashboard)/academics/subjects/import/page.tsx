@@ -517,7 +517,8 @@ export default function ImportAcademicsSubjectsPage() {
           <button
             type="button"
             onClick={() => fileRef.current?.click()}
-            className="w-full border-2 border-dashed border-border rounded-lg p-8 flex flex-col items-center gap-3 hover:border-primary hover:bg-primary/5 transition-colors cursor-pointer"
+            className="w-full border-2 border-dashed border-border rounded-lg p-8 flex flex-col items-center gap-3 hover:border-primary hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors cursor-pointer"
+            aria-label="Click to upload CSV or Excel file"
           >
             <FileSpreadsheet className="h-10 w-10 text-muted-foreground" />
             <div className="text-center">
@@ -526,19 +527,19 @@ export default function ImportAcademicsSubjectsPage() {
             </div>
           </button>
           {parseError && (
-            <div className="flex items-start gap-2 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+            <div className="flex items-start gap-2 p-3 rounded-lg bg-red-50 dark:bg-destructive/10 border border-red-200 dark:border-destructive/20 text-red-700 dark:text-red-400 text-sm">
               <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
               {parseError}
             </div>
           )}
           {!parseError && parseWarning && (
-            <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-700 text-sm">
+            <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 text-amber-700 dark:text-amber-300 text-sm">
               <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
               {parseWarning}
             </div>
           )}
           {rows.length > 0 && (
-            <p className="text-sm text-green-700 flex items-center gap-1">
+            <p className="text-sm text-green-700 dark:text-green-400 flex items-center gap-1">
               <CheckCircle2 className="h-4 w-4" />{rows.length} row{rows.length !== 1 ? "s" : ""} parsed successfully
             </p>
           )}
@@ -576,7 +577,7 @@ export default function ImportAcademicsSubjectsPage() {
                   {rows.slice(0, 20).map((row, i) => {
                     const missing = requiredKeys.some((k) => !row[k]?.trim());
                     return (
-                      <tr key={i} className={`border-b ${missing ? "bg-red-50" : i % 2 === 0 ? "" : "bg-muted/20"}`}>
+                      <tr key={i} className={`border-b ${missing ? "bg-red-50 dark:bg-destructive/15" : i % 2 === 0 ? "" : "bg-muted/20"}`}>
                         <td className="p-2 text-muted-foreground">{i + 2}</td>
                         {columns.filter((c) => rows.some((r) => r[c.key])).map((c) => (
                           <td key={c.key} className={`p-2 whitespace-nowrap ${c.required && !row[c.key]?.trim() ? "text-red-600 font-medium" : ""}`}>
@@ -604,7 +605,7 @@ export default function ImportAcademicsSubjectsPage() {
           <CardHeader><CardTitle className="text-base flex items-center gap-2"><span className="h-6 w-6 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center font-bold">4</span>Import</CardTitle></CardHeader>
           <CardContent className="space-y-4">
             {missingRequired && (
-              <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-sm">
+              <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 text-amber-800 dark:text-amber-300 text-sm">
                 <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
                 Some rows have missing required fields (highlighted in red above). Those rows will be skipped during import.
               </div>

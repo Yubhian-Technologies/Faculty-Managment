@@ -6,6 +6,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { createFirebaseUser } from "@/lib/firebase/authRest";
 import { getHodDepartmentScope, canHodManageFacultyDepartment } from "@/lib/departments/scope";
 import { SUPPORTING_STAFF_ROLE_CATEGORY } from "@/lib/supportingStaff/roleCategory";
+import { unitLabelForHeadRole } from "@/lib/attendance/collegeStaffUnits";
 import { migrateSupportingStaffDoc } from "@/lib/faculty/fieldRenames";
 import { NON_TECHNICAL_STAFF_DESIGNATION_LABELS } from "@/types";
 import type { SupportingStaffCategory, SupportingStaffDesignation } from "@/types";
@@ -30,7 +31,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await requireCollegeMember("COLLEGE_OFFICE", "HOD");
+    const session = await requireCollegeMember("COLLEGE_OFFICE", "HOD", "LIBRARY");
     const { id } = await params;
 
     const body = (await request.json()) as { email?: string; password?: string };
@@ -70,6 +71,9 @@ export async function POST(
       if (!canHodManageFacultyDepartment(scope, data.department ?? "")) {
         return NextResponse.json({ error: "Staff record not found" }, { status: 404 });
       }
+    }
+    if (session.role === "LIBRARY" && data.department !== unitLabelForHeadRole("LIBRARY")) {
+      return NextResponse.json({ error: "Staff record not found" }, { status: 404 });
     }
 
     if (data.userUid) {

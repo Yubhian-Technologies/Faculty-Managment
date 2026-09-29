@@ -74,12 +74,6 @@ export interface LeaveTypeRules {
   minAdvanceNoticeDays?: number; // fromDate must be at least this many days out from today
   maxRequestsPerMonth?: number;  // frequency cap, independent of the annual day balance
   eligibleGenders?: ("Male" | "Female" | "Other")[];
-  // Sunday/a declared holiday strictly between this request's own from/to
-  // dates is normally exempt from the day count (see countWorkingDays) - this
-  // charges it too, so leave can't be used to bridge a free long weekend.
-  // Only covers the single-request case; two separate requests either side of
-  // the same off day aren't (yet) detected as a sandwich - see dayCounter.ts.
-  sandwichRule?: boolean;
   escalateAfterDays?: number;       // beyond this many days, route straight to Principal even if this type is normally HOD-final
   maxLopDaysBeforeEscalation?: number; // beyond this many projected Loss-of-Pay days, likewise escalate past HOD
 }
@@ -501,6 +495,15 @@ export interface LeaveRequest {
   // cancelled request wherever the approver above them (HOD/Principal/VP/
   // Management) views this person's leave history, e.g. LeaveHistoryRow.
   cancelReason?: string;
+  // ─── On Duty details (OD only) ──────────────────────────────────────────
+  // Required at submission for leaveTypeCode "OD" (see applications/route.ts
+  // POST) - where the duty is and who an approver can verify it with, shown
+  // alongside `reason` wherever an approver reviews the request (e.g.
+  // LeaveApprovalQueue). Distinct from handoverToUid/handoverToName below,
+  // which is an internal colleague covering other responsibilities, not a
+  // contact at the place being visited.
+  placeOfVisit?: string;
+  pointOfContact?: string;
   // ─── On Duty proof (OD only - see ODProofStatus above) ──────────────────
   // Stamped true at APPROVAL time for an OD request, in both approval paths
   // (the HOD branch in applications/[id]/route.ts and the shared

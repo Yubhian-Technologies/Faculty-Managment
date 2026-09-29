@@ -227,6 +227,8 @@ export async function POST(request: Request) {
       extendsRequestId?: string;
       periodSubstitutions?: PeriodSubstitutionInput[];
       handoverToUid?: string;
+      placeOfVisit?: string;
+      pointOfContact?: string;
     };
 
     if (!body.fromDate || !body.toDate || !body.reason?.trim()) {
@@ -234,6 +236,9 @@ export async function POST(request: Request) {
     }
     if (!body.leaveTypeCode && !body.isOtherRequest) {
       return NextResponse.json({ error: "leaveTypeCode or isOtherRequest is required" }, { status: 400 });
+    }
+    if (body.leaveTypeCode === "OD" && (!body.placeOfVisit?.trim() || !body.pointOfContact?.trim())) {
+      return NextResponse.json({ error: "Place of visit and point of contact are required for On Duty" }, { status: 400 });
     }
 
     const db = getAdminDb();
@@ -422,7 +427,7 @@ export async function POST(request: Request) {
       getHolidayDateKeys(db, session.collegeId, fromDate, toDate),
       getWorkingDayWeightsForRole(db, session.collegeId, fromDate, toDate, session.role as UserRole),
     ]);
-    const totalDays = countWorkingDays(fromDate, toDate, holidayDates, body.isHalfDay, workingDayWeights, leaveType?.rules.sandwichRule);
+    const totalDays = countWorkingDays(fromDate, toDate, holidayDates, body.isHalfDay, workingDayWeights);
 
     // Insufficient balance never blocks submission - days beyond what's
     // remaining are accepted and split into Loss of Pay at approval time
@@ -540,6 +545,7 @@ export async function POST(request: Request) {
       ...(body.leaveTypeCode ? { leaveTypeCode: body.leaveTypeCode } : {}),
       isOtherRequest: body.isOtherRequest || false,
       ...(body.extendsRequestId ? { extendsRequestId: body.extendsRequestId } : {}),
+      ...(body.leaveTypeCode === "OD" ? { placeOfVisit: body.placeOfVisit!.trim(), pointOfContact: body.pointOfContact!.trim() } : {}),
       ...(periodSubstitutions ? { periodSubstitutions } : {}),
       ...(handover ? { handoverToUid: handover.uid, handoverToName: handover.name } : {}),
       ...(adjustmentRequests.length > 0 ? { adjustmentRequests, postAcceptanceStatus } : {}),

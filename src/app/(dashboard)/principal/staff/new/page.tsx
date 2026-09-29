@@ -30,7 +30,7 @@ import type { UserRole } from "@/types";
 // Staff lists. Non-teaching staff must be added via the Supporting Staff
 // modules (HOD for Technical, "Add Non-Technical Staff" for Non-Technical),
 // which create both the login and the profile record.
-const CREATABLE_ROLES: UserRole[] = ["COLLEGE_OFFICE", "COLLEGE_ACCOUNTS", "WEBMASTER"];
+const CREATABLE_ROLES: UserRole[] = ["COLLEGE_OFFICE", "COLLEGE_ACCOUNTS", "WEBMASTER", "LIBRARY"];
 
 export default function NewStaffPage() {
   const router = useRouter();

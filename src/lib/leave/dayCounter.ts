@@ -22,16 +22,8 @@ export function dateKey(d: Date): string {
 // that gets stored and deducted) and the client-side preview
 // (LeaveApplyForm.tsx), so both agree on the same number before and after
 // submission.
-// `sandwich`: when true (see LeaveTypeRules.sandwichRule), a Sunday/holiday
-// that would otherwise be exempt still counts IF it sits strictly between
-// `from` and `to` - i.e. this same request has a leave day both immediately
-// before and after it. The very first/last day of the range is never
-// sandwiched by definition (there's no leave day on the outside of it within
-// THIS request) - only covers the single-request case, see its own note in
-// types/leave.ts.
 export function countWorkingDays(
-  from: Date, to: Date, holidayDates: Set<string>, isHalfDay?: boolean, workingDayWeights?: Map<string, number>,
-  sandwich?: boolean
+  from: Date, to: Date, holidayDates: Set<string>, isHalfDay?: boolean, workingDayWeights?: Map<string, number>
 ): number {
   if (isHalfDay) return 0.5;
   let count = 0;
@@ -40,12 +32,9 @@ export function countWorkingDays(
   while (cursor <= end) {
     const key = dateKey(cursor);
     const overrideWeight = workingDayWeights?.get(key);
-    const isInterior = sandwich && cursor > from && cursor < end;
     if (overrideWeight !== undefined) {
       count += overrideWeight;
     } else if (cursor.getDay() !== 0 && !holidayDates.has(key)) {
-      count++;
-    } else if (isInterior) {
       count++;
     }
     cursor.setDate(cursor.getDate() + 1);

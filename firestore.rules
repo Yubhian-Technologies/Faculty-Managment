@@ -92,6 +92,14 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == uid;
     }
 
+    // A STUDENT reading only their own docs - never folded into isStaff()
+    // (OR-combined match blocks never tighten, so this only ever widens a
+    // read, never narrows an existing staff grant). See students/{studentId}
+    // and users/{uid} below for the two places this is actually used.
+    function isStudentSelf(collegeId) {
+      return isCollegeMember(collegeId) && hasRole('STUDENT');
+    }
+
     function hasCollegeId(collegeId) {
       return request.resource.data.collegeId == collegeId;
     }
@@ -141,7 +149,7 @@ service cloud.firestore {
       // ─── [ CORE ] ───────────────────────────────────────────────────────────
 
       match /users/{uid} {
-        allow read: if isStaff(collegeId);
+        allow read: if isStaff(collegeId) || (isStudentSelf(collegeId) && isOwner(uid));
         allow create: if isSuperAdmin() && hasCollegeId(collegeId);
         // Owner self-updates are for personal-profile fields only. Every field
         // any guard (verifySession/liveRoles/scope.ts) treats as an
@@ -259,8 +267,19 @@ service cloud.firestore {
       }
 
       match /students/{studentId} {
-        allow read: if isStaff(collegeId);
+        allow read: if isStaff(collegeId) || (isStudentSelf(collegeId) && resource.data.uid == request.auth.uid);
         allow create, update: if isHODorAbove(collegeId) || isPanelMember(collegeId);
+      }
+
+      // Certificates/documents Office uploads per student - v1 visibility is
+      // Office (uploader) + Principal/VP oversight + the student themself
+      // only. `studentUid` is denormalized on the doc (set once at creation)
+      // so a student's own read can match directly on their auth uid without
+      // a cross-document join back to the students collection.
+      match /studentDocuments/{docId} {
+        allow read: if isCollegeOffice(collegeId) || isPrincipal(collegeId) ||
+          (isStudentSelf(collegeId) && resource.data.studentUid == request.auth.uid);
+        allow create, delete: if isCollegeOffice(collegeId) || isPrincipal(collegeId);
       }
 
       // ─── [ FACULTY MODULE ] ─────────────────────────────────────────────────
