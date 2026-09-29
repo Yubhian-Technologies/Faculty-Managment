@@ -1,6 +1,8 @@
 "use client";
 
 import { useMemo } from "react";
+import Link from "next/link";
+import { BookOpen, CalendarRange } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SemesterColumnCard } from "./SemesterColumnCard";
 import type {
@@ -76,9 +78,21 @@ export function CourseYearRow({
             Year {year}
           </span>
 
-          <span className="text-muted-foreground/60 text-xs">|</span>
+          {/* Prominent Subject Count for this Year */}
+          <span
+            className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-0.5 rounded-md border ${
+              yearTotalSubjects > 0
+                ? "bg-primary/10 text-primary border-primary/25 dark:bg-primary/20 dark:text-primary dark:border-primary/30"
+                : "bg-muted/80 text-muted-foreground border-border"
+            }`}
+          >
+            <BookOpen className="h-3.5 w-3.5" />
+            <span className="font-bold">{yearTotalSubjects}</span> {yearTotalSubjects === 1 ? "Subject" : "Subjects"}
+          </span>
 
-          {/* Academic Year Info & Proper Button */}
+          <span className="text-muted-foreground/40 text-xs">|</span>
+
+          {/* Academic Year Info & Subtle Action */}
           <div className="flex items-center gap-2">
             <span className="text-xs text-muted-foreground">
               Academic Year:
@@ -89,12 +103,16 @@ export function CourseYearRow({
 
             {!isInherited && (
               <Button
-                variant="outline"
+                variant={academicYear ? "ghost" : "outline"}
                 size="sm"
                 onClick={onAdvanceAcademicYear}
-                className="h-7 text-xs px-2.5 rounded-md font-medium ml-1"
+                className={`h-6 text-xs px-2 rounded-md font-medium ${
+                  academicYear
+                    ? "text-muted-foreground hover:text-foreground hover:bg-muted"
+                    : "text-amber-700 border-amber-300 dark:text-amber-300 dark:border-amber-700 hover:bg-amber-50 dark:hover:bg-amber-950/30"
+                }`}
               >
-                {academicYear ? "Advance Academic Year" : "Set Academic Year"}
+                {academicYear ? "Advance AY →" : "Set AY"}
               </Button>
             )}
           </div>
@@ -109,7 +127,7 @@ export function CourseYearRow({
               </span>
             ) : (
               <span className="text-muted-foreground italic">
-                {isSubDepartment ? "Timings not configured" : "Timings not configured"}
+                Timings not configured
               </span>
             )}
           </span>
@@ -127,8 +145,8 @@ export function CourseYearRow({
         </div>
       </div>
 
-      {/* Semesters Grid - ONLY when semesters are actually configured */}
-      {semesters.length > 0 && (
+      {/* Semesters Grid or Accessible Empty State */}
+      {semesters.length > 0 ? (
         <div className="mt-3.5 pt-3 border-t border-border/50">
           <div className="flex items-center justify-between mb-2.5">
             <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
@@ -168,6 +186,43 @@ export function CourseYearRow({
                 />
               );
             })}
+          </div>
+        </div>
+      ) : (
+        <div className="mt-3 pt-3 border-t border-border/50">
+          <div className="rounded-lg border border-dashed border-border/80 bg-muted/20 px-4 py-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div className="space-y-0.5">
+              <p className="text-xs font-semibold text-foreground">
+                No Semesters Configured for Year {year}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Configure semester durations to organize subjects and schedule timetables.
+              </p>
+            </div>
+            {!isInherited && (
+              <div className="flex items-center gap-2 shrink-0">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={onEditTiming}
+                  className="h-7 text-xs font-medium gap-1.5"
+                >
+                  <CalendarRange className="h-3.5 w-3.5" />
+                  Add Semesters & Timings
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  asChild
+                  className="h-7 text-xs font-medium gap-1.5"
+                >
+                  <Link href={`/academics/assign-semester?catalogId=${course.catalogId ?? ""}&departmentId=${course.departmentId}&year=${year}`}>
+                    <BookOpen className="h-3.5 w-3.5" />
+                    Assign Subjects
+                  </Link>
+                </Button>
+              </div>
+            )}
           </div>
         </div>
       )}

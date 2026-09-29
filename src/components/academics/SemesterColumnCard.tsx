@@ -83,17 +83,18 @@ export function SemesterColumnCard({
     >
       <div className="space-y-1.5">
         <div className="flex items-center justify-between gap-2">
-          <span className="font-semibold text-sm text-foreground">
+          <span className="font-bold text-sm text-foreground">
             Semester {semester}
           </span>
           <span
-            className={`text-xs font-medium px-2 py-0.5 rounded border ${
+            className={`inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-0.5 rounded-md border ${
               count > 0
-                ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800"
-                : "bg-muted text-muted-foreground border-border"
+                ? "bg-primary/10 text-primary border-primary/25 dark:bg-primary/20 dark:text-primary dark:border-primary/30"
+                : "bg-muted/80 text-muted-foreground border-border"
             }`}
           >
-            {count} {count === 1 ? "subject" : "subjects"}
+            <span className={`h-1.5 w-1.5 rounded-full ${count > 0 ? "bg-primary" : "bg-muted-foreground/40"}`} />
+            {count} {count === 1 ? "Subject" : "Subjects"}
           </span>
         </div>
 
