@@ -25,7 +25,6 @@ type SubjectForm = {
   lectureHours: string;
   tutorialHours: string;
   practicalHours: string;
-  hoursPerWeek: string;
   totalHoursPerSemester: string;
   credits: string;
   regulation: string;
@@ -34,7 +33,7 @@ type SubjectForm = {
 const EMPTY_SUBJECT_FORM: SubjectForm = {
   serialNumber: "", category: "", customCategory: "", name: "", code: "", shortCode: "", type: "THEORY",
   lectureHours: "", tutorialHours: "", practicalHours: "",
-  hoursPerWeek: "", totalHoursPerSemester: "", credits: "", regulation: "",
+  totalHoursPerSemester: "", credits: "", regulation: "",
 };
 
 export default function NewAcademicsSubjectPage() {
@@ -85,6 +84,15 @@ export default function NewAcademicsSubjectPage() {
     setForm((f) => ({ ...f, ...patch }));
   }
 
+  // Always L+T+P, never independently typed - a separate free-typed field
+  // here previously let this drift from the hours actually entered (e.g.
+  // saved as 0 while L/T/P summed to 3), and that stored value is what
+  // Teaching Assignments falls back to for a faculty member's weekly load
+  // when the assigning HOD doesn't override it - a wrong 0 here silently
+  // undercounted real teaching load downstream, not just this page's own
+  // display.
+  const hoursPerWeek = (Number(form.lectureHours) || 0) + (Number(form.tutorialHours) || 0) + (Number(form.practicalHours) || 0);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.name.trim() || !form.code.trim()) {
@@ -126,7 +134,7 @@ export default function NewAcademicsSubjectPage() {
           lectureHours: Number(form.lectureHours),
           tutorialHours: Number(form.tutorialHours),
           practicalHours: Number(form.practicalHours),
-          hoursPerWeek: form.hoursPerWeek === "" ? 0 : Number(form.hoursPerWeek),
+          hoursPerWeek,
           totalHoursPerSemester: form.totalHoursPerSemester === "" ? null : Number(form.totalHoursPerSemester),
           credits: form.credits === "" ? 0 : Number(form.credits),
         }),
@@ -301,12 +309,8 @@ export default function NewAcademicsSubjectPage() {
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label>Hours / Week</Label>
-                <Input
-                  type="number"
-                  min={0}
-                  value={form.hoursPerWeek}
-                  onChange={(e) => setF({ hoursPerWeek: stripLeadingZeros(e.target.value) })}
-                />
+                <Input type="number" value={hoursPerWeek} disabled />
+                <p className="text-xs text-muted-foreground">L + T + P, computed automatically.</p>
               </div>
               <div className="space-y-2">
                 <Label>Hours / Semester</Label>

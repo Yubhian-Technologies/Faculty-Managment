@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo } from "react";
-import Link from "next/link";
 import { BookOpen, CalendarRange } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SemesterColumnCard } from "./SemesterColumnCard";
@@ -191,37 +190,19 @@ export function CourseYearRow({
       ) : (
         <div className="mt-3 pt-3 border-t border-border/50">
           <div className="rounded-lg border border-dashed border-border/80 bg-muted/20 px-4 py-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-            <div className="space-y-0.5">
-              <p className="text-xs font-semibold text-foreground">
-                No Semesters Configured for Year {year}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Configure semester durations to organize subjects and schedule timetables.
-              </p>
-            </div>
+            <p className="text-xs font-semibold text-foreground">
+              No Semesters Configured for Year {year}
+            </p>
             {!isInherited && (
-              <div className="flex items-center gap-2 shrink-0">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={onEditTiming}
-                  className="h-7 text-xs font-medium gap-1.5"
-                >
-                  <CalendarRange className="h-3.5 w-3.5" />
-                  Add Semesters & Timings
-                </Button>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  asChild
-                  className="h-7 text-xs font-medium gap-1.5"
-                >
-                  <Link href={`/academics/assign-semester?catalogId=${course.catalogId ?? ""}&departmentId=${course.departmentId}&year=${year}`}>
-                    <BookOpen className="h-3.5 w-3.5" />
-                    Assign Subjects
-                  </Link>
-                </Button>
-              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onEditTiming}
+                className="h-7 text-xs font-medium gap-1.5 shrink-0"
+              >
+                <CalendarRange className="h-3.5 w-3.5" />
+                Add Semesters & Timings
+              </Button>
             )}
           </div>
         </div>

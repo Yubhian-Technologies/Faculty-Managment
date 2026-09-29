@@ -36,7 +36,7 @@ export default function LocationsPage() {
         setLocations(d.locations ?? []);
       }
     } catch {
-      toast({ variant: "destructive", title: "Failed to load locations" });
+      toast({ variant: "destructive", title: "Failed to load gates" });
     } finally {
       setIsLoading(false);
     }
@@ -60,7 +60,7 @@ export default function LocationsPage() {
         body: JSON.stringify(form),
       });
       if (res.ok) {
-        toast({ variant: "success", title: editingId ? "Location updated" : "Location created" });
+        toast({ variant: "success", title: editingId ? "Gate updated" : "Gate created" });
         setIsDialogOpen(false);
         setEditingId(null);
         setForm({ name: "", address: "", city: "", state: "" });
@@ -76,7 +76,7 @@ export default function LocationsPage() {
   async function handleDelete(id: string) {
     try {
       const res = await fetch(`/api/location/locations/${id}`, { method: "DELETE" });
-      if (res.ok) { loadLocations(); toast({ variant: "success", title: "Location deleted" }); }
+      if (res.ok) { loadLocations(); toast({ variant: "success", title: "Gate deleted" }); }
     } catch {
       toast({ variant: "destructive", title: "Failed to delete" });
     }
@@ -96,13 +96,13 @@ export default function LocationsPage() {
             <Link href="/location-staff-admin"><ArrowLeft className="h-5 w-5 text-foreground" /></Link>
           </Button>
           <div>
-            <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 text-[11px] font-semibold px-2.5 py-0.5 rounded-full">Locations</Badge>
+            <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 text-[11px] font-semibold px-2.5 py-0.5 rounded-full">Gates</Badge>
             <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
-              <MapPin className="h-6 w-6" /> Campus Locations
+              <MapPin className="h-6 w-6" /> Gates
             </h1>
           </div>
         </div>
-        <Button onClick={() => { setEditingId(null); setForm({ name: "", address: "", city: "", state: "" }); setIsDialogOpen(true); }}><Plus className="h-4 w-4 mr-1.5" /> Add Location</Button>
+        <Button onClick={() => { setEditingId(null); setForm({ name: "", address: "", city: "", state: "" }); setIsDialogOpen(true); }}><Plus className="h-4 w-4 mr-1.5" /> Add Gate</Button>
       </div>
 
       {isLoading ? (
@@ -110,7 +110,7 @@ export default function LocationsPage() {
           {[1, 2, 3].map((i) => <div key={i} className="h-48 rounded-3xl border border-border/50 bg-card/60 animate-pulse" />)}
         </div>
       ) : locations.length === 0 ? (
-        <div className="rounded-3xl border border-dashed border-border/80 p-12 text-center bg-card/40"><Building2 className="h-10 w-10 text-muted-foreground mx-auto mb-3 opacity-50" /><p className="text-sm text-muted-foreground">No locations configured yet</p></div>
+        <div className="rounded-3xl border border-dashed border-border/80 p-12 text-center bg-card/40"><Building2 className="h-10 w-10 text-muted-foreground mx-auto mb-3 opacity-50" /><p className="text-sm text-muted-foreground">No gates configured yet</p></div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {locations.map((loc) => (
@@ -140,9 +140,9 @@ export default function LocationsPage() {
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="sm:max-w-md">
-          <DialogHeader><DialogTitle>{editingId ? "Edit Location" : "Add Location"}</DialogTitle><DialogDescription>Configure a campus/report location.</DialogDescription></DialogHeader>
+          <DialogHeader><DialogTitle>{editingId ? "Edit Gate" : "Add Gate"}</DialogTitle><DialogDescription>Gates are the places staff must report to.</DialogDescription></DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2"><Label>Location Name *</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g., Main Campus" required /></div>
+            <div className="space-y-2"><Label>Gate Name *</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g., Main Gate" required /></div>
             <div className="space-y-2"><Label>Address</Label><Input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} placeholder="Street address" /></div>
             <div className="grid grid-cols-2 gap-3"><div className="space-y-2"><Label>City *</Label><Input value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} required /></div><div className="space-y-2"><Label>State</Label><Input value={form.state} onChange={(e) => setForm({ ...form, state: e.target.value })} /></div></div>
             <DialogFooter><Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>Cancel</Button><Button type="submit" disabled={isSubmitting}>{isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : (editingId ? "Update" : "Create")}</Button></DialogFooter>

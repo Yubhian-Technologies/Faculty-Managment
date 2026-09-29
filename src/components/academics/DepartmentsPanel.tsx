@@ -7,13 +7,11 @@ import { Plus, Pencil, Trash2, CheckCircle2, Upload, Layers, ArrowLeft, ChevronR
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { FreshmanDepartmentBadge } from "@/components/shared/FreshmanDepartmentBadge";
-import { DepartmentChipList } from "@/components/shared/DepartmentChipList";
 import { toast } from "@/hooks/useToast";
 import { yearOrdinalLabel } from "@/lib/college/academicYears";
-import { resolveDepartmentCourseScope, replaceNoOwnSectionsParents, type DepartmentWithId } from "@/lib/college/academicStructure";
+import { resolveDepartmentCourseScope, type DepartmentWithId } from "@/lib/college/academicStructure";
 import { RoleAssignmentsPage } from "@/components/roles/RoleAssignmentsPage";
 import { SectionCard } from "@/components/academics/SectionsPanel";
 import { SectionRoster } from "@/components/academics/SectionRoster";
@@ -109,7 +107,7 @@ function DepartmentDrillDown({ departments, rootId, onExit }: {
           {children.map((c) => (
             <Card key={c.id} className="cursor-pointer transition-colors hover:border-primary/50" onClick={() => setPath([...path, c.id])}>
               <CardContent className="p-4">
-                <Badge variant="secondary" className="text-xs font-mono mb-1">{c.code}</Badge>
+                <span className="inline-flex items-center justify-center h-6 min-w-[1.5rem] px-1.5 rounded bg-muted text-xs font-mono font-semibold text-muted-foreground mb-1">{c.code}</span>
                 <p className="font-semibold text-sm leading-tight">{c.name}</p>
                 <p className="text-xs text-muted-foreground mt-1.5">
                   {c.hodName ? `HOD: ${c.hodName}` : "No HOD assigned"}
@@ -155,12 +153,6 @@ export function DepartmentsPanel() {
   const topLevelDepartments = departments.filter((d) => !d.parentDepartmentId);
   const childrenOf = (parentId: string) =>
     departments.filter((d) => d.parentDepartmentId === parentId);
-  // Cross-listing chips are shown narrowed (replaceNoOwnSectionsParents): a
-  // department that organises its sub-departments and runs no sections of its
-  // own is never a real destination, so it reads here as those children - the
-  // same substitution every picker and every section/student write path makes.
-  // Purely presentational; the stored value is untouched until the Principal
-  // saves the department again.
   const coursesOf = (departmentId: string) =>
     courses.filter((c) => c.departmentId === departmentId).sort((a, b) => a.name.localeCompare(b.name));
 
@@ -269,144 +261,116 @@ export function DepartmentsPanel() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {topLevelDepartments.map((dept) => (
-            <Card
-              key={dept.id}
-              className={`cursor-pointer transition-colors hover:border-primary/50 ${!dept.isActive ? "opacity-60" : ""}`}
-              onClick={() => setSelectedDeptId(dept.id)}
-            >
-              <CardContent className="p-4">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <Badge variant="secondary" className="text-xs font-mono shrink-0">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {topLevelDepartments.map((dept) => {
+            const deptCourses = coursesOf(dept.id);
+            const subDeptCount = childrenOf(dept.id).length;
+            return (
+              <Card
+                key={dept.id}
+                className={`flex flex-col cursor-pointer transition-colors hover:border-primary/50 ${!dept.isActive ? "opacity-60" : ""}`}
+                onClick={() => setSelectedDeptId(dept.id)}
+              >
+                <CardContent className="flex flex-col flex-1 p-4">
+                  {/* Header: code + actions */}
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="inline-flex items-center justify-center h-7 min-w-[1.75rem] px-1.5 rounded bg-muted text-xs font-mono font-semibold text-muted-foreground">
                         {dept.code}
-                      </Badge>
-                      {!dept.isActive && <Badge variant="outline" className="text-xs">Inactive</Badge>}
+                      </span>
                       <FreshmanDepartmentBadge departmentId={dept.id} allDepartments={departments as DepartmentWithId[]} />
+                      {!dept.isActive && <span className="text-[10px] font-medium text-orange-500 uppercase tracking-wide">Inactive</span>}
                     </div>
-                    <p className="font-semibold text-sm leading-tight">{dept.name}</p>
-                    <div className="mt-1.5" onClick={(e) => e.stopPropagation()}>
-                      {dept.hodName && dept.hodUid ? (
-                        <div className="flex items-center gap-1">
-                          <CheckCircle2 className="h-3 w-3 text-green-500 shrink-0" />
-                          <p className="text-xs text-muted-foreground truncate">HOD: {dept.hodName}</p>
-                        </div>
-                      ) : (
-                        <p className="text-xs text-orange-500">No HOD assigned</p>
-                      )}
+                    <div className="flex gap-0.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        title="Edit department"
+                        onClick={() => router.push(`/principal/departments/${dept.id}/edit`)}
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-destructive hover:text-destructive"
+                        title="Delete department"
+                        onClick={() => setDeletingDept(dept)}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
                     </div>
-                    {(() => {
-                      const deptCourses = coursesOf(dept.id);
-                      // A department with courses shows each one's OWN resolved
-                      // years/cross-listing (a per-course override when set,
-                      // else the flat fields below) - a department offering
-                      // both B.Tech and M.Tech can have entirely different
-                      // structures for each. One that hasn't added any course
-                      // yet falls back to the flat fields as a general preview.
-                      if (deptCourses.length > 0) {
-                        return (
-                          <div className="mt-1.5 space-y-1.5">
-                            {deptCourses.map((c) => {
-                              const scope = resolveDepartmentCourseScope(dept, c.catalogId);
-                              return (
-                                <div key={c.id} className="text-xs text-muted-foreground">
-                                  <span className="text-foreground font-medium line-clamp-1">{c.name}:</span>{" "}
-                                  {scope.assignedYears.length > 0
-                                    ? scope.assignedYears.map(yearOrdinalLabel).join(", ")
-                                    : "No years assigned yet"}
-                                  {scope.secondaryDepartments.length > 0 && (
-                                    <DepartmentChipList
-                                      names={replaceNoOwnSectionsParents(departments as DepartmentWithId[], scope.secondaryDepartments).slice(0, 3)}
-                                      className="mt-1"
-                                    />
-                                  )}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        );
-                      }
-                      return (
-                        <>
-                          {dept.assignedYears && dept.assignedYears.length > 0 ? (
-                            <div className="flex flex-wrap gap-1 mt-1.5">
-                              {dept.assignedYears.map((y) => (
-                                <Badge key={y} variant="outline" className="text-xs">{yearOrdinalLabel(y)}</Badge>
-                              ))}
-                            </div>
-                          ) : (
-                            <p className="text-xs text-muted-foreground mt-1.5">No years assigned yet</p>
-                          )}
-                          {dept.secondaryDepartments && dept.secondaryDepartments.length > 0 && (
-                            <div className="mt-1.5">
-                              <p className="text-xs text-muted-foreground">Cross-listed with</p>
-                              <DepartmentChipList
-                                names={replaceNoOwnSectionsParents(departments as DepartmentWithId[], dept.secondaryDepartments)}
-                                className="mt-1"
-                              />
-                            </div>
-                          )}
-                        </>
-                      );
-                    })()}
-                    {childrenOf(dept.id).length > 0 && (
-                      <div className="mt-1.5 flex items-start gap-1.5 text-xs text-muted-foreground">
-                        <Layers className="h-3 w-3 mt-0.5 shrink-0" />
-                        <span>
-                          {childrenOf(dept.id).length} sub-department
-                          {childrenOf(dept.id).length !== 1 ? "s" : ""}:{" "}
-                          <span className="text-foreground">
-                            {childrenOf(dept.id).map((c) => c.name).join(", ")}
-                          </span>
-                        </span>
+                  </div>
+
+                  {/* Name */}
+                  <p className="font-semibold text-sm mt-2 leading-snug">{dept.name}</p>
+
+                  {/* HOD */}
+                  <div className="mt-1.5" onClick={(e) => e.stopPropagation()}>
+                    {dept.hodName && dept.hodUid ? (
+                      <div className="flex items-center gap-1.5">
+                        <CheckCircle2 className="h-3 w-3 text-green-500 shrink-0" />
+                        <p className="text-xs text-muted-foreground truncate">HOD: {dept.hodName}</p>
                       </div>
+                    ) : (
+                      <p className="text-xs text-orange-500">No HOD assigned</p>
                     )}
                   </div>
-                  <div className="flex gap-1 shrink-0">
+
+                  {/* Course + Year info - concise text only */}
+                  <div className="mt-2 space-y-1 flex-1">
+                    {deptCourses.length > 0 ? (
+                      deptCourses.map((c) => {
+                        const scope = resolveDepartmentCourseScope(dept, c.catalogId);
+                        const yearsText = scope.assignedYears.length > 0
+                          ? scope.assignedYears.map(yearOrdinalLabel).join(", ")
+                          : "No years assigned";
+                        return (
+                          <p key={c.id} className="text-xs text-muted-foreground line-clamp-1">
+                            <span className="font-medium text-foreground">{c.name}:</span>{" "}{yearsText}
+                          </p>
+                        );
+                      })
+                    ) : dept.assignedYears && dept.assignedYears.length > 0 ? (
+                      <p className="text-xs text-muted-foreground">
+                        {dept.assignedYears.map(yearOrdinalLabel).join(", ")}
+                      </p>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">No courses configured</p>
+                    )}
+
+                    {subDeptCount > 0 && (
+                      <p className="text-xs text-muted-foreground">
+                        <Layers className="inline h-3 w-3 mr-1 -mt-px" />
+                        {subDeptCount} sub-department{subDeptCount !== 1 ? "s" : ""}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Actions */}
+                  <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-border/50" onClick={(e) => e.stopPropagation()}>
                     <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7"
-                      title="Edit department"
-                      onClick={(e) => { e.stopPropagation(); router.push(`/principal/departments/${dept.id}/edit`); }}
+                      asChild
+                      variant="outline"
+                      size="sm"
+                      className="h-8 text-xs"
                     >
-                      <Pencil className="h-3.5 w-3.5" />
+                      <Link href={`/principal/departments/${dept.id}`}>Manage courses &amp; timings</Link>
                     </Button>
                     <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 text-destructive hover:text-destructive"
-                      title="Delete department"
-                      onClick={(e) => { e.stopPropagation(); setDeletingDept(dept); }}
+                      variant="outline"
+                      size="sm"
+                      className="h-8 text-xs"
+                      onClick={() => setShowRoles(true)}
                     >
-                      <Trash2 className="h-3.5 w-3.5" />
+                      Role Assignments
                     </Button>
                   </div>
-                </div>
-                <div className="grid grid-cols-2 gap-2 mt-3">
-                  <Button
-                    asChild
-                    variant="outline"
-                    size="sm"
-                    className="h-8 text-xs"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <Link href={`/principal/departments/${dept.id}`}>Manage courses &amp; timings</Link>
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-8 text-xs"
-                    onClick={(e) => { e.stopPropagation(); setShowRoles(true); }}
-                  >
-                    Role Assignments
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       )}
 
