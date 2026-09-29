@@ -11,8 +11,10 @@ import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { FreshmanDepartmentBadge } from "@/components/shared/FreshmanDepartmentBadge";
 import { DepartmentChipList } from "@/components/shared/DepartmentChipList";
 import { resolveDepartmentCourseScope, type DepartmentWithId } from "@/lib/college/academicStructure";
+import { DepartmentCourseCard } from "@/components/academics/DepartmentCourseCard";
+import { SemesterSubjectsDialog } from "@/components/academics/SemesterSubjectsDialog";
 import { toast } from "@/hooks/useToast";
-import type { Department, Course, CourseYearTiming, CourseAcademicYear } from "@/types";
+import type { Department, Course, CourseYearTiming, CourseAcademicYear, SubjectSemesterAssignment } from "@/types";
 
 export default function DepartmentDetailPage() {
   const router = useRouter();
@@ -34,9 +36,15 @@ export default function DepartmentDetailPage() {
   const [parentCourses, setParentCourses] = useState<Course[]>([]);
   const [timings, setTimings] = useState<CourseYearTiming[]>([]);
   const [academicYears, setAcademicYears] = useState<CourseAcademicYear[]>([]);
+  const [subjectAssignments, setSubjectAssignments] = useState<SubjectSemesterAssignment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const [deletingCourse, setDeletingCourse] = useState<Course | null>(null);
+  const [activeSemesterModal, setActiveSemesterModal] = useState<{
+    course: Course;
+    year: number;
+    semester: number;
+  } | null>(null);
 
   // Per-course "Edit Academic Structure" dialog - null when closed. Every
   // course now has its own explicit courseScopes override (set mandatorily at
@@ -133,7 +141,7 @@ export default function DepartmentDetailPage() {
         setParentCourses([]);
       }
 
-      const [timingLists, academicYearLists] = await Promise.all([
+      const [timingLists, academicYearLists, assignmentLists] = await Promise.all([
         Promise.all(
           sortedCourses.map((c) =>
             fetch(`/api/college/course-year-timings?courseId=${encodeURIComponent(c.id)}`)
@@ -148,9 +156,21 @@ export default function DepartmentDetailPage() {
               .then((d) => d.academicYears ?? [])
           )
         ),
+        // Per-year, per-semester subject counts for the "Sem N: K subjects"
+        // status shown alongside timings below - the same collection Assign
+        // to Semester itself writes to, read here purely for display so a
+        // Principal can see staffing gaps without opening that page first.
+        Promise.all(
+          sortedCourses.map((c) =>
+            fetch(`/api/college/subject-semester-assignments?courseId=${encodeURIComponent(c.id)}`)
+              .then((r) => r.json() as Promise<{ assignments?: SubjectSemesterAssignment[] }>)
+              .then((d) => d.assignments ?? [])
+          )
+        ),
       ]);
       setTimings(timingLists.flat());
       setAcademicYears(academicYearLists.flat());
+      setSubjectAssignments(assignmentLists.flat());
     } catch {
       toast({ variant: "destructive", title: "Failed to load department" });
     } finally {
@@ -170,6 +190,34 @@ export default function DepartmentDetailPage() {
 
   function getAcademicYear(courseId: string, year: number): CourseAcademicYear | undefined {
     return academicYears.find((a) => a.courseId === courseId && a.year === year);
+  }
+
+  // One row per semester this course-year's OWN timing actually configured
+  // (never invented from the assignment docs themselves - a semester with
+  // zero subjects assigned would otherwise be silently missing from the
+  // list instead of showing up as the gap it is).
+  function semesterAssignmentStatus(courseId: string, year: number, timing: CourseYearTiming | undefined) {
+    return (timing?.semesters ?? [])
+      .map((s) => ({
+        semester: s.semester,
+        count: subjectAssignments.filter(
+          (a) => a.courseId === courseId && a.year === year && a.semester === s.semester
+        ).length,
+      }))
+      .sort((a, b) => a.semester - b.semester);
+  }
+
+  // Deep link into Assign to Semester, pre-filled so a Principal never has
+  // to re-walk Regulation -> Course -> Department -> Year by hand for
+  // something this page already knows - see that page's own prefill effects.
+  function assignSemesterHref(course: Course, year: number, semester: number): string {
+    const params = new URLSearchParams({
+      catalogId: course.catalogId ?? "",
+      departmentId: id,
+      year: String(year),
+      semester: String(semester),
+    });
+    return `/academics/assign-semester?${params.toString()}`;
   }
 
   // The department's resolved academic-structure scope for one course - own
@@ -389,7 +437,7 @@ export default function DepartmentDetailPage() {
                   : "No courses yet. Add the courses offered by this department."}
               </p>
             ) : (
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="space-y-4">
                 {courses.map((c) => {
                   // Only surface the years this department is actually assigned
                   // to teach THIS course (resolveDepartmentCourseScope - a
@@ -402,161 +450,32 @@ export default function DepartmentDetailPage() {
                   // scope before that fallback applies - see scopeForCourse.
                   const allYears = Array.from({ length: c.durationYears }, (_, i) => i + 1);
                   const scope = scopeForCourse(c);
-                  // The parent's Course doc, shown here but owned elsewhere.
-                  // Its timings and academic years are keyed by ITS courseId,
-                  // so opening those editors from here would edit the parent's
-                  // schedule for every sibling - customise it first.
-                  const inherited = isSubDepartment && !isOwnCourse(c);
                   const years = scope.assignedYears.length > 0
                     ? allYears.filter((y) => scope.assignedYears.includes(y))
                     : allYears;
                   return (
-                    <div key={c.id} className="rounded-lg border p-3 space-y-3">
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <div className="flex flex-wrap items-center gap-1 mb-1">
-                            <Badge variant="secondary" className="text-xs font-mono">{c.code}</Badge>
-                            {/* Which of the two kinds of row this is - the
-                                whole point of the sub-department view, and
-                                what decides the actions available above. */}
-                            {isSubDepartment && (
-                              <Badge variant="outline" className="text-[10px] font-normal">
-                                {isOwnCourse(c) ? `Managed by ${department?.name}` : `Shared from ${parentDepartment?.name}`}
-                              </Badge>
-                            )}
-                          </div>
-                          <p className="font-semibold text-sm">{c.name}</p>
-                          <p className="text-xs text-muted-foreground mt-0.5">{c.durationYears} year{c.durationYears !== 1 ? "s" : ""}</p>
-                          {/* The programme's own length stays above - a B.Tech
-                              is 4 years wherever it appears. This says which
-                              slice of it THIS department runs, which is the part
-                              that differs between a shared first-year parent and
-                              the branches that continue the course. */}
-                          {years.length > 0 && years.length < c.durationYears && (
-                            <p className="text-xs text-muted-foreground mt-0.5">
-                              Runs year{years.length !== 1 ? "s" : ""} {years.join(", ")} here
-                            </p>
-                          )}
-                          {scope.secondaryDepartments.length > 0 && (
-                            <div className="mt-1">
-                              <p className="text-xs text-muted-foreground">Cross-listed with</p>
-                              <DepartmentChipList names={scope.secondaryDepartments} className="mt-1" />
-                            </div>
-                          )}
-                        </div>
-                        <div className="flex gap-1 shrink-0">
-                          {/* Editing or deleting an inherited course would hit
-                              the PARENT's doc and every sibling with it, so on
-                              those rows these become "make it mine" and
-                              "remove it from my list" instead. */}
-                          {isSubDepartment && !isOwnCourse(c) ? (
-                            <>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-7 w-7"
-                                disabled={!c.catalogId}
-                                title={c.catalogId ? `Manage this course in ${department?.name} independently` : "This course predates the catalog system and can't be customised"}
-                                onClick={() => setCustomisingCourse(c)}
-                              >
-                                <GitBranch className="h-3.5 w-3.5" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-7 w-7 text-destructive"
-                                disabled={!c.catalogId}
-                                title={c.catalogId ? `Remove from ${department?.name} only` : "This course predates the catalog system and can't be removed here"}
-                                onClick={() => setRemovingInherited(c)}
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </Button>
-                            </>
-                          ) : (
-                            <>
-                              <Button variant="ghost" size="icon" className="h-7 w-7" title="Edit course" onClick={() => router.push(`/principal/departments/${id}/courses/${c.id}/edit`)}>
-                                <Pencil className="h-3.5 w-3.5" />
-                              </Button>
-                              <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" title="Delete course" onClick={() => setDeletingCourse(c)}>
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </Button>
-                            </>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="space-y-2 border-t pt-2">
-                        <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Year Setup</p>
-                        {years.length === 0 ? (
-                          <p className="text-xs text-muted-foreground">No years assigned to this department yet.</p>
-                        ) : years.map((y) => {
-                          const t = getTiming(c.id, y);
-                          const ay = getAcademicYear(c.id, y);
-                          const timingReady = !!t;
-                          const ayReady = !!ay;
-                          const bothReady = timingReady && ayReady;
-                          return (
-                            <div key={y} className="rounded-md border overflow-hidden">
-                              <div className="flex items-center justify-between gap-2 bg-muted/40 px-2 py-1">
-                                <span className="text-xs font-semibold">Year {y}</span>
-                                {!inherited && (
-                                  <span className={`flex items-center gap-1 text-[10px] font-medium ${bothReady ? "text-emerald-600" : "text-orange-500"}`}>
-                                    {bothReady ? (
-                                      <><CheckCircle2 className="h-3 w-3" />Fully set up</>
-                                    ) : (
-                                      <><AlertCircle className="h-3 w-3" />{timingReady || ayReady ? "1 of 2 set up" : "Setup needed"}</>
-                                    )}
-                                  </span>
-                                )}
-                              </div>
-                              <div className="divide-y">
-                                {/* Independent action: class hours/periods for this year. */}
-                                <button
-                                  type="button"
-                                  onClick={inherited ? undefined : () => router.push(`/principal/departments/${id}/courses/${c.id}/timing/${y}/edit`)}
-                                  className={`flex w-full items-center justify-between gap-2 px-2 py-1.5 text-left text-xs ${inherited ? "cursor-default" : "hover:bg-muted/50 transition-colors cursor-pointer"}`}
-                                >
-                                  <span className="flex items-center gap-1.5 min-w-0 shrink-0">
-                                    <Clock className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                                    <span className="font-medium">Timings</span>
-                                  </span>
-                                  <span className="flex items-center gap-1.5 justify-end min-w-0">
-                                    {timingReady ? (
-                                      <span className="flex items-center gap-1 text-emerald-600 font-medium text-right">
-                                        <CheckCircle2 className="h-3 w-3 shrink-0" />
-                                        {t.collegeStartTime}–{t.collegeEndTime} · {t.numberOfPeriods} periods
-                                      </span>
-                                    ) : (
-                                      <span className="text-orange-500 font-medium">{inherited ? "Not configured" : "Not set · tap to add"}</span>
-                                    )}
-                                    {!inherited && <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
-                                  </span>
-                                </button>
-                                {/* Independent action: which academic session/cohort this year is currently running. */}
-                                <button
-                                  type="button"
-                                  onClick={inherited ? undefined : () => router.push(`/principal/departments/${id}/courses/${c.id}/academic-year/${y}/edit`)}
-                                  className={`flex w-full items-center justify-between gap-2 px-2 py-1.5 text-left text-xs ${inherited ? "cursor-default" : "hover:bg-muted/50 transition-colors cursor-pointer"}`}
-                                >
-                                  <span className="flex items-center gap-1.5 min-w-0 shrink-0">
-                                    <CalendarClock className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                                    <span className="font-medium">Academic Year</span>
-                                  </span>
-                                  <span className="flex items-center gap-1.5 justify-end min-w-0">
-                                    {ayReady ? (
-                                      <span className="text-emerald-600 font-medium">{ay.label}{inherited ? "" : " · tap to advance"}</span>
-                                    ) : (
-                                      <span className="text-orange-500 font-medium">{inherited ? "Not set" : "Required · tap to set"}</span>
-                                    )}
-                                    {!inherited && <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
-                                  </span>
-                                </button>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
+                    <DepartmentCourseCard
+                      key={c.id}
+                      course={c}
+                      department={department}
+                      parentDepartment={parentDepartment}
+                      isSubDepartment={isSubDepartment}
+                      isOwnCourse={isOwnCourse(c)}
+                      scope={scope}
+                      years={years}
+                      timings={timings}
+                      academicYears={academicYears}
+                      subjectAssignments={subjectAssignments}
+                      onEditCourse={() => router.push(`/principal/departments/${id}/courses/${c.id}/edit`)}
+                      onDeleteCourse={() => setDeletingCourse(c)}
+                      onCustomiseCourse={() => setCustomisingCourse(c)}
+                      onRemoveInherited={() => setRemovingInherited(c)}
+                      onEditTiming={(y) => router.push(`/principal/departments/${id}/courses/${c.id}/timing/${y}/edit`)}
+                      onEditAcademicYear={(y) => router.push(`/principal/departments/${id}/courses/${c.id}/academic-year/${y}/edit`)}
+                      onOpenSemesterSubjects={(course, year, semester) =>
+                        setActiveSemesterModal({ course, year, semester })
+                      }
+                    />
                   );
                 })}
               </div>
@@ -595,6 +514,45 @@ export default function DepartmentDetailPage() {
         </Card>
         </>
       )}
+
+      <SemesterSubjectsDialog
+        open={!!activeSemesterModal}
+        onOpenChange={(open) => !open && setActiveSemesterModal(null)}
+        course={activeSemesterModal?.course ?? null}
+        year={activeSemesterModal?.year ?? 1}
+        semester={activeSemesterModal?.semester ?? 1}
+        academicYearLabel={
+          activeSemesterModal
+            ? getAcademicYear(activeSemesterModal.course.id, activeSemesterModal.year)?.label
+            : undefined
+        }
+        departmentId={id}
+        departmentName={department?.name}
+        assignments={
+          activeSemesterModal
+            ? subjectAssignments.filter(
+                (a) =>
+                  a.courseId === activeSemesterModal.course.id &&
+                  a.year === activeSemesterModal.year &&
+                  a.semester === activeSemesterModal.semester
+              )
+            : []
+        }
+        assignHref={
+          activeSemesterModal
+            ? assignSemesterHref(
+                activeSemesterModal.course,
+                activeSemesterModal.year,
+                activeSemesterModal.semester
+              )
+            : "#"
+        }
+        isInherited={
+          activeSemesterModal
+            ? isSubDepartment && !isOwnCourse(activeSemesterModal.course)
+            : false
+        }
+      />
 
       <ConfirmDialog
         open={!!customisingCourse}
