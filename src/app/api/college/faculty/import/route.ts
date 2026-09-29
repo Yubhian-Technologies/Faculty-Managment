@@ -115,13 +115,17 @@ export async function POST(request: Request) {
     const departmentsByCode = new Map(manageableDepartments.map((d) => [d.code.toLowerCase(), d]));
 
     // Resolves one row's Dept Code cell to the department it should be filed
-    // under. An HOD's rows are stored by department NAME (matches every
-    // existing HOD-created faculty record and the scoping queries in
-    // lib/departments/scope.ts); Principal/Vice Principal/College Admin
-    // (normalized to Principal via its seat)/Super Admin have no department
-    // of their own, so their rows are stored by the department's short CODE
-    // instead - matching how the manual Add Faculty form and every existing
-    // Principal-created faculty/user doc already store it.
+    // under. Every faculty record in the app - HOD-created or Principal-
+    // created alike - is stored and queried by department NAME (see the
+    // manual Add Faculty form, hod/faculty/new/page.tsx, which sends the
+    // full name regardless of who's submitting it, and every scoping query in
+    // lib/departments/scope.ts, which compares against Department.name too).
+    // A Principal/Vice Principal/Super Admin row previously resolved to the
+    // department's short CODE instead (e.g. "IT") - that string matches no
+    // real department's `name` field ("Information Technology"), so the
+    // imported faculty member silently fell outside every department-scoped
+    // view (HOD roster, sections, teaching assignments) instead of landing
+    // under the department its Dept Code actually named.
     function resolveRowDepartment(raw: string | undefined): { name: string } | { error: string } {
       const code = raw?.trim();
       if (!code) {
@@ -141,7 +145,7 @@ export async function POST(request: Request) {
             : `"${code}" is not one of this college's departments`,
         };
       }
-      return { name: session.role === "HOD" ? matched.name : matched.code };
+      return { name: matched.name };
     }
 
     // Load existing employeeIds/collegeEmails to detect duplicates - lowercased,
