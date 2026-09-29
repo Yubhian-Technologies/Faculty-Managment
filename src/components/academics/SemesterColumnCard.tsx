@@ -1,8 +1,6 @@
 "use client";
 
 import { useMemo } from "react";
-import { Badge } from "@/components/ui/badge";
-import { BookOpen, CheckCircle2, AlertCircle, ArrowRight, Calendar, Sparkles } from "lucide-react";
 import type { SemesterDuration, SubjectSemesterAssignment } from "@/types";
 
 interface SemesterColumnCardProps {
@@ -11,6 +9,29 @@ interface SemesterColumnCardProps {
   assignments: SubjectSemesterAssignment[];
   onClick: () => void;
   disabled?: boolean;
+}
+
+function parseFirestoreDate(val: unknown): Date | null {
+  if (!val) return null;
+  if (typeof val === "object") {
+    if ("toDate" in val && typeof (val as { toDate: () => Date }).toDate === "function") {
+      const d = (val as { toDate: () => Date }).toDate();
+      return isNaN(d.getTime()) ? null : d;
+    }
+    if ("_seconds" in val && typeof (val as { _seconds: number })._seconds === "number") {
+      const d = new Date((val as { _seconds: number })._seconds * 1000);
+      return isNaN(d.getTime()) ? null : d;
+    }
+    if ("seconds" in val && typeof (val as { seconds: number }).seconds === "number") {
+      const d = new Date((val as { seconds: number }).seconds * 1000);
+      return isNaN(d.getTime()) ? null : d;
+    }
+  }
+  if (typeof val === "string" || typeof val === "number") {
+    const d = new Date(val);
+    return isNaN(d.getTime()) ? null : d;
+  }
+  return null;
 }
 
 export function SemesterColumnCard({
@@ -26,28 +47,18 @@ export function SemesterColumnCard({
     return assignments.reduce((acc, curr) => acc + (curr.credits ?? 0), 0);
   }, [assignments]);
 
-  // Format dates if available
   const dateRange = useMemo(() => {
     if (!duration?.startDate || !duration?.endDate) return null;
-    try {
-      const start =
-        typeof duration.startDate === "object" && "toDate" in duration.startDate
-          ? duration.startDate.toDate()
-          : new Date(duration.startDate as unknown as string);
-      const end =
-        typeof duration.endDate === "object" && "toDate" in duration.endDate
-          ? duration.endDate.toDate()
-          : new Date(duration.endDate as unknown as string);
+    const start = parseFirestoreDate(duration.startDate);
+    const end = parseFirestoreDate(duration.endDate);
+    if (!start || !end) return null;
 
-      return `${start.toLocaleDateString(undefined, {
-        month: "short",
-      })} – ${end.toLocaleDateString(undefined, {
-        month: "short",
-        year: "numeric",
-      })}`;
-    } catch {
-      return null;
-    }
+    return `${start.toLocaleDateString(undefined, {
+      month: "short",
+    })} – ${end.toLocaleDateString(undefined, {
+      month: "short",
+      year: "numeric",
+    })}`;
   }, [duration]);
 
   return (
@@ -62,71 +73,44 @@ export function SemesterColumnCard({
         }
       }}
       aria-label={`Semester ${semester}: ${count} subjects assigned. Click to view.`}
-      className={`group relative flex flex-col justify-between rounded-xl border p-3.5 transition-all outline-none ${
+      className={`group relative flex flex-col justify-between rounded-lg border p-4 transition-all outline-none ${
         disabled
           ? "opacity-60 cursor-not-allowed bg-muted/20 border-border"
-          : "cursor-pointer bg-card/80 hover:bg-muted/40 hover:border-primary/50 hover:shadow-xs focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+          : "cursor-pointer bg-card hover:bg-muted/30 hover:border-primary/50 hover:shadow-xs focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
       } ${
-        count > 0
-          ? "border-border/80"
-          : "border-dashed border-amber-300/80 bg-amber-50/20 dark:bg-amber-950/10"
+        count > 0 ? "border-border" : "border-border/60 bg-muted/10"
       }`}
     >
-      <div>
-        {/* Top line: Semester title and count badge */}
-        <div className="flex items-center justify-between gap-1.5 mb-1.5">
-          <div className="flex items-center gap-1.5">
-            <span className="font-semibold text-xs text-foreground group-hover:text-primary transition-colors">
-              Semester {semester}
-            </span>
-          </div>
-
-          <Badge
-            variant="outline"
-            className={`text-[10px] font-medium px-1.5 py-0 gap-1 rounded-md shrink-0 ${
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between gap-2">
+          <span className="font-semibold text-sm text-foreground">
+            Semester {semester}
+          </span>
+          <span
+            className={`text-xs font-medium px-2 py-0.5 rounded border ${
               count > 0
-                ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300"
-                : "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300"
+                ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800"
+                : "bg-muted text-muted-foreground border-border"
             }`}
           >
-            {count > 0 ? (
-              <>
-                <CheckCircle2 className="h-2.5 w-2.5" />
-                {count} {count === 1 ? "subj" : "subjs"}
-              </>
-            ) : (
-              <>
-                <AlertCircle className="h-2.5 w-2.5" />
-                0 subj
-              </>
-            )}
-          </Badge>
+            {count} {count === 1 ? "subject" : "subjects"}
+          </span>
         </div>
 
-        {/* Date range if configured */}
         {dateRange && (
-          <p className="flex items-center gap-1 text-[11px] text-muted-foreground mb-1.5">
-            <Calendar className="h-3 w-3 shrink-0" />
-            <span className="truncate">{dateRange}</span>
+          <p className="text-xs text-muted-foreground">
+            {dateRange}
           </p>
         )}
       </div>
 
-      {/* Bottom stats & prompt */}
-      <div className="mt-2 pt-2 border-t border-border/50 flex items-center justify-between text-[11px]">
-        {count > 0 ? (
-          <span className="font-medium text-muted-foreground text-[10px]">
-            <span className="font-bold text-foreground">{totalCredits}</span> Credits
-          </span>
-        ) : (
-          <span className="text-[10px] text-muted-foreground font-medium">
-            0 Credits
-          </span>
-        )}
+      <div className="mt-3 pt-3 border-t border-border/50 flex items-center justify-between text-xs">
+        <span className="text-muted-foreground">
+          <strong className="font-semibold text-foreground">{totalCredits}</strong> Credits
+        </span>
 
-        <span className="text-[10px] font-medium text-primary flex items-center gap-0.5 group-hover:translate-x-0.5 transition-transform">
-          View subjects
-          <ArrowRight className="h-2.5 w-2.5" />
+        <span className="font-medium text-primary group-hover:underline">
+          View subjects →
         </span>
       </div>
     </div>
