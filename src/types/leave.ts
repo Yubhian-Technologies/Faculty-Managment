@@ -57,6 +57,17 @@ export interface LeaveTypeCarryForwardRule {
   cap?: number; // total balance (base + carried) never exceeds this - undefined = uncapped
 }
 
+// Who a supporting document for this reason should go to - e.g. an
+// exam-duty reason routes to Exam Cell instead of the requester's own HOD.
+// HOD is the default whenever a reason doesn't set this explicitly (see
+// resolveLeaveTypes.ts's normalizeReasonOptions).
+export type LeaveProofRouteTarget = "HOD" | "EXAM_CELL";
+
+export interface LeaveReasonOption {
+  label: string;
+  proofRoutedTo?: LeaveProofRouteTarget;
+}
+
 export interface LeaveTypeRules {
   daysPerYear?: number;   // undefined when unlimited is true
   unlimited?: boolean;    // OD only - no balance is tracked, history is shown instead
@@ -68,7 +79,10 @@ export interface LeaveTypeRules {
   entitlementByCategory?: Partial<Record<EffectiveLeaveCategory, number>>; // overrides daysPerYear for a specific category (EL's own vacation/non-vacation split, generalized)
   carryForward?: LeaveTypeCarryForwardRule;
   halfDayAllowed?: boolean;
-  reasonOptions?: string[];      // ordered dropdown options offered on the Apply form for this type
+  // Ordered dropdown options offered on the Apply form for this type. Each
+  // reason optionally names where its supporting proof should be routed
+  // (see LeaveReasonOption) - defaults to HOD when unset.
+  reasonOptions?: LeaveReasonOption[];
   allowCustomReason?: boolean;   // whether "Other" + free text is offered alongside reasonOptions
   maxConsecutiveDays?: number;   // longest single request (calendar span, not working-day count)
   minAdvanceNoticeDays?: number; // fromDate must be at least this many days out from today
@@ -216,6 +230,18 @@ export const OD_PROOF_STATUS_LABELS: Record<ODProofStatus, string> = {
   REJECTED: "Proof rejected",
 };
 
+// ─── Post-leave certificate (SL, optional; SCL, chased) ─────────────────────
+// Unlike OD proof, nothing here ever affects pay, balance, or approval status
+// - a requester may attach a certificate once an APPROVED SL or SCL period
+// ends, and their approver may verify or reject it. For SL this is purely
+// optional; for SCL an approver's queue chases an unresolved one (see the
+// scl-missing-certificate scope in applications/route.ts), but even then it
+// never blocks anything or affects pay. See src/lib/leave/leaveCertificate.ts.
+// Because there's no pay consequence, this is gated purely on `leaveTypeCode`
+// at read time (no `odProofRequired`-style approval-time stamp needed to
+// grandfather old requests - there's nothing to grandfather away from).
+export type LeaveCertificateStatus = "PENDING_VERIFICATION" | "VERIFIED" | "REJECTED";
+
 // The Principal/Vice Principal must pick one of these when approving an
 // isOtherRequest at PENDING_PRINCIPAL - a further breakdown of "Other" for
 // the Principal's own record-keeping. Deliberately NOT a field on
@@ -297,6 +323,11 @@ export interface PeriodSubstitution {
   courseId?: string;
   subjectId: string;
   subjectName: string;
+  // This period's clock time, carried over from the RequiredPeriod it was
+  // resolved from (see lib/leave/periodCoverage.ts) - display-only, absent
+  // for a course-year with no CourseYearTiming configured.
+  startTime?: string;
+  endTime?: string;
   substituteFacultyId: string;   // FacultyMember doc id, not the login uid
   substituteFacultyName: string;
   // "MANAGER": set directly by a Principal/VP/HOD/College Office through the
@@ -424,6 +455,11 @@ export interface LeaveRequest {
   // the approver knows which half without asking.
   halfDaySession?: "FN" | "AN";
   reason: string;
+  // Resolved at submission time from the matching LeaveReasonOption (see
+  // Settings > Leave Policy) - absent means the default, HOD. Never
+  // re-resolved later even if the reason's own routing config changes
+  // afterward, so a request's proof destination stays stable once filed.
+  proofRoutedTo?: LeaveProofRouteTarget;
   status: LeaveRequestStatus;
   // Set by the HOD when forwarding an isOtherRequest to the Principal - Other
   // requests are never balance-tracked, this is purely informational.
@@ -536,6 +572,27 @@ export interface LeaveRequest {
   // Required on rejection - shown to the requester on the re-upload page so
   // they know what to fix, same contract as cancelReason above.
   odProofRejectionReason?: string;
+  // ─── Post-leave certificate (SL or SCL - see LeaveCertificateStatus above) ───
+  // Same shape as the OD proof fields above, minus anything pay-related:
+  // written only by the requester via SUBMIT_CERTIFICATE, and only ever a
+  // URL this app's own /api/upload/leave-proof produced.
+  certificateUrl?: string;
+  certificateUploadedAt?: Timestamp;
+  // Same "vary the dedupe key" purpose as odProofSubmissionCount above.
+  certificateSubmissionCount?: number;
+  certificateStatus?: LeaveCertificateStatus;
+  certificateReviewedBy?: string;
+  certificateReviewedByName?: string;
+  certificateReviewedAt?: Timestamp;
+  certificateRejectionReason?: string;
+  // ─── SCL apply-time proof ──────────────────────────────────────────────
+  // Mandatory for SCL only, attached at submission (not post-leave - that's
+  // the certificate* group above). Written once, at creation, via
+  // /api/upload/leave-apply-proof - a separate uid-keyed upload route since no
+  // LeaveRequest document exists yet to validate an upload against. Visible to
+  // the approver immediately alongside the pending request, never reviewed
+  // through the verify/reject flow the way the post-leave certificate is.
+  applyProofUrl?: string;
   hodAction?: LeaveActionRecord;
   principalAction?: LeaveActionRecord;
   // Set when a PRINCIPAL's own leave (PENDING_MANAGEMENT) is decided - see

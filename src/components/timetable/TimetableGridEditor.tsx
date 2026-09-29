@@ -15,7 +15,7 @@ import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
-import { formatDMY } from "@/lib/utils";
+import { formatDMY, formatTime12h } from "@/lib/utils";
 import { useMyDepartments } from "@/hooks/useMyDepartments";
 import { buildRows, defaultPeriodTimings } from "@/lib/timetable/buildGrid";
 import { ordinalYear, resolveTimetableDays } from "@/lib/timetable/gridModel";
@@ -31,14 +31,6 @@ import type {
   TeachingAssignment, FacultyAssignmentRequest, PeriodTiming, Subject,
 } from "@/types";
 import { DAY_LABELS, DEFAULT_TIMETABLE_RULES } from "@/types";
-
-/** "09:00" -> "9:00 AM" - display only, stored/submitted values stay 24h "HH:MM". */
-function formatTime12h(hhmm: string) {
-  const [h, m] = hhmm.split(":").map(Number);
-  const period = h >= 12 ? "PM" : "AM";
-  const h12 = h % 12 === 0 ? 12 : h % 12;
-  return `${h12}:${String(m).padStart(2, "0")} ${period}`;
-}
 
 /** What the grid is currently showing. */
 type Mode = "published" | "draft";

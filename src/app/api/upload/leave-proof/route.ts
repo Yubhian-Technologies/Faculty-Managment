@@ -6,6 +6,7 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb, getAdminStorage } from "@/lib/firebase/admin";
 import { REQUESTS_COL } from "@/lib/leave/balanceEngine";
 import { evaluateODProof } from "@/lib/leave/odProof";
+import { evaluateLeaveCertificate } from "@/lib/leave/leaveCertificate";
 import type { LeaveRequest } from "@/types/leave";
 
 const MAX_SIZE = 10 * 1024 * 1024; // 10 MB - matches DocumentUploadField's own cap
@@ -18,7 +19,13 @@ const MIME_TO_EXT: Record<string, string> = {
 };
 const EXT_TO_EXT: Record<string, string> = { pdf: "pdf", png: "png", jpg: "jpg", jpeg: "jpg" };
 
-// Proof of duty for an approved On Duty leave (see lib/leave/odProof.ts).
+// Proof of duty for an approved On Duty leave (see lib/leave/odProof.ts), and
+// the post-leave certificate for an approved SL or SCL request (see
+// lib/leave/leaveCertificate.ts) - one generic "leave proof" upload endpoint
+// for all three, since the storage path/validation is identical either way.
+// (SCL's separate APPLY-time proof, before the leave, goes through
+// upload/leave-apply-proof instead - no LeaveRequest document exists yet at
+// that point for this route's ownership check to load.)
 //
 // Unlike the other upload routes this one is callable by EVERY role that can
 // apply for leave, not just HOD and above - so it can't do what
@@ -57,13 +64,13 @@ export async function POST(request: Request) {
     if (leaveRequest.uid !== session.uid) {
       return NextResponse.json({ error: "You can only upload proof for your own leave" }, { status: 403 });
     }
-    // One call covers "is an OD", "is approved", "carries the proof
-    // obligation", "the period has ended" and "isn't already verified" - and
-    // guarantees this endpoint and the SUBMIT_OD_PROOF action can never
+    // One call each covers "is an OD"/"is an SL or SCL", "is approved", "the
+    // period has ended" and "isn't already verified" - and guarantees this
+    // endpoint and the SUBMIT_OD_PROOF/SUBMIT_CERTIFICATE actions can never
     // disagree about whether an upload is allowed.
-    if (!evaluateODProof(leaveRequest).canUpload) {
+    if (!evaluateODProof(leaveRequest).canUpload && !evaluateLeaveCertificate(leaveRequest).canUpload) {
       return NextResponse.json(
-        { error: "This leave request isn't awaiting proof of duty" },
+        { error: "This leave request isn't awaiting a proof or certificate upload" },
         { status: 400 }
       );
     }

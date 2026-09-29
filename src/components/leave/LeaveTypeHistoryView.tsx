@@ -198,6 +198,11 @@ export function LeaveTypeHistoryView({ uid, backHref, type, showOtherLeaveCatego
                   // Only offer cancelling one's own requests - viewing someone
                   // else's history (uid set) is read-only.
                   onCancel={uid ? undefined : (target) => setCancelTarget(target)}
+                  // Same ownership test as onCancel above, and the same
+                  // `${backHref}/apply` convention every role's wrapper page
+                  // already uses for applyHref (see LeaveProfileView.tsx's
+                  // callers) - no new prop needed on this component.
+                  applyHref={uid ? undefined : `${backHref}/apply`}
                   cancelling={cancelling && cancelTarget?.id === r.id}
                   onAdjustCoverage={canAdjustCoverage ? (target) => setAdjustTarget(target) : undefined}
                   // Same ownership test as onCancel above - uploading proof of

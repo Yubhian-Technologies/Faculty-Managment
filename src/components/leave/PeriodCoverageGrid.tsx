@@ -8,6 +8,10 @@ export interface PeriodCoverageEntry {
   timetableSlotId: string;
   sectionName?: string;
   subjectName: string;
+  // "HH:MM" clock time, when this period's course-year has a CourseYearTiming
+  // configured - see lib/leave/periodCoverage.ts's RequiredPeriod.
+  startTime?: string;
+  endTime?: string;
   candidates: { facultyId: string; facultyName: string; facultyDepartment?: string }[];
 }
 
