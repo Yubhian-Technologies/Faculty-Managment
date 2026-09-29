@@ -645,6 +645,23 @@ export interface Department {
   // a common-year department is identified.
   commonYearStart?: string;
   commonYearEnd?: string;
+  // Explicit, Principal/VP-set answer to "is this the shared first-year
+  // department?" - ticked on the Add/Edit Department form. When present it IS
+  // the answer, and isCommonYearDepartment (src/lib/college/academicStructure.ts)
+  // returns it directly instead of inferring anything.
+  //
+  // UNSET falls back to the inferred rule (claims Year 1 AND is a shared
+  // parent), so every department created before this field existed keeps
+  // behaving exactly as it did - same backward-compatible "unset means
+  // derive" convention as parentRunsOwnSections above. A department becomes
+  // explicitly stored only the first time someone saves the form, which
+  // hydrates the checkbox from the effective (derived) value so an untouched
+  // legacy department round-trips as a no-op.
+  //
+  // Deliberately not consulted for a sub-department (parentDepartmentId set) or
+  // an inactive one - those are structural invariants, not inferences, so
+  // ticking this box can never make one of them a freshman department.
+  isFreshman?: boolean;
   createdAt: Timestamp;
   updatedAt?: Timestamp;
 }
@@ -687,6 +704,10 @@ export interface CourseCatalogItem {
   // student cohort's ordinal year keeps advancing every session while their
   // regulation stays fixed to their intake year.
   regulationBatches?: Record<string, string>;
+  // Regulation-keyed uploaded regulation-document URL(s), one per entry in
+  // `regulations` above. Uploaded via Academics > Regulation
+  // (/api/upload/regulation-document, PATCH course-catalog/[id]).
+  regulationDocumentUrls?: Record<string, string>;
   isActive: boolean;
   createdBy?: string;
   createdByName?: string;
@@ -745,6 +766,11 @@ export interface Course {
   // (a legacy pre-catalog course doc alongside a properly catalog-linked one -
   // see scripts/fix-course-catalog-duplicates.mjs for the root cause).
   mergedCourseIds?: string[];
+  // Regulation-keyed uploaded syllabus-document URL(s) - a Course doc can
+  // span multiple regulations via its catalogId's CourseCatalogItem, each
+  // with its own syllabus. Uploaded via Academics > Syllabus
+  // (/api/upload/syllabus-document, PATCH courses/[id]).
+  syllabusUrls?: Record<string, string>;
 }
 
 // ─── Course-Year Timing (college timings, periods, breaks — per course, per year) ──

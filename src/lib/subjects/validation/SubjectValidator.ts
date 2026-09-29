@@ -18,6 +18,20 @@ export interface SubjectRowInput {
   course?: string;
   regulation?: string;
   academicYear?: string;
+  // Course Structure upload only (see CourseStructureImportService) - which
+  // department-semester this row also gets auto-assigned to, on top of
+  // being created as a master subject. Required only when the caller's
+  // contextDefaults.requireYearSemester is set - every other caller
+  // (single Add Subject, the plain course+regulation bulk import) leaves
+  // department/year/semester assignment as a separate manual step, same
+  // as before.
+  year?: string | number;
+  semester?: string | number;
+  // Reference-only exam metadata - see Subject.internalMarks's own
+  // doc-comment (types/teaching.ts). Never validated against anything.
+  internalMarks?: string | number;
+  externalMarks?: string | number;
+  totalMarks?: string | number;
 }
 
 export interface ValidatedSubjectRow {
@@ -36,6 +50,11 @@ export interface ValidatedSubjectRow {
   credits: number;
   regulation?: string;
   academicYear?: string;
+  year?: number;
+  semester?: number;
+  internalMarks?: number;
+  externalMarks?: number;
+  totalMarks?: number;
 }
 
 export interface SubjectRowValidationResult {
@@ -48,7 +67,7 @@ export interface SubjectRowValidationResult {
 export class SubjectCatalogValidator {
   public static validateRow(
     row: SubjectRowInput,
-    contextDefaults?: { regulation?: string; academicYear?: string }
+    contextDefaults?: { regulation?: string; academicYear?: string; requireYearSemester?: boolean }
   ): SubjectRowValidationResult {
     const errors: string[] = [];
     const warnings: string[] = [];
@@ -153,6 +172,31 @@ export class SubjectCatalogValidator {
     const regulation = row.regulation?.toString().trim() || contextDefaults?.regulation;
     const academicYear = row.academicYear?.toString().trim() || contextDefaults?.academicYear;
 
+    // 8. Year / Semester - required only for the Course Structure flow
+    // (contextDefaults.requireYearSemester), which auto-assigns each row
+    // into a department's semester on top of creating the master subject.
+    // Every other caller leaves this as a separate manual step, so these
+    // stay optional there (undefined, not validated).
+    let year: number | undefined;
+    let semester: number | undefined;
+    if (contextDefaults?.requireYearSemester) {
+      const rawYear = row.year?.toString().trim();
+      const rawSemester = row.semester?.toString().trim();
+      year = Number(rawYear);
+      semester = Number(rawSemester);
+      if (!rawYear || !Number.isFinite(year) || year <= 0) {
+        errors.push("Year is required and must be a positive number");
+      }
+      if (!rawSemester || !Number.isFinite(semester) || semester <= 0) {
+        errors.push("Semester is required and must be a positive number");
+      }
+    }
+
+    // 9. Marks - reference-only, no validation beyond "is it a number".
+    const internalMarks = row.internalMarks != null && row.internalMarks !== "" ? Number(row.internalMarks) : undefined;
+    const externalMarks = row.externalMarks != null && row.externalMarks !== "" ? Number(row.externalMarks) : undefined;
+    const totalMarks = row.totalMarks != null && row.totalMarks !== "" ? Number(row.totalMarks) : undefined;
+
     if (errors.length > 0) {
       return { isValid: false, errors, warnings };
     }
@@ -175,6 +219,11 @@ export class SubjectCatalogValidator {
         credits: isNaN(credits) ? 0 : credits,
         regulation,
         academicYear,
+        year,
+        semester,
+        internalMarks: internalMarks != null && !isNaN(internalMarks) ? internalMarks : undefined,
+        externalMarks: externalMarks != null && !isNaN(externalMarks) ? externalMarks : undefined,
+        totalMarks: totalMarks != null && !isNaN(totalMarks) ? totalMarks : undefined,
       },
       errors: [],
       warnings,

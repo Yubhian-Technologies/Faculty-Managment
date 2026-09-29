@@ -107,6 +107,12 @@ export async function POST(request: Request) {
       assignedYears?: number[];
       commonYearStart?: string;
       commonYearEnd?: string;
+      // "Freshman's Department" - the Principal's explicit answer to the
+      // shared-first-year question. See Department.isFreshman's doc-comment
+      // (src/types/core.ts) and isCommonYearDepartment
+      // (src/lib/college/academicStructure.ts). Principal/VP/SUPER_ADMIN only,
+      // same tier as assignedYears below.
+      isFreshman?: boolean;
       // Required (at least one) when a Principal/VP/Super Admin creates a
       // top-level department - each entry becomes this department's own Course
       // doc, so it shows up under that course in the Courses module. Ignored
@@ -288,6 +294,14 @@ export async function POST(request: Request) {
       ...(session.role !== "HOD" && assignedYears !== undefined ? { assignedYears } : {}),
       ...(session.role !== "HOD" && commonYearStart !== undefined ? { commonYearStart } : {}),
       ...(session.role !== "HOD" && commonYearEnd !== undefined ? { commonYearEnd } : {}),
+      // Same tier as the academic-calendar fields above: only a Principal/VP/
+      // Super Admin decides whether this department is the shared first-year
+      // one, never the HOD creating a sub-department. Left UNSET (rather than
+      // written as false) when the client says nothing, so the department falls
+      // back to the inferred rule exactly like every pre-existing one.
+      ...(session.role !== "HOD" && typeof body.isFreshman === "boolean"
+        ? { isFreshman: body.isFreshman }
+        : {}),
       ...(secondaryDepartments.length > 0 ? { secondaryDepartments } : {}),
       ...(managedDepartments.length > 0 ? { managedDepartments } : {}),
       // Same per-catalog shape college/courses POST writes: this department's
@@ -604,6 +618,14 @@ export async function PATCH(request: Request) {
       parentDepartmentId?: string | null;
       commonYearStart?: string;
       commonYearEnd?: string;
+      // "Freshman's Department" - see Department.isFreshman's doc-comment
+      // (src/types/core.ts). Principal/VP/SUPER_ADMIN only; an HOD's restricted
+      // allowlist below drops it (it keeps only secondaryDepartments and
+      // managedDepartments). Sent as an explicit boolean by the Edit Department
+      // form, which hydrates the checkbox from the department's CURRENT
+      // effective value - so a legacy department nobody ever ticked still saves
+      // back exactly what it was already doing.
+      isFreshman?: boolean;
       // Per-course override of assignedYears - see Department.courseScopes.
       // Principal/VP/Super Admin only: deliberately NOT added to the
       // HOD-restricted allowlist below, same tier as assignedYears/
@@ -1037,6 +1059,12 @@ export async function PATCH(request: Request) {
     }
     if (updates.commonYearStart && updates.commonYearEnd && updates.commonYearEnd < updates.commonYearStart) {
       return NextResponse.json({ error: "First-year period end must be on or after its start" }, { status: 400 });
+    }
+    // updates is rawUpdates verbatim for a non-HOD, so isFreshman is not narrowed
+    // by any schema on its way to the write - reject a non-boolean explicitly
+    // rather than persisting whatever a hand-rolled request happened to send.
+    if (updates.isFreshman !== undefined && typeof updates.isFreshman !== "boolean") {
+      return NextResponse.json({ error: "isFreshman must be a boolean" }, { status: 400 });
     }
 
     const now = new Date();
