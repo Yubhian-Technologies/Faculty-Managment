@@ -214,9 +214,13 @@ export default function DepartmentDetailPage() {
       .sort((a, b) => a.semester - b.semester);
   }
 
-  // Deep link into Assign to Semester, pre-filled so a Principal never has
-  // to re-walk Regulation -> Course -> Department -> Year by hand for
-  // something this page already knows - see that page's own prefill effects.
+  // Deep link into Course Structure, pre-filled so a Principal never has to
+  // re-walk Regulation -> Course -> Department by hand for something this
+  // page already knows - see that page's own prefill effect. Was
+  // /academics/assign-semester (removed - superseded by the XLSX-driven
+  // Course Structure flow); year/semester are carried through as context
+  // only, since Course Structure gets Year/Semester per uploaded row, not a
+  // dropdown to pre-select.
   function assignSemesterHref(course: Course, year: number, semester: number): string {
     const params = new URLSearchParams({
       catalogId: course.catalogId ?? "",
@@ -224,7 +228,7 @@ export default function DepartmentDetailPage() {
       year: String(year),
       semester: String(semester),
     });
-    return `/academics/assign-semester?${params.toString()}`;
+    return `/academics/course-structure?${params.toString()}`;
   }
 
   // The department's resolved academic-structure scope for one course - own

@@ -28,6 +28,12 @@ export default function NewDepartmentPage() {
   // gets the same unrestricted behavior every department had before this
   // field existed.
   const [parentRunsOwnSections, setParentRunsOwnSections] = useState(true);
+  // "Freshman's Department" - this tick, not the year/sub-department settings
+  // around it, is what marks the department as the shared first-year one (see
+  // Department.isFreshman's doc-comment, src/types/core.ts). Defaults off: a
+  // brand-new department has no prior behavior to preserve, so the Principal's
+  // choice here is the whole answer.
+  const [isFreshman, setIsFreshman] = useState(false);
   // A department can't be created without at least one course - see
   // college/departments POST.
   const [catalog, setCatalog] = useState<CourseCatalogItem[]>([]);
@@ -86,6 +92,9 @@ export default function NewDepartmentPage() {
         hasSubDepartments,
         ...(hasSubDepartments ? { parentRunsOwnSections } : {}),
         secondaryDepartments: secondaryDepartments.length > 0 ? secondaryDepartments : undefined,
+        // Always sent, even when false - this is an explicit choice on a
+        // department that has no inferred behavior to fall back on yet.
+        isFreshman,
       };
       const res = await fetch("/api/college/departments", {
         method: "POST",
@@ -180,6 +189,22 @@ export default function NewDepartmentPage() {
 
             <div className="space-y-3 rounded-md border p-3">
               <div className="flex items-start gap-2">
+                <Checkbox
+                  id="dept-is-freshman"
+                  checked={isFreshman}
+                  onCheckedChange={(v) => setIsFreshman(v === true)}
+                />
+                <div className="space-y-1">
+                  <Label htmlFor="dept-is-freshman" className="font-normal">Freshman&apos;s Department</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Tick this if the department is the shared first year - where students sit in year 1 before
+                    moving on to their branch. It gets a &quot;Freshman&apos;s Department&quot; badge, and
+                    year-1 students can only be filed under it (or its sub-departments).
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-2 border-t pt-3">
                 <Checkbox
                   id="dept-has-subdepts"
                   checked={hasSubDepartments}
