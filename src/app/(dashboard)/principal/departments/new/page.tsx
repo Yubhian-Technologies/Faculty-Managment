@@ -22,6 +22,8 @@ export default function NewDepartmentPage() {
   const [secondaryDepartments, setSecondaryDepartments] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [hasSubDepartments, setHasSubDepartments] = useState(false);
+  // See Department.isFreshmanDepartment (src/types/core.ts).
+  const [isFreshmanDepartment, setIsFreshmanDepartment] = useState(false);
   // Only meaningful when hasSubDepartments is true - see
   // Department.parentRunsOwnSections's own doc-comment (src/types/core.ts).
   // Defaults true: a brand-new department that never touches this checkbox
@@ -84,6 +86,7 @@ export default function NewDepartmentPage() {
         code: data.code.toUpperCase(),
         courses: courseSelections,
         hasSubDepartments,
+        isFreshmanDepartment,
         ...(hasSubDepartments ? { parentRunsOwnSections } : {}),
         secondaryDepartments: secondaryDepartments.length > 0 ? secondaryDepartments : undefined,
       };
@@ -177,6 +180,15 @@ export default function NewDepartmentPage() {
               secondaryDepartments={secondaryDepartments}
               onToggleSecondaryDepartment={toggleSecondaryDepartment}
             />
+
+            <div className="flex items-center gap-2 rounded-md border p-3">
+              <Checkbox
+                id="dept-is-freshman"
+                checked={isFreshmanDepartment}
+                onCheckedChange={(v) => setIsFreshmanDepartment(v === true)}
+              />
+              <Label htmlFor="dept-is-freshman" className="font-normal">Is this a Freshman&apos;s Department?</Label>
+            </div>
 
             <div className="space-y-3 rounded-md border p-3">
               <div className="flex items-start gap-2">

@@ -261,6 +261,10 @@ function allClaimedYears(d: Pick<Department, "assignedYears" | "courseScopes">):
 export function isCommonYearDepartment(d: DepartmentWithId): boolean {
   if (d.isActive === false) return false;
   if (d.parentDepartmentId) return false; // sub-departments never qualify
+  // Explicit flag wins whenever it has been set (Department.isFreshmanDepartment):
+  // the Principal decides, no inference. Only departments saved before the
+  // field existed (undefined) fall through to the legacy inference below.
+  if (typeof d.isFreshmanDepartment === "boolean") return d.isFreshmanDepartment;
   if (!allClaimedYears(d).includes(1)) return false;
   if (Boolean(d.hasSubDepartments) || (d.secondaryDepartments ?? []).length > 0) return true;
   // Cross-listing set per-course (Department.courseScopes[catalogId].secondaryDepartments)

@@ -591,6 +591,14 @@ export interface Department {
   // this field existed - so no already-configured department's behavior
   // changes until a Principal explicitly unchecks it for one specific parent.
   parentRunsOwnSections?: boolean;
+  // Explicit, Principal-set marker: this department is a "Freshman's
+  // Department" (shows the badge, is a valid landing department for Year-1
+  // students, drives the common-first-year flows). Replaces inferring it from
+  // "claims year 1 + has core/secondary departments", which was ambiguous
+  // per-course (e.g. B.Tech Year 1 shared, M.Tech Year 1 not). UNSET = legacy
+  // department saved before this field existed: falls back to that old
+  // inference until someone saves it with an explicit true/false.
+  isFreshmanDepartment?: boolean;
   // Cross-listing: other departments whose HODs each get automatic view-only
   // access to every section (and its roster/faculty) created under this
   // department — set once here by Principal/VP instead of being re-picked

@@ -101,6 +101,7 @@ export async function POST(request: Request) {
       hodName?: string;
       hasSubDepartments?: boolean;
       parentRunsOwnSections?: boolean;
+      isFreshmanDepartment?: boolean;
       parentDepartmentId?: string;
       secondaryDepartments?: string[];
       managedDepartments?: string[];
@@ -280,6 +281,9 @@ export async function POST(request: Request) {
       ...(session.role !== "HOD" && body.hasSubDepartments && typeof body.parentRunsOwnSections === "boolean"
         ? { parentRunsOwnSections: body.parentRunsOwnSections }
         : {}),
+      // Explicit Freshman's Department flag (Principal/VP/SUPER_ADMIN only);
+      // always stored as a boolean so it is never left undefined-as-legacy.
+      ...(session.role !== "HOD" ? { isFreshmanDepartment: body.isFreshmanDepartment === true } : {}),
       // Years taught and the shared-first-year period are Principal/VP territory,
       // exactly as they are on PATCH - an HOD creating a sub-department here
       // can set its Sub-HOD and grouping, nothing that redefines the academic
@@ -591,6 +595,9 @@ export async function PATCH(request: Request) {
       // HOD-restricted allowlist below). See Department.
       // parentRunsOwnSections's own doc-comment (src/types/core.ts).
       parentRunsOwnSections?: boolean;
+      // Explicit "this is a Freshman's Department" flag - Principal/VP/Super
+      // Admin only (not in the HOD allowlist). See Department.isFreshmanDepartment.
+      isFreshmanDepartment?: boolean;
       secondaryDepartments?: string[];
       managedDepartments?: string[];
       // Clearing this (empty string or null) promotes a sub-department back
@@ -731,6 +738,10 @@ export async function PATCH(request: Request) {
         }
         throw e;
       }
+    }
+
+    if (updates.isFreshmanDepartment !== undefined) {
+      updates.isFreshmanDepartment = updates.isFreshmanDepartment === true;
     }
 
     // parentRunsOwnSections is only meaningful alongside hasSubDepartments

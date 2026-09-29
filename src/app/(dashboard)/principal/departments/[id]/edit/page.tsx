@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { YearsTaughtAndSecondaryFields } from "@/components/college/YearsTaughtAndSecondaryFields";
-import { replaceNoOwnSectionsParents, type DepartmentWithId } from "@/lib/college/academicStructure";
+import { isCommonYearDepartment, replaceNoOwnSectionsParents, type DepartmentWithId } from "@/lib/college/academicStructure";
 import { departmentSchema, type DepartmentFormData } from "@/lib/validations";
 import { toast } from "@/hooks/useToast";
 import type { Department } from "@/types";
@@ -25,6 +25,8 @@ export default function EditDepartmentPage() {
   const [department, setDepartment] = useState<Department | null>(null);
   const [allDepartments, setAllDepartments] = useState<Department[]>([]);
   const [hasSubDepartments, setHasSubDepartments] = useState(false);
+  // See Department.isFreshmanDepartment (src/types/core.ts).
+  const [isFreshmanDepartment, setIsFreshmanDepartment] = useState(false);
   // Only meaningful when hasSubDepartments is true - see
   // Department.parentRunsOwnSections's own doc-comment (src/types/core.ts).
   // Unset on the loaded department (every department before this field
@@ -67,6 +69,13 @@ export default function EditDepartmentPage() {
         setAllDepartments(deptRes.departments ?? []);
         setHasSubDepartments(dept.hasSubDepartments ?? false);
         setParentRunsOwnSections(dept.parentRunsOwnSections ?? true);
+        // Legacy departments (flag never saved) show what the old inference
+        // currently gives them, so saving doesn't silently flip their status.
+        setIsFreshmanDepartment(
+          typeof dept.isFreshmanDepartment === "boolean"
+            ? dept.isFreshmanDepartment
+            : isCommonYearDepartment(dept as DepartmentWithId)
+        );
         // A cross-listing saved against a department that organises its
         // sub-departments only (e.g. "AI", split into AIML/AIDS) is shown as
         // those children instead - they are what the picker now offers, and
@@ -123,6 +132,7 @@ export default function EditDepartmentPage() {
         name: data.name,
         code: data.code.toUpperCase(),
         hasSubDepartments,
+        ...(department.parentDepartmentId ? {} : { isFreshmanDepartment }),
         ...(hasSubDepartments ? { parentRunsOwnSections } : {}),
         secondaryDepartments,
       };
@@ -221,6 +231,17 @@ export default function EditDepartmentPage() {
               secondaryDepartments={secondaryDepartments}
               onToggleSecondaryDepartment={toggleSecondaryDepartment}
             />
+
+            {!department?.parentDepartmentId && (
+              <div className="flex items-center gap-2 rounded-md border p-3">
+                <Checkbox
+                  id="dept-is-freshman"
+                  checked={isFreshmanDepartment}
+                  onCheckedChange={(v) => setIsFreshmanDepartment(v === true)}
+                />
+                <Label htmlFor="dept-is-freshman" className="font-normal">Is this a Freshman&apos;s Department?</Label>
+              </div>
+            )}
 
             {!department?.parentDepartmentId && (
               <div className="space-y-3 rounded-md border p-3">
