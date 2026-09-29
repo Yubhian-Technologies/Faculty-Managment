@@ -1,8 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { Badge } from "@/components/ui/badge";
-import { Clock, CalendarClock, CheckCircle2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { SemesterColumnCard } from "./SemesterColumnCard";
 import type {
   Course,
@@ -21,7 +20,7 @@ interface CourseYearRowProps {
   isSubDepartment?: boolean;
   isInherited?: boolean;
   onEditTiming: () => void;
-  onEditAcademicYear: () => void;
+  onAdvanceAcademicYear: () => void;
   onOpenSemesterSubjects: (semester: number) => void;
 }
 
@@ -34,12 +33,11 @@ export function CourseYearRow({
   isSubDepartment = false,
   isInherited = false,
   onEditTiming,
-  onEditAcademicYear,
+  onAdvanceAcademicYear,
   onOpenSemesterSubjects,
 }: CourseYearRowProps) {
-  // Only return semesters if they are actually configured in timing.semesters
+  // Only display semesters if actually configured in timing.semesters
   // or if subjects are assigned to this course & year.
-  // Never synthesize fake/empty semesters.
   const semesters = useMemo((): { semester: number; duration?: SemesterDuration }[] => {
     if (timing?.semesters && timing.semesters.length > 0) {
       return timing.semesters
@@ -70,89 +68,73 @@ export function CourseYearRow({
   }, [subjectAssignments, course.id, year]);
 
   return (
-    <div className="rounded-xl border bg-muted/20 p-4 transition-all hover:bg-muted/30 hover:border-border/80">
-      {/* Top Meta Line: Year heading, Academic Year chip on left, Timings on right */}
+    <div className="rounded-lg border bg-card p-4 transition-colors hover:bg-muted/10">
+      {/* Top Line: Year identifier and Academic Year on left, Timings on right */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2.5">
-          <Badge
-            variant="default"
-            className="bg-primary text-primary-foreground font-bold px-2.5 py-1 text-xs rounded-md shadow-2xs"
-          >
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="font-bold text-sm text-foreground">
             Year {year}
-          </Badge>
+          </span>
 
-          {/* Academic Year Chip */}
-          <button
-            type="button"
-            disabled={isInherited}
-            onClick={isInherited ? undefined : onEditAcademicYear}
-            title={
-              isInherited
-                ? "Academic year follows the parent department"
-                : academicYear
-                ? "Tap to change or advance academic year"
-                : "Tap to configure academic year"
-            }
-            className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium transition-all ${
-              academicYear
-                ? "border-emerald-200/80 bg-emerald-50/70 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300"
-                : "border-orange-200 bg-orange-50/70 text-orange-700 dark:border-orange-800 dark:bg-orange-950/30 dark:text-orange-300"
-            } ${isInherited ? "cursor-default opacity-80" : "cursor-pointer hover:shadow-2xs hover:scale-[1.01]"}`}
-          >
-            <CalendarClock className="h-3.5 w-3.5 shrink-0" />
-            <span>
-              {academicYear ? academicYear.label : "Academic Year Required"}
+          <span className="text-muted-foreground/60 text-xs">|</span>
+
+          {/* Academic Year Info & Proper Button */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">
+              Academic Year:
             </span>
+            <span className={`text-xs font-semibold ${academicYear ? "text-foreground" : "text-amber-600 dark:text-amber-400"}`}>
+              {academicYear ? academicYear.label : "Not Configured"}
+            </span>
+
             {!isInherited && (
-              <span className="text-[10px] opacity-75 underline ml-0.5">
-                {academicYear ? "tap to advance" : "tap to set"}
-              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onAdvanceAcademicYear}
+                className="h-7 text-xs px-2.5 rounded-md font-medium ml-1"
+              >
+                {academicYear ? "Advance Academic Year" : "Set Academic Year"}
+              </Button>
             )}
-          </button>
+          </div>
         </div>
 
-        {/* Timings & Periods on right */}
-        <button
-          type="button"
-          disabled={isInherited}
-          onClick={isInherited ? undefined : onEditTiming}
-          title={
-            isInherited
-              ? "Timings follow the parent department"
-              : timing
-              ? "Tap to edit college timings and period schedule"
-              : "Tap to configure daily timings and periods"
-          }
-          className={`inline-flex items-center gap-1.5 text-xs font-medium transition-colors ${
-            timing
-              ? "text-emerald-600 dark:text-emerald-400 hover:text-emerald-700"
-              : "text-muted-foreground hover:text-foreground"
-          } ${isInherited ? "cursor-default opacity-80" : "cursor-pointer"}`}
-        >
-          <Clock className="h-3.5 w-3.5 shrink-0" />
-          {timing ? (
-            <span className="flex items-center gap-1">
-              <CheckCircle2 className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
-              <span>
-                {timing.collegeStartTime}–{timing.collegeEndTime} · {timing.numberOfPeriods} periods
+        {/* Timings on right with clean button */}
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          <span className="text-xs text-muted-foreground">
+            {timing ? (
+              <span className="text-foreground font-medium">
+                {timing.collegeStartTime}–{timing.collegeEndTime} ({timing.numberOfPeriods} periods)
               </span>
-            </span>
-          ) : (
-            <span className="text-muted-foreground">
-              {isSubDepartment ? "Not configured" : "Not configured - tap to add"}
-            </span>
+            ) : (
+              <span className="text-muted-foreground italic">
+                {isSubDepartment ? "Timings not configured" : "Timings not configured"}
+              </span>
+            )}
+          </span>
+
+          {!isInherited && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onEditTiming}
+              className="h-7 text-xs px-2 text-primary hover:text-primary hover:bg-primary/5"
+            >
+              {timing ? "Edit Timings" : "Add Timings"}
+            </Button>
           )}
-        </button>
+        </div>
       </div>
 
-      {/* Semester Columns Grid - ONLY when semesters are actually configured */}
+      {/* Semesters Grid - ONLY when semesters are actually configured */}
       {semesters.length > 0 && (
-        <div className="mt-3.5 pt-3 border-t border-border/60">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+        <div className="mt-3.5 pt-3 border-t border-border/50">
+          <div className="flex items-center justify-between mb-2.5">
+            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
               Semesters
             </span>
-            <span className="text-[11px] text-muted-foreground">
+            <span className="text-xs text-muted-foreground">
               {yearTotalSubjects} {yearTotalSubjects === 1 ? "subject" : "subjects"} assigned
             </span>
           </div>

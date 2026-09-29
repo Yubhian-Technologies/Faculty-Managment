@@ -45,6 +45,13 @@ export default function DepartmentDetailPage() {
     year: number;
     semester: number;
   } | null>(null);
+  const [advancingAcademicYear, setAdvancingAcademicYear] = useState<{
+    course: Course;
+    year: number;
+    currentLabel?: string;
+    suggestedNext: string;
+  } | null>(null);
+  const [isAdvancingAY, setIsAdvancingAY] = useState(false);
 
   // Per-course "Edit Academic Structure" dialog - null when closed. Every
   // course now has its own explicit courseScopes override (set mandatorily at
@@ -230,6 +237,64 @@ export default function DepartmentDetailPage() {
       : { assignedYears: [], secondaryDepartments: [] };
     if (own.assignedYears.length > 0 || !parentDepartment) return own;
     return resolveDepartmentCourseScope(parentDepartment, course.catalogId);
+  }
+
+  function suggestNextAcademicYear(label?: string): string {
+    if (!label) return "";
+    const match = /^(\d{4})\s*-\s*(\d{4})$/.exec(label.trim());
+    if (!match) return "";
+    return `${Number(match[1]) + 1}-${Number(match[2]) + 1}`;
+  }
+
+  function handleAdvanceAcademicYearClick(course: Course, year: number, current?: CourseAcademicYear) {
+    if (!current?.label) {
+      router.push(`/principal/departments/${id}/courses/${course.id}/academic-year/${year}/edit`);
+      return;
+    }
+    const next = suggestNextAcademicYear(current.label);
+    if (!next) {
+      router.push(`/principal/departments/${id}/courses/${course.id}/academic-year/${year}/edit`);
+      return;
+    }
+    setAdvancingAcademicYear({
+      course,
+      year,
+      currentLabel: current.label,
+      suggestedNext: next,
+    });
+  }
+
+  async function handleConfirmAdvanceAcademicYear() {
+    if (!advancingAcademicYear) return;
+    setIsAdvancingAY(true);
+    try {
+      const res = await fetch("/api/college/course-academic-years", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          departmentId: id,
+          courseId: advancingAcademicYear.course.id,
+          year: advancingAcademicYear.year,
+          label: advancingAcademicYear.suggestedNext,
+        }),
+      });
+      const json = await res.json() as { error?: string; advanced?: boolean; facultyUpdated?: number };
+      if (!res.ok) throw new Error(json.error ?? "Failed to advance academic year");
+      toast({
+        variant: "success",
+        title: `Advanced to ${advancingAcademicYear.suggestedNext}`,
+        description: `${json.facultyUpdated ?? 0} active faculty member${json.facultyUpdated === 1 ? "" : "s"} experience updated`,
+      });
+      setAdvancingAcademicYear(null);
+      await load();
+    } catch (err) {
+      toast({
+        variant: "destructive",
+        title: err instanceof Error ? err.message : "Failed to advance academic year",
+      });
+    } finally {
+      setIsAdvancingAY(false);
+    }
   }
 
 
@@ -471,7 +536,7 @@ export default function DepartmentDetailPage() {
                       onCustomiseCourse={() => setCustomisingCourse(c)}
                       onRemoveInherited={() => setRemovingInherited(c)}
                       onEditTiming={(y) => router.push(`/principal/departments/${id}/courses/${c.id}/timing/${y}/edit`)}
-                      onEditAcademicYear={(y) => router.push(`/principal/departments/${id}/courses/${c.id}/academic-year/${y}/edit`)}
+                      onAdvanceAcademicYear={(y, curAy) => handleAdvanceAcademicYearClick(c, y, curAy)}
                       onOpenSemesterSubjects={(course, year, semester) =>
                         setActiveSemesterModal({ course, year, semester })
                       }
@@ -552,6 +617,15 @@ export default function DepartmentDetailPage() {
             ? isSubDepartment && !isOwnCourse(activeSemesterModal.course)
             : false
         }
+      />
+
+      <ConfirmDialog
+        open={!!advancingAcademicYear}
+        onOpenChange={(open) => !open && setAdvancingAcademicYear(null)}
+        title={`Advance Academic Year to ${advancingAcademicYear?.suggestedNext}?`}
+        description={`Currently on ${advancingAcademicYear?.currentLabel}. Advancing will set Year ${advancingAcademicYear?.year} to ${advancingAcademicYear?.suggestedNext} and increase experience by 1 year for all faculty members with active teaching assignments in this year.`}
+        confirmLabel={isAdvancingAY ? "Advancing..." : `Advance to ${advancingAcademicYear?.suggestedNext}`}
+        onConfirm={() => void handleConfirmAdvanceAcademicYear()}
       />
 
       <ConfirmDialog
