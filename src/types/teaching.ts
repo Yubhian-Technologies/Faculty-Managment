@@ -91,6 +91,15 @@ export interface Subject {
   practicalHours?: number;
   credits: number;
   type: SubjectType;
+  // Reference-only exam metadata from the Course Structure XLSX upload -
+  // purely decorative, NOT wired into ExamConfiguration/exam-cell (that
+  // module is keyed per course+year+examType, shared across every subject
+  // of that type, not per-subject - see examConfig.ts's own doc-comment).
+  // Carried onto SubjectSemesterAssignment at instantiation, same
+  // convention as hoursPerWeek/credits below.
+  internalMarks?: number;
+  externalMarks?: number;
+  totalMarks?: number;
   isActive: boolean;
   createdAt: Timestamp;
   updatedAt: Timestamp;
@@ -127,6 +136,11 @@ export interface SubjectSemesterAssignment {
   hoursPerWeek?: number;
   totalHoursPerSemester?: number | null;
   credits?: number;
+  // Snapshot of Subject.internalMarks/externalMarks/totalMarks - see that
+  // field's own doc-comment. Decorative only.
+  internalMarks?: number;
+  externalMarks?: number;
+  totalMarks?: number;
   isCustomized?: boolean;
   isActive?: boolean;
   createdAt: Timestamp;

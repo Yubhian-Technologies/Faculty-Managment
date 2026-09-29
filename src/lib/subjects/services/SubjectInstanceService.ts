@@ -42,15 +42,32 @@ export class SubjectInstanceService {
   constructor(private db = getAdminDb()) {}
 
   /**
-   * Resolves the ordinal Year (1..6) configured for the given course and semester
+   * Resolves the ordinal Year (1..6) configured for the given course and semester.
+   * When `yearHint` is provided, checks that year first to support relative semester numbering
+   * (e.g. Semesters 1 & 2 in Year 1 as well as Semesters 1 & 2 in Year 2).
    */
   public async resolveYearForSemester(
     collegeId: string,
     courseId: string,
-    semester: number
+    semester: number,
+    yearHint?: number
   ): Promise<number | null> {
     const collegeRef = this.db.collection("colleges").doc(collegeId);
+
+    // 1. If a yearHint is given, check that year's timing doc first
+    if (yearHint != null && yearHint >= 1 && yearHint <= 6) {
+      const snap = await collegeRef.collection("courseYearTimings").doc(`${courseId}_year${yearHint}`).get();
+      if (snap.exists) {
+        const sems = (snap.data() as { semesters?: { semester: number }[] })?.semesters ?? [];
+        if (sems.some((s) => s.semester === semester)) {
+          return yearHint;
+        }
+      }
+    }
+
+    // 2. Scan remaining years 1..6
     for (let y = 1; y <= 6; y++) {
+      if (y === yearHint) continue;
       const snap = await collegeRef.collection("courseYearTimings").doc(`${courseId}_year${y}`).get();
       if (snap.exists) {
         const sems = (snap.data() as { semesters?: { semester: number }[] })?.semesters ?? [];
@@ -131,25 +148,33 @@ export class SubjectInstanceService {
     // present, skipping this resolution (and its "is this semester even
     // configured" check) entirely - a year/semester mismatch could be stored
     // with no server-side check at all.
-    const yearCacheKey = `${courseId}:${semester}`;
+    const yearCacheKey = `${courseId}:${options.year ?? ""}:${semester}`;
     let foundYear: number | null;
     if (yearCache?.has(yearCacheKey)) {
       foundYear = yearCache.get(yearCacheKey)!;
     } else {
-      foundYear = await this.resolveYearForSemester(collegeId, courseId, semester);
+      foundYear = await this.resolveYearForSemester(collegeId, courseId, semester, options.year);
       yearCache?.set(yearCacheKey, foundYear);
     }
-    if (foundYear == null) {
-      throw new Error(
-        `Semester ${semester} isn't configured in Course-Year Timings for course "${master.courseName || courseId}".`
-      );
+
+    let resolvedYear: number;
+    if (foundYear != null) {
+      if (options.year != null && options.year !== foundYear) {
+        throw new Error(
+          `Semester ${semester} belongs to Year ${foundYear} for this course, not Year ${options.year} - check Course-Year Timings.`
+        );
+      }
+      resolvedYear = foundYear;
+    } else {
+      // If timing docs have not been created yet or define no semesters, but options.year was explicitly provided
+      if (options.year != null && options.year >= 1 && options.year <= 6) {
+        resolvedYear = options.year;
+      } else {
+        throw new Error(
+          `Semester ${semester} isn't configured in Course-Year Timings for course "${master.courseName || courseId}".`
+        );
+      }
     }
-    if (options.year != null && options.year !== foundYear) {
-      throw new Error(
-        `Semester ${semester} belongs to Year ${foundYear} for this course, not Year ${options.year} - check Course-Year Timings.`
-      );
-    }
-    const resolvedYear = foundYear;
 
     // 4. This department must actually be scoped to teach this course in
     // this year (Department.courseScopes, or the legacy flat assignedYears
@@ -219,6 +244,9 @@ export class SubjectInstanceService {
       hoursPerWeek,
       totalHoursPerSemester: master.totalHoursPerSemester ?? null,
       credits,
+      ...(master.internalMarks != null ? { internalMarks: master.internalMarks } : {}),
+      ...(master.externalMarks != null ? { externalMarks: master.externalMarks } : {}),
+      ...(master.totalMarks != null ? { totalMarks: master.totalMarks } : {}),
       isCustomized: !!customOverrides,
       isActive: true,
       createdAt: (existing.exists
@@ -284,6 +312,19 @@ export class SubjectInstanceService {
    */
   public async unassignSubjectInstance(collegeId: string, subjectId: string, departmentId: string, semester: number): Promise<void> {
     const collegeRef = this.db.collection("colleges").doc(collegeId);
+
+    // Guard: Prevent orphaning active teaching assignments
+    const activeAssignmentsSnap = await collegeRef.collection("teachingAssignments")
+      .where("subjectId", "==", subjectId)
+      .where("departmentId", "==", departmentId)
+      .where("semester", "==", semester)
+      .limit(1)
+      .get();
+
+    if (!activeAssignmentsSnap.empty) {
+      throw new Error("This subject has active faculty teaching assignments in this semester. Please remove or reassign faculty before unassigning.");
+    }
+
     const instanceDocId = `${subjectId}_${departmentId}_${semester}`;
     // A pre-migration instance for this exact subject+department+semester
     // may still sit under the old (semester-less) key - delete it too, or

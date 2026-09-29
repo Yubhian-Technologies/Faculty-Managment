@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { YearsTaughtAndSecondaryFields } from "@/components/college/YearsTaughtAndSecondaryFields";
-import { replaceNoOwnSectionsParents, type DepartmentWithId } from "@/lib/college/academicStructure";
+import { isCommonYearDepartment, replaceNoOwnSectionsParents, type DepartmentWithId } from "@/lib/college/academicStructure";
 import { departmentSchema, type DepartmentFormData } from "@/lib/validations";
 import { toast } from "@/hooks/useToast";
 import type { Department } from "@/types";
@@ -31,6 +31,14 @@ export default function EditDepartmentPage() {
   // existed) defaults to true, its own documented backward-compatible
   // default.
   const [parentRunsOwnSections, setParentRunsOwnSections] = useState(true);
+  // "Freshman's Department". Hydrated from the department's CURRENT EFFECTIVE
+  // value (its explicit isFreshman if set, otherwise what the inferred rule
+  // already decides for it - see isCommonYearDepartment) rather than from
+  // isFreshman alone. Without that, merely opening and saving an untouched
+  // legacy department would persist `false` over behavior the inference was
+  // still producing, silently stripping its year-1 students of a landing
+  // department.
+  const [isFreshman, setIsFreshman] = useState(false);
   const [secondaryDepartments, setSecondaryDepartments] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -67,6 +75,12 @@ export default function EditDepartmentPage() {
         setAllDepartments(deptRes.departments ?? []);
         setHasSubDepartments(dept.hasSubDepartments ?? false);
         setParentRunsOwnSections(dept.parentRunsOwnSections ?? true);
+        // A sub-department can never be a freshman department whatever this box
+        // says (isCommonYearDepartment refuses one outright), so keep the
+        // checkbox off rather than showing a tick the save would silently drop.
+        setIsFreshman(
+          dept.parentDepartmentId ? false : isCommonYearDepartment(dept as DepartmentWithId)
+        );
         // A cross-listing saved against a department that organises its
         // sub-departments only (e.g. "AI", split into AIML/AIDS) is shown as
         // those children instead - they are what the picker now offers, and
@@ -125,6 +139,13 @@ export default function EditDepartmentPage() {
         hasSubDepartments,
         ...(hasSubDepartments ? { parentRunsOwnSections } : {}),
         secondaryDepartments,
+        // Explicit boolean from the checkbox above (itself hydrated from the
+        // effective value on load) - never left undefined, so saving records
+        // the Principal's actual decision rather than drifting back to the
+        // inferred rule. Omitted entirely for a sub-department, which can never
+        // qualify (isCommonYearDepartment refuses one outright) - writing a
+        // value there would be a field nothing ever reads.
+        ...(department.parentDepartmentId ? {} : { isFreshman }),
       };
       const saved = await submitPatch(payload);
       if (!saved) return; // warning dialog now showing - wait for the Principal's decision
@@ -225,6 +246,24 @@ export default function EditDepartmentPage() {
             {!department?.parentDepartmentId && (
               <div className="space-y-3 rounded-md border p-3">
                 <div className="flex items-start gap-2">
+                  <Checkbox
+                    id="dept-is-freshman"
+                    checked={isFreshman}
+                    onCheckedChange={(v) => setIsFreshman(v === true)}
+                  />
+                  <div className="space-y-1">
+                    <Label htmlFor="dept-is-freshman" className="font-normal">Freshman&apos;s Department</Label>
+                    <p className="text-xs text-muted-foreground">
+                      Tick this if the department is the shared first year - where students sit in year 1 before
+                      moving on to their branch. It gets a &quot;Freshman&apos;s Department&quot; badge, and
+                      year-1 students can only be filed under it (or its sub-departments). Unticking it stops
+                      the department being treated as a shared first year, even if it teaches year 1 and has
+                      sub-departments.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-2 border-t pt-3">
                   <Checkbox
                     id="dept-has-subdepts"
                     checked={hasSubDepartments}

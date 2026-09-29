@@ -122,7 +122,7 @@ export default function LocationStaffAdminDashboard() {
               size="sm"
               className="rounded-full h-10 px-4 text-xs font-semibold gap-1.5 bg-card/80 hover:bg-muted/60 border-border/80 shadow-xs"
             >
-              <Link href="/location-staff-admin/attendance/reports">
+              <Link href="/location-staff-admin/reports">
                 <FileBarChart className="h-4 w-4 text-emerald-600" />
                 <span>Reports</span>
               </Link>
@@ -300,7 +300,7 @@ export default function LocationStaffAdminDashboard() {
 
           {/* 3. Attendance Reports */}
           <Link
-            href="/location-staff-admin/attendance/reports"
+            href="/location-staff-admin/reports"
             className="group rounded-2xl p-5 bg-card/70 hover:bg-card border border-border/50 shadow-xs hover:shadow-md transition-all duration-200 flex flex-col justify-between"
           >
             <div>

@@ -306,7 +306,7 @@ export default function HODSubjectsPage() {
     if (!unassignTarget || !selectedCourse) return;
     try {
       const res = await fetch(
-        `/api/college/subject-semester-assignments?subjectId=${encodeURIComponent(unassignTarget.subjectId)}&departmentId=${encodeURIComponent(selectedCourse.departmentId)}`,
+        `/api/college/subject-semester-assignments?subjectId=${encodeURIComponent(unassignTarget.subjectId)}&departmentId=${encodeURIComponent(unassignTarget.departmentId || selectedCourse.departmentId)}&semester=${encodeURIComponent(unassignTarget.semester)}`,
         { method: "DELETE" }
       );
       const json = await res.json() as { error?: string };
