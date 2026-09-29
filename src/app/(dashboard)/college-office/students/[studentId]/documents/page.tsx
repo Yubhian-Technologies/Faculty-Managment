@@ -10,11 +10,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { FileUpload } from "@/components/shared/FileUpload";
 import { toast } from "@/hooks/useToast";
-import type { StudentDocument } from "@/types";
+import { STUDENT_DOCUMENT_TYPE_LABELS, resolveStudentDocumentTypeLabel } from "@/types";
+import type { StudentDocument, StudentDocumentType } from "@/types";
 
 export default function StudentDocumentsPage() {
   const { studentId } = useParams<{ studentId: string }>();
@@ -23,7 +26,8 @@ export default function StudentDocumentsPage() {
   const [isLoading, setIsLoading] = useState(true);
 
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [title, setTitle] = useState("");
+  const [documentType, setDocumentType] = useState<StudentDocumentType | "">("");
+  const [customTypeLabel, setCustomTypeLabel] = useState("");
   const [description, setDescription] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -48,14 +52,15 @@ export default function StudentDocumentsPage() {
   }, [studentId]);
 
   function resetForm() {
-    setTitle("");
+    setDocumentType("");
+    setCustomTypeLabel("");
     setDescription("");
     setSelectedFile(null);
   }
 
   async function handleSave() {
-    if (!title.trim() || !selectedFile) {
-      toast({ variant: "destructive", title: "Title and a file are required" });
+    if (!documentType || (documentType === "OTHER" && !customTypeLabel.trim()) || !selectedFile) {
+      toast({ variant: "destructive", title: "Document type and a file are required" });
       return;
     }
     setIsSaving(true);
@@ -74,7 +79,8 @@ export default function StudentDocumentsPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          title: title.trim(),
+          documentType,
+          ...(documentType === "OTHER" ? { customTypeLabel: customTypeLabel.trim() } : {}),
           description: description.trim(),
           fileUrl: uploadJson.url,
           fileName: uploadJson.fileName,
@@ -142,7 +148,9 @@ export default function StudentDocumentsPage() {
           {documents.map((d) => (
             <Card key={d.id}>
               <CardContent className="p-4 space-y-2">
-                <p className="font-medium text-sm text-foreground line-clamp-2">{d.title}</p>
+                <Badge variant="outline" className="rounded-full bg-primary/10 text-primary border-primary/20 font-medium">
+                  {resolveStudentDocumentTypeLabel(d)}
+                </Badge>
                 {d.description && <p className="text-xs text-muted-foreground line-clamp-2">{d.description}</p>}
                 <div className="flex items-center justify-between pt-2 border-t border-border/60">
                   <a href={d.fileUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-primary font-medium flex items-center gap-1 hover:underline">
@@ -165,9 +173,24 @@ export default function StudentDocumentsPage() {
           </DialogHeader>
           <div className="space-y-3">
             <div className="space-y-1.5">
-              <Label htmlFor="doc-title">Title</Label>
-              <Input id="doc-title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. 10th Class Certificate" />
+              <Label htmlFor="doc-type">Document Type</Label>
+              <Select value={documentType} onValueChange={(v) => setDocumentType(v as StudentDocumentType)}>
+                <SelectTrigger id="doc-type">
+                  <SelectValue placeholder="Select document type" />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(STUDENT_DOCUMENT_TYPE_LABELS).map(([value, label]) => (
+                    <SelectItem key={value} value={value}>{label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
+            {documentType === "OTHER" && (
+              <div className="space-y-1.5">
+                <Label htmlFor="doc-custom-type">Custom Document Type</Label>
+                <Input id="doc-custom-type" value={customTypeLabel} onChange={(e) => setCustomTypeLabel(e.target.value)} placeholder="Specify document type" />
+              </div>
+            )}
             <div className="space-y-1.5">
               <Label htmlFor="doc-description">Description (optional)</Label>
               <Textarea id="doc-description" value={description} onChange={(e) => setDescription(e.target.value)} rows={3} />
@@ -189,7 +212,7 @@ export default function StudentDocumentsPage() {
         open={!!deleteTarget}
         onOpenChange={(open) => !open && setDeleteTarget(null)}
         title="Remove this document?"
-        description={`"${deleteTarget?.title}" will be permanently removed.`}
+        description={`"${deleteTarget ? resolveStudentDocumentTypeLabel(deleteTarget) : ""}" will be permanently removed.`}
         confirmLabel="Remove"
         variant="destructive"
         onConfirm={() => void handleDelete()}

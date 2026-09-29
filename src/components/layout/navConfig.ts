@@ -468,6 +468,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Attendance", href: "/student/attendance", iconName: "TrendingUp", roles: ["STUDENT"] },
   { label: "Library", href: "/student/library", iconName: "BookOpen", roles: ["STUDENT"] },
   { label: "Documents", href: "/student/documents", iconName: "FileText", roles: ["STUDENT"] },
+  { label: "Permissions", href: "/student/permissions", iconName: "ShieldCheck", roles: ["STUDENT"] },
 
   // Webmaster
   { label: "Dashboard", href: "/webmaster", iconName: "LayoutDashboard", roles: ["WEBMASTER"] },
