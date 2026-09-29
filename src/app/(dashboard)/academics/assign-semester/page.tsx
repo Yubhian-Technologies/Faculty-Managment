@@ -283,10 +283,20 @@ function AssignToSemesterPageInner() {
   }, [selectedCourse, selectedDepartment, allDepartments, selectedCatalogItem, selectedRegulation]);
 
   const semesterOptions = useMemo(() => {
+    if (!selectedYear) return [];
+    const yearNum = Number(selectedYear);
+    const yearTiming = timings.find((t) => t.year === yearNum);
     const nums = new Set<number>();
-    for (const t of timings) for (const s of t.semesters ?? []) nums.add(s.semester);
+    for (const s of yearTiming?.semesters ?? []) nums.add(s.semester);
+    for (const a of assignments) {
+      if (a.year === yearNum && a.semester != null) nums.add(a.semester);
+    }
+    if (selectedSemester != null) nums.add(selectedSemester);
+    const paramSem = searchParams.get("semester");
+    if (paramSem) nums.add(Number(paramSem));
+
     return Array.from(nums).sort((a, b) => a - b);
-  }, [timings]);
+  }, [timings, selectedYear, assignments, selectedSemester, searchParams]);
   const effectiveSemester = semesterOptions.length === 0
     ? null
     : selectedSemester != null && semesterOptions.includes(selectedSemester)
@@ -307,23 +317,43 @@ function AssignToSemesterPageInner() {
   // silently showed the parent's raw list instead - identical output for a
   // sub-department that has never customized anything, since that's exactly
   // what an unfiltered inherited list already looks like.
+  // Guards against an out-of-order response: switching Department (or a
+  // fast Course->Department->Year click-through) fires a new fetch before
+  // the previous one lands, and network order isn't call order - a stale
+  // response landing last previously overwrote `courses` with the WRONG
+  // department's list, which then fed a wrong/empty `selectedCourse` and
+  // made a genuinely-configured year report "no semesters configured".
+  // Only the most recently STARTED call's response is ever applied.
+  const coursesRequestIdRef = useRef(0);
   const loadCourses = useCallback(async (departmentId: string) => {
+    const requestId = ++coursesRequestIdRef.current;
     setIsLoadingCourses(true);
     try {
       const res = await fetch(`/api/college/courses?departmentId=${encodeURIComponent(departmentId)}`);
       const data = await res.json() as { courses?: Course[] };
+      if (requestId !== coursesRequestIdRef.current) return;
       setCourses((data.courses ?? []).filter((c) => c.isActive).sort((a, b) => a.name.localeCompare(b.name)));
     } catch {
+      if (requestId !== coursesRequestIdRef.current) return;
       toast({ variant: "destructive", title: "Failed to load courses" });
     } finally {
-      setIsLoadingCourses(false);
+      if (requestId === coursesRequestIdRef.current) setIsLoadingCourses(false);
     }
   }, []);
 
   // Master Collection = every subject for this catalog course+year
   // (department-independent). Semester panel = this DEPARTMENT's own
   // mappings for that catalog+year, from the junction collection.
+  // Same out-of-order-response guard as loadCourses above - this is the
+  // exact function the reported bug traced back to: clicking Year 2 then
+  // Year 3 quickly could let Year 2's slower response land AFTER Year 3's
+  // and overwrite `timings`/`subjects`/`assignments` with Year 2's data
+  // while `selectedYear` had already moved to "3", so semesterOptions
+  // (which looks up `timings.find(t => t.year === 3)`) found nothing and
+  // reported "No semesters configured" for a year that genuinely had them.
+  const subjectsAndTimingsRequestIdRef = useRef(0);
   const loadSubjectsAndTimings = useCallback(async (course: Course, departmentId: string, year: string) => {
+    const requestId = ++subjectsAndTimingsRequestIdRef.current;
     setIsLoadingSubjects(true);
     try {
       const catalogId = course.catalogId ?? "";
@@ -350,13 +380,15 @@ function AssignToSemesterPageInner() {
       const subjectsData = await subjectsRes.json() as { subjects?: Subject[] };
       const timingsData = await timingsRes.json() as { timings?: CourseYearTiming[] };
       const assignmentsData = assignmentsRes ? await assignmentsRes.json() as { assignments?: SubjectSemesterAssignment[] } : { assignments: [] };
+      if (requestId !== subjectsAndTimingsRequestIdRef.current) return;
       setSubjects(subjectsData.subjects ?? []);
       setTimings((timingsData.timings ?? []).filter((t) => t.year === Number(year)));
       setAssignments(assignmentsData.assignments ?? []);
     } catch {
+      if (requestId !== subjectsAndTimingsRequestIdRef.current) return;
       toast({ variant: "destructive", title: "Failed to load subjects" });
     } finally {
-      setIsLoadingSubjects(false);
+      if (requestId === subjectsAndTimingsRequestIdRef.current) setIsLoadingSubjects(false);
     }
   }, []);
 

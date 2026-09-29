@@ -57,7 +57,6 @@ type FailedRow = { row: number; code: string; error: string; data: ParsedRow; st
     lectureHours: string;
     tutorialHours: string;
     practicalHours: string;
-    hoursPerWeek: string;
     totalHoursPerSemester: string;
     credits: string;
   };
@@ -330,7 +329,6 @@ export default function ImportAcademicsSubjectsPage() {
       lectureHours: f.data.lectureHours ?? "",
       tutorialHours: f.data.tutorialHours ?? "",
       practicalHours: f.data.practicalHours ?? "",
-      hoursPerWeek: f.data.hoursPerWeek ?? "",
       totalHoursPerSemester: f.data.totalHoursPerSemester ?? "",
       credits: f.data.credits ?? "",
     };
@@ -353,6 +351,13 @@ export default function ImportAcademicsSubjectsPage() {
   const fixAllowedRegulations = useMemo(() => {
     return fixCatalogItem?.regulations ?? [];
   }, [fixCatalogItem]);
+
+  // Always L+T+P, never taken from the CSV's own possibly-inconsistent
+  // column - see new/page.tsx's own doc-comment on why a diverged value
+  // here isn't just a display glitch.
+  const fixHoursPerWeek = fixTarget
+    ? (Number(fixTarget.form.lectureHours) || 0) + (Number(fixTarget.form.tutorialHours) || 0) + (Number(fixTarget.form.practicalHours) || 0)
+    : 0;
 
   async function handleFixSave() {
     if (!fixTarget) return;
@@ -384,7 +389,7 @@ export default function ImportAcademicsSubjectsPage() {
           lectureHours: Number(form.lectureHours),
           tutorialHours: Number(form.tutorialHours),
           practicalHours: Number(form.practicalHours),
-          hoursPerWeek: form.hoursPerWeek === "" ? 0 : Number(form.hoursPerWeek),
+          hoursPerWeek: fixHoursPerWeek,
           totalHoursPerSemester: form.totalHoursPerSemester === "" ? null : Number(form.totalHoursPerSemester),
           credits: form.credits === "" ? 0 : Number(form.credits),
         }),
@@ -804,7 +809,8 @@ export default function ImportAcademicsSubjectsPage() {
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <div className="space-y-2">
                   <Label>Hours / Week</Label>
-                  <Input type="number" min={0} value={fixTarget.form.hoursPerWeek} onChange={(e) => setFixField("hoursPerWeek", stripLeadingZeros(e.target.value))} />
+                  <Input type="number" value={fixHoursPerWeek} disabled />
+                  <p className="text-xs text-muted-foreground">L + T + P, computed automatically.</p>
                 </div>
                 <div className="space-y-2">
                   <Label>Hours / Semester</Label>

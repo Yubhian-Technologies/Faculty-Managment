@@ -116,6 +116,8 @@ export function LocationStaffForm({
 
     if (!dateOfJoining) newErrors.dateOfJoining = "Date of Joining is required";
 
+    if (reportAtLocationId === "__none__") newErrors.reportAtLocationId = "Select the gate this staff member must report to";
+
     if (!payeeType || payeeType === "__none__") newErrors.payeeType = "Please select Payee Type";
 
     if (payeeType === "Account Payee") {
@@ -173,7 +175,7 @@ export function LocationStaffForm({
     setTouched({
       name: true, contactNumber: true, aadhaar: true, payeeType: true, role: true,
       spouseGuardianPhone: true, spouseGuardianAadhaar: true, dateOfJoining: true,
-      accountNumber: true, branchName: true, ifscCode: true,
+      accountNumber: true, branchName: true, ifscCode: true, reportAtLocationId: true,
     });
     if (!validate()) {
       toast({ variant: "destructive", title: "Validation Error", description: "Please fix the highlighted errors before submitting." });
@@ -323,16 +325,16 @@ export function LocationStaffForm({
             {errors.dateOfJoining && touched.dateOfJoining && <p className="text-[11px] text-destructive font-medium">{errors.dateOfJoining}</p>}
           </div>
           <div className="space-y-1">
-            <Label className="text-xs font-medium">Report At Location</Label>
-            <Select value={reportAtLocationId} onValueChange={setReportAtLocationId}>
-              <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Select campus location" /></SelectTrigger>
+            <Label className="text-xs font-medium">Report At Gate <span className="text-destructive">*</span></Label>
+            <Select value={reportAtLocationId} onValueChange={(v) => { setReportAtLocationId(v); if (errors.reportAtLocationId) setErrors((p) => ({ ...p, reportAtLocationId: "" })); }}>
+              <SelectTrigger className={`h-9 text-xs ${errors.reportAtLocationId && touched.reportAtLocationId ? "border-destructive" : ""}`}><SelectValue placeholder="Select gate" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="__none__">No specific location</SelectItem>
                 {locations.map((l) => (
                   <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
+            {errors.reportAtLocationId && touched.reportAtLocationId && <p className="text-[11px] text-destructive font-medium">{errors.reportAtLocationId}</p>}
           </div>
         </div>
       </div>
