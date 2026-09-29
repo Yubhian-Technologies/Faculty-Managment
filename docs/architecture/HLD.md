@@ -132,7 +132,7 @@ HOD budget request → Principal freeze/approval → Finance approval/return →
 - **Error handling:** guard sentinels (`UNAUTHORIZED`, `NO_COLLEGE_CONTEXT`) → 401; validation → 400; optimistic concurrency (`expectedUpdatedAt`) → 409; generic 500 with server-side `console.error("[route-name]", err)`. No global error middleware exists — each route handles its own try/catch (verified convention across sampled routes).
 - **Observability:** `console.error/info` only; Firebase Cloud Functions logger in `functions/`. No APM/trace SDK. Playwright HTML reports (`test-reports/`) for e2e failures.
 - **Performance:** TanStack Query caching + `ChunkedBatch` for large writes; Firestore `in` queries capped at 30 values (department name lists deliberately `.slice(0, 30)`); server actions body limit 10 MB; `force-dynamic` on live reads instead of caching.
-- **Known risks (ground truth):** session cookie signature derives from the admin private key unless `SESSION_SECRET` is set; `firestore.rules` repo file is ahead of the deployed ruleset; CI lint failure gates nothing after it; `requireRoleOrHigher` exists with zero call sites.
+- **Known risks (ground truth):** session cookie signature derives from the admin private key unless `SESSION_SECRET` is set; `firestore.rules` repo file is ahead of the deployed ruleset; CI lint failure gates nothing after it.
 
 ## 6. Module Index → LLD Documents
 

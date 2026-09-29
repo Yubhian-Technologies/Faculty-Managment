@@ -129,8 +129,6 @@ change be the only thing gating something.
 
 ## Known gaps, so nobody rediscovers them
 
-- `requireRoleOrHigher` in `verifySession.ts` has **zero call sites**. Don't
-  adopt it without reading its own warning about tenant context.
 - None of these five files has a test. `scope.ts` and `verifySession.ts`
   between them decide every authorization outcome in the app.
 - `npm run lint` currently fails on `main` (128 errors, 118 of them one React

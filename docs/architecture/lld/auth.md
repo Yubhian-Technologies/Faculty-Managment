@@ -82,5 +82,4 @@ System collections: `systemUsers/{uid}` (global roles), `locations/{id}/location
 - Cookie `roles` snapshot is stale by design — live re-resolution fixes revoked seats.
 - `requireRole` role rewriting: an HOD+more-senior login evaluated as HOD returns department-scoped data, not college-wide — intentional; changing the resolution order is a breaking change.
 - Firestore rules OR-combine: a second `match` block never tightens; deployed ruleset lags the repo file (deployed manually, last published before the repo file's current state).
-- `requireRoleOrHigher` exists with **zero call sites** and its own tenant-context warning — do not adopt without reading it.
 - No tests cover `verifySession.ts` or `scope.ts` despite deciding every authorization outcome.
