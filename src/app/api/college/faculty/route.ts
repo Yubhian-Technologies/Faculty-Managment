@@ -192,6 +192,19 @@ export async function GET(request: Request) {
 
     primaryQuery = withStatus(primaryQuery);
 
+    // Optional lookup of one person's own faculty record by login uid,
+    // independent of which department it is filed under (an HOD seat and a
+    // faculty record's department are separate things - a person can head
+    // departments other than the one they teach in). Only ever ADDS an
+    // equality filter on top of the role scoping above, so it can narrow a
+    // result but never widen what any role may see.
+    const userUidFilter = searchParams.get("userUid");
+    if (userUidFilter) {
+      primaryQuery = primaryQuery.where("userUid", "==", userUidFilter);
+      if (childDeptQuery) childDeptQuery = childDeptQuery.where("userUid", "==", userUidFilter);
+      if (parentDeptQuery) parentDeptQuery = parentDeptQuery.where("userUid", "==", userUidFilter);
+    }
+
     const [primarySnap, childDeptSnap, parentDeptSnap] = await Promise.all([
       primaryQuery.get(),
       childDeptQuery ? childDeptQuery.get() : Promise.resolve(null),
