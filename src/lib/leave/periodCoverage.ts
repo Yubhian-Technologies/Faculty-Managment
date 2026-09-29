@@ -8,7 +8,8 @@ import { loadUnavailability, findSubstituteConflicts, describeSubstituteConflict
 import { resolveSectionCurrentSemester, matchesCurrentSemester as slotMatchesCurrentSemester } from "@/lib/college/semester";
 import { matchesCurrentAcademicYear } from "@/lib/college/academicSession";
 import { isFacultyAvailable } from "@/types";
-import type { DayOfWeek, FacultyMember, TimetableSlot } from "@/types";
+import { defaultPeriodTimings } from "@/lib/timetable/buildGrid";
+import type { DayOfWeek, FacultyMember, TimetableSlot, CourseYearTiming } from "@/types";
 import type { LeaveRequest, PeriodSubstitution, StaffAdjustment } from "@/types/leave";
 import { resolveCollegeAcademicYear } from "@/lib/college/collegeAcademicYear";
 
@@ -104,8 +105,18 @@ export interface RequiredPeriod {
   sectionId: string;
   sectionName?: string;
   courseId?: string;
+  // Needed alongside courseId to look up this period's own CourseYearTiming
+  // (id `${courseId}_year${year}`) for startTime/endTime below.
+  year?: number;
   subjectId: string;
   subjectName: string;
+  // This period's clock time ("HH:MM"), resolved from its course-year's
+  // CourseYearTiming (explicit periods[] if the HOD broke it down, else the
+  // same defaultPeriodTimings formula the timetable grid itself falls back
+  // on - see resolveRequiredPeriods). Absent when no CourseYearTiming exists
+  // at all for that course-year yet.
+  startTime?: string;
+  endTime?: string;
 }
 
 export interface SubstituteCandidate {
@@ -157,7 +168,7 @@ export async function resolveRequiredPeriods(
     for (const s of daySlots) {
       required.push({
         date: dateISO, day, periodNumber: s.periodNumber, timetableSlotId: s.id,
-        sectionId: s.sectionId, courseId: s.courseId, subjectId: s.subjectId, subjectName: s.subjectName,
+        sectionId: s.sectionId, courseId: s.courseId, year: s.year, subjectId: s.subjectId, subjectName: s.subjectName,
       });
     }
   }
@@ -170,7 +181,38 @@ export async function resolveRequiredPeriods(
   );
   for (const p of required) p.sectionName = sectionNameById.get(p.sectionId) ?? undefined;
 
+  await attachPeriodTimes(collegeRef, required);
+
   return required.sort((a, b) => (a.date === b.date ? a.periodNumber - b.periodNumber : a.date.localeCompare(b.date)));
+}
+
+// Stamps startTime/endTime onto each period from its own course-year's
+// CourseYearTiming, batch-fetched once per distinct courseId+year pair (a
+// leave spanning many periods usually repeats just a handful of course-years).
+// Falls back to defaultPeriodTimings - the same formula the timetable grid
+// itself uses (buildRows in lib/timetable/buildGrid.ts) - whenever an HOD
+// hasn't broken a course-year down period-by-period yet, so this never shows
+// a blank time just because CourseYearTiming.periods is unset. Silently
+// leaves startTime/endTime absent for a period whose course-year has no
+// CourseYearTiming doc at all (legacy/incomplete setup) - callers already
+// treat a missing time as "hide the time line", not an error.
+async function attachPeriodTimes(collegeRef: FirebaseFirestore.DocumentReference, periods: RequiredPeriod[]): Promise<void> {
+  const keys = Array.from(new Set(
+    periods.filter((p) => p.courseId && p.year != null).map((p) => `${p.courseId}_year${p.year}`)
+  ));
+  if (keys.length === 0) return;
+  const snaps = await Promise.all(keys.map((id) => collegeRef.collection("courseYearTimings").doc(id).get()));
+  const timingById = new Map(
+    snaps.filter((s) => s.exists).map((s) => [s.id, s.data() as CourseYearTiming])
+  );
+  for (const p of periods) {
+    if (!p.courseId || p.year == null) continue;
+    const timing = timingById.get(`${p.courseId}_year${p.year}`);
+    if (!timing) continue;
+    const source = timing.periods && timing.periods.length > 0 ? timing.periods : defaultPeriodTimings(timing);
+    const pt = source.find((t) => t.period === p.periodNumber);
+    if (pt) { p.startTime = pt.startTime; p.endTime = pt.endTime; }
+  }
 }
 
 // Resolves required periods plus, per period, which same-department teaching
@@ -326,6 +368,7 @@ export async function validatePeriodSubstitutions(params: {
       date: period.date, day: period.day, periodNumber: period.periodNumber, timetableSlotId: period.timetableSlotId,
       sectionId: period.sectionId, sectionName: period.sectionName, courseId: period.courseId,
       subjectId: period.subjectId, subjectName: period.subjectName,
+      startTime: period.startTime, endTime: period.endTime,
       substituteFacultyId: candidate.facultyId, substituteFacultyName: candidate.facultyName,
       assignedBy: assignedByOverride ?? (mode === "FULL" ? "APPLICANT" : "HOD"),
     });

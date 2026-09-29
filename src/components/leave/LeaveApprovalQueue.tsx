@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "@/hooks/useToast";
 import { PermissionApprovalQueue } from "@/components/leave/PermissionApprovalQueue";
 import { PeriodCoverageGrid, type PeriodCoverageEntry } from "@/components/leave/PeriodCoverageGrid";
-import { cn, formatDate } from "@/lib/utils";
+import { cn, formatDate, formatTime12h } from "@/lib/utils";
 import { CalendarClock, Check, X, ChevronDown, ChevronUp, FileCheck, BellRing } from "lucide-react";
 import { EFFECTIVE_CATEGORY_LABELS, EFFECTIVE_CATEGORY_ORDER, LEAVE_TYPE_LABELS, OTHER_LEAVE_CATEGORY_DESCRIPTIONS, OTHER_LEAVE_CATEGORY_LABELS, OTHER_LEAVE_CATEGORY_ORDER } from "@/types/leave";
 import type { EffectiveLeaveCategory, LeaveRequest, OtherLeaveCategory } from "@/types/leave";
@@ -433,12 +433,15 @@ export function LeaveApprovalQueue() {
                     <div className="space-y-1.5 pt-3">
                       <label className="text-xs text-muted-foreground">Reason</label>
                       <p className="text-sm">{r.reason || <span className="text-muted-foreground italic">No reason provided</span>}</p>
+                      {r.proofRoutedTo === "EXAM_CELL" && (
+                        <Badge variant="secondary" className="text-[10px]">Proof goes to Exam Cell</Badge>
+                      )}
                     </div>
 
-                    {r.leaveTypeCode === "OD" && (r.placeOfVisit || r.pointOfContact) && (
+                    {(r.placeOfVisit || r.pointOfContact) && (
                       <div className="grid gap-3 sm:grid-cols-2">
                         <div className="space-y-1">
-                          <label className="text-xs text-muted-foreground">Place of Visit</label>
+                          <label className="text-xs text-muted-foreground">Place{r.leaveTypeCode === "OD" ? " of Visit" : ""}</label>
                           <p className="text-sm">{r.placeOfVisit || "—"}</p>
                         </div>
                         <div className="space-y-1">
@@ -529,9 +532,15 @@ export function LeaveApprovalQueue() {
                               periods={periodsById[r.id]!}
                               renderPeriod={(p, key) => (
                                 <div key={key} className="space-y-1 rounded-md border p-2">
-                                  <p className="text-xs font-medium leading-tight">
-                                    P{p.periodNumber} · {p.subjectName}{p.sectionName ? ` · ${p.sectionName}` : ""}
+                                  <p className="text-xs font-medium leading-tight">Period {p.periodNumber}</p>
+                                  <p className="text-xs leading-tight">
+                                    {p.subjectName}{p.sectionName ? ` · ${p.sectionName}` : ""}
                                   </p>
+                                  {p.startTime && p.endTime && (
+                                    <p className="text-xs text-muted-foreground leading-tight">
+                                      {formatTime12h(p.startTime)}&ndash;{formatTime12h(p.endTime)}
+                                    </p>
+                                  )}
                                   <Select
                                     value={substitutionsById[r.id]?.[key] ?? ""}
                                     onValueChange={(v) =>

@@ -22,6 +22,7 @@ import { validatePeriodSubstitutions, type PeriodSubstitutionInput } from "@/lib
 import { buildAdjustmentRequests, notifyAdjustmentAssignees, notifyPendingApprover } from "@/lib/leave/adjustmentRequests";
 import { approverStageToStatus, resolveApproverStageForHeldRoles } from "@/lib/leave/approvalRouting";
 import { listHandoverCandidates } from "@/lib/leave/handoverPool";
+import { notifyRole } from "@/lib/notify";
 import type { AdjustmentRequest, LeaveRequest, LeaveTypeCode, PeriodSubstitution } from "@/types/leave";
 import type { UserRole } from "@/types/core";
 
@@ -308,11 +309,16 @@ export async function POST(request: Request) {
         }
       }
       if (leaveType.rules.reasonOptions?.length && !leaveType.rules.allowCustomReason) {
-        if (!leaveType.rules.reasonOptions.includes(body.reason.trim())) {
+        if (!leaveType.rules.reasonOptions.some((o) => o.label === body.reason!.trim())) {
           return NextResponse.json({ error: "Pick one of the listed reasons for this leave type" }, { status: 400 });
         }
       }
     }
+    // Which department a supporting document for this reason should go to -
+    // Exam Cell for an exam-duty reason, HOD otherwise (see LeaveReasonOption
+    // in types/leave.ts and Settings > Leave Policy). A custom/free-text
+    // reason (no matching configured option) always defaults to HOD.
+    const proofRoutedTo = leaveType?.rules.reasonOptions?.find((o) => o.label === body.reason!.trim())?.proofRoutedTo ?? "HOD";
     if (body.isHalfDay && !leaveType?.rules.halfDayAllowed) {
       return NextResponse.json({ error: "Half day isn't available for this leave type" }, { status: 400 });
     }
@@ -545,7 +551,10 @@ export async function POST(request: Request) {
       ...(body.leaveTypeCode ? { leaveTypeCode: body.leaveTypeCode } : {}),
       isOtherRequest: body.isOtherRequest || false,
       ...(body.extendsRequestId ? { extendsRequestId: body.extendsRequestId } : {}),
-      ...(body.leaveTypeCode === "OD" ? { placeOfVisit: body.placeOfVisit!.trim(), pointOfContact: body.pointOfContact!.trim() } : {}),
+      // Available on every leave type now (was OD-only) - still required for
+      // OD specifically (see the validation above), optional elsewhere.
+      ...(body.placeOfVisit?.trim() ? { placeOfVisit: body.placeOfVisit.trim() } : {}),
+      ...(body.pointOfContact?.trim() ? { pointOfContact: body.pointOfContact.trim() } : {}),
       ...(periodSubstitutions ? { periodSubstitutions } : {}),
       ...(handover ? { handoverToUid: handover.uid, handoverToName: handover.name } : {}),
       ...(adjustmentRequests.length > 0 ? { adjustmentRequests, postAcceptanceStatus } : {}),
@@ -555,6 +564,9 @@ export async function POST(request: Request) {
       isHalfDay: body.isHalfDay || false,
       ...(body.isHalfDay ? { halfDaySession: body.halfDaySession } : {}),
       reason: body.reason.trim(),
+      // Only stored when it's the non-default target - HOD is implicit
+      // whenever this is absent (see LeaveReasonOption's own doc-comment).
+      ...(proofRoutedTo === "EXAM_CELL" ? { proofRoutedTo } : {}),
       status: initialStatus,
       createdAt: now as unknown as LeaveRequest["createdAt"],
       updatedAt: now as unknown as LeaveRequest["updatedAt"],
@@ -568,6 +580,16 @@ export async function POST(request: Request) {
       // approver, so they need to hear about it now, not just via
       // LEAVE_APPLIED's audit-log trail.
       await notifyPendingApprover(db, session.collegeId, initialStatus, newRequest);
+    }
+    // An exam-duty reason also tells Exam Cell directly, on top of whatever
+    // approval-chain notification already fired above - they're not in that
+    // chain, but the reason names them as who should see the proof.
+    if (proofRoutedTo === "EXAM_CELL") {
+      await notifyRole(
+        db, session.collegeId, "EXAM_CELL", "LEAVE_PROOF_ROUTED_TO_EXAM_CELL",
+        "Leave filed for an exam-duty reason",
+        `${identity.name} applied for leave citing "${body.reason.trim()}" - proof for this should be routed to Exam Cell.`,
+      );
     }
 
     // Balance is only committed on final approval (see [id]/route.ts) - a

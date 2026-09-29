@@ -14,9 +14,10 @@ import { toast } from "@/hooks/useToast";
 import { OD_PROOF_GRACE_DAYS } from "@/lib/leave/odProof";
 import { AlertTriangle, CalendarPlus, Users } from "lucide-react";
 import { countWorkingDays, dateKey, isoDateKey, todayISODate } from "@/lib/leave/dayCounter";
-import { toDate as toJsDate, formatDate } from "@/lib/utils";
+import { toDate as toJsDate, formatDate, formatTime12h } from "@/lib/utils";
 import { useAuthStore } from "@/store/authStore";
 import { PeriodCoverageGrid, type PeriodCoverageEntry } from "@/components/leave/PeriodCoverageGrid";
+import { HANDOVER_ENABLED } from "@/lib/leave/featureFlags";
 import { LEAVE_TYPE_LABELS } from "@/types/leave";
 import type { LeaveRequest, LeaveTypeCode } from "@/types/leave";
 import type { Holiday, SummerHoliday, WorkingDayOverride } from "@/types";
@@ -31,7 +32,7 @@ interface BalanceEntry {
   // a hint only; the server (applications/route.ts POST) is the authoritative
   // check either way.
   halfDayAllowed?: boolean;
-  reasonOptions?: string[];
+  reasonOptions?: { label: string; proofRoutedTo?: "HOD" | "EXAM_CELL" }[];
   allowCustomReason?: boolean;
   maxConsecutiveDays?: number;
   minAdvanceNoticeDays?: number;
@@ -49,6 +50,13 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
   // it's launched from. Same form, same POST endpoint - just prefilled and
   // tagged so the new request carries the connection through.
   const extendId = searchParams.get("extend");
+  // Edit an existing PENDING request in place (see LeaveProfileView.tsx's
+  // Edit link, shown only while isLeaveRequestEditable) - the id of one of
+  // the requester's own not-yet-decided requests. Same form, but submits via
+  // PATCH .../{editId} action "EDIT" instead of POST, and pre-fills every
+  // editable field (extend deliberately only pre-fills a few, since it's
+  // creating a brand new linked request rather than modifying this one).
+  const editId = searchParams.get("edit");
   const todayISO = todayISODate();
   const [types, setTypes] = useState<BalanceEntry[]>([]);
   const [isLoadingTypes, setIsLoadingTypes] = useState(true);
@@ -70,7 +78,10 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
   // the free-text box below it. Irrelevant (and never shown) for a type with
   // no reasonOptions, which just gets the plain Textarea it always had.
   const [customReasonMode, setCustomReasonMode] = useState(false);
-  // On Duty only - see types/leave.ts's placeOfVisit/pointOfContact.
+  // Available on every leave type (was OD-only) - an optional "where are you
+  // and how do we reach you" pair, see types/leave.ts's
+  // placeOfVisit/pointOfContact. Still required for OD specifically (see the
+  // validation below and applications/route.ts).
   const [placeOfVisit, setPlaceOfVisit] = useState("");
   const [pointOfContact, setPointOfContact] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -379,6 +390,56 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
       .catch(() => toast({ variant: "destructive", title: "Couldn't load the leave you're extending" }));
   }, [extendId]);
 
+  const [editSource, setEditSource] = useState<LeaveRequest | null>(null);
+  useEffect(() => {
+    if (!editId) return;
+    fetch(`/api/leave/applications/${editId}`)
+      .then((r) => r.json() as Promise<{ request?: LeaveRequest; error?: string }>)
+      .then((data) => {
+        if (!data.request) { toast({ variant: "destructive", title: "Couldn't load this leave request" }); return; }
+        const r = data.request;
+        setEditSource(r);
+        setFullDayMode("RANGE");
+        setLeaveTypeCode(r.isOtherRequest && !r.leaveTypeCode ? "OTHER" : r.leaveTypeCode ?? "OTHER");
+        setFromDate(isoDateKey(toJsDate(r.fromDate) ?? new Date()));
+        setToDate(isoDateKey(toJsDate(r.toDate) ?? new Date()));
+        setIsHalfDay(!!r.isHalfDay);
+        if (r.halfDaySession) setHalfDaySession(r.halfDaySession);
+        setReason(r.reason ?? "");
+        setPlaceOfVisit(r.placeOfVisit ?? "");
+        setPointOfContact(r.pointOfContact ?? "");
+      })
+      .catch(() => toast({ variant: "destructive", title: "Couldn't load this leave request" }));
+  }, [editId]);
+
+  // Once this edit's own periods load for the pre-filled dates (the effect
+  // above), carry over whichever substitute was already picked for each one
+  // - otherwise every period would come up unpicked even when nothing about
+  // it actually changed. Only pre-fills a period whose candidate list still
+  // includes that same person; one who's no longer available is left for the
+  // requester to re-pick, same as if they'd never picked anyone.
+  useEffect(() => {
+    if (!editSource?.periodSubstitutions?.length || periods.length === 0) return;
+    // Deferred the same way LeaveProfileView's own load() effects are -
+    // setSubstituteByPeriod isn't reachable synchronously from the effect
+    // body (react-hooks/set-state-in-effect).
+    void (async () => {
+      const byKey = new Map(editSource.periodSubstitutions!.map((p) => [`${p.date}|${p.timetableSlotId}`, p.substituteFacultyId]));
+      setSubstituteByPeriod((prev) => {
+        const next = { ...prev };
+        for (const p of periods) {
+          const key = `${p.date}|${p.timetableSlotId}`;
+          const picked = byKey.get(key);
+          if (picked && p.candidates.some((c) => c.facultyId === picked)) next[key] = picked;
+        }
+        return next;
+      });
+    })();
+    // editSource is loaded once and never changes after; only re-run when a
+    // fresh `periods` fetch actually lands.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [periods]);
+
   async function handleSubmit() {
     if (!fromDate || !toDate || !reason.trim() || !leaveTypeCode) {
       toast({ variant: "destructive", title: "All fields are required" });
@@ -416,32 +477,50 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
     }
     setIsSubmitting(true);
     try {
-      const res = await fetch("/api/leave/applications", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          leaveTypeCode: leaveTypeCode === "OTHER" ? undefined : leaveTypeCode,
-          isOtherRequest: leaveTypeCode === "OTHER",
-          fromDate,
-          toDate,
-          isHalfDay,
-          halfDaySession: isHalfDay ? effectiveHalfDaySession : undefined,
-          reason: reason.trim(),
-          extendsRequestId: extendId ?? undefined,
-          handoverToUid: handoverToUid || undefined,
-          ...(leaveTypeCode === "OD" ? { placeOfVisit: placeOfVisit.trim(), pointOfContact: pointOfContact.trim() } : {}),
-          periodSubstitutions: periods.length > 0
-            ? periods.map((p) => ({
-                date: p.date,
-                timetableSlotId: p.timetableSlotId,
-                substituteFacultyId: substituteByPeriod[`${p.date}|${p.timetableSlotId}`],
-              }))
-            : undefined,
-        }),
-      });
+      const periodSubstitutions = periods.length > 0
+        ? periods.map((p) => ({
+            date: p.date,
+            timetableSlotId: p.timetableSlotId,
+            substituteFacultyId: substituteByPeriod[`${p.date}|${p.timetableSlotId}`],
+          }))
+        : undefined;
+      const res = editId
+        ? await fetch(`/api/leave/applications/${editId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              action: "EDIT",
+              fromDate,
+              toDate,
+              isHalfDay,
+              halfDaySession: isHalfDay ? effectiveHalfDaySession : undefined,
+              reason: reason.trim(),
+              placeOfVisit: placeOfVisit.trim() || undefined,
+              pointOfContact: pointOfContact.trim() || undefined,
+              periodSubstitutions,
+            }),
+          })
+        : await fetch("/api/leave/applications", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              leaveTypeCode: leaveTypeCode === "OTHER" ? undefined : leaveTypeCode,
+              isOtherRequest: leaveTypeCode === "OTHER",
+              fromDate,
+              toDate,
+              isHalfDay,
+              halfDaySession: isHalfDay ? effectiveHalfDaySession : undefined,
+              reason: reason.trim(),
+              extendsRequestId: extendId ?? undefined,
+              handoverToUid: HANDOVER_ENABLED ? (handoverToUid || undefined) : undefined,
+              placeOfVisit: placeOfVisit.trim() || undefined,
+              pointOfContact: pointOfContact.trim() || undefined,
+              periodSubstitutions,
+            }),
+          });
       const data = (await res.json()) as { error?: string };
       if (!res.ok) throw new Error(data.error ?? "Failed to submit");
-      toast({ variant: "success", title: "Leave request submitted" });
+      toast({ variant: "success", title: editId ? "Leave request updated" : "Leave request submitted" });
       router.push(backHref);
     } catch (err) {
       toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to submit" });
@@ -453,8 +532,11 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
   return (
     <div className="max-w-lg space-y-6">
       <PageHeader
-        title={extendId ? "Extend Leave" : "Apply for Leave"}
-        description={extendId ? "Request more days on an already-approved leave" : "Submit a new leave request"}
+        title={editId ? "Edit Leave Request" : extendId ? "Extend Leave" : "Apply for Leave"}
+        description={
+          editId ? "Editable until an approver acts on it"
+            : extendId ? "Request more days on an already-approved leave" : "Submit a new leave request"
+        }
       />
       {extendId && (
         <div className="flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900">
@@ -476,7 +558,7 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
         <CardContent className="p-4 space-y-4">
           <div className="space-y-2">
             <Label>Leave Type</Label>
-            <Select value={leaveTypeCode} onValueChange={handleLeaveTypeChange} disabled={isLoadingTypes || !!extendId}>
+            <Select value={leaveTypeCode} onValueChange={handleLeaveTypeChange} disabled={isLoadingTypes || !!extendId || !!editId}>
               <SelectTrigger>
                 <SelectValue placeholder="Select leave type" />
               </SelectTrigger>
@@ -501,33 +583,34 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
             {/* Set the expectation before they apply, not after they're
                 already overdue. Shared by all 17 apply routes for free. */}
             {leaveTypeCode === "OD" && (
-              <>
-                <p className="text-xs text-muted-foreground">
-                  You&rsquo;ll need to upload proof of duty (certificate, letter or order) within {OD_PROOF_GRACE_DAYS}{" "}
-                  days of this On Duty period ending. Unproven days are treated as Loss of Pay.
-                </p>
-                <div className="grid gap-3 sm:grid-cols-2 pt-1">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="place-of-visit" className="text-xs">Place of Visit</Label>
-                    <Input
-                      id="place-of-visit"
-                      value={placeOfVisit}
-                      onChange={(e) => setPlaceOfVisit(e.target.value)}
-                      placeholder="e.g. XYZ College, Hyderabad"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="point-of-contact" className="text-xs">Point of Contact</Label>
-                    <Input
-                      id="point-of-contact"
-                      value={pointOfContact}
-                      onChange={(e) => setPointOfContact(e.target.value)}
-                      placeholder="Name and phone number"
-                    />
-                  </div>
-                </div>
-              </>
+              <p className="text-xs text-muted-foreground">
+                You&rsquo;ll need to upload proof of duty (certificate, letter or order) within {OD_PROOF_GRACE_DAYS}{" "}
+                days of this On Duty period ending. Unproven days are treated as Loss of Pay.
+              </p>
             )}
+            {/* Available on every leave type - required only for OD (see the
+                submit validation and applications/route.ts), optional
+                elsewhere as a general "how do we reach you" pair. */}
+            <div className="grid gap-3 sm:grid-cols-2 pt-1">
+              <div className="space-y-1.5">
+                <Label htmlFor="place-of-visit" className="text-xs">Place{leaveTypeCode === "OD" ? " of Visit" : ""}</Label>
+                <Input
+                  id="place-of-visit"
+                  value={placeOfVisit}
+                  onChange={(e) => setPlaceOfVisit(e.target.value)}
+                  placeholder="e.g. XYZ College, Hyderabad"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="point-of-contact" className="text-xs">Point of Contact{leaveTypeCode !== "OD" ? " (optional)" : ""}</Label>
+                <Input
+                  id="point-of-contact"
+                  value={pointOfContact}
+                  onChange={(e) => setPointOfContact(e.target.value)}
+                  placeholder="Name and phone number"
+                />
+              </div>
+            </div>
             {/* Informational only - the server (applications/route.ts POST)
                 is the actual enforcement, this just avoids a surprise 400
                 after filling in the rest of the form. */}
@@ -660,10 +743,16 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
                       : p.candidates;
                     return (
                       <div key={key} className="space-y-1 rounded-md border p-2">
-                        <p className="text-xs font-medium leading-tight">
-                          P{p.periodNumber} · {p.subjectName}
+                        <p className="text-xs font-medium leading-tight">Period {p.periodNumber}</p>
+                        <p className="text-xs leading-tight">
+                          {p.subjectName}
                           {p.sectionName && <span className="text-muted-foreground"> · {p.sectionName}</span>}
                         </p>
+                        {p.startTime && p.endTime && (
+                          <p className="text-xs text-muted-foreground leading-tight">
+                            {formatTime12h(p.startTime)}&ndash;{formatTime12h(p.endTime)}
+                          </p>
+                        )}
                         <Select
                           value={substituteByPeriod[key] ?? ""}
                           onValueChange={(v) => setSubstituteByPeriod((prev) => ({ ...prev, [key]: v }))}
@@ -690,7 +779,7 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
             </div>
           )}
 
-          {handoverCandidates.length > 0 && (
+          {HANDOVER_ENABLED && handoverCandidates.length > 0 && (
             <div className="space-y-2">
               <Label>Handover / point of contact (optional)</Label>
               <p className="text-xs text-muted-foreground">
@@ -732,7 +821,7 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
                 >
                   <SelectTrigger><SelectValue placeholder="Select a reason" /></SelectTrigger>
                   <SelectContent>
-                    {selectedType.reasonOptions.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                    {selectedType.reasonOptions.map((r) => <SelectItem key={r.label} value={r.label}>{r.label}</SelectItem>)}
                     {selectedType.allowCustomReason && <SelectItem value="OTHER">Other</SelectItem>}
                   </SelectContent>
                 </Select>

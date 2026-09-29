@@ -7,11 +7,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { X } from "lucide-react";
 import { toast } from "@/hooks/useToast";
 import { LEAVE_TYPE_SEED } from "@/lib/leave/seedData";
-import type { EffectiveLeaveCategory, LeaveTypeCode, LeaveTypeRuleOverride, LeaveBlackoutWindow } from "@/types/leave";
+import type {
+  EffectiveLeaveCategory, LeaveTypeCode, LeaveTypeRuleOverride, LeaveBlackoutWindow, LeaveProofRouteTarget,
+} from "@/types/leave";
 import { EFFECTIVE_CATEGORY_LABELS } from "@/types/leave";
 import type { FacultyNorms } from "@/types/core";
 
@@ -34,6 +36,7 @@ export function LeaveTypeRulesCard() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [reasonDraft, setReasonDraft] = useState<Partial<Record<LeaveTypeCode, string>>>({});
+  const [reasonProofDraft, setReasonProofDraft] = useState<Partial<Record<LeaveTypeCode, LeaveProofRouteTarget>>>({});
   const [newWindow, setNewWindow] = useState({ fromDate: "", toDate: "", reason: "" });
 
   useEffect(() => {
@@ -260,21 +263,41 @@ export function LeaveTypeRulesCard() {
 
                   <div className="space-y-2">
                     <Label className="text-xs text-muted-foreground">Reason dropdown</Label>
-                    <div className="flex flex-wrap gap-1.5">
-                      {(o.reasonOptions ?? []).map((r) => (
-                        <Badge key={r} variant="secondary" className="gap-1">
-                          {r}
+                    {/* Proof to: which department follows up on a supporting
+                        document for this reason - Exam Cell for an exam-duty
+                        reason, HOD otherwise (the default when nothing's
+                        picked). See LeaveReasonOption in types/leave.ts. */}
+                    <div className="space-y-1.5">
+                      {(o.reasonOptions ?? []).map((r, i) => (
+                        <div key={`${r.label}-${i}`} className="flex items-center gap-2">
+                          <span className="flex-1 text-sm rounded-md border px-2.5 py-1.5 bg-muted/40">{r.label}</span>
+                          <Select
+                            value={r.proofRoutedTo ?? "HOD"}
+                            onValueChange={(v) => {
+                              const next = [...(o.reasonOptions ?? [])];
+                              next[i] = { ...r, ...(v === "EXAM_CELL" ? { proofRoutedTo: "EXAM_CELL" as const } : {}) };
+                              if (v !== "EXAM_CELL") delete next[i].proofRoutedTo;
+                              patch(lt.code, { reasonOptions: next });
+                            }}
+                          >
+                            <SelectTrigger className="w-36 shrink-0"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="HOD">Proof to HOD</SelectItem>
+                              <SelectItem value="EXAM_CELL">Proof to Exam Cell</SelectItem>
+                            </SelectContent>
+                          </Select>
                           <button
                             type="button"
-                            aria-label={`Remove ${r}`}
-                            onClick={() => patch(lt.code, {
-                              reasonOptions: o.reasonOptions?.filter((x) => x !== r).length
-                                ? o.reasonOptions?.filter((x) => x !== r) : undefined,
-                            })}
+                            aria-label={`Remove ${r.label}`}
+                            className="text-muted-foreground hover:text-destructive shrink-0"
+                            onClick={() => {
+                              const next = (o.reasonOptions ?? []).filter((_, idx) => idx !== i);
+                              patch(lt.code, { reasonOptions: next.length ? next : undefined });
+                            }}
                           >
-                            <X className="h-3 w-3" />
+                            <X className="h-4 w-4" />
                           </button>
-                        </Badge>
+                        </div>
                       ))}
                     </div>
                     <div className="flex gap-2">
@@ -286,17 +309,33 @@ export function LeaveTypeRulesCard() {
                           if (e.key !== "Enter") return;
                           e.preventDefault();
                           const v = (reasonDraft[lt.code] ?? "").trim();
-                          if (!v || o.reasonOptions?.includes(v)) return;
-                          patch(lt.code, { reasonOptions: [...(o.reasonOptions ?? []), v] });
+                          if (!v || o.reasonOptions?.some((x) => x.label === v)) return;
+                          const proofRoutedTo = reasonProofDraft[lt.code];
+                          patch(lt.code, {
+                            reasonOptions: [...(o.reasonOptions ?? []), { label: v, ...(proofRoutedTo === "EXAM_CELL" ? { proofRoutedTo } : {}) }],
+                          });
                           setReasonDraft((prev) => ({ ...prev, [lt.code]: "" }));
                         }}
                       />
+                      <Select
+                        value={reasonProofDraft[lt.code] ?? "HOD"}
+                        onValueChange={(v) => setReasonProofDraft((prev) => ({ ...prev, [lt.code]: v as LeaveProofRouteTarget }))}
+                      >
+                        <SelectTrigger className="w-36 shrink-0"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="HOD">Proof to HOD</SelectItem>
+                          <SelectItem value="EXAM_CELL">Proof to Exam Cell</SelectItem>
+                        </SelectContent>
+                      </Select>
                       <Button
                         type="button" variant="outline"
                         onClick={() => {
                           const v = (reasonDraft[lt.code] ?? "").trim();
-                          if (!v || o.reasonOptions?.includes(v)) return;
-                          patch(lt.code, { reasonOptions: [...(o.reasonOptions ?? []), v] });
+                          if (!v || o.reasonOptions?.some((x) => x.label === v)) return;
+                          const proofRoutedTo = reasonProofDraft[lt.code];
+                          patch(lt.code, {
+                            reasonOptions: [...(o.reasonOptions ?? []), { label: v, ...(proofRoutedTo === "EXAM_CELL" ? { proofRoutedTo } : {}) }],
+                          });
                           setReasonDraft((prev) => ({ ...prev, [lt.code]: "" }));
                         }}
                       >
