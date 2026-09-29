@@ -5,6 +5,7 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodManageFacultyDepartment } from "@/lib/departments/scope";
 import { SUPPORTING_STAFF_ROLE_CATEGORY, canRolePostCategory } from "@/lib/supportingStaff/roleCategory";
+import { unitLabelForHeadRole } from "@/lib/attendance/collegeStaffUnits";
 import { resolveDesignation } from "@/lib/designations/validate";
 import { designationLabel } from "@/lib/designations/config";
 import { syncLinkedLoginName } from "@/lib/roles/loginSync";
@@ -27,12 +28,18 @@ async function hodCanAccessStaff(
   return !!staffDepartment && canHodManageFacultyDepartment(scope, staffDepartment);
 }
 
+// Library's equivalent of hodCanAccessStaff - a single fixed unit name
+// instead of a dynamic scope lookup, since Library is always exactly one unit.
+function libraryCanAccessStaff(staffDepartment: string | undefined): boolean {
+  return !!staffDepartment && staffDepartment === unitLabelForHeadRole("LIBRARY");
+}
+
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await requireCollegeMember("SUPER_ADMIN", "COLLEGE_OFFICE", "PRINCIPAL", "VICE_PRINCIPAL", "HOD");
+    const session = await requireCollegeMember("SUPER_ADMIN", "COLLEGE_OFFICE", "PRINCIPAL", "VICE_PRINCIPAL", "HOD", "LIBRARY");
     const { id } = await params;
 
     const db = getAdminDb();
@@ -52,6 +59,9 @@ export async function GET(
     if (session.role === "HOD" && !(await hodCanAccessStaff(db, session.collegeId, session.uid, staffData.department))) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
+    if (session.role === "LIBRARY" && !libraryCanAccessStaff(staffData.department)) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
 
     return NextResponse.json({ staff: { id: snap.id, ...migrateSupportingStaffDoc(snap.data() ?? {}) } });
   } catch (err) {
@@ -68,7 +78,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await requireCollegeMember("COLLEGE_OFFICE", "HOD", "PRINCIPAL", "VICE_PRINCIPAL");
+    const session = await requireCollegeMember("COLLEGE_OFFICE", "HOD", "PRINCIPAL", "VICE_PRINCIPAL", "LIBRARY");
     const { id } = await params;
 
     const body = (await request.json()) as Partial<{
@@ -147,6 +157,16 @@ export async function PATCH(
         if (!canHodManageFacultyDepartment(scope, body.department)) {
           return NextResponse.json({ error: "That department is not yours or one of your sub-departments" }, { status: 403 });
         }
+      }
+    }
+    if (session.role === "LIBRARY") {
+      const staffDept = (snap.data() as { department?: string }).department;
+      if (!libraryCanAccessStaff(staffDept)) {
+        return NextResponse.json({ error: "Not found" }, { status: 404 });
+      }
+      // Can't move a Library staff record out of Library via edit.
+      if (body.department !== undefined && body.department !== unitLabelForHeadRole("LIBRARY")) {
+        return NextResponse.json({ error: "Cannot reassign this staff member out of Library" }, { status: 403 });
       }
     }
 
@@ -323,7 +343,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await requireCollegeMember("COLLEGE_OFFICE", "HOD", "PRINCIPAL", "VICE_PRINCIPAL");
+    const session = await requireCollegeMember("COLLEGE_OFFICE", "HOD", "PRINCIPAL", "VICE_PRINCIPAL", "LIBRARY");
     const { id } = await params;
 
     const db = getAdminDb();
@@ -338,6 +358,9 @@ export async function DELETE(
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
     if (session.role === "HOD" && !(await hodCanAccessStaff(db, session.collegeId, session.uid, staffData.department))) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+    if (session.role === "LIBRARY" && !libraryCanAccessStaff(staffData.department)) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Camera, CheckCircle2, FileBadge2, Shield, UploadCloud, X } from "lucide-react";
+import { Camera, CheckCircle2, FileBadge2, Shield, UploadCloud, X, Banknote } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/useToast";
 import { CameraCaptureModal } from "@/components/shared/CameraCaptureModal";
-import type { LocationDepartment, LocationShift, LocationStaffMember } from "@/types/locationStaff";
+import type { LocationDepartment, LocationShift, LocationStaffMember, LocationConfig } from "@/types/locationStaff";
 
 const COMMON_ROLES = [
   "Security Guard",
@@ -35,12 +35,7 @@ const PAYEE_OPTIONS = [
 interface LocationStaffFormProps {
   departments: LocationDepartment[];
   shifts: LocationShift[];
-  // Pre-selected department ID (e.g. when opening from a department's page).
-  // Remains editable in the picker for Location Staff Admin.
   initialDepartmentId?: string;
-  // Set for the Location Dept Head context - department is fixed to their own
-  // and the picker is replaced by a read-only display. Left unset for the
-  // Location Staff Admin context, where any department (or none) is pickable.
   lockedDepartmentId?: string;
   lockedDepartmentName?: string;
   onSuccess: (staff: LocationStaffMember) => void;
@@ -48,10 +43,6 @@ interface LocationStaffFormProps {
   submitLabel?: string;
 }
 
-// Shared "Add Location Staff Member" form - the single validated path both
-// Location Staff Admin (location-staff-admin/staff/new) and Location Dept
-// Head (location-dept-head/staff, inline dialog) submit through, instead of
-// each maintaining its own copy with different fields and validation rigor.
 export function LocationStaffForm({
   departments,
   shifts,
@@ -72,6 +63,11 @@ export function LocationStaffForm({
   const [address, setAddress] = useState("");
   const [payeeType, setPayeeType] = useState<string>("__none__");
   const [payeeReference, setPayeeReference] = useState("");
+  const [accountNumber, setAccountNumber] = useState("");
+  const [branchName, setBranchName] = useState("");
+  const [ifscCode, setIfscCode] = useState("");
+  const [pfEnabled, setPfEnabled] = useState(false);
+  const [esiEnabled, setEsiEnabled] = useState(false);
   const [role, setRole] = useState("");
   const [customRole, setCustomRole] = useState("");
   const [departmentId, setDepartmentId] = useState<string>(
@@ -80,6 +76,9 @@ export function LocationStaffForm({
   const [shiftId, setShiftId] = useState<string>("__none__");
   const [dateOfJoining, setDateOfJoining] = useState("");
   const [photoUrl, setPhotoUrl] = useState("");
+  const [reportAtLocationId, setReportAtLocationId] = useState<string>("__none__");
+  const [leaveBalance, setLeaveBalance] = useState<number>(0);
+  const [locations, setLocations] = useState<LocationConfig[]>([]);
 
   useEffect(() => {
     if (initialDepartmentId && initialDepartmentId !== "__none__") {
@@ -88,6 +87,13 @@ export function LocationStaffForm({
       setDepartmentId(lockedDepartmentId);
     }
   }, [initialDepartmentId, lockedDepartmentId]);
+
+  useEffect(() => {
+    fetch("/api/location/locations")
+      .then((r) => (r.ok ? r.json() : Promise.resolve({ locations: [] })))
+      .then((d) => setLocations(d.locations ?? []))
+      .catch(() => {});
+  }, []);
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [touched, setTouched] = useState<Record<string, boolean>>({});
@@ -108,7 +114,17 @@ export function LocationStaffForm({
     if (!aadhaar.trim()) newErrors.aadhaar = "Aadhaar number is required";
     else if (!/^\d{12}$/.test(aadhaar.trim())) newErrors.aadhaar = "Aadhaar must be exactly 12 numeric digits";
 
-    if (!payeeType || payeeType === "__none__") newErrors.payeeType = "Please select Payee Type (Voucher Payee or Account Payee)";
+    if (!dateOfJoining) newErrors.dateOfJoining = "Date of Joining is required";
+
+    if (!payeeType || payeeType === "__none__") newErrors.payeeType = "Please select Payee Type";
+
+    if (payeeType === "Account Payee") {
+      if (!accountNumber.trim()) newErrors.accountNumber = "Account Number is required for Account Payee";
+      else if (!/^\d{9,18}$/.test(accountNumber.trim())) newErrors.accountNumber = "Account Number must be 9-18 digits";
+      if (!branchName.trim()) newErrors.branchName = "Branch Name is required for Account Payee";
+      if (!ifscCode.trim()) newErrors.ifscCode = "IFSC Code is required for Account Payee";
+      else if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(ifscCode.trim())) newErrors.ifscCode = "Invalid IFSC code format";
+    }
 
     if (!role) newErrors.role = "Please select a role / designation";
     else if (role === "OTHER" && !customRole.trim()) newErrors.role = "Please specify the custom role title";
@@ -156,7 +172,8 @@ export function LocationStaffForm({
     e.preventDefault();
     setTouched({
       name: true, contactNumber: true, aadhaar: true, payeeType: true, role: true,
-      spouseGuardianPhone: true, spouseGuardianAadhaar: true,
+      spouseGuardianPhone: true, spouseGuardianAadhaar: true, dateOfJoining: true,
+      accountNumber: true, branchName: true, ifscCode: true,
     });
     if (!validate()) {
       toast({ variant: "destructive", title: "Validation Error", description: "Please fix the highlighted errors before submitting." });
@@ -182,11 +199,20 @@ export function LocationStaffForm({
           spouseGuardianAadhaar: spouseGuardianAadhaar.trim() || undefined,
           address: address.trim() || undefined,
           payeeVoucher: finalPayee,
+          payeeType: payeeType === "__none__" ? undefined : payeeType,
+          accountNumber: accountNumber.trim() || undefined,
+          branchName: branchName.trim() || undefined,
+          ifscCode: ifscCode.trim() || undefined,
+          pfEnabled,
+          esiEnabled,
           role: finalRole,
           departmentId: finalDepartmentId,
           shiftId: shiftId !== "__none__" ? shiftId : undefined,
-          dateOfJoining: dateOfJoining || undefined,
+          dateOfJoining,
           photoUrl: photoUrl || undefined,
+          reportAtLocationId: reportAtLocationId !== "__none__" ? reportAtLocationId : undefined,
+          leaveBalance,
+          leaveTaken: 0,
           status: "ACTIVE" as const,
         }),
       });
@@ -213,11 +239,18 @@ export function LocationStaffForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5" noValidate>
+      <CameraCaptureModal
+        isOpen={isCameraOpen}
+        onClose={() => setIsCameraOpen(false)}
+        onCapture={uploadPhotoFile}
+        title="Capture Staff Photo"
+        description="Position the staff member's face in the frame and click capture."
+      />
+
       {/* Photo Upload & Camera Capture */}
       <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-3.5 bg-muted/20 rounded-xl border">
         <div className="relative h-20 w-20 rounded-full bg-muted border-2 border-dashed border-border flex items-center justify-center overflow-hidden shrink-0 mx-auto sm:mx-0 shadow-xs">
           {photoUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
             <img src={photoUrl} alt="Preview" className="h-full w-full object-cover" />
           ) : (
             <Camera className="h-8 w-8 text-muted-foreground opacity-40" />
@@ -226,65 +259,25 @@ export function LocationStaffForm({
         <div className="space-y-1.5 flex-1 text-center sm:text-left">
           <Label className="text-xs font-semibold text-foreground">Staff Profile Photo</Label>
           <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
-            <input
-              type="file"
-              ref={fileInputRef}
-              onChange={handlePhotoSelect}
-              accept="image/png,image/jpeg,image/webp"
-              className="hidden"
-            />
-            {/* Upload File */}
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isUploadingPhoto}
-              className="h-8 text-xs gap-1.5"
-            >
+            <input type="file" ref={fileInputRef} onChange={handlePhotoSelect} accept="image/png,image/jpeg,image/webp" className="hidden" />
+            <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} disabled={isUploadingPhoto} className="h-8 text-xs gap-1.5">
               <UploadCloud className="h-3.5 w-3.5" />
               <span>{isUploadingPhoto ? "Uploading..." : photoUrl ? "Change File" : "Upload Photo"}</span>
             </Button>
-
-            {/* Take Photo with Camera */}
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              onClick={() => setIsCameraOpen(true)}
-              disabled={isUploadingPhoto}
-              className="h-8 text-xs gap-1.5 font-medium"
-            >
+            <Button type="button" variant="secondary" size="sm" onClick={() => setIsCameraOpen(true)} disabled={isUploadingPhoto} className="h-8 text-xs gap-1.5 font-medium">
               <Camera className="h-3.5 w-3.5 text-primary" />
               <span>Take Photo</span>
             </Button>
-
             {photoUrl && (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => setPhotoUrl("")}
-                className="h-8 text-xs text-destructive hover:bg-destructive/10 gap-1"
-              >
+              <Button type="button" variant="ghost" size="sm" onClick={() => setPhotoUrl("")} className="h-8 text-xs text-destructive hover:bg-destructive/10 gap-1">
                 <X className="h-3.5 w-3.5" />
                 <span>Remove</span>
               </Button>
             )}
           </div>
-          <p className="text-[10px] text-muted-foreground">
-            Optional. Take a photo using camera or upload a file (PNG, JPG, WEBP up to 5 MB).
-          </p>
+          <p className="text-[10px] text-muted-foreground">Optional. Take a photo using camera or upload a file (PNG, JPG, WEBP up to 5 MB).</p>
         </div>
       </div>
-
-      <CameraCaptureModal
-        isOpen={isCameraOpen}
-        onClose={() => setIsCameraOpen(false)}
-        onCapture={uploadPhotoFile}
-        title="Capture Staff Photo"
-        description="Position the staff member's face in the frame and click capture."
-      />
 
       {/* Identification */}
       <div className="space-y-3">
@@ -294,12 +287,10 @@ export function LocationStaffForm({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="space-y-1">
             <Label className="text-xs font-medium">Full Name <span className="text-destructive">*</span></Label>
-            <Input
-              placeholder="e.g. Ramesh Kumar" value={name}
+            <Input placeholder="e.g. Ramesh Kumar" value={name}
               onChange={(e) => { setName(e.target.value); if (errors.name) setErrors((p) => ({ ...p, name: "" })); }}
               onBlur={() => setTouched((p) => ({ ...p, name: true }))}
-              className={`h-9 text-xs ${errors.name && touched.name ? "border-destructive focus-visible:ring-destructive" : ""}`}
-            />
+              className={`h-9 text-xs ${errors.name && touched.name ? "border-destructive focus-visible:ring-destructive" : ""}`} />
             {errors.name && touched.name && <p className="text-[11px] text-destructive font-medium">{errors.name}</p>}
           </div>
           <div className="space-y-1">
@@ -311,23 +302,37 @@ export function LocationStaffForm({
           </div>
           <div className="space-y-1">
             <Label className="text-xs font-medium">Contact Phone Number <span className="text-destructive">*</span></Label>
-            <Input
-              type="tel" placeholder="10-digit mobile (e.g. 9876543210)" value={contactNumber}
+            <Input type="tel" placeholder="10-digit mobile (e.g. 9876543210)" value={contactNumber}
               onChange={(e) => { setContactNumber(e.target.value.replace(/\D/g, "").slice(0, 10)); if (errors.contactNumber) setErrors((p) => ({ ...p, contactNumber: "" })); }}
               onBlur={() => setTouched((p) => ({ ...p, contactNumber: true }))}
-              className={`h-9 text-xs ${errors.contactNumber && touched.contactNumber ? "border-destructive focus-visible:ring-destructive" : ""}`}
-            />
+              className={`h-9 text-xs ${errors.contactNumber && touched.contactNumber ? "border-destructive focus-visible:ring-destructive" : ""}`} />
             {errors.contactNumber && touched.contactNumber && <p className="text-[11px] text-destructive font-medium">{errors.contactNumber}</p>}
           </div>
           <div className="space-y-1">
             <Label className="text-xs font-medium">Aadhaar Number <span className="text-destructive">*</span></Label>
-            <Input
-              placeholder="12-digit Aadhaar number" value={aadhaar}
+            <Input placeholder="12-digit Aadhaar number" value={aadhaar}
               onChange={(e) => { setAadhaar(e.target.value.replace(/\D/g, "").slice(0, 12)); if (errors.aadhaar) setErrors((p) => ({ ...p, aadhaar: "" })); }}
               onBlur={() => setTouched((p) => ({ ...p, aadhaar: true }))}
-              className={`h-9 text-xs font-mono tracking-wider ${errors.aadhaar && touched.aadhaar ? "border-destructive focus-visible:ring-destructive" : ""}`}
-            />
+              className={`h-9 text-xs font-mono tracking-wider ${errors.aadhaar && touched.aadhaar ? "border-destructive focus-visible:ring-destructive" : ""}`} />
             {errors.aadhaar && touched.aadhaar && <p className="text-[11px] text-destructive font-medium">{errors.aadhaar}</p>}
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs font-medium">Date of Joining <span className="text-destructive">*</span></Label>
+            <Input type="date" value={dateOfJoining} onChange={(e) => { setDateOfJoining(e.target.value); if (errors.dateOfJoining) setErrors((p) => ({ ...p, dateOfJoining: "" })); }}
+              className={`h-9 text-xs ${errors.dateOfJoining && touched.dateOfJoining ? "border-destructive focus-visible:ring-destructive" : ""}`} />
+            {errors.dateOfJoining && touched.dateOfJoining && <p className="text-[11px] text-destructive font-medium">{errors.dateOfJoining}</p>}
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs font-medium">Report At Location</Label>
+            <Select value={reportAtLocationId} onValueChange={setReportAtLocationId}>
+              <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Select campus location" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">No specific location</SelectItem>
+                {locations.map((l) => (
+                  <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </div>
       </div>
@@ -368,6 +373,50 @@ export function LocationStaffForm({
             <Input placeholder="e.g. VCH-004, Contract-2026-A" value={payeeReference} onChange={(e) => setPayeeReference(e.target.value)} className="h-9 text-xs" />
           </div>
         </div>
+
+        {payeeType === "Account Payee" && (
+          <div className="space-y-3 pt-3 border-t mt-3">
+            <span className="text-xs font-bold text-foreground uppercase tracking-wider">Account Payee Details</span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs font-medium">Account Number <span className="text-destructive">*</span></Label>
+                <Input type="text" placeholder="Bank account number" value={accountNumber}
+                  onChange={(e) => { setAccountNumber(e.target.value); if (errors.accountNumber) setErrors((p) => ({ ...p, accountNumber: "" })); }}
+                  className={`h-9 text-xs font-mono ${errors.accountNumber && touched.accountNumber ? "border-destructive focus-visible:ring-destructive" : ""}`} />
+                {errors.accountNumber && touched.accountNumber && <p className="text-[11px] text-destructive font-medium">{errors.accountNumber}</p>}
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs font-medium">Branch Name <span className="text-destructive">*</span></Label>
+                <Input placeholder="e.g. Main Branch" value={branchName} onChange={(e) => { setBranchName(e.target.value); if (errors.branchName) setErrors((p) => ({ ...p, branchName: "" })); }}
+                  className={`h-9 text-xs ${errors.branchName && touched.branchName ? "border-destructive focus-visible:ring-destructive" : ""}`} />
+                {errors.branchName && touched.branchName && <p className="text-[11px] text-destructive font-medium">{errors.branchName}</p>}
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs font-medium">IFSC Code <span className="text-destructive">*</span></Label>
+                <Input placeholder="e.g. SBIN0001234" value={ifscCode} onChange={(e) => { setIfscCode(e.target.value.toUpperCase()); if (errors.ifscCode) setErrors((p) => ({ ...p, ifscCode: "" })); }}
+                  className={`h-9 text-xs font-mono ${errors.ifscCode && touched.ifscCode ? "border-destructive focus-visible:ring-destructive" : ""}`} />
+                {errors.ifscCode && touched.ifscCode && <p className="text-[11px] text-destructive font-medium">{errors.ifscCode}</p>}
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="space-y-3 pt-3 border-t mt-3">
+          <div className="flex items-center gap-2">
+            <Banknote className="h-4 w-4 text-primary" />
+            <span className="text-xs font-bold text-foreground uppercase tracking-wider">Statutory Deductions (Optional)</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <label className="flex items-center gap-2 text-sm cursor-pointer">
+              <input type="checkbox" checked={pfEnabled} onChange={(e) => setPfEnabled(e.target.checked)} className="rounded" />
+              <span>PF (Provident Fund) Enabled</span>
+            </label>
+            <label className="flex items-center gap-2 text-sm cursor-pointer">
+              <input type="checkbox" checked={esiEnabled} onChange={(e) => setEsiEnabled(e.target.checked)} className="rounded" />
+              <span>ESI (Employee State Insurance) Enabled</span>
+            </label>
+          </div>
+        </div>
       </div>
 
       {/* Role, Department & Shift */}
@@ -389,15 +438,12 @@ export function LocationStaffForm({
               </SelectContent>
             </Select>
             {role === "OTHER" && (
-              <Input
-                placeholder="Enter custom role title..." value={customRole}
+              <Input placeholder="Enter custom role title..." value={customRole}
                 onChange={(e) => { setCustomRole(e.target.value); if (errors.role) setErrors((p) => ({ ...p, role: "" })); }}
-                className="h-8 text-xs mt-1.5"
-              />
+                className="h-8 text-xs mt-1.5" />
             )}
             {errors.role && touched.role && <p className="text-[11px] text-destructive font-medium">{errors.role}</p>}
           </div>
-
           <div className="space-y-1">
             <div className="flex items-center justify-between">
               <Label className="text-xs font-medium text-foreground">Assigned Department</Label>
@@ -411,13 +457,12 @@ export function LocationStaffForm({
               <Select value={departmentId} onValueChange={setDepartmentId}>
                 <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Choose department" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="__none__">Leave Unassigned (Can assign later / Dept Head)</SelectItem>
+                  <SelectItem value="__none__">Leave Unassigned</SelectItem>
                   {departments.map((d) => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
                 </SelectContent>
               </Select>
             )}
           </div>
-
           <div className="space-y-1">
             <div className="flex items-center justify-between">
               <Label className="text-xs font-medium text-foreground">Assigned Shift</Label>
@@ -431,22 +476,15 @@ export function LocationStaffForm({
                   const isCampus = !!s.isCampusWide || s.departmentId === "ALL" || (Array.isArray(s.departmentIds) && s.departmentIds.includes("ALL"));
                   const isShared = !isCampus && Array.isArray(s.departmentIds) && s.departmentIds.length > 1;
                   const tag = isCampus ? " • Campus-wide" : isShared ? " • Shared" : "";
-                  return (
-                    <SelectItem key={s.id} value={s.id}>
-                      {s.name} ({s.startTime} - {s.endTime}){tag}
-                    </SelectItem>
-                  );
+                  return (<SelectItem key={s.id} value={s.id}>{s.name} ({s.startTime} - {s.endTime}){tag}</SelectItem>);
                 })}
               </SelectContent>
             </Select>
           </div>
-
           <div className="space-y-1">
-            <div className="flex items-center justify-between">
-              <Label className="text-xs font-medium text-foreground">Date of Joining</Label>
-              <span className="text-[10px] text-muted-foreground">Optional</span>
-            </div>
-            <Input type="date" value={dateOfJoining} onChange={(e) => setDateOfJoining(e.target.value)} className="h-9 text-xs" />
+            <Label className="text-xs font-medium">Leave Balance</Label>
+            <Input type="number" placeholder="e.g. 12" value={leaveBalance} onChange={(e) => setLeaveBalance(parseInt(e.target.value) || 0)} className="h-9 text-xs" />
+            <p className="text-[10px] text-muted-foreground">Total leaves configured for this staff member</p>
           </div>
         </div>
       </div>
@@ -473,20 +511,16 @@ export function LocationStaffForm({
           </div>
           <div className="space-y-1">
             <Label className="text-[11px] text-muted-foreground">Contact Phone (10 digits)</Label>
-            <Input
-              type="tel" placeholder="10 digits" value={spouseGuardianPhone}
+            <Input type="tel" placeholder="10 digits" value={spouseGuardianPhone}
               onChange={(e) => { setSpouseGuardianPhone(e.target.value.replace(/\D/g, "").slice(0, 10)); if (errors.spouseGuardianPhone) setErrors((p) => ({ ...p, spouseGuardianPhone: "" })); }}
-              className={`h-8 text-xs ${errors.spouseGuardianPhone ? "border-destructive focus-visible:ring-destructive" : ""}`}
-            />
+              className={`h-8 text-xs ${errors.spouseGuardianPhone ? "border-destructive focus-visible:ring-destructive" : ""}`} />
             {errors.spouseGuardianPhone && <p className="text-[10px] text-destructive">{errors.spouseGuardianPhone}</p>}
           </div>
           <div className="space-y-1">
             <Label className="text-[11px] text-muted-foreground">Aadhaar (12 digits)</Label>
-            <Input
-              placeholder="12 digits" value={spouseGuardianAadhaar}
+            <Input placeholder="12 digits" value={spouseGuardianAadhaar}
               onChange={(e) => { setSpouseGuardianAadhaar(e.target.value.replace(/\D/g, "").slice(0, 12)); if (errors.spouseGuardianAadhaar) setErrors((p) => ({ ...p, spouseGuardianAadhaar: "" })); }}
-              className={`h-8 text-xs font-mono ${errors.spouseGuardianAadhaar ? "border-destructive focus-visible:ring-destructive" : ""}`}
-            />
+              className={`h-8 text-xs font-mono ${errors.spouseGuardianAadhaar ? "border-destructive focus-visible:ring-destructive" : ""}`} />
             {errors.spouseGuardianAadhaar && <p className="text-[10px] text-destructive">{errors.spouseGuardianAadhaar}</p>}
           </div>
         </div>

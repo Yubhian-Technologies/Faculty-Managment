@@ -33,7 +33,7 @@ export default function NewLocationUserPage() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
   const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
+  const [mobile, setMobile] = useState("");
   const [password, setPassword] = useState("12345678");
   const [role, setRole] = useState("");
   const [locationDeptId, setLocationDeptId] = useState("");
@@ -78,18 +78,18 @@ export default function NewLocationUserPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!name || !email || !role) return;
+    if (!name || !mobile || !role) return;
     if (SINGLETON_ROLES.includes(role) && filledSingletons[role]) {
       toast({ variant: "destructive", title: "Role already assigned", description: `${filledSingletons[role]} already holds this role.` });
       return;
     }
     setSaving(true);
     try {
-      const res = await fetch("/api/location/users", {
+       const res = await fetch("/api/location/users", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name, email, password, role,
+          name, mobile, password, role,
           locationId: user?.locationId ?? "",
           locationDeptId: role === "LOCATION_DEPT_HEAD" ? locationDeptId : undefined,
           ...(MULTI_DEPT_ROLES.includes(role) ? { locationDeptIds, allLocationDepts } : {}),
@@ -127,8 +127,8 @@ export default function NewLocationUserPage() {
               <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Full name" />
             </div>
             <div className="space-y-2">
-              <Label>Email <span className="text-destructive">*</span></Label>
-              <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="email@example.com" />
+              <Label>Mobile Number <span className="text-destructive">*</span></Label>
+              <Input type="tel" value={mobile} onChange={(e) => setMobile(e.target.value)} placeholder="10-digit mobile number" maxLength={10} />
             </div>
             <div className="space-y-2">
               <Label>Role <span className="text-destructive">*</span></Label>
@@ -237,7 +237,7 @@ export default function NewLocationUserPage() {
             type="submit"
             loading={saving}
             disabled={
-              !name || !email || !role ||
+              !name || !mobile || !role ||
               (SINGLETON_ROLES.includes(role) && !!filledSingletons[role]) ||
               (role === "LOCATION_DEPT_HEAD" && !locationDeptId)
             }

@@ -33,12 +33,14 @@ export function TopBarSettingsMenu({ hiddenItems = [] }: { hiddenItems?: string[
   const [passwordOpen, setPasswordOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
 
-  if (!user) return null;
+  if (!user || user.role === "STUDENT") return null;
 
   const isCollegeAdmin = user.realRole === "COLLEGE_ADMIN";
   const isSuperAdmin = user.realRole === "SUPER_ADMIN";
   const settingsHref = getSettingsHref(user.role, user.roles ?? user.seatRoles ?? []);
   const showSettings = !!settingsHref && !hiddenItems.includes(settingsHref);
+
+  if (!showSettings && !isCollegeAdmin && !isSuperAdmin) return null;
 
   return (
     <>

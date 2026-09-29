@@ -13,7 +13,7 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { CardSkeleton } from "@/components/shared/SkeletonLoader";
 import { Pagination } from "@/components/shared/Pagination";
 import { toast } from "@/hooks/useToast";
-import type { Course, SectionListItem, StudentRecord, Subject, TeachingAssignment } from "@/types";
+import type { Course, CourseYearTiming, Department, SectionListItem, StudentRecord, Subject, SubjectSemesterAssignment, TeachingAssignment } from "@/types";
 import { SUBJECT_TYPE_LABELS } from "@/types";
 
 type SectionRow = SectionListItem;
@@ -59,16 +59,41 @@ export default function SectionRosterPage() {
         }
         // Resolved before the subjects fetch below, not alongside it in the
         // same Promise.all - the subjects fetch's own URL needs catalogId
-        // in hand first. courses is auto-scoped to this HOD's own
-        // departments server-side (no departmentId param - see
-        // /api/college/courses GET's own HOD branch), matching this page's
-        // HOD-only access.
-        const catalogId = sec.courseId
-          ? await fetch("/api/college/courses")
-              .then((r) => r.json() as Promise<{ courses?: Course[] }>)
-              .then((cd) => cd.courses?.find((c) => c.id === sec.courseId)?.catalogId)
-              .catch(() => undefined)
-          : undefined;
+        // (and, for the semester-scoped path, departmentId) in hand first.
+        // courses is auto-scoped to this HOD's own departments server-side
+        // (no departmentId param - see /api/college/courses GET's own HOD
+        // branch), matching this page's HOD-only access. departmentId is
+        // resolved from the section's own department NAME (Section has no
+        // id field for it) against the full department list, the same way
+        // /api/college/departments is already used read-only elsewhere in
+        // this file tree.
+        const [catalogId, departmentId] = await Promise.all([
+          sec.courseId
+            ? fetch("/api/college/courses")
+                .then((r) => r.json() as Promise<{ courses?: Course[] }>)
+                .then((cd) => cd.courses?.find((c) => c.id === sec.courseId)?.catalogId)
+                .catch(() => undefined)
+            : Promise.resolve(undefined),
+          fetch("/api/college/departments")
+            .then((r) => r.json() as Promise<{ departments?: Department[] }>)
+            .then((dd) => dd.departments?.find((d) => d.name === sec.department)?.id)
+            .catch(() => undefined),
+        ]);
+
+        // Whether this course-year actually has semesters configured
+        // (CourseYearTiming.semesters - see academics/assign-semester/page.tsx)
+        // decides which subject source is authoritative below. A course-year
+        // with none configured never gets SubjectSemesterAssignment rows at
+        // all (single continuous timetable, the common case - see
+        // SubjectSemesterAssignment's own doc-comment in types/teaching.ts),
+        // so there's nothing to scope by there and the master-subject list
+        // stays the only source, same as before this fix.
+        const hasSemesters = sec.courseId
+          ? await fetch(`/api/college/course-year-timings?courseId=${encodeURIComponent(sec.courseId)}`)
+              .then((r) => r.json() as Promise<{ timings?: CourseYearTiming[] }>)
+              .then((d) => (d.timings ?? []).some((t) => t.year === sec.year && (t.semesters?.length ?? 0) > 0))
+              .catch(() => false)
+          : false;
 
         await Promise.all([
           // Students API scopes by section NAME + year, not id - section names
@@ -87,25 +112,39 @@ export default function SectionRosterPage() {
           fetch(`/api/college/teaching-assignments?sectionId=${id}`)
             .then((r) => r.json() as Promise<{ assignments: AssignmentRow[] }>)
             .then((ad) => setAssignments(ad.assignments ?? [])),
-          // Every subject on file for this section's course + year, regardless
-          // of whether anyone's been assigned to teach it yet - unlike the
-          // teaching-assignments fetch above, which only reports subjects that
-          // already have an assignment. Narrowed to this section's own
-          // regulation client-side below (lenient both ways, same as
-          // Teaching Assignments' own filter - see availableSubjectsForAssign
-          // in hod/teaching-assignments/page.tsx). Queried by catalogId when
-          // resolved - a master subject is department-independent (see
-          // /api/college/subjects GET's own doc-comment), and the previous
-          // `department=` param here was never even read by that route (no
-          // such param exists on it), so this always silently fell back to
-          // courseId alone, missing any subject filed under a sibling
-          // department's Course doc.
+          // Master subjects have no per-year field at all on new data (see
+          // Subject.year's own "legacy" doc-comment in types/teaching.ts) -
+          // querying by courseId/catalogId alone (the previous behavior here)
+          // always returned every subject for the WHOLE course, every year,
+          // regardless of the `year` param this used to pass (the subjects
+          // GET route never reads one). The only real per-year/semester
+          // signal is the SubjectSemesterAssignment junction (same mechanism
+          // Teaching Assignments already uses, see its own
+          // semesterFilteredKeys effect) - when this course-year has
+          // semesters configured, join against it (any semester: a Section
+          // spans the whole year, not one semester, unlike Teaching
+          // Assignments' own per-semester picker) so only subjects actually
+          // mapped into THIS department's year show up. Falls back to the
+          // full course subject list only when this course-year genuinely
+          // has no semesters configured (see hasSemesters above).
           sec.courseId
-            ? fetch(catalogId
-                ? `/api/college/subjects?catalogId=${encodeURIComponent(catalogId)}`
-                : `/api/college/subjects?courseId=${encodeURIComponent(sec.courseId)}&year=${sec.year}`)
-                .then((r) => r.json() as Promise<{ subjects: Subject[] }>)
-                .then((sd) => setSubjects(sd.subjects ?? []))
+            ? (hasSemesters && departmentId
+                ? Promise.all([
+                    fetch(`/api/college/subject-semester-assignments?courseId=${encodeURIComponent(sec.courseId)}&departmentId=${encodeURIComponent(departmentId)}&year=${sec.year}`)
+                      .then((r) => r.json() as Promise<{ assignments?: SubjectSemesterAssignment[] }>),
+                    fetch(catalogId
+                      ? `/api/college/subjects?catalogId=${encodeURIComponent(catalogId)}`
+                      : `/api/college/subjects?courseId=${encodeURIComponent(sec.courseId)}`)
+                      .then((r) => r.json() as Promise<{ subjects: Subject[] }>),
+                  ]).then(([assignData, subjData]) => {
+                    const assignedIds = new Set((assignData.assignments ?? []).map((a) => a.subjectId));
+                    setSubjects((subjData.subjects ?? []).filter((s) => assignedIds.has(s.id)));
+                  })
+                : fetch(catalogId
+                    ? `/api/college/subjects?catalogId=${encodeURIComponent(catalogId)}`
+                    : `/api/college/subjects?courseId=${encodeURIComponent(sec.courseId)}`)
+                    .then((r) => r.json() as Promise<{ subjects: Subject[] }>)
+                    .then((sd) => setSubjects(sd.subjects ?? [])))
             : Promise.resolve(),
         ]);
       } catch {
@@ -129,6 +168,14 @@ export default function SectionRosterPage() {
   const assignmentBySubjectId = useMemo(
     () => new Map(assignments.map((a) => [a.subjectId, a])),
     [assignments]
+  );
+  // How many of THIS section's own year/semester subjects (sectionSubjects,
+  // now correctly scoped above) have nobody assigned yet - previously this
+  // would have counted every subject in the whole course across every year,
+  // wildly overstating the gap.
+  const unassignedSubjectsCount = useMemo(
+    () => sectionSubjects.filter((s) => !assignmentBySubjectId.has(s.id)).length,
+    [sectionSubjects, assignmentBySubjectId]
   );
 
   const [search, setSearch] = useState("");
@@ -229,6 +276,11 @@ export default function SectionRosterPage() {
           <p className="text-sm font-medium flex items-center gap-1.5">
             <BookOpen className="h-4 w-4" />Subjects
             {section.regulation && <Badge variant="secondary" className="text-xs">{section.regulation}</Badge>}
+            {unassignedSubjectsCount > 0 && (
+              <Badge variant="outline" className="text-xs text-amber-600 border-amber-300">
+                {unassignedSubjectsCount} unassigned faculty
+              </Badge>
+            )}
           </p>
           {sectionSubjects.length === 0 ? (
             <p className="text-sm text-muted-foreground">
