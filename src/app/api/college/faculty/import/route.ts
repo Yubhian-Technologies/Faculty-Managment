@@ -129,16 +129,17 @@ export async function POST(request: Request) {
 
     // Resolves one row's Dept Code cell to the department it should be filed
     // under. The Dept Code column exists so one sheet can cover several
-    // departments; what gets STORED is always the department NAME.
+    // departments; what gets STORED is always the department NAME - every
+    // faculty query in the app (lib/departments/scope.ts, api/college/faculty,
+    // the manual Add Faculty form at hod/faculty/new/page.tsx) filters on
+    // `department` by name, never by code.
     //
-    // It used to store the code for a Principal/Vice Principal/College Admin
-    // /Super Admin import, on the belief that Principal-created records were
-    // already stored that way. They are not - the manual Add Faculty form
-    // sends the name whoever is using it - and every faculty query in the app
-    // filters on `department` by name (see lib/departments/scope.ts and
-    // api/college/faculty). A code-stored record therefore matched nothing:
-    // the department's own Faculty page read "No faculty in this department"
-    // while the records sat right there in Firestore.
+    // It used to store the short CODE for a Principal/Vice Principal/College
+    // Admin/Super Admin import, on the belief that Principal-created records
+    // were already stored that way. They are not - the manual Add Faculty
+    // form sends the name whoever is using it. A code-stored record therefore
+    // matched nothing: the department's own Faculty page read "No faculty in
+    // this department" while the records sat right there in Firestore.
     function resolveRowDepartment(raw: string | undefined): { name: string } | { error: string } {
       const code = raw?.trim();
       if (!code) {
