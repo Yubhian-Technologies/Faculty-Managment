@@ -1,15 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CalendarSearch } from "lucide-react";
+import { CalendarSearch, X } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { toast } from "@/hooks/useToast";
-import { defaultPeriodTimings } from "@/lib/timetable/buildGrid";
-import { formatTime12h } from "@/lib/timetable/facultyTimetablePdf";
-import type { Course, CourseYearTiming, DayOfWeek, Department } from "@/types";
+import type { DayOfWeek, Department, PeriodTiming } from "@/types";
 import { DAY_LABELS } from "@/types";
 
 const WORKING_DAYS: DayOfWeek[] = ["MON", "TUE", "WED", "THU", "FRI", "SAT"];
@@ -24,57 +22,51 @@ interface ScheduleSlot {
   periodNumber: number;
   subjectName: string;
   courseName: string;
+  departmentName: string;
   year: number;
   sectionName: string;
+  /** Built but not yet published - still occupies the faculty (see the API). */
+  isDraft: boolean;
 }
 
 // Checks a faculty member's real schedule before sending/allocating a lend
 // request, or before marking their busy periods (see AssignmentRequestsPanel) -
 // read-only, and deliberately able to look at ANY department's faculty (see
 // api/college/faculty-schedule's own doc-comment on why that's a separate,
-// narrower endpoint from the department-scoped faculty roster). Department
-// and Faculty pick WHO; Course and Year only pick which period structure
-// (count + clock times) to lay the grid out with - the viewer's own
-// accessible courses, since that's the timetable they'd actually be placing
-// periods against. A cell is "busy" purely by matching day+period NUMBER
+// narrower endpoint from the department-scoped faculty roster).
+//
+// Department and Faculty pick WHO, and that is all that is asked for: the grid
+// is laid out against the faculty's OWN course-years (the API returns the
+// periods), so the Course and Year pickers - which existed only to shape the
+// table - are gone. They made the page look like it needed four answers to
+// show one person's week.
+//
+// A cell is "busy" purely by matching day+period NUMBER
 // against the faculty's real slots, the same convention busyFaculty/
 // FacultyAssignmentRequest.busyPeriods already use everywhere else - not a
 // clock-time translation.
 export function FacultyTimetableLookup() {
   const [departments, setDepartments] = useState<Department[]>([]);
-  const [courses, setCourses] = useState<Course[]>([]);
   const [isLoadingOptions, setIsLoadingOptions] = useState(true);
 
   const [departmentId, setDepartmentId] = useState<string>("");
   const [facultyId, setFacultyId] = useState<string>("");
-  const [courseId, setCourseId] = useState<string>("");
-  const [year, setYear] = useState<number | null>(null);
 
   const [facultyOptions, setFacultyOptions] = useState<{ id: string; name: string }[]>([]);
   const [isLoadingFaculty, setIsLoadingFaculty] = useState(false);
 
-  const [timing, setTiming] = useState<CourseYearTiming | null>(null);
-  const [isLoadingTiming, setIsLoadingTiming] = useState(false);
-
-  const [schedule, setSchedule] = useState<{ facultyName: string; slots: ScheduleSlot[] } | null>(null);
+  const [schedule, setSchedule] = useState<{ facultyName: string; slots: ScheduleSlot[]; periods: PeriodTiming[] } | null>(null);
   const [isLoadingSchedule, setIsLoadingSchedule] = useState(false);
-
-  const selectedCourse = courses.find((c) => c.id === courseId) ?? null;
 
   useEffect(() => {
     void (async () => {
       setIsLoadingOptions(true);
       try {
-        const [deptRes, courseRes] = await Promise.all([
-          fetch("/api/college/departments"),
-          fetch("/api/college/courses"),
-        ]);
+        const deptRes = await fetch("/api/college/departments");
         const deptJson = await deptRes.json() as { departments?: Department[] };
-        const courseJson = await courseRes.json() as { courses?: Course[] };
         setDepartments(deptJson.departments ?? []);
-        setCourses(courseJson.courses ?? []);
       } catch {
-        toast({ variant: "destructive", title: "Failed to load departments/courses" });
+        toast({ variant: "destructive", title: "Failed to load departments" });
       } finally {
         setIsLoadingOptions(false);
       }
@@ -102,41 +94,16 @@ export function FacultyTimetableLookup() {
     })();
   }, [departmentId]);
 
-  // Year picker resets whenever the course changes; timing loads once both are picked.
-  useEffect(() => {
-    void (async () => {
-      setYear(null);
-      setTiming(null);
-    })();
-  }, [courseId]);
-
-  useEffect(() => {
-    void (async () => {
-      if (!courseId || year == null) { setTiming(null); return; }
-      setIsLoadingTiming(true);
-      try {
-        const res = await fetch(`/api/college/course-year-timings?courseId=${encodeURIComponent(courseId)}`);
-        const json = await res.json() as { timings?: CourseYearTiming[] };
-        setTiming((json.timings ?? []).find((t) => Number(t.year) === year) ?? null);
-      } catch {
-        toast({ variant: "destructive", title: "Failed to load period timings" });
-      } finally {
-        setIsLoadingTiming(false);
-      }
-    })();
-  }, [courseId, year]);
-
-  // The faculty's real schedule loads once a faculty is picked - independent
-  // of course/year (that only decides how the grid is laid out on screen).
+  // The faculty's real schedule, and the periods to lay it out against.
   useEffect(() => {
     void (async () => {
       if (!facultyId) { setSchedule(null); return; }
       setIsLoadingSchedule(true);
       try {
         const res = await fetch(`/api/college/faculty-schedule?facultyId=${encodeURIComponent(facultyId)}`);
-        const json = await res.json() as { facultyName?: string; slots?: ScheduleSlot[]; error?: string };
+        const json = await res.json() as { facultyName?: string; slots?: ScheduleSlot[]; periods?: PeriodTiming[]; error?: string };
         if (!res.ok) throw new Error(json.error ?? "Failed to load schedule");
-        setSchedule({ facultyName: json.facultyName ?? "", slots: json.slots ?? [] });
+        setSchedule({ facultyName: json.facultyName ?? "", slots: json.slots ?? [], periods: json.periods ?? [] });
       } catch (err) {
         toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to load schedule" });
         setSchedule(null);
@@ -146,10 +113,7 @@ export function FacultyTimetableLookup() {
     })();
   }, [facultyId]);
 
-  const periodTimes = useMemo(() => {
-    if (!timing) return [];
-    return timing.periods && timing.periods.length > 0 ? timing.periods : defaultPeriodTimings(timing);
-  }, [timing]);
+  const periodTimes = schedule?.periods ?? [];
 
   const slotsByCell = useMemo(() => {
     const map = new Map<string, ScheduleSlot>();
@@ -157,7 +121,7 @@ export function FacultyTimetableLookup() {
     return map;
   }, [schedule]);
 
-  const readyForGrid = Boolean(facultyId && timing);
+  const readyForGrid = Boolean(facultyId && schedule && periodTimes.length > 0);
 
   return (
     <div className="space-y-6">
@@ -168,7 +132,7 @@ export function FacultyTimetableLookup() {
 
       <Card>
         <CardContent className="p-4">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1">
               <p className="text-xs text-muted-foreground">Department</p>
               <Select value={departmentId} onValueChange={setDepartmentId} disabled={isLoadingOptions}>
@@ -189,68 +153,43 @@ export function FacultyTimetableLookup() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1">
-              <p className="text-xs text-muted-foreground">Course</p>
-              <Select value={courseId} onValueChange={setCourseId} disabled={isLoadingOptions}>
-                <SelectTrigger><SelectValue placeholder="Select course" /></SelectTrigger>
-                <SelectContent>
-                  {courses.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1">
-              <p className="text-xs text-muted-foreground">Year</p>
-              <Select
-                value={year != null ? String(year) : ""}
-                onValueChange={(v) => setYear(Number(v))}
-                disabled={!selectedCourse}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder={!selectedCourse ? "Pick a course first" : "Select year"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {Array.from({ length: selectedCourse?.durationYears ?? 0 }, (_, i) => i + 1).map((y) => (
-                    <SelectItem key={y} value={String(y)}>{ordinalYear(y)}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
           </div>
         </CardContent>
       </Card>
 
-      {!readyForGrid ? (
+      {!facultyId || !schedule ? (
         <EmptyState
           icon={<CalendarSearch className="h-8 w-8" />}
-          title={isLoadingSchedule || isLoadingTiming ? "Loading…" : "Pick a department, faculty, course and year"}
-          description="Once all four are selected, that faculty's real schedule shows here, laid out against the course-year's own periods."
+          title={isLoadingSchedule ? "Loading…" : "Pick a department and a faculty member"}
+          description="Their real week shows here - every period they are already booked for, across every course and section."
         />
-      ) : !timing ? (
+      ) : !readyForGrid ? (
+        // No periods to draw means no course-year timings AND no bookings -
+        // said plainly rather than rendering an empty table.
         <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-          No period timings are configured for {selectedCourse?.name} - {ordinalYear(year!)} yet.
+          {schedule.facultyName} has no periods booked, and no period timings are configured for their course-years yet.
         </div>
       ) : (
         <div className="space-y-2">
-          <p className="text-sm font-semibold text-foreground">
-            {schedule?.facultyName} - against {selectedCourse?.name} {ordinalYear(year!)}&apos;s own periods
-          </p>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm font-semibold text-foreground">
+              {schedule.facultyName} &mdash; {schedule.slots.length} period{schedule.slots.length === 1 ? "" : "s"} booked this week
+            </p>
+            {schedule.slots.some((sl) => sl.isDraft) && (
+              <p className="text-xs text-muted-foreground">
+                Dashed cells are from a timetable that has been built but not published yet.
+              </p>
+            )}
+          </div>
           <div className="overflow-x-auto rounded-lg border">
-            <table className="w-full text-sm border-collapse">
-              <thead>
-                <tr className="bg-muted/50">
-                  <th className="p-2.5 text-left font-medium text-muted-foreground border-b w-20 sticky left-0 z-[5] bg-muted/95 backdrop-blur">
-                    Day
-                  </th>
-                  {periodTimes.map((p) => (
-                    <th key={p.period} className="p-2.5 text-center font-medium text-muted-foreground border-b min-w-[110px]">
-                      Period {p.period}
-                      <p className="text-[10px] font-normal whitespace-nowrap">
-                        {formatTime12h(p.startTime)}&ndash;{formatTime12h(p.endTime)}
-                      </p>
-                    </th>
-                  ))}
-                </tr>
-              </thead>
+            <table className="w-full table-fixed text-sm border-collapse">
+              {/* No header row: a period number in the column head is the
+                  number in THAT column's position, which is not necessarily
+                  the period number of the class sitting in it - different
+                  years run different period structures. The number is carried
+                  on the booked cell itself instead, where it is the section's
+                  own, and the clock times went with it since they were only
+                  ever true for one year at a time. */}
               <tbody>
                 {WORKING_DAYS.map((d) => (
                   <tr key={d} className="border-b last:border-b-0">
@@ -260,17 +199,37 @@ export function FacultyTimetableLookup() {
                     {periodTimes.map((p) => {
                       const slot = slotsByCell.get(`${d}:${p.period}`);
                       return (
-                        <td key={p.period} className="p-2 align-top">
+                        <td key={p.period} className="p-1.5 align-top">
                           {slot ? (
-                            <div className="rounded-md border border-amber-300 bg-amber-50 p-2">
-                              <p className="text-xs font-semibold text-amber-900 leading-tight">{slot.subjectName}</p>
-                              <p className="text-[11px] text-amber-700 mt-0.5">
-                                {[slot.courseName, ordinalYear(slot.year), slot.sectionName ? `Section ${slot.sectionName}` : null]
-                                  .filter(Boolean).join(" · ")}
+                            // Its own period number, year and section. The
+                            // subject, course and department are what the
+                            // section's own timetable is for - here the
+                            // question is just "is this hour taken, and by
+                            // whose class".
+                            <div
+                              className={`flex items-start gap-1 rounded-md border bg-red-50 px-1.5 py-1.5 ${
+                                slot.isDraft ? "border-dashed border-red-300" : "border-red-300"
+                              }`}
+                              title={[slot.departmentName, slot.courseName, slot.subjectName].filter(Boolean).join(" · ")}
+                            >
+                              <X className="h-3.5 w-3.5 shrink-0 text-red-600 mt-[1px]" />
+                              <p className="min-w-0 text-[11px] font-medium text-red-800 leading-snug">
+                                {[
+                                  `Period ${slot.periodNumber}`,
+                                  ordinalYear(slot.year),
+                                  // The section's own name alone - "Section"
+                                  // in front of it just said nothing.
+                                  slot.sectionName || null,
+                                ].filter(Boolean).map((part, i) => (
+                                  <span key={part}>
+                                    {i > 0 && <span className="text-red-400"> · </span>}
+                                    <span className="whitespace-nowrap">{part}</span>
+                                  </span>
+                                ))}
                               </p>
                             </div>
                           ) : (
-                            <div className="rounded-md border border-dashed p-2 text-center text-[11px] text-emerald-700 bg-emerald-50/50">
+                            <div className="rounded-md border border-dashed px-2 py-1.5 text-center text-[11px] text-emerald-700 bg-emerald-50/50">
                               Free
                             </div>
                           )}
