@@ -1,7 +1,11 @@
-// Derives which of the two academic structures a college follows. There is
-// deliberately NO stored flag for this - the shape is inferred from the
-// departments themselves, so an existing college needs no migration and no
-// setup step it can forget.
+// Derives which of the two academic structures a college follows. Historically
+// this was inferred purely from the departments themselves, so an existing
+// college needed no migration and no setup step it could forget; it is now
+// additionally overridable per department via Department.isFreshman - the
+// "Freshman's Department" checkbox on the Add/Edit Department form. The
+// override is consulted FIRST (see isCommonYearDepartment below) and only when
+// actually set, so a college that never touches the checkbox keeps the
+// inferred behavior exactly as before.
 //
 //  1. COMMON FIRST YEAR - one shared department (e.g. "Basic Science") owns
 //     year 1 for every branch. It is split into sub-departments (BS-Maths,
@@ -13,11 +17,11 @@
 //     end to end. This is the default, and what every college looks like until
 //     a common-year department is actually configured.
 //
-// Because the rule is inferred rather than stored, it must live in exactly one
-// place: every caller goes through getAcademicStructure() rather than
-// re-checking `assignedYears`/`hasSubDepartments` inline, so the definition
-// can't drift between routes. If the heuristic ever needs to change (or become
-// a stored flag), this file is the only thing to edit.
+// Because the rule has exactly one home, it must live in exactly one place:
+// every caller goes through getAcademicStructure()/isCommonYearDepartment()
+// rather than re-checking `assignedYears`/`hasSubDepartments`/`isFreshman`
+// inline, so the definition can't drift between routes. If the heuristic ever
+// needs to change, this file is the only thing to edit.
 import type { Course, Department, DepartmentCourseScope } from "@/types";
 
 export type DepartmentWithId = Department & { id: string };
@@ -245,6 +249,15 @@ function allClaimedYears(d: Pick<Department, "assignedYears" | "courseScopes">):
  * feeds (`secondaryDepartments`). A plain department that merely teaches year 1
  * for its own branch matches neither and is correctly left alone.
  *
+ * The single exception is an explicit `Department.isFreshman` - the Principal's
+ * own answer via the "Freshman's Department" checkbox, which wins outright so
+ * a department this inference can't recognize (or shouldn't be recognized, e.g.
+ * one deliberately ticked off) can still be classified deliberately. Unset falls
+ * through to the inference, so every pre-existing department is unaffected.
+ * The `isActive === false` / `parentDepartmentId` guards above run for BOTH
+ * paths - an inactive or sub-department never qualifies, ticked or not, since
+ * those are structural invariants rather than inferences.
+ *
  * Exported - unlike the rest of this file's internals - because a college can
  * genuinely have MORE THAN ONE such department at once, each independent of
  * the others: e.g. Chemistry, English, Maths and Physics each separately
@@ -261,6 +274,13 @@ function allClaimedYears(d: Pick<Department, "assignedYears" | "courseScopes">):
 export function isCommonYearDepartment(d: DepartmentWithId): boolean {
   if (d.isActive === false) return false;
   if (d.parentDepartmentId) return false; // sub-departments never qualify
+  // An explicitly-set Department.isFreshman (the "Freshman's Department"
+  // checkbox on the Add/Edit Department form) IS the answer - it has to be able
+  // to mark a department this heuristic can't detect, which is the whole point
+  // of making it settable. Absent (every department created before the field
+  // existed) falls through to the inference below, so no already-configured
+  // college changes behavior until someone deliberately ticks or unticks it.
+  if (typeof d.isFreshman === "boolean") return d.isFreshman;
   if (!allClaimedYears(d).includes(1)) return false;
   if (Boolean(d.hasSubDepartments) || (d.secondaryDepartments ?? []).length > 0) return true;
   // Cross-listing set per-course (Department.courseScopes[catalogId].secondaryDepartments)

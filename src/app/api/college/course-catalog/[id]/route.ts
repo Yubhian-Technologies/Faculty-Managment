@@ -21,6 +21,7 @@ export async function PATCH(
       isActive?: boolean;
       regulations?: string[];
       regulationBatches?: Record<string, string>;
+      regulationDocumentUrls?: Record<string, string>;
     };
 
     if (
@@ -94,6 +95,16 @@ export async function PATCH(
         );
       }
       updates.regulationBatches = body.regulationBatches;
+    }
+
+    // Merged key-by-key (dot-notation), not replaced wholesale like
+    // regulations/regulationBatches above - a single-regulation upload from
+    // Academics > Regulation must never wipe out another regulation's
+    // already-uploaded document just because this request didn't mention it.
+    if (body.regulationDocumentUrls != null) {
+      for (const [reg, url] of Object.entries(body.regulationDocumentUrls)) {
+        updates[`regulationDocumentUrls.${reg}`] = url;
+      }
     }
 
     await ref.update(updates);

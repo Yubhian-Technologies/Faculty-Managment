@@ -266,7 +266,7 @@ export function FacultyPublicProfileView({ profile }: { profile: FacultyPublicPr
         <div className="max-w-5xl mx-auto px-5 sm:px-10 pt-6">
           <div className="flex items-center justify-center gap-3 pb-6">
             <img src={VISHNU_LOGO_URL} alt="Vishnu Logo" className="h-9 w-9 lg:h-12 lg:w-12 object-contain shrink-0" />
-            <p className="font-bold text-primary text-base sm:text-2xl lg:text-4xl text-center whitespace-nowrap">SHRI VISHNU EDUCATIONAL SOCIETY</p>
+            <p className="font-bold text-primary text-base sm:text-2xl lg:text-4xl text-center whitespace-nowrap">SRI VISHNU EDUCATIONAL SOCIETY</p>
           </div>
         </div>
         <div className="max-w-5xl mx-auto px-5 sm:px-10 pb-8 lg:pb-12 flex flex-col sm:flex-row sm:items-center gap-6 lg:gap-8">
@@ -289,15 +289,6 @@ export function FacultyPublicProfileView({ profile }: { profile: FacultyPublicPr
               )}
             </div>
             <div className="flex items-center gap-2.5 shrink-0">
-              <button
-                type="button"
-                onClick={copyProfileLink}
-                aria-label="Copy public profile link"
-                title="Copy public profile link"
-                className="inline-flex items-center justify-center rounded-full border bg-background h-9 w-9 hover:bg-muted transition-colors"
-              >
-                <Share2 className="h-4 w-4" />
-              </button>
               {p.officialEmail && (
                 <Button asChild variant="outline" size="sm">
                   <a href={`mailto:${p.officialEmail}`}><Mail className="h-3.5 w-3.5 mr-1.5" />Send Email</a>

@@ -244,6 +244,9 @@ export class SubjectInstanceService {
       hoursPerWeek,
       totalHoursPerSemester: master.totalHoursPerSemester ?? null,
       credits,
+      ...(master.internalMarks != null ? { internalMarks: master.internalMarks } : {}),
+      ...(master.externalMarks != null ? { externalMarks: master.externalMarks } : {}),
+      ...(master.totalMarks != null ? { totalMarks: master.totalMarks } : {}),
       isCustomized: !!customOverrides,
       isActive: true,
       createdAt: (existing.exists

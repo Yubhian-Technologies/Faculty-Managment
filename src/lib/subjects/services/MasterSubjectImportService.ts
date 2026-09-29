@@ -8,12 +8,22 @@ export interface MasterImportPayload {
   academicYear?: string;
   regulation?: string;
   records: SubjectRowInput[];
+  // Set by CourseStructureImportService, whose rows must resolve a
+  // department-semester on top of being created - see SubjectRowInput's own
+  // doc-comment. Left unset (falsy) preserves this service's original
+  // course+regulation-only behavior for every other caller.
+  requireYearSemester?: boolean;
 }
 
 export interface MasterImportResult {
   created: number;
   failed: { row: number; code: string; error: string }[];
   warnings: { row: number; code: string; warning: string }[];
+  // Row -> created subject id, for a caller (CourseStructureImportService)
+  // that needs to do something with each specific row's new subject
+  // afterward (auto-assign it to a department semester) - existing callers
+  // that only read created/failed/warnings are unaffected.
+  createdRows: { row: number; subjectId: string; code: string; year?: number; semester?: number }[];
 }
 
 export class MasterSubjectImportService {
@@ -30,7 +40,7 @@ export class MasterSubjectImportService {
       // Course doc with an identical name (see courses/route.ts POST), that
       // match is ambiguous by construction and can silently bind subjects to
       // the wrong department's course. Reject up front instead of guessing.
-      return { created: 0, failed: [{ row: 0, code: "-", error: "Select a Course before importing" }], warnings: [] };
+      return { created: 0, failed: [{ row: 0, code: "-", error: "Select a Course before importing" }], warnings: [], createdRows: [] };
     }
     const collegeRef = this.db.collection("colleges").doc(collegeId);
 
@@ -73,12 +83,32 @@ export class MasterSubjectImportService {
 
     const failed: MasterImportResult["failed"] = [];
     const warnings: MasterImportResult["warnings"] = [];
-    const subjectsToCreate: Array<Omit<Subject, "id"> & { id?: string }> = [];
+    const subjectsToCreate: Array<{ row: number; year?: number; semester?: number; data: Omit<Subject, "id"> }> = [];
     const now = new Date();
 
     for (let i = 0; i < records.length; i++) {
-      const row = records[i];
+      let row = records[i];
       const rowNum = i + 2; // 1-indexed + header row
+
+      // Course Structure's template (see csvColumns.ts IMPORT_COLUMNS) has no
+      // Code or S.No. column - bulk-curriculum uploads shouldn't require an
+      // admin to hand-assign either per row. Auto-derive them here the same
+      // way the single-row "fix and retry" form already does (course-structure
+      // page.tsx), rather than relaxing SubjectCatalogValidator's required-ness
+      // for its other callers (single Add Subject, plain bulk import) where a
+      // manually-chosen code is still expected.
+      if (payload.requireYearSemester) {
+        const needsCode = !row.code?.toString().trim();
+        const needsSerial = !row.serialNumber?.toString().trim();
+        if (needsCode || needsSerial) {
+          row = {
+            ...row,
+            ...(needsCode ? { code: (row.name ?? "").toString().trim().toUpperCase().replace(/[^A-Z0-9]+/g, "").slice(0, 10) } : {}),
+            ...(needsSerial ? { serialNumber: rowNum } : {}),
+          };
+        }
+      }
+
       const codeLabel = row.code?.toString().trim() || "-";
 
       // ── Resolve Course ────────────────────────────────────────────────────
@@ -101,6 +131,7 @@ export class MasterSubjectImportService {
       const validation = SubjectCatalogValidator.validateRow(row, {
         regulation: payload.regulation,
         academicYear,
+        requireYearSemester: payload.requireYearSemester,
       });
 
       if (validation.warnings.length > 0) {
@@ -178,31 +209,40 @@ export class MasterSubjectImportService {
       existingCodes.add(dedupeKey);
 
       subjectsToCreate.push({
-        collegeId,
-        courseId: course.id,
-        courseName: course.name,
-        ...(academicYear ? { academicYear } : {}),
-        ...(regulation ? { regulation } : {}),
-        serialNumber: validData.serialNumber,
-        category: validData.category,
-        ...(validData.customCategory ? { customCategory: validData.customCategory } : {}),
-        name: validData.name,
-        code: validData.code,
-        ...(validData.shortCode ? { shortCode: validData.shortCode } : {}),
-        hoursPerWeek: validData.hoursPerWeek,
-        ...(validData.totalHoursPerSemester != null ? { totalHoursPerSemester: validData.totalHoursPerSemester } : {}),
-        lectureHours: validData.lectureHours,
-        tutorialHours: validData.tutorialHours,
-        practicalHours: validData.practicalHours,
-        credits: validData.credits,
-        type: validData.type,
-        isActive: true,
-        createdAt: now as unknown as Subject["createdAt"],
-        updatedAt: now as unknown as Subject["updatedAt"],
+        row: rowNum,
+        year: validData.year,
+        semester: validData.semester,
+        data: {
+          collegeId,
+          courseId: course.id,
+          courseName: course.name,
+          ...(academicYear ? { academicYear } : {}),
+          ...(regulation ? { regulation } : {}),
+          serialNumber: validData.serialNumber,
+          category: validData.category,
+          ...(validData.customCategory ? { customCategory: validData.customCategory } : {}),
+          name: validData.name,
+          code: validData.code,
+          ...(validData.shortCode ? { shortCode: validData.shortCode } : {}),
+          hoursPerWeek: validData.hoursPerWeek,
+          ...(validData.totalHoursPerSemester != null ? { totalHoursPerSemester: validData.totalHoursPerSemester } : {}),
+          lectureHours: validData.lectureHours,
+          tutorialHours: validData.tutorialHours,
+          practicalHours: validData.practicalHours,
+          credits: validData.credits,
+          type: validData.type,
+          ...(validData.internalMarks != null ? { internalMarks: validData.internalMarks } : {}),
+          ...(validData.externalMarks != null ? { externalMarks: validData.externalMarks } : {}),
+          ...(validData.totalMarks != null ? { totalMarks: validData.totalMarks } : {}),
+          isActive: true,
+          createdAt: now as unknown as Subject["createdAt"],
+          updatedAt: now as unknown as Subject["updatedAt"],
+        },
       });
     }
 
     // ── Batch Persist to colleges/{id}/subjects ───────────────────────────
+    const createdRows: MasterImportResult["createdRows"] = [];
     if (subjectsToCreate.length > 0) {
       const BATCH_SIZE = 400;
       for (let i = 0; i < subjectsToCreate.length; i += BATCH_SIZE) {
@@ -210,7 +250,8 @@ export class MasterSubjectImportService {
         const batch = this.db.batch();
         for (const item of chunk) {
           const docRef = collegeRef.collection("subjects").doc();
-          batch.set(docRef, item);
+          batch.set(docRef, item.data);
+          createdRows.push({ row: item.row, subjectId: docRef.id, code: item.data.code, year: item.year, semester: item.semester });
         }
         await batch.commit();
       }
@@ -220,6 +261,7 @@ export class MasterSubjectImportService {
       created: subjectsToCreate.length,
       failed,
       warnings,
+      createdRows,
     };
   }
 }
