@@ -145,7 +145,7 @@ export default function LocationStaffAttendanceOverviewPage() {
             </Link>
           </Button>
           <Button asChild variant="outline" size="sm" className="h-10 gap-1.5 text-xs font-semibold rounded-full px-4 border-border/60">
-            <Link href="/location-staff-admin/attendance/reports">
+            <Link href="/location-staff-admin/reports">
               <FileBarChart className="h-3.5 w-3.5" />
               <span>Reports</span>
             </Link>

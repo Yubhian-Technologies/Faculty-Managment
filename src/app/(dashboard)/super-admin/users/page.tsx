@@ -211,13 +211,32 @@ export default function UsersPage() {
   async function handleDelete(user: UserRow) {
     setActionUid(user.uid);
     try {
-      const collegeId = user.collegeId || selectedCollegeId;
-      const res = await fetch(`/api/admin/users/${user.uid}?collegeId=${collegeId}`, { method: "DELETE" });
-      if (!res.ok) throw new Error();
+      // Location-scoped profiles live at locations/{id}/locationUsers/{uid}, so
+      // their delete route is /api/location/users/[uid] (already SUPER_ADMIN-
+      // allowed) - /api/admin/users/[uid] only knows the college and global
+      // collections. locationId comes off the row, falling back to the selected
+      // location scope for any doc written before it carried one.
+      const rowLocationId = (user.locationId as string | undefined) ?? "";
+      const scopeLocationId = selectedCollegeId.startsWith(LOCATION_PREFIX)
+        ? selectedCollegeId.slice(LOCATION_PREFIX.length)
+        : "";
+      const locationId = rowLocationId || scopeLocationId;
+      const url = !user.collegeId && locationId
+        ? `/api/location/users/${user.uid}?locationId=${encodeURIComponent(locationId)}`
+        : `/api/admin/users/${user.uid}?collegeId=${user.collegeId || selectedCollegeId}`;
+      const res = await fetch(url, { method: "DELETE" });
+      // Surface the server's own refusal reason (e.g. "locationId required")
+      // rather than a bare failure - same convention as the Locations page.
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error((data as { error?: string }).error || "Failed to delete user");
       toast({ variant: "success", title: "User deleted" });
       setUsers((prev) => prev.filter((u) => u.uid !== user.uid));
-    } catch {
-      toast({ variant: "destructive", title: "Failed to delete user" });
+    } catch (err) {
+      toast({
+        variant: "destructive",
+        title: "Failed to delete user",
+        description: err instanceof Error ? err.message : undefined,
+      });
     } finally {
       setActionUid(null);
       setConfirmUser(null);
@@ -342,11 +361,10 @@ export default function UsersPage() {
         render: (row) => {
           // Edit (including the photo) is available for the 6 roles Super Admin
           // administers. Reset/Activate/Deactivate only exist for college-scoped
-          // users today. Delete also works for global (Management) users - but not
-          // location-scoped (Administration) ones, since the delete route doesn't
-          // know how to clean up a locationUsers doc yet.
+          // users today. Delete works for all three scopes: college + global via
+          // /api/admin/users/[uid], location via /api/location/users/[uid]
+          // (see handleDelete for how the two are routed).
           const isCollegeScoped = !!(row.collegeId as string);
-          const isLocationScoped = !isCollegeScoped && !!(row.locationId as string);
           const canEdit = PHOTO_EDITABLE_ROLES.includes(row.role);
           // Faculty isn't Super-Admin-editable (their HOD/Principal owns that),
           // but Super Admin can still view the profile - same hub view PRINCIPAL/
@@ -416,15 +434,14 @@ export default function UsersPage() {
                   )}
                 </>
               )}
-              {!isLocationScoped && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={(e) => { e.stopPropagation(); setConfirmUser({ user: row, action: "delete" }); }}
-                >
-                  <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                </Button>
-              )}
+              <Button
+                variant="ghost"
+                size="sm"
+                title="Delete user"
+                onClick={(e) => { e.stopPropagation(); setConfirmUser({ user: row, action: "delete" }); }}
+              >
+                <Trash2 className="h-3.5 w-3.5 text-destructive" />
+              </Button>
             </div>
           );
         },

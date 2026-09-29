@@ -10,12 +10,24 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await requireCollegeMember("PRINCIPAL", "SUPER_ADMIN");
+    // Courses themselves (catalogId/isActive) stay Principal/VP/Super Admin
+    // only, same as course-catalog/[id]/route.ts's own split - Academics
+    // may only attach a syllabus document, never re-point or deactivate the
+    // course itself.
+    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "ACADEMICS");
     const { id } = await params;
     const body = (await request.json()) as {
       catalogId?: string;
       isActive?: boolean;
+      syllabusUrls?: Record<string, string>;
     };
+
+    if (session.role === "ACADEMICS" && (body.catalogId != null || body.isActive != null)) {
+      return NextResponse.json(
+        { error: "Only the Principal, Vice Principal or College Admin can change a course's details. Academics can attach its syllabus." },
+        { status: 403 }
+      );
+    }
 
     const db = getAdminDb();
     const collegeRef = db.collection("colleges").doc(session.collegeId);
@@ -51,6 +63,16 @@ export async function PATCH(
     }
 
     if (body.isActive != null) updates.isActive = body.isActive;
+
+    // Merged key-by-key (dot-notation) - a single-regulation syllabus
+    // upload must never wipe out another regulation's already-uploaded
+    // syllabus, same reasoning as regulationDocumentUrls on
+    // course-catalog/[id]/route.ts.
+    if (body.syllabusUrls != null) {
+      for (const [reg, url] of Object.entries(body.syllabusUrls)) {
+        updates[`syllabusUrls.${reg}`] = url;
+      }
+    }
 
     await ref.update(updates);
     return NextResponse.json({ success: true });

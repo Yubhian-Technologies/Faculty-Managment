@@ -22,14 +22,18 @@ export default function NewDepartmentPage() {
   const [secondaryDepartments, setSecondaryDepartments] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [hasSubDepartments, setHasSubDepartments] = useState(false);
-  // See Department.isFreshmanDepartment (src/types/core.ts).
-  const [isFreshmanDepartment, setIsFreshmanDepartment] = useState(false);
   // Only meaningful when hasSubDepartments is true - see
   // Department.parentRunsOwnSections's own doc-comment (src/types/core.ts).
   // Defaults true: a brand-new department that never touches this checkbox
   // gets the same unrestricted behavior every department had before this
   // field existed.
   const [parentRunsOwnSections, setParentRunsOwnSections] = useState(true);
+  // "Freshman's Department" - this tick, not the year/sub-department settings
+  // around it, is what marks the department as the shared first-year one (see
+  // Department.isFreshman's doc-comment, src/types/core.ts). Defaults off: a
+  // brand-new department has no prior behavior to preserve, so the Principal's
+  // choice here is the whole answer.
+  const [isFreshman, setIsFreshman] = useState(false);
   // A department can't be created without at least one course - see
   // college/departments POST.
   const [catalog, setCatalog] = useState<CourseCatalogItem[]>([]);
@@ -86,9 +90,11 @@ export default function NewDepartmentPage() {
         code: data.code.toUpperCase(),
         courses: courseSelections,
         hasSubDepartments,
-        isFreshmanDepartment,
         ...(hasSubDepartments ? { parentRunsOwnSections } : {}),
         secondaryDepartments: secondaryDepartments.length > 0 ? secondaryDepartments : undefined,
+        // Always sent, even when false - this is an explicit choice on a
+        // department that has no inferred behavior to fall back on yet.
+        isFreshman,
       };
       const res = await fetch("/api/college/departments", {
         method: "POST",
@@ -181,17 +187,24 @@ export default function NewDepartmentPage() {
               onToggleSecondaryDepartment={toggleSecondaryDepartment}
             />
 
-            <div className="flex items-center gap-2 rounded-md border p-3">
-              <Checkbox
-                id="dept-is-freshman"
-                checked={isFreshmanDepartment}
-                onCheckedChange={(v) => setIsFreshmanDepartment(v === true)}
-              />
-              <Label htmlFor="dept-is-freshman" className="font-normal">Is this a Freshman&apos;s Department?</Label>
-            </div>
-
             <div className="space-y-3 rounded-md border p-3">
               <div className="flex items-start gap-2">
+                <Checkbox
+                  id="dept-is-freshman"
+                  checked={isFreshman}
+                  onCheckedChange={(v) => setIsFreshman(v === true)}
+                />
+                <div className="space-y-1">
+                  <Label htmlFor="dept-is-freshman" className="font-normal">Freshman&apos;s Department</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Tick this if the department is the shared first year - where students sit in year 1 before
+                    moving on to their branch. It gets a &quot;Freshman&apos;s Department&quot; badge, and
+                    year-1 students can only be filed under it (or its sub-departments).
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-2 border-t pt-3">
                 <Checkbox
                   id="dept-has-subdepts"
                   checked={hasSubDepartments}

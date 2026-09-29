@@ -145,11 +145,11 @@ export const NAV_ITEMS: NavItem[] = [
 
   // Location Staff Admin
   { label: "Dashboard", href: "/location-staff-admin", iconName: "LayoutDashboard", roles: ["LOCATION_STAFF_ADMIN"] },
-  { label: "Locations", href: "/location-staff-admin/locations", iconName: "MapPin", roles: ["LOCATION_STAFF_ADMIN", "ADMINISTRATION"], section: "Location Staff" },
+  { label: "Gates", href: "/location-staff-admin/locations", iconName: "MapPin", roles: ["LOCATION_STAFF_ADMIN", "ADMINISTRATION"], section: "Location Staff" },
   { label: "Departments", href: "/location-staff-admin/departments", iconName: "Building2", roles: ["LOCATION_STAFF_ADMIN", "ADMINISTRATION"], section: "Location Staff" },
   { label: "Shifts", href: "/location-staff-admin/shifts", iconName: "Clock", roles: ["LOCATION_STAFF_ADMIN", "ADMINISTRATION"], section: "Location Staff" },
   { label: "Attendance", href: "/location-staff-admin/attendance", iconName: "ClipboardCheck", roles: ["LOCATION_STAFF_ADMIN", "ADMINISTRATION"], section: "Location Staff" },
-  { label: "Attendance Reports", href: "/location-staff-admin/attendance/reports", iconName: "BarChart3", roles: ["LOCATION_STAFF_ADMIN", "ADMINISTRATION"], section: "Location Staff" },
+  { label: "Reports", href: "/location-staff-admin/reports", iconName: "BarChart3", roles: ["LOCATION_STAFF_ADMIN", "ADMINISTRATION"], section: "Location Staff" },
   { label: "Leave Requests", href: "/location-staff-admin/leave", iconName: "CalendarClock", roles: ["LOCATION_STAFF_ADMIN", "ADMINISTRATION"], section: "Location Staff" },
   { label: "My Profile", href: "/location-staff-admin/profile", iconName: "UserCircle", roles: ["LOCATION_STAFF_ADMIN"], section: "Personal" },
 
@@ -352,8 +352,10 @@ export const NAV_ITEMS: NavItem[] = [
 
   // Academics
   { label: "Dashboard", href: "/academics", iconName: "LayoutDashboard", roles: ["ACADEMICS"] },
-  { label: "Subjects", href: "/academics/subjects", iconName: "Library", roles: ["ACADEMICS"], section: "Academics" },
-  { label: "Assign to Semester", href: "/academics/assign-semester", iconName: "CalendarRange", roles: ["ACADEMICS"], section: "Academics" },
+  { label: "Regulation", href: "/academics/regulation", iconName: "FileText", roles: ["ACADEMICS"], section: "Academics" },
+  { label: "Course Structure", href: "/academics/course-structure", iconName: "Library", roles: ["ACADEMICS"], section: "Academics" },
+  { label: "Teaching Assignments", href: "/academics/teaching-assignments", iconName: "CalendarRange", roles: ["ACADEMICS"], section: "Academics" },
+  { label: "Syllabus", href: "/academics/syllabus", iconName: "BookOpen", roles: ["ACADEMICS"], section: "Academics" },
   { label: "My Profile", href: "/academics/profile", iconName: "UserCircle", roles: ["ACADEMICS"], section: "Personal" },
   { label: "My Leave", href: "/academics/leave", iconName: "CalendarClock", roles: ["ACADEMICS"] },
   { label: "Adjustment Requests", href: "/leave/adjustments", iconName: "UserCheck", roles: ["ACADEMICS"] },
@@ -880,7 +882,7 @@ export const BOTTOM_NAV_ITEMS: Record<UserRole, NavItem[]> = {
     { label: "Home", href: "/location-staff-admin", iconName: "LayoutDashboard", roles: ["LOCATION_STAFF_ADMIN"] },
     { label: "Depts", href: "/location-staff-admin/departments", iconName: "Building2", roles: ["LOCATION_STAFF_ADMIN"] },
     { label: "Shifts", href: "/location-staff-admin/shifts", iconName: "Clock", roles: ["LOCATION_STAFF_ADMIN"] },
-    { label: "Reports", href: "/location-staff-admin/attendance/reports", iconName: "BarChart3", roles: ["LOCATION_STAFF_ADMIN"] },
+    { label: "Reports", href: "/location-staff-admin/reports", iconName: "BarChart3", roles: ["LOCATION_STAFF_ADMIN"] },
     { label: "Profile", href: "/location-staff-admin/profile", iconName: "UserCircle", roles: ["LOCATION_STAFF_ADMIN"] },
   ],
   LOCATION_DEPT_HEAD: [
@@ -959,7 +961,7 @@ export const BOTTOM_NAV_ITEMS: Record<UserRole, NavItem[]> = {
   ],
   ACADEMICS: [
     { label: "Home", href: "/academics", iconName: "LayoutDashboard", roles: ["ACADEMICS"] },
-    { label: "Subjects", href: "/academics/subjects", iconName: "Library", roles: ["ACADEMICS"] },
+    { label: "Course Structure", href: "/academics/course-structure", iconName: "Library", roles: ["ACADEMICS"] },
     { label: "Profile", href: "/academics/profile", iconName: "UserCircle", roles: ["ACADEMICS"] },
   ],
   IQAC_COORDINATOR: [

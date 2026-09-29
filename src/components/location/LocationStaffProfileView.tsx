@@ -7,11 +7,29 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/useToast";
-import type { LocationDepartment, LocationStaffMember } from "@/types/locationStaff";
+import type { LocationConfig, LocationDepartment, LocationStaffMember } from "@/types/locationStaff";
 
 interface LocationStaffProfileViewProps {
   staffId: string;
   backHref: string;
+}
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section>
+      <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">{title}</h3>
+      <dl className="divide-y divide-border/40 rounded-2xl border border-border/50">{children}</dl>
+    </section>
+  );
+}
+
+function Row({ label, value, mono }: { label: string; value?: React.ReactNode; mono?: boolean }) {
+  return (
+    <div className="flex items-start justify-between gap-4 px-4 py-2.5 text-sm">
+      <dt className="text-muted-foreground shrink-0">{label}</dt>
+      <dd className={`text-right font-medium text-foreground break-words min-w-0 ${mono ? "font-mono tracking-wide" : ""}`}>{value || "—"}</dd>
+    </div>
+  );
 }
 
 // Shared read-only staff profile page content - the single view both Location
@@ -21,6 +39,7 @@ interface LocationStaffProfileViewProps {
 export function LocationStaffProfileView({ staffId, backHref }: LocationStaffProfileViewProps) {
   const [staff, setStaff] = useState<LocationStaffMember | null>(null);
   const [department, setDepartment] = useState<LocationDepartment | null>(null);
+  const [gateName, setGateName] = useState("");
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -32,11 +51,16 @@ export function LocationStaffProfileView({ staffId, backHref }: LocationStaffPro
       fetch(`/api/location/departments`)
         .then((r) => (r.ok ? r.json() : Promise.resolve({ departments: [] })))
         .then((d) => (d.departments as LocationDepartment[] | undefined) ?? []),
+      // Gates list is admin-only; dept heads get 403 and just see no gate name.
+      fetch(`/api/location/locations`)
+        .then((r) => (r.ok ? r.json() : Promise.resolve({ locations: [] })))
+        .then((d) => (d.locations as LocationConfig[] | undefined) ?? []),
     ])
-      .then(([staffData, departments]) => {
+      .then(([staffData, departments, gates]) => {
         if (isCancelled) return;
         setStaff(staffData);
         setDepartment(departments.find((dep) => dep.id === staffData?.departmentId) ?? null);
+        setGateName(gates.find((g) => g.id === staffData?.reportAtLocationId)?.name ?? staffData?.reportAtLocationName ?? "");
       })
       .catch(() => {
         if (!isCancelled) toast({ variant: "destructive", title: "Failed to load staff profile" });
@@ -50,22 +74,11 @@ export function LocationStaffProfileView({ staffId, backHref }: LocationStaffPro
     };
   }, [staffId]);
 
-  const isHead = !!staff?.isDeptHead;
-
   return (
-    <div className="space-y-6 max-w-xl mx-auto pb-24 md:pb-12 animate-in fade-in duration-300">
-      {/* ── Google Enterprise Header ── */}
-      <div className="flex items-center gap-3.5 bg-card/90 backdrop-blur-sm p-4 sm:p-5 rounded-3xl border border-border/60 shadow-xs">
-        <Button asChild variant="ghost" size="icon" className="h-10 w-10 rounded-full hover:bg-muted/80 shrink-0">
-          <Link href={backHref}>
-            <ArrowLeft className="h-5 w-5 text-foreground" />
-          </Link>
-        </Button>
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">Staff Member Profile</h1>
-          <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">Verified non-teaching staff personnel record.</p>
-        </div>
-      </div>
+    <div className="space-y-5 max-w-xl mx-auto pb-24 md:pb-12 animate-in fade-in duration-300">
+      <Button asChild variant="ghost" size="sm" className="-ml-2 text-muted-foreground">
+        <Link href={backHref}><ArrowLeft className="h-4 w-4 mr-1.5" /> Back</Link>
+      </Button>
 
       {isLoading ? (
         <div className="h-96 rounded-3xl border border-border/50 bg-card/60 animate-pulse" />
@@ -77,9 +90,8 @@ export function LocationStaffProfileView({ staffId, backHref }: LocationStaffPro
       ) : (
         <Card className="rounded-3xl border-border/60 shadow-xs bg-card overflow-hidden">
           <CardContent className="p-6 sm:p-7 space-y-6">
-            {/* Profile Avatar & Header */}
-            <div className="flex items-center gap-4">
-              <div className="h-20 w-20 rounded-3xl bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0 overflow-hidden font-bold text-primary text-2xl shadow-xs">
+            <div className="flex flex-col items-center text-center gap-3">
+              <div className="h-24 w-24 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center overflow-hidden font-bold text-primary text-3xl">
                 {staff.photoUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={staff.photoUrl} alt={staff.name} className="h-full w-full object-cover" />
@@ -87,123 +99,57 @@ export function LocationStaffProfileView({ staffId, backHref }: LocationStaffPro
                   staff.name.slice(0, 2).toUpperCase()
                 )}
               </div>
-              <div className="space-y-1">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <h2 className="text-lg sm:text-xl font-bold text-foreground">{staff.name}</h2>
-                  <Badge
-                    className={`rounded-full text-[10px] font-semibold px-2.5 py-0.5 border ${
-                      staff.status === "ACTIVE"
-                        ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
-                        : "bg-muted text-muted-foreground border-border/50"
-                    }`}
-                  >
+              <div className="space-y-1.5">
+                <h1 className="text-xl font-bold text-foreground">{staff.name}</h1>
+                <p className="text-sm text-muted-foreground">{staff.role} · {staff.departmentName || "Unassigned"}</p>
+                <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                  <Badge className={staff.status === "ACTIVE" ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20" : "bg-muted text-muted-foreground border-border/50"}>
                     {staff.status}
                   </Badge>
-                </div>
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <Badge variant="outline" className="text-xs font-semibold px-2.5 py-0.5 rounded-full border-primary/30 text-primary bg-primary/5">
-                    {staff.role}
-                  </Badge>
-                  <span className="text-xs text-muted-foreground">· {staff.departmentName || "Unassigned"}</span>
-                  {isHead && (
-                    <Badge className="bg-primary/15 text-primary border-primary/30 text-[10px] px-2 py-0.5 rounded-full flex items-center gap-1">
-                      <Shield className="h-3 w-3" />
-                      <span>Department Head</span>
-                    </Badge>
+                  {staff.isDeptHead && (
+                    <Badge className="bg-primary/15 text-primary border-primary/30 gap-1"><Shield className="h-3 w-3" /> Department Head</Badge>
                   )}
                 </div>
               </div>
             </div>
 
-            <div className="space-y-4 pt-2 text-xs divide-y divide-border/40">
-              {/* Department & Supervision */}
-              <div className="space-y-2 pt-2">
-                <span className="font-bold text-muted-foreground uppercase text-[10px] tracking-wider block">
-                  Department & Supervision
-                </span>
-                <div className="grid grid-cols-2 gap-3 bg-muted/30 p-3.5 rounded-2xl border border-border/40">
-                  <div>
-                    <span className="text-muted-foreground block text-[11px]">Department:</span>
-                    <strong className="text-foreground text-xs">{staff.departmentName || "Unassigned"}</strong>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground block text-[11px]">Supervising Head:</span>
-                    <strong className="text-foreground text-xs">{department?.headName || "Unassigned"}</strong>
-                  </div>
-                </div>
-              </div>
+            <Section title="Work">
+              <Row label="Department" value={staff.departmentName || "Unassigned"} />
+              <Row label="Supervising head" value={department?.headName} />
+              <Row label="Shift" value={staff.shiftName || "Flexible"} />
+              <Row label="Reports at gate" value={gateName} />
+              <Row label="Date of joining" value={staff.dateOfJoining} />
+            </Section>
 
-              {/* Personal Information */}
-              <div className="space-y-2 pt-4">
-                <span className="font-bold text-muted-foreground uppercase text-[10px] tracking-wider block">
-                  Personal Information
-                </span>
-                <div className="grid grid-cols-2 gap-3 bg-muted/30 p-3.5 rounded-2xl border border-border/40">
-                  <div>
-                    <span className="text-muted-foreground block text-[11px]">Father&rsquo;s Name:</span>
-                    <strong className="text-foreground text-xs">{staff.fatherName || "—"}</strong>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground block text-[11px]">Contact Number:</span>
-                    <strong className="text-foreground text-xs">{staff.contactNumber}</strong>
-                  </div>
-                  <div className="col-span-2 pt-2 border-t border-border/30">
-                    <span className="text-muted-foreground block text-[11px]">Aadhaar Number:</span>
-                    <strong className="font-mono text-foreground text-sm tracking-wider">{staff.aadhaar}</strong>
-                  </div>
-                  <div className="col-span-2 pt-2 border-t border-border/30">
-                    <span className="text-muted-foreground block text-[11px]">Residential Address:</span>
-                    <p className="text-foreground text-xs">{staff.address || "Not provided"}</p>
-                  </div>
-                </div>
-              </div>
+            <Section title="Personal">
+              <Row label="Contact" value={staff.contactNumber} />
+              <Row label="Aadhaar" value={staff.aadhaar} mono />
+              <Row label="Father's name" value={staff.fatherName} />
+              <Row label="Address" value={staff.address} />
+            </Section>
 
-              {/* Work & Payroll */}
-              <div className="space-y-2 pt-4">
-                <span className="font-bold text-muted-foreground uppercase text-[10px] tracking-wider block">
-                  Employment & Payroll
-                </span>
-                <div className="grid grid-cols-2 gap-3 bg-muted/30 p-3.5 rounded-2xl border border-border/40">
-                  <div>
-                    <span className="text-muted-foreground block text-[11px]">Payee Category:</span>
-                    <strong className="text-foreground text-xs">{staff.payeeVoucher}</strong>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground block text-[11px]">Assigned Shift:</span>
-                    <strong className="text-foreground text-xs">{staff.shiftName || "Flexible / Unassigned"}</strong>
-                  </div>
-                </div>
-              </div>
-
-              {/* Spouse / Guardian Information */}
-              {(staff.spouseGuardianName || staff.spouseGuardianPhone || staff.spouseGuardianAadhaar) && (
-                <div className="space-y-2 pt-4">
-                  <span className="font-bold text-muted-foreground uppercase text-[10px] tracking-wider block">
-                    Spouse / Guardian Information
-                  </span>
-                  <div className="grid grid-cols-2 gap-3 bg-muted/30 p-3.5 rounded-2xl border border-border/40">
-                    <div>
-                      <span className="text-muted-foreground block text-[11px]">Name:</span>
-                      <strong className="text-foreground text-xs">{staff.spouseGuardianName || "—"}</strong>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground block text-[11px]">Phone:</span>
-                      <strong className="text-foreground text-xs">{staff.spouseGuardianPhone || "—"}</strong>
-                    </div>
-                    {staff.spouseGuardianAadhaar && (
-                      <div className="col-span-2 pt-2 border-t border-border/30">
-                        <span className="text-muted-foreground block text-[11px]">Aadhaar:</span>
-                        <strong className="font-mono text-foreground text-xs">{staff.spouseGuardianAadhaar}</strong>
-                      </div>
-                    )}
-                  </div>
-                </div>
+            <Section title="Payroll">
+              <Row label="Payee" value={staff.payeeVoucher} />
+              {staff.payeeType === "Account Payee" && (
+                <>
+                  <Row label="Account no." value={staff.accountNumber} mono />
+                  <Row label="IFSC" value={staff.ifscCode} mono />
+                  <Row label="Branch" value={staff.branchName} />
+                </>
               )}
-            </div>
+              <Row label="PF / ESI" value={`${staff.pfEnabled ? "PF" : "No PF"} · ${staff.esiEnabled ? "ESI" : "No ESI"}`} />
+            </Section>
+
+            {(staff.spouseGuardianName || staff.spouseGuardianPhone || staff.spouseGuardianAadhaar) && (
+              <Section title="Spouse / Guardian">
+                <Row label="Name" value={staff.spouseGuardianName} />
+                <Row label="Phone" value={staff.spouseGuardianPhone} />
+                <Row label="Aadhaar" value={staff.spouseGuardianAadhaar} mono />
+              </Section>
+            )}
           </CardContent>
         </Card>
       )}
     </div>
   );
 }
-

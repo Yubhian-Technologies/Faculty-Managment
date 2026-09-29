@@ -1,5 +1,49 @@
 import { describe, it, expect } from "vitest";
 import { regulationsForCourseYearByBatch } from "@/lib/college/academicSession";
+import { isCommonYearDepartment, type DepartmentWithId } from "@/lib/college/academicStructure";
+
+function dept(overrides: Partial<DepartmentWithId>): DepartmentWithId {
+  return {
+    id: "d1",
+    collegeId: "c1",
+    name: "Basic Science",
+    code: "BS",
+    isActive: true,
+    createdAt: null as unknown as DepartmentWithId["createdAt"],
+    ...overrides,
+  };
+}
+
+describe("isCommonYearDepartment", () => {
+  it("infers a shared first year from year 1 + sub-departments when isFreshman is unset", () => {
+    expect(isCommonYearDepartment(dept({ assignedYears: [1], hasSubDepartments: true }))).toBe(true);
+  });
+
+  it("infers a shared first year from year 1 + cross-listing when isFreshman is unset", () => {
+    expect(isCommonYearDepartment(dept({ assignedYears: [1], secondaryDepartments: ["CSE"] }))).toBe(true);
+  });
+
+  it("leaves a plain department that merely teaches year 1 alone", () => {
+    expect(isCommonYearDepartment(dept({ assignedYears: [1] }))).toBe(false);
+  });
+
+  it("lets an explicit isFreshman win over the inferred rule", () => {
+    // No year 1, no sub-departments - nothing to infer from, but ticked.
+    expect(isCommonYearDepartment(dept({ isFreshman: true }))).toBe(true);
+  });
+
+  it("lets an explicit isFreshman false switch OFF an otherwise-inferred department", () => {
+    expect(isCommonYearDepartment(dept({ isFreshman: false, assignedYears: [1], hasSubDepartments: true }))).toBe(false);
+  });
+
+  it("still refuses a sub-department that is ticked", () => {
+    expect(isCommonYearDepartment(dept({ isFreshman: true, parentDepartmentId: "parent" }))).toBe(false);
+  });
+
+  it("still refuses an inactive department that is ticked", () => {
+    expect(isCommonYearDepartment(dept({ isFreshman: true, isActive: false }))).toBe(false);
+  });
+});
 
 describe("regulationsForCourseYearByBatch", () => {
   it("returns all regulations when no batch mapping exists", () => {

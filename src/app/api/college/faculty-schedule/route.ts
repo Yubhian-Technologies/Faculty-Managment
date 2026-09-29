@@ -7,7 +7,8 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { resolveCurrentSemester, matchesCurrentSemester } from "@/lib/college/semester";
 import { isFacultyAvailable } from "@/types";
-import type { CourseYearTiming, Section, TimetableSlot } from "@/types";
+import { defaultPeriodTimings } from "@/lib/timetable/buildGrid";
+import type { CourseYearTiming, PeriodTiming, Section, TimetableDraft, TimetableSlot } from "@/types";
 
 // A deliberately narrow, read-only cross-department lookup: unlike
 // /api/college/faculty and /api/college/courses (which reject a department
@@ -48,8 +49,33 @@ export async function GET(request: Request) {
       if (!facultySnap.exists) return NextResponse.json({ error: "Faculty not found" }, { status: 404 });
       const facultyName = facultyDisplayName(facultySnap.data() as { legalName?: string });
 
-      const slotsSnap = await collegeRef.collection("timetableSlots").where("facultyId", "==", facultyId).get();
+      const [slotsSnap, draftsSnap] = await Promise.all([
+        collegeRef.collection("timetableSlots").where("facultyId", "==", facultyId).get(),
+        // An unpublished draft occupies this faculty just as surely as a live
+        // slot does - loadTimetableContext already refuses to double-book
+        // against one (see its own doc-comment), so a schedule that ignored
+        // drafts showed someone "Free" in a period the app itself would not
+        // let you give away. Small collection: one doc per section+semester.
+        collegeRef.collection("timetableDrafts").get(),
+      ]);
       const rawSlots = slotsSnap.docs.map((d) => d.data() as TimetableSlot);
+
+      // Draft periods for this faculty, reshaped to look like published ones.
+      // A draft that has already been published is skipped - its slots are in
+      // timetableSlots above, and counting both would show them twice.
+      const draftSlots: (TimetableSlot & { isDraft: true })[] = [];
+      for (const d of draftsSnap.docs) {
+        const draft = { id: d.id, ...d.data() } as TimetableDraft;
+        if (draft.status !== "DRAFT") continue;
+        for (const ds of draft.slots ?? []) {
+          if (ds.facultyId !== facultyId) continue;
+          draftSlots.push({
+            day: ds.day, periodNumber: ds.periodNumber, subjectName: ds.subjectName,
+            courseId: draft.courseId, year: draft.year, sectionId: draft.sectionId,
+            semester: draft.semester ?? null, isDraft: true,
+          } as unknown as TimetableSlot & { isDraft: true });
+        }
+      }
 
       // Only THIS faculty's currently-relevant slots - each checked against
       // its OWN course-year's current semester (a slot from an
@@ -58,17 +84,21 @@ export async function GET(request: Request) {
       // follows. Timings are fetched once per distinct (courseId, year) pair
       // in this small set, not per slot.
       const distinctCourseYears = new Map<string, { courseId: string; year: number }>();
-      for (const s of rawSlots) distinctCourseYears.set(`${s.courseId}_${s.year}`, { courseId: s.courseId, year: s.year });
+      for (const s of [...rawSlots, ...draftSlots]) distinctCourseYears.set(`${s.courseId}_${s.year}`, { courseId: s.courseId, year: s.year });
       const currentSemesterByCourseYear = new Map<string, number | null>();
+      // Kept so the grid can be laid out against a real course-year's own
+      // periods without the caller having to pick one - see `periods` below.
+      const timingByCourseYear = new Map<string, CourseYearTiming | null>();
       await Promise.all(
         Array.from(distinctCourseYears.entries()).map(async ([key, { courseId, year }]) => {
           const timingSnap = await collegeRef.collection("courseYearTimings").doc(`${courseId}_year${year}`).get();
           const timing = timingSnap.exists ? (timingSnap.data() as CourseYearTiming) : null;
+          timingByCourseYear.set(key, timing);
           currentSemesterByCourseYear.set(key, resolveCurrentSemester(timing));
         }),
       );
 
-      const currentSlots = rawSlots.filter(
+      const currentSlots = [...rawSlots, ...draftSlots].filter(
         (s) => matchesCurrentSemester(s.semester, currentSemesterByCourseYear.get(`${s.courseId}_${s.year}`) ?? null),
       );
 
@@ -90,12 +120,33 @@ export async function GET(request: Request) {
           periodNumber: s.periodNumber,
           subjectName: s.subjectName,
           courseName: section?.courseName ?? "",
+          departmentName: section?.department ?? "",
           year: s.year,
           sectionName: section?.name ?? "",
+          isDraft: (s as { isDraft?: boolean }).isDraft === true,
         };
       });
 
-      return NextResponse.json({ facultyName, slots });
+      // How many periods to draw, and their clock times. Taken from the
+      // faculty's OWN course-years so the caller no longer has to choose a
+      // course and year purely to shape the grid. Widest one wins, so a
+      // faculty teaching a 7-period and an 8-period course-year still sees
+      // every period they are booked in.
+      let periods: PeriodTiming[] = [];
+      for (const timing of timingByCourseYear.values()) {
+        if (!timing) continue;
+        const own = timing.periods && timing.periods.length > 0 ? timing.periods : defaultPeriodTimings(timing);
+        if (own.length > periods.length) periods = own;
+      }
+      // No timings at all (or no slots yet): fall back to the widest period
+      // the faculty actually appears in, so their booked periods are never
+      // hidden by a grid that stops short.
+      const maxPeriod = slots.reduce((m, s) => Math.max(m, s.periodNumber), 0);
+      if (periods.length < maxPeriod) {
+        periods = Array.from({ length: maxPeriod }, (_, i) => ({ period: i + 1, startTime: "", endTime: "" }));
+      }
+
+      return NextResponse.json({ facultyName, slots, periods });
     }
 
     return NextResponse.json({ error: "departmentId or facultyId is required" }, { status: 400 });
