@@ -8,6 +8,7 @@ import {
   Clock,
   FileText,
   MapPin,
+  ShieldCheck,
   TrendingDown,
   TrendingUp,
   User,
@@ -16,6 +17,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { PageHeader } from "@/components/shared/PageHeader";
+import { DashboardSkeleton } from "@/components/shared/SkeletonLoader";
 import { toast } from "@/hooks/useToast";
 import { resolveTimetableDays } from "@/lib/timetable/gridModel";
 import { formatTime12h } from "@/lib/timetable/facultyTimetablePdf";
@@ -97,22 +100,17 @@ export default function StudentDashboardPage() {
 
   return (
     <div className="space-y-6">
-      <div className="min-w-0">
-        <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold tracking-tight text-foreground break-words">
-          {student ? `Welcome, ${student.name.split(" ")[0]}` : "My Dashboard"}
-        </h1>
-        <p className="text-sm text-muted-foreground mt-0.5 break-words">
-          {student && section
+      <PageHeader
+        title={student ? `Welcome, ${student.name.split(" ")[0]}` : "My Dashboard"}
+        description={
+          student && section
             ? `${student.rollNumber} · ${formatAcademicShortNotation({ year: section.year, courseName: course?.name, courseCode: course?.code, sectionName: section.name })}`
-            : "Your profile, timetable and attendance"}
-        </p>
-      </div>
+            : "Your profile, timetable and attendance"
+        }
+      />
 
       {isLoading ? (
-        <div className="space-y-4">
-          <div className="h-24 rounded-xl border bg-muted/30 animate-pulse" />
-          <div className="h-64 rounded-xl border bg-muted/30 animate-pulse" />
-        </div>
+        <DashboardSkeleton />
       ) : !student ? (
         <Card className="border-dashed">
           <CardContent className="py-12 text-center space-y-3">
@@ -126,7 +124,7 @@ export default function StudentDashboardPage() {
         <div className="space-y-6">
           {/* Quick stats */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Card>
+            <Card className="rounded-2xl border-border/60 bg-card/90 backdrop-blur-sm shadow-xs">
               <CardContent className="p-4 flex items-center justify-between gap-3">
                 <div>
                   <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Attendance</p>
@@ -135,14 +133,20 @@ export default function StudentDashboardPage() {
                   </p>
                 </div>
                 {attendance && attendance.subjects.length > 0 && (
-                  <Badge variant={overallShort ? "destructive" : "default"} className="gap-1.5 shrink-0">
+                  <Badge
+                    className={
+                      overallShort
+                        ? "gap-1.5 shrink-0 rounded-full bg-red-500/10 border-red-500/20 text-red-700 dark:text-red-400"
+                        : "gap-1.5 shrink-0 rounded-full bg-emerald-500/10 border-emerald-500/20 text-emerald-700 dark:text-emerald-400"
+                    }
+                  >
                     {overallShort ? <TrendingDown className="h-3.5 w-3.5" /> : <TrendingUp className="h-3.5 w-3.5" />}
                     {overallShort ? "Below threshold" : "On track"}
                   </Badge>
                 )}
               </CardContent>
             </Card>
-            <Card>
+            <Card className="rounded-2xl border-border/60 bg-card/90 backdrop-blur-sm shadow-xs">
               <CardContent className="p-4 flex items-center justify-between gap-3">
                 <div>
                   <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Today&rsquo;s Classes</p>
@@ -158,13 +162,13 @@ export default function StudentDashboardPage() {
           </div>
 
           {!section ? (
-            <Card className="border-dashed">
+            <Card className="border-dashed rounded-2xl">
               <CardContent className="py-8 text-center text-sm text-muted-foreground">
                 No class/section is linked to your record yet - your timetable and today&rsquo;s schedule will appear once one is.
               </CardContent>
             </Card>
           ) : (
-            <Card className="shadow-xs border-border/80 overflow-hidden">
+            <Card className="rounded-3xl border-border/60 bg-card/90 backdrop-blur-sm shadow-xs overflow-hidden">
               <CardHeader className="p-4 sm:p-5 border-b bg-card/60">
                 <CardTitle className="text-base font-bold flex items-center gap-2">
                   <Clock className="h-4 w-4 text-primary shrink-0" />
@@ -183,7 +187,7 @@ export default function StudentDashboardPage() {
                       return (
                         <div
                           key={slot.id}
-                          className={`rounded-xl border p-3.5 flex flex-col justify-between gap-3 ${
+                          className={`rounded-2xl border p-3.5 flex flex-col justify-between gap-3 ${
                             isSub
                               ? "bg-amber-500/5 border-amber-500/30 dark:bg-amber-950/20"
                               : isLab
@@ -236,7 +240,7 @@ export default function StudentDashboardPage() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             <Link href="/student/attendance">
-              <Card className="hover:bg-muted/20 transition-colors cursor-pointer h-full">
+              <Card className="rounded-2xl border-border/60 bg-card/90 backdrop-blur-sm shadow-xs hover:bg-muted/20 transition-colors cursor-pointer h-full">
                 <CardContent className="p-4 flex items-center gap-3">
                   <TrendingUp className="h-5 w-5 text-primary shrink-0" />
                   <div>
@@ -247,7 +251,7 @@ export default function StudentDashboardPage() {
               </Card>
             </Link>
             <Link href="/student/timetable">
-              <Card className="hover:bg-muted/20 transition-colors cursor-pointer h-full">
+              <Card className="rounded-2xl border-border/60 bg-card/90 backdrop-blur-sm shadow-xs hover:bg-muted/20 transition-colors cursor-pointer h-full">
                 <CardContent className="p-4 flex items-center gap-3">
                   <BookOpen className="h-5 w-5 text-primary shrink-0" />
                   <div>
@@ -258,7 +262,7 @@ export default function StudentDashboardPage() {
               </Card>
             </Link>
             <Link href="/student/library">
-              <Card className="hover:bg-muted/20 transition-colors cursor-pointer h-full">
+              <Card className="rounded-2xl border-border/60 bg-card/90 backdrop-blur-sm shadow-xs hover:bg-muted/20 transition-colors cursor-pointer h-full">
                 <CardContent className="p-4 flex items-center gap-3">
                   <BookOpen className="h-5 w-5 text-primary shrink-0" />
                   <div>
@@ -269,12 +273,23 @@ export default function StudentDashboardPage() {
               </Card>
             </Link>
             <Link href="/student/documents">
-              <Card className="hover:bg-muted/20 transition-colors cursor-pointer h-full">
+              <Card className="rounded-2xl border-border/60 bg-card/90 backdrop-blur-sm shadow-xs hover:bg-muted/20 transition-colors cursor-pointer h-full">
                 <CardContent className="p-4 flex items-center gap-3">
                   <FileText className="h-5 w-5 text-primary shrink-0" />
                   <div>
                     <p className="font-medium text-sm">My Documents</p>
                     <p className="text-xs text-muted-foreground">Certificates on file</p>
+                  </div>
+                </CardContent>
+              </Card>
+            </Link>
+            <Link href="/student/permissions">
+              <Card className="rounded-2xl border-border/60 bg-card/90 backdrop-blur-sm shadow-xs hover:bg-muted/20 transition-colors cursor-pointer h-full">
+                <CardContent className="p-4 flex items-center gap-3">
+                  <ShieldCheck className="h-5 w-5 text-primary shrink-0" />
+                  <div>
+                    <p className="font-medium text-sm">Permissions</p>
+                    <p className="text-xs text-muted-foreground">Request approvals & activities</p>
                   </div>
                 </CardContent>
               </Card>
