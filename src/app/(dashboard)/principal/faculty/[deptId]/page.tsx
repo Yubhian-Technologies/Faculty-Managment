@@ -87,6 +87,13 @@ export default function PrincipalDepartmentFacultyPage() {
     enabled: !!department?.hodUid,
   });
 
+  // Always fetched, even when this department organises sub-departments and
+  // isn't a valid destination for a NEW faculty member (isFacultyDestination
+  // is a picker rule, not a display rule) - a department can still have real
+  // faculty already filed under it directly (added before sub-departments
+  // existed, before "runs its own sections" was turned off, or via bulk
+  // import), and gating the fetch itself on that picker rule silently hid
+  // them with no way to ever see or export them again.
   const { data: faculty = [], isLoading } = useQuery({
     queryKey: ["principal-dept-faculty", department?.name, statusFilter],
     queryFn: () =>
@@ -95,7 +102,7 @@ export default function PrincipalDepartmentFacultyPage() {
       )
         .then((r) => r.json() as Promise<{ faculty: FacultyRow[] }>)
         .then((d) => d.faculty ?? []),
-    enabled: !!department && departmentIsFacultyDestination,
+    enabled: !!department,
   });
 
   // An HOD is almost always ALSO a teaching Faculty member of their own
@@ -324,7 +331,12 @@ export default function PrincipalDepartmentFacultyPage() {
         </div>
       )}
 
-      {departmentIsFacultyDestination && (
+      {/* Shown whenever this is a normal faculty destination, OR - even when
+          it isn't - whenever faculty records already exist directly under it
+          (see the query's own comment above) or the query is still resolving
+          that. Never gated on isFacultyDestination alone, or real data filed
+          under a since-reorganised parent department would stay invisible. */}
+      {(departmentIsFacultyDestination || isLoading || faculty.length > 0) && (
         <>
           <div className="flex gap-2 flex-wrap">
             {STATUS_TABS.map((tab) => (

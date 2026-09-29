@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { notify } from "@/lib/notify";
+import { STUDENT_DOCUMENT_TYPE_LABELS, resolveStudentDocumentTypeLabel } from "@/types";
 import type { StudentDocument, StudentRecord } from "@/types";
 
 const GUARD_ROLES = ["COLLEGE_OFFICE", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN"];
@@ -39,11 +40,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const { id } = await params;
     const body = (await request.json()) as Partial<StudentDocument>;
 
-    const title = body.title?.trim();
+    const documentType = body.documentType;
+    const customTypeLabel = body.customTypeLabel?.trim();
     const fileUrl = body.fileUrl?.trim();
     const fileName = body.fileName?.trim();
-    if (!title || !fileUrl || !fileName) {
-      return NextResponse.json({ error: "title, fileUrl and fileName are required" }, { status: 400 });
+
+    if (!documentType || !(documentType in STUDENT_DOCUMENT_TYPE_LABELS)) {
+      return NextResponse.json({ error: "A valid documentType is required" }, { status: 400 });
+    }
+    if (documentType === "OTHER" && !customTypeLabel) {
+      return NextResponse.json({ error: "customTypeLabel is required when documentType is OTHER" }, { status: 400 });
+    }
+    if (!fileUrl || !fileName) {
+      return NextResponse.json({ error: "fileUrl and fileName are required" }, { status: 400 });
     }
 
     const db = getAdminDb();
@@ -63,7 +72,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       collegeId: session.collegeId,
       studentId: id,
       studentUid: student.uid ?? "",
-      title,
+      documentType,
+      ...(documentType === "OTHER" && customTypeLabel ? { customTypeLabel } : {}),
       description: body.description?.trim() || undefined,
       fileName,
       fileUrl,
@@ -75,7 +85,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     });
 
     if (student.uid) {
-      await notify(db, session.collegeId, student.uid, "DOCUMENT_UPLOADED", "New Document Uploaded", `"${title}" has been added to your documents.`, "/student/documents");
+      const resolvedLabel = resolveStudentDocumentTypeLabel({ documentType, customTypeLabel });
+      await notify(db, session.collegeId, student.uid, "DOCUMENT_UPLOADED", "New Document Uploaded", `"${resolvedLabel}" has been added to your documents.`, "/student/documents");
     }
 
     return NextResponse.json({ ok: true, id: ref.id });

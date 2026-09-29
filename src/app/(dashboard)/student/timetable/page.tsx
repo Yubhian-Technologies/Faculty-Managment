@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { TableSkeleton } from "@/components/shared/SkeletonLoader";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/useToast";
@@ -126,7 +127,7 @@ export default function StudentTimetablePage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-card/90 backdrop-blur-sm p-5 rounded-3xl border border-border/60 shadow-xs">
         <PageHeader
           title={
             section
@@ -140,9 +141,10 @@ export default function StudentTimetablePage() {
               : "My Timetable"
           }
           description={section && course ? `${departmentName} · Weekly Schedule` : "Your weekly class schedule"}
+          className="mb-0"
         />
         <div className="flex items-center gap-2 shrink-0">
-          <Button asChild variant="outline" size="sm">
+          <Button asChild variant="outline" size="sm" className="rounded-full border-border/60">
             <Link href="/student">
               <ArrowLeft className="h-4 w-4 mr-1.5" /> Back to Dashboard
             </Link>
@@ -151,33 +153,33 @@ export default function StudentTimetablePage() {
       </div>
 
       {isLoading ? (
-        <div className="h-96 rounded-xl border bg-muted/30 animate-pulse flex items-center justify-center text-sm text-muted-foreground">
-          Loading timetable...
+        <div className="rounded-3xl border border-border/60 bg-card/90 shadow-xs p-4">
+          <TableSkeleton rows={6} cols={6} />
         </div>
       ) : !section ? (
-        <div className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground bg-muted/10">
+        <div className="rounded-3xl border border-dashed p-8 text-center text-sm text-muted-foreground bg-muted/10">
           <p className="font-semibold text-foreground text-base">No Section Linked</p>
           <p className="mt-1 text-xs">No class/section is linked to your login yet. Please contact your College Office.</p>
         </div>
       ) : !timing ? (
-        <div className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground bg-muted/10">
+        <div className="rounded-3xl border border-dashed p-8 text-center text-sm text-muted-foreground bg-muted/10">
           <p className="font-semibold text-foreground text-base">Timings Not Configured</p>
           <p className="mt-1 text-xs">Timings haven&rsquo;t been configured for {course?.name} - {ordinalYear(section.year)} yet.</p>
         </div>
       ) : (
         <div className="space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-lg border bg-card/60 shadow-xs">
+          <div className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-3xl border border-border/60 bg-card/90 shadow-xs">
             {availableSemesters.length > 1 && (
               <div className="flex items-center gap-2">
                 <span className="text-xs font-semibold text-muted-foreground">Semester:</span>
-                <div className="inline-flex rounded-lg border p-0.5 bg-muted/30">
+                <div className="inline-flex p-1 bg-muted/60 rounded-full border border-border/50 shadow-xs gap-1">
                   {availableSemesters.map((sem) => (
                     <Button
                       key={sem.semester}
                       type="button"
                       size="sm"
                       variant={selectedSemester === sem.semester ? "default" : "ghost"}
-                      className="h-7 text-xs px-3"
+                      className="h-7 text-xs px-3 rounded-full font-medium"
                       onClick={() => changeSemester(sem.semester)}
                     >
                       {toRoman(sem.semester)} Sem
@@ -188,14 +190,14 @@ export default function StudentTimetablePage() {
             )}
 
             <div className="flex items-center gap-2 flex-wrap">
-              <div className="inline-flex rounded-lg border p-0.5 bg-muted/30">
+              <div className="inline-flex p-1 bg-muted/60 rounded-full border border-border/50 shadow-xs gap-1">
                 {(["ALL", "THEORY", "PRACTICAL"] as const).map((t) => (
                   <Button
                     key={t}
                     type="button"
                     size="sm"
                     variant={typeFilter === t ? "default" : "ghost"}
-                    className="h-7 text-xs px-3 font-medium transition-all"
+                    className="h-7 text-xs px-3 rounded-full font-medium transition-all"
                     onClick={() => setTypeFilter(t)}
                   >
                     {t === "ALL" ? "All" : t === "THEORY" ? "Theory" : "Practical"}
@@ -206,7 +208,7 @@ export default function StudentTimetablePage() {
               {batchOptions.length > 0 && (
                 <div className="flex items-center gap-1.5">
                   <Select value={batchValue || "__all__"} onValueChange={(v) => setBatchValue(v === "__all__" ? "" : v)}>
-                    <SelectTrigger className="h-8 text-xs w-28">
+                    <SelectTrigger className="h-8 text-xs w-28 rounded-full border-border/60 bg-muted/30">
                       <SelectValue placeholder="Batch: All" />
                     </SelectTrigger>
                     <SelectContent>
@@ -230,7 +232,7 @@ export default function StudentTimetablePage() {
                     setTypeFilter("ALL");
                     setBatchValue("");
                   }}
-                  className="h-8 text-xs px-2 text-muted-foreground hover:text-foreground"
+                  className="h-8 text-xs px-2 rounded-full text-muted-foreground hover:text-foreground"
                 >
                   Clear filters
                 </Button>
@@ -238,7 +240,7 @@ export default function StudentTimetablePage() {
             </div>
           </div>
 
-          <div className="w-full min-w-0">
+          <div className="w-full min-w-0 rounded-3xl border border-border/60 bg-card/90 shadow-xs p-3 sm:p-4 overflow-hidden">
             <InstitutionalTimetableTable
               section={section}
               timing={timing}
