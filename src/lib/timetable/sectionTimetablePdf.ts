@@ -177,9 +177,9 @@ export function buildSectionTimetablePdfHtml(opts: SectionTimetablePdfOptions): 
         ${collegeName ? `<div class="inst-name">${escapeHtml(collegeName)}${collegeCode ? ` <span class="inst-code">(Code: ${escapeHtml(collegeCode)})</span>` : ""}</div>` : ""}
         ${identityLines}
         <div class="doc-title">${escapeHtml(documentTitle)}</div>
-        ${metaPills.length ? `<div class="meta-line">${metaPills.map((p) => `<span class="meta-pill">${escapeHtml(p)}</span>`).join("")}</div>` : ""}
+        ${metaPills.length ? `<div class="meta-line">${metaPills.map((p) => escapeHtml(p)).join('<span class="meta-sep">&nbsp;|&nbsp;</span>')}</div>` : ""}
         ${inchargePill || effectivePill || sessionPill
-          ? `<div class="meta-line meta-sub">${[inchargePill, effectivePill, sessionPill].filter(Boolean).map((p) => `<span class="meta-pill muted">${escapeHtml(p)}</span>`).join("")}</div>`
+          ? `<div class="meta-line meta-sub">${[inchargePill, effectivePill, sessionPill].filter(Boolean).map((p) => escapeHtml(p)).join('<span class="meta-sep">&nbsp;|&nbsp;</span>')}</div>`
           : ""}
       </td>
     </tr>
@@ -227,7 +227,8 @@ export function buildSectionTimetablePdfHtml(opts: SectionTimetablePdfOptions): 
               const sub = s.substituteFacultyName;
               const faculty = sub ? s.facultyName : slotFacultyName(s);
               const batch = s.labBatch ? escapeHtml(s.labBatch) : "";
-              return `<div class="cell${sub ? " cell-sub" : ""}">
+              const isLab = !!s.labBatch || subjectMap.get(s.subjectId)?.type === "PRACTICAL";
+              return `<div class="cell${sub ? " cell-sub" : isLab ? " cell-lab" : ""}">
                 <div class="cell-code">${code}</div>
                 ${batch ? `<div class="cell-batch">${batch}</div>` : ""}
                 ${faculty ? `<div class="cell-faculty">${escapeHtml(faculty)}</div>` : ""}
@@ -299,55 +300,62 @@ export function buildSectionTimetablePdfHtml(opts: SectionTimetablePdfOptions): 
   <meta charset="UTF-8">
   <title>${escapeHtml(documentTitle)}${sectionName ? ` - Section ${escapeHtml(sectionName)}` : ""}${collegeName ? ` - ${escapeHtml(collegeName)}` : ""}</title>
   <style>
-    @page { size: A4 portrait; margin: 10mm; }
+    @page { size: A4 portrait; margin: 0; }
     * { box-sizing: border-box; margin: 0; padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    body { font-family: Arial, Helvetica, sans-serif; color: #000; background: #fff; font-size: 11px; line-height: 1.3; }
-    .page { width: 190mm; margin: 0 auto; }
+    body { font-family: Arial, Helvetica, sans-serif; color: #111827; background: #fff; font-size: 11px; line-height: 1.3; }
+    /* The PDF renderer captures .page edge to edge, so the page margin has to
+       live inside it as padding - a margin outside .page never reaches the file. */
+    .page { width: 210mm; margin: 0 auto; padding: 10mm 10mm 12mm; }
 
-    .letterhead { width: 100%; margin-bottom: 8px; }
+    .letterhead { width: 100%; margin-bottom: 10px; border: 0; }
     .logo-cell { width: 90px; padding-right: 8px; vertical-align: middle; text-align: center; }
     .logo-cell img { max-width: 80px; max-height: 72px; object-fit: contain; }
     .letterhead-text { vertical-align: middle; text-align: center; }
-    .inst-name { font-size: 15pt; font-weight: 800; text-transform: uppercase; letter-spacing: 0.4px; }
+    .inst-name { font-size: 16pt; font-weight: 800; text-transform: uppercase; letter-spacing: 0.4px; color: #1e3a5f; }
     .inst-code { font-size: 9pt; font-weight: 700; }
-    .identity-line { font-size: 8.5pt; font-weight: 600; }
-    .doc-title { font-size: 13pt; font-weight: 800; letter-spacing: 1.5px; margin: 6px 0 4px; border-top: 1px solid #000; border-bottom: 1px solid #000; padding: 4px 0; }
-    .meta-line { margin-top: 2px; }
-    .meta-pill { display: inline-block; border: 1px solid #666; border-radius: 2px; padding: 1px 5px; margin: 1px 2px; font-size: 8pt; font-weight: 700; }
-    .meta-pill.muted { border-color: #bbb; font-weight: 600; color: #333; }
-    .muted { color: #555; }
+    .identity-line { font-size: 8.5pt; font-weight: 600; color: #374151; }
+    .doc-title { font-size: 12pt; font-weight: 800; letter-spacing: 2px; margin: 8px 0 6px; padding: 5px 0; background: #1e3a5f; color: #fff; }
+    .meta-line { margin-top: 3px; font-size: 8.5pt; font-weight: 700; color: #111827; }
+    .meta-sub { font-weight: 600; color: #4b5563; font-size: 8pt; }
+    .meta-sep { color: #9ca3af; font-weight: 400; }
+    .muted { color: #6b7280; }
 
-    .cellBorder { border: 1px solid #000; padding: 3px 2px; text-align: center; vertical-align: middle; }
-    th.cellBorder { font-weight: 800; font-size: 8.5pt; background: #f2f2f2; }
-    .col-time { font-size: 6.5pt; font-weight: 500; color: #333; margin-top: 1px; white-space: nowrap; }
+    /* Borders on right/bottom of each cell plus top/left on the table: with
+       border-collapse the canvas capture drew every shared edge twice, so inner
+       lines looked twice as heavy as the outer ones. */
+    table { border-collapse: separate; border-spacing: 0; border-top: 1px solid #6b7280; border-left: 1px solid #6b7280; }
+    .cellBorder { border-right: 1px solid #6b7280; border-bottom: 1px solid #6b7280; padding: 4px 3px; text-align: center; vertical-align: middle; }
+    th.cellBorder { font-weight: 800; font-size: 8.5pt; background: #e8eef6; color: #1e3a5f; }
+    .col-time { font-size: 6.5pt; font-weight: 500; color: #4b5563; margin-top: 1px; white-space: nowrap; }
     .period-label { font-size: 8pt; }
     .break-label { font-size: 6.5pt; font-weight: 700; text-transform: uppercase; }
     .col-day { width: 21mm; }
-    .col-break { width: 11mm; }
+    .col-break { width: 14mm; }
     .day-head, .day-cell { font-size: 7pt; text-transform: uppercase; overflow: hidden; }
-    .day-cell { background: #f2f2f2; font-weight: 800; }
+    .day-cell { background: #e8eef6; color: #1e3a5f; font-weight: 800; }
 
-    .timetable-grid { width: 100%; border-collapse: collapse; table-layout: fixed; }
-    .timetable-grid td { height: 34px; font-size: 8pt; overflow: hidden; word-break: break-word; }
-    .break-cell { background: #f7f7f7; }
-    .cell { line-height: 1.15; }
+    .timetable-grid { width: 100%; table-layout: fixed; }
+    .timetable-grid td { height: 38px; font-size: 8pt; overflow: hidden; word-break: break-word; }
+    .break-cell { background: #f1f3f6; }
+    .cell { line-height: 1.2; padding: 1px 0; }
     .cell-code { font-size: 9.5pt; font-weight: 800; text-transform: uppercase; }
-    .cell-faculty { font-size: 7pt; font-weight: 600; color: #333; }
-    .cell-batch { font-size: 6.5pt; font-weight: 700; color: #444; }
-    .cell-room { font-size: 6.5pt; font-weight: 600; color: #555; }
-    .cell-sub { background: #fff6e5; border: 1px solid #e0a800; border-radius: 2px; }
+    .cell-faculty { font-size: 7pt; font-weight: 600; color: #374151; }
+    .cell-batch { font-size: 6.5pt; font-weight: 700; color: #4b5563; }
+    .cell-room { font-size: 6.5pt; font-weight: 600; color: #6b7280; }
+    .cell-lab { background: #e9f6ec; }
+    .cell-sub { background: #fff3d6; }
     .cell-subnote { font-size: 6.5pt; font-weight: 700; color: #7a5200; }
 
-    .section-title { font-size: 11pt; font-weight: 800; text-transform: uppercase; text-align: center; margin: 12px 0 5px; }
-    .allocation-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-    .allocation-table td, .allocation-table th { font-size: 8.5pt; padding: 3px 5px; }
+    .section-title { font-size: 10.5pt; font-weight: 800; text-transform: uppercase; text-align: center; margin: 16px 0 6px; color: #1e3a5f; letter-spacing: 0.5px; }
+    .allocation-table { width: 100%; table-layout: fixed; }
+    .allocation-table td, .allocation-table th { font-size: 8.5pt; padding: 4px 6px; }
     .center { text-align: center; }
     .strong { font-weight: 800; }
 
-    .signature-row { display: flex; justify-content: space-around; margin-top: 20px; }
+    .signature-row { display: flex; justify-content: space-around; margin-top: 48px; }
     .signature-block { text-align: center; width: 26%; }
-    .signature-line { border-top: 1px solid #000; margin-bottom: 3px; }
-    .signature-title { font-size: 8pt; font-weight: 700; text-transform: uppercase; }
+    .signature-line { border-top: 1px solid #111827; margin-bottom: 4px; }
+    .signature-title { font-size: 8pt; font-weight: 700; text-transform: uppercase; padding-bottom: 2px; }
   </style>
 </head>
 <body>
