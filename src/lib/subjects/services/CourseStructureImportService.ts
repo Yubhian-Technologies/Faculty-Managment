@@ -55,7 +55,20 @@ export interface CourseStructureScopeSummary {
   // what the Academics Teaching Assignments year picker filters by.
   regulationCoverage: { year: number; regulations: string[] }[];
   // Subjects already assigned to this department for this course, per slot.
-  existing: { year: number; semester: number; count: number; regulations: string[] }[];
+  existing: { year: number; semester: number; count: number; regulations: string[]; subjects: CourseStructureAssignedSubject[] }[];
+}
+
+export interface CourseStructureAssignedSubject {
+  subjectId: string;
+  code: string;
+  name: string;
+  regulation: string;
+  category?: string;
+  type?: string;
+  lectureHours: number;
+  tutorialHours: number;
+  practicalHours: number;
+  credits: number;
 }
 
 export interface CourseStructurePlanRow {
@@ -93,6 +106,9 @@ type CourseDoc = Course & { id: string };
 type MasterDoc = Subject & { id: string };
 
 interface LoadedContext {
+  // Every Course doc sharing this course's catalog entry - the dedupe group
+  // for master subjects. Read once in loadContext.
+  groupCourseIds: string[];
   course: CourseDoc;
   department: Dept;
   allDepartments: Dept[];
@@ -169,7 +185,7 @@ export class CourseStructureImportService {
     sameCatalogCourses: CourseDoc[],
     catalogData: { regulations?: string[]; regulationBatches?: Record<string, string> } | undefined,
     timingDocs: (Partial<CourseYearTiming> | undefined)[]
-  ): Omit<LoadedContext, "summary"> & { summary: Omit<CourseStructureScopeSummary, "existing"> } {
+  ): Omit<LoadedContext, "summary" | "groupCourseIds"> & { summary: Omit<CourseStructureScopeSummary, "existing"> } {
     if (!courseData) throw new CourseStructureRequestError("Course not found.");
     if (courseData.isActive === false) throw new CourseStructureRequestError("This course is inactive.");
     const course: CourseDoc = { ...courseData, id: courseId, durationYears: Number(courseData.durationYears) || 0 };
@@ -247,21 +263,39 @@ export class CourseStructureImportService {
     const existingInstances = instancesSnap.docs
       .map((d) => ({ ...(d.data() as SubjectSemesterAssignment), id: d.id }))
       .filter((a) => a.departmentId === departmentId && a.isActive !== false);
-    const slots = new Map<string, { year: number; semester: number; count: number; regulations: Set<string> }>();
+    const slots = new Map<string, { year: number; semester: number; regulations: Set<string>; subjects: CourseStructureAssignedSubject[] }>();
     for (const a of existingInstances) {
       const key = `${a.year ?? 0}|${a.semester}`;
-      const slot = slots.get(key) ?? { year: a.year ?? 0, semester: a.semester, count: 0, regulations: new Set<string>() };
-      slot.count++;
+      const slot = slots.get(key) ?? { year: a.year ?? 0, semester: a.semester, regulations: new Set<string>(), subjects: [] };
       if (a.regulation) slot.regulations.add(a.regulation);
+      slot.subjects.push({
+        subjectId: a.subjectId,
+        code: a.subjectCode ?? "",
+        name: a.subjectName ?? "",
+        regulation: a.regulation ?? "",
+        category: a.category,
+        type: a.type,
+        lectureHours: a.lectureHours ?? 0,
+        tutorialHours: a.tutorialHours ?? 0,
+        practicalHours: a.practicalHours ?? 0,
+        credits: a.credits ?? 0,
+      });
       slots.set(key, slot);
     }
     return {
       ...ctx,
+      groupCourseIds: sameCatalog.map((c) => c.id).includes(courseId) ? sameCatalog.map((c) => c.id) : [courseId, ...sameCatalog.map((c) => c.id)],
       existingInstances,
       summary: {
         ...ctx.summary,
         existing: Array.from(slots.values())
-          .map((s) => ({ ...s, regulations: Array.from(s.regulations).sort() }))
+          .map((s) => ({
+            year: s.year,
+            semester: s.semester,
+            count: s.subjects.length,
+            regulations: Array.from(s.regulations).sort(),
+            subjects: s.subjects.sort((x, y) => x.code.localeCompare(y.code)),
+          }))
           .sort((a, b) => a.year - b.year || a.semester - b.semester),
       },
     };
@@ -278,15 +312,12 @@ export class CourseStructureImportService {
 
   private async loadExistingMasters(collegeId: string, ctx: LoadedContext, regulation: string): Promise<Map<string, MasterDoc>> {
     const college = this.collegeRef(collegeId);
-    const groupCourseIds = new Set<string>([ctx.course.id]);
-    if (ctx.course.catalogId) {
-      const snap = await college.collection("courses").where("catalogId", "==", ctx.course.catalogId).get();
-      for (const d of snap.docs) groupCourseIds.add(d.id);
-    }
-    const ids = Array.from(groupCourseIds);
+    const ids = ctx.groupCourseIds;
     const byCode = new Map<string, MasterDoc>();
-    for (let i = 0; i < ids.length; i += 30) {
-      const snap = await college.collection("subjects").where("courseId", "in", ids.slice(i, i + 30)).get();
+    const chunks: string[][] = [];
+    for (let i = 0; i < ids.length; i += 30) chunks.push(ids.slice(i, i + 30));
+    const snaps = await Promise.all(chunks.map((chunk) => college.collection("subjects").where("courseId", "in", chunk).get()));
+    for (const snap of snaps) {
       for (const d of snap.docs) {
         const s = { ...(d.data() as Subject), id: d.id };
         if ((s.regulation ?? "").trim() !== regulation || !s.code) continue;
@@ -362,17 +393,24 @@ export class CourseStructureImportService {
         }
         instanceAction = "unchanged";
         plan.existingInstanceIds.add(instanceId);
-      } else if (masterAction === "reuse") {
-        // A pre-migration instance under the old semester-less key - carried
-        // over and removed, same as SubjectInstanceService.assignSubjectInstance.
-        const legacySnap = await this.collegeRef(req.collegeId).collection("subjectSemesterAssignments").doc(`${masterId}_${ctx.department.id}`).get();
-        const legacy = legacySnap.exists ? (legacySnap.data() as { semester?: number; createdAt?: unknown }) : null;
-        if (legacy && legacy.semester === row.semester) {
-          plan.legacyToDelete.set(instanceId, { createdAt: legacy.createdAt });
-          instanceAction = "reactivate";
-        }
       }
       plan.planRows.push({ row: row.rowNumber, code: row.code, name: row.name, year: row.year, semester: row.semester, master: masterAction, instance: instanceAction });
+    }
+
+    // A reused subject may still have a pre-migration instance under the old
+    // semester-less key - carried over and removed, same as
+    // SubjectInstanceService.assignSubjectInstance. One batched read for all.
+    const legacyCandidates = plan.planRows.filter((p) => p.master === "reuse" && p.instance === "create");
+    if (legacyCandidates.length > 0) {
+      const instances = this.collegeRef(req.collegeId).collection("subjectSemesterAssignments");
+      const legacySnaps = await this.db.getAll(...legacyCandidates.map((p) => instances.doc(`${plan.masterIdByCode.get(p.code)}_${ctx.department.id}`)));
+      legacyCandidates.forEach((p, i) => {
+        const legacy = legacySnaps[i].exists ? (legacySnaps[i].data() as { semester?: number; createdAt?: unknown }) : null;
+        if (legacy && legacy.semester === p.semester) {
+          plan.legacyToDelete.set(`${plan.masterIdByCode.get(p.code)}_${ctx.department.id}_${p.semester}`, { createdAt: legacy.createdAt });
+          p.instance = "reactivate";
+        }
+      });
     }
 
     // Slots that already hold subjects under a DIFFERENT regulation: Teaching

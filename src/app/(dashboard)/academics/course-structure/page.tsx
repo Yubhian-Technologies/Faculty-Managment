@@ -63,49 +63,46 @@ function CourseStructurePageInner() {
     const departmentId = searchParams.get("departmentId");
     return catalogId && departmentId ? { catalogId, departmentId, regulation: searchParams.get("regulation") } : null;
   });
-  useEffect(() => {
-    if (!prefill || picker.catalogItems.length === 0) return;
-    const item = picker.catalogItems.find((c) => c.id === prefill.catalogId);
-    void (async () => {
-      setPrefill(null);
-      if (!item) return;
-      const regs = item.regulations ?? [];
-      picker.setSelectedRegulation(prefill.regulation && regs.includes(prefill.regulation) ? prefill.regulation : regs[0] ?? "");
-      picker.setSelectedCatalogId(prefill.catalogId);
-      picker.selectDepartment(prefill.departmentId);
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [prefill, picker.catalogItems]);
 
   // ── Scope: what this department may receive for this course ────────────
-  const [scope, setScope] = useState<CourseStructureScopeSummary | null>(null);
+  // Fetched only by the Load button (handleLoad), never on a dropdown change.
+  const [scopeData, setScopeData] = useState<CourseStructureScopeSummary | null>(null);
   const [scopeError, setScopeError] = useState("");
   const [isLoadingScope, setIsLoadingScope] = useState(false);
   const scopeRequestRef = useRef(0);
-  const courseId = picker.selectedCourse?.id ?? "";
+  // Shown only while the dropdowns still match what was loaded.
+  const scope = picker.isLoaded ? scopeData : null;
+  const courseId = scope?.course.id ?? "";
   const departmentId = picker.selectedDepartmentId;
   const regulation = picker.selectedRegulation;
-  useEffect(() => {
+  const canLoad = !!picker.selectedRegulation && !!picker.selectedCatalogId && !!picker.selectedDepartmentId;
+
+  async function fetchScope(cId: string, dId: string, reg: string, requestId: number) {
+    setIsLoadingScope(true);
+    try {
+      const qs = new URLSearchParams({ courseId: cId, departmentId: dId, regulation: reg });
+      const res = await fetch(`/api/college/subjects/import-and-assign?${qs}`);
+      const json = await res.json() as CourseStructureScopeSummary & { error?: string };
+      if (requestId !== scopeRequestRef.current) return;
+      if (!res.ok) setScopeError(json.error ?? "Couldn't load this department's years and semesters.");
+      else setScopeData(json);
+    } catch {
+      if (requestId === scopeRequestRef.current) setScopeError("Couldn't load this department's years and semesters.");
+    } finally {
+      if (requestId === scopeRequestRef.current) setIsLoadingScope(false);
+    }
+  }
+
+  async function handleLoad(selection?: { regulation: string; catalogId: string; departmentId: string }) {
+    const sel = selection ?? { regulation, catalogId: picker.selectedCatalogId, departmentId };
     const requestId = ++scopeRequestRef.current;
-    void (async () => {
-      setScope(null);
-      setScopeError("");
-      if (!courseId || !departmentId || !regulation) return;
-      setIsLoadingScope(true);
-      try {
-        const qs = new URLSearchParams({ courseId, departmentId, regulation });
-        const res = await fetch(`/api/college/subjects/import-and-assign?${qs}`);
-        const json = await res.json() as CourseStructureScopeSummary & { error?: string };
-        if (requestId !== scopeRequestRef.current) return;
-        if (!res.ok) setScopeError(json.error ?? "Couldn't load this department's years and semesters.");
-        else setScope(json);
-      } catch {
-        if (requestId === scopeRequestRef.current) setScopeError("Couldn't load this department's years and semesters.");
-      } finally {
-        if (requestId === scopeRequestRef.current) setIsLoadingScope(false);
-      }
-    })();
-  }, [courseId, departmentId, regulation]);
+    resetUploadState();
+    setScopeData(null);
+    setScopeError("");
+    const { ok, course } = await picker.load(sel);
+    if (!ok || !course || requestId !== scopeRequestRef.current) return;
+    await fetchScope(course.id, sel.departmentId, sel.regulation, requestId);
+  }
 
   const teachableYears = scope?.scope.teachableYears ?? [];
   const canUpload = !!scope && teachableYears.length > 0;
@@ -132,6 +129,22 @@ function CourseStructurePageInner() {
     setResult(null);
     setShowProblemsOnly(false);
   }
+
+  useEffect(() => {
+    if (!prefill || picker.catalogItems.length === 0) return;
+    const item = picker.catalogItems.find((c) => c.id === prefill.catalogId);
+    void (async () => {
+      setPrefill(null);
+      if (!item) return;
+      const regs = item.regulations ?? [];
+      const reg = prefill.regulation && regs.includes(prefill.regulation) ? prefill.regulation : regs[0] ?? "";
+      picker.setSelectedRegulation(reg);
+      picker.setSelectedCatalogId(prefill.catalogId);
+      picker.selectDepartment(prefill.departmentId);
+      await handleLoad({ regulation: reg, catalogId: prefill.catalogId, departmentId: prefill.departmentId });
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefill, picker.catalogItems]);
 
   const local = useMemo(
     () => (uploaded && scope ? validateCourseStructureRows(uploaded.inputs, scope.scope) : null),
@@ -313,6 +326,7 @@ function CourseStructurePageInner() {
         return;
       }
       setResult(json);
+      if (scope) void fetchScope(scope.course.id, scope.department.id, scope.regulation, ++scopeRequestRef.current);
       const problems = json.verification?.problems.length ?? 0;
       toast(problems > 0
         ? { variant: "destructive", title: `Imported, but ${problems} assignment${problems !== 1 ? "s don't" : " doesn't"} match. See below.` }
@@ -380,58 +394,107 @@ function CourseStructurePageInner() {
             </Select>
           </div>
         </CardContent>
-        {picker.selectedDepartmentId && !picker.isLoadingCourses && !picker.selectedCourse && (
+        <CardContent className="pt-0">
+          <Button onClick={() => void handleLoad()} disabled={!canLoad || picker.isLoadingData || isLoadingScope} loading={picker.isLoadingData || isLoadingScope}>
+            Load
+          </Button>
+          {!picker.isLoaded && canLoad && !picker.isLoadingData && (
+            <span className="ml-3 text-sm text-muted-foreground">Click Load to see this department&apos;s years, semesters and subjects.</span>
+          )}
+        </CardContent>
+        {picker.isLoaded && picker.selectedDepartmentId && !picker.isLoadingCourses && !picker.selectedCourse && (
           <CardContent className="pt-0">
             <p className="text-sm text-amber-600 flex items-center gap-1.5"><AlertTriangle className="h-3.5 w-3.5" />{picker.selectedDepartment?.name} doesn&apos;t teach this course yet.</p>
           </CardContent>
         )}
-        {isLoadingScope && (
-          <CardContent className="pt-0 text-sm text-muted-foreground flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" />Loading years and semesters</CardContent>
-        )}
-        {scopeError && (
+        {picker.isLoaded && scopeError && (
           <CardContent className="pt-0">
             <p className="text-sm text-red-600 flex items-center gap-1.5"><XCircle className="h-4 w-4 shrink-0" />{scopeError}</p>
           </CardContent>
         )}
-        {scope && (
-          <CardContent className="pt-0 space-y-2">
-            <p className="text-sm font-medium">
-              Years and semesters assigned to {scope.department.name} for {scope.course.name}
-            </p>
-            {teachableYears.length === 0 ? (
-              <p className="text-sm text-red-600 flex items-center gap-1.5"><XCircle className="h-4 w-4 shrink-0" />No years are assigned to this department for this course. Set its Years Taught before importing.</p>
-            ) : (
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
-                {Array.from({ length: scope.scope.durationYears }, (_, i) => i + 1).map((y) => {
-                  const taught = teachableYears.includes(y);
-                  const sems = scope.scope.semestersByYear[y] ?? [];
-                  const cov = scope.regulationCoverage.find((c) => c.year === y)?.regulations ?? [];
-                  const existing = scope.existing.filter((e) => e.year === y);
-                  return (
-                    <div key={y} className={`rounded-md border p-2.5 text-xs space-y-1 ${taught ? "bg-background" : "opacity-50"}`}>
-                      <div className="flex items-center justify-between font-medium text-sm">
-                        <span>Year {y}</span>
-                        {!taught && <span className="text-muted-foreground text-xs">not assigned</span>}
-                      </div>
-                      {taught && (
-                        <>
-                          <div>{sems.length > 0 ? `Semesters ${sems.join(", ")}` : <span className="text-red-600">No semesters configured</span>}</div>
-                          {cov.length > 0 && (
-                            <div className={cov.includes(scope.regulation) ? "text-muted-foreground" : "text-amber-700"}>Current batch regulation: {cov.join(", ")}</div>
-                          )}
-                          {existing.map((e) => (
-                            <div key={e.semester} className="text-muted-foreground">Sem {e.semester}: {e.count} assigned{e.regulations.length > 0 ? ` (${e.regulations.join(", ")})` : ""}</div>
-                          ))}
-                        </>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </CardContent>
-        )}
       </Card>
+
+      {scope && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Current course structure</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              {scope.course.name}, {scope.department.name}. Subjects currently assigned to each semester, all regulations.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {teachableYears.length === 0 && (
+              <p className="text-sm text-red-600 flex items-center gap-1.5"><XCircle className="h-4 w-4 shrink-0" />No years are assigned to this department for this course. Set its Years Taught before importing.</p>
+            )}
+            {Array.from({ length: scope.scope.durationYears }, (_, i) => i + 1).map((y) => {
+              const taught = teachableYears.includes(y);
+              const configured = scope.scope.semestersByYear[y] ?? [];
+              const slots = scope.existing.filter((e) => e.year === y);
+              const semesters = Array.from(new Set([...configured, ...slots.map((e) => e.semester)])).sort((a, b) => a - b);
+              const cov = scope.regulationCoverage.find((c) => c.year === y)?.regulations ?? [];
+              return (
+                <section key={y} className={`rounded-md border ${taught ? "" : "opacity-60"}`}>
+                  <div className="flex flex-wrap items-baseline justify-between gap-2 border-b bg-muted/40 px-3 py-2">
+                    <h3 className="text-sm font-semibold">Year {y}</h3>
+                    <p className="text-xs text-muted-foreground">
+                      {taught ? "Assigned to this department" : "Not assigned to this department"}
+                      {cov.length > 0 && `. Current batch regulation: ${cov.join(", ")}`}
+                    </p>
+                  </div>
+                  {semesters.length === 0 ? (
+                    <p className="px-3 py-2 text-sm text-muted-foreground">No semesters configured in Course-Year Timings.</p>
+                  ) : (
+                    <div className="grid grid-cols-1 divide-y md:grid-cols-2 md:divide-x md:divide-y-0">
+                      {semesters.map((sem) => {
+                        const subjects = slots.find((e) => e.semester === sem)?.subjects ?? [];
+                        return (
+                          <div key={sem} className="min-w-0 px-3 py-2 space-y-1.5">
+                            <p className="text-sm font-medium">
+                              Semester {sem}
+                              <span className="ml-2 font-normal text-muted-foreground">
+                                {subjects.length} subject{subjects.length !== 1 ? "s" : ""}
+                                {!configured.includes(sem) && ", not in Course-Year Timings"}
+                              </span>
+                            </p>
+                            {subjects.length === 0 ? (
+                              <p className="text-xs text-muted-foreground">No subjects assigned.</p>
+                            ) : (
+                              <div className="overflow-x-auto">
+                                <table className="w-full text-xs">
+                                  <thead>
+                                    <tr className="text-left text-muted-foreground">
+                                      <th className="py-1 pr-2 font-medium">Code</th>
+                                      <th className="py-1 pr-2 font-medium">Subject</th>
+                                      <th className="py-1 pr-2 font-medium whitespace-nowrap">L-T-P</th>
+                                      <th className="py-1 pr-2 font-medium">Credits</th>
+                                      <th className="py-1 font-medium">Regulation</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {subjects.map((sub) => (
+                                      <tr key={sub.subjectId} className="border-t">
+                                        <td className="py-1 pr-2 font-mono whitespace-nowrap">{sub.code}</td>
+                                        <td className="py-1 pr-2">{sub.name}</td>
+                                        <td className="py-1 pr-2 tabular-nums whitespace-nowrap">{sub.lectureHours}-{sub.tutorialHours}-{sub.practicalHours}</td>
+                                        <td className="py-1 pr-2 tabular-nums">{sub.credits}</td>
+                                        <td className={`py-1 ${sub.regulation === scope.regulation ? "" : "text-amber-700"}`}>{sub.regulation || "-"}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </section>
+              );
+            })}
+          </CardContent>
+        </Card>
+      )}
 
       {canUpload && (
         <>

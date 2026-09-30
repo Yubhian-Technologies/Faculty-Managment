@@ -5,7 +5,6 @@ import Link from "next/link";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TeachingAssignmentsEditor } from "@/components/timetable/TeachingAssignmentsEditor";
@@ -13,7 +12,7 @@ import { useRegulationCourseDepartmentPicker } from "@/lib/subjects/hooks/useReg
 import { regulationsForCourseYearByBatch, fedYears } from "@/lib/college/academicStructure";
 import { currentAcademicStartYear } from "@/lib/college/academicSession";
 import { managerTeachingYears } from "@/lib/departments/managedBranches";
-import { ArrowLeft, BookOpen, AlertTriangle } from "lucide-react";
+import { ArrowLeft, AlertTriangle } from "lucide-react";
 
 function ordinalYear(year: number) {
   const suffix = year === 1 ? "st" : year === 2 ? "nd" : year === 3 ? "rd" : "th";
@@ -29,14 +28,20 @@ function ordinalYear(year: number) {
 export default function AcademicsTeachingAssignmentsPage() {
   const picker = useRegulationCourseDepartmentPicker();
   const [selectedYear, setSelectedYear] = useState("");
+  // The year the editor was last loaded for - the editor only shows while
+  // every filter still matches what was loaded (Load button).
+  const [loadedYear, setLoadedYear] = useState("");
+  const isLoaded = picker.isLoaded && loadedYear === selectedYear;
 
   // Same narrowing as the old assign-semester page's own yearOptions -
   // which years this exact department actually teaches this course, then
   // filtered to the years the chosen Regulation's own batch coverage governs.
+  // Built from the catalog entry (already loaded for the dropdowns), so the
+  // Year can be picked before Load fetches the department's course.
   const yearOptions = useMemo(() => {
-    if (!picker.selectedCourse || !picker.selectedDepartment) return [];
-    const courseYears = Array.from({ length: picker.selectedCourse.durationYears }, (_, i) => i + 1);
-    const catalogId = picker.selectedCourse.catalogId;
+    if (!picker.selectedCatalogItem || !picker.selectedDepartment) return [];
+    const courseYears = Array.from({ length: Number(picker.selectedCatalogItem.durationYears) || 0 }, (_, i) => i + 1);
+    const catalogId = picker.selectedCatalogItem.id;
     const assigned = managerTeachingYears(picker.allDepartments, picker.selectedDepartment, catalogId);
     const teachableYears = assigned.length > 0
       ? courseYears.filter((y) => assigned.includes(y))
@@ -50,7 +55,14 @@ export default function AcademicsTeachingAssignmentsPage() {
         picker.selectedCatalogItem!.regulations,
       ).includes(picker.selectedRegulation)
     );
-  }, [picker.selectedCourse, picker.selectedDepartment, picker.allDepartments, picker.selectedCatalogItem, picker.selectedRegulation]);
+  }, [picker.selectedDepartment, picker.allDepartments, picker.selectedCatalogItem, picker.selectedRegulation]);
+
+  const canLoad = !!picker.selectedRegulation && !!picker.selectedCatalogId && !!picker.selectedDepartmentId && !!selectedYear;
+  async function handleLoad() {
+    const year = selectedYear;
+    const { ok } = await picker.load();
+    if (ok) setLoadedYear(year);
+  }
 
   return (
     <div className="max-w-5xl space-y-6">
@@ -66,12 +78,7 @@ export default function AcademicsTeachingAssignmentsPage() {
 
       <Card className="border-primary/20 bg-muted/20">
         <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center justify-between">
-            <span className="flex items-center gap-2"><BookOpen className="h-4 w-4 text-primary" />Regulation, Course, Department &amp; Year</span>
-            {picker.selectedCourse && picker.selectedDepartment && selectedYear && (
-              <Badge variant="secondary" className="font-mono text-xs">{picker.selectedDepartment.name} · {ordinalYear(Number(selectedYear))}</Badge>
-            )}
-          </CardTitle>
+          <CardTitle className="text-base">Regulation, Course, Department and Year</CardTitle>
         </CardHeader>
         <CardContent className="grid grid-cols-1 gap-3 sm:grid-cols-4">
           <div className="space-y-1.5">
@@ -108,22 +115,30 @@ export default function AcademicsTeachingAssignmentsPage() {
           </div>
           <div className="space-y-1.5">
             <Label>Year</Label>
-            <Select value={selectedYear} onValueChange={setSelectedYear} disabled={!picker.selectedCourse || picker.isLoadingCourses}>
-              <SelectTrigger><SelectValue placeholder={picker.isLoadingCourses ? "Loading…" : !picker.selectedDepartmentId ? "Select a department first" : "Select year"} /></SelectTrigger>
+            <Select value={selectedYear} onValueChange={setSelectedYear} disabled={!picker.selectedDepartmentId}>
+              <SelectTrigger><SelectValue placeholder={!picker.selectedDepartmentId ? "Select a department first" : "Select year"} /></SelectTrigger>
               <SelectContent>
                 {yearOptions.map((y) => <SelectItem key={y} value={String(y)}>{ordinalYear(y)}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
         </CardContent>
-        {picker.selectedDepartmentId && !picker.isLoadingCourses && !picker.selectedCourse && (
+        <CardContent className="pt-0">
+          <Button onClick={() => void handleLoad()} disabled={!canLoad || picker.isLoadingData} loading={picker.isLoadingData}>
+            Load
+          </Button>
+          {!isLoaded && canLoad && !picker.isLoadingData && (
+            <span className="ml-3 text-sm text-muted-foreground">Click Load to open this course-year&apos;s teaching assignments.</span>
+          )}
+        </CardContent>
+        {picker.isLoaded && picker.selectedDepartmentId && !picker.isLoadingCourses && !picker.selectedCourse && (
           <CardContent className="pt-0">
             <p className="text-sm text-amber-600 flex items-center gap-1.5"><AlertTriangle className="h-3.5 w-3.5" />{picker.selectedDepartment?.name} doesn&apos;t teach this course yet.</p>
           </CardContent>
         )}
       </Card>
 
-      {picker.selectedCourse && selectedYear && (
+      {isLoaded && picker.selectedCourse && selectedYear && (
         <TeachingAssignmentsEditor
           courseId={picker.selectedCourse.id}
           year={selectedYear}

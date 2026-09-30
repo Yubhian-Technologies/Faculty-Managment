@@ -225,6 +225,23 @@ describe("Course Structure import - end to end", () => {
     expect(res.warnings.some((w) => /already has subjects under R20/.test(w.message))).toBe(true);
   });
 
+  it("scope lists the subjects assigned under each year and semester", async () => {
+    await service.run(request([row(), row({ year: "3", semester: "5", name: "Operating Systems", code: "CS301" })]), "commit");
+    const scope = await service.getScope("col1", "c-cse", "cse", "R23");
+    expect(scope.existing.map((e) => [e.year, e.semester, e.subjects.map((x) => x.code)])).toEqual([[2, 3, ["CS201"]], [3, 5, ["CS301"]]]);
+    expect(scope.existing[0].subjects[0]).toMatchObject({ name: "Data Structures", regulation: "R23", lectureHours: 3, credits: 3 });
+  });
+
+  it("carries over and removes an old-format assignment of a reused subject", async () => {
+    await service.run(request([row()], { courseId: "c-ai", departmentId: "ai" }), "commit");
+    const [master] = docs("subjects");
+    put(`subjectSemesterAssignments/${master.id}_cse`, { subjectId: master.id, departmentId: "cse", courseId: "c-cse", semester: 3, createdAt: "2024-01-01" });
+    const res = await service.run(request([row()]), "commit");
+    expect(res.plan[0]).toMatchObject({ master: "reuse", instance: "reactivate" });
+    expect(db.store.has(`${C}/subjectSemesterAssignments/${master.id}_cse`)).toBe(false);
+    expect(db.store.get(`${C}/subjectSemesterAssignments/${master.id}_cse_3`)).toMatchObject({ createdAt: "2024-01-01", year: 2 });
+  });
+
   it("sub-department on its parent's course: assignment is the sub-department's, and Teaching Assignments finds it", async () => {
     const res = await service.run(request([row()], { courseId: "c-ai", departmentId: "ai-ds" }), "commit");
     expect(res.ok).toBe(true);
