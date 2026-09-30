@@ -8,7 +8,11 @@ import { getHodDepartmentScope, canHodEditDepartment, ownDepartmentNames } from 
 import { isTimetableInchargeForDepartment } from "@/lib/departments/timetableIncharge";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { isFacultyAvailable } from "@/types";
-import type { DayOfWeek, FacultyAssignmentRequest } from "@/types";
+import { matchesCurrentSemester, resolveCurrentSemester } from "@/lib/college/semester";
+import {
+  expandDeclaredBusy, loadUserRole, requesterRequestsLink, requesterTimetableLink,
+} from "@/lib/timetable/declaredBusy";
+import type { CourseYearTiming, DayOfWeek, FacultyAssignmentRequest, TimetableDraft, TimetableSlot } from "@/types";
 
 const VALID_DAYS = new Set<DayOfWeek>(["MON", "TUE", "WED", "THU", "FRI", "SAT"]);
 
@@ -35,7 +39,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       facultyId?: string;
       facultyName?: string;
       declineReason?: string;
-      busyPeriods?: { day?: string; period?: number }[];
+      busyPeriods?: { day?: string; period?: number; year?: number }[];
     };
 
     const db = getAdminDb();
@@ -83,7 +87,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       if (raw.length > 100) {
         return NextResponse.json({ error: "Too many busy periods" }, { status: 400 });
       }
-      const busyPeriods: { day: DayOfWeek; period: number }[] = [];
+      const busyPeriods: { day: DayOfWeek; period: number; year?: number }[] = [];
       for (const bp of raw) {
         if (!bp.day || !VALID_DAYS.has(bp.day as DayOfWeek)) {
           return NextResponse.json({ error: `Invalid day: ${bp.day}` }, { status: 400 });
@@ -91,14 +95,71 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         if (!Number.isInteger(bp.period) || (bp.period as number) < 1) {
           return NextResponse.json({ error: "Each period must be a positive number" }, { status: 400 });
         }
-        busyPeriods.push({ day: bp.day as DayOfWeek, period: bp.period as number });
+        if (bp.year != null && (!Number.isInteger(bp.year) || bp.year < 1 || bp.year > 10)) {
+          return NextResponse.json({ error: `Invalid year: ${bp.year}` }, { status: 400 });
+        }
+        busyPeriods.push({
+          day: bp.day as DayOfWeek, period: bp.period as number, ...(bp.year != null ? { year: bp.year } : {}),
+        });
       }
-      // De-dupe by day+period - a re-added entry shouldn't double up.
-      const deduped = Array.from(
-        new Map(busyPeriods.map((bp) => [`${bp.day}:${bp.period}`, bp])).values()
-      );
+      // De-dupe by day+period+year - a re-added entry shouldn't double up, but
+      // the same period number in two different years is two different hours.
+      const busyKey = (bp: { day: string; period: number; year?: number }) => `${bp.day}:${bp.period}:${bp.year ?? ""}`;
+      const deduped = Array.from(new Map(busyPeriods.map((bp) => [busyKey(bp), bp])).values());
+      const previousKeys = new Set((reqData.busyPeriods ?? []).map(busyKey));
+      const added = deduped.filter((bp) => !previousKeys.has(busyKey(bp)));
       await reqRef.update({ busyPeriods: deduped, updatedAt: now });
-      return NextResponse.json({ ok: true, busyPeriods: deduped });
+
+      // Newly busy cells never re-validate what the requester already placed -
+      // surface any that now clash with their draft or live timetable, so they
+      // aren't left with a placement that silently breaks the lender's
+      // declaration (publish would reject it much later).
+      const conflicts: string[] = [];
+      if (added.length > 0 && reqData.allocatedFacultyId) {
+        const timingSnaps = await Promise.all(
+          Array.from(new Set([Number(reqData.year), ...added.map((bp) => bp.year).filter((y): y is number => y != null)])).map(async (y) => {
+            const snap = await collegeRef.collection("courseYearTimings").doc(`${reqData.courseId}_year${y}`).get();
+            return [y, snap.exists ? (snap.data() as CourseYearTiming) : null] as const;
+          }),
+        );
+        const timings = new Map(timingSnaps);
+        const sectionTiming = timings.get(Number(reqData.year)) ?? null;
+        const newCells = expandDeclaredBusy(added, Number(reqData.year), sectionTiming, (y) => timings.get(y) ?? null);
+        const currentSemester = resolveCurrentSemester(sectionTiming);
+        const hit = new Set<string>();
+
+        const [slotsSnap, draftsSnap] = await Promise.all([
+          collegeRef.collection("timetableSlots").where("sectionId", "==", reqData.sectionId).get(),
+          collegeRef.collection("timetableDrafts").where("sectionId", "==", reqData.sectionId).get(),
+        ]);
+        for (const d of slotsSnap.docs) {
+          const sl = d.data() as TimetableSlot;
+          if (sl.facultyId !== reqData.allocatedFacultyId || !matchesCurrentSemester(sl.semester, currentSemester)) continue;
+          if (newCells.has(`${sl.day}:${sl.periodNumber}`)) hit.add(`${sl.day}:${sl.periodNumber}`);
+        }
+        for (const d of draftsSnap.docs) {
+          const draft = d.data() as TimetableDraft;
+          if (!matchesCurrentSemester(draft.semester ?? null, currentSemester)) continue;
+          for (const sl of draft.slots ?? []) {
+            if (sl.facultyId !== reqData.allocatedFacultyId) continue;
+            if (newCells.has(`${sl.day}:${sl.periodNumber}`)) hit.add(`${sl.day}:${sl.periodNumber}`);
+          }
+        }
+        for (const cell of hit) {
+          const [day, period] = cell.split(":");
+          conflicts.push(`${day} P${period}`);
+        }
+        if (conflicts.length > 0) {
+          const role = await loadUserRole(db, session.collegeId, reqData.requestedBy);
+          await notify(
+            db, session.collegeId, reqData.requestedBy, "FACULTY_ASSIGNMENT_ALLOCATED",
+            "Busy period clashes with your timetable",
+            `${reqData.targetDepartmentName} marked ${reqData.allocatedFacultyName ?? "the allocated faculty"} busy at ${conflicts.join(", ")}, where ${reqData.subjectName} (Section ${reqData.sectionName}) is already placed - move it before publishing`,
+            requesterTimetableLink(role, reqData),
+          );
+        }
+      }
+      return NextResponse.json({ ok: true, busyPeriods: deduped, conflicts });
     }
 
     // Fired once the lending side considers this lend "ready" - whether or
@@ -109,11 +170,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       if (reqData.status !== "ALLOCATED") {
         return NextResponse.json({ error: "This request hasn't been allocated yet" }, { status: 409 });
       }
+      const requesterRole = await loadUserRole(db, session.collegeId, reqData.requestedBy);
       await notify(
         db, session.collegeId, reqData.requestedBy, "FACULTY_ASSIGNMENT_ALLOCATED",
         "Ready to schedule",
         `${reqData.targetDepartmentName} shared ${reqData.allocatedFacultyName ?? "the allocated faculty"}'s busy periods for ${reqData.subjectName} (Section ${reqData.sectionName}) - you can now place it on your Timetable page`,
-        `/hod/timetable/${reqData.courseId}/${reqData.year}/${reqData.sectionId}`
+        requesterTimetableLink(requesterRole, reqData)
       );
       return NextResponse.json({ ok: true });
     }
@@ -122,13 +184,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       return NextResponse.json({ error: "This request has already been handled" }, { status: 409 });
     }
 
+    const requesterRole = await loadUserRole(db, session.collegeId, reqData.requestedBy);
     if (body.action === "decline") {
       await reqRef.update({ status: "DECLINED", declineReason: body.declineReason ?? "", updatedAt: now });
       await notify(
         db, session.collegeId, reqData.requestedBy, "FACULTY_ASSIGNMENT_DECLINED",
         "Faculty assignment request declined",
         `${reqData.targetDepartmentName} couldn't lend a faculty member for ${reqData.subjectName} (Section ${reqData.sectionName})`,
-        "/hod/assignment-requests"
+        requesterRequestsLink(requesterRole)
       );
       return NextResponse.json({ ok: true });
     }
@@ -215,7 +278,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       db, session.collegeId, reqData.requestedBy, "FACULTY_ASSIGNMENT_ALLOCATED",
       "Faculty assignment fulfilled",
       `${reqData.targetDepartmentName} assigned ${allocatedName || "a faculty member"} to ${reqData.subjectName} (Section ${reqData.sectionName}) - pick its weekly periods on the Timetable page`,
-      "/hod/assignment-requests"
+      requesterRequestsLink(requesterRole)
     );
 
     return NextResponse.json({ ok: true, teachingAssignmentId: taRef.id });

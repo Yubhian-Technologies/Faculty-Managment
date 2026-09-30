@@ -251,7 +251,11 @@ export interface FacultyAssignmentRequest {
   // busyFaculty so the requesting HOD's own "Add a subject" placement is
   // blocked at these cells exactly like a real double-booking - see
   // src/lib/timetable/loadContext.ts.
-  busyPeriods?: { day: DayOfWeek; period: number }[];
+  // `year` is the course-year whose period numbering `period` is expressed in
+  // (the lender picks it explicitly); absent on entries written before it was
+  // stored, which are read in the requesting section's own numbering. Entries
+  // for another year are mapped by clock time - see lib/timetable/declaredBusy.ts.
+  busyPeriods?: { day: DayOfWeek; period: number; year?: number }[];
   declineReason?: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;

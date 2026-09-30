@@ -79,20 +79,12 @@ export function validatePlacement(
       .filter((k) => !ignore.has(k)),
   );
   const facultyBusy = ctx.busyFaculty.get(facultyId) ?? new Set<string>();
-  const facultyDeclaredBusy = ctx.declaredBusyFaculty.get(facultyId) ?? new Set<string>();
 
   for (let i = 0; i < blockSize; i++) {
     const p = startPeriod + i;
     const key = cellKey(day, p);
     if (pinned.has(key)) return `Period ${p} on ${day} holds a pinned slot.`;
     if (occupied.has(key) && !opts.allowSplit) return `This section already has a subject at ${day} period ${p}.`;
-    // A lending department's own busyPeriods declaration (see
-    // AssignmentRequestsPanel) never created a real TimetableSlot anywhere -
-    // "already teaching another section" would be misleading for it, so this
-    // gets its own, accurate wording instead.
-    if (facultyDeclaredBusy.has(key)) {
-      return `${facultyName} already has a period on ${day} period ${p}.`;
-    }
     if (facultyBusy.has(key)) {
       return `${facultyName} is already teaching another section at ${day} period ${p}.`;
     }

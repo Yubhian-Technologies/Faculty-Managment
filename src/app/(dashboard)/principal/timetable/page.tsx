@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { toast } from "@/hooks/useToast";
+import { useAuth } from "@/hooks/useAuth";
+import { FacultyLeisureFilter } from "@/components/timetable/FacultyLeisureFilter";
 import { currentWeekDates } from "@/lib/utils";
 import { isoDateKey } from "@/lib/leave/dayCounter";
 import { sectionDisplayLabel } from "@/lib/sections/sectionLabel";
@@ -17,7 +19,14 @@ import type { Course, Department, Section, CourseYearTiming, TimetableSlot, Subj
 // VICE_PRINCIPAL reaches this page through its inherited access to /principal/*
 // (see ROLE_PATH_MAP in src/proxy.ts).
 
+// Roles that also get the college-wide "who is free at this time" filter. The
+// page is re-exported for Exam Cell and Academics, which do not (the
+// /api/college/faculty-leisure guard enforces the same list).
+const LEISURE_ROLES = ["PRINCIPAL", "VICE_PRINCIPAL", "EXAM_CELL", "COLLEGE_ADMIN", "DIRECTOR", "SUPER_ADMIN"];
+
 export default function PrincipalTimetablePage() {
+  const { user } = useAuth();
+  const canSeeLeisure = LEISURE_ROLES.includes(user?.role ?? "");
   const [courses, setCourses] = useState<Course[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   // A Course doc belongs to one department, so the same programme (e.g. B.Tech)
@@ -29,6 +38,8 @@ export default function PrincipalTimetablePage() {
   const [semester, setSemester] = useState<number | null>(null);
   const [sections, setSections] = useState<Section[]>([]);
   const [sectionId, setSectionId] = useState("");
+  // Admission-batch filter ("" = every batch) narrowing the section list below.
+  const [batch, setBatch] = useState("");
   const [timing, setTiming] = useState<CourseYearTiming | null>(null);
   const [slots, setSlots] = useState<TimetableSlot[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
@@ -50,6 +61,7 @@ export default function PrincipalTimetablePage() {
     setDepartmentId("");
     setYear("");
     setSemester(null);
+    setBatch("");
     setSections([]);
     setSectionId("");
     setTiming(null);
@@ -63,6 +75,7 @@ export default function PrincipalTimetablePage() {
     setDepartmentId(id);
     setYear("");
     setSemester(null);
+    setBatch("");
     setSections([]);
     setSectionId("");
     setTiming(null);
@@ -71,6 +84,7 @@ export default function PrincipalTimetablePage() {
   function chooseYear(y: string) {
     setYear(y);
     setSemester(null);
+    setBatch("");
     setSections([]);
     setSectionId("");
     setTiming(null);
@@ -120,6 +134,20 @@ export default function PrincipalTimetablePage() {
     return assigned.length > 0 ? courseYears.filter((y) => assigned.includes(y)) : courseYears;
   })();
 
+  const batchOptions = useMemo(
+    () => Array.from(new Set(sections.map((s) => s.batch).filter(Boolean))).sort(),
+    [sections]
+  );
+  const visibleSections = useMemo(
+    () => (batch ? sections.filter((s) => s.batch === batch) : sections),
+    [sections, batch]
+  );
+  function chooseBatch(b: string) {
+    setBatch(b);
+    const list = b ? sections.filter((s) => s.batch === b) : sections;
+    setSectionId(list[0]?.id ?? "");
+  }
+
   const semesterOptions = useMemo(() => {
     if (!timing) return [];
     const sems = timing.semesters;
@@ -161,6 +189,7 @@ export default function PrincipalTimetablePage() {
           .filter((sec) => courseIdsForName.has(sec.courseId))
           .sort((a, b) => a.name.localeCompare(b.name));
         setSections(list);
+        setBatch("");
         setSectionId(list[0]?.id ?? "");
         setTiming((t.timings ?? []).find((x) => Number(x.year) === Number(year)) ?? null);
       } catch {
@@ -261,23 +290,39 @@ export default function PrincipalTimetablePage() {
          </div>
 
          <div className="space-y-1.5">
+           <label className="text-sm font-medium" htmlFor="tt-batch">Batch</label>
+           <select
+             id="tt-batch"
+             className={selectClass}
+             value={batch}
+             onChange={(e) => chooseBatch(e.target.value)}
+             disabled={batchOptions.length === 0}
+           >
+             <option value="">All batches</option>
+             {batchOptions.map((b) => <option key={b} value={b}>{b}</option>)}
+           </select>
+         </div>
+
+         <div className="space-y-1.5">
            <label className="text-sm font-medium" htmlFor="tt-section">Section</label>
            <select
              id="tt-section"
              className={selectClass}
              value={sectionId}
              onChange={(e) => setSectionId(e.target.value)}
-             disabled={sections.length === 0}
+             disabled={visibleSections.length === 0}
            >
-             {sections.length === 0 ? <option value="">No sections</option> : null}
+             {visibleSections.length === 0 ? <option value="">No sections</option> : null}
              {/* Department code included: a parent department and its
                  sub-departments each have their own "A". */}
-             {sections.map((s) => (
+             {visibleSections.map((s) => (
                <option key={s.id} value={s.id}>{sectionDisplayLabel(s, departments)}</option>
              ))}
            </select>
          </div>
       </div>
+
+      {canSeeLeisure && <FacultyLeisureFilter />}
 
       {!sectionId ? (
         <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">

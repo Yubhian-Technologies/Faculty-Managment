@@ -23,6 +23,8 @@ export default function HODTimetableViewPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [year, setYear] = useState("");
   const [sectionId, setSectionId] = useState("");
+  const [batch, setBatch] = useState("");
+  const [semester, setSemester] = useState<number | null>(null);
   const [timing, setTiming] = useState<CourseYearTiming | null>(null);
   const [slots, setSlots] = useState<TimetableSlot[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
@@ -57,25 +59,48 @@ export default function HODTimetableViewPage() {
     () => Array.from(new Set(sections.map((s) => Number(s.year)))).sort((a, b) => a - b),
     [sections]
   );
+  const batchOptions = useMemo(
+    () => Array.from(new Set(sections.filter((s) => String(s.year) === year).map((s) => s.batch).filter(Boolean))).sort(),
+    [sections, year]
+  );
   const sectionsForYear = useMemo(
     () =>
       sections
-        .filter((s) => String(s.year) === year)
+        .filter((s) => String(s.year) === year && (!batch || s.batch === batch))
         .sort((a, b) => sectionDisplayLabel(a, departments).localeCompare(sectionDisplayLabel(b, departments))),
-    [sections, year, departments]
+    [sections, year, batch, departments]
   );
   const section = sections.find((s) => s.id === sectionId) ?? null;
   const course = section ? courses.find((c) => c.id === section.courseId) : undefined;
-  const isLoadingGrid = Boolean(sectionId) && loadedFor !== `${sectionId}|${isoDateKey(weekStart)}`;
+  // Only present when the section's course-year has semesters configured.
+  const semesterOptions = useMemo(
+    () => (timing?.semesters ?? []).map((x) => x.semester).sort((a, b) => a - b),
+    [timing]
+  );
+  const effectiveSemester = semesterOptions.length === 0
+    ? null
+    : semester != null && semesterOptions.includes(semester) ? semester : semesterOptions[0];
+  const gridKey = `${sectionId}|${isoDateKey(weekStart)}|${effectiveSemester ?? ""}`;
+  const isLoadingGrid = Boolean(sectionId) && loadedFor !== gridKey;
 
   function chooseYear(y: string) {
     setYear(y);
+    setBatch("");
+    setSemester(null);
+    setSectionId("");
+    setTiming(null);
+    setSlots([]);
+  }
+  function chooseBatch(b: string) {
+    setBatch(b);
+    setSemester(null);
     setSectionId("");
     setTiming(null);
     setSlots([]);
   }
   function chooseSection(id: string) {
     setSectionId(id);
+    setSemester(null);
     setTiming(null);
     setSlots([]);
   }
@@ -99,11 +124,11 @@ export default function HODTimetableViewPage() {
 
   useEffect(() => {
     if (!sectionId) return;
-    const key = `${sectionId}|${isoDateKey(weekStart)}`;
+    const key = gridKey;
     let cancelled = false;
     void (async () => {
       try {
-        const d = await fetch(`/api/college/timetable-slots?sectionId=${encodeURIComponent(sectionId)}&week=${isoDateKey(weekStart)}`)
+        const d = await fetch(`/api/college/timetable-slots?sectionId=${encodeURIComponent(sectionId)}&week=${isoDateKey(weekStart)}${effectiveSemester != null ? "&semester=" + effectiveSemester : ""}`)
           .then((r) => r.json() as Promise<{ slots: TimetableSlot[]; subjects?: Subject[]; workingDays?: DayOfWeek[] }>);
         if (cancelled) return;
         setSlots(d.slots ?? []);
@@ -116,7 +141,7 @@ export default function HODTimetableViewPage() {
       }
     })();
     return () => { cancelled = true; };
-  }, [sectionId, weekStart]);
+  }, [sectionId, weekStart, effectiveSemester, gridKey]);
 
   const selectClass =
     "h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus:border-primary focus:outline-none";
@@ -125,12 +150,19 @@ export default function HODTimetableViewPage() {
     <div className="space-y-6">
       <PageHeader title="Timetable View" description="View and download published timetables for your sections" />
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:max-w-xl">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <div className="space-y-1.5">
           <label className="text-sm font-medium" htmlFor="ttv-year">Year</label>
           <select id="ttv-year" className={selectClass} value={year} onChange={(e) => chooseYear(e.target.value)} disabled={isLoading}>
             <option value="">{!isLoading && years.length === 0 ? "No sections" : "Select a year"}</option>
             {years.map((y) => <option key={y} value={y}>{ordinalYear(y)}</option>)}
+          </select>
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium" htmlFor="ttv-batch">Batch</label>
+          <select id="ttv-batch" className={selectClass} value={batch} onChange={(e) => chooseBatch(e.target.value)} disabled={!year || batchOptions.length === 0}>
+            <option value="">All batches</option>
+            {batchOptions.map((b) => <option key={b} value={b}>{b}</option>)}
           </select>
         </div>
         <div className="space-y-1.5">
@@ -140,6 +172,19 @@ export default function HODTimetableViewPage() {
             {sectionsForYear.map((s) => (
               <option key={s.id} value={s.id}>{sectionDisplayLabel(s, departments)}</option>
             ))}
+          </select>
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium" htmlFor="ttv-semester">Semester</label>
+          <select
+            id="ttv-semester"
+            className={selectClass}
+            value={effectiveSemester != null ? String(effectiveSemester) : ""}
+            onChange={(e) => setSemester(Number(e.target.value))}
+            disabled={!timing || semesterOptions.length === 0}
+          >
+            <option value="">{!timing ? "Select a section" : "No semesters"}</option>
+            {semesterOptions.map((n) => <option key={n} value={n}>Semester {n}</option>)}
           </select>
         </div>
       </div>
@@ -166,6 +211,7 @@ export default function HODTimetableViewPage() {
           courseName={course?.name}
           departmentName={departments.find((d) => d.name === section?.department)?.name ?? section?.department}
           academicYear={slots[0]?.academicYear}
+          semesterLabel={effectiveSemester != null ? `Semester ${effectiveSemester}` : undefined}
           workingDays={workingDays}
           weekStart={weekStart}
           onWeekChange={setWeekStart}
