@@ -31,7 +31,7 @@ const LIVENESS_STEPS = ["Blink your eyes", "Tilt your head to the left", "Look s
 const STEP_MIN_DISPLAY_MS = 1500;
 const STEP_CONFIRM_HOLD_MS = 1300;
 
-type Stage = "init" | "camera-ready" | "guided-liveness" | "capturing" | "verifying" | "submitting" | "success" | "error";
+type Stage = "init" | "camera-ready" | "guided-liveness" | "capturing" | "verifying" | "late-reason" | "submitting" | "success" | "error";
 
 interface MarkAttendanceDialogProps {
   // "register" runs the one-time enrollment flow (capture → extract → store
@@ -65,6 +65,9 @@ export function MarkAttendanceDialog({ mode, open, onOpenChange, onSuccess }: Ma
   // no reason regardless of what this flag decided.
   const [isLate, setIsLate] = useState(false);
   const [lateReason, setLateReason] = useState("");
+  // Held between face verification and the submit that follows the late-reason
+  // step, so the reason screen does not have to re-run the match.
+  const verifiedDistanceRef = useRef<number | null>(null);
 
   const isRegister = mode === "register";
   const label = mode === "check-in" ? "Check In" : mode === "check-out" ? "Check Out" : "Register Face";
@@ -97,6 +100,7 @@ export function MarkAttendanceDialog({ mode, open, onOpenChange, onSuccess }: Ma
     setStage("init");
     setErrorMsg("");
     setUserCoords(null);
+    verifiedDistanceRef.current = null;
 
     if (mode === "check-in") {
       setIsLate(isLateCheckIn(nowInIndia().timeHHMM));
@@ -312,8 +316,35 @@ export function MarkAttendanceDialog({ mode, open, onOpenChange, onSuccess }: Ma
         return;
       }
 
-      setStage("submitting");
       stopCamera();
+
+      // The face matched and the location is in hand, so the check-in is going
+      // to stand - only now is there anything to explain. Asking up front made
+      // people justify a check-in that might still have failed on face match or
+      // location, and it sat in front of the camera for everyone whose clock
+      // read late here but not on the server.
+      if (mode === "check-in" && isLate) {
+        verifiedDistanceRef.current = distance;
+        setStage("late-reason");
+        return;
+      }
+
+      await submitAttendance(distance);
+    } catch (err) {
+      console.error("[MarkAttendanceDialog] capture failed", err);
+      fail("Something went wrong verifying your face. Please try again.");
+    }
+  }
+
+  // The write itself - reached straight from handleCapture when nothing is
+  // owed, or from the late-reason screen once the reason is filled in.
+  async function submitAttendance(distance: number) {
+    if (!coordsRef.current) {
+      fail("Still waiting on your location — check location permissions and try again.");
+      return;
+    }
+    setStage("submitting");
+    try {
       const res = await fetch(`/api/college/attendance/${mode}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -334,8 +365,8 @@ export function MarkAttendanceDialog({ mode, open, onOpenChange, onSuccess }: Ma
       setStage("success");
       onSuccess();
     } catch (err) {
-      console.error("[MarkAttendanceDialog] capture failed", err);
-      fail("Something went wrong verifying your face. Please try again.");
+      console.error("[MarkAttendanceDialog] submit failed", err);
+      fail("Something went wrong recording your attendance. Please try again.");
     }
   }
 
@@ -364,7 +395,7 @@ export function MarkAttendanceDialog({ mode, open, onOpenChange, onSuccess }: Ma
           );
         })()}
 
-        {mode === "check-in" && isLate && (stage === "init" || stage === "camera-ready") && (
+        {mode === "check-in" && isLate && stage === "late-reason" && (
           <div className="space-y-1.5">
             <Label htmlFor="late-reason" className="text-sm font-medium text-amber-700">
               You&rsquo;re checking in late — why?
@@ -387,6 +418,12 @@ export function MarkAttendanceDialog({ mode, open, onOpenChange, onSuccess }: Ma
               <p className="font-medium">
                 {isRegister ? "Face registered successfully" : `${label} recorded at ${resultTime}`}
               </p>
+            </div>
+          ) : stage === "late-reason" ? (
+            <div className="flex flex-col items-center gap-2 py-6 text-center">
+              <CheckCircle2 className="h-10 w-10 text-green-600" />
+              <p className="text-sm font-medium">Face verified &mdash; you&rsquo;re on campus</p>
+              <p className="text-xs text-muted-foreground">Add your reason above to finish checking in.</p>
             </div>
           ) : stage === "error" ? (
             <div className="flex flex-col items-center gap-2 py-6 text-center">
@@ -435,12 +472,28 @@ export function MarkAttendanceDialog({ mode, open, onOpenChange, onSuccess }: Ma
             <Button variant="outline" onClick={() => void startCamera()}>Try Again</Button>
           )}
           {stage === "camera-ready" && (
-            <Button
-              onClick={() => void handleStart()}
-              disabled={mode === "check-in" && isLate && !lateReason.trim()}
-            >
+            <Button onClick={() => void handleStart()}>
               {isRegister ? <ScanFace className="h-4 w-4 mr-1.5" /> : <Camera className="h-4 w-4 mr-1.5" />}
               {isRegister ? "Start Registration" : `Start & ${label}`}
+            </Button>
+          )}
+          {stage === "late-reason" && (
+            <Button
+              onClick={() => {
+                const distance = verifiedDistanceRef.current;
+                // Only reachable if the stage was set without a match behind
+                // it; submitting a made-up distance would record a check-in
+                // that never passed verification.
+                if (distance === null) {
+                  fail("Something went wrong — please try again.");
+                  return;
+                }
+                void submitAttendance(distance);
+              }}
+              disabled={!lateReason.trim()}
+            >
+              <Camera className="h-4 w-4 mr-1.5" />
+              {label}
             </Button>
           )}
           {stage === "success" && (
