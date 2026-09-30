@@ -135,6 +135,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Exam Configuration", href: "/exam-cell/configure", iconName: "ClipboardList", roles: ["EXAM_CELL"] },
   { label: "Exam Cell Guidelines", href: "/exam-cell/guidelines", iconName: "BookOpen", roles: ["EXAM_CELL"] },
   { label: "Mid Timings & Dates", href: "/exam-cell/mid-timings", iconName: "CalendarRange", roles: ["EXAM_CELL"] },
+  { label: "Timetable View", href: "/exam-cell/timetable-view", iconName: "CalendarDays", roles: ["EXAM_CELL"] },
   { label: "Settings", href: "/exam-cell/settings", iconName: "Settings2", roles: ["EXAM_CELL"] },
   { label: "Circulars", href: "/exam-cell/circulars", iconName: "ScrollText", roles: ["EXAM_CELL"] },
   { label: "Attendance Reports", href: "/exam-cell/attendance-report", iconName: "BarChart3", roles: ["EXAM_CELL"] },
@@ -270,6 +271,7 @@ export const NAV_ITEMS: NavItem[] = [
   // Sits directly below Teaching Assignments: subjects are assigned there first,
   // then scheduled here.
   { label: "Timetable", href: "/hod/timetable", iconName: "CalendarDays", roles: ["HOD"], module: "timetable-incharge" },
+  { label: "Timetable View", href: "/hod/timetable-view", iconName: "CalendarSearch", roles: ["HOD"], module: "timetable-incharge" },
   { label: "Leave Approvals", href: "/hod/leave-approvals", iconName: "CalendarClock", roles: ["HOD"], section: "Approvals", module: "leave-approvals" },
   { label: "Leave History", href: "/hod/leave-history", iconName: "History", roles: ["HOD"], module: "leave-approvals" },
   // Arrange cover for their department's faculty / supporting staff who have
@@ -357,6 +359,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Regulation", href: "/academics/regulation", iconName: "FileText", roles: ["ACADEMICS"], section: "Academics" },
   { label: "Course Structure", href: "/academics/course-structure", iconName: "Library", roles: ["ACADEMICS"], section: "Academics" },
   { label: "Syllabus", href: "/academics/syllabus", iconName: "BookOpen", roles: ["ACADEMICS"], section: "Academics" },
+  { label: "Timetable View", href: "/academics/timetable-view", iconName: "CalendarDays", roles: ["ACADEMICS"], section: "Academics" },
   { label: "My Profile", href: "/academics/profile", iconName: "UserCircle", roles: ["ACADEMICS"], section: "Personal" },
   { label: "My Leave", href: "/academics/leave", iconName: "CalendarClock", roles: ["ACADEMICS"] },
   { label: "Adjustment Requests", href: "/leave/adjustments", iconName: "UserCheck", roles: ["ACADEMICS"] },
