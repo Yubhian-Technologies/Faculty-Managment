@@ -192,7 +192,7 @@ export function validateCourseStructureRows(
     errors.push({ row: 0, message: "The file has no data rows." });
   }
   if (inputs.length > COURSE_STRUCTURE_MAX_ROWS) {
-    errors.push({ row: 0, message: `A single import can hold at most ${COURSE_STRUCTURE_MAX_ROWS} rows - this file has ${inputs.length}. Split it by year.` });
+    errors.push({ row: 0, message: `A single import can hold at most ${COURSE_STRUCTURE_MAX_ROWS} rows. This file has ${inputs.length}. Split it by year.` });
   }
 
   for (const { rowNumber, data } of inputs) {
@@ -227,7 +227,7 @@ export function validateCourseStructureRows(
     if (!name) err("name", "Subject Name is required.");
     const fileCode = text(data.code).toUpperCase();
     const code = fileCode || deriveSubjectCode(name);
-    if (!code) err("code", "Subject Code couldn't be derived - add a Subject Code.");
+    if (!code) err("code", "Subject Code couldn't be derived. Add a Subject Code.");
     else if (!/^[A-Z0-9][A-Z0-9\-/.]*$/.test(code)) err("code", `Subject Code "${code}" may only contain letters, digits, "-", "/" and ".".`);
     const shortCode = text(data.shortCode).toUpperCase() || undefined;
 
@@ -238,10 +238,10 @@ export function validateCourseStructureRows(
     if (!categoryRaw) err("category", "Category is required.");
     else {
       const resolved = resolveImportCategory(categoryRaw);
-      if (resolved.kind === "typo") err("category", `Category "${categoryRaw}" isn't recognised - did you mean ${resolved.suggestion}?`);
+      if (resolved.kind === "typo") err("category", `Category "${categoryRaw}" isn't recognised. Did you mean ${resolved.suggestion}?`);
       else {
         category = resolved.category;
-        if (resolved.kind === "custom") warn("category", `"${categoryRaw}" isn't a standard category - it will be saved as a custom category.`);
+        if (resolved.kind === "custom") warn("category", `"${categoryRaw}" isn't a standard category. It will be saved as a custom category.`);
       }
       if (category === "OTHER") {
         customCategory = text(data.customCategory) || undefined;
@@ -261,7 +261,7 @@ export function validateCourseStructureRows(
     const T = typeof tp === "number" ? tp : 0;
     const P = typeof pp === "number" ? pp : 0;
     const lptOk = typeof lp === "number" && typeof tp === "number" && typeof pp === "number";
-    if (lptOk && L + T + P === 0) warn("lectureHours", "L, T and P are all 0 - this subject won't take any timetable periods.");
+    if (lptOk && L + T + P === 0) warn("lectureHours", "L, T and P are all 0. This subject won't take any timetable periods.");
 
     // Type (optional - inferred from L/T/P when absent, same as before)
     let type: SubjectType = P > 0 && L === 0 ? "PRACTICAL" : "THEORY";
@@ -331,7 +331,7 @@ export function validateCourseStructureRows(
         row: r.rowNumber,
         field: "code",
         message: r.codeSource === "derived" && first.codeSource === "derived"
-          ? `"${r.name}" and "${first.name}" (row ${first.rowNumber}) both produce the code ${r.code} - add a Subject Code column with distinct codes.`
+          ? `"${r.name}" and "${first.name}" (row ${first.rowNumber}) both produce the code ${r.code}. Add a Subject Code column with distinct codes.`
           : `Code ${r.code} is already used by row ${first.rowNumber} for a different subject ("${first.name}").`,
       });
       continue;
@@ -354,7 +354,7 @@ export function validateCourseStructureRows(
       const shortKey = `${semKey}|${r.shortCode}`;
       const sameShort = shortInSemester.get(shortKey);
       if (sameShort && sameShort.code !== r.code) {
-        warnings.push({ row: r.rowNumber, field: "shortCode", message: `Short Code ${r.shortCode} is also used by row ${sameShort.rowNumber} in this semester - the timetable won't tell them apart.` });
+        warnings.push({ row: r.rowNumber, field: "shortCode", message: `Short Code ${r.shortCode} is also used by row ${sameShort.rowNumber} in this semester. The timetable won't tell them apart.` });
       } else shortInSemester.set(shortKey, r);
     }
   }

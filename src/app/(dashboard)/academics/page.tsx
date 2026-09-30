@@ -20,7 +20,7 @@ const QUICK_ACTIONS = [
     href: "/academics/course-structure",
     icon: Library,
     title: "Course Structure",
-    description: "Upload a course's subjects once - created and auto-assigned to the department's semesters, no separate Assign to Semester step.",
+    description: "Import a course's subjects from a spreadsheet and assign them to a department's semesters.",
   },
   {
     href: "/academics/teaching-assignments",

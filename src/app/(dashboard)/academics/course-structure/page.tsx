@@ -6,7 +6,6 @@ import Link from "next/link";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/useToast";
@@ -22,7 +21,7 @@ import {
 } from "@/lib/subjects/courseStructureValidation";
 import type { CourseStructureResult, CourseStructureScopeSummary } from "@/lib/subjects/services/CourseStructureImportService";
 import { SUBJECT_CATEGORY_LABELS } from "@/types";
-import { Download, Upload, CheckCircle2, XCircle, FileSpreadsheet, ArrowLeft, AlertTriangle, BookOpen, Layers, ShieldCheck, Loader2 } from "lucide-react";
+import { Download, Upload, XCircle, FileSpreadsheet, ArrowLeft, AlertTriangle, Loader2 } from "lucide-react";
 
 // Academics > Course Structure. One file = every subject of one
 // Regulation + Course + Department, created and assigned to that
@@ -219,7 +218,7 @@ function CourseStructurePageInner() {
 
       // Reference sheets - never read back (only the first sheet is imported).
       const info = workbook.addWorksheet("Allowed Years & Semesters");
-      info.addRow([`${scope.course.name} · ${scope.department.name} · Regulation ${scope.regulation}`]).font = { bold: true };
+      info.addRow([`${scope.course.name}, ${scope.department.name}, regulation ${scope.regulation}`]).font = { bold: true };
       info.addRow([]);
       info.addRow(["Year", "Semesters", "Regulation(s) currently teaching this year"]).font = { bold: true };
       for (const y of teachableYears) {
@@ -255,7 +254,7 @@ function CourseStructurePageInner() {
 
     const name = file.name.toLowerCase();
     const isExcel = name.endsWith(".xlsx");
-    if (name.endsWith(".xls")) { setParseError("Legacy .xls files aren't supported - re-save as .xlsx and try again."); return; }
+    if (name.endsWith(".xls")) { setParseError(".xls files aren't supported. Save the file as .xlsx and try again."); return; }
 
     try {
       const { rows: parsed, rowNumbers } = isExcel ? await parseExcelFileWithRowNumbers(file) : parseCSVWithRowNumbers(await readFileAsText(file));
@@ -282,7 +281,7 @@ function CourseStructurePageInner() {
       });
       if (inputs.length === 0) { setParseError("No subject rows found under the header."); return; }
       if (inputs.length > COURSE_STRUCTURE_MAX_ROWS) {
-        setParseError(`A single import can hold at most ${COURSE_STRUCTURE_MAX_ROWS} rows - this file has ${inputs.length}. Split it by year.`);
+        setParseError(`A single import can hold at most ${COURSE_STRUCTURE_MAX_ROWS} rows. This file has ${inputs.length}. Split it by year.`);
         return;
       }
       setUploaded({ fileName: file.name, inputs });
@@ -303,12 +302,12 @@ function CourseStructurePageInner() {
       const json = await res.json() as CourseStructureResult & { error?: string };
       if (res.status === 422) {
         setServerCheck(json);
-        toast({ variant: "destructive", title: "The file has problems - nothing was imported" });
+        toast({ variant: "destructive", title: "Nothing was imported. Fix the rows listed below." });
         return;
       }
       if (!res.ok) {
         // 409: configuration changed mid-import. Nothing was written; re-check.
-        toast({ variant: "destructive", title: json.error ?? "Import failed - nothing was saved" });
+        toast({ variant: "destructive", title: json.error ?? "Import failed. Nothing was saved." });
         setServerCheck(null);
         setUploaded((u) => (u ? { ...u } : u));
         return;
@@ -316,10 +315,10 @@ function CourseStructurePageInner() {
       setResult(json);
       const problems = json.verification?.problems.length ?? 0;
       toast(problems > 0
-        ? { variant: "destructive", title: `Imported, but ${problems} link check${problems !== 1 ? "s" : ""} failed - see below` }
+        ? { variant: "destructive", title: `Imported, but ${problems} assignment${problems !== 1 ? "s don't" : " doesn't"} match. See below.` }
         : { variant: "success", title: `${json.counts.instancesWritten} subject${json.counts.instancesWritten !== 1 ? "s" : ""} assigned to ${scope?.department.name}` });
     } catch {
-      toast({ variant: "destructive", title: "Network error - check the Course Structure before retrying" });
+      toast({ variant: "destructive", title: "Network error. Reload the page to see whether the import was saved before trying again." });
     } finally {
       setIsImporting(false);
     }
@@ -335,7 +334,7 @@ function CourseStructurePageInner() {
     <div className="max-w-5xl space-y-6">
       <PageHeader
         title="Course Structure"
-        description="Upload a course's subjects once - they're created and assigned to the selected department's semesters in one step, and only if every row is valid."
+        description="Import a course's subjects from one file and assign them to a department's semesters. Nothing is saved unless every row is valid."
         actions={
           <Button variant="outline" asChild>
             <Link href="/academics"><ArrowLeft className="h-4 w-4 mr-1" />Back to Academics</Link>
@@ -345,7 +344,7 @@ function CourseStructurePageInner() {
 
       <Card className="border-primary/20 bg-muted/20">
         <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2"><BookOpen className="h-4 w-4 text-primary" />Regulation, Course &amp; Department</CardTitle>
+          <CardTitle className="text-base">Regulation, Course and Department</CardTitle>
         </CardHeader>
         <CardContent className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <div className="space-y-1.5">
@@ -387,7 +386,7 @@ function CourseStructurePageInner() {
           </CardContent>
         )}
         {isLoadingScope && (
-          <CardContent className="pt-0 text-sm text-muted-foreground flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" />Loading years and semesters…</CardContent>
+          <CardContent className="pt-0 text-sm text-muted-foreground flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" />Loading years and semesters</CardContent>
         )}
         {scopeError && (
           <CardContent className="pt-0">
@@ -397,10 +396,10 @@ function CourseStructurePageInner() {
         {scope && (
           <CardContent className="pt-0 space-y-2">
             <p className="text-sm font-medium">
-              {scope.department.name} can receive these years and semesters of {scope.course.name}:
+              Years and semesters assigned to {scope.department.name} for {scope.course.name}
             </p>
             {teachableYears.length === 0 ? (
-              <p className="text-sm text-red-600 flex items-center gap-1.5"><XCircle className="h-4 w-4 shrink-0" />No years are assigned to this department for this course. Set its Years Taught first.</p>
+              <p className="text-sm text-red-600 flex items-center gap-1.5"><XCircle className="h-4 w-4 shrink-0" />No years are assigned to this department for this course. Set its Years Taught before importing.</p>
             ) : (
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
                 {Array.from({ length: scope.scope.durationYears }, (_, i) => i + 1).map((y) => {
@@ -418,7 +417,7 @@ function CourseStructurePageInner() {
                         <>
                           <div>{sems.length > 0 ? `Semesters ${sems.join(", ")}` : <span className="text-red-600">No semesters configured</span>}</div>
                           {cov.length > 0 && (
-                            <div className={cov.includes(scope.regulation) ? "text-muted-foreground" : "text-amber-700"}>Current batch: {cov.join(", ")}</div>
+                            <div className={cov.includes(scope.regulation) ? "text-muted-foreground" : "text-amber-700"}>Current batch regulation: {cov.join(", ")}</div>
                           )}
                           {existing.map((e) => (
                             <div key={e.semester} className="text-muted-foreground">Sem {e.semester}: {e.count} assigned{e.regulations.length > 0 ? ` (${e.regulations.join(", ")})` : ""}</div>
@@ -437,19 +436,17 @@ function CourseStructurePageInner() {
       {canUpload && (
         <>
           <Card>
-            <CardHeader><CardTitle className="text-base flex items-center gap-2"><span className="h-6 w-6 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center font-bold">1</span>Download Template</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="text-base">1. Download the template</CardTitle></CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-muted-foreground bg-muted/40 rounded-lg p-3">
-                {HINTS.map((h) => (
-                  <p key={h} className="flex items-start gap-1"><span className="text-primary mt-0.5">•</span>{h}</p>
-                ))}
-              </div>
-              <Button onClick={() => void downloadTemplate()} loading={isBuildingTemplate} className="gap-2"><Download className="h-4 w-4" />Download Template (.xlsx)</Button>
+              <ul className="list-disc pl-5 space-y-1 text-sm text-muted-foreground">
+                {HINTS.map((h) => <li key={h}>{h}</li>)}
+              </ul>
+              <Button onClick={() => void downloadTemplate()} loading={isBuildingTemplate} className="gap-2"><Download className="h-4 w-4" />Download template (.xlsx)</Button>
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader><CardTitle className="text-base flex items-center gap-2"><span className="h-6 w-6 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center font-bold">2</span>Upload Filled File</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="text-base">2. Upload the filled file</CardTitle></CardHeader>
             <CardContent className="space-y-4">
               <input ref={fileRef} type="file" accept=".csv,.xlsx" className="hidden" onChange={(e) => void handleFile(e)} />
               <button
@@ -460,8 +457,8 @@ function CourseStructurePageInner() {
               >
                 <FileSpreadsheet className="h-10 w-10 text-muted-foreground" />
                 <div className="text-center">
-                  <p className="font-medium text-sm">{uploaded ? `${uploaded.fileName} · click to replace` : "Click to select an Excel or CSV file"}</p>
-                  <p className="text-xs text-muted-foreground mt-1">.xlsx (first sheet) or .csv · up to {COURSE_STRUCTURE_MAX_ROWS} subjects</p>
+                  <p className="font-medium text-sm">{uploaded ? `${uploaded.fileName} (click to choose a different file)` : "Click to choose an Excel or CSV file"}</p>
+                  <p className="text-xs text-muted-foreground mt-1">.xlsx (first sheet is read) or .csv, up to {COURSE_STRUCTURE_MAX_ROWS} rows</p>
                 </div>
               </button>
               {parseError && (
@@ -481,14 +478,11 @@ function CourseStructurePageInner() {
             <Card>
               <CardHeader>
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <span className="h-6 w-6 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center font-bold">3</span>
-                    Check ({uploaded.inputs.length} rows)
-                  </CardTitle>
-                  <div className="flex items-center gap-2">
-                    {isChecking && <Badge variant="secondary" className="text-xs gap-1"><Loader2 className="h-3 w-3 animate-spin" />Checking with server</Badge>}
-                    {errors.length > 0 && <Badge variant="destructive" className="text-xs">{rowErrorCount || errors.length} row{(rowErrorCount || errors.length) !== 1 ? "s" : ""} with problems</Badge>}
-                    {readyToImport && <Badge className="text-xs gap-1 bg-green-600 hover:bg-green-600"><CheckCircle2 className="h-3 w-3" />All rows valid</Badge>}
+                  <CardTitle className="text-base">3. Check the rows ({uploaded.inputs.length})</CardTitle>
+                  <div className="flex items-center gap-3 text-sm">
+                    {isChecking && <span className="flex items-center gap-1.5 text-muted-foreground"><Loader2 className="h-3.5 w-3.5 animate-spin" />Checking against existing subjects</span>}
+                    {errors.length > 0 && <span className="text-red-600">{rowErrorCount || errors.length} row{(rowErrorCount || errors.length) !== 1 ? "s have" : " has"} problems</span>}
+                    {readyToImport && <span className="text-green-700 dark:text-green-400">All rows are valid</span>}
                     {errors.length > 0 && (
                       <Button size="sm" variant="outline" onClick={() => setShowProblemsOnly((v) => !v)}>
                         {showProblemsOnly ? "Show all rows" : "Show problem rows only"}
@@ -537,10 +531,9 @@ function CourseStructurePageInner() {
                                   {rowErrors.map((m, i) => <li key={i} className="flex gap-1"><AlertTriangle className="h-3 w-3 shrink-0 mt-0.5" />{m}</li>)}
                                 </ul>
                               ) : planned ? (
-                                <span className="flex items-center gap-1 text-green-700 dark:text-green-400">
-                                  <CheckCircle2 className="h-3 w-3 shrink-0" />
-                                  {planned.instance === "unchanged" ? "Already assigned - no change"
-                                    : planned.master === "reuse" ? "Link existing subject" : "New subject"}
+                                <span className="text-green-700 dark:text-green-400">
+                                  {planned.instance === "unchanged" ? "Already assigned, no change"
+                                    : planned.master === "reuse" ? "Uses existing subject" : "New subject"}
                                 </span>
                               ) : (
                                 <span className="text-muted-foreground">OK</span>
@@ -557,7 +550,7 @@ function CourseStructurePageInner() {
                 </div>
                 {warnings.length > 0 && (
                   <div className="m-4 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 text-amber-800 dark:text-amber-300 text-xs space-y-1">
-                    <p className="font-medium text-sm">Check before importing (won&apos;t block the import)</p>
+                    <p className="font-medium text-sm">Warnings (these don&apos;t block the import)</p>
                     {warnings.map((w, i) => <p key={i}>{issueText(w)}</p>)}
                   </div>
                 )}
@@ -567,20 +560,19 @@ function CourseStructurePageInner() {
 
           {uploaded && local && !result && (
             <Card>
-              <CardHeader><CardTitle className="text-base flex items-center gap-2"><span className="h-6 w-6 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center font-bold">4</span>Import</CardTitle></CardHeader>
+              <CardHeader><CardTitle className="text-base">4. Import</CardTitle></CardHeader>
               <CardContent className="space-y-4">
                 {errors.length > 0 ? (
                   <div className="flex items-start gap-2 p-3 rounded-lg bg-red-50 dark:bg-destructive/10 border border-red-200 dark:border-destructive/20 text-red-700 dark:text-red-400 text-sm">
                     <XCircle className="h-4 w-4 shrink-0 mt-0.5" />
-                    Nothing will be imported until every row is fixed. Correct the file and upload it again.
+                    Nothing can be imported until every row is fixed. Correct the file and upload it again.
                   </div>
                 ) : serverCheck?.ok ? (
                   <p className="text-sm text-muted-foreground">
-                    {serverCheck.counts.mastersCreated} new subject{serverCheck.counts.mastersCreated !== 1 ? "s" : ""}
-                    {serverCheck.counts.mastersReused > 0 && ` · ${serverCheck.counts.mastersReused} existing linked`}
-                    {` · ${serverCheck.counts.instancesWritten} semester assignment${serverCheck.counts.instancesWritten !== 1 ? "s" : ""}`}
-                    {serverCheck.counts.unchanged > 0 && ` · ${serverCheck.counts.unchanged} already assigned`}
-                    {` under ${regulation}, for ${scope?.department.name}.`}
+                    {`Regulation ${regulation}, ${scope?.department.name}: ${serverCheck.counts.mastersCreated} new subject${serverCheck.counts.mastersCreated !== 1 ? "s" : ""}, `}
+                    {`${serverCheck.counts.mastersReused} existing subject${serverCheck.counts.mastersReused !== 1 ? "s" : ""} reused, `}
+                    {`${serverCheck.counts.instancesWritten} semester assignment${serverCheck.counts.instancesWritten !== 1 ? "s" : ""} to add`}
+                    {serverCheck.counts.unchanged > 0 ? `, ${serverCheck.counts.unchanged} already assigned.` : "."}
                   </p>
                 ) : null}
                 <div className="flex gap-3">
@@ -596,24 +588,21 @@ function CourseStructurePageInner() {
           {result && (
             <Card className={result.verification?.problems.length ? "border-red-200" : "border-green-200"}>
               <CardContent className="p-5 space-y-3">
-                <div className="flex items-center gap-3">
-                  <CheckCircle2 className="h-6 w-6 text-green-600 shrink-0" />
-                  <div>
-                    <p className="font-semibold flex items-center gap-1.5"><Layers className="h-4 w-4" />
-                      {result.counts.mastersCreated} created · {result.counts.mastersReused} linked · {result.counts.instancesWritten} assigned to {scope?.department.name}
-                      {result.counts.unchanged > 0 && ` · ${result.counts.unchanged} already assigned`}
-                    </p>
-                    <p className="text-sm text-muted-foreground">Regulation {regulation} · {scope?.course.name}</p>
-                  </div>
+                <div>
+                  <p className="font-semibold">Import complete</p>
+                  <p className="text-sm text-muted-foreground">
+                    {`${scope?.course.name}, regulation ${regulation}, ${scope?.department.name}: ${result.counts.mastersCreated} subjects created, ${result.counts.mastersReused} reused, ${result.counts.instancesWritten} semester assignments added`}
+                    {result.counts.unchanged > 0 ? `, ${result.counts.unchanged} already assigned.` : "."}
+                  </p>
                 </div>
                 {result.verification && (
                   result.verification.problems.length === 0 ? (
-                    <p className="text-sm text-green-700 dark:text-green-400 flex items-center gap-1.5">
-                      <ShieldCheck className="h-4 w-4" />All {result.verification.checked} assignments read back with the right regulation, course, department, year and semester - ready for Teaching Assignments.
+                    <p className="text-sm text-green-700 dark:text-green-400">
+                      Checked {result.verification.checked} semester assignments after saving. Regulation, course, department, year and semester all match the file.
                     </p>
                   ) : (
                     <div className="text-sm text-red-700 dark:text-red-400 space-y-1">
-                      <p className="font-medium">Some links didn&apos;t read back as expected:</p>
+                      <p className="font-medium">These semester assignments don&apos;t match the file:</p>
                       {result.verification.problems.map((p, i) => <p key={i}>{p}</p>)}
                     </div>
                   )

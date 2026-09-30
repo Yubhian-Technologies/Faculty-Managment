@@ -141,11 +141,11 @@ export function courseOwnershipError(
   const belongs = ownDocs.length > 0 ? ownDocs.some((c) => c.id === course.id) : related.has(course.departmentId);
   if (!belongs) {
     return ownDocs.length > 0
-      ? `${department.name} has its own copy of ${course.name} - select it again so subjects attach to that copy.`
+      ? `${department.name} has its own copy of ${course.name}. Select it again so subjects attach to that copy.`
       : `${course.name} isn't run by ${department.name}.`;
   }
   if (!departmentRunsOwnSections(department)) {
-    return `${department.name} doesn't run sections of its own - import into one of its sub-departments instead.`;
+    return `${department.name} doesn't run sections of its own. Import into one of its sub-departments instead.`;
   }
   return null;
 }
@@ -324,7 +324,7 @@ export class CourseStructureImportService {
         const existing = existingMasters.get(row.code);
         if (existing) {
           if (existing.isActive === false) {
-            errors.push({ row: row.rowNumber, field: "code", message: `Subject ${row.code} exists for ${req.regulation} but is deactivated - reactivate it or use a different code.` });
+            errors.push({ row: row.rowNumber, field: "code", message: `Subject ${row.code} exists for ${req.regulation} but is deactivated. Reactivate it or use a different code.` });
             continue;
           }
           const existingIdentity = {
@@ -382,7 +382,7 @@ export class CourseStructureImportService {
     for (const slot of ctx.summary.existing) {
       const others = slot.regulations.filter((r) => r !== req.regulation);
       if (fileSlots.has(`${slot.year}|${slot.semester}`) && others.length > 0) {
-        warnings.push({ row: 0, message: `Year ${slot.year} Semester ${slot.semester} already has subjects under ${others.join(", ")}. Teaching Assignments will list them alongside these ${req.regulation} subjects - remove the old ones if they're no longer taught.` });
+        warnings.push({ row: 0, message: `Year ${slot.year} Semester ${slot.semester} already has subjects under ${others.join(", ")}. Teaching Assignments will list them alongside these ${req.regulation} subjects. Remove the old ones if they're no longer taught.` });
       }
     }
     // Years this regulation doesn't currently govern.
@@ -490,7 +490,7 @@ export class CourseStructureImportService {
       }
       const recheck = validateCourseStructureRows(req.records, fresh.summary.scope);
       if (!recheck.ok) {
-        throw new CourseStructureConflictError("Course-Year Timings or the department's assigned years changed during the import. Nothing was saved - validate the file again.");
+        throw new CourseStructureConflictError("Course-Year Timings or the department's assigned years changed during the import. Nothing was saved. Validate the file again.");
       }
 
       // 2. Targets must still be in the state the plan saw.
@@ -503,7 +503,7 @@ export class CourseStructureImportService {
         : [];
       let i = 0;
       for (const s of snaps.slice(i, (i += newMasterRefs.length))) {
-        if (s.exists) throw new CourseStructureConflictError(`Subject ${(s.data() as Subject).code} was created by someone else during the import. Nothing was saved - validate the file again.`);
+        if (s.exists) throw new CourseStructureConflictError(`Subject ${(s.data() as Subject).code} was created by someone else during the import. Nothing was saved. Validate the file again.`);
       }
       const masters = new Map<string, Subject>();
       for (const s of snaps.slice(i, (i += reusedRefs.length))) {
@@ -512,7 +512,7 @@ export class CourseStructureImportService {
       }
       for (const s of snaps.slice(i, (i += instanceRefs.length))) {
         if (s.exists && (s.data() as SubjectSemesterAssignment).isActive !== false) {
-          throw new CourseStructureConflictError("Some of these subjects were assigned by someone else during the import. Nothing was saved - validate the file again.");
+          throw new CourseStructureConflictError("Some of these subjects were assigned by someone else during the import. Nothing was saved. Validate the file again.");
         }
       }
 

@@ -44,7 +44,7 @@ function handleError(err: unknown, label: string) {
     return NextResponse.json({ error: err.message }, { status: 409 });
   }
   console.error(label, err);
-  return NextResponse.json({ error: "Internal error - nothing was saved." }, { status: 500 });
+  return NextResponse.json({ error: "Internal error. Nothing was saved." }, { status: 500 });
 }
 
 export async function GET(request: Request) {

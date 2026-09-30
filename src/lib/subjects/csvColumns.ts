@@ -34,13 +34,13 @@ export const IMPORT_COLUMNS: SubjectCsvColumn[] = [
 ];
 
 export const IMPORT_HINTS = [
-  "Regulation, Course and Department are chosen above - every row is created under that regulation and assigned to that department.",
-  "Year and Semester are required per row and must be one of the years/semesters listed for this department above. \"2\", \"II\" and \"Year 2\" are all read as Year 2.",
-  "The whole file is imported together or not at all: if any row has a problem, nothing is saved until the file is fixed.",
-  "Category: HSMC, BSC, ESC, PCC, PEC, OEC, MC, PROJ or Other (short code or full name). Other needs a Custom Category.",
-  "L, T and P (weekly Lecture/Tutorial/Practical hours) are required - use 0 where there are none.",
-  "Subject Code is optional but recommended (e.g. the university's paper code). Without it, a code is made from the name, and two names that start the same way will clash.",
-  "A subject that already exists for this course and regulation (same code, name, category and L-T-P) is linked, not duplicated. The same subject may appear in two semesters.",
-  "Type (Theory / Practical / Tutorial / Project) is optional - left blank, a subject with only P hours is treated as Practical.",
-  "Credits, Weekly Hours, Short Code and the Marks columns are optional. Credits default to L+T+0.5P; Internal + External must equal Total when all three are given.",
+  "Each row is one subject. Every row is saved under the regulation, course and department selected above.",
+  "Year and Semester are required. Use only the years and semesters listed above for this department. 2, II and Year 2 are all read as Year 2.",
+  "If any row has a problem, nothing is imported. Fix the file and upload it again.",
+  "Category is required: HSMC, BSC, ESC, PCC, PEC, OEC, MC, PROJ or Other. If you choose Other, fill in Custom Category.",
+  "L, T and P are the weekly lecture, tutorial and practical hours. They are required. Enter 0 where there are none.",
+  "Subject Code is optional. If it's blank, a code is made from the subject name, so two names that start the same way will clash. Use the university paper code where you have one.",
+  "If a subject with the same code, name, category and L-T-P already exists for this course and regulation, it is reused. A subject can appear in more than one semester.",
+  "Type is optional: Theory, Practical, Tutorial or Project. If it's blank, a subject with only P hours is treated as Practical.",
+  "Credits, Weekly Hours, Short Code and the marks columns are optional. Credits default to L + T + half of P. If you fill in all three marks columns, Internal + External must equal Total.",
 ];
