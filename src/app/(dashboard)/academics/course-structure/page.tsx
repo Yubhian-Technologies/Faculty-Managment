@@ -190,6 +190,20 @@ function CourseStructurePageInner() {
   }, [errors]);
   const planByRow = useMemo(() => new Map((serverCheck?.plan ?? []).map((p) => [p.row, p])), [serverCheck]);
   const fileLevelErrors = errors.filter((e) => e.row === 0);
+  // Each category the file names that isn't defined, once, with its row count.
+  const unknownCategories = useMemo(() => {
+    const map = new Map<string, { value: string; rows: number; suggestion?: string }>();
+    for (const e of errors) {
+      if (e.kind !== "unknown-category" || !e.value) continue;
+      const entry = map.get(e.value) ?? { value: e.value, rows: 0, suggestion: e.suggestion };
+      entry.rows++;
+      map.set(e.value, entry);
+    }
+    return Array.from(map.values());
+  }, [errors]);
+  function refreshCategories() {
+    if (scope) void fetchScope(scope.course.id, scope.department.id, scope.regulation, ++scopeRequestRef.current);
+  }
   const readyToImport = !!serverCheck?.ok && !isChecking && !result;
 
   async function downloadTemplate() {
@@ -207,11 +221,19 @@ function CourseStructurePageInner() {
 
       // Dropdowns built from this department's own scope, so the sheet can't
       // name a year or semester the import would reject.
-      const semesters = Array.from(new Set(teachableYears.flatMap((y) => scope.scope.semestersByYear[y] ?? []))).sort((a, b) => a - b);
+      // Configured semester numbers, plus 1..N for a file that counts each
+      // year's semesters from 1 (the import maps them to the configured ones).
+      const perYear = Math.max(0, ...teachableYears.map((y) => (scope.scope.semestersByYear[y] ?? []).length));
+      const semesters = Array.from(new Set([
+        ...teachableYears.flatMap((y) => scope.scope.semestersByYear[y] ?? []),
+        ...Array.from({ length: perYear }, (_, i) => i + 1),
+      ])).sort((a, b) => a - b);
+      const categoryCodes = [...Object.keys(SUBJECT_CATEGORY_LABELS), ...(scope.scope.customCategories ?? []).map((c) => c.code)];
       const lists: Record<string, string[]> = {
         year: teachableYears.map(String),
         semester: semesters.map(String),
-        category: Object.keys(SUBJECT_CATEGORY_LABELS),
+        // Excel caps an inline list at 255 characters.
+        category: categoryCodes.join(",").length <= 250 ? categoryCodes : [],
         type: ["Theory", "Practical", "Tutorial", "Project"],
       };
       IMPORT_COLUMNS.forEach((col, i) => {
@@ -350,9 +372,14 @@ function CourseStructurePageInner() {
         title="Course Structure"
         description="Import a course's subjects from one file and assign them to a department's semesters. Nothing is saved unless every row is valid."
         actions={
-          <Button variant="outline" asChild>
-            <Link href="/academics"><ArrowLeft className="h-4 w-4 mr-1" />Back to Academics</Link>
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" asChild>
+              <Link href="/academics/categories">Categories</Link>
+            </Button>
+            <Button variant="outline" asChild>
+              <Link href="/academics"><ArrowLeft className="h-4 w-4 mr-1" />Back to Academics</Link>
+            </Button>
+          </div>
         }
       />
 
@@ -561,6 +588,27 @@ function CourseStructurePageInner() {
                     {fileLevelErrors.map((e, i) => <p key={i}>{e.message}</p>)}
                   </div>
                 )}
+                {unknownCategories.length > 0 && (
+                  <div className="mx-4 mb-3 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 text-amber-800 dark:text-amber-300 text-sm space-y-2">
+                    <p className="font-medium">These categories aren&apos;t defined yet</p>
+                    <ul className="list-disc pl-5 text-xs space-y-0.5">
+                      {unknownCategories.map((c) => (
+                        <li key={c.value}>
+                          {c.value}, {c.rows} row{c.rows !== 1 ? "s" : ""}
+                          {c.suggestion ? `. If you meant ${c.suggestion}, change it in the file.` : ""}
+                        </li>
+                      ))}
+                    </ul>
+                    <div className="flex flex-wrap gap-2">
+                      <Button size="sm" asChild>
+                        <Link href={`/academics/categories?add=${encodeURIComponent(unknownCategories.map((c) => c.value).join("|"))}`} target="_blank" rel="noopener">
+                          Define these categories
+                        </Link>
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={refreshCategories} disabled={isLoadingScope}>I&apos;ve defined them, check again</Button>
+                    </div>
+                  </div>
+                )}
                 <div className="overflow-x-auto">
                   <table className="w-full text-xs">
                     <thead>
@@ -583,7 +631,13 @@ function CourseStructurePageInner() {
                           <tr key={rowNumber} className={`border-b align-top ${rowErrors ? "bg-red-50 dark:bg-destructive/15" : ""}`}>
                             <td className="p-2 text-muted-foreground tabular-nums">{rowNumber}</td>
                             <td className="p-2">{data.year || "-"}</td>
-                            <td className="p-2">{data.semester || "-"}</td>
+                            <td className="p-2 whitespace-nowrap">
+                              {data.semester || "-"}
+                              {(() => {
+                                const landed = local.rows.find((x) => x.rowNumber === rowNumber)?.semester;
+                                return landed != null && String(landed) !== String(data.semester).trim() ? <span className="text-muted-foreground"> (Sem {landed})</span> : null;
+                              })()}
+                            </td>
                             <td className="p-2 font-mono">{planned?.code ?? (data.code || <span className="text-muted-foreground">auto</span>)}</td>
                             <td className="p-2 min-w-40">{data.name || "-"}</td>
                             <td className="p-2">{data.category || "-"}</td>

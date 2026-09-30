@@ -11,6 +11,7 @@ import {
   type CourseStructureRowInput,
   type CourseStructureScope,
 } from "@/lib/subjects/courseStructureValidation";
+import type { CategoryDefinition } from "@/lib/subjects/categoryDefinitions";
 import { buildSubjectInstancePayload } from "./SubjectInstanceService";
 import type { Course, CourseYearTiming, Department, Subject, SubjectSemesterAssignment } from "@/types";
 
@@ -166,6 +167,12 @@ export function courseOwnershipError(
   return null;
 }
 
+function customCategoriesFrom(docs: FirebaseFirestore.DocumentData[]): CategoryDefinition[] {
+  return docs
+    .filter((d): d is CategoryDefinition => typeof d.code === "string" && typeof d.fullForm === "string")
+    .map((d) => ({ code: d.code, fullForm: d.fullForm }));
+}
+
 export class CourseStructureImportService {
   constructor(private db = getAdminDb()) {}
 
@@ -184,7 +191,8 @@ export class CourseStructureImportService {
     deptDocs: Dept[],
     sameCatalogCourses: CourseDoc[],
     catalogData: { regulations?: string[]; regulationBatches?: Record<string, string> } | undefined,
-    timingDocs: (Partial<CourseYearTiming> | undefined)[]
+    timingDocs: (Partial<CourseYearTiming> | undefined)[],
+    customCategories: CategoryDefinition[] = []
   ): Omit<LoadedContext, "summary" | "groupCourseIds"> & { summary: Omit<CourseStructureScopeSummary, "existing"> } {
     if (!courseData) throw new CourseStructureRequestError("Course not found.");
     if (courseData.isActive === false) throw new CourseStructureRequestError("This course is inactive.");
@@ -209,7 +217,7 @@ export class CourseStructureImportService {
     const timings: Record<number, number[]> = {};
     timingDocs.forEach((t, i) => { timings[i + 1] = semestersFrom(t); });
     const teachableYears = teachableYearsForDepartment(course, department, deptDocs);
-    const scope: CourseStructureScope = { durationYears: course.durationYears, teachableYears, semestersByYear: timings };
+    const scope: CourseStructureScope = { durationYears: course.durationYears, teachableYears, semestersByYear: timings, customCategories };
 
     const startYear = currentAcademicStartYear();
     return {
@@ -246,11 +254,12 @@ export class CourseStructureImportService {
     const deptDocs = deptsSnap.docs.map((d) => ({ ...(d.data() as Department), id: d.id }));
     const catalogId = courseData?.catalogId;
     const durationYears = Number(courseData?.durationYears) || 0;
-    const [sameCatalogSnap, catalogSnap, timingSnaps, instancesSnap] = await Promise.all([
+    const [sameCatalogSnap, catalogSnap, timingSnaps, instancesSnap, categoriesSnap] = await Promise.all([
       catalogId ? college.collection("courses").where("catalogId", "==", catalogId).get() : Promise.resolve(null),
       catalogId ? college.collection("courseCatalog").doc(catalogId).get() : Promise.resolve(null),
       durationYears > 0 ? this.db.getAll(...this.timingRefs(collegeId, courseId, durationYears)) : Promise.resolve([]),
       college.collection("subjectSemesterAssignments").where("courseId", "==", courseId).get(),
+      college.collection("subjectCategories").get(),
     ]);
     const sameCatalog = sameCatalogSnap
       ? sameCatalogSnap.docs.map((d) => ({ ...(d.data() as Course), id: d.id }))
@@ -258,7 +267,8 @@ export class CourseStructureImportService {
     const ctx = this.buildContext(
       courseId, departmentId, regulation, courseData, deptDocs, sameCatalog,
       catalogSnap?.exists ? (catalogSnap.data() as { regulations?: string[]; regulationBatches?: Record<string, string> }) : undefined,
-      timingSnaps.map((s) => (s.exists ? (s.data() as Partial<CourseYearTiming>) : undefined))
+      timingSnaps.map((s) => (s.exists ? (s.data() as Partial<CourseYearTiming>) : undefined)),
+      customCategoriesFrom(categoriesSnap.docs.map((d) => d.data()))
     );
     const existingInstances = instancesSnap.docs
       .map((d) => ({ ...(d.data() as SubjectSemesterAssignment), id: d.id }))
@@ -506,11 +516,12 @@ export class CourseStructureImportService {
       const courseRef = college.collection("courses").doc(ctx.course.id);
       const catalogRef = ctx.course.catalogId ? college.collection("courseCatalog").doc(ctx.course.catalogId) : null;
       const timingRefs = this.timingRefs(req.collegeId, ctx.course.id, ctx.course.durationYears);
-      const [courseSnap, deptsSnap, sameCatalogSnap, catalogSnap, ...timingSnaps] = await Promise.all([
+      const [courseSnap, deptsSnap, sameCatalogSnap, catalogSnap, categoriesSnap, ...timingSnaps] = await Promise.all([
         tx.get(courseRef),
         tx.get(college.collection("departments")),
         ctx.course.catalogId ? tx.get(college.collection("courses").where("catalogId", "==", ctx.course.catalogId)) : Promise.resolve(null),
         catalogRef ? tx.get(catalogRef) : Promise.resolve(null),
+        tx.get(college.collection("subjectCategories")),
         ...timingRefs.map((r) => tx.get(r)),
       ]);
       let fresh: ReturnType<CourseStructureImportService["buildContext"]>;
@@ -521,7 +532,8 @@ export class CourseStructureImportService {
           deptsSnap.docs.map((d) => ({ ...(d.data() as Department), id: d.id })),
           sameCatalogSnap ? sameCatalogSnap.docs.map((d) => ({ ...(d.data() as Course), id: d.id })) : [{ ...ctx.course }],
           catalogSnap?.exists ? (catalogSnap.data() as { regulations?: string[]; regulationBatches?: Record<string, string> }) : undefined,
-          timingSnaps.map((s) => (s.exists ? (s.data() as Partial<CourseYearTiming>) : undefined))
+          timingSnaps.map((s) => (s.exists ? (s.data() as Partial<CourseYearTiming>) : undefined)),
+          customCategoriesFrom(categoriesSnap.docs.map((d) => d.data()))
         );
       } catch (err) {
         throw new CourseStructureConflictError(`The course or department changed during the import: ${(err as Error).message}`);

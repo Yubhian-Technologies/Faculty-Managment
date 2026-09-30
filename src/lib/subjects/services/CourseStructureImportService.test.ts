@@ -242,6 +242,30 @@ describe("Course Structure import - end to end", () => {
     expect(db.store.get(`${C}/subjectSemesterAssignments/${master.id}_cse_3`)).toMatchObject({ createdAt: "2024-01-01", year: 2 });
   });
 
+  it("accepts only categories the standard set or the college's own definitions cover", async () => {
+    const before = db.store.size;
+    const bad = await service.run(request([row({ category: "SEC" })]), "commit");
+    expect(bad.ok).toBe(false);
+    expect(bad.errors[0]).toMatchObject({ kind: "unknown-category", value: "SEC" });
+    expect(db.store.size).toBe(before);
+
+    put("subjectCategories/SEC", { code: "SEC", fullForm: "Skill Enhancement Course" });
+    const res = await service.run(request([row({ category: "Skill Enhancement Course" })]), "commit");
+    expect(res.ok).toBe(true);
+    expect(docs("subjects")[0]).toMatchObject({ category: "SEC" });
+    expect(docs("subjectSemesterAssignments")[0]).toMatchObject({ category: "SEC" });
+  });
+
+  it("files a year's semesters 1 and 2 under its configured semesters", async () => {
+    const res = await service.run(request([
+      row({ year: "3", semester: "1", name: "Computer Networks", code: "CS301" }),
+      row({ year: "3", semester: "2", name: "Compiler Design", code: "CS302" }),
+    ]), "commit");
+    expect(res.ok).toBe(true);
+    expect(docs("subjectSemesterAssignments").map((a) => [a.subjectCode, a.year, a.semester]).sort()).toEqual([["CS301", 3, 5], ["CS302", 3, 6]]);
+    expect(res.warnings[0].message).toMatch(/Semester 1 is read as Semester 5/);
+  });
+
   it("sub-department on its parent's course: assignment is the sub-department's, and Teaching Assignments finds it", async () => {
     const res = await service.run(request([row()], { courseId: "c-ai", departmentId: "ai-ds" }), "commit");
     expect(res.ok).toBe(true);

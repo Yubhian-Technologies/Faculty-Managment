@@ -10,6 +10,7 @@
 // importer never writes a partial file.
 import { SUBJECT_CATEGORY_LABELS, type SubjectCategory, type SubjectType } from "@/types";
 import { resolveSubjectType } from "./normalize";
+import { categoryKey, type CategoryDefinition } from "./categoryDefinitions";
 
 // Each row can cost up to two writes (a new master subject + its semester
 // instance) and the whole file commits in one transaction, which this repo
@@ -29,6 +30,9 @@ export interface CourseStructureScope {
   teachableYears: number[];
   // Year -> semester numbers configured in Course-Year Timings for this course.
   semestersByYear: Record<number, number[]>;
+  // Categories the college defined on Academics > Categories, on top of the
+  // standard set. Absent means none.
+  customCategories?: CategoryDefinition[];
 }
 
 export type CourseStructureRawRow = Record<string, string | number | null | undefined>;
@@ -44,6 +48,11 @@ export interface CourseStructureIssue {
   row: number;
   field?: string;
   message: string;
+  // Set on a category that isn't defined, so the page can list each distinct
+  // value once and point at Category settings.
+  kind?: "unknown-category";
+  value?: string;
+  suggestion?: string;
 }
 
 export interface CourseStructureRow {
@@ -100,11 +109,29 @@ export function parseOrdinal(raw: CourseStructureRawRow[string]): number | null 
   return Number.isInteger(n) && n > 0 ? n : null;
 }
 
-function parseNonNegative(raw: CourseStructureRawRow[string]): number | undefined | "invalid" {
+// "-", "--" and "Nil" are how curriculum tables write "none" in an L-T-P or
+// Credits cell.
+const DASH_OR_NIL = /^(?:[-\u2013\u2014]+|nil)$/i;
+// Credits only: audit and non-credit courses don't carry any.
+const NO_CREDITS = /^(?:na|n\/a|nc|none|audit|not applicable|non[- ]?credits?)$/i;
+
+function parseNonNegative(raw: CourseStructureRawRow[string], zeroMarker?: RegExp[]): number | undefined | "invalid" {
   const s = text(raw);
   if (!s) return undefined;
+  if (zeroMarker?.some((re) => re.test(s))) return 0;
   const n = Number(s);
   return Number.isFinite(n) && n >= 0 ? n : "invalid";
+}
+
+// The semester a file's number means for `year`, given the semesters
+// configured for that year in Course-Year Timings: the number itself when the
+// year has it, else its position within the year (1 = the year's first
+// semester, 2 = its second), so a file that numbers each year's semesters 1
+// and 2 lands on the configured 5 and 6 of Year 3.
+export function resolveSemesterForYear(semester: number, configured: number[]): number | null {
+  const sorted = [...configured].sort((a, b) => a - b);
+  if (sorted.includes(semester)) return semester;
+  return semester >= 1 && semester <= sorted.length ? sorted[semester - 1] : null;
 }
 
 // Same derivation the page's old single-row fix dialog and
@@ -136,30 +163,40 @@ function editDistance(a: string, b: string): number {
 
 type CategoryResolution =
   | { kind: "known"; category: SubjectCategory }
-  | { kind: "custom"; category: SubjectCategory }
-  | { kind: "typo"; suggestion: SubjectCategory };
+  | { kind: "unknown"; suggestion?: SubjectCategory };
 
-// Strict counterpart of normalize.ts's resolveSubjectCategory: a known
-// category (key or label), a near-miss of one (a typo - rejected with a
-// suggestion instead of silently becoming a brand-new category), or a
-// deliberately custom category (kept, with a warning).
-export function resolveImportCategory(raw: string): CategoryResolution {
+// A category the file names must be defined: one of the standard set, or one
+// the college defined on Academics > Categories, matched by short code or full
+// form. Anything else is unknown, with a suggestion when it looks like a typo
+// of, or a numbered variant of ("Professional Elective-II"), a defined one.
+export function resolveImportCategory(raw: string, custom: CategoryDefinition[] = []): CategoryResolution {
   const norm = normalizeWords(raw);
   const known = CATEGORY_LOOKUP.get(norm);
   if (known) return { kind: "known", category: known };
-  for (const [candidate, key] of CATEGORY_LOOKUP) {
+  for (const c of custom) {
+    if (categoryKey(c.code) === norm || categoryKey(c.fullForm) === norm) return { kind: "known", category: c.code };
+  }
+
+  const candidates = new Map(CATEGORY_LOOKUP);
+  for (const c of custom) {
+    candidates.set(categoryKey(c.code), c.code);
+    candidates.set(categoryKey(c.fullForm), c.code);
+  }
+  const base = norm.replace(/(?: (?:[ivx]+|\d+))+$/, "");
+  if (base && base !== norm && candidates.has(base)) return { kind: "unknown", suggestion: candidates.get(base) };
+  for (const [candidate, key] of candidates) {
     if (candidate.length <= 4) {
       // Short codes: only a dropped/doubled letter ("PCCC", "PC") counts as a
       // typo. A same-length substitution is usually a real, different code
       // ("SEC" - Skill Enhancement Course - is not a typo of "BSC").
       if (Math.abs(candidate.length - norm.length) === 1 && editDistance(candidate, norm) === 1) {
-        return { kind: "typo", suggestion: key };
+        return { kind: "unknown", suggestion: key };
       }
     } else if (Math.abs(candidate.length - norm.length) <= 2 && editDistance(candidate, norm) <= 2) {
-      return { kind: "typo", suggestion: key };
+      return { kind: "unknown", suggestion: key };
     }
   }
-  return { kind: "custom", category: raw.trim() };
+  return { kind: "unknown" };
 }
 
 // Two rows (or a row and an existing master) describe the same subject.
@@ -187,6 +224,8 @@ export function validateCourseStructureRows(
   const warnings: CourseStructureIssue[] = [];
   const rows: CourseStructureRow[] = [];
   const teachable = new Set(scope.teachableYears);
+  const remapped = new Map<string, { year: number; from: number; to: number; configured: number[] }>();
+  const usedYears = new Set<number>();
 
   if (inputs.length === 0) {
     errors.push({ row: 0, message: "The file has no data rows." });
@@ -202,7 +241,7 @@ export function validateCourseStructureRows(
 
     // Year / Semester - and whether this department may receive them.
     const year = parseOrdinal(data.year);
-    const semester = parseOrdinal(data.semester);
+    let semester = parseOrdinal(data.semester);
     if (!text(data.year)) err("year", "Year is required.");
     else if (year == null) err("year", `Year "${text(data.year)}" isn't a valid year number.`);
     else if (year > scope.durationYears) err("year", `Year ${year} is beyond this course's ${scope.durationYears}-year duration.`);
@@ -215,10 +254,15 @@ export function validateCourseStructureRows(
     else if (semester == null) err("semester", `Semester "${text(data.semester)}" isn't a valid semester number.`);
     else if (year != null && teachable.has(year)) {
       const allowed = scope.semestersByYear[year] ?? [];
-      if (!allowed.includes(semester)) {
+      const resolved = resolveSemesterForYear(semester, allowed);
+      if (resolved == null) {
         err("semester", allowed.length > 0
-          ? `Semester ${semester} isn't configured for Year ${year} (configured: ${allowed.join(", ")}).`
+          ? `Semester ${semester} isn't configured for Year ${year}. Use ${[...allowed].sort((a, b) => a - b).join(" or ")}, or 1${allowed.length > 1 ? `-${allowed.length}` : ""} for the year's own semesters.`
           : `Year ${year} has no semesters configured in Course-Year Timings.`);
+      } else {
+        if (resolved !== semester) remapped.set(`${year}|${semester}`, { year, from: semester, to: resolved, configured: allowed });
+        usedYears.add(year);
+        semester = resolved;
       }
     }
 
@@ -237,11 +281,18 @@ export function validateCourseStructureRows(
     let customCategory: string | undefined;
     if (!categoryRaw) err("category", "Category is required.");
     else {
-      const resolved = resolveImportCategory(categoryRaw);
-      if (resolved.kind === "typo") err("category", `Category "${categoryRaw}" isn't recognised. Did you mean ${resolved.suggestion}?`);
-      else {
+      const resolved = resolveImportCategory(categoryRaw, scope.customCategories);
+      if (resolved.kind === "unknown") {
+        rowErrors.push({
+          row: rowNumber,
+          field: "category",
+          kind: "unknown-category",
+          value: categoryRaw,
+          suggestion: resolved.suggestion,
+          message: `Category "${categoryRaw}" isn't defined.${resolved.suggestion ? ` Did you mean ${resolved.suggestion}?` : ""} Add it in Category settings.`,
+        });
+      } else {
         category = resolved.category;
-        if (resolved.kind === "custom") warn("category", `"${categoryRaw}" isn't a standard category. It will be saved as a custom category.`);
       }
       if (category === "OTHER") {
         customCategory = text(data.customCategory) || undefined;
@@ -250,12 +301,12 @@ export function validateCourseStructureRows(
     }
 
     // L / T / P
-    const lp = parseNonNegative(data.lectureHours);
-    const tp = parseNonNegative(data.tutorialHours);
-    const pp = parseNonNegative(data.practicalHours);
-    for (const [field, label, v] of [["lectureHours", "L", lp], ["tutorialHours", "T", tp], ["practicalHours", "P", pp]] as const) {
+    const lp = parseNonNegative(data.lectureHours, [DASH_OR_NIL]);
+    const tp = parseNonNegative(data.tutorialHours, [DASH_OR_NIL]);
+    const pp = parseNonNegative(data.practicalHours, [DASH_OR_NIL]);
+    for (const [field, label, v, raw] of [["lectureHours", "L", lp, data.lectureHours], ["tutorialHours", "T", tp, data.tutorialHours], ["practicalHours", "P", pp, data.practicalHours]] as const) {
       if (v === undefined) err(field, `${label} is required (use 0 if none).`);
-      else if (v === "invalid") err(field, `${label} must be a number 0 or more.`);
+      else if (v === "invalid") err(field, `${label} "${text(raw)}" must be a number 0 or more.`);
     }
     const L = typeof lp === "number" ? lp : 0;
     const T = typeof tp === "number" ? tp : 0;
@@ -274,16 +325,18 @@ export function validateCourseStructureRows(
 
     // Optional numerics
     const hpw = parseNonNegative(data.hoursPerWeek);
-    const credits = parseNonNegative(data.credits);
-    const internalMarks = parseNonNegative(data.internalMarks);
-    const externalMarks = parseNonNegative(data.externalMarks);
-    const totalMarks = parseNonNegative(data.totalMarks);
-    if (hpw === "invalid") err("hoursPerWeek", "Weekly Hours must be a number 0 or more.");
+    const credits = parseNonNegative(data.credits, [DASH_OR_NIL, NO_CREDITS]);
+    // A dash in a marks cell means no marks, not zero.
+    const marks = (raw: CourseStructureRawRow[string]) => (DASH_OR_NIL.test(text(raw)) ? undefined : parseNonNegative(raw));
+    const internalMarks = marks(data.internalMarks);
+    const externalMarks = marks(data.externalMarks);
+    const totalMarks = marks(data.totalMarks);
+    if (hpw === "invalid") err("hoursPerWeek", `Weekly Hours "${text(data.hoursPerWeek)}" must be a number 0 or more.`);
     else if (typeof hpw === "number" && lptOk && hpw !== L + T + P) warn("hoursPerWeek", `Weekly Hours (${hpw}) differs from L+T+P (${L + T + P}).`);
-    if (credits === "invalid") err("credits", "Credits must be a number 0 or more.");
-    if (internalMarks === "invalid") err("internalMarks", "Internal Marks must be a number 0 or more.");
-    if (externalMarks === "invalid") err("externalMarks", "External Marks must be a number 0 or more.");
-    if (totalMarks === "invalid") err("totalMarks", "Total Marks must be a number 0 or more.");
+    if (credits === "invalid") err("credits", `Credits "${text(data.credits)}" must be a number 0 or more. Use 0, -, or NC for a course with no credits.`);
+    if (internalMarks === "invalid") err("internalMarks", `Internal Marks "${text(data.internalMarks)}" must be a number 0 or more.`);
+    if (externalMarks === "invalid") err("externalMarks", `External Marks "${text(data.externalMarks)}" must be a number 0 or more.`);
+    if (totalMarks === "invalid") err("totalMarks", `Total Marks "${text(data.totalMarks)}" must be a number 0 or more.`);
     if (typeof internalMarks === "number" && typeof externalMarks === "number" && typeof totalMarks === "number"
       && internalMarks + externalMarks !== totalMarks) {
       err("totalMarks", `Internal (${internalMarks}) + External (${externalMarks}) doesn't equal Total (${totalMarks}).`);
@@ -356,6 +409,27 @@ export function validateCourseStructureRows(
       if (sameShort && sameShort.code !== r.code) {
         warnings.push({ row: r.rowNumber, field: "shortCode", message: `Short Code ${r.shortCode} is also used by row ${sameShort.rowNumber} in this semester. The timetable won't tell them apart.` });
       } else shortInSemester.set(shortKey, r);
+    }
+  }
+
+  // Say how each year's semester numbers were read, so a file that numbers
+  // every year 1 and 2 is never silently reinterpreted.
+  const byYear = new Map<number, { from: number; to: number; configured: number[] }[]>();
+  for (const m of remapped.values()) byYear.set(m.year, [...(byYear.get(m.year) ?? []), m]);
+  for (const [y, list] of Array.from(byYear).sort((a, b) => a[0] - b[0])) {
+    const configured = [...list[0].configured].sort((a, b) => a - b);
+    warnings.push({
+      row: 0,
+      field: "semester",
+      message: `Year ${y}: ${list.sort((a, b) => a.from - b.from).map((m) => `Semester ${m.from} is read as Semester ${m.to}`).join(", ")} (the year's semesters are ${configured.join(", ")}, and the file counts them within the year).`,
+    });
+  }
+  // A year whose configured semesters skip a number is usually a typo in
+  // Course-Year Timings; the import follows it as configured.
+  for (const y of Array.from(usedYears).sort((a, b) => a - b)) {
+    const configured = [...(scope.semestersByYear[y] ?? [])].sort((a, b) => a - b);
+    if (configured.length >= 2 && configured[configured.length - 1] - configured[0] + 1 !== configured.length) {
+      warnings.push({ row: 0, field: "semester", message: `Year ${y} has semesters ${configured.join(", ")} configured in Course-Year Timings, which aren't consecutive. Check them before importing.` });
     }
   }
 
