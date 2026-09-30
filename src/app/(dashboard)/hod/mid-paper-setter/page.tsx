@@ -9,6 +9,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Pagination } from "@/components/shared/Pagination";
+import { usePagination } from "@/hooks/usePagination";
 import { toast } from "@/hooks/useToast";
 import type { Course, MidNumber, MidPaperAssignment, Subject } from "@/types";
 
@@ -39,6 +41,7 @@ export default function MidPaperSetterPage() {
   const [isLoadingFaculty, setIsLoadingFaculty] = useState(false);
 
   const [assignments, setAssignments] = useState<MidPaperAssignment[]>([]);
+  const assignmentPager = usePagination(assignments, 10);
   const [isLoadingAssignments, setIsLoadingAssignments] = useState(true);
   const [isAssigning, setIsAssigning] = useState(false);
 
@@ -240,7 +243,7 @@ export default function MidPaperSetterPage() {
             <p className="text-sm text-muted-foreground text-center py-6">No mid papers assigned yet.</p>
           ) : (
             <div className="space-y-2">
-              {assignments.map((a) => (
+              {assignmentPager.pageItems.map((a) => (
                 <div key={a.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border p-3">
                   <div>
                     <p className="text-sm font-medium">{a.subjectName} <span className="text-muted-foreground">({a.subjectCode})</span></p>
@@ -249,6 +252,14 @@ export default function MidPaperSetterPage() {
                   <Badge variant="outline">Mid {a.midNumber}</Badge>
                 </div>
               ))}
+              <Pagination
+                page={assignmentPager.page}
+                pageSize={assignmentPager.pageSize}
+                total={assignmentPager.total}
+                onPageChange={assignmentPager.setPage}
+                onPageSizeChange={assignmentPager.setPageSize}
+                className="pt-2"
+              />
             </div>
           )}
         </CardContent>

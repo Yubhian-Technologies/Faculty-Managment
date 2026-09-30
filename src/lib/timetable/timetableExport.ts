@@ -66,27 +66,33 @@ const BORDER: Partial<ExcelJS.Borders> = {
   right: { style: "thin" },
 };
 
-function styleHeaderRow(row: ExcelJS.Row) {
-  row.font = { bold: true, size: 9 };
-  row.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
-  row.eachCell((cell) => {
+// Styles cells 1..lastCol by index. row.eachCell skips cells that were never
+// written, so empty timetable slots used to come out with no border and the
+// grid looked broken wherever a period was free.
+function styleHeaderRow(row: ExcelJS.Row, lastCol: number) {
+  for (let c = 1; c <= lastCol; c++) {
+    const cell = row.getCell(c);
+    cell.font = { bold: true, size: 10 };
+    cell.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
     cell.fill = HEADER_FILL;
     cell.border = BORDER;
-  });
+  }
 }
 
-function styleBodyRow(row: ExcelJS.Row) {
-  row.font = { size: 9 };
-  row.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
-  row.eachCell((cell) => {
+function styleBodyRow(row: ExcelJS.Row, lastCol: number) {
+  for (let c = 1; c <= lastCol; c++) {
+    const cell = row.getCell(c);
+    cell.font = { size: 10 };
+    cell.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
     cell.border = BORDER;
-  });
+  }
 }
 
 /** A4 portrait printable width, in Excel's ~character-width column units. */
-const DAY_COL_WIDTH = 10;
-const PERIOD_COL_WIDTH = 13;
+const DAY_COL_WIDTH = 13;
+const PERIOD_COL_WIDTH = 18;
 const BREAK_COL_WIDTH = 9;
+const LINE_HEIGHT = 13.5;
 
 export async function buildSectionTimetableXlsxBuffer(opts: SectionTimetableXlsxOptions): Promise<ArrayBuffer> {
   const {
@@ -136,7 +142,7 @@ export async function buildSectionTimetableXlsxBuffer(opts: SectionTimetableXlsx
   workbook.created = new Date();
 
   const sheet = workbook.addWorksheet("Timetable", {
-    pageSetup: { paperSize: 9, orientation: "portrait", fitToPage: true, fitToWidth: 1, fitToHeight: 0 },
+    pageSetup: { paperSize: 9, orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0, margins: { left: 0.4, right: 0.4, top: 0.5, bottom: 0.5, header: 0.3, footer: 0.3 }, horizontalCentered: true },
   });
 
   const lastCol = columns.length + 1;
@@ -146,9 +152,9 @@ export async function buildSectionTimetableXlsxBuffer(opts: SectionTimetableXlsx
     const row = sheet.getRow(rowIndex);
     row.getCell(1).value = text;
     row.getCell(1).font = font;
-    row.getCell(1).alignment = { horizontal: "center", vertical: "middle" };
+    row.getCell(1).alignment = { horizontal: "center", vertical: "middle", wrapText: true };
     sheet.mergeCells(rowIndex, 1, rowIndex, lastCol);
-    if (height) row.height = height;
+    row.height = height ?? Math.max(16, (font.size ?? 10) * 1.6);
   };
 
   const identity = [affiliation, address, phone].filter(Boolean).join("  |  ");
@@ -195,14 +201,18 @@ export async function buildSectionTimetableXlsxBuffer(opts: SectionTimetableXlsx
       cell.value = [`Period ${col.periodNumber}`, range].filter(Boolean).join("\n");
     }
   });
-  styleHeaderRow(headerRow);
-  headerRow.height = 30;
+  styleHeaderRow(headerRow, lastCol);
+  headerRow.height = 32;
+  // Keep the Day column and period header on screen while scrolling, and repeat
+  // the header row if the sheet ever prints on more than one page.
+  sheet.views = [{ state: "frozen", xSplit: 1, ySplit: headerRowIndex }];
+  sheet.pageSetup.printTitlesRow = `${headerRowIndex}:${headerRowIndex}`;
 
   // ── Grid body ────────────────────────────────────────────────────────────
   for (const day of days) {
     const row = sheet.getRow(r++);
     row.getCell(1).value = DAY_LABELS[day] ?? day;
-    row.getCell(1).font = { bold: true, size: 9 };
+    let maxLines = 1;
     columns.forEach((col, i) => {
       const cell = row.getCell(i + 2);
       if (col.kind === "break") {
@@ -211,58 +221,60 @@ export async function buildSectionTimetableXlsxBuffer(opts: SectionTimetableXlsx
       }
       const cellSlots = slots.filter((s) => s.day === day && s.periodNumber === col.periodNumber);
       if (cellSlots.length === 0) return;
-      cell.value = cellSlots
-        .map((s) =>
-          [
-            slotShortCode(s, subjectMap),
-            s.labBatch,
-            slotFacultyName(s),
-            s.substituteFacultyName ? `Sub: ${s.substituteFacultyName}` : undefined,
-            s.classroom ? `Room ${s.classroom}` : undefined,
-          ]
-            .filter(Boolean)
-            .join("\n")
-        )
-        .join("\n");
+      const blocks = cellSlots.map((s) =>
+        [
+          slotShortCode(s, subjectMap),
+          s.labBatch,
+          // Substitute gets its own line; the faculty line stays the timetabled one.
+          s.substituteFacultyName ? s.facultyName : slotFacultyName(s),
+          s.substituteFacultyName ? `Sub: ${s.substituteFacultyName}` : undefined,
+          s.classroom ? `Room ${s.classroom}` : undefined,
+        ].filter((v): v is string => !!v)
+      );
+      // Split parallel sessions (lab batches) are separated by a rule of dashes.
+      const text = blocks.map((b) => b.join("\n")).join("\n──────\n");
+      cell.value = text;
+      maxLines = Math.max(maxLines, blocks.reduce((n, b) => n + b.length, 0) + Math.max(0, blocks.length - 1));
       if (cellSlots.some((s) => s.substituteFacultyName)) {
         cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFF6E5" } };
       }
     });
-    styleBodyRow(row);
-    row.height = 42;
+    styleBodyRow(row, lastCol);
+    row.getCell(1).font = { bold: true, size: 10 };
+    row.height = Math.max(42, maxLines * LINE_HEIGHT + 6);
   }
 
   // ── Allocation of subjects ───────────────────────────────────────────────
+  // On its own sheet: its columns (subject name, faculty) need widths that
+  // would otherwise be forced onto the period columns of the grid above.
   const allocation = buildAllocationList(slots, { subjects: subjectMap, assignments });
   if (allocation.length) {
-    r++; // spacer
-    const titleRow = sheet.getRow(r++);
-    titleRow.getCell(1).value = "Allocation of Subjects";
-    titleRow.getCell(1).font = { bold: true, size: 11 };
-    sheet.mergeCells(r - 1, 1, r - 1, lastCol);
-
-    const allocHeader = sheet.getRow(r++);
+    const alloc = workbook.addWorksheet("Allocation of Subjects", {
+      pageSetup: { paperSize: 9, orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0 },
+    });
+    [7, 16, 42, 34, 12, 9].forEach((w, i) => {
+      alloc.getColumn(i + 1).width = w;
+    });
+    const allocHeader = alloc.getRow(1);
     ["S.No", "Subject Code", "Subject", "Name of Faculty", "Type", "Hrs/Wk"].forEach((h, i) => {
       allocHeader.getCell(i + 1).value = h;
     });
-    // Column widths, not cell widths - these columns overlap the grid's own, so
-    // take the wider of the two rather than shrinking the timetable above.
-    sheet.getColumn(2).width = Math.max(sheet.getColumn(2).width ?? 0, 16);
-    sheet.getColumn(3).width = Math.max(sheet.getColumn(3).width ?? 0, 40);
-    sheet.getColumn(4).width = Math.max(sheet.getColumn(4).width ?? 0, 30);
-    styleHeaderRow(allocHeader);
+    styleHeaderRow(allocHeader, 6);
+    allocHeader.height = 22;
+    alloc.views = [{ state: "frozen", ySplit: 1 }];
 
     allocation.forEach((a, i) => {
-      const row = sheet.getRow(r++);
+      const row = alloc.getRow(i + 2);
       row.getCell(1).value = i + 1;
       row.getCell(2).value = a.code;
       row.getCell(3).value = a.labBatches.length ? `${a.name} (${a.labBatches.join(", ")})` : a.name;
       row.getCell(4).value = a.faculty;
-      row.getCell(5).value = a.subjectType === "PRACTICAL" ? "Practical" : a.subjectType === "THEORY" ? "Theory" : "";
-      row.getCell(6).value = a.hoursPerWeek ?? "";
-      styleBodyRow(row);
+      row.getCell(5).value = a.subjectType === "PRACTICAL" ? "Practical" : a.subjectType === "THEORY" ? "Theory" : "—";
+      row.getCell(6).value = a.hoursPerWeek ?? "—";
+      styleBodyRow(row, 6);
       row.getCell(3).alignment = { horizontal: "left", vertical: "middle", wrapText: true };
       row.getCell(4).alignment = { horizontal: "left", vertical: "middle", wrapText: true };
+      row.height = 20;
     });
   }
 

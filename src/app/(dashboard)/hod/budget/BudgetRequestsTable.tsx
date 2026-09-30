@@ -47,6 +47,7 @@ export function BudgetRequestsTable({ requests, isLoading, onEditRequest, onView
       </CardHeader>
       <CardContent>
         <DataTable
+          paginate
           data={requests as (BudgetRequest & Record<string, unknown>)[]}
           columns={columns}
           isLoading={isLoading}

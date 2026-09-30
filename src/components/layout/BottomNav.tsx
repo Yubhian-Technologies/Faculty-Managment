@@ -8,6 +8,7 @@ import { useAssignedInterviews } from "@/hooks/useAssignedInterviews";
 import { usePrincipalPendingHiring } from "@/hooks/usePrincipalPendingHiring";
 import { BOTTOM_NAV_ITEMS, isNavItemActive, filterVisibleNavItems, isPathHidden, type NavItem } from "./navConfig";
 import { NavIcon } from "./NavIcon";
+import type { UserRole } from "@/types";
 
 const INTERVIEW_NAV_ITEM: NavItem = {
   label: "Interviews",
@@ -18,6 +19,26 @@ const INTERVIEW_NAV_ITEM: NavItem = {
 
 // See Sidebar.tsx - same badge, mirrored here for the mobile bottom bar.
 const PENDING_HIRING_HREF = "/principal/vacancies";
+
+// Roles that navigate on mobile ONLY through the left drawer, where every tab
+// is listed on its own. The bottom bar shows a hand-picked handful of these
+// tabs (and, for some roles, relabels/merges them), so it's dropped for them
+// rather than offering two different menus for the same pages.
+const DRAWER_ONLY_ROLES: ReadonlySet<UserRole> = new Set<UserRole>([
+  "PANEL_MEMBER", // faculty
+  "HOD",
+  "PRINCIPAL",
+  "VICE_PRINCIPAL",
+  "ACADEMICS",
+  "STUDENT",
+]);
+
+/** Whether the mobile bottom bar renders at all for this session (layout padding depends on it). */
+export function hasBottomNav(role: UserRole | undefined, pathname?: string | null): boolean {
+  if (!role) return false;
+  if (role === "CLASS_LEADER" || pathname?.startsWith("/class-leader")) return true;
+  return !DRAWER_ONLY_ROLES.has(role);
+}
 
 interface BottomNavProps {
   hiddenModules: string[];
@@ -30,7 +51,7 @@ export function BottomNav({ hiddenModules, hiddenItems }: BottomNavProps) {
   const { hasInterviews } = useAssignedInterviews();
   const { pendingCount: pendingHiringCount } = usePrincipalPendingHiring();
 
-  if (!user || user.role === "STUDENT") return null;
+  if (!user || !hasBottomNav(user.role, pathname)) return null;
 
   const isClassLeader = user.role === "CLASS_LEADER" || pathname?.startsWith("/class-leader");
 
