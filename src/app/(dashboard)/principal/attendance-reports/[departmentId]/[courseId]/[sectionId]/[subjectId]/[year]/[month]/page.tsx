@@ -106,7 +106,7 @@ export default function PrincipalAttendanceReportPage() {
         // non-fatal - the calendar still works without a pre-selected date
       }
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [sectionId, year, month]);
 
   useEffect(() => {

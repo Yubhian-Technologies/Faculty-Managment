@@ -6,8 +6,8 @@ describe("periodAttendanceStatus", () => {
     const submittedAt = new Date(Date.UTC(2026, 8, 25, 0, 10 * 60, 0)); // 10:00 IST
     const session = {
       status: "SUBMITTED" as const,
-      submittedAt: { toDate: () => submittedAt } as any,
-      entries: [] as any,
+      submittedAt: { toDate: () => submittedAt },
+      entries: [],
       totalStudents: 0,
       presentCount: 0,
     };
@@ -18,8 +18,8 @@ describe("periodAttendanceStatus", () => {
     const submittedAt = new Date(Date.UTC(2026, 8, 25, 0, 18 * 60, 0)); // 18:00 IST
     const session = {
       status: "SUBMITTED" as const,
-      submittedAt: { toDate: () => submittedAt } as any,
-      entries: [] as any,
+      submittedAt: { toDate: () => submittedAt },
+      entries: [],
       totalStudents: 0,
       presentCount: 0,
     };
@@ -32,7 +32,7 @@ describe("periodAttendanceStatus", () => {
       entries: [
         { studentId: "s1", rollNumber: "1", name: "A", status: "PRESENT" as const },
         { studentId: "s2", rollNumber: "2", name: "B", status: null },
-      ] as any,
+      ],
       totalStudents: 2,
       presentCount: 1,
     };
@@ -42,7 +42,7 @@ describe("periodAttendanceStatus", () => {
   it("marks a DRAFT with no marks as NOT_MARKED on a past date", () => {
     const session = {
       status: "DRAFT" as const,
-      entries: [] as any,
+      entries: [],
       totalStudents: 0,
       presentCount: 0,
     };

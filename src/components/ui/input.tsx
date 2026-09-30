@@ -1,7 +1,7 @@
 import * as React from "react";
 import { cn, stripLeadingZeros } from "@/lib/utils";
 
-export interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {}
+export type InputProps = React.InputHTMLAttributes<HTMLInputElement>;
 
 // An Indian mobile number - the only kind of phone number stored anywhere in
 // this app (see PHONE_REGEX in lib/validations).

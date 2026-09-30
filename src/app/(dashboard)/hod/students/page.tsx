@@ -1085,7 +1085,7 @@ export default function HodStudentsPage() {
               </datalist>
               <p className="text-xs text-muted-foreground">
                 Which split-lab sub-group this student sits in for a PRACTICAL subject - must match the batch
-                label on the Timetable exactly. Leave blank if this section's labs aren&rsquo;t split.
+                label on the Timetable exactly. Leave blank if this section&rsquo;s labs aren&rsquo;t split.
               </p>
             </div>
           </div>

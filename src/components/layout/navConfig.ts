@@ -723,7 +723,7 @@ export function filterVisibleNavItems(
   // Apply assigned-modules filtering first: if the user has assigned
   // modules, only keep items whose module is in that set (personal
   // items like profile/leave/attendance/dashboard are always kept).
-  let working = filterByAssignedModules(items, assignedModules);
+  const working = filterByAssignedModules(items, assignedModules);
 
   // Each item's module is fixed from the FULL list before anything is
   // removed. Computing it after removal let the items following a
