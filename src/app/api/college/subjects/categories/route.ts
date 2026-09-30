@@ -25,6 +25,22 @@ export async function GET() {
       Object.keys(SUBJECT_CATEGORY_LABELS).filter((c) => c !== "OTHER")
     );
 
+    // Categories the college defined on Academics > Categories (code + full
+    // form) are offered too, even before a subject uses them.
+    const defined = await db
+      .collection("colleges")
+      .doc(session.collegeId)
+      .collection("subjectCategories")
+      .get();
+    const labels: Record<string, string> = {};
+    for (const doc of defined.docs) {
+      const { code, fullForm } = doc.data() as { code?: string; fullForm?: string };
+      if (code && fullForm) {
+        distinct.add(code);
+        labels[code] = fullForm;
+      }
+    }
+
     for (const doc of snap.docs) {
       const cat = (doc.data() as { category?: string })?.category?.trim();
       if (cat && cat !== "OTHER") {
@@ -32,7 +48,7 @@ export async function GET() {
       }
     }
 
-    return NextResponse.json({ categories: Array.from(distinct) });
+    return NextResponse.json({ categories: Array.from(distinct), labels });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

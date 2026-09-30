@@ -327,11 +327,16 @@ export function TeachingAssignmentsEditor({ courseId, year, backHref }: Teaching
     });
   }, [assignForm.sectionId, sections, departments, semesterAssignments, effectiveSemester, year, assignedSubjects, pendingRequestKeys, assignments]);
 
-  // Every top-level department in the college is askable except this
-  // section's own - see hod/teaching-assignments/page.tsx's own copy.
+  // Every department in the college is askable except this section's own -
+  // see hod/teaching-assignments/page.tsx's own copy. Sub-departments are NOT
+  // excluded as a class: a true sub-department (e.g. BS-Chemistry,
+  // BS-Physics under parent Basic Science) runs its own faculty roster under
+  // its own HOD login exactly like a top-level department does, so it needs
+  // to be askable too - this used to only offer top-level departments,
+  // leaving no way to request from a sibling sub-department.
   const requestSection = sections.find((s) => s.id === assignForm.sectionId);
   const requestableDepartments = useMemo(
-    () => departments.filter((d) => !d.parentDepartmentId && d.name !== requestSection?.department),
+    () => departments.filter((d) => d.name !== requestSection?.department),
     [departments, requestSection]
   );
 
@@ -555,9 +560,16 @@ export function TeachingAssignmentsEditor({ courseId, year, backHref }: Teaching
                         <SelectValue placeholder={requestableDepartments.length ? "Select department" : "No other departments"} />
                       </SelectTrigger>
                       <SelectContent>
-                        {requestableDepartments.map((d) => (
-                          <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
-                        ))}
+                        {requestableDepartments.map((d) => {
+                          const parentName = d.parentDepartmentId
+                            ? departments.find((p) => p.id === d.parentDepartmentId)?.name
+                            : null;
+                          return (
+                            <SelectItem key={d.id} value={d.id}>
+                              {d.name}{parentName ? ` (${parentName})` : ""}
+                            </SelectItem>
+                          );
+                        })}
                       </SelectContent>
                     </Select>
                     <Button

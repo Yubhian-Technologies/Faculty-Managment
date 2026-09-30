@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,14 +16,14 @@ export default function AcademicsRegulationPage() {
   const picker = useRegulationCourseDepartmentPicker();
 
   // Local override so the field reflects an upload immediately - the hook's
-  // own catalogItems only refetches on mount, so a plain derived value from
-  // it would keep showing "not uploaded" until a full page reload.
-  const [localUrl, setLocalUrl] = useState<string | undefined>(undefined);
-  useEffect(() => {
-    setLocalUrl(undefined);
-  }, [picker.selectedCatalogId, picker.selectedRegulation]);
-
-  const currentUrl = localUrl ?? picker.selectedCatalogItem?.regulationDocumentUrls?.[picker.selectedRegulation];
+  // catalogItems only refetch on Load, so a plain derived value from it would
+  // keep showing "not uploaded" until the next Load. Tied to the course +
+  // regulation it was uploaded for.
+  const [local, setLocal] = useState<{ key: string; url: string } | null>(null);
+  const localKey = `${picker.selectedCatalogId}|${picker.selectedRegulation}`;
+  const setLocalUrl = (url: string) => setLocal({ key: localKey, url });
+  const currentUrl = local?.key === localKey ? local.url : picker.selectedCatalogItem?.regulationDocumentUrls?.[picker.selectedRegulation];
+  const canLoad = !!picker.selectedRegulation && !!picker.selectedCatalogId;
 
   async function patchRegulationDocument(url: string) {
     await fetch(`/api/college/course-catalog/${picker.selectedCatalogId}`, {
@@ -71,7 +71,11 @@ export default function AcademicsRegulationPage() {
             </div>
           </div>
 
-          {picker.selectedCatalogId && picker.selectedRegulation ? (
+          <Button onClick={() => void picker.load()} disabled={!canLoad || picker.isLoadingData} loading={picker.isLoadingData}>
+            Load
+          </Button>
+
+          {picker.isLoaded && picker.selectedCatalogId && picker.selectedRegulation ? (
             <DocumentUploadField
               label={`${picker.selectedCatalogItem?.name ?? "Course"} — ${picker.selectedRegulation} Regulation Document`}
               value={currentUrl}
@@ -81,7 +85,7 @@ export default function AcademicsRegulationPage() {
               onRemoved={() => { setLocalUrl(""); void patchRegulationDocument(""); }}
             />
           ) : (
-            <p className="text-sm text-muted-foreground">Select a Regulation and Course above to upload its document.</p>
+            <p className="text-sm text-muted-foreground">Select a Regulation and Course above and click Load to upload its document.</p>
           )}
         </CardContent>
       </Card>

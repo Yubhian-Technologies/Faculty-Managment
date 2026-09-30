@@ -5,12 +5,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { DepartmentChipList } from "@/components/shared/DepartmentChipList";
 import { CourseYearRow } from "./CourseYearRow";
+import type { CourseYearBatchInfo } from "@/lib/college/courseYearBatch";
 import { Pencil, Trash2, GitBranch, BookOpen } from "lucide-react";
 import type {
   Course,
   Department,
   CourseYearTiming,
-  CourseAcademicYear,
   SubjectSemesterAssignment,
 } from "@/types";
 
@@ -23,14 +23,14 @@ interface DepartmentCourseCardProps {
   scope: { assignedYears: number[]; secondaryDepartments: string[] };
   years: number[];
   timings: CourseYearTiming[];
-  academicYears: CourseAcademicYear[];
+  // Batch in each year this academic year, and its regulation (null until loaded).
+  batchForYear: (year: number) => CourseYearBatchInfo | null;
   subjectAssignments: SubjectSemesterAssignment[];
   onEditCourse: () => void;
   onDeleteCourse: () => void;
   onCustomiseCourse: () => void;
   onRemoveInherited: () => void;
   onEditTiming: (year: number) => void;
-  onAdvanceAcademicYear: (year: number, currentAcademicYear?: CourseAcademicYear) => void;
   onOpenSemesterSubjects: (course: Course, year: number, semester: number) => void;
 }
 
@@ -43,14 +43,13 @@ export function DepartmentCourseCard({
   scope,
   years,
   timings,
-  academicYears,
+  batchForYear,
   subjectAssignments,
   onEditCourse,
   onDeleteCourse,
   onCustomiseCourse,
   onRemoveInherited,
   onEditTiming,
-  onAdvanceAcademicYear,
   onOpenSemesterSubjects,
 }: DepartmentCourseCardProps) {
   const isInherited = isSubDepartment && !isOwnCourse;
@@ -190,9 +189,6 @@ export function DepartmentCourseCard({
         ) : (
           years.map((y) => {
             const timing = timings.find((t) => t.courseId === course.id && t.year === y);
-            const academicYear = academicYears.find(
-              (a) => a.courseId === course.id && a.year === y
-            );
 
             return (
               <CourseYearRow
@@ -200,12 +196,11 @@ export function DepartmentCourseCard({
                 course={course}
                 year={y}
                 timing={timing}
-                academicYear={academicYear}
+                batch={batchForYear(y)}
                 subjectAssignments={subjectAssignments}
                 isSubDepartment={isSubDepartment}
                 isInherited={isInherited}
                 onEditTiming={() => onEditTiming(y)}
-                onAdvanceAcademicYear={() => onAdvanceAcademicYear(y, academicYear)}
                 onOpenSemesterSubjects={(semester) =>
                   onOpenSemesterSubjects(course, y, semester)
                 }

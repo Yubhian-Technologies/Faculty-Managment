@@ -30,13 +30,18 @@ export function CategoryField({ category, customCategory, onCategoryChange, onCu
   const [categories, setCategories] = useState<string[]>(
     Object.keys(SUBJECT_CATEGORY_LABELS).filter((c) => c !== "OTHER")
   );
+  // Full forms of categories defined on Academics > Categories, by code.
+  const [labels, setLabels] = useState<Record<string, string>>({});
   const [addingNew, setAddingNew] = useState(false);
   const [newCategoryText, setNewCategoryText] = useState("");
 
   useEffect(() => {
     fetch("/api/college/subjects/categories")
-      .then((r) => r.json() as Promise<{ categories?: string[] }>)
-      .then((d) => { if (d.categories?.length) setCategories(d.categories); })
+      .then((r) => r.json() as Promise<{ categories?: string[]; labels?: Record<string, string> }>)
+      .then((d) => {
+        if (d.categories?.length) setCategories(d.categories);
+        if (d.labels) setLabels(d.labels);
+      })
       .catch(() => { /* non-critical - falls back to the AICTE defaults */ });
   }, []);
 
@@ -64,7 +69,7 @@ export function CategoryField({ category, customCategory, onCategoryChange, onCu
         <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
         <SelectContent>
           {categories.map((c) => (
-            <SelectItem key={c} value={c}>{(SUBJECT_CATEGORY_LABELS as Record<string, string>)[c] ?? c}</SelectItem>
+            <SelectItem key={c} value={c}>{labels[c] ? `${labels[c]} (${c})` : (SUBJECT_CATEGORY_LABELS as Record<string, string>)[c] ?? c}</SelectItem>
           ))}
           <SelectItem value="OTHER">{SUBJECT_CATEGORY_LABELS.OTHER}</SelectItem>
           <SelectItem value={NEW_CATEGORY_VALUE}>+ Add new category…</SelectItem>
