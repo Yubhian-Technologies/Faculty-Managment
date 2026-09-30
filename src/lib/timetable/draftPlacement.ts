@@ -79,7 +79,6 @@ export function validatePlacement(
       .filter((k) => !ignore.has(k)),
   );
   const facultyBusy = ctx.busyFaculty.get(facultyId) ?? new Set<string>();
-  const facultyDeclaredBusy = ctx.declaredBusyFaculty.get(facultyId) ?? new Set<string>();
 
   for (let i = 0; i < blockSize; i++) {
     const p = startPeriod + i;
@@ -95,13 +94,6 @@ export function validatePlacement(
       if (existing.some((s) => ctx.subjectsById.get(s.subjectId)?.type !== "PRACTICAL")) {
         return `Period ${p} on ${day} holds a non-lab subject - a period can only be split between lab subjects.`;
       }
-    }
-    // A lending department's own busyPeriods declaration (see
-    // AssignmentRequestsPanel) never created a real TimetableSlot anywhere -
-    // "already teaching another section" would be misleading for it, so this
-    // gets its own, accurate wording instead.
-    if (facultyDeclaredBusy.has(key)) {
-      return `${facultyName} already has a period on ${day} period ${p}.`;
     }
     // No "already teaching another section" check: years run their own period
     // timings, so the same faculty may hold the same period number in two
