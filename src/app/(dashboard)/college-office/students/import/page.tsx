@@ -97,7 +97,7 @@ const LOCKED_KEY_SET = new Set(["department", "year", "secondaryDepartment"]);
 const LOCKED_TEMPLATE_COLUMNS = COLUMNS.filter((c) => !LOCKED_KEY_SET.has(c.key));
 
 const HINTS = [
-  "Course, Department and Academic Year are selected once above — they are not columns in the file. Name is the only required field in the file.",
+  "Course, Department and Current year of Study are selected once above — they are not columns in the file. Name is the only required field in the file.",
   "Name (as per SSC): enter the name exactly as it appears on the student's SSC (10th) certificate - this is the name used on statutory/academic paperwork.",
   "Section is NOT collected here - the department assigns it later (the sub-HOD divides students into sections). Every student is imported as \"unassigned\" until then. Roll No, if you already have a provisional one, is accepted but not checked for uniqueness until the department assigns the real one.",
   "Core Department (the real branch a 1st-year is pre-registered to while under a shared/Basic Science department) isn't a column in the file either - it's picked once above, for the whole file, the same way Department itself is.",
@@ -247,7 +247,7 @@ export default function OfficeStudentImportPage() {
     if (!form.name?.trim()) { setFixError("Name is required"); return; }
     if (!form.course) { setFixError("Course is required"); return; }
     if (!form.department) { setFixError("Department is required"); return; }
-    if (!form.year) { setFixError("Academic Year is required"); return; }
+    if (!form.year) { setFixError("Current year of Study is required"); return; }
     // 1st-year rows at a college that runs a shared first year must land
     // under a Basic Science (Freshman) department with a Core Department
     // named - same rule the main Students page's Add form checks and the
@@ -441,7 +441,7 @@ export default function OfficeStudentImportPage() {
         title="Import Students"
         description={isLocked
           ? `Bulk upload students directly into Section ${lockedSection} - from a CSV/Excel file`
-          : "Select Course, Department & Academic Year below, then upload the student roster"}
+          : "Select Course, Department & Current year of Study below, then upload the student roster"}
         actions={
           <Button variant="outline" asChild>
             <Link href={backHref}><ArrowLeft className="h-4 w-4 mr-1" />Back to Dashboard</Link>
@@ -451,10 +451,10 @@ export default function OfficeStudentImportPage() {
 
       {!isLocked && (
         <Card>
-          <CardHeader><CardTitle className="text-base flex items-center gap-2"><span className="h-6 w-6 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center font-bold">1</span>Select Course, Department &amp; Academic Year</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="text-base flex items-center gap-2"><span className="h-6 w-6 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center font-bold">1</span>Select Course, Department &amp; Current year of Study</CardTitle></CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              Course, Department and Academic Year are required for the whole file — set them once here instead of typing them per row. Every student in this import will belong to these values.
+              Course, Department and Current year of Study are required for the whole file — set them once here instead of typing them per row. Every student in this import will belong to these values.
               {secondaryDepartmentBranches.length > 0 && " Since this Department cross-lists to real branches, pick Core Department too - same as adding one student by hand."}
             </p>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -474,8 +474,8 @@ export default function OfficeStudentImportPage() {
             {!dropdownComplete && (
               <p className="text-xs text-amber-700">
                 {secondaryDepartmentRequired && !pickValues.secondaryDepartment
-                  ? "Select Course, Department, Core Department and Academic Year to continue."
-                  : "Select Course, Department and Academic Year to continue."}
+                  ? "Select Course, Department, Core Department and Current year of Study to continue."
+                  : "Select Course, Department and Current year of Study to continue."}
               </p>
             )}
           </CardContent>

@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/store/authStore";
 import { ROLE_LABELS } from "@/types";
-import { Library, CalendarRange, BookOpen, FileText, Tags, ArrowRight } from "lucide-react";
+import { Library, BookOpen, FileText, Tags, ArrowRight } from "lucide-react";
 
 const QUICK_ACTIONS = [
   {
@@ -27,12 +27,6 @@ const QUICK_ACTIONS = [
     icon: Tags,
     title: "Categories",
     description: "Define subject categories as a short code and its full form, for use in Course Structure files.",
-  },
-  {
-    href: "/academics/teaching-assignments",
-    icon: CalendarRange,
-    title: "Teaching Assignments",
-    description: "Browse any department's course-year and assign faculty to its subjects.",
   },
   {
     href: "/academics/syllabus",

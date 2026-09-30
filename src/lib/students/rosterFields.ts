@@ -75,7 +75,7 @@ export const ROSTER_FIELDS: RosterField[] = [
   // per-student via the Add/Edit form.
   { key: "secondaryDepartment", label: "Core Department", kind: "select", sample: "Optional; same name/Code rules as Department - only for a 1st-year pre-registered to a core branch while enrolled under a shared/Basic Science department", primary: true,
     aliases: ["Secondary Department", "Secondary Dept", "Core Branch"] },
-  { key: "year", label: "Academic Year", kind: "select", sample: "Required; the academic year number (1-4)", required: true, primary: true, aliases: ["Year"] },
+  { key: "year", label: "Current year of Study", kind: "select", sample: "Required; the current year of study (1-4)", required: true, primary: true, aliases: ["Year", "Academic Year"] },
 
   { key: "admissionNo", label: "Admission No", kind: "text", sample: "Optional; text" },
   { key: "hallTicketNo", label: "Hall Ticket No", kind: "text", sample: "Optional; text" },
