@@ -19,14 +19,16 @@ import type { Course, Department, Section, CourseYearTiming, TimetableSlot, Subj
 // VICE_PRINCIPAL reaches this page through its inherited access to /principal/*
 // (see ROLE_PATH_MAP in src/proxy.ts).
 
-// Roles that also get the college-wide "who is free at this time" filter. The
-// page is re-exported for Exam Cell and Academics, which do not (the
-// /api/college/faculty-leisure guard enforces the same list).
-const LEISURE_ROLES = ["PRINCIPAL", "VICE_PRINCIPAL", "EXAM_CELL", "COLLEGE_ADMIN", "DIRECTOR", "SUPER_ADMIN"];
+// The college-wide "who is free at this time" filter is an optional toggle. The
+// page is re-exported for Academics, which does not get it (the
+// /api/college/faculty-leisure guard enforces the real role list). Hidden for Academics only; a "working as" seat can change user.role, so this
+// is a denylist rather than an allowlist.
+const NO_LEISURE_ROLES = ["ACADEMICS"];
 
 export default function PrincipalTimetablePage() {
   const { user } = useAuth();
-  const canSeeLeisure = LEISURE_ROLES.includes(user?.role ?? "");
+  const canSeeLeisure = !NO_LEISURE_ROLES.includes(user?.role ?? "");
+  const [showLeisure, setShowLeisure] = useState(false);
   const [courses, setCourses] = useState<Course[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   // A Course doc belongs to one department, so the same programme (e.g. B.Tech)
@@ -38,8 +40,6 @@ export default function PrincipalTimetablePage() {
   const [semester, setSemester] = useState<number | null>(null);
   const [sections, setSections] = useState<Section[]>([]);
   const [sectionId, setSectionId] = useState("");
-  // Admission-batch filter ("" = every batch) narrowing the section list below.
-  const [batch, setBatch] = useState("");
   const [timing, setTiming] = useState<CourseYearTiming | null>(null);
   const [slots, setSlots] = useState<TimetableSlot[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
@@ -61,7 +61,6 @@ export default function PrincipalTimetablePage() {
     setDepartmentId("");
     setYear("");
     setSemester(null);
-    setBatch("");
     setSections([]);
     setSectionId("");
     setTiming(null);
@@ -75,7 +74,6 @@ export default function PrincipalTimetablePage() {
     setDepartmentId(id);
     setYear("");
     setSemester(null);
-    setBatch("");
     setSections([]);
     setSectionId("");
     setTiming(null);
@@ -84,7 +82,6 @@ export default function PrincipalTimetablePage() {
   function chooseYear(y: string) {
     setYear(y);
     setSemester(null);
-    setBatch("");
     setSections([]);
     setSectionId("");
     setTiming(null);
@@ -134,32 +131,19 @@ export default function PrincipalTimetablePage() {
     return assigned.length > 0 ? courseYears.filter((y) => assigned.includes(y)) : courseYears;
   })();
 
-  const batchOptions = useMemo(
-    () => Array.from(new Set(sections.map((s) => s.batch).filter(Boolean))).sort(),
-    [sections]
-  );
-  const visibleSections = useMemo(
-    () => (batch ? sections.filter((s) => s.batch === batch) : sections),
-    [sections, batch]
-  );
-  function chooseBatch(b: string) {
-    setBatch(b);
-    const list = b ? sections.filter((s) => s.batch === b) : sections;
-    setSectionId(list[0]?.id ?? "");
-  }
+  const visibleSections = sections;
 
   const semesterOptions = useMemo(() => {
     if (!timing) return [];
     const sems = timing.semesters;
     return sems ? sems.map((s) => s.semester).sort((a, b) => a - b) : [];
   }, [timing]);
-  const effectiveSemester = semesterOptions.length === 0
-    ? null
-    : semester != null && semesterOptions.includes(semester)
-      ? semester
-      : semesterOptions[0];
+  // No auto-pick: until a semester is chosen the API resolves the current one.
+  const effectiveSemester = semester != null && semesterOptions.includes(semester) ? semester : null;
 
-  // Sections + timing for the resolved course-year. Downstream state is cleared
+  // Sections + timing for the resolved course-year. Deliberately NOT keyed on the
+  // semester: sections belong to a course-year, and refetching on a semester
+  // change reset the picked section (and raced the timing load). Downstream state is cleared
   // by the choose* handlers, so this effect never has to reset anything itself.
   //
   // Sections are fetched by DEPARTMENT (not the resolved courseId) because a
@@ -178,7 +162,7 @@ export default function PrincipalTimetablePage() {
     void (async () => {
       try {
         const [s, t] = await Promise.all([
-          fetch(`/api/college/sections?departmentId=${encodeURIComponent(departmentId)}&year=${encodeURIComponent(year)}${effectiveSemester != null ? "&semester=" + effectiveSemester : ""}`)
+          fetch(`/api/college/sections?departmentId=${encodeURIComponent(departmentId)}&year=${encodeURIComponent(year)}`)
             .then((r) => r.json() as Promise<{ sections: Section[] }>),
           fetch(`/api/college/course-year-timings?courseId=${encodeURIComponent(courseId)}`)
             .then((r) => r.json() as Promise<{ timings: CourseYearTiming[] }>),
@@ -189,15 +173,14 @@ export default function PrincipalTimetablePage() {
           .filter((sec) => courseIdsForName.has(sec.courseId))
           .sort((a, b) => a.name.localeCompare(b.name));
         setSections(list);
-        setBatch("");
-        setSectionId(list[0]?.id ?? "");
+            setSectionId("");
         setTiming((t.timings ?? []).find((x) => Number(x.year) === Number(year)) ?? null);
       } catch {
         if (!cancelled) toast({ variant: "destructive", title: "Failed to load sections" });
       }
     })();
     return () => { cancelled = true; };
-  }, [departmentId, year, effectiveSemester, courseId, courseName, courses]);
+  }, [departmentId, year, courseId, courseName, courses]);
 
   useEffect(() => {
     if (!sectionId) return;
@@ -224,7 +207,7 @@ export default function PrincipalTimetablePage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Timetable" description="Published section timetables across the college" />
+      <PageHeader title="Timetable View" description="Published section timetables across the college" />
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <div className="space-y-1.5">
@@ -279,27 +262,13 @@ export default function PrincipalTimetablePage() {
              id="tt-semester"
              className={selectClass}
              value={effectiveSemester != null ? String(effectiveSemester) : ""}
-             onChange={(e) => setSemester(Number(e.target.value))}
+             onChange={(e) => setSemester(e.target.value ? Number(e.target.value) : null)}
              disabled={!timing || semesterOptions.length === 0}
            >
              <option value="">Select semester</option>
              {semesterOptions.map((s) => (
                <option key={s} value={s}>Semester {s}</option>
              ))}
-           </select>
-         </div>
-
-         <div className="space-y-1.5">
-           <label className="text-sm font-medium" htmlFor="tt-batch">Batch</label>
-           <select
-             id="tt-batch"
-             className={selectClass}
-             value={batch}
-             onChange={(e) => chooseBatch(e.target.value)}
-             disabled={batchOptions.length === 0}
-           >
-             <option value="">All batches</option>
-             {batchOptions.map((b) => <option key={b} value={b}>{b}</option>)}
            </select>
          </div>
 
@@ -312,7 +281,7 @@ export default function PrincipalTimetablePage() {
              onChange={(e) => setSectionId(e.target.value)}
              disabled={visibleSections.length === 0}
            >
-             {visibleSections.length === 0 ? <option value="">No sections</option> : null}
+             <option value="">{visibleSections.length === 0 ? "No sections" : "Select a section"}</option>
              {/* Department code included: a parent department and its
                  sub-departments each have their own "A". */}
              {visibleSections.map((s) => (
@@ -322,7 +291,18 @@ export default function PrincipalTimetablePage() {
          </div>
       </div>
 
-      {canSeeLeisure && <FacultyLeisureFilter />}
+      {canSeeLeisure && (
+        <div className="space-y-3">
+          <button
+            type="button"
+            className="h-9 rounded-md border border-input bg-background px-3 text-sm font-medium hover:bg-muted"
+            onClick={() => setShowLeisure((v) => !v)}
+          >
+            {showLeisure ? "Hide free faculty" : "Show free faculty"}
+          </button>
+          {showLeisure && <FacultyLeisureFilter />}
+        </div>
+      )}
 
       {!sectionId ? (
         <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
