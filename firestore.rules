@@ -544,6 +544,19 @@ service cloud.firestore {
         allow write: if isExamCell(collegeId);
       }
 
+      // Exam Cell's college-wide "how many mids" setting, and the published
+      // Course+Semester+Mid date/time windows it drives. Same ownership shape
+      // as examConfigurations above.
+      match /examSettings/{settingId} {
+        allow read: if isStaff(collegeId) || isExamCell(collegeId);
+        allow write: if isExamCell(collegeId);
+      }
+
+      match /examMidSchedules/{scheduleId} {
+        allow read: if isStaff(collegeId) || isExamCell(collegeId);
+        allow write: if isExamCell(collegeId);
+      }
+
       match /teachingAssignments/{assignmentId} {
         allow read: if isStaff(collegeId);
         allow write: if isHODorAbove(collegeId);
