@@ -79,6 +79,9 @@ export function StudentFormDialog({ open, onOpenChange, student, onSaved }: Stud
   const activeDepartments = departments.filter((d) => d.isActive).sort((a, b) => a.name.localeCompare(b.name));
 
   async function handleSave() {
+    // Roll No is the student's unique identity - required on Add. (On Edit it
+    // is shown read-only, so a legacy roll-less student can still be edited.)
+    if (!editTarget && !form.rollNumber?.trim()) { toast({ variant: "destructive", title: "Roll No is required" }); return; }
     if (!form.name?.trim()) { toast({ variant: "destructive", title: "Name is required" }); return; }
     if (!form.course) { toast({ variant: "destructive", title: "Course is required" }); return; }
     if (!form.department) { toast({ variant: "destructive", title: "Department is required" }); return; }

@@ -90,7 +90,7 @@ export default function AcademicsRegulationPage() {
         </CardContent>
       </Card>
 
-      <CourseCatalogSettingsCard regulationsOnly showDepartments />
+      <CourseCatalogSettingsCard showDepartments />
     </div>
   );
 }
