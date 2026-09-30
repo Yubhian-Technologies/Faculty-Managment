@@ -14,6 +14,7 @@ import {
   type CourseStructureRequest,
 } from "./CourseStructureImportService";
 import type { CourseStructureRawRow } from "../courseStructureValidation";
+import { SubjectInstanceService } from "./SubjectInstanceService";
 
 // ── Minimal Firestore fake ─────────────────────────────────────────────────
 type Data = Record<string, unknown>;
@@ -51,11 +52,13 @@ class DocRef {
     return { id: this.id, exists: data !== undefined, data: () => (data ? structuredClone(data) : undefined) };
   }
   async get() { return this.snap(); }
+  async delete() { this.db.store.delete(this.path); }
 }
 
 class QueryRef {
   constructor(protected db: FakeDb, readonly path: string, readonly filters: Filter[] = []) {}
   where(field: string, op: "==" | "in", value: unknown) { return new QueryRef(this.db, this.path, [...this.filters, { field, op, value }]); }
+  limit() { return this; }
   run() {
     const docs = [];
     for (const [p, data] of this.db.store) {
@@ -259,6 +262,61 @@ describe("Course Structure import - end to end", () => {
     const before = db.store.size;
     await expect(service.run(request([row()]), "commit")).rejects.toThrow(/created by someone else/);
     expect(db.store.size).toBe(before + 1); // only the competitor's subject
+    expect(docs("subjectSemesterAssignments")).toHaveLength(0);
+  });
+});
+
+// ── After the import: teaching assignment -> timetable slot -> attendance ──
+// Teaching assignments, timetable slots and attendance sessions all carry
+// the imported master's id as `subjectId`; removing the semester assignment
+// underneath a live teaching assignment must be refused.
+describe("Course Structure import - downstream links", () => {
+  async function importOne(over: Partial<CourseStructureRequest> = {}) {
+    await service.run(request([row()], over), "commit");
+    const [a] = docs("subjectSemesterAssignments");
+    return a as Data & { id: string; subjectId: string; departmentId: string; semester: number };
+  }
+  // The shape teaching-assignments/route.ts POST writes for a section.
+  function teachingAssignment(subjectId: string, over: Data = {}) {
+    put("teachingAssignments/ta1", {
+      subjectId, sectionId: "sec1", courseId: "c-cse", departmentId: "cse", department: "CSE",
+      year: 2, timetableSemester: 3, facultyId: "f1", ...over,
+    });
+  }
+
+  it("the same subject id carries through teaching assignment, timetable slot and attendance", async () => {
+    const inst = await importOne();
+    teachingAssignment(inst.subjectId);
+    // timetable-slots POST copies subjectId/courseId/year/sectionId from the assignment;
+    // student-attendance POST copies subjectId from the assignment.
+    const ta = db.store.get(`${C}/teachingAssignments/ta1`)!;
+    const master = db.store.get(`${C}/subjects/${inst.subjectId}`)!;
+    expect(ta.subjectId).toBe(inst.subjectId);
+    expect(master).toMatchObject({ regulation: "R23", courseId: "c-cse", type: "THEORY", hoursPerWeek: 3 });
+    expect(teachingLookup(inst.subjectId, { courseId: "c-cse", department: "CSE", year: 2 })[0]).toMatchObject({ semester: ta.timetableSemester });
+  });
+
+  it("refuses to remove a semester assignment a live teaching assignment uses", async () => {
+    const inst = await importOne();
+    teachingAssignment(inst.subjectId);
+    const svc = new SubjectInstanceService(db as never);
+    await expect(svc.unassignSubjectInstance("col1", inst.subjectId, "cse", 3)).rejects.toThrow(/active faculty teaching assignments/);
+    expect(docs("subjectSemesterAssignments")).toHaveLength(1);
+  });
+
+  it("refuses it for a sub-department whose section runs on the parent's course", async () => {
+    const inst = await importOne({ courseId: "c-ai", departmentId: "ai-ds" });
+    teachingAssignment(inst.subjectId, { courseId: "c-ai", departmentId: "ai", department: "AI-DS" });
+    const svc = new SubjectInstanceService(db as never);
+    await expect(svc.unassignSubjectInstance("col1", inst.subjectId, "ai-ds", 3)).rejects.toThrow(/active faculty/);
+  });
+
+  it("allows removal when the only teaching assignment is past or for another semester", async () => {
+    const inst = await importOne();
+    teachingAssignment(inst.subjectId, { timetableSemester: 4 });
+    put("teachingAssignments/ta2", { subjectId: inst.subjectId, sectionId: "sec1", courseId: "c-cse", department: "CSE", year: 2, timetableSemester: 3, isPast: true });
+    const svc = new SubjectInstanceService(db as never);
+    await svc.unassignSubjectInstance("col1", inst.subjectId, "cse", 3);
     expect(docs("subjectSemesterAssignments")).toHaveLength(0);
   });
 });

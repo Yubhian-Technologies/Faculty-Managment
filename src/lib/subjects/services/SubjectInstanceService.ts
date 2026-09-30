@@ -1,5 +1,6 @@
 import { getAdminDb } from "@/lib/firebase/admin";
-import type { Subject, SubjectSemesterAssignment } from "@/types";
+import { inheritedAssignmentDepartmentId } from "@/lib/timetable/sharedYearTiming";
+import type { Course, Department, Subject, SubjectSemesterAssignment, TeachingAssignment } from "@/types";
 
 export interface SubjectInstanceAssignOptions {
   collegeId: string;
@@ -104,6 +105,38 @@ export function buildSubjectInstancePayload(
     createdAt: options.createdAt as SubjectSemesterAssignment["createdAt"],
     updatedAt: options.now as unknown as SubjectSemesterAssignment["updatedAt"],
   };
+}
+
+/**
+ * Whether a live teaching assignment depends on this semester instance -
+ * the same lookup teaching-assignments/route.ts POST uses to accept it: the
+ * instance's department is the section course's department, the section's
+ * own department (a sub-department running on its parent's course), or the
+ * shared-first-year managing department; same semester (section-scoped
+ * assignments store it as `timetableSemester`) and same year.
+ */
+export function teachingAssignmentUsesInstance(
+  ta: Pick<TeachingAssignment, "isPast" | "sectionId" | "courseId" | "year" | "department" | "departmentId" | "timetableSemester" | "semester">,
+  instance: { departmentId: string; semester: number; year?: number },
+  departments: (Department & { id: string })[],
+  coursesById: Map<string, Pick<Course, "departmentId" | "catalogId">>
+): boolean {
+  if (ta.isPast) return false;
+  // Legacy semester-scoped shape: no section, semester stored directly.
+  if (!ta.sectionId) return ta.departmentId === instance.departmentId && ta.semester === instance.semester;
+  if (ta.timetableSemester != null && ta.timetableSemester !== instance.semester) return false;
+  if (instance.year != null && ta.year != null && Number(ta.year) !== Number(instance.year)) return false;
+  const course = ta.courseId ? coursesById.get(ta.courseId) : undefined;
+  const candidates = new Set<string>();
+  if (course?.departmentId) candidates.add(course.departmentId);
+  if (ta.departmentId) candidates.add(ta.departmentId);
+  const sectionDeptId = departments.find((d) => d.name === ta.department)?.id;
+  if (sectionDeptId) candidates.add(sectionDeptId);
+  if (course && ta.year != null) {
+    const inherited = inheritedAssignmentDepartmentId(course, ta.year, departments);
+    if (inherited) candidates.add(inherited);
+  }
+  return candidates.has(instance.departmentId);
 }
 
 export class SubjectInstanceService {
@@ -351,16 +384,26 @@ export class SubjectInstanceService {
   public async unassignSubjectInstance(collegeId: string, subjectId: string, departmentId: string, semester: number): Promise<void> {
     const collegeRef = this.db.collection("colleges").doc(collegeId);
 
-    // Guard: Prevent orphaning active teaching assignments
-    const activeAssignmentsSnap = await collegeRef.collection("teachingAssignments")
-      .where("subjectId", "==", subjectId)
-      .where("departmentId", "==", departmentId)
-      .where("semester", "==", semester)
-      .limit(1)
-      .get();
-
-    if (!activeAssignmentsSnap.empty) {
-      throw new Error("This subject has active faculty teaching assignments in this semester. Please remove or reassign faculty before unassigning.");
+    // Guard: never remove a semester instance a live teaching assignment
+    // still relies on (its timetable slots and attendance hang off that
+    // assignment). Previously queried `semester` + the instance's
+    // departmentId, but section-scoped assignments store `timetableSemester`
+    // and the section course's departmentId, so the guard never matched them.
+    const [assignmentsSnap, instanceSnap, deptsSnap] = await Promise.all([
+      collegeRef.collection("teachingAssignments").where("subjectId", "==", subjectId).get(),
+      collegeRef.collection("subjectSemesterAssignments").doc(`${subjectId}_${departmentId}_${semester}`).get(),
+      collegeRef.collection("departments").get(),
+    ]);
+    const live = assignmentsSnap.docs.map((d) => d.data() as TeachingAssignment).filter((a) => !a.isPast);
+    if (live.length > 0) {
+      const departments = deptsSnap.docs.map((d) => ({ ...(d.data() as Department), id: d.id }));
+      const courseIds = Array.from(new Set(live.map((a) => a.courseId).filter((c): c is string => !!c)));
+      const courseSnaps = courseIds.length > 0 ? await this.db.getAll(...courseIds.map((c) => collegeRef.collection("courses").doc(c))) : [];
+      const coursesById = new Map(courseSnaps.filter((c) => c.exists).map((c) => [c.id, c.data() as Course]));
+      const instanceYear = instanceSnap.exists ? (instanceSnap.data() as { year?: number }).year : undefined;
+      if (live.some((a) => teachingAssignmentUsesInstance(a, { departmentId, semester, year: instanceYear }, departments, coursesById))) {
+        throw new Error("This subject has active faculty teaching assignments in this semester. Please remove or reassign faculty before unassigning.");
+      }
     }
 
     const instanceDocId = `${subjectId}_${departmentId}_${semester}`;
