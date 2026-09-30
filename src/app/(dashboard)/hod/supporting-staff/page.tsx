@@ -202,6 +202,7 @@ export default function HODSupportingStaffPage() {
       />
 
       <DataTable
+        paginate
         data={staff}
         columns={columns}
         isLoading={isLoading}

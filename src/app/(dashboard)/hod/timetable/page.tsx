@@ -40,7 +40,7 @@ interface LoadedSection {
   sectionId: string;
 }
 
-export default function HODTimetablePage() {
+function SectionTimetable() {
   const myDepartments = useMyDepartments();
   const [courses, setCourses] = useState<Course[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -334,4 +334,8 @@ export default function HODTimetablePage() {
       )}
     </div>
   );
+}
+
+export default function HODTimetablePage() {
+  return <SectionTimetable />;
 }

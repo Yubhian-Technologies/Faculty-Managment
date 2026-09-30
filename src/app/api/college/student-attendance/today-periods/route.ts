@@ -67,6 +67,8 @@ export async function GET() {
     const periods = await Promise.all(
       slots.map(async ({ slot, startTime, endTime }) => {
         const isOpen = nowMinutes >= toMinutes(startTime) && nowMinutes < toMinutes(endTime);
+        // Where "now" sits against the period: not started yet, running, or over.
+        const phase: "UPCOMING" | "OPEN" | "ENDED" = isOpen ? "OPEN" : nowMinutes < toMinutes(startTime) ? "UPCOMING" : "ENDED";
         const id = `${slot.assignmentId}_${today}_${slot.periodNumber}`;
         let sess: (StudentAttendanceSession & { id: string }) | null = null;
         try {
@@ -92,6 +94,7 @@ export async function GET() {
           session: sess,
           sessionStatus: sess?.status ?? null,
           isOpen,
+          phase,
           labBatch: slot.labBatch ?? null,
         };
       })

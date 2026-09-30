@@ -50,6 +50,7 @@ export function IndentRequestsTable({ requests, isLoading, onEditRequest, onView
       </CardHeader>
       <CardContent>
         <DataTable
+          paginate
           data={requests as (IndentRequest & Record<string, unknown>)[]}
           columns={columns}
           isLoading={isLoading}
