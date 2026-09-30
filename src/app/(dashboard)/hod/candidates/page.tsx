@@ -181,6 +181,7 @@ export default function HODCandidatesPage() {
       />
 
       <DataTable
+        paginate
         data={candidates}
         columns={columns}
         isLoading={isLoading}

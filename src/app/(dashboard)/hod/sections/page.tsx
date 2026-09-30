@@ -16,6 +16,8 @@ import {
   resolveScopeDepartments, buildCourseGroups, managedBranchYearsMap, yearsInScope, managerEffectiveYears,
   mergeOwnDepartmentOptions, deriveHodScope,
 } from "@/lib/departments/hodScope";
+import { Pagination } from "@/components/shared/Pagination";
+import { usePagination } from "@/hooks/usePagination";
 import { getFreshmanDepartmentIds, type DepartmentWithId } from "@/lib/college/academicStructure";
 import type { SectionListItem, Course, Department } from "@/types";
 
@@ -543,6 +545,14 @@ export default function HODSectionsPage() {
   }
   groups.sort((a, b) => a.courseName.localeCompare(b.courseName) || a.year - b.year);
 
+  // Paginated over the flat section list (in group order), so a page can end
+  // mid-group; the group header keeps its FULL-group counts either way.
+  const sectionPager = usePagination(groups.flatMap((g) => g.sections), 12);
+  const pageSectionIds = new Set(sectionPager.pageItems.map((x) => x.id));
+  const pageGroups = groups
+    .map((g) => ({ g, shown: g.sections.filter((x) => pageSectionIds.has(x.id)) }))
+    .filter((x) => x.shown.length > 0);
+
   const totalStudents = yearScopedSections.reduce((sum, s) => sum + (s.studentCount ?? 0), 0);
 
   return (
@@ -797,7 +807,7 @@ export default function HODSectionsPage() {
       {/* Sections grouped by course + year */}
       {!isLoading && groups.length > 0 && (
         <div className="space-y-8">
-          {groups.map((g) => {
+          {pageGroups.map(({ g, shown }) => {
             const sts = g.sections.reduce((s, r) => s + (r.studentCount ?? 0), 0);
             const req = sts > 0 ? Math.ceil(sts / STUDENT_FACULTY_RATIO) : 0;
             return (
@@ -813,7 +823,7 @@ export default function HODSectionsPage() {
                 </div>
 
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {g.sections.map((sec) => (
+                  {shown.map((sec) => (
                     <div
                       key={sec.id}
                       className={`rounded-xl border-2 p-5 flex flex-col gap-3 ${yearColor(sec.year)}`}
@@ -903,6 +913,13 @@ export default function HODSectionsPage() {
               </div>
             );
           })}
+          <Pagination
+            page={sectionPager.page}
+            pageSize={sectionPager.pageSize}
+            total={sectionPager.total}
+            onPageChange={sectionPager.setPage}
+            onPageSizeChange={sectionPager.setPageSize}
+          />
         </div>
       )}
 
