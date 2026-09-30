@@ -4,10 +4,10 @@ import { useMemo } from "react";
 import { BookOpen, CalendarRange } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SemesterColumnCard } from "./SemesterColumnCard";
+import type { CourseYearBatchInfo } from "@/lib/college/courseYearBatch";
 import type {
   Course,
   CourseYearTiming,
-  CourseAcademicYear,
   SubjectSemesterAssignment,
   SemesterDuration,
 } from "@/types";
@@ -16,12 +16,11 @@ interface CourseYearRowProps {
   course: Course;
   year: number;
   timing?: CourseYearTiming;
-  academicYear?: CourseAcademicYear;
+  batch: CourseYearBatchInfo | null;
   subjectAssignments: SubjectSemesterAssignment[];
   isSubDepartment?: boolean;
   isInherited?: boolean;
   onEditTiming: () => void;
-  onAdvanceAcademicYear: () => void;
   onOpenSemesterSubjects: (semester: number) => void;
 }
 
@@ -29,12 +28,11 @@ export function CourseYearRow({
   course,
   year,
   timing,
-  academicYear,
+  batch,
   subjectAssignments,
   isSubDepartment = false,
   isInherited = false,
   onEditTiming,
-  onAdvanceAcademicYear,
   onOpenSemesterSubjects,
 }: CourseYearRowProps) {
   // Only display semesters if actually configured in timing.semesters
@@ -70,7 +68,7 @@ export function CourseYearRow({
 
   return (
     <div className="rounded-lg border bg-card p-4 transition-colors hover:bg-muted/10">
-      {/* Top Line: Year identifier and Academic Year on left, Timings on right */}
+      {/* Top Line: Year, batch and regulation on left, Timings on right */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-3">
           <span className="font-bold text-sm text-foreground">
@@ -89,32 +87,21 @@ export function CourseYearRow({
             <span className="font-bold">{yearTotalSubjects}</span> {yearTotalSubjects === 1 ? "Subject" : "Subjects"}
           </span>
 
-          <span className="text-muted-foreground/40 text-xs">|</span>
-
-          {/* Academic Year Info & Subtle Action */}
-          <div className="flex items-center gap-2">
+          {/* Batch in this year right now (derived from the college academic
+              year) and the regulation that batch follows. */}
+          {batch && (
             <span className="text-xs text-muted-foreground">
-              Academic Year:
+              Batch <span className="font-semibold text-foreground">{batch.label}</span>, Regulation{" "}
+              {batch.regulations.length === 0 ? (
+                <span className="font-semibold text-amber-600 dark:text-amber-400">not set for this batch</span>
+              ) : (
+                <span className={`font-semibold ${batch.regulations.length > 1 ? "text-amber-600 dark:text-amber-400" : "text-foreground"}`}>
+                  {batch.regulations.join(", ")}
+                  {batch.regulations.length > 1 && " (overlapping, check Regulation settings)"}
+                </span>
+              )}
             </span>
-            <span className={`text-xs font-semibold ${academicYear ? "text-foreground" : "text-amber-600 dark:text-amber-400"}`}>
-              {academicYear ? academicYear.label : "Not Configured"}
-            </span>
-
-            {!isInherited && (
-              <Button
-                variant={academicYear ? "ghost" : "outline"}
-                size="sm"
-                onClick={onAdvanceAcademicYear}
-                className={`h-6 text-xs px-2 rounded-md font-medium ${
-                  academicYear
-                    ? "text-muted-foreground hover:text-foreground hover:bg-muted"
-                    : "text-amber-700 border-amber-300 dark:text-amber-300 dark:border-amber-700 hover:bg-amber-50 dark:hover:bg-amber-950/30"
-                }`}
-              >
-                {academicYear ? "Advance AY →" : "Set AY"}
-              </Button>
-            )}
-          </div>
+          )}
         </div>
 
         {/* Timings on right with clean button */}
