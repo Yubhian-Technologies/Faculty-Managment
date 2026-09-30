@@ -38,15 +38,28 @@ export async function computeStudentAttendanceHistory(
   department: string,
   range: AttendanceHistoryRange = {}
 ): Promise<StudentAttendanceHistory> {
-  const sessionsSnap = await db
+  const monthStr = range.month ? String(Number(range.month)).padStart(2, "0") : null;
+
+  // Push the date range into the query (status+department+date index) instead
+  // of reading the department's whole history and filtering in memory - this
+  // runs on every student dashboard load.
+  let lower = range.from ?? null;
+  let upper = range.to ?? null;
+  if (range.year && /^\d{4}$/.test(range.year)) {
+    const yLo = monthStr ? `${range.year}-${monthStr}-01` : `${range.year}-01-01`;
+    const yHi = monthStr ? `${range.year}-${monthStr}-31` : `${range.year}-12-31`;
+    lower = lower && lower > yLo ? lower : yLo;
+    upper = upper && upper < yHi ? upper : yHi;
+  }
+  let query: FirebaseFirestore.Query = db
     .collection("colleges")
     .doc(collegeId)
     .collection("studentAttendance")
     .where("department", "==", department)
-    .where("status", "==", "SUBMITTED")
-    .get();
-
-  const monthStr = range.month ? String(Number(range.month)).padStart(2, "0") : null;
+    .where("status", "==", "SUBMITTED");
+  if (lower) query = query.where("date", ">=", lower);
+  if (upper) query = query.where("date", "<=", upper);
+  const sessionsSnap = await query.get();
 
   const inRange = sessionsSnap.docs
     .map((d) => d.data() as StudentAttendanceSession)
@@ -59,15 +72,11 @@ export async function computeStudentAttendanceHistory(
     })
     .filter((r) => r.entries.some((e) => e.studentId === studentId));
 
-  // One session per subject per date - a faculty double-submitting the same
-  // class shouldn't double-count it (mirrors section-attendance-report's own
-  // dedupe).
-  const seen = new Set<string>();
+  // Every submitted session is one period and counts for a student who is on
+  // its roster - the same rule every report uses (see counting.ts). Collapsing
+  // to one session per subject per day made a 3-period lab block count once.
   const bySubject = new Map<string, { subjectName: string; subjectCode: string; held: number; attend: number }>();
   for (const r of inRange) {
-    const key = `${r.subjectId}|${r.date}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
     const entry = r.entries.find((e) => e.studentId === studentId)!;
     const cur = bySubject.get(r.subjectId) ?? { subjectName: r.subjectName, subjectCode: r.subjectCode, held: 0, attend: 0 };
     cur.held += 1;

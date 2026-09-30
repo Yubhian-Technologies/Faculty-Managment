@@ -6,6 +6,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
 import { fetchSectionStudents } from "@/lib/students/sectionRoster";
 import { calcPercent } from "@/lib/studentAttendance/percentage";
+import { indexSessions, tallyStudentBySubject } from "@/lib/studentAttendance/counting";
 import { isShortageByPercent } from "@/lib/studentAttendance/shortage";
 import { matchesCurrentSemester } from "@/lib/college/semester";
 import type { Section, StudentAttendanceMark, StudentAttendanceSession, TeachingAssignment } from "@/types";
@@ -178,10 +179,37 @@ export async function GET(request: Request) {
     // Bounds (if any) are applied at query time with .where();
     // unbounded paths keep the same shape so the response contract is
     // stable and callers don't need to special-case "no filter".
-    const sessionsSnap = await collegeRef.collection("studentAttendance")
+    // Bounded by date wherever the request itself names a range: each session
+    // carries its whole roster, so pulling a section's entire history to show
+    // one month was the dominant cost of this route. Only the year/month
+    // pickers (which need every date to list what exists) stay unbounded, and
+    // those read just the two fields they use.
+    let dateFrom: string | null = null;
+    let dateTo: string | null = null;
+    if (summaryParam && (fromParam || toParam)) {
+      dateFrom = fromParam;
+      dateTo = toParam;
+    } else if (!summaryParam && fromParam && toParam) {
+      dateFrom = fromParam;
+      dateTo = toParam;
+    } else if (!tillNow && !allTimeParam && yearParam && /^\d{4}$/.test(yearParam)) {
+      if (monthParam && Number(monthParam) >= 1 && Number(monthParam) <= 12) {
+        const mm = String(Number(monthParam)).padStart(2, "0");
+        dateFrom = `${yearParam}-${mm}-01`;
+        dateTo = `${yearParam}-${mm}-31`;
+      } else {
+        dateFrom = `${yearParam}-01-01`;
+        dateTo = `${yearParam}-12-31`;
+      }
+    }
+    const listingDatesOnly = !tillNow && !allTimeParam && !fromParam && !toParam && !summaryParam && !dateParam && !(yearParam && monthParam);
+    let sessionsQuery: FirebaseFirestore.Query = collegeRef.collection("studentAttendance")
       .where("sectionId", "==", sectionId)
-      .where("status", "==", "SUBMITTED")
-      .get();
+      .where("status", "==", "SUBMITTED");
+    if (dateFrom) sessionsQuery = sessionsQuery.where("date", ">=", dateFrom);
+    if (dateTo) sessionsQuery = sessionsQuery.where("date", "<=", dateTo);
+    if (listingDatesOnly) sessionsQuery = sessionsQuery.select("date", "semester", "subjectId");
+    const sessionsSnap = await sessionsQuery.get();
     // Filtered once here (same leniency as currentSectionSubjects above) -
     // every mode below derives from this single list, so this is the one
     // place a semester filter needs to apply for all of them to be correct.
@@ -218,18 +246,8 @@ export async function GET(request: Request) {
         .map(([subjectId, v]) => ({ subjectId, subjectName: v.subjectName, subjectCode: v.subjectCode }))
         .sort((a, b) => a.subjectName.localeCompare(b.subjectName));
 
-      // One session per subject per date (same dedupe as every other branch
-      // here, in case a faculty ever double-submits).
-      const sessionsBySubject = new Map<string, StudentAttendanceSession[]>();
-      const seenSubjectDate = new Set<string>();
-      for (const r of inRange) {
-        const key = `${r.subjectId}|${r.date}`;
-        if (seenSubjectDate.has(key)) continue;
-        seenSubjectDate.add(key);
-        const arr = sessionsBySubject.get(r.subjectId) ?? [];
-        arr.push(r);
-        sessionsBySubject.set(r.subjectId, arr);
-      }
+      // Every submitted session is one period (see lib/studentAttendance/counting.ts).
+      const indexedInRange = indexSessions(inRange);
 
       const roster = await fetchSectionStudents(collegeRef, {
         department: section.department,
@@ -241,13 +259,9 @@ export async function GET(request: Request) {
       let students = roster
         .map((stu) => {
           const bySubject: Record<string, { held: number; attend: number; percent: number | null }> = {};
+          const tallies = tallyStudentBySubject(indexedInRange, stu.id);
           for (const sub of subjects) {
-            let held = 0;
-            let attend = 0;
-            for (const r of sessionsBySubject.get(sub.subjectId) ?? []) {
-              held += 1;
-              if (r.entries.find((e) => e.studentId === stu.id)?.status === "PRESENT") attend += 1;
-            }
+            const { held, attended: attend } = tallies.get(sub.subjectId) ?? { held: 0, attended: 0 };
             bySubject[sub.subjectId] = { held, attend, percent: calcPercent(attend, held) };
           }
           // consolidated overall for this range
@@ -311,6 +325,7 @@ export async function GET(request: Request) {
         if (!sessionsBySubject.has(r.subjectId)) sessionsBySubject.set(r.subjectId, []);
         sessionsBySubject.get(r.subjectId)!.push(r);
       }
+      const indexedRange = indexSessions(rangeSessions);
 
       let roster = await fetchSectionStudents(collegeRef, {
         department: section.department,
@@ -325,12 +340,9 @@ export async function GET(request: Request) {
           let overallHeld = 0;
           let overallAttended = 0;
           const bySubject: Record<string, { held: number; attended: number; percentage: number | null }> = {};
+          const tallies = tallyStudentBySubject(indexedRange, stu.id);
           for (const s of subjects) {
-            const sessionsForSubject = sessionsBySubject.get(s.subjectId) ?? [];
-            const held = sessionsForSubject.length;
-            const attended = sessionsForSubject.filter(
-              (r) => r.entries.find((e) => e.studentId === stu.id)?.status === "PRESENT"
-            ).length;
+            const { held, attended } = tallies.get(s.subjectId) ?? { held: 0, attended: 0 };
             bySubject[s.subjectId] = { held, attended, percentage: calcPercent(attended, held) };
             overallHeld += held;
             overallAttended += attended;
@@ -427,17 +439,12 @@ export async function GET(request: Request) {
         return Math.floor((day - 1 + firstWeekday) / 7);
       };
 
-      // One session per subject per date (same "first one wins" dedupe as
-      // the single-date branch below, in case a faculty ever double-submits).
-      const sessionsBySubject = new Map<string, StudentAttendanceSession[]>();
-      const seenSubjectDate = new Set<string>();
-      for (const r of inMonth) {
-        const key = `${r.subjectId}|${r.date}`;
-        if (seenSubjectDate.has(key)) continue;
-        seenSubjectDate.add(key);
-        const arr = sessionsBySubject.get(r.subjectId) ?? [];
-        arr.push(r);
-        sessionsBySubject.set(r.subjectId, arr);
+      // Every submitted session is one period (see lib/studentAttendance/counting.ts).
+      const indexedBySubject = new Map<string, ReturnType<typeof indexSessions<StudentAttendanceSession>>>();
+      for (const ix of indexSessions(inMonth)) {
+        const arr = indexedBySubject.get(ix.session.subjectId) ?? [];
+        arr.push(ix);
+        indexedBySubject.set(ix.session.subjectId, arr);
       }
 
       let roster = await fetchSectionStudents(collegeRef, {
@@ -454,10 +461,11 @@ export async function GET(request: Request) {
           for (const sub of subjects) {
             const weekPresent = new Array(weekRanges.length).fill(0) as number[];
             const weekTotal = new Array(weekRanges.length).fill(0) as number[];
-            for (const r of sessionsBySubject.get(sub.subjectId) ?? []) {
+            for (const { session: r, marks } of indexedBySubject.get(sub.subjectId) ?? []) {
+              if (!marks.has(stu.id)) continue; // not on this session's roster (other lab batch / joined later)
               const wi = weekIndexForDate(r.date);
               weekTotal[wi] += 1;
-              if (r.entries.find((e) => e.studentId === stu.id)?.status === "PRESENT") weekPresent[wi] += 1;
+              if (marks.get(stu.id) === "PRESENT") weekPresent[wi] += 1;
             }
             const weeks = weekPresent.map((p, i) => (weekTotal[i] > 0 ? Math.round((p / weekTotal[i]) * 100) : null));
             const monthTotal = weekTotal.reduce((a, b) => a + b, 0);
@@ -513,6 +521,7 @@ export async function GET(request: Request) {
     const subjects = await currentSectionSubjects(collegeRef, sectionId, requestedSemester);
 
     const dayRecords = inMonth.filter((r) => r.date === dateParam);
+    const indexedDay = indexSessions(dayRecords);
     const sessionBySubject = new Map<string, StudentAttendanceSession>();
     for (const r of dayRecords) {
       if (!sessionBySubject.has(r.subjectId)) sessionBySubject.set(r.subjectId, r);
@@ -543,10 +552,10 @@ export async function GET(request: Request) {
         }
         // also compute percent per subject for this single day (1 held if session exists)
         const bySubjectDaily: Record<string, { held: number; attend: number; percent: number | null }> = {};
+        const dayTallies = tallyStudentBySubject(indexedDay, stu.id);
         for (const s of subjects) {
-          const has = sessionBySubject.has(s.subjectId) ? 1 : 0;
-          const present = statusBySubject[s.subjectId] === "PRESENT" ? 1 : 0;
-          bySubjectDaily[s.subjectId] = { held: has, attend: present, percent: has > 0 ? (present === 1 ? 100 : 0) : null };
+          const { held: has, attended: present } = dayTallies.get(s.subjectId) ?? { held: 0, attended: 0 };
+          bySubjectDaily[s.subjectId] = { held: has, attend: present, percent: calcPercent(present, has) };
         }
         let cHeld = 0, cAtt = 0;
         for (const v of Object.values(bySubjectDaily)) { cHeld += v.held; cAtt += v.attend; }
