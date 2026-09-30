@@ -1,7 +1,5 @@
 import { cookies } from "next/headers";
 import { readSession } from "@/lib/auth/sessionToken";
-import { canRoleAccessRole } from "@/types";
-import type { UserRole } from "@/types";
 import { resolveHeldRoles, resolveRealRole } from "@/lib/auth/liveRoles";
 import { pickEffectiveRole } from "@/lib/roles/seatRoles";
 import { ACTIVE_HOD_DEPT_COOKIE, decodeActiveHodDepartment } from "@/lib/roles/activeHodDepartment";
@@ -140,26 +138,6 @@ export async function requireRole(...roles: string[]): Promise<SessionPayload> {
     : { ...session, role: match, realRole, roles: held };
 }
 
-// Passes if the caller's role IS one of `targetRoles` OR inherits it via the
-// L0–L6 level hierarchy (higher level, same-or-broader scope). Opt-in helper for
-// routes that want inherited access - existing explicit guards are left untouched.
-// Callers that read college/location-scoped data must still validate the tenant
-// context (collegeId/locationId) themselves, since a higher role may carry none.
-export async function requireRoleOrHigher(
-  ...targetRoles: string[]
-): Promise<SessionPayload> {
-  const session = await verifySession();
-  if (!session) {
-    throw new Error("UNAUTHORIZED");
-  }
-  const held = await resolveHeldRoles(session);
-  const ok = held.some((actor) => targetRoles.some((t) => canRoleAccessRole(actor as UserRole, t as UserRole)));
-  if (!ok) {
-    throw new Error("UNAUTHORIZED");
-  }
-  return session;
-}
-
 // Resolve the operative college for a route that may be called by BOTH
 // college-scoped roles and the GLOBAL Finance/Purchase roles:
 //   • college-scoped caller  → their own session.collegeId
@@ -200,12 +178,4 @@ export async function requireLocationMember(
     throw new Error("NO_LOCATION_CONTEXT");
   }
   return session as SessionPayload & { locationId: string };
-}
-
-// Super Admin or location member (for shared APIs)
-export async function requireLocationOrAdmin(
-  ...roles: string[]
-): Promise<SessionPayload> {
-  const allRoles = ["SUPER_ADMIN", ...roles];
-  return requireRole(...allRoles);
 }

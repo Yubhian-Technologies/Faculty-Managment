@@ -105,14 +105,24 @@ export default function PrincipalDepartmentFacultyPage() {
     enabled: !!department,
   });
 
-  // An HOD is almost always ALSO a teaching Faculty member of their own
-  // department - when they have a real facultyMembers record (userUid links
-  // it back to their login), "View/Edit HOD" should open THAT full profile
-  // (Research, Teaching Load, every module) instead of the generic Staff
-  // view, which deliberately hides those two modules for non-teaching roles
-  // (see principal/staff/[uid]/page.tsx's excludeModules). Falls back to the
-  // Staff view only for a bare HOD login with no Faculty record at all.
-  const hodFaculty = faculty.find((f) => (f as unknown as { userUid?: string }).userUid === hod?.uid);
+  // An HOD is almost always ALSO a teaching Faculty member - when they have a
+  // real facultyMembers record (userUid links it back to their login), "View
+  // HOD" should open THAT full profile (Research, Teaching Load, every module)
+  // instead of the generic Staff view, which deliberately hides those two
+  // modules for non-teaching roles (see principal/staff/[uid]/page.tsx's
+  // excludeModules). Resolved by the HOD's login uid across the whole college,
+  // NOT from this department's roster: an HOD seat and a faculty record's
+  // department are independent (someone can head Basic Science while their one
+  // faculty record is filed under Information Technology). Falls back to the
+  // Add Faculty link form only for a login with no Faculty record at all.
+  const { data: hodFaculty, isLoading: hodFacultyLoading } = useQuery({
+    queryKey: ["principal-hod-faculty-record", hod?.uid],
+    queryFn: () =>
+      fetch(`/api/college/faculty?userUid=${encodeURIComponent(hod!.uid)}`)
+        .then((r) => r.json() as Promise<{ faculty: FacultyRow[] }>)
+        .then((d) => d.faculty?.[0] ?? null),
+    enabled: !!hod?.uid,
+  });
 
   // Switching status tabs (or departments) changes which rows exist at all -
   // a stale selection from before would otherwise silently export rows no
@@ -276,17 +286,22 @@ export default function PrincipalDepartmentFacultyPage() {
                     in its "link mode" (?linkUid=&department=&name=) - completing
                     it creates their Faculty record on the spot, so there's never
                     a need to fall back to Staff for a bare HOD login either. */}
-                <Button size="sm" variant="outline" asChild>
-                  <Link
-                    href={
-                      hodFaculty
-                        ? `/principal/faculty/${deptId}/${hodFaculty.id}`
-                        : `/principal/faculty/new?linkUid=${hod.uid}&department=${encodeURIComponent(department?.name ?? "")}&name=${encodeURIComponent(hod.name)}`
-                    }
-                  >
-                    <Eye className="h-3.5 w-3.5 mr-1" />View HOD
-                  </Link>
-                </Button>
+                {/* Held back until the faculty-record lookup settles, so the
+                    button never flashes the Add Faculty link for someone who
+                    does have a record. */}
+                {!hodFacultyLoading && (
+                  <Button size="sm" variant="outline" asChild>
+                    <Link
+                      href={
+                        hodFaculty
+                          ? `/principal/faculty/${deptId}/${hodFaculty.id}`
+                          : `/principal/faculty/new?linkUid=${hod.uid}&department=${encodeURIComponent(department?.name ?? "")}&name=${encodeURIComponent(hod.name)}`
+                      }
+                    >
+                      <Eye className="h-3.5 w-3.5 mr-1" />View HOD
+                    </Link>
+                  </Button>
+                )}
                 <Button
                   size="sm"
                   variant="outline"

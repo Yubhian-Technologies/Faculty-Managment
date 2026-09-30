@@ -1,28 +1,27 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DocumentUploadField } from "@/components/shared/DocumentUploadField";
 import { useRegulationCourseDepartmentPicker } from "@/lib/subjects/hooks/useRegulationCourseDepartmentPicker";
-import { ArrowLeft, BookOpen, FileText, AlertTriangle } from "lucide-react";
+import { ArrowLeft, FileText, AlertTriangle } from "lucide-react";
 
 export default function AcademicsSyllabusPage() {
   const picker = useRegulationCourseDepartmentPicker();
 
-  // Same local-override pattern as regulation/page.tsx - courses is refetched
-  // on Department change (loadCourses), but not immediately after a PATCH.
-  const [localUrl, setLocalUrl] = useState<string | undefined>(undefined);
-  useEffect(() => {
-    setLocalUrl(undefined);
-  }, [picker.selectedCourse?.id, picker.selectedRegulation]);
-
-  const currentUrl = localUrl ?? picker.selectedCourse?.syllabusUrls?.[picker.selectedRegulation];
+  // Same local-override pattern as regulation/page.tsx - courses are only
+  // refetched on Load, not immediately after a PATCH. Tied to the course +
+  // regulation it was uploaded for, so it never leaks into another selection.
+  const [local, setLocal] = useState<{ key: string; url: string } | null>(null);
+  const localKey = `${picker.selectedCourse?.id ?? ""}|${picker.selectedRegulation}`;
+  const setLocalUrl = (url: string) => setLocal({ key: localKey, url });
+  const currentUrl = local?.key === localKey ? local.url : picker.selectedCourse?.syllabusUrls?.[picker.selectedRegulation];
+  const canLoad = !!picker.selectedRegulation && !!picker.selectedCatalogId && !!picker.selectedDepartmentId;
 
   async function patchSyllabus(url: string) {
     if (!picker.selectedCourse) return;
@@ -47,12 +46,7 @@ export default function AcademicsSyllabusPage() {
 
       <Card className="border-primary/20 bg-muted/20">
         <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center justify-between">
-            <span className="flex items-center gap-2"><BookOpen className="h-4 w-4 text-primary" />Regulation, Course &amp; Department</span>
-            {picker.selectedCourse && picker.selectedDepartment && (
-              <Badge variant="secondary" className="font-mono text-xs">{picker.selectedDepartment.name}</Badge>
-            )}
-          </CardTitle>
+          <CardTitle className="text-base">Regulation, Course and Department</CardTitle>
         </CardHeader>
         <CardContent className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <div className="space-y-1.5">
@@ -88,7 +82,12 @@ export default function AcademicsSyllabusPage() {
             </Select>
           </div>
         </CardContent>
-        {picker.selectedDepartmentId && !picker.isLoadingCourses && !picker.selectedCourse && (
+        <CardContent className="pt-0">
+          <Button onClick={() => void picker.load()} disabled={!canLoad || picker.isLoadingData} loading={picker.isLoadingData}>
+            Load
+          </Button>
+        </CardContent>
+        {picker.isLoaded && picker.selectedDepartmentId && !picker.isLoadingCourses && !picker.selectedCourse && (
           <CardContent className="pt-0">
             <p className="text-sm text-amber-600 flex items-center gap-1.5"><AlertTriangle className="h-3.5 w-3.5" />{picker.selectedDepartment?.name} doesn&apos;t teach this course yet.</p>
           </CardContent>
@@ -100,7 +99,7 @@ export default function AcademicsSyllabusPage() {
           <CardTitle className="text-base flex items-center gap-2"><FileText className="h-4 w-4" />Upload Syllabus</CardTitle>
         </CardHeader>
         <CardContent>
-          {picker.selectedCourse && picker.selectedRegulation ? (
+          {picker.isLoaded && picker.selectedCourse && picker.selectedRegulation ? (
             <DocumentUploadField
               label={`${picker.selectedDepartment?.name ?? "Department"} — ${picker.selectedRegulation} Syllabus`}
               value={currentUrl}
@@ -110,7 +109,7 @@ export default function AcademicsSyllabusPage() {
               onRemoved={() => { setLocalUrl(""); void patchSyllabus(""); }}
             />
           ) : (
-            <p className="text-sm text-muted-foreground">Select Regulation, Course and Department above to upload a syllabus.</p>
+            <p className="text-sm text-muted-foreground">Select Regulation, Course and Department above and click Load to upload a syllabus.</p>
           )}
         </CardContent>
       </Card>

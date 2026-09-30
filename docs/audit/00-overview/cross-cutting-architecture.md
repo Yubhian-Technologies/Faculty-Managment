@@ -22,7 +22,7 @@
 ## 3. RBAC model
 
 - `UserRole` 29 values (`src/types/core.ts:5-61`), `ROLE_LABELS` (62), `ROLE_DASHBOARD_PATHS` (111), `ROLE_LEVEL` 0–6 (152), `ROLE_SCOPE` GLOBAL/LOCATION/COLLEGE (202).
-- Inheritance: `rolesInheritedBy`, `canRoleAccessRole` (core.ts) drive proxy path inheritance and `requireRoleOrHigher` — which has **zero call sites** and explicit warnings (`SHARED_FILES.md` "Known gaps"; do-not-adopt note).
+- Inheritance: `rolesInheritedBy`, `canRoleAccessRole` (core.ts) drive proxy path inheritance.
 - Normalized "mirror" roles: College Admin ≡ Principal, Director ≡ Principal, Department Office ≡ HOD for all permission checks; exceptions gated by `realRole` (`isCollegeAdmin`, `isDepartmentOffice` — verifySession.ts:28-38) e.g. appointing another office head.
 - Seat roles (`src/types/roleSeats.ts`, `api/college/role-seats*`): Principal seat appointment may be done by Super Admin/Management/Administration; seat holder's `role` reads as the seat role.
 

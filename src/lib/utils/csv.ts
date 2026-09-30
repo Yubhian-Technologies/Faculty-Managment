@@ -17,6 +17,18 @@ export async function parseExcelFile(file: File): Promise<string[][]> {
   return json.rows ?? [];
 }
 
+// parseExcelFile plus each row's real sheet row number (blank rows are
+// dropped, so position alone drifts from what Excel shows).
+export async function parseExcelFileWithRowNumbers(file: File): Promise<{ rows: string[][]; rowNumbers: number[] }> {
+  const formData = new FormData();
+  formData.append("file", file);
+  const res = await fetch("/api/college/parse-excel", { method: "POST", body: formData });
+  const json = await res.json() as { rows?: string[][]; rowNumbers?: number[]; error?: string };
+  if (!res.ok) throw new Error(json.error ?? "Failed to parse Excel file");
+  const rows = json.rows ?? [];
+  return { rows, rowNumbers: json.rowNumbers ?? rows.map((_, i) => i + 1) };
+}
+
 export function readFileAsText(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -66,6 +78,20 @@ export function parseCSV(text: string): string[][] {
     result.push(cells);
   }
   return result;
+}
+
+// parseCSV plus each row's 1-based line number in the file, for the same
+// reason as parseExcelFileWithRowNumbers.
+export function parseCSVWithRowNumbers(text: string): { rows: string[][]; rowNumbers: number[] } {
+  const stripped = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
+  const rows: string[][] = [];
+  const rowNumbers: number[] = [];
+  stripped.split(/\r?\n/).forEach((line, i) => {
+    if (!line.trim()) return;
+    rows.push(parseCSV(line)[0] ?? []);
+    rowNumbers.push(i + 1);
+  });
+  return { rows, rowNumbers };
 }
 
 // Loosens header text for matching: case, punctuation, extra whitespace, and

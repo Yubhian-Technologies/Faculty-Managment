@@ -6,53 +6,38 @@ import Link from "next/link";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
-} from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
-import { toCSV, parseCSV, downloadCSV, matchHeaders, getUnmatchedHeaders, parseExcelFile, readFileAsText } from "@/lib/utils/csv";
+import { matchHeaders, getUnmatchedHeaders, parseExcelFileWithRowNumbers, parseCSVWithRowNumbers, readFileAsText } from "@/lib/utils/csv";
 import { IMPORT_COLUMNS, IMPORT_HINTS as HINTS } from "@/lib/subjects/csvColumns";
-import { resolveSubjectCategory } from "@/lib/subjects/normalize";
 import { useRegulationCourseDepartmentPicker } from "@/lib/subjects/hooks/useRegulationCourseDepartmentPicker";
-import { teachableYearsForDepartment } from "@/lib/subjects/teachableYears";
-import { stripLeadingZeros } from "@/lib/utils";
-import type { CourseYearTiming, SubjectCategory } from "@/types";
+import {
+  COURSE_STRUCTURE_MAX_ROWS,
+  missingRequiredColumns,
+  validateCourseStructureRows,
+  type CourseStructureIssue,
+  type CourseStructureRowInput,
+} from "@/lib/subjects/courseStructureValidation";
+import type { CourseStructureResult, CourseStructureScopeSummary } from "@/lib/subjects/services/CourseStructureImportService";
 import { SUBJECT_CATEGORY_LABELS } from "@/types";
-import { Download, Upload, CheckCircle2, XCircle, FileSpreadsheet, ArrowLeft, AlertTriangle, Pencil, BookOpen, Layers } from "lucide-react";
+import { Download, Upload, XCircle, FileSpreadsheet, ArrowLeft, AlertTriangle, Loader2 } from "lucide-react";
+
+// Academics > Course Structure. One file = every subject of one
+// Regulation + Course + Department, created and assigned to that
+// department's semesters together or not at all:
+//   1. pick Regulation / Course / Department -> the server returns exactly
+//      which years and semesters this department may receive (scope panel)
+//   2. upload -> every row is checked here with the same rules the server
+//      uses (courseStructureValidation.ts), then the server dry-runs it
+//      (existing subjects, already-assigned slots)
+//   3. Import is enabled only when every row passes; the server commits
+//      the whole file in one transaction and reads the links back.
 
 type ParsedRow = Record<string, string>;
-type ImportResult = {
-  created: number;
-  assigned: number;
-  failed: { row: number; code: string; error: string; stage: "create" | "assign" }[];
-  warnings: { row: number; code: string; warning: string }[];
-};
-// Same fix-and-retry pattern as the old academics/subjects/import/page.tsx -
-// a skipped row plus its own original field values (snapshotted before
-// `rows` clears on partial success) and a live status.
-// "scope" = excluded BEFORE submit (Year/Semester validation - see
-// validateRowScope) - never even sent to the server, unlike "create"/
-// "assign" which are the server's own post-submit failure stages.
-type FailedRow = { row: number; code: string; error: string; stage: "create" | "assign" | "scope"; data: ParsedRow; status: "failed" | "fixed" };
+type Uploaded = { fileName: string; inputs: CourseStructureRowInput[] };
 
-type FixForm = {
-  category: SubjectCategory | "";
-  name: string;
-  lectureHours: string;
-  tutorialHours: string;
-  practicalHours: string;
-  internalMarks: string;
-  externalMarks: string;
-  totalMarks: string;
-  credits: string;
-  shortCode: string;
-  year: string;
-  semester: string;
-};
+const PREVIEW_LIMIT = 100;
 
 export default function CourseStructurePage() {
   return (
@@ -62,362 +47,345 @@ export default function CourseStructurePage() {
   );
 }
 
+function issueText(i: CourseStructureIssue) {
+  return i.row > 0 ? `Row ${i.row}: ${i.message}` : i.message;
+}
+
 function CourseStructurePageInner() {
   const picker = useRegulationCourseDepartmentPicker();
   const searchParams = useSearchParams();
 
-  // Deep-link prefill from principal/departments/[id]/page.tsx's per-year
-  // "Sem N: K subjects" status badges (?catalogId=&departmentId=&year=&
-  // semester=) - lands the admin straight on the right Course+Department
-  // instead of re-walking the cascade by hand. Year/semester aren't
-  // consumed here (Course Structure gets those per uploaded row, not a
-  // dropdown) - only Regulation/Course/Department are prefilled.
-  const prefillRef = useRef<{ catalogId: string; departmentId: string } | null>(null);
-  const [prefillPending, setPrefillPending] = useState(false);
-  useEffect(() => {
+  // Deep-link prefill from principal/departments/[id]/page.tsx
+  // (?catalogId=&departmentId=[&regulation=]) - Regulation/Course/Department
+  // only; Year/Semester come from the file.
+  const [prefill, setPrefill] = useState<{ catalogId: string; departmentId: string; regulation: string | null } | null>(() => {
     const catalogId = searchParams.get("catalogId");
     const departmentId = searchParams.get("departmentId");
-    if (catalogId && departmentId) {
-      prefillRef.current = { catalogId, departmentId };
-      setPrefillPending(true);
+    return catalogId && departmentId ? { catalogId, departmentId, regulation: searchParams.get("regulation") } : null;
+  });
+
+  // ── Scope: what this department may receive for this course ────────────
+  // Fetched only by the Load button (handleLoad), never on a dropdown change.
+  const [scopeData, setScopeData] = useState<CourseStructureScopeSummary | null>(null);
+  const [scopeError, setScopeError] = useState("");
+  const [isLoadingScope, setIsLoadingScope] = useState(false);
+  const scopeRequestRef = useRef(0);
+  // Shown only while the dropdowns still match what was loaded.
+  const scope = picker.isLoaded ? scopeData : null;
+  const courseId = scope?.course.id ?? "";
+  const departmentId = picker.selectedDepartmentId;
+  const regulation = picker.selectedRegulation;
+  const canLoad = !!picker.selectedRegulation && !!picker.selectedCatalogId && !!picker.selectedDepartmentId;
+
+  async function fetchScope(cId: string, dId: string, reg: string, requestId: number) {
+    setIsLoadingScope(true);
+    try {
+      const qs = new URLSearchParams({ courseId: cId, departmentId: dId, regulation: reg });
+      const res = await fetch(`/api/college/subjects/import-and-assign?${qs}`);
+      const json = await res.json() as CourseStructureScopeSummary & { error?: string };
+      if (requestId !== scopeRequestRef.current) return;
+      if (!res.ok) setScopeError(json.error ?? "Couldn't load this department's years and semesters.");
+      else setScopeData(json);
+    } catch {
+      if (requestId === scopeRequestRef.current) setScopeError("Couldn't load this department's years and semesters.");
+    } finally {
+      if (requestId === scopeRequestRef.current) setIsLoadingScope(false);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-  useEffect(() => {
-    if (!prefillPending || picker.catalogItems.length === 0) return;
-    const p = prefillRef.current;
-    const item = p ? picker.catalogItems.find((c) => c.id === p.catalogId) : null;
-    if (!p || !item) { setPrefillPending(false); return; }
-    picker.setSelectedRegulation(item.regulations?.[0] ?? "");
-    picker.setSelectedCatalogId(p.catalogId);
-    picker.selectDepartment(p.departmentId);
-    setPrefillPending(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [prefillPending, picker.catalogItems]);
-
-  // ── Pre-import validation: does the SELECTED department actually teach
-  // each row's Year, and is that Year/Semester configured in Course-Year
-  // Timings at all? Checked here, before anything is sent to the server,
-  // so a bad row is caught and excluded up front rather than round-tripped
-  // through a create-then-fail cycle (the server still re-checks this on
-  // submit too - see CourseStructureImportService - this is purely to
-  // surface it earlier, in the Preview, not a replacement for that check).
-  const [courseYearTimings, setCourseYearTimings] = useState<CourseYearTiming[]>([]);
-  useEffect(() => {
-    if (!picker.selectedCourse) { setCourseYearTimings([]); return; }
-    fetch(`/api/college/course-year-timings?courseId=${encodeURIComponent(picker.selectedCourse.id)}`)
-      .then((r) => r.json() as Promise<{ timings?: CourseYearTiming[] }>)
-      .then((d) => setCourseYearTimings(d.timings ?? []))
-      .catch(() => setCourseYearTimings([]));
-  }, [picker.selectedCourse]);
-
-  const teachableYears = useMemo(() => {
-    if (!picker.selectedCourse || !picker.selectedDepartment) return new Set<number>();
-    return new Set(teachableYearsForDepartment(picker.selectedCourse, picker.selectedDepartment, picker.allDepartments));
-  }, [picker.selectedCourse, picker.selectedDepartment, picker.allDepartments]);
-
-  // Returns null when the row's Year/Semester are fine to import, or a
-  // human-readable reason when they're not - either because this
-  // department isn't scoped to teach that Year at all, or because
-  // Course-Year Timings has no such Year/Semester configured for this
-  // course (so SubjectInstanceService would reject the assignment even if
-  // department scope were fine).
-  function validateRowScope(row: ParsedRow): string | null {
-    const yearRaw = row.year?.trim();
-    const semesterRaw = row.semester?.trim();
-    if (!yearRaw || !semesterRaw) return null; // caught separately as a missing-required-field row
-    const year = Number(yearRaw);
-    const semester = Number(semesterRaw);
-    if (!Number.isFinite(year) || !Number.isFinite(semester)) return null; // same - non-numeric is a required-field-style error, not a scope one
-
-    if (!teachableYears.has(year)) {
-      return `${picker.selectedDepartment?.name ?? "This department"} isn't assigned to teach Year ${year} of this course.`;
-    }
-    const timing = courseYearTimings.find((t) => t.year === year);
-    if (!timing || !(timing.semesters ?? []).some((s) => s.semester === semester)) {
-      return `Year ${year} / Semester ${semester} isn't configured in Course-Year Timings for this course.`;
-    }
-    return null;
   }
 
-  // ── Step 1-4: Download Template / Upload / Preview / Import ─────────────
+  async function handleLoad(selection?: { regulation: string; catalogId: string; departmentId: string }) {
+    const sel = selection ?? { regulation, catalogId: picker.selectedCatalogId, departmentId };
+    const requestId = ++scopeRequestRef.current;
+    resetUploadState();
+    setScopeData(null);
+    setScopeError("");
+    const { ok, course } = await picker.load(sel);
+    if (!ok || !course || requestId !== scopeRequestRef.current) return;
+    await fetchScope(course.id, sel.departmentId, sel.regulation, requestId);
+  }
+
+  const teachableYears = scope?.scope.teachableYears ?? [];
+  const canUpload = !!scope && teachableYears.length > 0;
+
+  // ── Upload / validate / commit ─────────────────────────────────────────
   const fileRef = useRef<HTMLInputElement>(null);
-  const [rows, setRows] = useState<ParsedRow[]>([]);
+  const [uploaded, setUploaded] = useState<Uploaded | null>(null);
   const [parseError, setParseError] = useState("");
   const [parseWarning, setParseWarning] = useState("");
+  const [serverCheck, setServerCheck] = useState<CourseStructureResult | null>(null);
+  const [serverError, setServerError] = useState("");
+  const [isChecking, setIsChecking] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
-  const [result, setResult] = useState<ImportResult | null>(null);
-  const [failedRows, setFailedRows] = useState<FailedRow[]>([]);
-
-  const canUpload = !!picker.selectedCourse && !!picker.selectedDepartmentId;
+  const [result, setResult] = useState<CourseStructureResult | null>(null);
+  const [showProblemsOnly, setShowProblemsOnly] = useState(false);
+  const [isBuildingTemplate, setIsBuildingTemplate] = useState(false);
 
   function resetUploadState() {
-    setRows([]);
+    setUploaded(null);
     setParseError("");
     setParseWarning("");
+    setServerCheck(null);
+    setServerError("");
     setResult(null);
-    setFailedRows([]);
+    setShowProblemsOnly(false);
   }
 
-  function downloadTemplate() {
-    const headers = IMPORT_COLUMNS.map((c) => c.label);
-    const sample1 = IMPORT_COLUMNS.map((c) => c.sample);
-    const prefix = picker.selectedCourse ? picker.selectedCourse.name.toLowerCase().replace(/[^a-z0-9]+/g, "_") : "course_structure";
-    downloadCSV(toCSV([headers, sample1]), `${prefix}_import_template.csv`);
+  useEffect(() => {
+    if (!prefill || picker.catalogItems.length === 0) return;
+    const item = picker.catalogItems.find((c) => c.id === prefill.catalogId);
+    void (async () => {
+      setPrefill(null);
+      if (!item) return;
+      const regs = item.regulations ?? [];
+      const reg = prefill.regulation && regs.includes(prefill.regulation) ? prefill.regulation : regs[0] ?? "";
+      picker.setSelectedRegulation(reg);
+      picker.setSelectedCatalogId(prefill.catalogId);
+      picker.selectDepartment(prefill.departmentId);
+      await handleLoad({ regulation: reg, catalogId: prefill.catalogId, departmentId: prefill.departmentId });
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefill, picker.catalogItems]);
+
+  const local = useMemo(
+    () => (uploaded && scope ? validateCourseStructureRows(uploaded.inputs, scope.scope) : null),
+    [uploaded, scope]
+  );
+
+  // Server dry run, once the file passes every local check.
+  const checkRequestRef = useRef(0);
+  useEffect(() => {
+    const requestId = ++checkRequestRef.current;
+    if (!uploaded || !local?.ok || !scope) return;
+    void (async () => {
+      setIsChecking(true);
+      setServerCheck(null);
+      setServerError("");
+      try {
+        const res = await fetch("/api/college/subjects/import-and-assign", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ mode: "validate", courseId, departmentId, regulation, records: uploaded.inputs }),
+        });
+        const json = await res.json() as CourseStructureResult & { error?: string };
+        if (requestId !== checkRequestRef.current) return;
+        if (res.status === 422 || res.ok) setServerCheck(json);
+        else setServerError(json.error ?? "Couldn't check the file.");
+      } catch {
+        if (requestId === checkRequestRef.current) setServerError("Network error while checking the file.");
+      } finally {
+        if (requestId === checkRequestRef.current) setIsChecking(false);
+      }
+    })();
+  }, [uploaded, local, scope, courseId, departmentId, regulation]);
+
+  const errors = useMemo(
+    () => (serverCheck?.errors.length ? serverCheck.errors : local?.errors ?? []),
+    [serverCheck, local]
+  );
+  const warnings = serverCheck ? serverCheck.warnings : local?.warnings ?? [];
+  const errorsByRow = useMemo(() => {
+    const m = new Map<number, string[]>();
+    for (const e of errors) m.set(e.row, [...(m.get(e.row) ?? []), e.message]);
+    return m;
+  }, [errors]);
+  const planByRow = useMemo(() => new Map((serverCheck?.plan ?? []).map((p) => [p.row, p])), [serverCheck]);
+  const fileLevelErrors = errors.filter((e) => e.row === 0);
+  // Each category the file names that isn't defined, once, with its row count.
+  const unknownCategories = useMemo(() => {
+    const map = new Map<string, { value: string; rows: number; suggestion?: string }>();
+    for (const e of errors) {
+      if (e.kind !== "unknown-category" || !e.value) continue;
+      const entry = map.get(e.value) ?? { value: e.value, rows: 0, suggestion: e.suggestion };
+      entry.rows++;
+      map.set(e.value, entry);
+    }
+    return Array.from(map.values());
+  }, [errors]);
+  function refreshCategories() {
+    if (scope) void fetchScope(scope.course.id, scope.department.id, scope.regulation, ++scopeRequestRef.current);
+  }
+  const readyToImport = !!serverCheck?.ok && !isChecking && !result;
+
+  async function downloadTemplate() {
+    if (!scope) return;
+    setIsBuildingTemplate(true);
+    try {
+      const ExcelJS = (await import("exceljs")).default;
+      const workbook = new ExcelJS.Workbook();
+      const headers = IMPORT_COLUMNS.map((c) => c.label);
+      const sheet = workbook.addWorksheet("Subjects");
+      sheet.addRow(headers);
+      sheet.getRow(1).font = { bold: true };
+      sheet.columns = headers.map((h) => ({ width: Math.min(Math.max(h.length + 4, 10), 36) }));
+      sheet.views = [{ state: "frozen", ySplit: 1 }];
+
+      // Dropdowns built from this department's own scope, so the sheet can't
+      // name a year or semester the import would reject.
+      // Configured semester numbers, plus 1..N for a file that counts each
+      // year's semesters from 1 (the import maps them to the configured ones).
+      const perYear = Math.max(0, ...teachableYears.map((y) => (scope.scope.semestersByYear[y] ?? []).length));
+      const semesters = Array.from(new Set([
+        ...teachableYears.flatMap((y) => scope.scope.semestersByYear[y] ?? []),
+        ...Array.from({ length: perYear }, (_, i) => i + 1),
+      ])).sort((a, b) => a - b);
+      const categoryCodes = [...Object.keys(SUBJECT_CATEGORY_LABELS), ...(scope.scope.customCategories ?? []).map((c) => c.code)];
+      const lists: Record<string, string[]> = {
+        year: teachableYears.map(String),
+        semester: semesters.map(String),
+        // Excel caps an inline list at 255 characters.
+        category: categoryCodes.join(",").length <= 250 ? categoryCodes : [],
+        type: ["Theory", "Practical", "Tutorial", "Project"],
+      };
+      IMPORT_COLUMNS.forEach((col, i) => {
+        const values = lists[col.key];
+        if (!values || values.length === 0) return;
+        for (let r = 2; r <= COURSE_STRUCTURE_MAX_ROWS + 1; r++) {
+          sheet.getCell(r, i + 1).dataValidation = {
+            type: "list",
+            allowBlank: !col.required,
+            formulae: [`"${values.join(",")}"`],
+            showErrorMessage: col.key !== "category",
+            errorTitle: `Invalid ${col.label}`,
+            error: `Pick one of: ${values.join(", ")}`,
+          };
+        }
+      });
+
+      // Reference sheets - never read back (only the first sheet is imported).
+      const info = workbook.addWorksheet("Allowed Years & Semesters");
+      info.addRow([`${scope.course.name}, ${scope.department.name}, regulation ${scope.regulation}`]).font = { bold: true };
+      info.addRow([]);
+      info.addRow(["Year", "Semesters", "Regulation(s) currently teaching this year"]).font = { bold: true };
+      for (const y of teachableYears) {
+        info.addRow([y, (scope.scope.semestersByYear[y] ?? []).join(", ") || "none configured",
+          scope.regulationCoverage.find((c) => c.year === y)?.regulations.join(", ") ?? ""]);
+      }
+      info.columns = [{ width: 10 }, { width: 18 }, { width: 44 }];
+      const sample = workbook.addWorksheet("Example");
+      sample.addRow(headers).font = { bold: true };
+      sample.addRow(IMPORT_COLUMNS.map((c) => c.sample));
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${scope.course.name}_${scope.department.name}_${scope.regulation}_subjects.xlsx`.replace(/[^A-Za-z0-9._-]+/g, "_");
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      toast({ variant: "destructive", title: "Couldn't build the Excel template" });
+    } finally {
+      setIsBuildingTemplate(false);
+    }
   }
 
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
+    e.target.value = "";
     if (!file) return;
     resetUploadState();
-
-    if (!canUpload) {
-      setParseError("Select Regulation, Course and Department above before uploading.");
-      e.target.value = "";
-      return;
-    }
+    if (!canUpload) { setParseError("Select Regulation, Course and Department above before uploading."); return; }
 
     const name = file.name.toLowerCase();
     const isExcel = name.endsWith(".xlsx");
-    if (name.endsWith(".xls")) {
-      setParseError("Legacy .xls files aren't supported - please re-save as .xlsx or .csv and try again.");
-      e.target.value = "";
-      return;
-    }
+    if (name.endsWith(".xls")) { setParseError(".xls files aren't supported. Save the file as .xlsx and try again."); return; }
 
     try {
-      const parsed = isExcel ? await parseExcelFile(file) : parseCSV(await readFileAsText(file));
-      if (parsed.length < 2) { setParseError("File must have a header row and at least one data row."); return; }
+      const { rows: parsed, rowNumbers } = isExcel ? await parseExcelFileWithRowNumbers(file) : parseCSVWithRowNumbers(await readFileAsText(file));
+      if (parsed.length < 2) { setParseError("The file needs a header row and at least one subject row."); return; }
 
       const headers = parsed[0].map((h) => h.trim());
       const keyMap = matchHeaders(headers, IMPORT_COLUMNS);
-
-      const mappedCount = Object.keys(keyMap).length;
-      if (mappedCount === 0) {
-        setParseError("None of the columns in this file matched the template. Make sure the header row is the first row, and its wording is close to the template.");
-        return;
-      }
-      if (!Object.values(keyMap).includes("name")) {
-        setParseError("Couldn't find a \"Subject Name\" column. Check your file's header row against the template.");
+      const missing = missingRequiredColumns(Object.values(keyMap));
+      if (missing.length > 0) {
+        const labels = missing.map((k) => IMPORT_COLUMNS.find((c) => c.key === k)?.label ?? k);
+        setParseError(`These required columns are missing from the header row: ${labels.join(", ")}. Download the template to see the expected columns.`);
         return;
       }
       const unmatched = getUnmatchedHeaders(headers, keyMap);
       if (unmatched.length > 0) {
-        setParseWarning(`These column(s) don't match any template column and were ignored: ${unmatched.map((h) => `"${h}"`).join(", ")}.`);
+        setParseWarning(`These columns don't match the template and were ignored: ${unmatched.map((h) => `"${h}"`).join(", ")}.`);
       }
 
-      const dataRows = parsed.slice(1).map((cells) => {
-        const row: ParsedRow = {};
-        cells.forEach((val, i) => {
-          if (keyMap[i]) row[keyMap[i]] = val;
-        });
-        return row;
-      }).filter((r) => Object.values(r).some((v) => v.trim()));
-
-      if (dataRows.length === 0) { setParseError("No data rows found after the header - check that your data starts on the row right after the header, with no blank rows in between."); return; }
-      if (dataRows.length > 500) { setParseError("Maximum 500 rows allowed per import."); return; }
-
-      setRows(dataRows);
+      const inputs: CourseStructureRowInput[] = [];
+      parsed.slice(1).forEach((cells, i) => {
+        const data: ParsedRow = {};
+        cells.forEach((val, c) => { if (keyMap[c]) data[keyMap[c]] = val; });
+        if (Object.values(data).some((v) => v.trim())) inputs.push({ rowNumber: rowNumbers[i + 1] ?? i + 2, data });
+      });
+      if (inputs.length === 0) { setParseError("No subject rows found under the header."); return; }
+      if (inputs.length > COURSE_STRUCTURE_MAX_ROWS) {
+        setParseError(`A single import can hold at most ${COURSE_STRUCTURE_MAX_ROWS} rows. This file has ${inputs.length}. Split it by year.`);
+        return;
+      }
+      setUploaded({ fileName: file.name, inputs });
     } catch {
-      setParseError(isExcel ? "Failed to parse the Excel file. Ensure it is a valid, uncorrupted .xlsx file." : "Failed to parse the file. Ensure it is a valid CSV.");
-    } finally {
-      e.target.value = "";
+      setParseError(isExcel ? "Couldn't read this Excel file. Make sure it's a valid .xlsx file." : "Couldn't read this file. Make sure it's a valid CSV.");
     }
   }
 
   async function handleImport() {
-    if (rows.length === 0 || !picker.selectedCourse || !picker.selectedDepartmentId) return;
+    if (!uploaded || !readyToImport) return;
     setIsImporting(true);
-    setResult(null);
-
-    // Rows that fail Year/Semester scope validation are excluded from the
-    // request entirely (per the "validate before importing, don't import
-    // them" requirement) - only rows that pass every check are sent.
-    // originalRowNumbers keeps each SENT row's true position in the parsed
-    // file, since the server numbers its own failed[]/warnings[] by
-    // position within whatever array it actually received, not the
-    // original file - without this translation, "Row N" in the results
-    // would point at the wrong row whenever any rows were excluded above it.
-    const entries = rows.map((row, i) => ({ row, originalRowNumber: i + 2, verdict: rowVerdicts[i] }));
-    const scopeExcluded: FailedRow[] = entries
-      .filter((e) => !e.verdict.importable && e.verdict.reason != null)
-      .map((e) => ({ row: e.originalRowNumber, code: e.row.code || "-", error: e.verdict.reason!, stage: "scope" as const, data: e.row, status: "failed" as const }));
-    const toSend = entries.filter((e) => e.verdict.importable);
-    const originalRowNumbers = toSend.map((e) => e.originalRowNumber);
-    const records = toSend.map((e) => e.row);
-
-    if (records.length === 0) {
-      setIsImporting(false);
-      setFailedRows(scopeExcluded);
-      toast({ variant: "destructive", title: "Every row failed Year/Semester validation - nothing was imported" });
-      return;
-    }
-
     try {
       const res = await fetch("/api/college/subjects/import-and-assign", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          courseId: picker.selectedCourse.id,
-          departmentId: picker.selectedDepartmentId,
-          departmentName: picker.selectedDepartment?.name,
-          regulation: picker.selectedRegulation || undefined,
-          records,
-        }),
+        body: JSON.stringify({ mode: "commit", courseId, departmentId, regulation, records: uploaded.inputs }),
       });
-      const json = await res.json() as ImportResult & { error?: string };
-      if (!res.ok) { toast({ variant: "destructive", title: json.error ?? "Import failed" }); return; }
+      const json = await res.json() as CourseStructureResult & { error?: string };
+      if (res.status === 422) {
+        setServerCheck(json);
+        toast({ variant: "destructive", title: "Nothing was imported. Fix the rows listed below." });
+        return;
+      }
+      if (!res.ok) {
+        // 409: configuration changed mid-import. Nothing was written; re-check.
+        toast({ variant: "destructive", title: json.error ?? "Import failed. Nothing was saved." });
+        setServerCheck(null);
+        setUploaded((u) => (u ? { ...u } : u));
+        return;
+      }
       setResult(json);
-      // Translate each failure's sent-array position back to its original
-      // file row number before snapshotting its own values, then merge in
-      // the rows that were excluded before submit at all.
-      const serverFailed = json.failed.map((f) => {
-        const originalRow = originalRowNumbers[f.row - 2] ?? f.row;
-        return { ...f, row: originalRow, data: rows[originalRow - 2] ?? {}, status: "failed" as const };
-      });
-      setFailedRows([...scopeExcluded, ...serverFailed]);
-      if (json.assigned > 0) {
-        toast({ variant: "success", title: `${json.assigned} subject${json.assigned !== 1 ? "s" : ""} created and assigned` });
-        setRows([]);
-      }
-      if (scopeExcluded.length > 0) {
-        toast({ variant: "destructive", title: `${scopeExcluded.length} row${scopeExcluded.length !== 1 ? "s" : ""} skipped - Year/Semester not assigned to this department` });
-      }
+      if (scope) void fetchScope(scope.course.id, scope.department.id, scope.regulation, ++scopeRequestRef.current);
+      const problems = json.verification?.problems.length ?? 0;
+      toast(problems > 0
+        ? { variant: "destructive", title: `Imported, but ${problems} assignment${problems !== 1 ? "s don't" : " doesn't"} match. See below.` }
+        : { variant: "success", title: `${json.counts.instancesWritten} subject${json.counts.instancesWritten !== 1 ? "s" : ""} assigned to ${scope?.department.name}` });
     } catch {
-      toast({ variant: "destructive", title: "Network error - import failed" });
+      toast({ variant: "destructive", title: "Network error. Reload the page to see whether the import was saved before trying again." });
     } finally {
       setIsImporting(false);
     }
   }
 
-  // ── Failed-row "fix and retry" dialog - resubmits just this one row
-  // through the same combined create+assign endpoint. ──────────────────────
-  const [fixTarget, setFixTarget] = useState<{ row: number; form: FixForm } | null>(null);
-  const [fixSaving, setFixSaving] = useState(false);
-  const [fixError, setFixError] = useState("");
-
-  function openFix(f: FailedRow) {
-    const form: FixForm = {
-      category: resolveSubjectCategory(f.data.category) ?? "",
-      name: f.data.name ?? "",
-      lectureHours: f.data.lectureHours ?? "",
-      tutorialHours: f.data.tutorialHours ?? "",
-      practicalHours: f.data.practicalHours ?? "",
-      internalMarks: f.data.internalMarks ?? "",
-      externalMarks: f.data.externalMarks ?? "",
-      totalMarks: f.data.totalMarks ?? "",
-      credits: f.data.credits ?? "",
-      shortCode: f.data.shortCode ?? "",
-      year: f.data.year ?? "",
-      semester: f.data.semester ?? "",
-    };
-    setFixError("");
-    setFixTarget({ row: f.row, form });
-  }
-
-  function setFixField<K extends keyof FixForm>(key: K, value: FixForm[K]) {
-    setFixTarget((prev) => (prev ? { ...prev, form: { ...prev.form, [key]: value } } : prev));
-  }
-
-  const fixHoursPerWeek = fixTarget
-    ? (Number(fixTarget.form.lectureHours) || 0) + (Number(fixTarget.form.tutorialHours) || 0) + (Number(fixTarget.form.practicalHours) || 0)
-    : 0;
-
-  async function handleFixSave() {
-    if (!fixTarget || !picker.selectedCourse || !picker.selectedDepartmentId) return;
-    const form = fixTarget.form;
-    if (!form.name.trim()) { setFixError("Subject Name is required"); return; }
-    if (!form.category) { setFixError("Select a category"); return; }
-    if (form.lectureHours === "" || form.tutorialHours === "" || form.practicalHours === "") { setFixError("L, T and P are required"); return; }
-    if (!form.year || !form.semester) { setFixError("Year and Semester are required"); return; }
-    setFixSaving(true);
-    setFixError("");
-    try {
-      const originalCode = failedRows.find((r) => r.row === fixTarget.row)?.code;
-      const res = await fetch("/api/college/subjects/import-and-assign", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          courseId: picker.selectedCourse.id,
-          departmentId: picker.selectedDepartmentId,
-          departmentName: picker.selectedDepartment?.name,
-          regulation: picker.selectedRegulation || undefined,
-          records: [{
-            serialNumber: 1,
-            category: form.category,
-            name: form.name.trim(),
-            code: originalCode && originalCode !== "-" ? originalCode : form.name.trim().toUpperCase().replace(/[^A-Z0-9]+/g, "").slice(0, 10),
-            shortCode: form.shortCode || undefined,
-            lectureHours: form.lectureHours,
-            tutorialHours: form.tutorialHours,
-            practicalHours: form.practicalHours,
-            internalMarks: form.internalMarks || undefined,
-            externalMarks: form.externalMarks || undefined,
-            totalMarks: form.totalMarks || undefined,
-            credits: form.credits || undefined,
-            year: form.year,
-            semester: form.semester,
-          }],
-        }),
-      });
-      const json = await res.json() as ImportResult & { error?: string };
-      if (!res.ok) { setFixError(json.error ?? "Failed to save"); return; }
-      if (json.failed.length > 0) { setFixError(json.failed[0].error); return; }
-      toast({ variant: "success", title: `${form.name.trim()} created and assigned` });
-      setFailedRows((prev) => prev.map((r) => (r.row === fixTarget.row ? { ...r, status: "fixed" as const } : r)));
-      setFixTarget(null);
-    } catch {
-      setFixError("Network error - please try again");
-    } finally {
-      setFixSaving(false);
-    }
-  }
-
-  const requiredKeys = IMPORT_COLUMNS.filter((c) => c.required).map((c) => c.key);
-  function rowMissingRequired(row: ParsedRow): boolean {
-    return requiredKeys.some((k) => !row[k]?.trim());
-  }
-  const missingRequired = rows.some(rowMissingRequired);
-
-  // Every row's own verdict, computed once and reused by the Preview table,
-  // the Step 4 summary/button, and the actual submit payload - a row is
-  // importable only when it has every required field AND passes the
-  // Year/Semester scope check above.
-  const rowVerdicts = useMemo(
-    () => rows.map((row) => {
-      if (rowMissingRequired(row)) return { row, importable: false, reason: null as string | null };
-      const scopeError = validateRowScope(row);
-      return { row, importable: !scopeError, reason: scopeError };
-    }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [rows, teachableYears, courseYearTimings]
-  );
-  const importableRows = rowVerdicts.filter((v) => v.importable).map((v) => v.row);
-  const scopeInvalidCount = rowVerdicts.filter((v) => !v.importable && v.reason != null).length;
-
-  const stillFailed = failedRows.filter((f) => f.status === "failed");
-  const fixed = failedRows.filter((f) => f.status === "fixed");
+  const visibleInputs = useMemo(() => {
+    const list = uploaded?.inputs ?? [];
+    return (showProblemsOnly ? list.filter((r) => errorsByRow.has(r.rowNumber)) : list).slice(0, PREVIEW_LIMIT);
+  }, [uploaded, showProblemsOnly, errorsByRow]);
+  const rowErrorCount = new Set(errors.filter((e) => e.row > 0).map((e) => e.row)).size;
 
   return (
     <div className="max-w-5xl space-y-6">
       <PageHeader
         title="Course Structure"
-        description="Upload a course's subjects once - they're created and auto-assigned to the selected department's semesters, no separate Assign to Semester step."
+        description="Import a course's subjects from one file and assign them to a department's semesters. Nothing is saved unless every row is valid."
         actions={
-          <Button variant="outline" asChild>
-            <Link href="/academics"><ArrowLeft className="h-4 w-4 mr-1" />Back to Academics</Link>
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" asChild>
+              <Link href="/academics/categories">Categories</Link>
+            </Button>
+            <Button variant="outline" asChild>
+              <Link href="/academics"><ArrowLeft className="h-4 w-4 mr-1" />Back to Academics</Link>
+            </Button>
+          </div>
         }
       />
 
       <Card className="border-primary/20 bg-muted/20">
         <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center justify-between">
-            <span className="flex items-center gap-2"><BookOpen className="h-4 w-4 text-primary" />Regulation, Course &amp; Department</span>
-            {picker.selectedCourse && picker.selectedDepartment && (
-              <Badge variant="secondary" className="font-mono text-xs">{picker.selectedDepartment.name}</Badge>
-            )}
-          </CardTitle>
+          <CardTitle className="text-base">Regulation, Course and Department</CardTitle>
         </CardHeader>
         <CardContent className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <div className="space-y-1.5">
@@ -431,11 +399,7 @@ function CourseStructurePageInner() {
           </div>
           <div className="space-y-1.5">
             <Label>Course</Label>
-            <Select
-              value={picker.selectedCatalogId}
-              onValueChange={(v) => { picker.selectCatalog(v); resetUploadState(); }}
-              disabled={!picker.selectedRegulation}
-            >
+            <Select value={picker.selectedCatalogId} onValueChange={(v) => { picker.selectCatalog(v); resetUploadState(); }} disabled={!picker.selectedRegulation}>
               <SelectTrigger><SelectValue placeholder={!picker.selectedRegulation ? "Select a regulation first" : "Select course"} /></SelectTrigger>
               <SelectContent>
                 {picker.catalogOptions.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
@@ -444,11 +408,7 @@ function CourseStructurePageInner() {
           </div>
           <div className="space-y-1.5">
             <Label>Department</Label>
-            <Select
-              value={picker.selectedDepartmentId}
-              onValueChange={(v) => { picker.selectDepartment(v); resetUploadState(); }}
-              disabled={!picker.selectedCatalogId}
-            >
+            <Select value={picker.selectedDepartmentId} onValueChange={(v) => { picker.selectDepartment(v); resetUploadState(); }} disabled={!picker.selectedCatalogId}>
               <SelectTrigger><SelectValue placeholder={!picker.selectedCatalogId ? "Select a course first" : "Select department"} /></SelectTrigger>
               <SelectContent>
                 {picker.departments.flatMap((d) => [
@@ -461,42 +421,134 @@ function CourseStructurePageInner() {
             </Select>
           </div>
         </CardContent>
-        {picker.selectedDepartmentId && !picker.isLoadingCourses && !picker.selectedCourse && (
+        <CardContent className="pt-0">
+          <Button onClick={() => void handleLoad()} disabled={!canLoad || picker.isLoadingData || isLoadingScope} loading={picker.isLoadingData || isLoadingScope}>
+            Load
+          </Button>
+          {!picker.isLoaded && canLoad && !picker.isLoadingData && (
+            <span className="ml-3 text-sm text-muted-foreground">Click Load to see this department&apos;s years, semesters and subjects.</span>
+          )}
+        </CardContent>
+        {picker.isLoaded && picker.selectedDepartmentId && !picker.isLoadingCourses && !picker.selectedCourse && (
           <CardContent className="pt-0">
             <p className="text-sm text-amber-600 flex items-center gap-1.5"><AlertTriangle className="h-3.5 w-3.5" />{picker.selectedDepartment?.name} doesn&apos;t teach this course yet.</p>
           </CardContent>
         )}
+        {picker.isLoaded && scopeError && (
+          <CardContent className="pt-0">
+            <p className="text-sm text-red-600 flex items-center gap-1.5"><XCircle className="h-4 w-4 shrink-0" />{scopeError}</p>
+          </CardContent>
+        )}
       </Card>
+
+      {scope && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Current course structure</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              {scope.course.name}, {scope.department.name}. Subjects currently assigned to each semester, all regulations.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {teachableYears.length === 0 && (
+              <p className="text-sm text-red-600 flex items-center gap-1.5"><XCircle className="h-4 w-4 shrink-0" />No years are assigned to this department for this course. Set its Years Taught before importing.</p>
+            )}
+            {Array.from({ length: scope.scope.durationYears }, (_, i) => i + 1).map((y) => {
+              const taught = teachableYears.includes(y);
+              const configured = scope.scope.semestersByYear[y] ?? [];
+              const slots = scope.existing.filter((e) => e.year === y);
+              const semesters = Array.from(new Set([...configured, ...slots.map((e) => e.semester)])).sort((a, b) => a - b);
+              const cov = scope.regulationCoverage.find((c) => c.year === y)?.regulations ?? [];
+              return (
+                <section key={y} className={`rounded-md border ${taught ? "" : "opacity-60"}`}>
+                  <div className="flex flex-wrap items-baseline justify-between gap-2 border-b bg-muted/40 px-3 py-2">
+                    <h3 className="text-sm font-semibold">Year {y}</h3>
+                    <p className="text-xs text-muted-foreground">
+                      {taught ? "Assigned to this department" : "Not assigned to this department"}
+                      {cov.length > 0 && `. Current batch regulation: ${cov.join(", ")}`}
+                    </p>
+                  </div>
+                  {semesters.length === 0 ? (
+                    <p className="px-3 py-2 text-sm text-muted-foreground">No semesters configured in Course-Year Timings.</p>
+                  ) : (
+                    <div className="grid grid-cols-1 divide-y md:grid-cols-2 md:divide-x md:divide-y-0">
+                      {semesters.map((sem) => {
+                        const subjects = slots.find((e) => e.semester === sem)?.subjects ?? [];
+                        return (
+                          <div key={sem} className="min-w-0 px-3 py-2 space-y-1.5">
+                            <p className="text-sm font-medium">
+                              Semester {sem}
+                              <span className="ml-2 font-normal text-muted-foreground">
+                                {subjects.length} subject{subjects.length !== 1 ? "s" : ""}
+                                {!configured.includes(sem) && ", not in Course-Year Timings"}
+                              </span>
+                            </p>
+                            {subjects.length === 0 ? (
+                              <p className="text-xs text-muted-foreground">No subjects assigned.</p>
+                            ) : (
+                              <div className="overflow-x-auto">
+                                <table className="w-full text-xs">
+                                  <thead>
+                                    <tr className="text-left text-muted-foreground">
+                                      <th className="py-1 pr-2 font-medium">Code</th>
+                                      <th className="py-1 pr-2 font-medium">Subject</th>
+                                      <th className="py-1 pr-2 font-medium whitespace-nowrap">L-T-P</th>
+                                      <th className="py-1 pr-2 font-medium">Credits</th>
+                                      <th className="py-1 font-medium">Regulation</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {subjects.map((sub) => (
+                                      <tr key={sub.subjectId} className="border-t">
+                                        <td className="py-1 pr-2 font-mono whitespace-nowrap">{sub.code}</td>
+                                        <td className="py-1 pr-2">{sub.name}</td>
+                                        <td className="py-1 pr-2 tabular-nums whitespace-nowrap">{sub.lectureHours}-{sub.tutorialHours}-{sub.practicalHours}</td>
+                                        <td className="py-1 pr-2 tabular-nums">{sub.credits}</td>
+                                        <td className={`py-1 ${sub.regulation === scope.regulation ? "" : "text-amber-700"}`}>{sub.regulation || "-"}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </section>
+              );
+            })}
+          </CardContent>
+        </Card>
+      )}
 
       {canUpload && (
         <>
           <Card>
-            <CardHeader><CardTitle className="text-base flex items-center gap-2"><span className="h-6 w-6 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center font-bold">1</span>Download Template</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="text-base">1. Download the template</CardTitle></CardHeader>
             <CardContent className="space-y-4">
-              <p className="text-sm text-muted-foreground">Download the template, fill in every subject for {picker.selectedDepartment?.name}, and upload it below. Each row is one subject.</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-muted-foreground bg-muted/40 rounded-lg p-3">
-                {HINTS.map((h) => (
-                  <p key={h} className="flex items-start gap-1"><span className="text-primary mt-0.5">•</span>{h}</p>
-                ))}
-              </div>
-              <Button onClick={downloadTemplate} className="gap-2"><Download className="h-4 w-4" />Download Template (CSV)</Button>
+              <ul className="list-disc pl-5 space-y-1 text-sm text-muted-foreground">
+                {HINTS.map((h) => <li key={h}>{h}</li>)}
+              </ul>
+              <Button onClick={() => void downloadTemplate()} loading={isBuildingTemplate} className="gap-2"><Download className="h-4 w-4" />Download template (.xlsx)</Button>
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader><CardTitle className="text-base flex items-center gap-2"><span className="h-6 w-6 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center font-bold">2</span>Upload Filled File</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="text-base">2. Upload the filled file</CardTitle></CardHeader>
             <CardContent className="space-y-4">
               <input ref={fileRef} type="file" accept=".csv,.xlsx" className="hidden" onChange={(e) => void handleFile(e)} />
               <button
                 type="button"
                 onClick={() => fileRef.current?.click()}
                 className="w-full border-2 border-dashed border-border rounded-lg p-8 flex flex-col items-center gap-3 hover:border-primary hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors cursor-pointer"
-                aria-label="Click to upload CSV or Excel file"
+                aria-label="Click to upload an Excel or CSV file"
               >
                 <FileSpreadsheet className="h-10 w-10 text-muted-foreground" />
                 <div className="text-center">
-                  <p className="font-medium text-sm">Click to select a CSV or Excel file</p>
-                  <p className="text-xs text-muted-foreground mt-1">.csv or .xlsx supported - headers matched loosely</p>
+                  <p className="font-medium text-sm">{uploaded ? `${uploaded.fileName} (click to choose a different file)` : "Click to choose an Excel or CSV file"}</p>
+                  <p className="text-xs text-muted-foreground mt-1">.xlsx (first sheet is read) or .csv, up to {COURSE_STRUCTURE_MAX_ROWS} rows</p>
                 </div>
               </button>
               {parseError && (
@@ -509,69 +561,99 @@ function CourseStructurePageInner() {
                   <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />{parseWarning}
                 </div>
               )}
-              {rows.length > 0 && (
-                <p className="text-sm text-green-700 dark:text-green-400 flex items-center gap-1">
-                  <CheckCircle2 className="h-4 w-4" />{rows.length} row{rows.length !== 1 ? "s" : ""} parsed successfully
-                </p>
-              )}
             </CardContent>
           </Card>
 
-          {rows.length > 0 && (
+          {uploaded && local && (
             <Card>
               <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <span className="h-6 w-6 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center font-bold">3</span>
-                    Preview ({rows.length} records)
-                  </CardTitle>
-                  <div className="flex gap-2">
-                    {missingRequired && <Badge variant="destructive" className="text-xs">Missing required fields</Badge>}
-                    {scopeInvalidCount > 0 && <Badge variant="destructive" className="text-xs">{scopeInvalidCount} not assigned to this department</Badge>}
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <CardTitle className="text-base">3. Check the rows ({uploaded.inputs.length})</CardTitle>
+                  <div className="flex items-center gap-3 text-sm">
+                    {isChecking && <span className="flex items-center gap-1.5 text-muted-foreground"><Loader2 className="h-3.5 w-3.5 animate-spin" />Checking against existing subjects</span>}
+                    {errors.length > 0 && <span className="text-red-600">{rowErrorCount || errors.length} row{(rowErrorCount || errors.length) !== 1 ? "s have" : " has"} problems</span>}
+                    {readyToImport && <span className="text-green-700 dark:text-green-400">All rows are valid</span>}
+                    {errors.length > 0 && (
+                      <Button size="sm" variant="outline" onClick={() => setShowProblemsOnly((v) => !v)}>
+                        {showProblemsOnly ? "Show all rows" : "Show problem rows only"}
+                      </Button>
+                    )}
                   </div>
                 </div>
               </CardHeader>
               <CardContent className="p-0">
+                {(fileLevelErrors.length > 0 || serverError) && (
+                  <div className="mx-4 mb-3 p-3 rounded-lg bg-red-50 dark:bg-destructive/10 border border-red-200 dark:border-destructive/20 text-red-700 dark:text-red-400 text-sm space-y-1">
+                    {serverError && <p>{serverError}</p>}
+                    {fileLevelErrors.map((e, i) => <p key={i}>{e.message}</p>)}
+                  </div>
+                )}
+                {unknownCategories.length > 0 && (
+                  <div className="mx-4 mb-3 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 text-amber-800 dark:text-amber-300 text-sm space-y-2">
+                    <p className="font-medium">These categories aren&apos;t defined yet</p>
+                    <ul className="list-disc pl-5 text-xs space-y-0.5">
+                      {unknownCategories.map((c) => (
+                        <li key={c.value}>
+                          {c.value}, {c.rows} row{c.rows !== 1 ? "s" : ""}
+                          {c.suggestion ? `. If you meant ${c.suggestion}, change it in the file.` : ""}
+                        </li>
+                      ))}
+                    </ul>
+                    <div className="flex flex-wrap gap-2">
+                      <Button size="sm" asChild>
+                        <Link href={`/academics/categories?add=${encodeURIComponent(unknownCategories.map((c) => c.value).join("|"))}`} target="_blank" rel="noopener">
+                          Define these categories
+                        </Link>
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={refreshCategories} disabled={isLoadingScope}>I&apos;ve defined them, check again</Button>
+                    </div>
+                  </div>
+                )}
                 <div className="overflow-x-auto">
                   <table className="w-full text-xs">
                     <thead>
-                      <tr className="border-b bg-muted/40">
-                        <th className="text-left p-2 font-medium text-muted-foreground w-8">#</th>
-                        {IMPORT_COLUMNS.filter((c) => rows.some((r) => r[c.key])).map((c) => (
-                          <th key={c.key} className="text-left p-2 font-medium text-muted-foreground whitespace-nowrap">
-                            {c.label}{c.required && <span className="text-red-500 ml-0.5">*</span>}
-                          </th>
-                        ))}
-                        <th className="text-left p-2 font-medium text-muted-foreground whitespace-nowrap">Status</th>
+                      <tr className="border-b bg-muted/40 text-left text-muted-foreground">
+                        <th className="p-2 font-medium">Row</th>
+                        <th className="p-2 font-medium">Year</th>
+                        <th className="p-2 font-medium">Sem</th>
+                        <th className="p-2 font-medium">Code</th>
+                        <th className="p-2 font-medium">Subject</th>
+                        <th className="p-2 font-medium">Category</th>
+                        <th className="p-2 font-medium whitespace-nowrap">L-T-P</th>
+                        <th className="p-2 font-medium">Status</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {rows.slice(0, 20).map((row, i) => {
-                        const missing = rowMissingRequired(row);
-                        const verdict = rowVerdicts[i];
-                        const scopeError = !missing ? verdict?.reason : null;
+                      {visibleInputs.map(({ rowNumber, data }) => {
+                        const rowErrors = errorsByRow.get(rowNumber);
+                        const planned = planByRow.get(rowNumber);
                         return (
-                          <tr key={i} className={`border-b ${missing || scopeError ? "bg-red-50 dark:bg-destructive/15" : i % 2 === 0 ? "" : "bg-muted/20"}`}>
-                            <td className="p-2 text-muted-foreground">{i + 2}</td>
-                            {IMPORT_COLUMNS.filter((c) => rows.some((r) => r[c.key])).map((c) => (
-                              <td
-                                key={c.key}
-                                className={`p-2 whitespace-nowrap ${
-                                  (c.required && !row[c.key]?.trim()) || ((c.key === "year" || c.key === "semester") && scopeError)
-                                    ? "text-red-600 font-medium"
-                                    : ""
-                                }`}
-                              >
-                                {row[c.key] || <span className="text-muted-foreground/40">-</span>}
-                              </td>
-                            ))}
+                          <tr key={rowNumber} className={`border-b align-top ${rowErrors ? "bg-red-50 dark:bg-destructive/15" : ""}`}>
+                            <td className="p-2 text-muted-foreground tabular-nums">{rowNumber}</td>
+                            <td className="p-2">{data.year || "-"}</td>
                             <td className="p-2 whitespace-nowrap">
-                              {missing ? (
-                                <span className="flex items-center gap-1 text-red-600"><AlertTriangle className="h-3 w-3 shrink-0" />Missing field(s)</span>
-                              ) : scopeError ? (
-                                <span className="flex items-center gap-1 text-red-600"><AlertTriangle className="h-3 w-3 shrink-0" />{scopeError}</span>
+                              {data.semester || "-"}
+                              {(() => {
+                                const landed = local.rows.find((x) => x.rowNumber === rowNumber)?.semester;
+                                return landed != null && String(landed) !== String(data.semester).trim() ? <span className="text-muted-foreground"> (Sem {landed})</span> : null;
+                              })()}
+                            </td>
+                            <td className="p-2 font-mono">{planned?.code ?? (data.code || <span className="text-muted-foreground">auto</span>)}</td>
+                            <td className="p-2 min-w-40">{data.name || "-"}</td>
+                            <td className="p-2">{data.category || "-"}</td>
+                            <td className="p-2 whitespace-nowrap tabular-nums">{data.lectureHours || "?"}-{data.tutorialHours || "?"}-{data.practicalHours || "?"}</td>
+                            <td className="p-2 min-w-56">
+                              {rowErrors ? (
+                                <ul className="space-y-0.5 text-red-600">
+                                  {rowErrors.map((m, i) => <li key={i} className="flex gap-1"><AlertTriangle className="h-3 w-3 shrink-0 mt-0.5" />{m}</li>)}
+                                </ul>
+                              ) : planned ? (
+                                <span className="text-green-700 dark:text-green-400">
+                                  {planned.instance === "unchanged" ? "Already assigned, no change"
+                                    : planned.master === "reuse" ? "Uses existing subject" : "New subject"}
+                                </span>
                               ) : (
-                                <span className="flex items-center gap-1 text-green-600"><CheckCircle2 className="h-3 w-3 shrink-0" />OK</span>
+                                <span className="text-muted-foreground">OK</span>
                               )}
                             </td>
                           </tr>
@@ -579,33 +661,40 @@ function CourseStructurePageInner() {
                       })}
                     </tbody>
                   </table>
-                  {rows.length > 20 && (
-                    <p className="text-xs text-muted-foreground p-3 border-t">Showing first 20 of {rows.length} rows.</p>
+                  {(showProblemsOnly ? rowErrorCount : uploaded.inputs.length) > PREVIEW_LIMIT && (
+                    <p className="text-xs text-muted-foreground p-3 border-t">Showing the first {PREVIEW_LIMIT} rows.</p>
                   )}
                 </div>
+                {warnings.length > 0 && (
+                  <div className="m-4 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 text-amber-800 dark:text-amber-300 text-xs space-y-1">
+                    <p className="font-medium text-sm">Warnings (these don&apos;t block the import)</p>
+                    {warnings.map((w, i) => <p key={i}>{issueText(w)}</p>)}
+                  </div>
+                )}
               </CardContent>
             </Card>
           )}
 
-          {rows.length > 0 && (
+          {uploaded && local && !result && (
             <Card>
-              <CardHeader><CardTitle className="text-base flex items-center gap-2"><span className="h-6 w-6 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center font-bold">4</span>Create &amp; Assign</CardTitle></CardHeader>
+              <CardHeader><CardTitle className="text-base">4. Import</CardTitle></CardHeader>
               <CardContent className="space-y-4">
-                {missingRequired && (
-                  <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 text-amber-800 dark:text-amber-300 text-sm">
-                    <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />Some rows have missing required fields (highlighted in red above). Those rows will be skipped.
-                  </div>
-                )}
-                {scopeInvalidCount > 0 && (
+                {errors.length > 0 ? (
                   <div className="flex items-start gap-2 p-3 rounded-lg bg-red-50 dark:bg-destructive/10 border border-red-200 dark:border-destructive/20 text-red-700 dark:text-red-400 text-sm">
-                    <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
-                    {scopeInvalidCount} row{scopeInvalidCount !== 1 ? "s" : ""} won&apos;t be imported - their Year/Semester isn&apos;t assigned to {picker.selectedDepartment?.name} or isn&apos;t configured in Course-Year Timings (see Status column above). Fix the file and re-upload, or import the rest now and fix these individually afterward.
+                    <XCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                    Nothing can be imported until every row is fixed. Correct the file and upload it again.
                   </div>
-                )}
+                ) : serverCheck?.ok ? (
+                  <p className="text-sm text-muted-foreground">
+                    {`Regulation ${regulation}, ${scope?.department.name}: ${serverCheck.counts.mastersCreated} new subject${serverCheck.counts.mastersCreated !== 1 ? "s" : ""}, `}
+                    {`${serverCheck.counts.mastersReused} existing subject${serverCheck.counts.mastersReused !== 1 ? "s" : ""} reused, `}
+                    {`${serverCheck.counts.instancesWritten} semester assignment${serverCheck.counts.instancesWritten !== 1 ? "s" : ""} to add`}
+                    {serverCheck.counts.unchanged > 0 ? `, ${serverCheck.counts.unchanged} already assigned.` : "."}
+                  </p>
+                ) : null}
                 <div className="flex gap-3">
-                  <Button onClick={() => void handleImport()} loading={isImporting} disabled={isImporting || importableRows.length === 0}>
-                    <Upload className="h-4 w-4 mr-2" />
-                    Create &amp; Assign {importableRows.length}{importableRows.length !== rows.length ? ` of ${rows.length}` : ""} Record{importableRows.length !== 1 ? "s" : ""}
+                  <Button onClick={() => void handleImport()} loading={isImporting} disabled={!readyToImport || isImporting}>
+                    <Upload className="h-4 w-4 mr-2" />Import all {uploaded.inputs.length} row{uploaded.inputs.length !== 1 ? "s" : ""}
                   </Button>
                   <Button variant="outline" onClick={resetUploadState}>Clear</Button>
                 </div>
@@ -614,164 +703,33 @@ function CourseStructurePageInner() {
           )}
 
           {result && (
-            <Card className={result.assigned > 0 || fixed.length > 0 ? "border-green-200" : "border-red-200"}>
-              <CardContent className="p-5 space-y-4">
-                <div className="flex items-center gap-3">
-                  {result.assigned > 0 ? <CheckCircle2 className="h-6 w-6 text-green-600 shrink-0" /> : <XCircle className="h-6 w-6 text-red-600 shrink-0" />}
-                  <div>
-                    <p className="font-semibold flex items-center gap-1.5"><Layers className="h-4 w-4" />{result.created} created · {result.assigned} assigned to {picker.selectedDepartment?.name}</p>
-                    {failedRows.length > 0 && (
-                      <p className="text-sm text-muted-foreground">
-                        {stillFailed.length} row{stillFailed.length !== 1 ? "s" : ""} skipped{fixed.length > 0 ? ` · ${fixed.length} fixed just now` : ""}
-                      </p>
-                    )}
-                    {result.warnings.length > 0 && (
-                      <p className="text-sm text-amber-700">{result.warnings.length} field{result.warnings.length !== 1 ? "s" : ""} ignored due to invalid values</p>
-                    )}
-                  </div>
+            <Card className={result.verification?.problems.length ? "border-red-200" : "border-green-200"}>
+              <CardContent className="p-5 space-y-3">
+                <div>
+                  <p className="font-semibold">Import complete</p>
+                  <p className="text-sm text-muted-foreground">
+                    {`${scope?.course.name}, regulation ${regulation}, ${scope?.department.name}: ${result.counts.mastersCreated} subjects created, ${result.counts.mastersReused} reused, ${result.counts.instancesWritten} semester assignments added`}
+                    {result.counts.unchanged > 0 ? `, ${result.counts.unchanged} already assigned.` : "."}
+                  </p>
                 </div>
-                {failedRows.length > 0 && (
-                  <div className="space-y-1">
-                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Skipped rows</p>
-                    <p className="text-xs text-muted-foreground">
-                      Click <Pencil className="h-3 w-3 inline" /> on a row to correct it and import it on its own, without re-uploading the file.
+                {result.verification && (
+                  result.verification.problems.length === 0 ? (
+                    <p className="text-sm text-green-700 dark:text-green-400">
+                      Checked {result.verification.checked} semester assignments after saving. Regulation, course, department, year and semester all match the file.
                     </p>
-                    <div className="rounded-lg border divide-y max-h-64 overflow-y-auto">
-                      {failedRows.map((f) => (
-                        <div key={f.row} className={`flex items-center justify-between gap-2 px-3 py-2 text-sm ${f.status === "fixed" ? "opacity-50" : ""}`}>
-                          <div className="min-w-0">
-                            <span className="text-muted-foreground">Row {f.row} · {f.data.name || f.code}</span>
-                            <Badge variant="outline" className="ml-2 text-[10px] py-0">
-                              {f.stage === "create" ? "create failed" : f.stage === "assign" ? "assign failed" : "not assigned to department"}
-                            </Badge>
-                            {f.status === "fixed" ? (
-                              <span className="ml-2 text-green-600 text-xs">Fixed and imported</span>
-                            ) : (
-                              <span className="block text-red-600 text-xs">{f.error}</span>
-                            )}
-                          </div>
-                          {f.status === "failed" && (
-                            <button onClick={() => openFix(f)} className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors shrink-0" title="Edit and retry this row">
-                              <Pencil className="h-4 w-4" />
-                            </button>
-                          )}
-                        </div>
-                      ))}
+                  ) : (
+                    <div className="text-sm text-red-700 dark:text-red-400 space-y-1">
+                      <p className="font-medium">These semester assignments don&apos;t match the file:</p>
+                      {result.verification.problems.map((p, i) => <p key={i}>{p}</p>)}
                     </div>
-                  </div>
+                  )
                 )}
-                {result.warnings.length > 0 && (
-                  <div className="space-y-1">
-                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Imported, but some fields were ignored</p>
-                    <div className="rounded-lg border divide-y max-h-48 overflow-y-auto">
-                      {result.warnings.map((w, i) => (
-                        <div key={i} className="flex items-center justify-between px-3 py-2 text-sm">
-                          <span className="text-muted-foreground">Row {w.row} · {w.code}</span>
-                          <span className="text-amber-700 text-xs">{w.warning}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                <Button variant="outline" onClick={resetUploadState}>Import another file</Button>
               </CardContent>
             </Card>
           )}
         </>
       )}
-
-      <Dialog open={!!fixTarget} onOpenChange={(o) => !o && setFixTarget(null)}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Fix Row {fixTarget?.row}</DialogTitle>
-            <DialogDescription>Correct the field(s) that failed and save - this creates and assigns just this one subject.</DialogDescription>
-          </DialogHeader>
-
-          {fixTarget && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label>Year</Label>
-                  <Input type="number" min={1} value={fixTarget.form.year} onChange={(e) => setFixField("year", stripLeadingZeros(e.target.value))} />
-                </div>
-                <div className="space-y-2">
-                  <Label>Semester</Label>
-                  <Input type="number" min={1} value={fixTarget.form.semester} onChange={(e) => setFixField("semester", stripLeadingZeros(e.target.value))} />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Category</Label>
-                <Select value={fixTarget.form.category} onValueChange={(v) => setFixField("category", v as SubjectCategory)}>
-                  <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
-                  <SelectContent>
-                    {(Object.entries(SUBJECT_CATEGORY_LABELS) as [SubjectCategory, string][]).map(([value, label]) => (
-                      <SelectItem key={value} value={value}>{label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label>Subject Name</Label>
-                  <Input value={fixTarget.form.name} onChange={(e) => setFixField("name", e.target.value)} />
-                </div>
-                <div className="space-y-2">
-                  <Label>Short Code</Label>
-                  <Input value={fixTarget.form.shortCode} onChange={(e) => setFixField("shortCode", e.target.value.toUpperCase())} placeholder="e.g. BCE" className="uppercase" />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label>L / T / P</Label>
-                <div className="grid grid-cols-3 gap-4">
-                  <Input type="number" min={0} placeholder="L" aria-label="Lecture hours" value={fixTarget.form.lectureHours} onChange={(e) => setFixField("lectureHours", stripLeadingZeros(e.target.value))} />
-                  <Input type="number" min={0} placeholder="T" aria-label="Tutorial hours" value={fixTarget.form.tutorialHours} onChange={(e) => setFixField("tutorialHours", stripLeadingZeros(e.target.value))} />
-                  <Input type="number" min={0} placeholder="P" aria-label="Practical hours" value={fixTarget.form.practicalHours} onChange={(e) => setFixField("practicalHours", stripLeadingZeros(e.target.value))} />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                <div className="space-y-2">
-                  <Label>Weekly Hours</Label>
-                  <Input type="number" value={fixHoursPerWeek} disabled />
-                  <p className="text-xs text-muted-foreground">L + T + P, computed automatically.</p>
-                </div>
-                <div className="space-y-2">
-                  <Label>Credits</Label>
-                  <Input type="number" min={0} step="any" value={fixTarget.form.credits} onChange={(e) => setFixField("credits", stripLeadingZeros(e.target.value))} placeholder="Optional" />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                <div className="space-y-2">
-                  <Label>Internal Marks</Label>
-                  <Input type="number" min={0} value={fixTarget.form.internalMarks} onChange={(e) => setFixField("internalMarks", stripLeadingZeros(e.target.value))} placeholder="Optional" />
-                </div>
-                <div className="space-y-2">
-                  <Label>External Marks</Label>
-                  <Input type="number" min={0} value={fixTarget.form.externalMarks} onChange={(e) => setFixField("externalMarks", stripLeadingZeros(e.target.value))} placeholder="Optional" />
-                </div>
-                <div className="space-y-2">
-                  <Label>Total Marks</Label>
-                  <Input type="number" min={0} value={fixTarget.form.totalMarks} onChange={(e) => setFixField("totalMarks", stripLeadingZeros(e.target.value))} placeholder="Optional" />
-                </div>
-              </div>
-            </div>
-          )}
-
-          {fixError && (
-            <div className="flex items-start gap-2 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
-              <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />{fixError}
-            </div>
-          )}
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setFixTarget(null)}>Cancel</Button>
-            <Button onClick={() => void handleFixSave()} loading={fixSaving}>Save &amp; Import</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

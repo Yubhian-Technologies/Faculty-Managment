@@ -318,3 +318,33 @@ export function canHodExclusivelyOwnDepartmentYear<T extends DepartmentYearRow &
   const owner = resolveBranchYearOwner(departments, departmentName, year, catalogId);
   return scope.ownDepartmentNames.includes(owner) || scope.childDepartmentNames.includes(owner);
 }
+
+export type SectionHodVisibility = "primary" | "secondary" | "hidden";
+
+/**
+ * How a section filed under `departmentName` at `year` should reach an HOD who
+ * got it through the child / managed-branch query of `api/college/sections`
+ * GET (not through their own department name):
+ *
+ * - "primary"   - the year is theirs (they, or one of their sub-departments,
+ *                 own it per resolveBranchYearOwner): full access.
+ * - "secondary" - a TRUE sub-department of theirs whose year is run by a
+ *                 shared-year manager elsewhere (e.g. "data science", child of
+ *                 AI, year 1 under Basic Science - English): shown read-only so
+ *                 their roster isn't missing a year.
+ * - "hidden"    - reached ONLY via `managedDepartments` and the year belongs to
+ *                 the branch's own dedicated HOD (e.g. Basic Science - English
+ *                 looking at CIVIL years 2-4). A manager runs the shared year,
+ *                 nothing else, so these are not theirs to see at all.
+ */
+export function classifySectionForHod<T extends DepartmentYearRow & { name?: string }>(
+  scope: { ownDepartmentNames: string[]; childDepartmentNames: string[] },
+  departments: T[],
+  departmentName: string,
+  year: number,
+  catalogId?: string
+): SectionHodVisibility {
+  const owner = resolveBranchYearOwner(departments, departmentName, year, catalogId);
+  if (scope.ownDepartmentNames.includes(owner) || scope.childDepartmentNames.includes(owner)) return "primary";
+  return scope.childDepartmentNames.includes(departmentName) ? "secondary" : "hidden";
+}

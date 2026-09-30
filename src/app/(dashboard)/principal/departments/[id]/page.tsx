@@ -14,7 +14,8 @@ import { resolveDepartmentCourseScope, type DepartmentWithId } from "@/lib/colle
 import { DepartmentCourseCard } from "@/components/academics/DepartmentCourseCard";
 import { SemesterSubjectsDialog } from "@/components/academics/SemesterSubjectsDialog";
 import { toast } from "@/hooks/useToast";
-import type { Department, Course, CourseYearTiming, CourseAcademicYear, SubjectSemesterAssignment } from "@/types";
+import type { Department, Course, CourseCatalogItem, CourseYearTiming, SubjectSemesterAssignment } from "@/types";
+import { courseYearBatch } from "@/lib/college/courseYearBatch";
 
 export default function DepartmentDetailPage() {
   const router = useRouter();
@@ -35,7 +36,11 @@ export default function DepartmentDetailPage() {
   // they can be put back. Empty everywhere else.
   const [parentCourses, setParentCourses] = useState<Course[]>([]);
   const [timings, setTimings] = useState<CourseYearTiming[]>([]);
-  const [academicYears, setAcademicYears] = useState<CourseAcademicYear[]>([]);
+  // The college's current academic year (same for every year of every
+  // course) and the catalog entries whose regulation batches give each
+  // year's regulation - see courseYearBatch.
+  const [currentAcademicYear, setCurrentAcademicYear] = useState<{ label: string; startYear: number } | null>(null);
+  const [catalogItems, setCatalogItems] = useState<CourseCatalogItem[]>([]);
   const [subjectAssignments, setSubjectAssignments] = useState<SubjectSemesterAssignment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -45,13 +50,6 @@ export default function DepartmentDetailPage() {
     year: number;
     semester: number;
   } | null>(null);
-  const [advancingAcademicYear, setAdvancingAcademicYear] = useState<{
-    course: Course;
-    year: number;
-    currentLabel?: string;
-    suggestedNext: string;
-  } | null>(null);
-  const [isAdvancingAY, setIsAdvancingAY] = useState(false);
 
   // Per-course "Edit Academic Structure" dialog - null when closed. Every
   // course now has its own explicit courseScopes override (set mandatorily at
@@ -148,7 +146,7 @@ export default function DepartmentDetailPage() {
         setParentCourses([]);
       }
 
-      const [timingLists, academicYearLists, assignmentLists] = await Promise.all([
+      const [timingLists, currentAy, catalog, assignmentLists] = await Promise.all([
         Promise.all(
           sortedCourses.map((c) =>
             fetch(`/api/college/course-year-timings?courseId=${encodeURIComponent(c.id)}`)
@@ -156,13 +154,13 @@ export default function DepartmentDetailPage() {
               .then((d) => d.timings ?? [])
           )
         ),
-        Promise.all(
-          sortedCourses.map((c) =>
-            fetch(`/api/college/course-academic-years?courseId=${encodeURIComponent(c.id)}`)
-              .then((r) => r.json() as Promise<{ academicYears: CourseAcademicYear[] }>)
-              .then((d) => d.academicYears ?? [])
-          )
-        ),
+        fetch("/api/college/academic-year/current")
+          .then((r) => (r.ok ? r.json() as Promise<{ label: string; startYear: number }> : null))
+          .catch(() => null),
+        fetch("/api/college/course-catalog")
+          .then((r) => r.json() as Promise<{ items?: CourseCatalogItem[] }>)
+          .then((d) => d.items ?? [])
+          .catch(() => [] as CourseCatalogItem[]),
         // Per-year, per-semester subject counts for the "Sem N: K subjects"
         // status shown alongside timings below - the same collection Assign
         // to Semester itself writes to, read here purely for display so a
@@ -176,7 +174,8 @@ export default function DepartmentDetailPage() {
         ),
       ]);
       setTimings(timingLists.flat());
-      setAcademicYears(academicYearLists.flat());
+      setCurrentAcademicYear(currentAy);
+      setCatalogItems(catalog);
       setSubjectAssignments(assignmentLists.flat());
     } catch {
       toast({ variant: "destructive", title: "Failed to load department" });
@@ -195,8 +194,12 @@ export default function DepartmentDetailPage() {
     return timings.find((t) => t.courseId === courseId && t.year === year);
   }
 
-  function getAcademicYear(courseId: string, year: number): CourseAcademicYear | undefined {
-    return academicYears.find((a) => a.courseId === courseId && a.year === year);
+  // Which batch is in `year` of `course` this academic year, and its
+  // regulation. Null until the current academic year has loaded.
+  function batchFor(course: Course, year: number) {
+    if (!currentAcademicYear) return null;
+    const catalog = catalogItems.find((i) => i.id === course.catalogId) ?? null;
+    return courseYearBatch(currentAcademicYear.startYear, year, course.durationYears, catalog);
   }
 
   // One row per semester this course-year's OWN timing actually configured
@@ -242,65 +245,6 @@ export default function DepartmentDetailPage() {
     if (own.assignedYears.length > 0 || !parentDepartment) return own;
     return resolveDepartmentCourseScope(parentDepartment, course.catalogId);
   }
-
-  function suggestNextAcademicYear(label?: string): string {
-    if (!label) return "";
-    const match = /^(\d{4})\s*-\s*(\d{4})$/.exec(label.trim());
-    if (!match) return "";
-    return `${Number(match[1]) + 1}-${Number(match[2]) + 1}`;
-  }
-
-  function handleAdvanceAcademicYearClick(course: Course, year: number, current?: CourseAcademicYear) {
-    if (!current?.label) {
-      router.push(`/principal/departments/${id}/courses/${course.id}/academic-year/${year}/edit`);
-      return;
-    }
-    const next = suggestNextAcademicYear(current.label);
-    if (!next) {
-      router.push(`/principal/departments/${id}/courses/${course.id}/academic-year/${year}/edit`);
-      return;
-    }
-    setAdvancingAcademicYear({
-      course,
-      year,
-      currentLabel: current.label,
-      suggestedNext: next,
-    });
-  }
-
-  async function handleConfirmAdvanceAcademicYear() {
-    if (!advancingAcademicYear) return;
-    setIsAdvancingAY(true);
-    try {
-      const res = await fetch("/api/college/course-academic-years", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          departmentId: id,
-          courseId: advancingAcademicYear.course.id,
-          year: advancingAcademicYear.year,
-          label: advancingAcademicYear.suggestedNext,
-        }),
-      });
-      const json = await res.json() as { error?: string; advanced?: boolean; facultyUpdated?: number };
-      if (!res.ok) throw new Error(json.error ?? "Failed to advance academic year");
-      toast({
-        variant: "success",
-        title: `Advanced to ${advancingAcademicYear.suggestedNext}`,
-        description: `${json.facultyUpdated ?? 0} active faculty member${json.facultyUpdated === 1 ? "" : "s"} experience updated`,
-      });
-      setAdvancingAcademicYear(null);
-      await load();
-    } catch (err) {
-      toast({
-        variant: "destructive",
-        title: err instanceof Error ? err.message : "Failed to advance academic year",
-      });
-    } finally {
-      setIsAdvancingAY(false);
-    }
-  }
-
 
   // Turn an inherited course into this sub-department's own independent copy.
   // The server creates a Course doc owned by this department for the same
@@ -476,9 +420,17 @@ export default function DepartmentDetailPage() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-base flex items-center gap-2">
-              <GraduationCap className="h-4 w-4" />Courses
-            </CardTitle>
+            <div>
+              <CardTitle className="text-base flex items-center gap-2">
+                <GraduationCap className="h-4 w-4" />Courses
+              </CardTitle>
+              {currentAcademicYear && (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Academic year <span className="font-medium text-foreground">{currentAcademicYear.label}</span>, the same for every year.
+                  Each year shows the batch studying in it now and that batch&apos;s regulation.
+                </p>
+              )}
+            </div>
             {/* On a sub-department this adds a course only IT runs - the same
                 Add flow, filed against this department rather than the parent,
                 so the parent and its other children are unaffected. */}
@@ -533,14 +485,13 @@ export default function DepartmentDetailPage() {
                       scope={scope}
                       years={years}
                       timings={timings}
-                      academicYears={academicYears}
+                      batchForYear={(y) => batchFor(c, y)}
                       subjectAssignments={subjectAssignments}
                       onEditCourse={() => router.push(`/principal/departments/${id}/courses/${c.id}/edit`)}
                       onDeleteCourse={() => setDeletingCourse(c)}
                       onCustomiseCourse={() => setCustomisingCourse(c)}
                       onRemoveInherited={() => setRemovingInherited(c)}
                       onEditTiming={(y) => router.push(`/principal/departments/${id}/courses/${c.id}/timing/${y}/edit`)}
-                      onAdvanceAcademicYear={(y, curAy) => handleAdvanceAcademicYearClick(c, y, curAy)}
                       onOpenSemesterSubjects={(course, year, semester) =>
                         setActiveSemesterModal({ course, year, semester })
                       }
@@ -590,11 +541,8 @@ export default function DepartmentDetailPage() {
         course={activeSemesterModal?.course ?? null}
         year={activeSemesterModal?.year ?? 1}
         semester={activeSemesterModal?.semester ?? 1}
-        academicYearLabel={
-          activeSemesterModal
-            ? getAcademicYear(activeSemesterModal.course.id, activeSemesterModal.year)?.label
-            : undefined
-        }
+        batchLabel={activeSemesterModal ? batchFor(activeSemesterModal.course, activeSemesterModal.year)?.label : undefined}
+        regulations={activeSemesterModal ? batchFor(activeSemesterModal.course, activeSemesterModal.year)?.regulations : undefined}
         departmentId={id}
         departmentName={department?.name}
         assignments={
@@ -624,19 +572,10 @@ export default function DepartmentDetailPage() {
       />
 
       <ConfirmDialog
-        open={!!advancingAcademicYear}
-        onOpenChange={(open) => !open && setAdvancingAcademicYear(null)}
-        title={`Advance Academic Year to ${advancingAcademicYear?.suggestedNext}?`}
-        description={`Currently on ${advancingAcademicYear?.currentLabel}. Advancing will set Year ${advancingAcademicYear?.year} to ${advancingAcademicYear?.suggestedNext} and increase experience by 1 year for all faculty members with active teaching assignments in this year.`}
-        confirmLabel={isAdvancingAY ? "Advancing..." : `Advance to ${advancingAcademicYear?.suggestedNext}`}
-        onConfirm={() => void handleConfirmAdvanceAcademicYear()}
-      />
-
-      <ConfirmDialog
         open={!!customisingCourse}
         onOpenChange={(open) => !open && setCustomisingCourse(null)}
         title={`Manage ${customisingCourse?.name ?? "this course"} in ${department?.name ?? "this sub-department"}?`}
-        description={`${department?.name} gets its own copy of this course, with ${parentDepartment?.name}'s current timings and academic years copied across. From then on the two are independent - changes here won't follow ${parentDepartment?.name}, and its other sub-departments keep sharing the original.`}
+        description={`${department?.name} gets its own copy of this course, with ${parentDepartment?.name}'s current timings copied across. From then on the two are independent - changes here won't follow ${parentDepartment?.name}, and its other sub-departments keep sharing the original.`}
         confirmLabel={isCustomising ? "Setting up..." : "Manage here"}
         onConfirm={() => void handleCustomiseCourse()}
       />

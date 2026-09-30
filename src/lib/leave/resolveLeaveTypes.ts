@@ -1,10 +1,26 @@
 import type { Firestore } from "firebase-admin/firestore";
-import type { LeaveTypeCode, LeaveTypeFull, LeaveTypeRuleOverride } from "@/types/leave";
+import type { LeaveTypeCode, LeaveTypeFull, LeaveTypeRuleOverride, LeaveReasonOption } from "@/types/leave";
 import type { FacultyNorms } from "@/types/core";
 import { LEAVE_TYPE_SEED } from "./seedData";
 import { loadCollegeSettings } from "@/lib/firestore/collegeSettings";
 
 type Overrides = FacultyNorms["leaveTypeRuleOverrides"];
+
+// reasonOptions used to be a plain string[] - a college whose settings doc
+// hasn't been resaved since LeaveReasonOption was introduced still has that
+// old shape sitting in Firestore. Normalizing here, at every read, means no
+// migration script is needed: an old string is treated as a HOD-routed
+// reason with no other metadata, and the new object shape passes through
+// unchanged. Every consumer of resolveLeaveTypes/resolveLeaveType sees only
+// the new shape regardless of what's actually stored.
+export function normalizeReasonOptions(raw: unknown): LeaveReasonOption[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((r) => {
+    if (typeof r === "string") return { label: r };
+    const o = r as Partial<LeaveReasonOption>;
+    return { label: String(o.label ?? ""), ...(o.proofRoutedTo === "EXAM_CELL" ? { proofRoutedTo: "EXAM_CELL" as const } : {}) };
+  }).filter((r) => r.label.trim().length > 0);
+}
 
 // Merges the college's own Settings > Leave Policy overrides on top of the
 // built-in seed - a field left unset in the override keeps the seed's value,
@@ -16,7 +32,10 @@ export function resolveLeaveTypes(overrides: Overrides): LeaveTypeFull[] {
   if (!overrides) return LEAVE_TYPE_SEED;
   return LEAVE_TYPE_SEED.map((lt) => {
     const o = overrides[lt.code];
-    return o ? { ...lt, rules: { ...lt.rules, ...o } } : lt;
+    if (!o) return lt;
+    const rules = { ...lt.rules, ...o };
+    if (rules.reasonOptions) rules.reasonOptions = normalizeReasonOptions(rules.reasonOptions);
+    return { ...lt, rules };
   });
 }
 
@@ -24,7 +43,10 @@ export function resolveLeaveType(overrides: Overrides, code: LeaveTypeCode): Lea
   const base = LEAVE_TYPE_SEED.find((lt) => lt.code === code);
   if (!base) return undefined;
   const o = overrides?.[code];
-  return o ? { ...base, rules: { ...base.rules, ...o } } : base;
+  if (!o) return base;
+  const rules = { ...base.rules, ...o };
+  if (rules.reasonOptions) rules.reasonOptions = normalizeReasonOptions(rules.reasonOptions);
+  return { ...base, rules };
 }
 
 export async function loadResolvedLeaveTypes(db: Firestore, collegeId: string): Promise<LeaveTypeFull[]> {
@@ -77,10 +99,29 @@ export function sanitizeLeaveTypeRuleOverride(input: unknown): { ok: true; rule:
     }
 
     if (r.reasonOptions !== undefined) {
-      if (!Array.isArray(r.reasonOptions) || r.reasonOptions.some((x) => typeof x !== "string" || !x.trim())) {
-        return { ok: false, error: "reasonOptions must be an array of non-empty strings" };
+      if (!Array.isArray(r.reasonOptions)) {
+        return { ok: false, error: "reasonOptions must be an array" };
       }
-      rule.reasonOptions = (r.reasonOptions as string[]).map((s) => s.trim());
+      const opts: LeaveReasonOption[] = [];
+      for (const x of r.reasonOptions) {
+        if (typeof x === "string") {
+          if (!x.trim()) return { ok: false, error: "reasonOptions entries must be non-empty" };
+          opts.push({ label: x.trim() });
+          continue;
+        }
+        if (typeof x !== "object" || x === null || typeof (x as Record<string, unknown>).label !== "string" || !(x as { label: string }).label.trim()) {
+          return { ok: false, error: "Each reasonOptions entry must be a non-empty string or { label, proofRoutedTo? }" };
+        }
+        const entry = x as { label: string; proofRoutedTo?: unknown };
+        if (entry.proofRoutedTo !== undefined && entry.proofRoutedTo !== "HOD" && entry.proofRoutedTo !== "EXAM_CELL") {
+          return { ok: false, error: "reasonOptions.proofRoutedTo must be HOD or EXAM_CELL" };
+        }
+        opts.push({
+          label: entry.label.trim(),
+          ...(entry.proofRoutedTo === "EXAM_CELL" ? { proofRoutedTo: "EXAM_CELL" as const } : {}),
+        });
+      }
+      rule.reasonOptions = opts;
     }
     if (r.allowCustomReason !== undefined) {
       if (typeof r.allowCustomReason !== "boolean") return { ok: false, error: "allowCustomReason must be a boolean" };

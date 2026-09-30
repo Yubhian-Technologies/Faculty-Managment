@@ -13,7 +13,6 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import {
   BookOpen,
-  Calendar,
   Clock,
   ExternalLink,
   Layers,
@@ -29,7 +28,9 @@ interface SemesterSubjectsDialogProps {
   course: Course | null;
   year: number;
   semester: number;
-  academicYearLabel?: string;
+  // Batch in this year right now, and its regulation(s).
+  batchLabel?: string;
+  regulations?: string[];
   departmentId: string;
   departmentName?: string;
   assignments: SubjectSemesterAssignment[];
@@ -43,7 +44,8 @@ export function SemesterSubjectsDialog({
   course,
   year,
   semester,
-  academicYearLabel,
+  batchLabel,
+  regulations,
   departmentName,
   assignments,
   assignHref,
@@ -90,13 +92,13 @@ export function SemesterSubjectsDialog({
                 <GraduationCap className="h-3.5 w-3.5" />
                 Year {year} · Semester {semester}
               </span>
-              {academicYearLabel && (
+              {batchLabel && (
                 <>
                   <span className="text-xs text-muted-foreground">·</span>
-                  <Badge variant="outline" className="text-[11px] gap-1 px-1.5 py-0">
-                    <Calendar className="h-3 w-3 text-muted-foreground" />
-                    AY {academicYearLabel}
-                  </Badge>
+                  <span className="text-xs text-muted-foreground">
+                    Batch {batchLabel}
+                    {regulations && regulations.length > 0 && `, Regulation ${regulations.join(", ")}`}
+                  </span>
                 </>
               )}
               {isInherited && (
