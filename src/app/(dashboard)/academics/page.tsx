@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/store/authStore";
 import { ROLE_LABELS } from "@/types";
-import { Library, CalendarRange, BookOpen, FileText, ArrowRight } from "lucide-react";
+import { Library, BookOpen, FileText, Tags, ArrowRight } from "lucide-react";
 
 const QUICK_ACTIONS = [
   {
@@ -20,13 +20,13 @@ const QUICK_ACTIONS = [
     href: "/academics/course-structure",
     icon: Library,
     title: "Course Structure",
-    description: "Upload a course's subjects once - created and auto-assigned to the department's semesters, no separate Assign to Semester step.",
+    description: "Import a course's subjects from a spreadsheet and assign them to a department's semesters.",
   },
   {
-    href: "/academics/teaching-assignments",
-    icon: CalendarRange,
-    title: "Teaching Assignments",
-    description: "Browse any department's course-year and assign faculty to its subjects.",
+    href: "/academics/categories",
+    icon: Tags,
+    title: "Categories",
+    description: "Define subject categories as a short code and its full form, for use in Course Structure files.",
   },
   {
     href: "/academics/syllabus",

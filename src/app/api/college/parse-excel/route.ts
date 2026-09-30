@@ -54,19 +54,26 @@ export async function POST(request: Request) {
 
     const sheet = workbook.worksheets[0];
     if (!sheet) {
-      return NextResponse.json({ rows: [] });
+      return NextResponse.json({ rows: [], rowNumbers: [] });
     }
 
     const rows: string[][] = [];
-    sheet.eachRow({ includeEmpty: false }, (row) => {
+    // Each kept row's real sheet row number (1-based), parallel to `rows` -
+    // blank rows are skipped above, so an importer that reports "Row N"
+    // needs this to point at the row the user actually sees in Excel.
+    const rowNumbers: number[] = [];
+    sheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
       const cells: string[] = [];
       for (let i = 1; i <= row.cellCount; i++) {
         cells.push(cellToString(row.getCell(i).value));
       }
-      if (cells.some((c) => c.trim())) rows.push(cells);
+      if (cells.some((c) => c.trim())) {
+        rows.push(cells);
+        rowNumbers.push(rowNumber);
+      }
     });
 
-    return NextResponse.json({ rows });
+    return NextResponse.json({ rows, rowNumbers });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

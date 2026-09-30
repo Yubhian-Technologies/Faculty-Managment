@@ -72,7 +72,10 @@ export default function OfficeStudentsPage() {
   const [years, setYears] = useState<number[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
   const [courseNames, setCourseNames] = useState<string[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
+  // The list stays empty until the user presses Load; after that, filter/page
+  // changes refetch automatically as before.
+  const [loadRequested, setLoadRequested] = useState(false);
   const [isFetching, setIsFetching] = useState(false);
 
   // `search` is the input's live value; `debouncedSearch` is what actually
@@ -203,8 +206,9 @@ export default function OfficeStudentsPage() {
   }, [loadMetadata]);
 
   useEffect(() => {
+    if (!loadRequested) return;
     void (async () => { await loadStudents(); })();
-  }, [loadStudents]);
+  }, [loadStudents, loadRequested]);
 
   const activeDepartments = useMemo(
     () => departments.filter((d) => d.isActive).sort((a, b) => a.name.localeCompare(b.name)),
@@ -695,7 +699,13 @@ export default function OfficeStudentsPage() {
       )}
 
       {/* List */}
-      {isLoading ? (
+      {!loadRequested ? (
+        <div className="flex flex-col items-center justify-center py-20 text-center">
+          <Users className="h-10 w-10 text-muted-foreground mb-3" />
+          <p className="text-sm text-muted-foreground mb-4">Set any filters, then load the student list.</p>
+          <Button onClick={() => setLoadRequested(true)}>Load Students</Button>
+        </div>
+      ) : isLoading || (isFetching && students.length === 0 && total === 0) ? (
         <div className="space-y-2">
           {[1, 2, 3, 4, 5].map((i) => <div key={i} className="h-12 rounded-lg border bg-muted/30 animate-pulse" />)}
         </div>
