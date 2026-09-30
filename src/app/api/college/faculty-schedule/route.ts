@@ -5,6 +5,7 @@ import { FieldPath } from "firebase-admin/firestore";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
+import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 import { resolveCurrentSemester, matchesCurrentSemester } from "@/lib/college/semester";
 import { isFacultyAvailable } from "@/types";
 import { defaultPeriodTimings } from "@/lib/timetable/buildGrid";
@@ -23,10 +24,13 @@ export async function GET(request: Request) {
     const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "PANEL_MEMBER", "COLLEGE_STAFF");
     const { searchParams } = new URL(request.url);
     const departmentId = searchParams.get("departmentId");
-    const facultyId = searchParams.get("facultyId");
-
     const db = getAdminDb();
     const collegeRef = db.collection("colleges").doc(session.collegeId);
+    // `me=1`: the caller's own schedule - resolved server-side from the
+    // session, so a faculty never has to (or can) pick anyone.
+    const facultyId = searchParams.get("me") === "1"
+      ? await resolveFacultyMemberId(db, session.collegeId, session.uid)
+      : searchParams.get("facultyId");
 
     if (departmentId) {
       const deptSnap = await collegeRef.collection("departments").doc(departmentId).get();

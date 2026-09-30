@@ -279,29 +279,10 @@ export async function POST(request: Request) {
       }
     }
 
-    // A faculty member can't teach two classes at once - block regardless of
-    // section/year/course. Each candidate slot may belong to a different
-    // course-year than this one, so its own semester is resolved
-    // individually rather than reusing assignmentSemester.
-    const facultyConflictSnap = await collegeRef.collection("timetableSlots")
-      .where("facultyId", "==", assignment.facultyId)
-      .where("day", "==", day)
-      .where("periodNumber", "==", Number(periodNumber))
-      .get();
-    let facultyConflict: TimetableSlot | null = null;
-    for (const d of facultyConflictSnap.docs) {
-      const other = d.data() as TimetableSlot;
-      const otherSemester = await resolveSectionCurrentSemester(db, session.collegeId, other.courseId, other.year);
-      if (matchesCurrentSemester(other.semester, otherSemester) && matchesCurrentAcademicYear(other.academicYear, currentAcademicYear)) {
-        facultyConflict = other; break;
-      }
-    }
-    if (facultyConflict) {
-      return NextResponse.json(
-        { error: `Conflict: ${assignment.facultyName || "this faculty"} already teaches ${facultyConflict.subjectName ?? "another class"} on ${day} period ${periodNumber} in a different section` },
-        { status: 409 }
-      );
-    }
+    // No faculty-clash check across sections: different years run their own
+    // period timings (e.g. P3 is 10:40-11:30 for Year 1 and 11:00-11:50 for
+    // Year 2), so the same faculty holding the same period number in two
+    // sections is allowed on purpose.
 
     const now = new Date();
     const deptIndex = await loadDepartmentIndex(db, session.collegeId);
