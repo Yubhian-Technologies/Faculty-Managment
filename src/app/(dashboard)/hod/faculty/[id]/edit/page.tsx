@@ -3,9 +3,10 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Trash2 } from "lucide-react";
+import { ArrowLeft, Trash2, User, UserPen } from "lucide-react";
+import { WizardPage, WizardHero, WizardStepper, WizardStepHeader, type ChromeStep } from "@/components/shared/WizardChrome";
 import { PageHeader } from "@/components/shared/PageHeader";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -92,9 +93,9 @@ export default function EditHodFacultyIdentityPage() {
   // Submit" tab here - that's specific to the create wizard's one-shot
   // submission; each tab here already saves independently on its own.
   type EditTabKey = "core" | ProfileModuleKey;
-  const tabs: { key: EditTabKey; label: string }[] = [
-    { key: "core", label: "Identity & Employment" },
-    ...getFacultyProfileModules().map((m) => ({ key: m.key, label: m.label })),
+  const tabs: (ChromeStep & { key: EditTabKey })[] = [
+    { key: "core", label: "Identity & Employment", icon: User, description: "Official ID, department, designation and employment status" },
+    ...getFacultyProfileModules().map((m) => ({ key: m.key, label: m.label, icon: m.icon })),
   ];
   const [activeTab, setActiveTab] = useState<EditTabKey>("core");
 
@@ -338,39 +339,26 @@ export default function EditHodFacultyIdentityPage() {
   }
 
   return (
-    <div className="max-w-2xl">
-      <Button variant="ghost" size="sm" className="mb-4" asChild>
+    <WizardPage>
+      <Button variant="ghost" size="sm" className="-mb-2 self-start" asChild>
         <Link href={`/hod/faculty/${facultyId}`}>
           <ArrowLeft className="h-4 w-4 mr-1" />
           Back to Faculty Details
         </Link>
       </Button>
-      <PageHeader title="Edit Details" description={`Employee ID: ${employeeId}`} />
+      <WizardHero icon={UserPen} title="Edit Faculty Details" description={`Employee ID: ${employeeId}`} />
 
-      {/* Same step-pill bar as the Add Faculty wizard - click any tab to
+      {/* Same step bar as the Add Faculty wizard - click any tab to
           switch sections without leaving this page. Purely a display switch
           (no validation gate like the wizard's Next button), since editing
           doesn't need to happen in order. */}
-      <div className="flex flex-wrap gap-2 mb-4">
-        {tabs.map((t) => (
-          <button
-            type="button"
-            key={t.key}
-            onClick={() => setActiveTab(t.key)}
-            className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-              activeTab === t.key ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/70"
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <WizardStepper steps={tabs} currentKey={activeTab} onSelect={(i) => setActiveTab(tabs[i].key)} />
 
       {activeTab === "core" ? (
       <form onSubmit={(e) => void handleSubmit(e)}>
-        <Card className="mt-6">
-          <CardHeader><CardTitle className="text-base">Identity & Employment</CardTitle></CardHeader>
-          <CardContent className="space-y-5">
+        <Card className="shadow-xs border-border/80 overflow-hidden">
+          <WizardStepHeader step={tabs[0]} />
+          <CardContent className="p-5 sm:p-6 space-y-5">
             <p className="text-xs text-muted-foreground -mt-2">
               Employee ID, College Email and the login password can&apos;t be changed here.
             </p>
@@ -609,9 +597,9 @@ export default function EditHodFacultyIdentityPage() {
         // unsaved edits on another one, each is saved on its own. Clicking a
         // View tile's own "Edit" still opens this same section on its own
         // dedicated page ([id]/[module]/edit) - both paths reach every field.
-        <Card>
-          <CardHeader><CardTitle className="text-base">{tabs.find((t) => t.key === activeTab)?.label}</CardTitle></CardHeader>
-          <CardContent className="space-y-5">
+        <Card className="shadow-xs border-border/80 overflow-hidden">
+          <WizardStepHeader step={tabs.find((t) => t.key === activeTab) ?? tabs[0]} />
+          <CardContent className="p-5 sm:p-6 space-y-5">
             <FacultyProfileModuleEditor
               moduleKey={activeTab as ProfileModuleKey}
               record={record}
@@ -637,6 +625,6 @@ export default function EditHodFacultyIdentityPage() {
           </CardContent>
         </Card>
       )}
-    </div>
+    </WizardPage>
   );
 }

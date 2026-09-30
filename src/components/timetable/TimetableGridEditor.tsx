@@ -15,7 +15,8 @@ import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
-import { formatDMY, formatTime12h } from "@/lib/utils";
+import { formatDMY } from "@/lib/utils";
+import { formatTime12h } from "@/lib/timetable/facultyTimetablePdf";
 import { useMyDepartments } from "@/hooks/useMyDepartments";
 import { buildRows, defaultPeriodTimings } from "@/lib/timetable/buildGrid";
 import { ordinalYear, resolveTimetableDays } from "@/lib/timetable/gridModel";
@@ -77,7 +78,11 @@ interface TimetableGridEditorProps {
   // route, or the Timetable Incharge's own equivalent for theirs (see
   // panel/timetable-incharge/[courseId]/[year]/[sectionId]/page.tsx). Kept as
   // a prop rather than hardcoded so this one component serves both URLs.
-  backHref: string;
+  // Optional: omitted when the grid is embedded under its own filter controls
+  // (hod/timetable's Course/Year/Section pickers sit directly above it), where
+  // "Back to sections" is meaningless - the filters ARE the way back. The
+  // header, title and every export/edit action still render either way.
+  backHref?: string;
 }
 
 // Shared by both hod/timetable/[courseId]/[year]/[sectionId]/page.tsx and
@@ -818,9 +823,11 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref }: Tim
         }
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            <Button variant="outline" onClick={() => router.push(backHref)}>
-              <ArrowLeft className="h-4 w-4 mr-2" />Back
-            </Button>
+            {backHref && (
+              <Button variant="outline" onClick={() => router.push(backHref)}>
+                <ArrowLeft className="h-4 w-4 mr-2" />Back
+              </Button>
+            )}
             {timing && slots.length > 0 && (
               <>
                 <Button variant="outline" onClick={handleDownloadPdf} disabled={isExportingPdf || isExportingXlsx}>

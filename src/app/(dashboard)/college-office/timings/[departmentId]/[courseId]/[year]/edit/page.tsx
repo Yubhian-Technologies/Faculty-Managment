@@ -37,6 +37,7 @@ export default function CollegeOfficeCourseYearTimingPage() {
           departmentId={departmentId}
           courseId={courseId}
           year={yearNum}
+          courseName={course?.name}
           onSaved={() => router.push(backHref)}
           onCancel={() => router.push(backHref)}
         />
