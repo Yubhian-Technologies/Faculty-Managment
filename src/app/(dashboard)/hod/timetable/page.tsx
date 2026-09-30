@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TimetableGridEditor } from "@/components/timetable/TimetableGridEditor";
+import { FacultyTimetableLookup } from "@/components/timetable/FacultyTimetableLookup";
 import { toast } from "@/hooks/useToast";
 import { useMyDepartments } from "@/hooks/useMyDepartments";
 import { buildCourseGroups, deriveHodScope, managerEffectiveYears } from "@/lib/departments/hodScope";
@@ -40,7 +41,7 @@ interface LoadedSection {
   sectionId: string;
 }
 
-export default function HODTimetablePage() {
+function SectionTimetable() {
   const myDepartments = useMyDepartments();
   const [courses, setCourses] = useState<Course[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -332,6 +333,35 @@ export default function HODTimetablePage() {
           </div>
         )
       )}
+    </div>
+  );
+}
+
+// Faculty Timetable used to be its own sidebar item; it now lives here as a
+// second sub-tab next to the section timetable.
+export default function HODTimetablePage() {
+  const [tab, setTab] = useState<"section" | "faculty">("section");
+  const tabs = [
+    { key: "section", label: "Section Timetable" },
+    { key: "faculty", label: "Faculty Timetable" },
+  ] as const;
+  return (
+    <div className="space-y-6">
+      <div className="flex gap-2 border-b">
+        {tabs.map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            onClick={() => setTab(t.key)}
+            className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
+              tab === t.key ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+      {tab === "section" ? <SectionTimetable /> : <FacultyTimetableLookup />}
     </div>
   );
 }

@@ -56,10 +56,10 @@ const placementOpts = {
 };
 
 describe("validatePlacement - busy-period source wording", () => {
-  it("uses the real-double-booking wording for a cell busy from an actual slot", () => {
+  it("allows the same period number when the faculty teaches another section (years have their own timings)", () => {
     const ctx = makeContext({ busyFaculty: new Map([["f1", new Set(["MON:1"])]]) });
     const problem = validatePlacement(ctx, { slots: [] }, placementOpts);
-    expect(problem).toBe("Ramesh Rao is already teaching another section at MON period 1.");
+    expect(problem).toBeNull();
   });
 
   it("does not block a cell a lending department only declared busy", () => {
