@@ -32,6 +32,7 @@ interface TodayPeriod {
   session: StudentAttendanceSession | null;
   sessionStatus: string | null;
   isOpen: boolean;
+  phase?: "UPCOMING" | "OPEN" | "ENDED";
   // Split lab period (see TimetableSlot.labBatch) - roster is only this batch,
   // not the whole section, mirrors student-attendance/route.ts's own gate.
   labBatch: string | null;
@@ -70,17 +71,23 @@ function formatTime12h(hhmm: string) {
   return `${h12}:${String(m).padStart(2, "0")} ${period}`;
 }
 
-type AttendanceMode = "ALL_PRESENT" | "ALL_ABSENT";
+// Upcoming (not started) / Open (running) / Ended (time over) - `phase` comes
+// from the server clock; a response without it falls back to isOpen.
+function phaseOf(p: TodayPeriod): "UPCOMING" | "OPEN" | "ENDED" {
+  return p.phase ?? (p.isOpen ? "OPEN" : "ENDED");
+}
+
+// ABSENTEES: everyone starts Present, the faculty switches ON only the absent
+// roll numbers. PRESENTEES: everyone starts Absent, the faculty switches ON
+// only the present ones. Either way a switched-ON row is the "picked" one.
+type AttendanceMode = "ABSENTEES" | "PRESENTEES";
 
 function checkedMeaningFor(mode: AttendanceMode | null): StudentAttendanceMark {
-  return mode === "ALL_ABSENT" ? "ABSENT" : "PRESENT";
+  return mode === "ABSENTEES" ? "ABSENT" : "PRESENT";
 }
 
 function defaultFillFor(mode: AttendanceMode): StudentAttendanceMark {
-  switch (mode) {
-    case "ALL_PRESENT": return "PRESENT";
-    case "ALL_ABSENT": return "ABSENT";
-  }
+  return mode === "ABSENTEES" ? "PRESENT" : "ABSENT";
 }
 
 function updatedAtIso(s: StudentAttendanceSession | null): string | undefined {
@@ -409,8 +416,8 @@ export default function MarkAttendancePage() {
               const s = p.session;
               const isSubmitted = s?.status === "SUBMITTED";
               const isPending = queuedIds.has(p.sessionId);
-              const label = isPending ? "Saved on this device — pending sync" : p.isOpen ? (isSubmitted ? "Submitted" : "Open — tap to mark") : s ? (isSubmitted ? "Posted" : "Closed — Contact Dept Office") : "Closed — Contact Dept Office";
-              const badge = isPending ? "bg-amber-100 text-amber-800 border-amber-200" : p.isOpen ? "bg-emerald-100 text-emerald-800 border-emerald-200" : isSubmitted ? "bg-green-100 text-green-800 border-green-200" : "bg-amber-100 text-amber-800 border-amber-200";
+              const label = isPending ? "Saved on this device — pending sync" : isSubmitted ? "Closed — attendance submitted" : phaseOf(p) === "OPEN" ? "Open — tap to mark" : phaseOf(p) === "UPCOMING" ? `Not started — opens at ${formatTime12h(p.startTime)}` : "Closed — time over, contact Dept Office";
+              const badge = isPending ? "bg-amber-100 text-amber-800 border-amber-200" : isSubmitted ? "bg-green-100 text-green-800 border-green-200" : phaseOf(p) === "OPEN" ? "bg-emerald-100 text-emerald-800 border-emerald-200" : phaseOf(p) === "UPCOMING" ? "bg-slate-100 text-slate-700 border-slate-200" : "bg-amber-100 text-amber-800 border-amber-200";
               const isExpanded = expandedId === p.sessionId;
               return (
                 <div key={p.sessionId} className={`p-4 space-y-2 ${isExpanded ? "bg-blue-50/60" : ""}`}>
@@ -421,7 +428,7 @@ export default function MarkAttendancePage() {
                       <p className="text-muted-foreground">Section {p.sectionName}</p>
                     </div>
                     <span className={`inline-flex shrink-0 items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${badge}`}>
-                      {isPending ? "Pending Sync" : isSubmitted ? "Submitted" : p.isOpen ? "Open" : "Closed"}
+                      {isPending ? "Pending Sync" : isSubmitted || phaseOf(p) === "ENDED" ? "Closed" : phaseOf(p) === "UPCOMING" ? "Upcoming" : "Open"}
                     </span>
                   </div>
                   <p className="text-xs text-muted-foreground">{label}</p>
@@ -430,7 +437,7 @@ export default function MarkAttendancePage() {
                       {isSubmitted || isPending ? "View" : isExpanded ? "Opened" : "Mark Attendance"}
                     </Button>
                   ) : (
-                    <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground"><Clock className="h-3.5 w-3.5" /> Not open</span>
+                    <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground"><Clock className="h-3.5 w-3.5" /> {phaseOf(p) === "UPCOMING" ? `Opens ${formatTime12h(p.startTime)}` : "Time over"}</span>
                   )}
                 </div>
               );
@@ -453,8 +460,8 @@ export default function MarkAttendancePage() {
                   const s = p.session;
                   const isSubmitted = s?.status === "SUBMITTED";
                   const isPending = queuedIds.has(p.sessionId);
-                  const label = isPending ? "Saved on this device — pending sync" : p.isOpen ? (isSubmitted ? "Submitted" : "Open — tap to mark") : s ? (isSubmitted ? "Posted" : "Closed — Contact Dept Office") : "Closed — Contact Dept Office";
-                  const badge = isPending ? "bg-amber-100 text-amber-800 border-amber-200" : p.isOpen ? "bg-emerald-100 text-emerald-800 border-emerald-200" : isSubmitted ? "bg-green-100 text-green-800 border-green-200" : "bg-amber-100 text-amber-800 border-amber-200";
+                  const label = isPending ? "Saved on this device — pending sync" : isSubmitted ? "Closed — attendance submitted" : phaseOf(p) === "OPEN" ? "Open — tap to mark" : phaseOf(p) === "UPCOMING" ? `Not started — opens at ${formatTime12h(p.startTime)}` : "Closed — time over, contact Dept Office";
+                  const badge = isPending ? "bg-amber-100 text-amber-800 border-amber-200" : isSubmitted ? "bg-green-100 text-green-800 border-green-200" : phaseOf(p) === "OPEN" ? "bg-emerald-100 text-emerald-800 border-emerald-200" : phaseOf(p) === "UPCOMING" ? "bg-slate-100 text-slate-700 border-slate-200" : "bg-amber-100 text-amber-800 border-amber-200";
                   const isExpanded = expandedId === p.sessionId;
                   return (
                     <tr key={p.sessionId} className={isExpanded ? "bg-blue-50/60" : ""}>
@@ -464,7 +471,7 @@ export default function MarkAttendancePage() {
                       <td className="px-4 py-3">{p.sectionName}</td>
                       <td className="px-4 py-3">
                         <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${badge}`}>
-                          {isPending ? "Pending Sync" : isSubmitted ? "Submitted" : p.isOpen ? "Open" : "Closed"}
+                          {isPending ? "Pending Sync" : isSubmitted || phaseOf(p) === "ENDED" ? "Closed" : phaseOf(p) === "UPCOMING" ? "Upcoming" : "Open"}
                         </span>
                         <span className="ml-2 text-xs text-muted-foreground">{label}</span>
                       </td>
@@ -474,7 +481,7 @@ export default function MarkAttendancePage() {
                             {isSubmitted || isPending ? "View" : isExpanded ? "Opened" : "Mark Attendance"}
                           </Button>
                         ) : (
-                          <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground"><Clock className="h-3.5 w-3.5" /> Not open</span>
+                          <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground"><Clock className="h-3.5 w-3.5" /> {phaseOf(p) === "UPCOMING" ? `Opens ${formatTime12h(p.startTime)}` : "Time over"}</span>
                         )}
                       </td>
                     </tr>
@@ -526,7 +533,7 @@ export default function MarkAttendancePage() {
               </span>
             ) : isReadOnly ? (
               <span className="flex items-center gap-1.5 font-medium text-emerald-700">
-                <Lock className="h-4 w-4" /> Submitted (Read-only)
+                <Lock className="h-4 w-4" /> Closed — attendance submitted (Read-only)
               </span>
             ) : isExpandedOpen ? (
               <span className="flex items-center gap-1.5 font-medium text-blue-700">
@@ -548,17 +555,22 @@ export default function MarkAttendancePage() {
               {!isReadOnly && isExpandedOpen && (
                 <div className="flex flex-wrap items-center justify-end gap-6 border-b px-4 py-3">
                   <label className="flex items-center gap-2 text-sm font-medium">
-                    <Switch checked={mode === "ALL_PRESENT"} onCheckedChange={(c) => handleModeToggle("ALL_PRESENT", c)} aria-label="Mark all present" />
-                    Mark All Present
+                    <Switch checked={mode === "ABSENTEES"} onCheckedChange={(c) => handleModeToggle("ABSENTEES", c)} aria-label="Check absentees" />
+                    Check Absentees
                   </label>
                   <label className="flex items-center gap-2 text-sm font-medium">
-                    <Switch checked={mode === "ALL_ABSENT"} onCheckedChange={(c) => handleModeToggle("ALL_ABSENT", c)} aria-label="Mark all absent" />
-                    Mark All Absent
+                    <Switch checked={mode === "PRESENTEES"} onCheckedChange={(c) => handleModeToggle("PRESENTEES", c)} aria-label="Check presentees" />
+                    Check Presentees
                   </label>
                 </div>
               )}
               {!isReadOnly && isExpandedOpen && !mode && (
-                <p className="border-b bg-muted/30 px-4 py-2 text-xs text-muted-foreground">Pick one option above to mark the whole class — the roster controls unlock once you do.</p>
+                <p className="border-b bg-muted/30 px-4 py-2 text-xs text-muted-foreground">Pick one option above — the roster controls unlock once you do.</p>
+              )}
+              {!isReadOnly && isExpandedOpen && mode && (
+                <p className="border-b bg-muted/30 px-4 py-2 text-xs text-muted-foreground">
+                  {mode === "ABSENTEES" ? "Everyone is Present. Switch ON the roll numbers that are Absent." : "Everyone is Absent. Switch ON the roll numbers that are Present."}
+                </p>
               )}
               {/* Card list below sm - same roster data, one row per student
                   stacked instead of a cramped 4-column table. */}
