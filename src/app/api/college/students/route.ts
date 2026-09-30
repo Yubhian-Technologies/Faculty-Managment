@@ -12,6 +12,8 @@ import { getFacultyIdCandidates } from "@/lib/faculty/resolveFacultyMemberId";
 import { resolveDepartmentCourseScope, resolveCatalogId, freshmanLandingDepartmentNames, expandDepartmentNameForRollup, type DepartmentWithId } from "@/lib/college/academicStructure";
 import { fetchStudentsPage, fetchMatchingStudentIds, fetchStudentsForExport } from "@/lib/students/paginatedList";
 import { isLikelySameUnassignedStudent } from "@/lib/students/duplicateDetection";
+import { sortStudentsForList } from "@/lib/students/listOrder";
+import { findRollNumberConflict, rollNumberTakenMessage } from "@/lib/students/rollNumberUniqueness";
 import { validateYearForCourseDuration } from "@/lib/students/rosterValidation";
 import type { Course, Section, StudentRecord, StudentStatus, DepartmentCourseScope } from "@/types";
 import { loadDepartmentIndex, stampDepartmentIds } from "@/lib/departments/stampIds";
@@ -182,7 +184,7 @@ export async function GET(request: Request) {
           students.push({ id: d.id, ...(d.data() as Omit<StudentRecord, "id">), accessLevel: "primary" });
         }
       }
-      students.sort((a, b) => (a.rollNumber ?? "").localeCompare(b.rollNumber ?? ""));
+      sortStudentsForList(students);
       return NextResponse.json({ students });
     } else if (session.role === "HOD") {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
@@ -286,7 +288,7 @@ export async function GET(request: Request) {
         students.push({ id: d.id, ...(d.data() as Omit<StudentRecord, "id">), accessLevel: "secondary" });
       }
     }
-    students.sort((a, b) => (a.rollNumber ?? "").localeCompare(b.rollNumber ?? ""));
+    sortStudentsForList(students);
 
     return NextResponse.json({ students });
   } catch (err) {
@@ -324,13 +326,16 @@ export async function POST(request: Request) {
       [key: string]: unknown;
     };
 
-    // A roll number here is optional and provisional only - the same standing
-    // it has as a column in the roster import. The real one is the
-    // department's responsibility: the assigned HOD (years 2-4) or sub-HOD
-    // (year 1) sets it once students are divided into sections (students/[id]
-    // PATCH), and only that path checks it for uniqueness.
+    // The roll number is the student's unique identity: required on every add
+    // (placed or unassigned) and unique across the whole college - checked
+    // below once the target is resolved. The department can still correct one
+    // later via students/[id] PATCH, under the same uniqueness rule.
     if (!body.name?.trim() || !body.year) {
       return NextResponse.json({ error: "name and year are required" }, { status: 400 });
+    }
+    const providedRoll = typeof body.rollNumber === "string" ? body.rollNumber.trim() : "";
+    if (!providedRoll) {
+      return NextResponse.json({ error: "Roll number is required" }, { status: 400 });
     }
 
     const db = getAdminDb();
@@ -562,6 +567,15 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: `"${dept}" does not cross-list to "${secondaryDept}"` }, { status: 400 });
           }
         }
+      }
+    }
+
+    // A roll number is unique across the whole college, wherever the student
+    // is (or isn't) placed - checked first, for placed and unassigned adds alike.
+    {
+      const clash = await findRollNumberConflict(collegeRef.collection("students"), providedRoll);
+      if (clash) {
+        return NextResponse.json({ error: rollNumberTakenMessage(providedRoll, clash.name) }, { status: 409 });
       }
     }
 

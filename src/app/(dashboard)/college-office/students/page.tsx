@@ -25,6 +25,8 @@ import { EDITABLE_ROSTER_FIELDS, LIST_ROSTER_FIELDS, rosterFieldDisplay } from "
 import { toCSV, downloadCSV } from "@/lib/utils/csv";
 import { GraduatedStudentsView } from "@/components/students/GraduatedStudentsView";
 import { StudentPromotionsPanel } from "@/components/students/StudentPromotionsPanel";
+import { StudentStrengthDashboard } from "@/components/students/StudentStrengthDashboard";
+import { StudentsViewTabs } from "@/components/students/StudentsViewTabs";
 import type { StudentListItem, Department, AcademicYear, Course } from "@/types";
 
 // The Add and Edit forms collect every field the roster import collects, in the
@@ -53,6 +55,7 @@ const SEARCH_DEBOUNCE_MS = 350;
 // promotion/graduation itself rather than asking Principal to.
 const STUDENT_TABS = [
   { key: "roster", label: "All Students" },
+  { key: "strength", label: "Students Strength" },
   { key: "promotion", label: "Promotion" },
   { key: "graduates", label: "Graduated" },
 ] as const;
@@ -578,7 +581,9 @@ export default function OfficeStudentsPage() {
       <PageHeader
         title="Students"
         description={
-          activeTab === "promotion"
+          activeTab === "strength"
+            ? "Live student counts by department, year and section - generated from the student records"
+            : activeTab === "promotion"
             ? "Move a cohort to the next year"
             : activeTab === "graduates"
             ? "Every student who has completed their programme"
@@ -586,20 +591,7 @@ export default function OfficeStudentsPage() {
         }
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-1.5">
-              {STUDENT_TABS.map((t) => (
-                <button
-                  key={t.key}
-                  type="button"
-                  onClick={() => setActiveTab(t.key)}
-                  className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                    activeTab === t.key ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/70"
-                  }`}
-                >
-                  {t.label}
-                </button>
-              ))}
-            </div>
+            <StudentsViewTabs tabs={STUDENT_TABS} value={activeTab} onChange={setActiveTab} />
             {activeTab === "roster" && (
               <div className="flex gap-2">
                 <Button variant="outline" onClick={() => setExportOpen(true)}>
@@ -615,7 +607,9 @@ export default function OfficeStudentsPage() {
         }
       />
 
-      {activeTab === "promotion" ? (
+      {activeTab === "strength" ? (
+        <StudentStrengthDashboard />
+      ) : activeTab === "promotion" ? (
         <StudentPromotionsPanel showHeader={false} />
       ) : activeTab === "graduates" ? (
         <GraduatedStudentsView showHeader={false} studentDetailHref={(id) => `/college-office/students/${id}`} />

@@ -13,6 +13,8 @@ import { toast } from "@/hooks/useToast";
 import { departmentsOfferingCourse, yearOptionsForDepartment, yearOptionsForCourse } from "@/components/students/RosterFieldInputs";
 import { LIST_ROSTER_FIELDS, rosterFieldDisplay } from "@/lib/students/rosterFields";
 import { StudentPromotionsPanel } from "@/components/students/StudentPromotionsPanel";
+import { StudentStrengthDashboard } from "@/components/students/StudentStrengthDashboard";
+import { StudentsViewTabs } from "@/components/students/StudentsViewTabs";
 import { GraduatedStudentsView } from "@/components/students/GraduatedStudentsView";
 import type { StudentListItem, Department, AcademicYear, Course } from "@/types";
 
@@ -23,6 +25,7 @@ const DEFAULT_PAGE_SIZE = 20;
 // student-lifecycle actions sit under one "Students" entry in the nav.
 const STUDENT_TABS = [
   { key: "roster", label: "All Students" },
+  { key: "strength", label: "Students Strength" },
   { key: "promotion", label: "Promotion" },
   { key: "graduates", label: "Graduated" },
 ] as const;
@@ -215,31 +218,22 @@ export default function PrincipalStudentsPage() {
       <PageHeader
         title="Students"
         description={
-          activeTab === "promotion"
+          activeTab === "strength"
+            ? "Live student counts by department, year and section - generated from the student records"
+            : activeTab === "promotion"
             ? "Move a cohort to the next year"
             : activeTab === "graduates"
             ? "Every student who has completed their programme"
             : "Every student across the college"
         }
         actions={
-          <div className="flex items-center gap-1.5">
-            {STUDENT_TABS.map((t) => (
-              <button
-                key={t.key}
-                type="button"
-                onClick={() => setActiveTab(t.key)}
-                className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                  activeTab === t.key ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/70"
-                }`}
-              >
-                {t.label}
-              </button>
-            ))}
-          </div>
+          <StudentsViewTabs tabs={STUDENT_TABS} value={activeTab} onChange={setActiveTab} />
         }
       />
 
-      {activeTab === "promotion" ? (
+      {activeTab === "strength" ? (
+        <StudentStrengthDashboard />
+      ) : activeTab === "promotion" ? (
         <StudentPromotionsPanel showHeader={false} />
       ) : activeTab === "graduates" ? (
         <GraduatedStudentsView showHeader={false} studentDetailHref={(id) => `/principal/students/${id}`} />
