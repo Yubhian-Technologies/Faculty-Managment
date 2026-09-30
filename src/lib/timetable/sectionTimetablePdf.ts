@@ -8,12 +8,11 @@ import type {
   TimetableSlot,
 } from "@/types";
 import { DAY_LABELS } from "@/types";
-import { escapeHtml } from "./facultyTimetablePdf";
+import { escapeHtml, formatTime12h } from "./facultyTimetablePdf";
 import {
   buildAllocationList,
   buildTimetableColumns,
   ordinalYear,
-  periodTimeRange,
   resolveTimetableDays,
   slotFacultyName,
   slotShortCode,
@@ -168,7 +167,7 @@ export function buildSectionTimetablePdfHtml(opts: SectionTimetablePdfOptions): 
 
   const logoTd = logoUrl
     ? `<td class="logo-cell"><img src="${escapeHtml(logoUrl)}" alt="${escapeHtml(collegeName)} logo"></td>`
-    : `<td class="logo-cell"></td>`;
+    : "";
 
   const headerHtml = `
   <table class="letterhead" cellspacing="0" cellpadding="0">
@@ -187,19 +186,27 @@ export function buildSectionTimetablePdfHtml(opts: SectionTimetablePdfOptions): 
   </table>`;
 
   // ── Grid ──────────────────────────────────────────────────────────────────
+  // Start and end go on their own lines: a single "9:00 AM - 9:50 AM" string is
+  // wider than a period column on A4 portrait and spilled into its neighbours.
+  const timeStack = (start?: string, end?: string) =>
+    start && end
+      ? `<div class="col-time">${escapeHtml(formatTime12h(start))}</div><div class="col-time">${escapeHtml(formatTime12h(end))}</div>`
+      : "";
+  const colGroup = `<colgroup><col class="col-day">${columns
+    .map((c) => `<col class="${c.kind === "break" ? "col-break" : "col-period"}">`)
+    .join("")}</colgroup>`;
   const dayHeader = `<th class="cellBorder day-head">Day</th>`;
   const periodHeaders = columns
     .map((col) => {
       if (col.kind === "break") {
         return `<th class="cellBorder break-head">
-          <div class="break-label">${escapeHtml(col.label)}</div>
-          ${periodTimeRange(col.startTime, col.endTime) ? `<div class="col-time">${escapeHtml(periodTimeRange(col.startTime, col.endTime)!)}</div>` : ""}
+          <div class="break-label">${escapeHtml(col.breakKind === "lunch" ? "Lunch" : "Break")}</div>
+          ${timeStack(col.startTime, col.endTime)}
         </th>`;
       }
-      const range = periodTimeRange(col.startTime, col.endTime);
       return `<th class="cellBorder period-head">
-        <div>Period ${col.periodNumber}</div>
-        ${range ? `<div class="col-time">${escapeHtml(range)}</div>` : ""}
+        <div class="period-label">Period ${col.periodNumber}</div>
+        ${timeStack(col.startTime, col.endTime)}
       </th>`;
     })
     .join("");
@@ -214,8 +221,11 @@ export function buildSectionTimetablePdfHtml(opts: SectionTimetablePdfOptions): 
           const inner = cellSlots
             .map((s) => {
               const code = escapeHtml(slotShortCode(s, subjectMap));
-              const faculty = slotFacultyName(s);
+              // With a substitute, the line under the code stays the timetabled
+              // faculty and the substitute gets its own "Sub:" line - showing the
+              // substitute in both places printed their name twice.
               const sub = s.substituteFacultyName;
+              const faculty = sub ? s.facultyName : slotFacultyName(s);
               const batch = s.labBatch ? escapeHtml(s.labBatch) : "";
               return `<div class="cell${sub ? " cell-sub" : ""}">
                 <div class="cell-code">${code}</div>
@@ -235,6 +245,7 @@ export function buildSectionTimetablePdfHtml(opts: SectionTimetablePdfOptions): 
 
   const gridHtml = `
   <table class="timetable-grid" cellspacing="0" cellpadding="0">
+    ${colGroup}
     <thead><tr>${dayHeader}${periodHeaders}</tr></thead>
     <tbody>${bodyRows}</tbody>
   </table>`;
@@ -294,7 +305,7 @@ export function buildSectionTimetablePdfHtml(opts: SectionTimetablePdfOptions): 
     .page { width: 190mm; margin: 0 auto; }
 
     .letterhead { width: 100%; margin-bottom: 8px; }
-    .logo-cell { width: 90px; vertical-align: middle; text-align: center; }
+    .logo-cell { width: 90px; padding-right: 8px; vertical-align: middle; text-align: center; }
     .logo-cell img { max-width: 80px; max-height: 72px; object-fit: contain; }
     .letterhead-text { vertical-align: middle; text-align: center; }
     .inst-name { font-size: 15pt; font-weight: 800; text-transform: uppercase; letter-spacing: 0.4px; }
@@ -308,13 +319,16 @@ export function buildSectionTimetablePdfHtml(opts: SectionTimetablePdfOptions): 
 
     .cellBorder { border: 1px solid #000; padding: 3px 2px; text-align: center; vertical-align: middle; }
     th.cellBorder { font-weight: 800; font-size: 8.5pt; background: #f2f2f2; }
-    .col-time { font-size: 7pt; font-weight: 500; color: #333; margin-top: 1px; white-space: nowrap; }
-    .break-label { font-size: 7.5pt; font-weight: 700; text-transform: uppercase; }
-    .day-head, .day-cell { width: 11mm; font-size: 8pt; text-transform: uppercase; }
+    .col-time { font-size: 6.5pt; font-weight: 500; color: #333; margin-top: 1px; white-space: nowrap; }
+    .period-label { font-size: 8pt; }
+    .break-label { font-size: 6.5pt; font-weight: 700; text-transform: uppercase; }
+    .col-day { width: 21mm; }
+    .col-break { width: 11mm; }
+    .day-head, .day-cell { font-size: 7pt; text-transform: uppercase; overflow: hidden; }
     .day-cell { background: #f2f2f2; font-weight: 800; }
 
     .timetable-grid { width: 100%; border-collapse: collapse; table-layout: fixed; }
-    .timetable-grid td { height: 34px; font-size: 8pt; }
+    .timetable-grid td { height: 34px; font-size: 8pt; overflow: hidden; word-break: break-word; }
     .break-cell { background: #f7f7f7; }
     .cell { line-height: 1.15; }
     .cell-code { font-size: 9.5pt; font-weight: 800; text-transform: uppercase; }
