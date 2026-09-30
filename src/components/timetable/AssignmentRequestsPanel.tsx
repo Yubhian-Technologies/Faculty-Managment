@@ -67,7 +67,7 @@ export function AssignmentRequestsPanel({ timetableHrefFor }: AssignmentRequests
   // checking against a different year's period count.
   const [timingsByRequest, setTimingsByRequest] = useState<Record<string, CourseYearTiming[]>>({});
   const [loadingTimingId, setLoadingTimingId] = useState<string | null>(null);
-  const [busyDraftByRequest, setBusyDraftByRequest] = useState<Record<string, { day: DayOfWeek; period: number }[]>>({});
+  const [busyDraftByRequest, setBusyDraftByRequest] = useState<Record<string, { day: DayOfWeek; period: number; year?: number }[]>>({});
   const [pickerDay, setPickerDay] = useState<DayOfWeek>("MON");
   const [pickerYear, setPickerYear] = useState(1);
   const [pickerPeriod, setPickerPeriod] = useState(1);
@@ -184,7 +184,7 @@ export function AssignmentRequestsPanel({ timetableHrefFor }: AssignmentRequests
   }
 
   /** Writes the full busy-periods list for one request straight through - every add/remove below is saved immediately, no separate "Save" step. */
-  async function persistBusyPeriods(r: FacultyAssignmentRequest, next: { day: DayOfWeek; period: number }[]) {
+  async function persistBusyPeriods(r: FacultyAssignmentRequest, next: { day: DayOfWeek; period: number; year?: number }[]) {
     const previous = busyDraftByRequest[r.id] ?? [];
     setBusyDraftByRequest((prev) => ({ ...prev, [r.id]: next }));
     setBusySavingId(r.id);
@@ -194,8 +194,11 @@ export function AssignmentRequestsPanel({ timetableHrefFor }: AssignmentRequests
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "set_busy_periods", busyPeriods: next }),
       });
-      const json = await res.json() as { error?: string; busyPeriods?: { day: DayOfWeek; period: number }[] };
+      const json = await res.json() as { error?: string; busyPeriods?: { day: DayOfWeek; period: number; year?: number }[]; conflicts?: string[] };
       if (!res.ok) throw new Error(json.error ?? "Failed to update busy periods");
+      if (json.conflicts?.length) {
+        toast({ variant: "destructive", title: `Clashes with ${r.requestingDepartment}'s timetable: ${json.conflicts.join(", ")}`, description: "They have been notified to move it." });
+      }
       if (json.busyPeriods) setBusyDraftByRequest((prev) => ({ ...prev, [r.id]: json.busyPeriods! }));
     } catch (err) {
       setBusyDraftByRequest((prev) => ({ ...prev, [r.id]: previous }));
@@ -207,8 +210,8 @@ export function AssignmentRequestsPanel({ timetableHrefFor }: AssignmentRequests
 
   function addBusyPeriod(r: FacultyAssignmentRequest) {
     const current = busyDraftByRequest[r.id] ?? [];
-    if (current.some((bp) => bp.day === pickerDay && bp.period === pickerPeriod)) return;
-    void persistBusyPeriods(r, [...current, { day: pickerDay, period: pickerPeriod }]);
+    if (current.some((bp) => bp.day === pickerDay && bp.period === pickerPeriod && bp.year === pickerYear)) return;
+    void persistBusyPeriods(r, [...current, { day: pickerDay, period: pickerPeriod, year: pickerYear }]);
   }
 
   function removeBusyPeriod(r: FacultyAssignmentRequest, idx: number) {
@@ -363,7 +366,9 @@ export function AssignmentRequestsPanel({ timetableHrefFor }: AssignmentRequests
                                 <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
                                 <SelectContent>
                                   {Array.from({ length: activeTiming?.numberOfPeriods ?? 0 }, (_, i) => i + 1).map((p) => (
-                                    <SelectItem key={p} value={String(p)}>P{p}</SelectItem>
+                                    <SelectItem key={p} value={String(p)}>
+                                      P{p}{(() => { const t = activeTiming?.periods?.find((x) => x.period === p); return t ? ` (${t.startTime}-${t.endTime})` : ""; })()}
+                                    </SelectItem>
                                   ))}
                                 </SelectContent>
                               </Select>
@@ -389,10 +394,10 @@ export function AssignmentRequestsPanel({ timetableHrefFor }: AssignmentRequests
                             <div className="flex flex-wrap gap-1.5">
                               {(busyDraftByRequest[r.id] ?? []).map((bp, idx) => (
                                 <span
-                                  key={`${bp.day}_${bp.period}`}
+                                  key={`${bp.day}_${bp.period}_${bp.year ?? ""}`}
                                   className="inline-flex items-center gap-1 rounded-full border bg-background px-2 py-1 text-[11px]"
                                 >
-                                  {DAY_LABELS[bp.day]} P{bp.period}
+                                  {bp.year ? `${ordinalYear(bp.year)} · ` : ""}{DAY_LABELS[bp.day]} P{bp.period}
                                   <button
                                     type="button"
                                     disabled={saving}
