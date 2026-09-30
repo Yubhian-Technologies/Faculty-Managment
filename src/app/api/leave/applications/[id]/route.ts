@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { FieldValue } from "firebase-admin/firestore";
 import { findUsersSnapshot } from "@/lib/roles/findUsersByRoles";
 import { NextResponse } from "next/server";
 import { isCollegeAdmin, requireCollegeMember } from "@/lib/auth/verifySession";
@@ -11,22 +12,31 @@ import { REQUESTS_COL, commitApproval, releasePending, releaseApproval, splitLea
 import { decideFinalStageLeave } from "@/lib/leave/decideFinalStage";
 import { getHolidayDateKeys } from "@/lib/leave/holidaysCount";
 import { resolveStaffGender, resolveEmployeeIdentity } from "@/lib/leave/identity";
-import { isoDateKey, yearsOfService } from "@/lib/leave/dayCounter";
+import { isoDateKey, yearsOfService, countWorkingDays, todayISODate } from "@/lib/leave/dayCounter";
+import { getWorkingDayWeightsForRole } from "@/lib/attendance/workingDays";
+import { loadUnavailability } from "@/lib/leave/availability";
+import { resolveLeaveType } from "@/lib/leave/resolveLeaveTypes";
 import { OTHER_CATEGORIES_COL } from "@/lib/leave/otherCategories";
 import { LEAVE_TYPE_SEED } from "@/lib/leave/seedData";
 import { evaluateODProof } from "@/lib/leave/odProof";
 import { notifyODProofSubmitted, notifyODProofDecision } from "@/lib/leave/odProofNotify";
+import { evaluateLeaveCertificate } from "@/lib/leave/leaveCertificate";
+import { notifyCertificateSubmitted, notifyCertificateDecision, notifyCertificateRequested } from "@/lib/leave/leaveCertificateNotify";
 import { syncApprovedLeaveToAttendance, revokeFutureLeaveFromAttendance } from "@/lib/leave/attendanceSync";
 import { notify, notifyRole } from "@/lib/notify";
 import { emitWorkflowNotification } from "@/lib/notifications/workflowNotifications";
 import { validatePeriodSubstitutions, notifySubstitutes, type PeriodSubstitutionInput } from "@/lib/leave/periodCoverage";
-import { notifyAdjustmentAssignees, mergeSubstituteEntry, withdrawSupersededPeriods } from "@/lib/leave/adjustmentRequests";
+import {
+  buildAdjustmentRequests, notifyAdjustmentAssignees, notifyPendingApprover, mergeSubstituteEntry, withdrawSupersededPeriods,
+} from "@/lib/leave/adjustmentRequests";
 import { resolveLoginUidForFacultyMember } from "@/lib/faculty/resolveFacultyMemberId";
 import { loadCollegeSettings } from "@/lib/firestore/collegeSettings";
-import { resolveApproverStage } from "@/lib/leave/approvalRouting";
+import { resolveApproverStage, resolveApproverStageForHeldRoles, approverStageToStatus } from "@/lib/leave/approvalRouting";
 import { listHandoverCandidates } from "@/lib/leave/handoverPool";
+import { isLeaveRequestEditable } from "@/lib/leave/editability";
 import { OTHER_LEAVE_CATEGORY_ORDER } from "@/types/leave";
-import type { AdjustmentRequest, LeaveRequest, LeaveActionRecord, OtherLeaveCategory } from "@/types/leave";
+import type { AdjustmentRequest, LeaveRequest, LeaveActionRecord, OtherLeaveCategory, PeriodSubstitution } from "@/types/leave";
+import type { UserRole } from "@/types/core";
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -57,6 +67,42 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   }
 }
 
+// Shared by VERIFY/REJECT_CERTIFICATE (and the REQUEST_CERTIFICATE nudge)
+// below - the exact same reviewer-tier rule VERIFY/REJECT_OD_PROOF apply
+// inline (HOD only within their own department via hodAction, else
+// Principal/VP, never a self-review, never a College-Admin-as-Principal).
+// Factored out here rather than in odProof.ts's own inline copies, which stay
+// untouched to avoid any risk to that working code - this is only for the
+// post-leave SL/SCL certificate actions.
+async function assertCanReviewLeaveProof(
+  db: FirebaseFirestore.Firestore,
+  session: { uid: string; role: string; collegeId: string; realRole?: string },
+  req: Pick<LeaveRequest, "uid" | "hodAction" | "department">
+): Promise<NextResponse | null> {
+  if (req.uid === session.uid) {
+    return NextResponse.json({ error: "You cannot verify your own leave" }, { status: 403 });
+  }
+  if (req.hodAction) {
+    if (session.role === "HOD") {
+      const hodDepts = await resolveHodDepartments(db, session.collegeId, session.uid);
+      if (!req.department || !hodDepts.includes(req.department)) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+    } else if (session.role !== "PRINCIPAL" && session.role !== "VICE_PRINCIPAL") {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    } else if (isCollegeAdmin(session)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+  } else if (session.role !== "PRINCIPAL" && session.role !== "VICE_PRINCIPAL") {
+    // Approved at the Principal tier - or by Management, which has no
+    // reviewer UI for this either (see leaveCertificateNotify.ts's scope note).
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  } else if (isCollegeAdmin(session)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+  return null;
+}
+
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
@@ -67,8 +113,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       "LIBRARY", "EXAM_CELL", "WEBMASTER", "PLACEMENT_DEPT", "PURCHASE_DEPT"
     );
     const body = (await request.json()) as {
-      action?: "APPROVE" | "REJECT" | "CANCEL" | "PROPOSE_COVERAGE" | "REVISE_ADJUSTMENT"
-        | "SUBMIT_OD_PROOF" | "VERIFY_OD_PROOF" | "REJECT_OD_PROOF" | "REQUEST_OD_PROOF";
+      action?: "APPROVE" | "REJECT" | "CANCEL" | "EDIT" | "PROPOSE_COVERAGE" | "REVISE_ADJUSTMENT"
+        | "SUBMIT_OD_PROOF" | "VERIFY_OD_PROOF" | "REJECT_OD_PROOF" | "REQUEST_OD_PROOF"
+        | "SUBMIT_CERTIFICATE" | "VERIFY_CERTIFICATE" | "REJECT_CERTIFICATE" | "REQUEST_CERTIFICATE";
       remarks?: string;
       isPaidLeave?: boolean;
       otherLeaveCategory?: OtherLeaveCategory;
@@ -81,6 +128,15 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       newHandoverUid?: string;
       // SUBMIT_OD_PROOF only - the URL /api/upload/leave-proof just returned.
       odProofUrl?: string;
+      // SUBMIT_CERTIFICATE only - same upload endpoint, different field.
+      certificateUrl?: string;
+      // EDIT only.
+      fromDate?: string;
+      toDate?: string;
+      isHalfDay?: boolean;
+      halfDaySession?: "FN" | "AN";
+      placeOfVisit?: string;
+      pointOfContact?: string;
     };
     if (!body.action) {
       return NextResponse.json({ error: "action is required" }, { status: 400 });
@@ -90,6 +146,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
     if (body.action === "REJECT_OD_PROOF" && !body.reason?.trim()) {
       return NextResponse.json({ error: "A reason is required to reject proof of duty" }, { status: 400 });
+    }
+    if (body.action === "EDIT" && (!body.fromDate || !body.toDate || !body.reason?.trim())) {
+      return NextResponse.json({ error: "fromDate, toDate and reason are required" }, { status: 400 });
     }
 
     const db = getAdminDb();
@@ -302,6 +361,225 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         updatedAt: now,
       });
       await notifyAdjustmentAssignees(db, session.collegeId, { ...req, adjustmentRequests });
+      return NextResponse.json({ ok: true });
+    }
+
+    // ─── Edit (requester only, before any approver has decided) ─────────────
+    // Re-runs the same validation applications/route.ts POST applies when
+    // this request was first created, against the NEW fromDate/toDate/reason/
+    // etc, then overwrites the request in place. Deliberately does not allow
+    // changing leaveTypeCode/isOtherRequest (a different leave type has its
+    // own eligibility/reason/gender rules entirely - that's a big enough
+    // change to warrant cancelling and re-applying, not "editing"). Balance
+    // is untouched either way: nothing is reserved/committed until an
+    // approver actually decides (see POST's own comment on this), so an edit
+    // here never needs to release or re-reserve anything.
+    if (body.action === "EDIT") {
+      if (req.uid !== session.uid) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+      if (!isLeaveRequestEditable(req)) {
+        return NextResponse.json({ error: "This request can no longer be edited - an approver has already acted on it" }, { status: 400 });
+      }
+
+      const [identity, settings] = await Promise.all([
+        resolveEmployeeIdentity(db, session.collegeId, req.uid),
+        loadCollegeSettings(db, session.collegeId),
+      ]);
+      if (!identity) {
+        return NextResponse.json({ error: "Employee record not found" }, { status: 404 });
+      }
+
+      let leaveType = null;
+      if (req.leaveTypeCode) {
+        leaveType = resolveLeaveType(settings.leaveTypeRuleOverrides, req.leaveTypeCode);
+        if (leaveType?.rules.reasonOptions?.length && !leaveType.rules.allowCustomReason) {
+          if (!leaveType.rules.reasonOptions.some((o) => o.label === body.reason!.trim())) {
+            return NextResponse.json({ error: "Pick one of the listed reasons for this leave type" }, { status: 400 });
+          }
+        }
+      }
+      if (body.isHalfDay && !leaveType?.rules.halfDayAllowed) {
+        return NextResponse.json({ error: "Half day isn't available for this leave type" }, { status: 400 });
+      }
+      if (body.isHalfDay && body.halfDaySession !== "FN" && body.halfDaySession !== "AN") {
+        return NextResponse.json({ error: "Select forenoon or afternoon for a half day request" }, { status: 400 });
+      }
+
+      const fromDate = new Date(body.fromDate!);
+      const toDate = new Date(body.toDate!);
+      if (Number.isNaN(fromDate.getTime()) || Number.isNaN(toDate.getTime()) || toDate < fromDate) {
+        return NextResponse.json({ error: "Invalid date range" }, { status: 400 });
+      }
+      const requestSpanDays = Math.round((toDate.getTime() - fromDate.getTime()) / 86400000) + 1;
+      if (!body.isHalfDay && leaveType?.rules.maxConsecutiveDays && requestSpanDays > leaveType.rules.maxConsecutiveDays) {
+        return NextResponse.json(
+          { error: `This leave type can't be applied for more than ${leaveType.rules.maxConsecutiveDays} consecutive day(s)` },
+          { status: 400 }
+        );
+      }
+      if (leaveType?.rules.minAdvanceNoticeDays && !req.extendsRequestId && req.leaveTypeCode !== "SH") {
+        const noticeDays = Math.round((fromDate.getTime() - new Date(todayISODate()).getTime()) / 86400000);
+        if (noticeDays < leaveType.rules.minAdvanceNoticeDays) {
+          return NextResponse.json(
+            { error: `This leave type requires at least ${leaveType.rules.minAdvanceNoticeDays} day(s) advance notice` },
+            { status: 400 }
+          );
+        }
+      }
+      const blackoutHit = (settings.leaveBlackoutWindows ?? []).find((w) => {
+        if (w.appliesToTypes && !(req.leaveTypeCode && w.appliesToTypes.includes(req.leaveTypeCode))) return false;
+        return body.fromDate! <= w.toDate && w.fromDate <= body.toDate!;
+      });
+      if (blackoutHit) {
+        return NextResponse.json(
+          { error: `Leave can't be applied between ${blackoutHit.fromDate} and ${blackoutHit.toDate} - ${blackoutHit.reason}` },
+          { status: 400 }
+        );
+      }
+      if (req.leaveTypeCode === "SH") {
+        const summerSnap = await db.collection("colleges").doc(session.collegeId).collection("summerHolidays").get();
+        const withinDeclaredRange = summerSnap.docs.some((d) => {
+          const s = d.data() as { fromDate?: FirebaseFirestore.Timestamp; toDate?: FirebaseFirestore.Timestamp };
+          const rangeFrom = s.fromDate?.toDate();
+          const rangeTo = s.toDate?.toDate();
+          return !!rangeFrom && !!rangeTo && fromDate >= rangeFrom && toDate <= rangeTo;
+        });
+        if (!withinDeclaredRange) {
+          return NextResponse.json(
+            { error: "Summer Vacation dates must fall within a range declared by College Office" },
+            { status: 400 }
+          );
+        }
+      } else if (body.fromDate! < todayISODate() || body.toDate! < todayISODate()) {
+        return NextResponse.json({ error: "Leave cannot be applied for a date before today" }, { status: 400 });
+      }
+
+      const existingSnap = await REQUESTS_COL(session.collegeId, db).where("uid", "==", req.uid).get();
+      const overlapsApprovedLeave = existingSnap.docs.some((d) => {
+        if (d.id === id) return false; // this request's own prior dates, being replaced
+        const r = d.data() as LeaveRequest;
+        if (r.status !== "APPROVED") return false;
+        const rFrom = (r.fromDate as unknown as { toDate(): Date }).toDate();
+        const rTo = (r.toDate as unknown as { toDate(): Date }).toDate();
+        return fromDate <= rTo && rFrom <= toDate;
+      });
+      if (overlapsApprovedLeave) {
+        return NextResponse.json(
+          { error: "You already have an approved leave covering one or more of these dates." },
+          { status: 400 }
+        );
+      }
+
+      const [holidayDates, workingDayWeights] = await Promise.all([
+        getHolidayDateKeys(db, session.collegeId, fromDate, toDate),
+        getWorkingDayWeightsForRole(db, session.collegeId, fromDate, toDate, session.role as UserRole),
+      ]);
+      const totalDays = countWorkingDays(fromDate, toDate, holidayDates, !!body.isHalfDay, workingDayWeights);
+
+      let periodSubstitutions: PeriodSubstitution[] | undefined;
+      if (!req.isOtherRequest && identity.isTeachingStaff && identity.department) {
+        const facultyMemberId = await resolveFacultyMemberId(db, session.collegeId, req.uid);
+        const unavailability = await loadUnavailability(
+          db, session.collegeId, isoDateKey(fromDate), isoDateKey(toDate), { excludeRequestId: id }
+        );
+        if (unavailability.coveringFacultyIdsBetween(isoDateKey(fromDate), isoDateKey(toDate)).has(facultyMemberId)) {
+          return NextResponse.json(
+            { error: "You're already committed to cover another faculty member's periods during these dates - resolve that coverage before editing your leave to overlap them." },
+            { status: 400 },
+          );
+        }
+        const result = await validatePeriodSubstitutions({
+          db, collegeId: session.collegeId, facultyMemberId, department: identity.department,
+          fromDate, toDate, holidayDates,
+          submitted: body.periodSubstitutions ?? [],
+          mode: "FULL",
+          coverageOptions: { excludeRequestId: id },
+        });
+        if (!result.ok) {
+          return NextResponse.json({ error: result.error }, { status: 400 });
+        }
+        if (result.resolved.length > 0) periodSubstitutions = result.resolved;
+      }
+
+      if (req.leaveTypeCode === "OD" && (!body.placeOfVisit?.trim() || !body.pointOfContact?.trim())) {
+        return NextResponse.json({ error: "Place of visit and point of contact are required for On Duty" }, { status: 400 });
+      }
+
+      // Re-resolved against the (possibly edited) reason text - see
+      // applications/route.ts POST's own version of this.
+      const proofRoutedTo = leaveType?.rules.reasonOptions?.find((o) => o.label === body.reason!.trim())?.proofRoutedTo ?? "HOD";
+
+      // The handover/point-of-contact pick (if any) rides along unchanged -
+      // editing dates/reason/periods never touches it. Rebuilding
+      // adjustmentRequests from scratch below still needs it passed back in,
+      // or an existing handover invitation would be silently dropped.
+      const existingHandover = req.handoverToUid ? { uid: req.handoverToUid, name: req.handoverToName ?? "" } : null;
+
+      let approverStage = resolveApproverStageForHeldRoles(
+        settings.leaveApprovalRouting, session.roles ?? [session.role], session.role, !!identity.department
+      );
+      if (approverStage === "HOD" && leaveType && !leaveType.rules.unlimited) {
+        const tooLong = leaveType.rules.escalateAfterDays !== undefined && totalDays > leaveType.rules.escalateAfterDays;
+        let tooMuchLop = false;
+        if (!tooLong && leaveType.rules.maxLopDaysBeforeEscalation !== undefined) {
+          const preview = await splitLeaveDays(db, session.collegeId, req.uid, leaveType, fromDate.getFullYear(), totalDays);
+          tooMuchLop = preview.lopDays > leaveType.rules.maxLopDaysBeforeEscalation;
+        }
+        if (tooLong || tooMuchLop) approverStage = "PRINCIPAL";
+      }
+      const postAcceptanceStatus = approverStageToStatus(approverStage);
+
+      // Rebuilt from scratch rather than diffed against the old picks - since
+      // nothing here has been decided yet (isLeaveRequestEditable above), a
+      // previously-accepted substitute simply gets asked again if they're
+      // still covering under the new dates/periods. Simpler and safer than
+      // trying to carry partial acceptance state across a date change that
+      // may have altered which periods even need covering.
+      const adjustmentRequests: AdjustmentRequest[] = await buildAdjustmentRequests(
+        db, session.collegeId, periodSubstitutions, existingHandover
+      );
+      const newStatus = adjustmentRequests.length > 0 ? "PENDING_ACCEPTANCE" : postAcceptanceStatus;
+
+      const updated: Partial<LeaveRequest> = {
+        fromDate: fromDate as unknown as LeaveRequest["fromDate"],
+        toDate: toDate as unknown as LeaveRequest["toDate"],
+        totalDays,
+        isHalfDay: !!body.isHalfDay,
+        ...(body.isHalfDay ? { halfDaySession: body.halfDaySession } : {}),
+        reason: body.reason!.trim(),
+        ...(proofRoutedTo === "EXAM_CELL" ? { proofRoutedTo } : {}),
+        ...(body.placeOfVisit?.trim() ? { placeOfVisit: body.placeOfVisit.trim() } : {}),
+        ...(body.pointOfContact?.trim() ? { pointOfContact: body.pointOfContact.trim() } : {}),
+        periodSubstitutions: periodSubstitutions ?? [],
+        adjustmentRequests,
+        ...(adjustmentRequests.length > 0 ? { postAcceptanceStatus } : {}),
+        status: newStatus,
+        updatedAt: now as unknown as LeaveRequest["updatedAt"],
+      };
+      // A prior EXAM_CELL routing that the edited reason no longer matches
+      // has to be explicitly cleared - Firestore's update() leaves an
+      // omitted field untouched, it doesn't reset it to the HOD default.
+      const clearProofRouting = proofRoutedTo !== "EXAM_CELL" && !!req.proofRoutedTo;
+      await ref.update(clearProofRouting ? { ...updated, proofRoutedTo: FieldValue.delete() } : updated);
+      await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
+        collegeId: session.collegeId, action: "LEAVE_EDITED", performedBy: session.uid,
+        performedByName: identity.name, targetId: id, details: { totalDays }, timestamp: now,
+      });
+      if (adjustmentRequests.length > 0) {
+        await notifyAdjustmentAssignees(db, session.collegeId, { ...req, ...updated, adjustmentRequests });
+      } else {
+        await notifyPendingApprover(db, session.collegeId, newStatus, { ...req, ...updated });
+      }
+      // Same "tell Exam Cell directly" as a fresh submission - only when this
+      // edit newly routes here (wasn't already EXAM_CELL before the edit).
+      if (proofRoutedTo === "EXAM_CELL" && req.proofRoutedTo !== "EXAM_CELL") {
+        await notifyRole(
+          db, session.collegeId, "EXAM_CELL", "LEAVE_PROOF_ROUTED_TO_EXAM_CELL",
+          "Leave filed for an exam-duty reason",
+          `${identity.name} applied for leave citing "${body.reason!.trim()}" - proof for this should be routed to Exam Cell.`,
+        );
+      }
       return NextResponse.json({ ok: true });
     }
 
@@ -554,6 +832,97 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       );
       await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
         collegeId: session.collegeId, action: "LEAVE_OD_PROOF_REQUESTED", performedBy: session.uid,
+        performedByName: session.email || session.role, targetId: id, details: {}, timestamp: now,
+      });
+      return NextResponse.json({ ok: true });
+    }
+
+    // ─── Post-leave certificate (SL, optional; SCL, chased) ─────────────────
+    // Record-keeping (see lib/leave/leaveCertificate.ts) - unlike the On Duty
+    // proof block above, nothing here ever affects lopDays, isPaidLeave, or
+    // status, for EITHER leave type. Same "already approved" placement as OD
+    // proof.
+    if (body.action === "SUBMIT_CERTIFICATE") {
+      if (req.uid !== session.uid) {
+        return NextResponse.json({ error: "You can only upload a certificate for your own leave" }, { status: 403 });
+      }
+      const evaluation = evaluateLeaveCertificate(req, now);
+      if (!evaluation.canUpload) {
+        return NextResponse.json({
+          error: evaluation.state === "VERIFIED"
+            ? "This certificate has already been verified"
+            : "A certificate can only be uploaded once the leave period has ended",
+        }, { status: 400 });
+      }
+      const expectedPrefix = `leave-proofs/${session.collegeId}/${session.uid}/${id}/`;
+      if (
+        !body.certificateUrl?.startsWith("https://firebasestorage.googleapis.com/") ||
+        !body.certificateUrl.includes(encodeURIComponent(expectedPrefix))
+      ) {
+        return NextResponse.json({ error: "Invalid certificate URL" }, { status: 400 });
+      }
+
+      const submissionCount = (req.certificateSubmissionCount ?? 0) + 1;
+      await ref.update({
+        certificateUrl: body.certificateUrl,
+        certificateUploadedAt: now,
+        certificateStatus: "PENDING_VERIFICATION",
+        certificateSubmissionCount: submissionCount,
+        // A resubmission must not keep showing the previous rejection.
+        certificateRejectionReason: "",
+        certificateReviewedBy: "",
+        certificateReviewedByName: "",
+        updatedAt: now,
+      });
+      await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
+        collegeId: session.collegeId, action: "LEAVE_CERTIFICATE_SUBMITTED", performedBy: session.uid,
+        performedByName: session.email || session.role, targetId: id, details: { submissionCount }, timestamp: now,
+      });
+      await notifyCertificateSubmitted(db, session.collegeId, { ...req, id }, submissionCount);
+      return NextResponse.json({ ok: true });
+    }
+
+    if (body.action === "VERIFY_CERTIFICATE" || body.action === "REJECT_CERTIFICATE") {
+      if (req.certificateStatus !== "PENDING_VERIFICATION") {
+        return NextResponse.json({ error: "There is no certificate awaiting verification on this request" }, { status: 400 });
+      }
+      const forbidden = await assertCanReviewLeaveProof(db, session, req);
+      if (forbidden) return forbidden;
+
+      const verified = body.action === "VERIFY_CERTIFICATE";
+      await ref.update({
+        certificateStatus: verified ? "VERIFIED" : "REJECTED",
+        certificateReviewedBy: session.uid,
+        certificateReviewedByName: session.email || session.role,
+        certificateReviewedAt: now,
+        certificateRejectionReason: verified ? "" : (body.reason ?? "").trim(),
+        updatedAt: now,
+      });
+      await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
+        collegeId: session.collegeId,
+        action: verified ? "LEAVE_CERTIFICATE_VERIFIED" : "LEAVE_CERTIFICATE_REJECTED",
+        performedBy: session.uid, performedByName: session.email || session.role, targetId: id,
+        details: { reason: body.reason ?? null }, timestamp: now,
+      });
+      await notifyCertificateDecision(db, session.collegeId, { ...req, id }, verified, body.reason);
+      return NextResponse.json({ ok: true });
+    }
+
+    // Manual nudge, SCL only in practice (SL's certificate is optional, so
+    // nothing ever needs chasing) - same audience as VERIFY/REJECT_CERTIFICATE
+    // above, mirrors REQUEST_OD_PROOF exactly.
+    if (body.action === "REQUEST_CERTIFICATE") {
+      const evaluation = evaluateLeaveCertificate(req, now);
+      if (!evaluation.required || !evaluation.canUpload || evaluation.awaitingVerification) {
+        return NextResponse.json({ error: "There's nothing outstanding to request a certificate for on this request" }, { status: 400 });
+      }
+      const forbidden = await assertCanReviewLeaveProof(db, session, req);
+      if (forbidden) return forbidden;
+
+      const requestedByLabel = session.role === "HOD" ? "Your HOD" : (session.email || session.role);
+      await notifyCertificateRequested(db, session.collegeId, { ...req, id }, requestedByLabel);
+      await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
+        collegeId: session.collegeId, action: "LEAVE_CERTIFICATE_REQUESTED", performedBy: session.uid,
         performedByName: session.email || session.role, targetId: id, details: {}, timestamp: now,
       });
       return NextResponse.json({ ok: true });

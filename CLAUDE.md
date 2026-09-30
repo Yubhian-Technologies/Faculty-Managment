@@ -125,5 +125,5 @@ firestore.rules, firestore.indexes.json, storage.rules
 5. **`src/lib/college/academicStructure.ts`** — the single source of truth for derived academic shape (common first year vs department-direct). Never re-check `assignedYears`/`hasSubDepartments` inline elsewhere.
 6. **`src/types/core.ts`** `ROLE_SCOPE` must stay in lockstep with where profiles actually live in Firestore.
 7. **Supporting-staff split** (Technical → HOD / Non-Technical → College Office, per `lib/designations/config.ts`) has been reverted and re-decided several times — treat re-opening it as a deliberate product decision.
-8. **Do not adopt** `requireRoleOrHigher` (zero call sites, tenant-context warnings in its own docs). **Do not add** a `middleware.ts` (this repo uses `proxy.ts`).
+8. **Do not add** a `middleware.ts` (this repo uses `proxy.ts`).
 9. **Never rely on nav visibility as security** — every capability needs its own API guard.

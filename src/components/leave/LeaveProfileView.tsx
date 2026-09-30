@@ -9,9 +9,13 @@ import { toast } from "@/hooks/useToast";
 import { formatDate, toDate } from "@/lib/utils";
 import { Plus, ChevronRight, History, CalendarPlus } from "lucide-react";
 import { evaluateODProof } from "@/lib/leave/odProof";
+import { evaluateLeaveCertificate } from "@/lib/leave/leaveCertificate";
 import { PermissionRequestDialog } from "@/components/leave/PermissionRequestDialog";
 import { LeaveCalendar } from "@/components/leave/LeaveCalendar";
 import { LEAVE_REQUEST_STATUS_LABELS, EFFECTIVE_CATEGORY_LABELS, LEAVE_TYPE_LABELS } from "@/types/leave";
+import { HANDOVER_ENABLED } from "@/lib/leave/featureFlags";
+import { isLeaveRequestEditable } from "@/lib/leave/editability";
+import { LeaveUsageBar } from "@/components/leave/LeaveUsageBar";
 import type { EffectiveLeaveCategory, LeaveRequest, LeaveRequestStatus, LeaveTypeCode, PeriodSubstitution } from "@/types/leave";
 
 export interface BalanceEntry {
@@ -167,6 +171,30 @@ export function LeaveProfileView({ uid, applyHref, historyBaseHref }: LeaveProfi
     ).length;
   const otherApprovedCount = requests.filter((r) => r.isOtherRequest && r.status === "APPROVED").length;
 
+  // This year's approved days, bucketed by type - unifies tracked types
+  // (CL/SL/...) and the unlimited/Other ones onto the same "days" unit
+  // (unlimited types otherwise only ever get an approved-COUNT above, which
+  // isn't comparable to a day figure), so the usage bar below reads as one
+  // consistent picture instead of mixing units.
+  const usageByType = new Map<string, number>();
+  for (const r of requests) {
+    if (r.status !== "APPROVED" || toDate(r.fromDate)?.getFullYear() !== currentYear) continue;
+    const key = r.isOtherRequest ? "OTHER" : (r.leaveTypeCode ?? "OTHER");
+    usageByType.set(key, (usageByType.get(key) ?? 0) + r.totalDays);
+  }
+  const usageOrder = ["CL", "SL", "SCL", "EL", "OD", "SH", "OTHER"];
+  const usageSegments = Array.from(usageByType, ([key, value]) => ({
+    key, value, label: key === "OTHER" ? "Other" : LEAVE_TYPE_LABELS[key as LeaveTypeCode],
+  }));
+  const totalDaysThisYear = Array.from(usageByType.values()).reduce((a, b) => a + b, 0);
+  const requestsThisYear = requests.filter((r) => toDate(r.fromDate)?.getFullYear() === currentYear);
+  const statCounts = {
+    total: requestsThisYear.length,
+    approved: requestsThisYear.filter((r) => r.status === "APPROVED").length,
+    pending: requestsThisYear.filter((r) => PENDING_STATUSES.includes(r.status)).length,
+    rejected: requestsThisYear.filter((r) => r.status === "REJECTED").length,
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
@@ -233,6 +261,39 @@ export function LeaveProfileView({ uid, applyHref, historyBaseHref }: LeaveProfi
       </div>
 
       <LeaveCalendar uid={uid} />
+
+      <Card>
+        <CardContent className="p-4">
+          <div className="grid gap-6 sm:grid-cols-[1.3fr_1fr]">
+            <div>
+              <p className="text-sm text-muted-foreground mb-1">Leave usage this year</p>
+              <LeaveUsageBar
+                order={usageOrder}
+                segments={usageSegments}
+                totalLabel={`${totalDaysThisYear} day${totalDaysThisYear === 1 ? "" : "s"}`}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3 content-start sm:border-l sm:pl-6">
+              <div>
+                <p className="text-xl font-semibold">{statCounts.total}</p>
+                <p className="text-xs text-muted-foreground">Requests this year</p>
+              </div>
+              <div>
+                <p className="text-xl font-semibold">{statCounts.approved}</p>
+                <p className="text-xs text-muted-foreground">Approved</p>
+              </div>
+              <div>
+                <p className="text-xl font-semibold">{statCounts.pending}</p>
+                <p className="text-xs text-muted-foreground">Awaiting decision</p>
+              </div>
+              <div>
+                <p className="text-xl font-semibold">{statCounts.rejected}</p>
+                <p className="text-xs text-muted-foreground">Rejected</p>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {trackedBalances.map((b) => (
@@ -385,6 +446,7 @@ export function LeaveHistoryRow({
   request,
   categoryLabel,
   onCancel,
+  applyHref,
   cancelling,
   onAdjustCoverage,
   isOwnHistory,
@@ -396,6 +458,10 @@ export function LeaveHistoryRow({
   // requester cancel their own request anyway (see applications/[id]/route.ts
   // PATCH's CANCEL branch), so the button isn't offered there at all.
   onCancel?: (request: LeaveRequest) => void;
+  // Same ownership gate as onCancel (own history only) - base path for the
+  // Edit link, e.g. "/hod/leave/apply" (see LeaveApplyForm.tsx's editId).
+  // Omitted entirely when browsing someone else's history, same as onCancel.
+  applyHref?: string;
   cancelling?: boolean;
   // The reverse of onCancel: only offered to an HOD/Principal browsing
   // someone ELSE's history (see AdjustCoverageDialog) - the requester can't
@@ -411,11 +477,16 @@ export function LeaveHistoryRow({
   isOwnHistory?: boolean;
 }) {
   const canCancel = !!onCancel && isCancellable(request);
+  const canEdit = !!applyHref && isLeaveRequestEditable(request);
   const canAdjustCoverage = !!onAdjustCoverage && request.status === "APPROVED";
   // On Duty proof (see lib/leave/odProof.ts). Returns NOT_APPLICABLE for every
   // other type and for any OD approved before the feature existed, so the whole
   // block below simply doesn't render for them.
   const odProof = evaluateODProof(request);
+  // Post-leave certificate, SL or SCL (see lib/leave/leaveCertificate.ts).
+  // Returns NOT_APPLICABLE for every other type, so the block below simply
+  // doesn't render for them - never affects pay, for either type.
+  const certificate = evaluateLeaveCertificate(request);
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3">
       <div className="min-w-0">
@@ -441,6 +512,9 @@ export function LeaveHistoryRow({
           {formatDate(request.fromDate)} - {formatDate(request.toDate)}
         </p>
         <p className="text-xs text-muted-foreground truncate mt-0.5">{request.reason}</p>
+        {request.proofRoutedTo === "EXAM_CELL" && (
+          <Badge variant="secondary" className="text-[10px] mt-0.5">Proof goes to Exam Cell</Badge>
+        )}
         {!!request.periodSubstitutions?.length && (
           <p className="text-xs text-muted-foreground mt-0.5">
             <span className="font-medium text-foreground/80">Covered by:</span>{" "}
@@ -454,7 +528,7 @@ export function LeaveHistoryRow({
             </Badge>
           </p>
         )}
-        {!!request.handoverToName && (
+        {HANDOVER_ENABLED && !!request.handoverToName && (
           <p className="text-xs text-muted-foreground mt-0.5">
             <span className="font-medium text-foreground/80">Handover:</span> {request.handoverToName}
           </p>
@@ -481,6 +555,11 @@ export function LeaveHistoryRow({
         {odProof.state === "REJECTED_REUPLOAD" && request.odProofRejectionReason && (
           <p className="text-xs text-muted-foreground mt-0.5">
             <span className="font-medium text-foreground/80">Proof rejected:</span> {request.odProofRejectionReason}
+          </p>
+        )}
+        {certificate.state === "REJECTED_REUPLOAD" && request.certificateRejectionReason && (
+          <p className="text-xs text-muted-foreground mt-0.5">
+            <span className="font-medium text-foreground/80">Certificate rejected:</span> {request.certificateRejectionReason}
           </p>
         )}
       </div>
@@ -513,6 +592,30 @@ export function LeaveHistoryRow({
             </Link>
           </Button>
         )}
+        {/* NOT_DUE stays silent, same reasoning as OD's NOT_DUE above. */}
+        {certificate.state === "AWAITING_UPLOAD" && (
+          <Badge variant="outline">{certificate.required ? "Certificate required" : "Certificate optional"}</Badge>
+        )}
+        {certificate.state === "PENDING_VERIFICATION" && <Badge variant="pending">Certificate awaiting verification</Badge>}
+        {certificate.state === "VERIFIED" && <Badge variant="approved">Certificate verified</Badge>}
+        {certificate.state === "REJECTED_REUPLOAD" && <Badge variant="rejected">Certificate rejected</Badge>}
+        {isOwnHistory && certificate.canUpload && (
+          <Button size="sm" variant="outline" className="h-7 px-2 text-xs" asChild>
+            <Link href={`/leave/certificate/${request.id}`}>
+              {request.certificateStatus === "REJECTED" ? "Re-upload certificate" : "Add certificate"}
+            </Link>
+          </Button>
+        )}
+        {request.applyProofUrl && (
+          <a
+            href={request.applyProofUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs text-primary hover:underline"
+          >
+            View attached proof
+          </a>
+        )}
         {!!onCancel && request.status === "PENDING_ACCEPTANCE" && request.adjustmentRequests?.some((a) => a.status === "DECLINED") && (
           <Button size="sm" variant="outline" className="h-7 px-2 text-xs" asChild>
             <Link href={`/leave/revise/${request.id}`}>Pick someone else</Link>
@@ -526,6 +629,11 @@ export function LeaveHistoryRow({
             onClick={() => onAdjustCoverage!(request)}
           >
             Adjust coverage
+          </Button>
+        )}
+        {canEdit && (
+          <Button size="sm" variant="outline" className="h-7 px-2 text-xs" asChild>
+            <Link href={`${applyHref}?edit=${request.id}`}>Edit</Link>
           </Button>
         )}
         {canCancel && (

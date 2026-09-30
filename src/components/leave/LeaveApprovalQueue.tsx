@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "@/hooks/useToast";
 import { PermissionApprovalQueue } from "@/components/leave/PermissionApprovalQueue";
 import { PeriodCoverageGrid, type PeriodCoverageEntry } from "@/components/leave/PeriodCoverageGrid";
-import { cn, formatDate } from "@/lib/utils";
+import { cn, formatDate, formatTime12h } from "@/lib/utils";
 import { CalendarClock, Check, X, ChevronDown, ChevronUp, FileCheck, BellRing } from "lucide-react";
 import { EFFECTIVE_CATEGORY_LABELS, EFFECTIVE_CATEGORY_ORDER, LEAVE_TYPE_LABELS, OTHER_LEAVE_CATEGORY_DESCRIPTIONS, OTHER_LEAVE_CATEGORY_LABELS, OTHER_LEAVE_CATEGORY_ORDER } from "@/types/leave";
 import type { EffectiveLeaveCategory, LeaveRequest, OtherLeaveCategory } from "@/types/leave";
@@ -81,6 +81,18 @@ export function LeaveApprovalQueue() {
   const [odRequestingId, setOdRequestingId] = useState<string | null>(null);
   const [odRequestedIds, setOdRequestedIds] = useState<Set<string>>(new Set());
 
+  // Post-leave certificate submissions (SL or SCL) awaiting this approver -
+  // never affects pay either way (see lib/leave/leaveCertificate.ts).
+  const [certificates, setCertificates] = useState<LeaveRequest[]>([]);
+  const [certificateReasonById, setCertificateReasonById] = useState<Record<string, string>>({});
+  const [certificateActingId, setCertificateActingId] = useState<string | null>(null);
+
+  // Approved SCLs whose period has ended with no certificate on file yet -
+  // SL is never chased here, its certificate is purely optional.
+  const [missingCertificates, setMissingCertificates] = useState<LeaveRequest[]>([]);
+  const [certificateRequestingId, setCertificateRequestingId] = useState<string | null>(null);
+  const [certificateRequestedIds, setCertificateRequestedIds] = useState<Set<string>>(new Set());
+
   const load = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -122,6 +134,82 @@ export function LeaveApprovalQueue() {
       setOdMissingProofs([]);
     }
   }, []);
+
+  const loadCertificates = useCallback(async () => {
+    try {
+      const res = await fetch("/api/leave/applications?scope=leave-certificates");
+      const data = (await res.json()) as { requests?: LeaveRequest[]; error?: string };
+      if (!res.ok) throw new Error(data.error ?? "Failed to load certificate submissions");
+      setCertificates(data.requests ?? []);
+    } catch {
+      // Deliberately quiet - same reasoning as loadOdProofs above.
+      setCertificates([]);
+    }
+  }, []);
+
+  const loadMissingCertificates = useCallback(async () => {
+    try {
+      const res = await fetch("/api/leave/applications?scope=scl-missing-certificate");
+      const data = (await res.json()) as { requests?: LeaveRequest[]; error?: string };
+      if (!res.ok) throw new Error(data.error ?? "Failed to load missing-certificate list");
+      setMissingCertificates(data.requests ?? []);
+    } catch {
+      // Deliberately quiet - same reasoning as loadOdProofs above.
+      setMissingCertificates([]);
+    }
+  }, []);
+
+  async function requestCertificate(request: LeaveRequest) {
+    setCertificateRequestingId(request.id);
+    try {
+      const res = await fetch(`/api/leave/applications/${request.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "REQUEST_CERTIFICATE" }),
+      });
+      const json = (await res.json()) as { error?: string };
+      if (!res.ok) throw new Error(json.error ?? "Failed to send the request");
+      toast({ variant: "success", title: `${request.employeeName} has been notified` });
+      setCertificateRequestedIds((prev) => new Set(prev).add(request.id));
+    } catch (err) {
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to send the request" });
+    } finally {
+      setCertificateRequestingId(null);
+    }
+  }
+
+  async function reviewCertificate(request: LeaveRequest, verify: boolean) {
+    const reason = (certificateReasonById[request.id] ?? "").trim();
+    if (!verify && !reason) {
+      toast({ variant: "destructive", title: "Add a reason so they know what to fix" });
+      return;
+    }
+    setCertificateActingId(request.id);
+    try {
+      const res = await fetch(`/api/leave/applications/${request.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: verify ? "VERIFY_CERTIFICATE" : "REJECT_CERTIFICATE",
+          ...(verify ? {} : { reason }),
+        }),
+      });
+      const json = (await res.json()) as { error?: string };
+      if (!res.ok) throw new Error(json.error ?? "Failed to record the decision");
+      toast({
+        variant: "success",
+        title: verify ? "Certificate verified" : "Certificate rejected",
+        description: verify
+          ? `${request.employeeName}'s certificate is now on file as verified.`
+          : `${request.employeeName} has been asked to re-upload.`,
+      });
+      setCertificates((prev) => prev.filter((r) => r.id !== request.id));
+    } catch (err) {
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to record the decision" });
+    } finally {
+      setCertificateActingId(null);
+    }
+  }
 
   async function requestOdProof(request: LeaveRequest) {
     setOdRequestingId(request.id);
@@ -178,10 +266,12 @@ export function LeaveApprovalQueue() {
   useEffect(() => {
     load();
     // Fetched alongside the pending queue rather than from its own effect -
-    // three independent lists, but one mount-time load.
+    // five independent lists, but one mount-time load.
     loadOdProofs();
     loadOdMissingProofs();
-  }, [load, loadOdProofs, loadOdMissingProofs]);
+    loadCertificates();
+    loadMissingCertificates();
+  }, [load, loadOdProofs, loadOdMissingProofs, loadCertificates, loadMissingCertificates]);
 
   useEffect(() => {
     if (!expandedId) return;
@@ -433,18 +523,41 @@ export function LeaveApprovalQueue() {
                     <div className="space-y-1.5 pt-3">
                       <label className="text-xs text-muted-foreground">Reason</label>
                       <p className="text-sm">{r.reason || <span className="text-muted-foreground italic">No reason provided</span>}</p>
+                      {r.proofRoutedTo === "EXAM_CELL" && (
+                        <Badge variant="secondary" className="text-[10px]">Proof goes to Exam Cell</Badge>
+                      )}
                     </div>
 
-                    {r.leaveTypeCode === "OD" && (r.placeOfVisit || r.pointOfContact) && (
+                    {(r.placeOfVisit || r.pointOfContact) && (
                       <div className="grid gap-3 sm:grid-cols-2">
                         <div className="space-y-1">
-                          <label className="text-xs text-muted-foreground">Place of Visit</label>
+                          <label className="text-xs text-muted-foreground">Place{r.leaveTypeCode === "OD" ? " of Visit" : ""}</label>
                           <p className="text-sm">{r.placeOfVisit || "—"}</p>
                         </div>
                         <div className="space-y-1">
                           <label className="text-xs text-muted-foreground">Point of Contact</label>
                           <p className="text-sm">{r.pointOfContact || "—"}</p>
                         </div>
+                      </div>
+                    )}
+
+                    {/* SCL's mandatory apply-time evidence - attached at
+                        submission, distinct from the post-leave certificate
+                        flow (see the "Certificate Verification" section
+                        below, which only covers APPROVED requests). */}
+                    {r.applyProofUrl && (
+                      <div className="space-y-1">
+                        <label className="text-xs text-muted-foreground">Supporting Evidence</label>
+                        <p className="text-sm">
+                          <a
+                            href={r.applyProofUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-primary hover:underline"
+                          >
+                            View attached proof
+                          </a>
+                        </p>
                       </div>
                     )}
 
@@ -529,9 +642,15 @@ export function LeaveApprovalQueue() {
                               periods={periodsById[r.id]!}
                               renderPeriod={(p, key) => (
                                 <div key={key} className="space-y-1 rounded-md border p-2">
-                                  <p className="text-xs font-medium leading-tight">
-                                    P{p.periodNumber} · {p.subjectName}{p.sectionName ? ` · ${p.sectionName}` : ""}
+                                  <p className="text-xs font-medium leading-tight">Period {p.periodNumber}</p>
+                                  <p className="text-xs leading-tight">
+                                    {p.subjectName}{p.sectionName ? ` · ${p.sectionName}` : ""}
                                   </p>
+                                  {p.startTime && p.endTime && (
+                                    <p className="text-xs text-muted-foreground leading-tight">
+                                      {formatTime12h(p.startTime)}&ndash;{formatTime12h(p.endTime)}
+                                    </p>
+                                  )}
                                   <Select
                                     value={substitutionsById[r.id]?.[key] ?? ""}
                                     onValueChange={(v) =>
@@ -754,6 +873,123 @@ export function LeaveApprovalQueue() {
                 >
                   <BellRing className="h-4 w-4 mr-1" />
                   {odRequestedIds.has(r.id) ? "Requested" : "Request Upload"}
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Post-leave certificates (SL or SCL) awaiting review - never affects
+          whether the leave is paid, for either type. */}
+      {certificates.length > 0 && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <FileCheck className="h-4 w-4 text-muted-foreground" />
+            <h3 className="text-sm font-semibold">Certificate Verification ({certificates.length})</h3>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            These never affect whether the leave is paid - verify the document, or reject it with a reason so they can
+            re-upload.
+          </p>
+          {certificates.map((r) => (
+            <Card key={r.id}>
+              <CardContent className="p-4 space-y-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <Avatar name={r.employeeName} size="sm" />
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium leading-tight">{r.employeeName}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {formatDate(r.fromDate)} – {formatDate(r.toDate)} · {r.totalDays} day
+                        {r.totalDays === 1 ? "" : "s"}
+                        {r.department ? ` · ${r.department}` : ""}
+                      </p>
+                    </div>
+                  </div>
+                  <Badge variant="pending" className="shrink-0">
+                    {r.leaveTypeCode ? LEAVE_TYPE_LABELS[r.leaveTypeCode] : "Leave"}
+                  </Badge>
+                </div>
+
+                {r.reason && <p className="text-xs text-muted-foreground">{r.reason}</p>}
+
+                {r.certificateUrl && (
+                  <a
+                    href={r.certificateUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                  >
+                    <FileCheck className="h-3.5 w-3.5" /> View certificate
+                  </a>
+                )}
+
+                <div>
+                  <label className="text-xs font-medium">Reason (required to reject)</label>
+                  <Textarea
+                    className="mt-1 text-xs"
+                    rows={2}
+                    placeholder="e.g. the certificate doesn't cover these dates"
+                    value={certificateReasonById[r.id] ?? ""}
+                    onChange={(e) => setCertificateReasonById((prev) => ({ ...prev, [r.id]: e.target.value }))}
+                  />
+                </div>
+
+                <div className="flex justify-end gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={certificateActingId === r.id}
+                    onClick={() => void reviewCertificate(r, false)}
+                  >
+                    <X className="h-4 w-4 mr-1" /> Reject
+                  </Button>
+                  <Button size="sm" disabled={certificateActingId === r.id} onClick={() => void reviewCertificate(r, true)}>
+                    <Check className="h-4 w-4 mr-1" /> Verify
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {/* Approved SCLs whose period has ended with no certificate on file yet
+          (never uploaded, or rejected and not fixed) - SL never appears here,
+          its certificate is purely optional. Same shape as the On Duty
+          missing-proof list above, minus any pay consequence. */}
+      {missingCertificates.length > 0 && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <BellRing className="h-4 w-4 text-muted-foreground" />
+            <h3 className="text-sm font-semibold">Certificate Not Uploaded ({missingCertificates.length})</h3>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            These Special Casual Leaves have ended with no certificate on file yet. This never affects whether the
+            leave is paid - send a reminder if you&rsquo;d like one on record.
+          </p>
+          <div className="divide-y rounded-lg border">
+            {missingCertificates.map((r) => (
+              <div key={r.id} className="flex items-center justify-between gap-3 p-3 flex-wrap">
+                <div className="flex items-center gap-3 min-w-0">
+                  <Avatar name={r.employeeName} size="sm" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium leading-tight">{r.employeeName}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {formatDate(r.fromDate)} – {formatDate(r.toDate)}
+                      {r.department ? ` · ${r.department}` : ""}
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={certificateRequestingId === r.id || certificateRequestedIds.has(r.id)}
+                  onClick={() => void requestCertificate(r)}
+                >
+                  <BellRing className="h-4 w-4 mr-1" />
+                  {certificateRequestedIds.has(r.id) ? "Requested" : "Request Upload"}
                 </Button>
               </div>
             ))}

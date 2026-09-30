@@ -1,4 +1,4 @@
-import { findBranchManager } from "@/lib/departments/managedBranches";
+import { findBranchManager, resolveBranchYearOwner } from "@/lib/departments/managedBranches";
 import { resolveDepartmentCourseScope, fedYears, expandDepartmentNameForRollup, type DepartmentWithId } from "@/lib/college/academicStructure";
 import type { Course, Department } from "@/types";
 
@@ -241,4 +241,34 @@ export function yearsInScope(
   }
   const base = assigned.size > 0 ? courseYears.filter((y) => assigned.has(y)) : courseYears;
   return base.filter((y) => !excluded.has(y));
+}
+
+/**
+ * Year-aware department filter for college-wide Sections views (Principal / VP
+ * / College Admin). A section is always filed under a REAL branch name for
+ * every year, so "the sections of Basic Science" cannot be a name match: it
+ * must be the ones Basic Science (or one of its sub-departments) actually runs
+ * for that section's year - i.e. the year-aware owner (resolveBranchYearOwner).
+ *
+ * Matches when the section is filed directly under `filterName` (a branch's
+ * full roster, every year - year 1 included, which its manager runs), or when
+ * the section's owner for its year is `filterName` or one of its
+ * sub-departments. A container therefore matches only the shared year(s) it
+ * teaches, never its branches' later years.
+ */
+export function sectionMatchesDepartmentFilter(
+  departments: Department[],
+  filterName: string,
+  sectionDepartment: string,
+  year: number,
+  catalogId?: string
+): boolean {
+  if (sectionDepartment === filterName) return true;
+  const filterDept = departments.find((d) => d.name === filterName);
+  if (!filterDept) return false;
+  const owner = resolveBranchYearOwner(departments, sectionDepartment, year, catalogId);
+  if (owner === sectionDepartment) return false; // the branch owns this year itself, and it isn't the filter
+  if (owner === filterName) return true;
+  const ownerDept = departments.find((d) => d.name === owner);
+  return Boolean(ownerDept?.parentDepartmentId && ownerDept.parentDepartmentId === filterDept.id);
 }

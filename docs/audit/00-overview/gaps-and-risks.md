@@ -19,7 +19,6 @@ Severity: **S1** critical (security/data loss), **S2** high (broken/incorrect), 
 | 13 | S3 | M2 | Public offer-acceptance/candidate-form endpoints: token security model not audited this pass (`[UNVERIFIED]`) | Enumeration risk if tokens guessable | Verify id/token entropy + rate limits |
 | 14 | S3 | M3 | `DataTable` groupBy+paginate interaction bug (SHARED_FILES.md) | Wrong group counts on paginated lists | Fix grouping to aggregate pre-pagination |
 | 15 | S3 | M8 | RND coordinator review gating per college type unverified per-route `[UNVERIFIED]` | Wrong college types can see review UI | Route-level verification + tests |
-| 16 | S4 | Platform | `requireRoleOrHigher` dead code with warnings (zero call sites) | Confusion | Delete or adopt with tenant context work |
 | 17 | S4 | M1 | `ROLE_DASHBOARD_PATHS` includes STUDENT but no student dashboard pages exist | Dead mapping | Implement or remove |
 | 18 | S4 | Cross | `BOTTOM_NAV_ITEMS` hand-maintained; drifts from NAV_ITEMS | Mobile nav gaps | Derive from NAV_ITEMS |
 | 19 | S4 | M5 | Offline submit queue persistence mechanism undocumented | Recovery behavior unclear | Document + test |

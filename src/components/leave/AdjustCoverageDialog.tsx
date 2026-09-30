@@ -5,7 +5,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/useToast";
-import { formatDate } from "@/lib/utils";
+import { formatDate, formatTime12h } from "@/lib/utils";
 import { PeriodCoverageGrid, type PeriodCoverageEntry } from "@/components/leave/PeriodCoverageGrid";
 import type { LeaveRequest } from "@/types/leave";
 
@@ -111,9 +111,15 @@ export function AdjustCoverageDialog({
               periods={periods}
               renderPeriod={(p, key) => (
                 <div key={key} className="space-y-1 rounded-md border p-2">
-                  <p className="text-xs font-medium leading-tight">
-                    P{p.periodNumber} · {p.subjectName}{p.sectionName ? ` · ${p.sectionName}` : ""}
+                  <p className="text-xs font-medium leading-tight">Period {p.periodNumber}</p>
+                  <p className="text-xs leading-tight">
+                    {p.subjectName}{p.sectionName ? ` · ${p.sectionName}` : ""}
                   </p>
+                  {p.startTime && p.endTime && (
+                    <p className="text-xs text-muted-foreground leading-tight">
+                      {formatTime12h(p.startTime)}&ndash;{formatTime12h(p.endTime)}
+                    </p>
+                  )}
                   <Select
                     value={picks[key] ?? ""}
                     onValueChange={(v) => setPicks((prev) => ({ ...prev, [key]: v }))}

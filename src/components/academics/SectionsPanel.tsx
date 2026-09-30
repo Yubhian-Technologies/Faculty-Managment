@@ -6,7 +6,7 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { CardSkeleton } from "@/components/shared/SkeletonLoader";
 import { toast } from "@/hooks/useToast";
-import { buildCourseGroups, deriveHodScope } from "@/lib/departments/hodScope";
+import { buildCourseGroups, sectionMatchesDepartmentFilter } from "@/lib/departments/hodScope";
 import { SectionRoster } from "@/components/academics/SectionRoster";
 import type { Course, Department, Section } from "@/types";
 
@@ -144,24 +144,24 @@ export function SectionsPanel() {
 
   // A department filter never matches Section.department by literal string
   // equality - a Section is always filed under a real branch name (e.g.
-  // "vlsi"), never under a sub-department's own name or a shared "no own
-  // sections" parent's name (e.g. "Basic Science Maths"/"Basic Science") even
-  // though that's what actually owns/manages it (Department.managedDepartments).
-  // Expand the picked department into the real branch names it structurally
-  // covers first - the exact same deriveHodScope resolution the (working) HOD
-  // Sections page and the /api/college/sections `departmentId` param both use
-  // - so picking a sub-department or shared-year parent here shows its real
-  // sections instead of silently returning none. A no-op for a plain
-  // department (deptOptions resolves to just itself).
-  const deptScopeNames = useMemo(() => {
-    if (deptFilter === ALL) return null;
-    const scope = deriveHodScope(departments, deptFilter).deptOptions.map((d) => d.name);
-    return new Set(scope.length > 0 ? scope : [deptFilter]);
-  }, [departments, deptFilter]);
-
+  // "vlsi") for EVERY year, never under a sub-department or a shared-year
+  // parent (e.g. "Basic Science - Maths"/"Basic Science"), even though that is
+  // what runs its shared year (Department.managedDepartments). Picking a
+  // container must therefore be year-aware: it matches only the year(s) it
+  // actually teaches for that section's course (Basic Science -> year 1 of its
+  // branches, never their years 2-4), while picking a branch shows that
+  // branch's full roster. See sectionMatchesDepartmentFilter. A plain
+  // department is a straight name match.
+  const catalogIdByCourseId = useMemo(
+    () => new Map(courses.map((c) => [c.id, c.catalogId])),
+    [courses]
+  );
   const byDept = useMemo(
-    () => (deptScopeNames ? byCourse.filter((s) => deptScopeNames.has(s.department)) : byCourse),
-    [byCourse, deptScopeNames]
+    () => (deptFilter === ALL
+      ? byCourse
+      : byCourse.filter((s) =>
+          sectionMatchesDepartmentFilter(departments, deptFilter, s.department, s.year, catalogIdByCourseId.get(s.courseId)))),
+    [byCourse, deptFilter, departments, catalogIdByCourseId]
   );
   const yearOptions = useMemo(() => {
     if (sections.length > 0) {

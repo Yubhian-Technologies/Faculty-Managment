@@ -28,7 +28,17 @@ import { isPathHidden } from "@/components/layout/navConfig";
 import { hasSupportingStaffSplit } from "@/lib/designations/config";
 import { formatDate } from "@/lib/utils";
 import { CardSkeleton } from "@/components/shared/SkeletonLoader";
+import { LeaveUsageBar, RatioMeter } from "@/components/leave/LeaveUsageBar";
+import { LEAVE_TYPE_LABELS } from "@/types/leave";
 import type { Department, VacancyRequest, HiringBatch } from "@/types";
+
+const LEAVE_USAGE_ORDER = ["CL", "SL", "SCL", "EL", "OD", "SH", "OTHER"];
+
+interface TeamStats {
+  leaveByType: { leaveTypeCode: string; days: number }[];
+  totalLeaveDays: number;
+  attendancePercent: number | null;
+}
 
 // "Faculty" (teaching) and "Supporting Staff" (Technical, department-scoped)
 // are two segregated modules - separate tiles here, separate pages, separate
@@ -70,6 +80,7 @@ export default function HODDashboard() {
   const [batches, setBatches] = useState<HiringBatch[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [parentDeptName, setParentDeptName] = useState<string | null>(null);
+  const [teamStats, setTeamStats] = useState<TeamStats | null>(null);
 
   useEffect(() => {
     // isLoading already starts true, so nothing is set synchronously here -
@@ -92,6 +103,11 @@ export default function HODDashboard() {
         setIsLoading(false);
       }
     })();
+
+    fetch("/api/college/hod/team-stats")
+      .then((r) => r.json() as Promise<TeamStats>)
+      .then((d) => setTeamStats(d))
+      .catch(() => {});
 
     fetch("/api/college/departments")
       .then((r) => r.json() as Promise<{ departments: Department[] }>)
@@ -177,6 +193,36 @@ export default function HODDashboard() {
           ))}
         </div>
       </div>
+      )}
+
+      {/* Team Leave & Attendance */}
+      {teamStats && (
+        <Card>
+          <CardHeader className="pb-3"><CardTitle className="text-base">Team Leave &amp; Attendance</CardTitle></CardHeader>
+          <CardContent>
+            <div className="grid gap-6 sm:grid-cols-[1.3fr_1fr]">
+              <div>
+                <p className="text-sm text-muted-foreground mb-1">Leave taken this month</p>
+                <LeaveUsageBar
+                  order={LEAVE_USAGE_ORDER}
+                  segments={teamStats.leaveByType.map((s) => ({
+                    key: s.leaveTypeCode, value: s.days,
+                    label: s.leaveTypeCode === "OTHER" ? "Other" : LEAVE_TYPE_LABELS[s.leaveTypeCode as keyof typeof LEAVE_TYPE_LABELS] ?? s.leaveTypeCode,
+                  }))}
+                  totalLabel={`${teamStats.totalLeaveDays} day${teamStats.totalLeaveDays === 1 ? "" : "s"}`}
+                  emptyLabel="No leave taken this month"
+                />
+              </div>
+              <div className="sm:border-l sm:pl-6 flex flex-col justify-center">
+                {teamStats.attendancePercent != null ? (
+                  <RatioMeter label="Department attendance this month" percent={teamStats.attendancePercent} />
+                ) : (
+                  <p className="text-xs text-muted-foreground">No attendance data yet this month</p>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {/* Recent Vacancies */}

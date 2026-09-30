@@ -52,6 +52,14 @@ export function formatDMY(input: Date | string | null | undefined): string {
   return `${dd}-${mm}-${date.getFullYear()}`;
 }
 
+// "09:00" -> "9:00 AM" - display only, stored/submitted values stay 24h "HH:MM".
+export function formatTime12h(hhmm: string): string {
+  const [h, m] = hhmm.split(":").map(Number);
+  const period = h >= 12 ? "PM" : "AM";
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}:${String(m).padStart(2, "0")} ${period}`;
+}
+
 // Monday..Saturday Date objects for the calendar week containing `today` -
 // pairs positionally with a `DAYS: DayOfWeek[] = ["MON", ..., "SAT"]` array
 // so a weekly timetable grid can label each column with its actual date
