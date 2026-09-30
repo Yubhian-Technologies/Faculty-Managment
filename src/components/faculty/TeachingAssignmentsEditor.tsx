@@ -357,14 +357,6 @@ export function TeachingAssignmentsEditor({ value, onChange, department }: Props
         const timing = timingsForKey.find((t) => t.courseId === row.courseId) ?? timingsForKey[0] ?? null;
         const occupied = occupiedCache[row.sectionId] ?? [];
         const periodNumbers = timing ? Array.from({ length: timing.numberOfPeriods }, (_, i) => i + 1) : [];
-        // Periods this same faculty member is already teaching in any other row (any other
-        // section/year/course, including ones staged but not yet saved) - a teacher can't be
-        // in two classes at once, so these must block regardless of which section they're in.
-        const facultyBusyElsewhere = new Set(
-          value
-            .filter((r) => r.localId !== row.localId)
-            .flatMap((r) => r.slots.map((s) => `${s.day}_${s.periodNumber}`))
-        );
         // Subjects this faculty is already CURRENTLY assigned to in another row shouldn't be
         // offered again - picking the same subject twice would just duplicate the live
         // assignment. Past rows are exempt on both sides: a subject taught in a prior year
@@ -576,10 +568,11 @@ export function TeachingAssignmentsEditor({ value, onChange, department }: Props
                               );
                               // A section conflict is still selectable - it's a split period (two+
                               // subjects/faculty sharing this cell), a deliberate choice, not an
-                              // error - only a genuine faculty double-booking hard-blocks below.
-                              const selfConflict = !selected && facultyBusyElsewhere.has(`${d}_${p}`);
+                              // error. The same faculty in two sections at one period number
+                              // is allowed too (years have their own period timings).
+                              const selfConflict = false;
                               const capReached = !selected && row.slots.length >= row.hoursPerWeek;
-                              const disabled = selfConflict || capReached;
+                              const disabled = capReached;
                               return (
                                 <td key={d} className="p-1">
                                   <button
