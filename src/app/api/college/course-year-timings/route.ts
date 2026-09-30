@@ -18,7 +18,7 @@ function toMinutes(hhmm: string): number {
 
 export async function GET(request: Request) {
   try {
-    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "HOD", "COLLEGE_OFFICE", "ACCOUNTS", "PANEL_MEMBER", "COLLEGE_STAFF", "ACADEMICS");
+    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "HOD", "COLLEGE_OFFICE", "ACCOUNTS", "PANEL_MEMBER", "COLLEGE_STAFF", "ACADEMICS", "EXAM_CELL");
     const { searchParams } = new URL(request.url);
     const courseId = searchParams.get("courseId");
 

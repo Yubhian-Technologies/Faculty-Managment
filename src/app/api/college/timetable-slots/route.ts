@@ -15,7 +15,7 @@ import { resolveCollegeAcademicYear } from "@/lib/college/collegeAcademicYear";
 
 export async function GET(request: Request) {
   try {
-    const session = await requireCollegeMember("HOD", "PRINCIPAL", "SUPER_ADMIN", "PANEL_MEMBER", "COLLEGE_STAFF", "VICE_PRINCIPAL");
+    const session = await requireCollegeMember("HOD", "PRINCIPAL", "SUPER_ADMIN", "PANEL_MEMBER", "COLLEGE_STAFF", "VICE_PRINCIPAL", "EXAM_CELL", "ACADEMICS");
     const { searchParams } = new URL(request.url);
     const sectionId = searchParams.get("sectionId");
     if (!sectionId) {
