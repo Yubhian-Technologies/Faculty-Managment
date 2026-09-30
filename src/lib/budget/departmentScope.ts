@@ -1,3 +1,4 @@
+import { activeDelegatedRoles } from "@/lib/leave/roleDelegation";
 import type { Firestore } from "firebase-admin/firestore";
 
 export interface DeptScopeSession {
@@ -36,7 +37,10 @@ export async function resolveHodDepartments(db: Firestore, collegeId: string, ui
     const snap = await db.collection("colleges").doc(collegeId).collection("users").doc(uid).get();
     const data = snap.data() as { department?: string; departments?: string[] } | undefined;
     const names = data?.departments && data.departments.length > 0 ? data.departments : [data?.department ?? ""];
-    return Array.from(new Set(names.map((n) => n.trim()).filter(Boolean)));
+    // Plus the departments of any HOD seat handed to this person for the
+    // delegator's leave (see lib/leave/roleDelegation.ts).
+    const delegated = (await activeDelegatedRoles(db, collegeId, uid)).departments;
+    return Array.from(new Set([...names, ...delegated].map((n) => n.trim()).filter(Boolean)));
   } catch {
     return [];
   }

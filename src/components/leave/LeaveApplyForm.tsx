@@ -107,6 +107,13 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
   // see types/leave.ts's handoverToUid.
   const [handoverCandidates, setHandoverCandidates] = useState<{ uid: string; name: string }[]>([]);
   const [handoverToUid, setHandoverToUid] = useState("");
+  // Role handover for seat-holders (see lib/leave/roleDelegation.ts): pick a
+  // department, then someone in it to act in your seats during the leave.
+  const [handoverRoles, setHandoverRoles] = useState<string[]>([]);
+  const [handoverDepts, setHandoverDepts] = useState<string[]>([]);
+  const [roleDept, setRoleDept] = useState("");
+  const [rolePeople, setRolePeople] = useState<{ uid: string; name: string }[]>([]);
+  const [roleToUid, setRoleToUid] = useState("");
   // College Office's declared Summer Vacation range (see the Holidays page's
   // "Summer Vacation" section) - whichever one hasn't fully ended yet, soonest
   // first. Selecting "Summer Vacation" below locks From/To to this exact
@@ -276,7 +283,7 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
     setReason("");
     setCustomReasonMode(false);
     if (value !== "OD") { setPlaceOfVisit(""); setPointOfContact(""); }
-    if (value !== "SCL") setProofUrl("");
+    if (value !== "SCL" && value !== "SL") setProofUrl("");
     // Summer Vacation defaults From/To to the College Office's full declared
     // range (see the effect below) - inherently a span, so the single-day
     // toggle would just fight that default.
@@ -348,6 +355,29 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
   // lib/leave/handoverPool.ts) and, once a range is picked, leaves out anyone
   // who's on leave or tied up in it. A previously picked contact who drops out
   // of the new list is cleared rather than silently submitted.
+  useEffect(() => {
+    fetch("/api/leave/role-handover-options")
+      .then((r) => r.json() as Promise<{ roles?: string[]; departments?: string[] }>)
+      .then((d) => { setHandoverRoles(d.roles ?? []); setHandoverDepts(d.departments ?? []); })
+      .catch(() => { /* optional picker just stays hidden */ });
+  }, []);
+
+  useEffect(() => {
+    if (!roleDept) { setRolePeople([]); setRoleToUid(""); return; }
+    const range = fromDate && toDate && toDate >= fromDate ? `&fromDate=${fromDate}&toDate=${toDate}` : "";
+    let cancelled = false;
+    fetch(`/api/leave/role-handover-options?department=${encodeURIComponent(roleDept)}${range}`)
+      .then((r) => r.json() as Promise<{ people?: { uid: string; name: string }[] }>)
+      .then((d) => {
+        if (cancelled) return;
+        const list = d.people ?? [];
+        setRolePeople(list);
+        setRoleToUid((cur) => (cur && !list.some((p) => p.uid === cur) ? "" : cur));
+      })
+      .catch(() => { if (!cancelled) setRolePeople([]); });
+    return () => { cancelled = true; };
+  }, [roleDept, fromDate, toDate]);
+
   useEffect(() => {
     const range = fromDate && toDate && toDate >= fromDate ? `?fromDate=${fromDate}&toDate=${toDate}` : "";
     let cancelled = false;
@@ -523,9 +553,11 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
               reason: reason.trim(),
               extendsRequestId: extendId ?? undefined,
               handoverToUid: HANDOVER_ENABLED ? (handoverToUid || undefined) : undefined,
+              roleHandoverToUid: roleToUid || undefined,
+              roleHandoverDepartment: roleToUid ? roleDept : undefined,
               placeOfVisit: placeOfVisit.trim() || undefined,
               pointOfContact: pointOfContact.trim() || undefined,
-              proofUrl: leaveTypeCode === "SCL" ? proofUrl : undefined,
+              proofUrl: (leaveTypeCode === "SCL" || leaveTypeCode === "SL") && proofUrl ? proofUrl : undefined,
               periodSubstitutions,
             }),
           });
@@ -614,11 +646,13 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
             {/* SCL's mandatory apply-time evidence (see the submit validation
                 below and applications/route.ts POST) - a separate, before-the-
                 leave requirement from SL's optional post-leave certificate. */}
-            {leaveTypeCode === "SCL" && (
+            {(leaveTypeCode === "SCL" || leaveTypeCode === "SL") && (
               <div className="space-y-1.5 pt-1">
-                <Label className="text-xs">Supporting Evidence</Label>
+                <Label className="text-xs">
+                  {leaveTypeCode === "SL" ? "Doctor's Prescription / Medical Document (optional)" : "Supporting Evidence"}
+                </Label>
                 <DocumentUploadField
-                  label="Supporting evidence"
+                  label={leaveTypeCode === "SL" ? "Doctor's prescription (optional)" : "Supporting evidence"}
                   value={proofUrl}
                   uploadEndpoint="/api/upload/leave-apply-proof"
                   onUploaded={(url) => setProofUrl(url)}
@@ -833,6 +867,32 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+          )}
+
+          {handoverRoles.length > 0 && handoverDepts.length > 0 && (
+            <div className="space-y-2">
+              <Label>Hand over my role during this leave (optional)</Label>
+              <p className="text-xs text-muted-foreground">
+                Choose a department, then the person who will act as {handoverRoles.join(" / ").replaceAll("_", " ")} while
+                you&rsquo;re away. They get those modules only on your approved leave dates; you keep yours.
+              </p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Select value={roleDept || "NONE"} onValueChange={(v) => setRoleDept(v === "NONE" ? "" : v)}>
+                  <SelectTrigger><SelectValue placeholder="Department" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="NONE">No handover</SelectItem>
+                    {handoverDepts.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <Select value={roleToUid || "NONE"} onValueChange={(v) => setRoleToUid(v === "NONE" ? "" : v)} disabled={!roleDept}>
+                  <SelectTrigger><SelectValue placeholder="Person" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="NONE">Select person</SelectItem>
+                    {rolePeople.map((p) => <SelectItem key={p.uid} value={p.uid}>{p.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           )}
 

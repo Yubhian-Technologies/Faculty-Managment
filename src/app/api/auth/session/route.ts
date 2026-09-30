@@ -6,6 +6,7 @@ import { getAdminDb, getAdminAuth } from "@/lib/firebase/admin";
 import { LOCATION_SCOPED_ROLES } from "@/types";
 import { signSession } from "@/lib/auth/sessionToken";
 import { orderHeldRoles } from "@/lib/roles/seatRoles";
+import { activeDelegatedRoles } from "@/lib/leave/roleDelegation";
 import { migrateUserDoc } from "@/lib/faculty/fieldRenames";
 
 export async function POST(request: Request) {
@@ -154,7 +155,12 @@ export async function POST(request: Request) {
     // DEPARTMENT_OFFICE login's does - and `realRole` is what stops them
     // appointing, and so replacing, another office head.
     if (seatRoles.includes("DEPARTMENT_OFFICE")) realRole = "DEPARTMENT_OFFICE";
-    const roles = role === "UNKNOWN" ? [role] : orderHeldRoles(role, seatRoles);
+    // Plus any seats handed to this person for someone's leave, live today.
+    let delegatedRoles: string[] = [];
+    if (collegeId && profile) {
+      try { delegatedRoles = (await activeDelegatedRoles(getAdminDb(), collegeId, decoded.uid)).roles; } catch { /* non-fatal */ }
+    }
+    const roles = role === "UNKNOWN" ? [role] : orderHeldRoles(role, [...seatRoles, ...delegatedRoles]);
 
     const sessionData = {
       uid: decoded.uid,

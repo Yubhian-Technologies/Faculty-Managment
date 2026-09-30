@@ -795,6 +795,17 @@ export function LeaveApprovalQueue() {
 
                 {r.reason && <p className="text-xs text-muted-foreground">{r.reason}</p>}
 
+                {r.applyProofUrl && (
+                  <a
+                    href={r.applyProofUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                  >
+                    <FileCheck className="h-3.5 w-3.5" /> View document attached at apply time
+                  </a>
+                )}
+
                 {r.odProofUrl && (
                   <a
                     href={r.odProofUrl}
@@ -913,6 +924,17 @@ export function LeaveApprovalQueue() {
                 </div>
 
                 {r.reason && <p className="text-xs text-muted-foreground">{r.reason}</p>}
+
+                {r.applyProofUrl && (
+                  <a
+                    href={r.applyProofUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                  >
+                    <FileCheck className="h-3.5 w-3.5" /> View document attached at apply time
+                  </a>
+                )}
 
                 {r.certificateUrl && (
                   <a
