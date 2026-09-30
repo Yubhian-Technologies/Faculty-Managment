@@ -112,6 +112,7 @@ export default function HODVacancyPage() {
         </div>
       ) : (
         <DataTable<Record<string, unknown>>
+          paginate
           data={vacancies as unknown as Record<string, unknown>[]}
           keyExtractor={(row) => row.id as string}
           isLoading={isLoading}

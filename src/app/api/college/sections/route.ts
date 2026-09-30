@@ -17,7 +17,7 @@ import { resolveCollegeAcademicYear } from "@/lib/college/collegeAcademicYear";
 
 export async function GET(request: Request) {
   try {
-    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "PANEL_MEMBER", "COLLEGE_STAFF", "COLLEGE_OFFICE");
+    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "PANEL_MEMBER", "COLLEGE_STAFF", "COLLEGE_OFFICE", "EXAM_CELL", "ACADEMICS");
     const { searchParams } = new URL(request.url);
     const yearFilter = searchParams.get("year");
     // Comma-separated when a caller needs every Course doc that represents the
@@ -101,7 +101,7 @@ export async function GET(request: Request) {
     // rather than the caller's own, so it's simplest and safest not to offer it.
     if (
       departmentIdFilter &&
-      (session.role === "PRINCIPAL" || session.role === "VICE_PRINCIPAL" || session.role === "SUPER_ADMIN" || session.role === "COLLEGE_OFFICE")
+      (session.role === "PRINCIPAL" || session.role === "VICE_PRINCIPAL" || session.role === "SUPER_ADMIN" || session.role === "COLLEGE_OFFICE" || session.role === "EXAM_CELL" || session.role === "ACADEMICS")
     ) {
       const deptsSnap = await db.collection("colleges").doc(session.collegeId).collection("departments").get();
       const allDepartments = deptsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as Department[];

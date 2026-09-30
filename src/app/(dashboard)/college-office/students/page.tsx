@@ -25,6 +25,8 @@ import { EDITABLE_ROSTER_FIELDS, LIST_ROSTER_FIELDS, rosterFieldDisplay } from "
 import { toCSV, downloadCSV } from "@/lib/utils/csv";
 import { GraduatedStudentsView } from "@/components/students/GraduatedStudentsView";
 import { StudentPromotionsPanel } from "@/components/students/StudentPromotionsPanel";
+import { StudentStrengthDashboard } from "@/components/students/StudentStrengthDashboard";
+import { StudentsViewTabs } from "@/components/students/StudentsViewTabs";
 import type { StudentListItem, Department, AcademicYear, Course } from "@/types";
 
 // The Add and Edit forms collect every field the roster import collects, in the
@@ -53,6 +55,7 @@ const SEARCH_DEBOUNCE_MS = 350;
 // promotion/graduation itself rather than asking Principal to.
 const STUDENT_TABS = [
   { key: "roster", label: "All Students" },
+  { key: "strength", label: "Students Strength" },
   { key: "promotion", label: "Promotion" },
   { key: "graduates", label: "Graduated" },
 ] as const;
@@ -72,7 +75,10 @@ export default function OfficeStudentsPage() {
   const [years, setYears] = useState<number[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
   const [courseNames, setCourseNames] = useState<string[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
+  // The list stays empty until the user presses Load; after that, filter/page
+  // changes refetch automatically as before.
+  const [loadRequested, setLoadRequested] = useState(false);
   const [isFetching, setIsFetching] = useState(false);
 
   // `search` is the input's live value; `debouncedSearch` is what actually
@@ -203,8 +209,9 @@ export default function OfficeStudentsPage() {
   }, [loadMetadata]);
 
   useEffect(() => {
+    if (!loadRequested) return;
     void (async () => { await loadStudents(); })();
-  }, [loadStudents]);
+  }, [loadStudents, loadRequested]);
 
   const activeDepartments = useMemo(
     () => departments.filter((d) => d.isActive).sort((a, b) => a.name.localeCompare(b.name)),
@@ -574,7 +581,9 @@ export default function OfficeStudentsPage() {
       <PageHeader
         title="Students"
         description={
-          activeTab === "promotion"
+          activeTab === "strength"
+            ? "Live student counts by department, year and section - generated from the student records"
+            : activeTab === "promotion"
             ? "Move a cohort to the next year"
             : activeTab === "graduates"
             ? "Every student who has completed their programme"
@@ -582,20 +591,7 @@ export default function OfficeStudentsPage() {
         }
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-1.5">
-              {STUDENT_TABS.map((t) => (
-                <button
-                  key={t.key}
-                  type="button"
-                  onClick={() => setActiveTab(t.key)}
-                  className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                    activeTab === t.key ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/70"
-                  }`}
-                >
-                  {t.label}
-                </button>
-              ))}
-            </div>
+            <StudentsViewTabs tabs={STUDENT_TABS} value={activeTab} onChange={setActiveTab} />
             {activeTab === "roster" && (
               <div className="flex gap-2">
                 <Button variant="outline" onClick={() => setExportOpen(true)}>
@@ -611,7 +607,9 @@ export default function OfficeStudentsPage() {
         }
       />
 
-      {activeTab === "promotion" ? (
+      {activeTab === "strength" ? (
+        <StudentStrengthDashboard />
+      ) : activeTab === "promotion" ? (
         <StudentPromotionsPanel showHeader={false} />
       ) : activeTab === "graduates" ? (
         <GraduatedStudentsView showHeader={false} studentDetailHref={(id) => `/college-office/students/${id}`} />
@@ -695,7 +693,13 @@ export default function OfficeStudentsPage() {
       )}
 
       {/* List */}
-      {isLoading ? (
+      {!loadRequested ? (
+        <div className="flex flex-col items-center justify-center py-20 text-center">
+          <Users className="h-10 w-10 text-muted-foreground mb-3" />
+          <p className="text-sm text-muted-foreground mb-4">Set any filters, then load the student list.</p>
+          <Button onClick={() => setLoadRequested(true)}>Load Students</Button>
+        </div>
+      ) : isLoading || (isFetching && students.length === 0 && total === 0) ? (
         <div className="space-y-2">
           {[1, 2, 3, 4, 5].map((i) => <div key={i} className="h-12 rounded-lg border bg-muted/30 animate-pulse" />)}
         </div>

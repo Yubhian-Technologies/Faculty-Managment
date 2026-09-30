@@ -1,4 +1,5 @@
 import type { StudentListItem, StudentRecord } from "@/types";
+import { compareStudentsForList } from "@/lib/students/listOrder";
 
 // Server-side pagination for the College Office / Principal-tier Students
 // list (the roles that see the whole college unscoped - no HOD/PANEL_MEMBER
@@ -70,8 +71,9 @@ function matchesRemaining(
 }
 
 /** Dedupes by id (a shared-first-year student's department/secondaryDepartment
- *  queries can both match the same doc) and sorts by name - locale-aware, same
- *  comparator the client used to sort with before this moved server-side. */
+ *  queries can both match the same doc) and sorts in the standard student list
+ *  order - roll number, with roll-less students after them by name (see
+ *  lib/students/listOrder.ts). */
 function dedupeAndSortByName(docs: Doc[]): Doc[] {
   const seen = new Set<string>();
   const out: Doc[] = [];
@@ -80,7 +82,11 @@ function dedupeAndSortByName(docs: Doc[]): Doc[] {
     seen.add(d.id);
     out.push(d);
   }
-  return out.sort((a, b) => String(a.data().name ?? "").localeCompare(String(b.data().name ?? "")));
+  return out.sort((a, b) => {
+    const da = a.data() as { rollNumber?: string; name?: string };
+    const db = b.data() as { rollNumber?: string; name?: string };
+    return compareStudentsForList({ id: a.id, rollNumber: da.rollNumber, name: da.name }, { id: b.id, rollNumber: db.rollNumber, name: db.name });
+  });
 }
 
 async function resolveCandidates(

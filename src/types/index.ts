@@ -12,6 +12,7 @@ export * from "./exams";
 export * from "./examConfig";
 export * from "./examGuidelines";
 export * from "./examCirculars";
+export * from "./examMidSchedule";
 export * from "./studentAttendance";
 export * from "./appraisal";
 export * from "./training";

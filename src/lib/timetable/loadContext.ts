@@ -5,6 +5,7 @@ import type {
 } from "@/types";
 import { DEFAULT_TIMETABLE_RULES } from "@/types";
 import { resolveCurrentSemester, matchesCurrentSemester } from "@/lib/college/semester";
+import { declaredBusyByFaculty } from "@/lib/timetable/declaredBusy";
 import { inheritedTimingCourseId } from "@/lib/timetable/sharedYearTiming";
 import type { Course, Department } from "@/types";
 
@@ -33,12 +34,10 @@ export interface TimetableContext {
    */
   busyFaculty: Map<string, Set<string>>;
   /**
-   * Subset of busyFaculty's cells that came from a lending department's own
-   * busyPeriods declaration (see FacultyAssignmentRequest.busyPeriods),
-   * rather than a real TimetableSlot elsewhere - lets validatePlacement give
-   * a clearer rejection message ("already has a period declared busy") for
-   * this source instead of the generic "already teaching another section",
-   * which would be misleading (nothing was actually scheduled anywhere).
+   * Cells a lending department declared busy (see
+   * FacultyAssignmentRequest.busyPeriods). Advisory only: NOT part of
+   * busyFaculty, so it never rejects a placement - callers may surface it as
+   * a heads-up.
    */
   declaredBusyFaculty: Map<string, Set<string>>;
   // Resolved once from `timing` - null when this course-year has no
@@ -241,23 +240,18 @@ export async function loadTimetableContext(
       cells.add(`${s.day}:${s.periodNumber}`);
     }
   }
-  // And during whatever the lending department declared busy for an
-  // allocated faculty member - see the query above and
-  // FacultyAssignmentRequest.busyPeriods' own doc-comment.
-  const declaredBusyFaculty = new Map<string, Set<string>>();
-  for (const d of allocatedRequestsSnap.docs) {
-    const req = d.data() as FacultyAssignmentRequest;
-    if (!req.allocatedFacultyId || !req.busyPeriods?.length) continue;
-    let cells = busyFaculty.get(req.allocatedFacultyId);
-    if (!cells) { cells = new Set(); busyFaculty.set(req.allocatedFacultyId, cells); }
-    let declaredCells = declaredBusyFaculty.get(req.allocatedFacultyId);
-    if (!declaredCells) { declaredCells = new Set(); declaredBusyFaculty.set(req.allocatedFacultyId, declaredCells); }
-    for (const bp of req.busyPeriods) {
-      const key = `${bp.day}:${bp.period}`;
-      cells.add(key);
-      declaredCells.add(key);
-    }
-  }
+  // What the lending department declared busy for an allocated faculty member
+  // is ADVISORY only - kept separate from busyFaculty so it never blocks a
+  // placement, the daily cap or the consecutive-period cap (see
+  // FacultyAssignmentRequest.busyPeriods). Expanded through declaredBusy.ts so
+  // an entry declared against another year's numbering lands on the right
+  // period(s) of THIS section.
+  const timingForYear = (y: number) =>
+    allTimings.find((t) => t.courseId === section.courseId && Number(t.year) === y) ?? null;
+  const declaredBusyFaculty = declaredBusyByFaculty(
+    allocatedRequestsSnap.docs.map((d) => d.data() as FacultyAssignmentRequest),
+    Number(section.year), timing, timingForYear,
+  );
 
   return {
     section, timing, rules, assignments, courseYearSubjects, subjectsById, pinnedSlots,

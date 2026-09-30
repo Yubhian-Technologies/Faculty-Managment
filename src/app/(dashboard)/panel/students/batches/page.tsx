@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { compareStudentsForList } from "@/lib/students/listOrder";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -93,7 +94,7 @@ export default function LabBatchesPage() {
         (s.department === selectedSection.department || s.secondaryDepartment === selectedSection.department)
         && s.section === selectedSection.name && s.year === selectedSection.year
       )
-      .sort((a, b) => (a.rollNumber || a.name).localeCompare(b.rollNumber || b.name));
+      .sort(compareStudentsForList);
   }, [authorizedStudents, selectedSection]);
 
   function effectiveBatch(s: StudentRecord & { id: string }): string {

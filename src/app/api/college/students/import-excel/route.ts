@@ -12,6 +12,7 @@ import { freshmanLandingDepartmentNames, type DepartmentWithId } from "@/lib/col
 import { isLikelySameUnassignedStudent, STRONG_IDENTITY_FIELDS } from "@/lib/students/duplicateDetection";
 import { validateYearForCourseDuration } from "@/lib/students/rosterValidation";
 import { ChunkedBatch } from "@/lib/firestore/chunkedBatch";
+import { createRollRegistry, rollNumberTakenMessage } from "@/lib/students/rollNumberUniqueness";
 import type { Section } from "@/types";
 
 // Bulk, multi-section roster upload (HOD's Excel/CSV template, also used by
@@ -312,6 +313,10 @@ export async function POST(request: Request) {
         existingRolls.add(rollDedupeKey(s.rollNumber, s.department, s.courseId, s.section, s.year));
       }
     }
+    // College-wide roll registry - every saved student, placed or not.
+    const rollRegistry = createRollRegistry(
+      existingSnap.docs.map((d) => ({ id: d.id, rollNumber: d.get("rollNumber"), name: d.get("name") }))
+    );
 
     // Lightweight direct-duplicate check on real-world unique identifiers -
     // Admission No, Hall Ticket No, Email - independent of the name+department
@@ -529,11 +534,13 @@ export async function POST(request: Request) {
         const yearDurationError = validateYearForCourseDuration(Number(row.year), resolvedCourseDoc?.durationYears, resolvedCourse);
         if (yearDurationError) { failed.push({ row: rowNum, rollNumber: row.rollNumber ?? "-", error: yearDurationError }); continue; }
 
-        // The Office doesn't know roll numbers yet, so they're optional here.
-        // De-dupe by roll when it's present, otherwise by name+dept+year -
-        // checked against both Department and Secondary Department, matching
-        // how existingUnassignedByKey was indexed above.
+        // De-dupe by roll (required, unique college-wide - see below).
         const roll = row.rollNumber?.trim() ?? "";
+        // Roll Number is the student's unique identity - required on every
+        // imported row, unassigned or placed alike. (The roll-less name+detail
+        // duplicate matching below now only ever guards against re-importing a
+        // legacy roll-less student, which a new row can no longer be.)
+        if (!roll) { failed.push({ row: rowNum, rollNumber: "-", error: "Roll Number is required" }); continue; }
         const nameLower = row.name.trim().toLowerCase();
         const year = Number(row.year);
         const nameKey = `${nameLower}::${departmentName!.toLowerCase()}::${year}`;
@@ -544,6 +551,13 @@ export async function POST(request: Request) {
         // falsely collided), fixed alongside the courseId gap since both are
         // the same "roll dedupe key was too loose" family of bug.
         const rollKey = `${roll}::${departmentName}::${year}`;
+        // A roll number is unique across the whole college - held by ANY
+        // student already saved, or by an earlier row of this same file.
+        const unassignedRollHolder = rollRegistry.holder(roll);
+        if (unassignedRollHolder) {
+          failed.push({ row: rowNum, rollNumber: roll, error: rollNumberTakenMessage(roll, unassignedRollHolder.name) });
+          continue;
+        }
         if (roll && existingUnassignedRolls.has(rollKey)) {
           failed.push({ row: rowNum, rollNumber: roll, error: `An unassigned student with this Roll Number already exists for ${departmentName} Year ${row.year}` });
           continue;
@@ -574,6 +588,7 @@ export async function POST(request: Request) {
         batch.set(history.ref, history.data);
         if (roll) {
           existingUnassignedRolls.add(rollKey);
+          rollRegistry.claim(roll, row.name.trim());
         } else {
           // Registered as a candidate too, so a second, genuinely duplicate
           // row later in the SAME file (matching on a strong field) is still
@@ -713,6 +728,13 @@ export async function POST(request: Request) {
       }
 
       const roll = row.rollNumber.trim();
+      // Unique across the whole college, not just this section - held by any
+      // saved student or an earlier row of this same file.
+      const placedRollHolder = rollRegistry.holder(roll);
+      if (placedRollHolder) {
+        failed.push({ row: rowNum, rollNumber: roll, error: rollNumberTakenMessage(roll, placedRollHolder.name) });
+        continue;
+      }
       const dedupeKey = rollDedupeKey(roll, section.department, section.courseId, section.name, section.year);
       if (existingRolls.has(dedupeKey)) {
         failed.push({ row: rowNum, rollNumber: roll, error: "Roll number already exists in this section" });
@@ -755,6 +777,7 @@ export async function POST(request: Request) {
       const history = departmentHistoryEntry(db, collegeId, docRef.id, section.department, section.name, section.year, now);
       batch.set(history.ref, history.data);
       existingRolls.add(dedupeKey);
+      rollRegistry.claim(roll, row.name.trim());
       registerIdentityValues(row);
       created.push(roll);
     }

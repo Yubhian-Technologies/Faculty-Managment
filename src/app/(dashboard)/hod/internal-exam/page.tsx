@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/useToast";
+import { Pagination } from "@/components/shared/Pagination";
+import { usePagination } from "@/hooks/usePagination";
 import { formatDate } from "@/lib/utils";
 import type { ExamConfiguration, InternalExamMarksBatch } from "@/types";
 
@@ -98,6 +100,7 @@ export default function HodInternalExamPage() {
   }, [afterSection]);
 
   const visibleBatches = afterSection.filter((b) => subjectFilter === ALL || b.subjectId === subjectFilter);
+  const batchPager = usePagination(visibleBatches, 20);
 
   function handleCourseChange(v: string) {
     setCourseFilter(v);
@@ -308,7 +311,7 @@ export default function HodInternalExamPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y">
-                  {visibleBatches.map((b) => (
+                  {batchPager.pageItems.map((b) => (
                     <tr key={b.id}>
                       <td className="px-4 py-2.5 font-medium text-foreground">{b.facultyName}</td>
                       <td className="px-4 py-2.5">{b.sectionName}</td>
@@ -334,6 +337,17 @@ export default function HodInternalExamPage() {
                 </tbody>
               </table>
             </div>
+            {visibleBatches.length > 0 && (
+              <div className="border-t p-3">
+                <Pagination
+                  page={batchPager.page}
+                  pageSize={batchPager.pageSize}
+                  total={batchPager.total}
+                  onPageChange={batchPager.setPage}
+                  onPageSizeChange={batchPager.setPageSize}
+                />
+              </div>
+            )}
           </Card>
         </>
       )}

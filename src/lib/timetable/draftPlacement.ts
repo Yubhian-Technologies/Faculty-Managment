@@ -79,23 +79,25 @@ export function validatePlacement(
       .filter((k) => !ignore.has(k)),
   );
   const facultyBusy = ctx.busyFaculty.get(facultyId) ?? new Set<string>();
-  const facultyDeclaredBusy = ctx.declaredBusyFaculty.get(facultyId) ?? new Set<string>();
 
   for (let i = 0; i < blockSize; i++) {
     const p = startPeriod + i;
     const key = cellKey(day, p);
     if (pinned.has(key)) return `Period ${p} on ${day} holds a pinned slot.`;
     if (occupied.has(key) && !opts.allowSplit) return `This section already has a subject at ${day} period ${p}.`;
-    // A lending department's own busyPeriods declaration (see
-    // AssignmentRequestsPanel) never created a real TimetableSlot anywhere -
-    // "already teaching another section" would be misleading for it, so this
-    // gets its own, accurate wording instead.
-    if (facultyDeclaredBusy.has(key)) {
-      return `${facultyName} already has a period on ${day} period ${p}.`;
+    if (occupied.has(key) && opts.allowSplit) {
+      // A period may only be split between labs: every subject already in it
+      // must be PRACTICAL too (the incoming one is checked by the caller),
+      // and at most two share it.
+      const existing = draft.slots.filter((s) => s.day === day && s.periodNumber === p);
+      if (existing.length >= 2) return `Period ${p} on ${day} already has 2 subjects sharing it - a period can only be split between two labs.`;
+      if (existing.some((s) => ctx.subjectsById.get(s.subjectId)?.type !== "PRACTICAL")) {
+        return `Period ${p} on ${day} holds a non-lab subject - a period can only be split between lab subjects.`;
+      }
     }
-    if (facultyBusy.has(key)) {
-      return `${facultyName} is already teaching another section at ${day} period ${p}.`;
-    }
+    // No "already teaching another section" check: years run their own period
+    // timings, so the same faculty may hold the same period number in two
+    // sections. facultyBusy still feeds the daily/consecutive caps below.
   }
 
   // Per-faculty daily cap: the rest of this draft, plus other sections.

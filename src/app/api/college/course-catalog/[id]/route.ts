@@ -10,8 +10,8 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    // Courses themselves belong to the Principal / VP / College Admin; the
-    // Academics keeps only the curriculum regulations attached to each course.
+    // Courses are managed by the Principal / VP / College Admin and by the
+    // Dean Academics (ACADEMICS), who can change every field of a course.
     const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "ACADEMICS");
     const { id } = await params;
     const body = (await request.json()) as {
@@ -23,16 +23,6 @@ export async function PATCH(
       regulationBatches?: Record<string, string>;
       regulationDocumentUrls?: Record<string, string>;
     };
-
-    if (
-      session.role === "ACADEMICS" &&
-      (body.name != null || body.code != null || body.durationYears != null || body.isActive != null)
-    ) {
-      return NextResponse.json(
-        { error: "Only the Principal, Vice Principal or College Admin can change a course's details. Academics can edit its regulations." },
-        { status: 403 }
-      );
-    }
 
     const db = getAdminDb();
     const catalogCol = db.collection("colleges").doc(session.collegeId).collection("courseCatalog");
@@ -138,7 +128,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");
+    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "ACADEMICS");
     const { id } = await params;
 
     const db = getAdminDb();

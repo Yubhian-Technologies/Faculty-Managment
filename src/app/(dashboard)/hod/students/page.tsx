@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Shuffle, Pencil, Layers, ArrowRightLeft, CalendarCheck } from "lucide-react";
+import { Shuffle, Pencil, ArrowRightLeft, CalendarCheck } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Button } from "@/components/ui/button";
@@ -15,22 +15,24 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger,
 } from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
-import { useMyDepartments } from "@/hooks/useMyDepartments";
 import { yearOptionsForDepartment, yearOptionsForCourse } from "@/components/students/RosterFieldInputs";
-import { structureFromDepartments, noOwnSectionsChildren, expandDepartmentNameForRollup, type DepartmentWithId } from "@/lib/college/academicStructure";
+import { StudentStrengthDashboard } from "@/components/students/StudentStrengthDashboard";
+import { StudentsViewTabs } from "@/components/students/StudentsViewTabs";
+import { noOwnSectionsChildren, expandDepartmentNameForRollup, type DepartmentWithId } from "@/lib/college/academicStructure";
 import { yearOrdinalLabel } from "@/lib/college/academicYears";
 import { disambiguateSectionLabels, sectionFeedsTarget } from "@/lib/sections/sectionLabel";
+import { sectionsAcceptingAll } from "@/lib/students/sectionMove";
 import type { StudentListItem, Section, Department, Course, AcademicYear } from "@/types";
 
 type StudentRow = Record<string, unknown> & StudentListItem;
 type SectionRow = Section & { id: string; accessLevel?: "primary" | "secondary" };
 
-interface CohortBranchResult {
-  branch: string;
-  managedBy?: string;
-  distributed: number;
-  perSection: { section: string; count: number }[];
-  skippedReason?: string;
+type BulkMode = "move" | "unassign";
+// Response of POST /api/college/students/bulk-move (a dry run returns the plan
+// without writing anything).
+interface BulkPlan {
+  moves: { id: string; name: string; rollNumber: string; from: string; to: string }[];
+  skipped: { id: string; name: string; reason: string }[];
 }
 
 const STATUS_VARIANTS: Record<string, "default" | "secondary" | "outline" | "destructive"> = {
@@ -39,9 +41,16 @@ const STATUS_VARIANTS: Record<string, "default" | "secondary" | "outline" | "des
   GRADUATED: "secondary",
 };
 
+// Roster (the original page) vs the live Strength report - see
+// components/students/StudentStrengthDashboard.tsx.
+const HOD_VIEWS = [
+  { key: "roster", label: "Students Allocation" },
+  { key: "strength", label: "Students Strength" },
+] as const;
+
 export default function HodStudentsPage() {
   const router = useRouter();
-  const myDepartments = useMyDepartments();
+  const [view, setView] = useState<(typeof HOD_VIEWS)[number]["key"]>("roster");
   const [students, setStudents] = useState<StudentRow[]>([]);
   const [sections, setSections] = useState<SectionRow[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -64,10 +73,6 @@ export default function HodStudentsPage() {
   // this HOD's students to manage until they're actually distributed/
   // promoted into one of their own real sections.
   const [freshmanView, setFreshmanView] = useState("none");
-
-  const [cohortOpen, setCohortOpen] = useState(false);
-  const [cohortResult, setCohortResult] = useState<CohortBranchResult[] | null>(null);
-  const [isDistributingCohort, setIsDistributingCohort] = useState(false);
 
   const [distributeOpen, setDistributeOpen] = useState(false);
   const [distDept, setDistDept] = useState("");
@@ -101,6 +106,16 @@ export default function HodStudentsPage() {
   const [assignSectionId, setAssignSectionId] = useState("");
   const [isAssigning, setIsAssigning] = useState(false);
   const [isUnassigning, setIsUnassigning] = useState(false);
+
+  // Manual multi-select Move / Assign / Unassign. Selection is tracked by id
+  // but only ever ACTED ON through the rows currently in view (selectedStudents
+  // below), so a row hidden by a filter can never be moved by accident.
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkMode, setBulkMode] = useState<BulkMode | null>(null);
+  const [bulkSectionId, setBulkSectionId] = useState("");
+  const [bulkPlan, setBulkPlan] = useState<BulkPlan | null>(null);
+  const [isPreviewing, setIsPreviewing] = useState(false);
+  const [isBulkApplying, setIsBulkApplying] = useState(false);
 
   async function load() {
     setIsLoading(true);
@@ -451,6 +466,111 @@ export default function HodStudentsPage() {
     [assignTargetSections, departments]
   );
 
+  // ── Manual multi-select ────────────────────────────────────────────────
+  // What's ticked AND visible right now - the only students any bulk action
+  // touches.
+  const selectedStudents = useMemo(
+    () => filtered.filter((s) => selectedIds.has(s.id)),
+    [filtered, selectedIds]
+  );
+  const selectedYears = useMemo(() => Array.from(new Set(selectedStudents.map((s) => s.year))), [selectedStudents]);
+  const unassignedInView = useMemo(() => filtered.filter((s) => !s.section), [filtered]);
+  const selectedPlacedCount = selectedStudents.filter((s) => s.section).length;
+  // "12 unassigned · 3 in A" - a quick read of where the picked students are now.
+  const selectedFromSummary = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const s of selectedStudents) counts.set(s.section || "Unassigned", (counts.get(s.section || "Unassigned") ?? 0) + 1);
+    return Array.from(counts.entries()).map(([label, n]) => (label === "Unassigned" ? `${n} unassigned` : `${n} in ${label}`)).join(" · ");
+  }, [selectedStudents]);
+  // Sections that can take EVERY selected student: one year, and each section
+  // must feed each student's own branch. The server re-checks all of this per
+  // student; narrowing here just keeps impossible choices off the list.
+  const bulkTargetSections = useMemo(() => {
+    return sectionsAcceptingAll(managedSections, selectedStudents).sort((a, b) => a.name.localeCompare(b.name));
+  }, [managedSections, selectedStudents]);
+  const bulkSectionLabels = useMemo(
+    () => disambiguateSectionLabels(bulkTargetSections, departments),
+    [bulkTargetSections, departments]
+  );
+
+  function toggleSelected(id: string, checked: boolean) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id); else next.delete(id);
+      return next;
+    });
+  }
+  function setAllSelected(rows: StudentRow[], checked: boolean) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      for (const r of rows) { if (checked) next.add(r.id); else next.delete(r.id); }
+      return next;
+    });
+  }
+
+  async function requestBulk(body: Record<string, unknown>): Promise<BulkPlan & { moved: number }> {
+    const res = await fetch("/api/college/students/bulk-move", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ studentIds: selectedStudents.map((s) => s.id), ...body }),
+    });
+    const json = await res.json() as { error?: string; moves?: BulkPlan["moves"]; skipped?: BulkPlan["skipped"]; moved?: number };
+    if (!res.ok) throw new Error(json.error ?? "Request failed");
+    return { moves: json.moves ?? [], skipped: json.skipped ?? [], moved: json.moved ?? 0 };
+  }
+
+  // Every change is previewed first (a dry run - nothing is written) so the
+  // HOD sees exactly who moves and who is skipped, and why, before confirming.
+  async function previewBulk(mode: BulkMode, sectionId: string) {
+    if (mode === "move" && !sectionId) { setBulkPlan(null); return; }
+    setIsPreviewing(true);
+    setBulkPlan(null);
+    try {
+      const plan = await requestBulk(mode === "unassign" ? { unassign: true, dryRun: true } : { targetSectionId: sectionId, dryRun: true });
+      setBulkPlan(plan);
+    } catch (err) {
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to preview" });
+    } finally {
+      setIsPreviewing(false);
+    }
+  }
+
+  function openBulk(mode: BulkMode) {
+    setBulkMode(mode);
+    setBulkSectionId("");
+    setBulkPlan(null);
+    if (mode === "unassign") void previewBulk("unassign", "");
+  }
+
+  function closeBulk() {
+    setBulkMode(null);
+    setBulkSectionId("");
+    setBulkPlan(null);
+  }
+
+  async function applyBulk() {
+    if (!bulkMode || !bulkPlan || bulkPlan.moves.length === 0) return;
+    setIsBulkApplying(true);
+    try {
+      const result = await requestBulk(bulkMode === "unassign" ? { unassign: true } : { targetSectionId: bulkSectionId });
+      const sectionName = bulkTargetSections.find((s) => s.id === bulkSectionId)?.name;
+      toast({
+        variant: "success",
+        title: bulkMode === "unassign"
+          ? `Unassigned ${result.moved} student${result.moved === 1 ? "" : "s"}`
+          : `Moved ${result.moved} student${result.moved === 1 ? "" : "s"} to Section ${sectionName ?? ""}`.trim(),
+        description: result.skipped.length > 0 ? `${result.skipped.length} skipped - left as they were.` : undefined,
+      });
+      setSelectedIds(new Set());
+      closeBulk();
+      void load();
+    } catch (err) {
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to move students" });
+    } finally {
+      setIsBulkApplying(false);
+    }
+  }
+
   // Existing lab-batch labels already in use in this student's own section -
   // offered as datalist suggestions so a second student gets typed in as
   // exactly "Batch 1" again rather than a near-miss ("batch1", "Batch  1")
@@ -465,60 +585,6 @@ export default function HodStudentsPage() {
       .filter((v): v is string => !!v);
     return Array.from(new Set(labels)).sort();
   }, [editTarget, students]);
-
-  // The cohort action belongs to the main HOD of a shared first-year department
-  // only - a core branch HOD sections their own students with the per-department
-  // dialog. Derived with the same helper the API uses, so both agree.
-  const structure = useMemo(
-    () => structureFromDepartments(departments as DepartmentWithId[]),
-    [departments]
-  );
-  const cohortYear = structure.commonYears[0];
-  const isCommonYearHod =
-    structure.isCommonFirstYear &&
-    !!structure.commonDepartment &&
-    myDepartments.includes(structure.commonDepartment.name);
-  const cohortUnassignedCount = useMemo(
-    () => (cohortYear ? students.filter((s) => s.year === cohortYear && !s.section).length : 0),
-    [students, cohortYear]
-  );
-
-  async function handleDistributeCohort() {
-    if (!cohortYear) return;
-    setIsDistributingCohort(true);
-    try {
-      const res = await fetch("/api/college/students/distribute-cohort", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ year: cohortYear }),
-      });
-      const json = await res.json() as {
-        error?: string; distributed?: number; perBranch?: CohortBranchResult[];
-        invalidStudents?: { id: string; name?: string; branch?: string }[];
-      };
-      if (!res.ok) {
-        // A failed run can still carry per-branch detail (e.g. every branch is
-        // missing sections) - surface it rather than just the message.
-        setCohortResult(json.perBranch ?? null);
-        if (res.status === 409) throw new Error(json.error ?? "Another distribution is already running for this year - try again shortly");
-        if (json.invalidStudents?.length) {
-          throw new Error(
-            `${json.invalidStudents.length} student(s) have a missing/blank name - fix them before distributing: ${
-              json.invalidStudents.map((s) => s.name || s.id).join(", ")
-            }`
-          );
-        }
-        throw new Error(json.error ?? "Failed to distribute");
-      }
-      setCohortResult(json.perBranch ?? []);
-      toast({ variant: "success", title: `Distributed ${json.distributed} students` });
-      void load();
-    } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to distribute" });
-    } finally {
-      setIsDistributingCohort(false);
-    }
-  }
 
   // Mirrors the Office Students page's own onCourseFilterChange/
   // onDeptFilterChange: dropping a previously-picked Year that no longer
@@ -669,7 +735,32 @@ export default function HodStudentsPage() {
     }
   }
 
+  const allInViewSelected = filtered.length > 0 && filtered.every((s) => selectedIds.has(s.id));
+  const someInViewSelected = filtered.some((s) => selectedIds.has(s.id)) && !allInViewSelected;
+
   const columns: Column<StudentRow>[] = [
+    {
+      key: "select",
+      excludeFromCsv: true,
+      className: "w-10",
+      header: (
+        <Checkbox
+          checked={allInViewSelected ? true : someInViewSelected ? "indeterminate" : false}
+          onCheckedChange={(checked) => setAllSelected(filtered, checked === true)}
+          aria-label="Select all students in view"
+        />
+      ),
+      // The row itself navigates on click - keep the tick from doing that too.
+      render: (r) => (
+        <div onClick={(e) => e.stopPropagation()}>
+          <Checkbox
+            checked={selectedIds.has(r.id)}
+            onCheckedChange={(checked) => toggleSelected(r.id, checked === true)}
+            aria-label={`Select ${r.name}`}
+          />
+        </div>
+      ),
+    },
     { key: "rollNumber", header: "Roll No", render: (r) => <span className="font-medium">{r.rollNumber || "—"}</span> },
     { key: "name", header: "Name" },
     { key: "department", header: "Department", hideOnMobile: true, render: (r) => <span className="text-sm text-muted-foreground">{r.department}</span> },
@@ -749,153 +840,91 @@ export default function HodStudentsPage() {
     },
   ];
 
+  // Same header - title, description and tab strip - for both views, so
+  // switching tabs moves and resizes nothing; only the active pill changes.
+  const studentsHeader = (
+    <PageHeader
+      title="Students"
+      description="Your department's students, plus every branch grouped under it."
+      actions={<StudentsViewTabs tabs={HOD_VIEWS} value={view} onChange={setView} />}
+    />
+  );
+
+  if (view === "strength") {
+    return (
+      <div className="space-y-6">
+        {studentsHeader}
+        <StudentStrengthDashboard />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Students"
-        description="Your department's students, plus every branch grouped under it. Distribute rebalances the whole roster evenly across sections in surname order."
-        actions={!isFreshmanView && (
-          <>
-          {isCommonYearHod && (
-            <Dialog open={cohortOpen} onOpenChange={(open) => { setCohortOpen(open); if (!open) setCohortResult(null); }}>
-              <DialogTrigger asChild>
-                <Button variant="outline">
-                  <Layers className="h-4 w-4 mr-2" />
-                  Distribute All {cohortYear ? yearOrdinalLabel(cohortYear) : ""} Students
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>
-                    Distribute the whole {cohortYear ? yearOrdinalLabel(cohortYear) : ""} intake
-                  </DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4">
-                  <p className="text-xs text-muted-foreground">
-                    Every student lands in a section of <strong>their own branch</strong> - an IT student always
-                    lands in an IT section, never in a sub-department. Within each branch, the whole roster
-                    (unassigned students plus everyone already sectioned in that branch) is sorted by surname
-                    (first word of their name) and split evenly across that branch&apos;s sections - this can move
-                    an already-placed student to a different section so the branch stays in surname order as more
-                    students are imported later. Branches with no sections yet are reported and left untouched.
-                  </p>
-                  <p className="text-sm">
-                    <strong>{cohortUnassignedCount}</strong> unassigned student
-                    {cohortUnassignedCount === 1 ? "" : "s"} across{" "}
-                    {structure.subDepartments.length} sub-department
-                    {structure.subDepartments.length === 1 ? "" : "s"}.
-                  </p>
+      {studentsHeader}
 
-                  {cohortResult && (
-                    <div className="space-y-2 rounded-md border p-3 max-h-64 overflow-y-auto">
-                      {cohortResult.map((b) => (
-                        <div key={b.branch} className="text-sm">
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="font-medium">{b.branch}</span>
-                            {b.skippedReason ? (
-                              <Badge variant="outline" className="text-amber-600 border-amber-300">Skipped</Badge>
-                            ) : (
-                              <span className="text-muted-foreground">{b.distributed} moved</span>
-                            )}
-                          </div>
-                          <p className="text-xs text-muted-foreground">
-                            {b.skippedReason
-                              ?? b.perSection.map((p) => `${p.section}: ${p.count}`).join(", ")}
-                            {b.managedBy && !b.skippedReason ? ` · managed by ${b.managedBy}` : ""}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                <DialogFooter>
-                  <Button type="button" variant="outline" onClick={() => setCohortOpen(false)}>Close</Button>
-                  <Button
-                    onClick={() => void handleDistributeCohort()}
-                    loading={isDistributingCohort}
-                    disabled={cohortUnassignedCount === 0}
+      {/* Distribute lives in the body, not the header, so the header above is
+          identical to the Strength view's. */}
+        {!isFreshmanView && (
+        <div className="flex justify-end">
+        <Dialog
+          open={distributeOpen}
+          onOpenChange={(open) => {
+            setDistributeOpen(open);
+            if (!open) { setDistBranch(""); setDistCourseId(""); setDistSectionIds([]); }
+          }}
+        >
+          <DialogTrigger asChild>
+            <Button><Shuffle className="h-4 w-4 mr-2" />Distribute Unassigned</Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Distribute Unassigned Students</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <p className="text-xs text-muted-foreground">
+                Every student in the sections you pick - unassigned plus already-sectioned - is sorted by
+                surname (first word of their name) and split evenly across those sections, earliest surnames
+                first. Re-running this can move a student who was already in one of the picked sections to
+                another, so the whole group stays in surname order as new students are imported later.
+                Sections you don&apos;t pick, and roll numbers, are left untouched.
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label>Department</Label>
+                  <Select
+                    value={distDept}
+                    onValueChange={(v) => { setDistDept(v); setDistBranch(""); setDistYear(""); setDistCourseId(""); setDistSectionIds([]); }}
                   >
-                    Distribute All
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
-          )}
-          <Dialog
-            open={distributeOpen}
-            onOpenChange={(open) => {
-              setDistributeOpen(open);
-              if (!open) { setDistBranch(""); setDistCourseId(""); setDistSectionIds([]); }
-            }}
-          >
-            <DialogTrigger asChild>
-              <Button><Shuffle className="h-4 w-4 mr-2" />Distribute Unassigned</Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Distribute Unassigned Students</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4">
-                <p className="text-xs text-muted-foreground">
-                  Every student in the sections you pick - unassigned plus already-sectioned - is sorted by
-                  surname (first word of their name) and split evenly across those sections, earliest surnames
-                  first. Re-running this can move a student who was already in one of the picked sections to
-                  another, so the whole group stays in surname order as new students are imported later.
-                  Sections you don&apos;t pick, and roll numbers, are left untouched.
-                </p>
-                <div className="grid grid-cols-2 gap-3">
+                    <SelectTrigger><SelectValue placeholder="Select branch" /></SelectTrigger>
+                    <SelectContent>
+                      {distDepartments.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                {/* Only a shared-first-year grouping department (e.g.
+                    "BS-Mathematics") has branches here - its sections are
+                    filed under the real branch (cse, IT, ...), never under
+                    itself, so the branch has to be picked before sections
+                    can be found at all. A plain department skips straight
+                    to Year, unchanged from before. */}
+                {distBranches.length > 0 ? (
                   <div className="space-y-2">
-                    <Label>Department</Label>
+                    <Label>Core Department</Label>
                     <Select
-                      value={distDept}
-                      onValueChange={(v) => { setDistDept(v); setDistBranch(""); setDistYear(""); setDistCourseId(""); setDistSectionIds([]); }}
+                      value={distBranch}
+                      onValueChange={(v) => { setDistBranch(v); setDistYear(""); setDistCourseId(""); setDistSectionIds([]); }}
                     >
                       <SelectTrigger><SelectValue placeholder="Select branch" /></SelectTrigger>
                       <SelectContent>
-                        {distDepartments.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                        {distBranches.map((b) => <SelectItem key={b} value={b}>{b}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>
-                  {/* Only a shared-first-year grouping department (e.g.
-                      "BS-Mathematics") has branches here - its sections are
-                      filed under the real branch (cse, IT, ...), never under
-                      itself, so the branch has to be picked before sections
-                      can be found at all. A plain department skips straight
-                      to Year, unchanged from before. */}
-                  {distBranches.length > 0 ? (
-                    <div className="space-y-2">
-                      <Label>Core Department</Label>
-                      <Select
-                        value={distBranch}
-                        onValueChange={(v) => { setDistBranch(v); setDistYear(""); setDistCourseId(""); setDistSectionIds([]); }}
-                      >
-                        <SelectTrigger><SelectValue placeholder="Select branch" /></SelectTrigger>
-                        <SelectContent>
-                          {distBranches.map((b) => <SelectItem key={b} value={b}>{b}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      <Label>Year</Label>
-                      <Select value={distYear} onValueChange={(v) => { setDistYear(v); setDistCourseId(""); setDistSectionIds([]); }} disabled={!distDept}>
-                        <SelectTrigger><SelectValue placeholder="Select year" /></SelectTrigger>
-                        <SelectContent>
-                          {distYears.map((y) => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  )}
-                </div>
-
-                {distBranches.length > 0 && (
+                ) : (
                   <div className="space-y-2">
                     <Label>Year</Label>
-                    <Select
-                      value={distYear}
-                      onValueChange={(v) => { setDistYear(v); setDistCourseId(""); setDistSectionIds([]); }}
-                      disabled={!distBranch}
-                    >
+                    <Select value={distYear} onValueChange={(v) => { setDistYear(v); setDistCourseId(""); setDistSectionIds([]); }} disabled={!distDept}>
                       <SelectTrigger><SelectValue placeholder="Select year" /></SelectTrigger>
                       <SelectContent>
                         {distYears.map((y) => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
@@ -903,77 +932,93 @@ export default function HodStudentsPage() {
                     </Select>
                   </div>
                 )}
-
-                {/* Only shown when this (department, branch, year) cohort
-                    itself has unassigned students declared for more than one
-                    genuinely different PROGRAMME - the common case (one
-                    programme, or none declared, even if spread across more
-                    than one Course document of that same programme - see
-                    catalogIdByCourseId's own doc-comment) skips straight to
-                    Target Sections. */}
-                {distDept && (distBranches.length === 0 || distBranch) && distYear && distCohortCatalogIds.length > 1 && (
-                  <div className="space-y-2">
-                    <Label>Course</Label>
-                    <Select
-                      value={distCourseId}
-                      onValueChange={(v) => { setDistCourseId(v); setDistSectionIds([]); }}
-                    >
-                      <SelectTrigger><SelectValue placeholder="Select course" /></SelectTrigger>
-                      <SelectContent>
-                        {distCohortProgrammeOptions.map((cid) => (
-                          <SelectItem key={cid} value={cid}>{courses.find((c) => c.id === cid)?.name ?? cid}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <p className="text-xs text-muted-foreground">
-                      This department has unassigned students declared for more than one course - pick which one to distribute.
-                    </p>
-                  </div>
-                )}
-
-                {distDept && (distBranches.length === 0 || distBranch) && distYear && (distCohortCatalogIds.length <= 1 || distCourseId) && (
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <Label>Target Sections</Label>
-                      <span className="text-xs text-muted-foreground">{unassignedCount} unassigned to divide</span>
-                    </div>
-                    {distTargetSections.length > 0 ? (
-                      <div className="flex flex-wrap gap-3 border rounded-md px-3 py-2">
-                        {distTargetSections.map((s) => (
-                          <label key={s.id} className="flex items-center gap-1.5 text-sm">
-                            <Checkbox
-                              checked={distSectionIds.includes(s.id)}
-                              onCheckedChange={(checked) => toggleDistSection(s.id, !!checked)}
-                            />
-                            {distSectionLabels.get(s.id) ?? s.name}
-                          </label>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-sm text-muted-foreground border rounded-md px-3 py-2">
-                        No sections for {distTargetDept} Year {distYear}
-                        {effectiveDistCourseId ? ` (${courses.find((c) => c.id === effectiveDistCourseId)?.name ?? "this course"})` : ""}
-                        {" "}yet - create them under Sections first.
-                      </p>
-                    )}
-                  </div>
-                )}
               </div>
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setDistributeOpen(false)}>Cancel</Button>
-                <Button
-                  onClick={() => void handleDistribute()}
-                  loading={isDistributing}
-                  disabled={unassignedCount === 0 || distSectionIds.length === 0}
-                >
-                  Distribute
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-          </>
+
+              {distBranches.length > 0 && (
+                <div className="space-y-2">
+                  <Label>Year</Label>
+                  <Select
+                    value={distYear}
+                    onValueChange={(v) => { setDistYear(v); setDistCourseId(""); setDistSectionIds([]); }}
+                    disabled={!distBranch}
+                  >
+                    <SelectTrigger><SelectValue placeholder="Select year" /></SelectTrigger>
+                    <SelectContent>
+                      {distYears.map((y) => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              {/* Only shown when this (department, branch, year) cohort
+                  itself has unassigned students declared for more than one
+                  genuinely different PROGRAMME - the common case (one
+                  programme, or none declared, even if spread across more
+                  than one Course document of that same programme - see
+                  catalogIdByCourseId's own doc-comment) skips straight to
+                  Target Sections. */}
+              {distDept && (distBranches.length === 0 || distBranch) && distYear && distCohortCatalogIds.length > 1 && (
+                <div className="space-y-2">
+                  <Label>Course</Label>
+                  <Select
+                    value={distCourseId}
+                    onValueChange={(v) => { setDistCourseId(v); setDistSectionIds([]); }}
+                  >
+                    <SelectTrigger><SelectValue placeholder="Select course" /></SelectTrigger>
+                    <SelectContent>
+                      {distCohortProgrammeOptions.map((cid) => (
+                        <SelectItem key={cid} value={cid}>{courses.find((c) => c.id === cid)?.name ?? cid}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    This department has unassigned students declared for more than one course - pick which one to distribute.
+                  </p>
+                </div>
+              )}
+
+              {distDept && (distBranches.length === 0 || distBranch) && distYear && (distCohortCatalogIds.length <= 1 || distCourseId) && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label>Target Sections</Label>
+                    <span className="text-xs text-muted-foreground">{unassignedCount} unassigned to divide</span>
+                  </div>
+                  {distTargetSections.length > 0 ? (
+                    <div className="flex flex-wrap gap-3 border rounded-md px-3 py-2">
+                      {distTargetSections.map((s) => (
+                        <label key={s.id} className="flex items-center gap-1.5 text-sm">
+                          <Checkbox
+                            checked={distSectionIds.includes(s.id)}
+                            onCheckedChange={(checked) => toggleDistSection(s.id, !!checked)}
+                          />
+                          {distSectionLabels.get(s.id) ?? s.name}
+                        </label>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground border rounded-md px-3 py-2">
+                      No sections for {distTargetDept} Year {distYear}
+                      {effectiveDistCourseId ? ` (${courses.find((c) => c.id === effectiveDistCourseId)?.name ?? "this course"})` : ""}
+                      {" "}yet - create them under Sections first.
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setDistributeOpen(false)}>Cancel</Button>
+              <Button
+                onClick={() => void handleDistribute()}
+                loading={isDistributing}
+                disabled={unassignedCount === 0 || distSectionIds.length === 0}
+              >
+                Distribute
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+        </div>
         )}
-      />
 
       {/* Freshman's Department view switch - only shown once there's actually
           someone pre-registered toward this HOD to view. Picking one swaps
@@ -998,9 +1043,42 @@ export default function HodStudentsPage() {
         </div>
       )}
 
+      {!isFreshmanView && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/30 p-3" data-testid="bulk-action-bar">
+          {selectedStudents.length > 0 ? (
+            <>
+              <span className="text-sm font-medium">{selectedStudents.length} selected</span>
+              <span className="text-xs text-muted-foreground">{selectedFromSummary}</span>
+              <div className="ml-auto flex flex-wrap items-center gap-2">
+                <Button size="sm" onClick={() => openBulk("move")}>
+                  <ArrowRightLeft className="h-3.5 w-3.5 mr-1.5" />Move / Assign to section
+                </Button>
+                {selectedPlacedCount > 0 && (
+                  <Button size="sm" variant="outline" className="text-destructive hover:text-destructive" onClick={() => openBulk("unassign")}>
+                    Unassign
+                  </Button>
+                )}
+                <Button size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())}>Clear</Button>
+              </div>
+            </>
+          ) : (
+            <>
+              <span className="text-xs text-muted-foreground">
+                Tick students below to move or assign several to a section at once.
+              </span>
+              {unassignedInView.length > 0 && (
+                <Button size="sm" variant="outline" className="ml-auto" onClick={() => setAllSelected(unassignedInView, true)}>
+                  Select all {unassignedInView.length} unassigned
+                </Button>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
       <DataTable
         data={isFreshmanView ? incomingFiltered : filtered}
-        columns={isFreshmanView ? columns.filter((c) => c.key !== "actions") : columns}
+        columns={isFreshmanView ? columns.filter((c) => c.key !== "actions" && c.key !== "select") : columns}
         onRowClick={(r) => router.push(`/hod/students/${r.id}`)}
         isLoading={isLoading}
         keyExtractor={(r) => r.id}
@@ -1058,7 +1136,7 @@ export default function HodStudentsPage() {
                 placeholder="e.g. 21A91A0501"
                 autoComplete="off"
               />
-              <p className="text-xs text-muted-foreground">Leave blank to keep the student roll-less for now.</p>
+              <p className="text-xs text-muted-foreground">The student&apos;s unique roll number - it can be corrected, but must not be used by any other student.</p>
             </div>
             <div className="space-y-2">
               <Label>Status</Label>
@@ -1092,6 +1170,95 @@ export default function HodStudentsPage() {
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setEditTarget(null)}>Cancel</Button>
             <Button onClick={() => void handleSaveEdit()} loading={isSavingEdit}>Save</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={bulkMode !== null} onOpenChange={(open) => { if (!open && !isBulkApplying) closeBulk(); }}>
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>
+              {bulkMode === "unassign"
+                ? `Unassign ${selectedStudents.length} student${selectedStudents.length === 1 ? "" : "s"}`
+                : `Move / Assign ${selectedStudents.length} student${selectedStudents.length === 1 ? "" : "s"}`}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-xs text-muted-foreground">Currently: {selectedFromSummary || "—"}</p>
+
+            {bulkMode === "move" && (
+              <div className="space-y-2">
+                <Label>Move to section</Label>
+                <Select
+                  value={bulkSectionId}
+                  onValueChange={(v) => { setBulkSectionId(v); void previewBulk("move", v); }}
+                  disabled={bulkTargetSections.length === 0}
+                >
+                  <SelectTrigger><SelectValue placeholder="Select section" /></SelectTrigger>
+                  <SelectContent>
+                    {bulkTargetSections.map((s) => (
+                      <SelectItem key={s.id} value={s.id}>
+                        {(bulkSectionLabels.get(s.id) ?? s.name)} · {s.studentCount ?? 0} student{(s.studentCount ?? 0) === 1 ? "" : "s"}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {selectedYears.length > 1 ? (
+                  <p className="text-xs text-amber-600">
+                    The selected students are from different years. Filter by Year so every selected student is in the same year, then try again.
+                  </p>
+                ) : bulkTargetSections.length === 0 ? (
+                  <p className="text-xs text-amber-600">
+                    No section can take all of the selected students - they may belong to different branches, or no section exists yet for them. Select students of one branch, or create the section first.
+                  </p>
+                ) : null}
+              </div>
+            )}
+
+            {isPreviewing && <p className="text-sm text-muted-foreground">Checking…</p>}
+
+            {bulkPlan && (
+              <div className="space-y-3" data-testid="bulk-preview">
+                <p className="text-sm">
+                  <strong>{bulkPlan.moves.length}</strong> will be {bulkMode === "unassign" ? "unassigned" : "moved"}
+                  {bulkPlan.skipped.length > 0 && <> · <strong className="text-amber-600">{bulkPlan.skipped.length}</strong> skipped</>}
+                </p>
+                {bulkPlan.moves.length > 0 && (
+                  <div className="max-h-44 overflow-y-auto rounded-md border divide-y text-sm">
+                    {bulkPlan.moves.map((m) => (
+                      <div key={m.id} className="flex items-center justify-between gap-2 px-3 py-1.5">
+                        <span className="truncate"><span className="font-mono text-xs text-muted-foreground mr-2">{m.rollNumber || "—"}</span>{m.name}</span>
+                        <span className="shrink-0 text-xs text-muted-foreground">{m.from || "Unassigned"} → {m.to || "Unassigned"}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {bulkPlan.skipped.length > 0 && (
+                  <div className="max-h-32 overflow-y-auto rounded-md border border-amber-200 bg-amber-50/50 divide-y divide-amber-100 text-sm">
+                    {bulkPlan.skipped.map((s) => (
+                      <div key={s.id} className="px-3 py-1.5">
+                        <span className="font-medium">{s.name}</span>
+                        <span className="text-xs text-muted-foreground"> — {s.reason}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {bulkPlan.skipped.length > 0 && bulkPlan.moves.length > 0 && (
+                  <p className="text-xs text-muted-foreground">Skipped students are left exactly as they are.</p>
+                )}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={closeBulk} disabled={isBulkApplying}>Cancel</Button>
+            <Button
+              onClick={() => void applyBulk()}
+              loading={isBulkApplying}
+              disabled={isPreviewing || !bulkPlan || bulkPlan.moves.length === 0}
+              variant={bulkMode === "unassign" ? "destructive" : "default"}
+            >
+              {bulkMode === "unassign" ? "Unassign" : "Move"}{bulkPlan && bulkPlan.moves.length > 0 ? ` ${bulkPlan.moves.length}` : ""}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
