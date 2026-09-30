@@ -5,9 +5,9 @@ import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ChevronLeft, ChevronRight, Check, Trash2 } from "lucide-react";
-import { PageHeader } from "@/components/shared/PageHeader";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Trash2, User, UserPlus, CheckCircle2 } from "lucide-react";
+import { WizardPage, WizardHero, WizardStepper, WizardStepHeader, WizardFooter, type ChromeStep } from "@/components/shared/WizardChrome";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -41,9 +41,8 @@ type FormData = z.infer<typeof schema>;
 
 type WizardStepKey = "core" | "personal" | "qualifications" | "responsibilities" | "training" | "achievements" | "others" | "review";
 
-interface WizardStep {
+interface WizardStep extends ChromeStep {
   key: WizardStepKey;
-  label: string;
 }
 
 // Steps beyond "core" reuse SupportingStaffModuleEditor, the same per-module
@@ -95,9 +94,9 @@ export default function NewNonTechnicalStaffPage() {
   }, [isLibrary, setValue]);
 
   const steps: WizardStep[] = useMemo(() => [
-    { key: "core", label: "Identity & Employment" },
-    ...getSupportingStaffProfileModules().map((m) => ({ key: m.key as WizardStepKey, label: m.label })),
-    { key: "review", label: "Review & Submit" },
+    { key: "core", label: "Identity & Employment", icon: User, description: "Official ID, login credentials, designation and employment details" },
+    ...getSupportingStaffProfileModules().map((m) => ({ key: m.key as WizardStepKey, label: m.label, icon: m.icon })),
+    { key: "review", label: "Review & Submit", icon: CheckCircle2, description: "Verify all inputs before committing to the institutional register" },
   ], []);
 
   const step = steps[stepIndex];
@@ -183,33 +182,19 @@ export default function NewNonTechnicalStaffPage() {
   };
 
   return (
-    <div className="max-w-2xl">
-      <PageHeader
+    <WizardPage>
+      <WizardHero
+        icon={UserPlus}
         title={isLibrary ? "Add Library Staff" : "Add Non-Technical Staff"}
         description={isLibrary ? "Add a staff member to your Library unit" : "Add a Non-Technical staff member for your college"}
+        badge={`Step ${stepIndex + 1} of ${steps.length}`}
       />
-
-      <div className="flex flex-wrap gap-2 mb-4">
-        {steps.map((s, i) => (
-          <button
-            type="button"
-            key={s.key}
-            onClick={() => setStepIndex(i)}
-            className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-              erroredSteps.has(s.key) ? "ring-1 ring-destructive text-destructive bg-destructive/5" :
-              i === stepIndex ? "bg-primary text-primary-foreground" : i < stepIndex ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground hover:bg-muted/70"
-            }`}
-          >
-            {i < stepIndex && !erroredSteps.has(s.key) && <Check className="h-3 w-3" />}
-            {s.label}
-          </button>
-        ))}
-      </div>
+      <WizardStepper steps={steps} currentKey={step.key} onSelect={setStepIndex} errored={erroredSteps} completedBefore={stepIndex} />
 
       <form onSubmit={handleSubmit(onSubmit, onInvalid)}>
-        <Card>
-          <CardHeader><CardTitle className="text-base">{step.label}</CardTitle></CardHeader>
-          <CardContent className="space-y-5">
+        <Card className="shadow-xs border-border/80 overflow-hidden">
+          <WizardStepHeader step={step} />
+          <CardContent className="p-5 sm:p-6 space-y-5">
             {step.key === "core" && (
               <>
                 <div className="flex flex-col gap-5 pb-5 border-b sm:flex-row sm:items-start">
@@ -401,17 +386,16 @@ export default function NewNonTechnicalStaffPage() {
           </CardContent>
         </Card>
 
-        <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-between pt-6">
-          <Button type="button" variant="outline" onClick={() => (stepIndex === 0 ? router.back() : goBack())}>
-            <ChevronLeft className="h-4 w-4 mr-2" />{stepIndex === 0 ? "Cancel" : "Back"}
-          </Button>
-          {step.key === "review" ? (
-            <Button type="submit" loading={submitting}>Add Staff Member</Button>
-          ) : (
-            <Button type="button" onClick={() => void goNext()}>Next<ChevronRight className="h-4 w-4 ml-2" /></Button>
-          )}
-        </div>
+        <WizardFooter
+          stepIndex={stepIndex}
+          total={steps.length}
+          isLast={step.key === "review"}
+          submitting={submitting}
+          submitLabel="Add Staff Member"
+          onBack={() => (stepIndex === 0 ? router.back() : goBack())}
+          onNext={goNext}
+        />
       </form>
-    </div>
+    </WizardPage>
   );
 }
