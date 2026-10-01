@@ -6,6 +6,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodEditDepartmentId, facultyManageableDepartmentNames } from "@/lib/departments/scope";
 import { isTimetableIncharge } from "@/lib/departments/timetableIncharge";
 import { defaultPeriodTimings } from "@/lib/timetable/buildGrid";
+import { getFreshmanDepartmentIds, structureFromDepartments } from "@/lib/college/academicStructure";
 import { inheritedTimingCourseId } from "@/lib/timetable/sharedYearTiming";
 import type { BreakConfig, Course, CourseYearTiming, Department, PeriodTiming } from "@/types";
 
@@ -18,7 +19,7 @@ function toMinutes(hhmm: string): number {
 
 export async function GET(request: Request) {
   try {
-    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "HOD", "COLLEGE_OFFICE", "ACCOUNTS", "PANEL_MEMBER", "COLLEGE_STAFF", "ACADEMICS");
+    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "HOD", "COLLEGE_OFFICE", "ACCOUNTS", "PANEL_MEMBER", "COLLEGE_STAFF", "ACADEMICS", "EXAM_CELL");
     const { searchParams } = new URL(request.url);
     const courseId = searchParams.get("courseId");
 
@@ -70,6 +71,23 @@ export async function GET(request: Request) {
             if (accessibleYears.has(Number(t.year))) ownedTimings.push(t);
           }
         }
+
+        // A lending department marking busy periods (AssignmentRequestsPanel)
+        // picks ANY year of the requesting course - the faculty's own commitment
+        // can be in a different year than the request - so the per-year
+        // assignment rule above left every other year unconfigured. Having an
+        // ALLOCATED request for this course targeted at the HOD's own
+        // department unlocks the course's remaining rows (read-only; PATCH
+        // still enforces edit scope). Filtered in memory to avoid a composite index.
+        const alreadyOwned = new Set(ownedTimings.map((t) => t.id));
+        const lendNames = new Set(rosterDeptNames);
+        const lentSnap = await db.collection("colleges").doc(session.collegeId)
+          .collection("facultyAssignmentRequests")
+          .where("courseId", "==", courseId).where("status", "==", "ALLOCATED").get();
+        const isLender = lentSnap.docs.some((d) => lendNames.has((d.data() as { targetDepartmentName?: string }).targetDepartmentName ?? ""));
+        if (isLender) {
+          for (const t of deniedTimings) if (!alreadyOwned.has(t.id)) ownedTimings.push(t);
+        }
       }
 
       timings = ownedTimings;
@@ -105,6 +123,33 @@ export async function GET(request: Request) {
           // so a later edit still writes to the row it came from rather than
           // silently forking a copy.
           if (inherited) timings.push({ ...inherited, inheritedFromCourseId: inheritedId } as typeof inherited);
+          haveYears.add(year);
+        }
+
+        // Common first year: the Principal configures it ONCE on the shared
+        // (freshman) department and it governs every course's year 1 - a branch
+        // that isn't a managed branch of any sub-department (so
+        // inheritedTimingCourseId above finds nothing) has no row of its own
+        // for it. Fall back to the shared department's row for any year it
+        // claims, preferring the same catalog programme. Read-only view of the
+        // shared row; edits still write to the row it came from.
+        const structure = structureFromDepartments(departments);
+        if (structure.isCommonFirstYear) {
+          const commonIds = getFreshmanDepartmentIds(departments);
+          const sharedDeptIds = new Set(
+            departments.filter((d) => commonIds.has(d.id) || (d.parentDepartmentId && commonIds.has(d.parentDepartmentId))).map((d) => d.id)
+          );
+          const courseById = new Map(courses.map((c) => [c.id, c]));
+          for (const year of structure.commonYears) {
+            if (year < 1 || year > span || haveYears.has(year)) continue;
+            const candidates = allTimings.filter((t) => Number(t.year) === year && sharedDeptIds.has(t.departmentId));
+            if (candidates.length === 0) continue;
+            const shared =
+              candidates.find((t) => ownCourse.catalogId && courseById.get(t.courseId)?.catalogId === ownCourse.catalogId) ??
+              candidates[0];
+            timings.push({ ...shared, inheritedFromCourseId: shared.courseId } as typeof shared);
+            haveYears.add(year);
+          }
         }
       }
     }

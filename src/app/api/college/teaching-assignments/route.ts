@@ -661,25 +661,9 @@ export async function POST(request: Request) {
             }, { status: 409 });
           }
 
-          // A faculty member can't teach two classes at once - block regardless
-          // of section/year/course, but only within the same semester (a
-          // different semester never happens at the same real-world time).
-          const facultyConflictSnap = await collegeRef.collection("timetableSlots")
-            .where("facultyId", "==", facultyId)
-            .where("day", "==", slot.day)
-            .where("periodNumber", "==", slot.periodNumber)
-            .get();
-          const facultyConflict = facultyConflictSnap.docs.find((d) => {
-            const data = d.data() as { semester?: number | null; academicYear?: string };
-            return matchesCurrentSemester(data.semester, timetableSemester) && matchesCurrentAcademicYear(data.academicYear, currentAcademicYear);
-          });
-          if (facultyConflict) {
-            const other = facultyConflict.data() as { subjectName?: string };
-            return NextResponse.json({
-              error: `Conflict: ${resolvedFacultyName || "this faculty"} already teaches ${other.subjectName ?? "another class"} on ${slot.day} period ${slot.periodNumber} in a different section`,
-              assignmentId: ref.id,
-            }, { status: 409 });
-          }
+          // No faculty-clash check across sections - years have their own
+          // period timings, so the same faculty may hold the same period
+          // number in two sections on purpose.
 
           const slotRef = collegeRef.collection("timetableSlots").doc();
           await slotRef.set({

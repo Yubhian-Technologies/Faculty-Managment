@@ -55,11 +55,10 @@ export interface RosterField {
 
 export const ROSTER_FIELDS: RosterField[] = [
   // Roll No leads - it's what a physical roster/attendance sheet is
-  // organised by, and (unlike Name) it's usually unique enough on its own to
-  // recognise a row by at a glance. Still optional here: a provisional
-  // number if the office already has one, not checked for uniqueness until
-  // the department assigns the real one.
-  { key: "rollNumber", label: "Roll No", kind: "text", sample: "Optional; a provisional roll number if you already have one - not checked for uniqueness until the department assigns the real one", primary: true, aliases: ["Roll Number"] },
+  // organised by. It is the student's unique identity: REQUIRED on every add
+  // and import, and unique across the whole college (like a faculty member's
+  // employee id) - see lib/students/rollNumberUniqueness.ts.
+  { key: "rollNumber", label: "Roll No", kind: "text", sample: "Required; the student's unique roll / registration number - must not be used by any other student in the college", required: true, primary: true, aliases: ["Roll Number"], placeholder: "24A91A0501" },
   { key: "name", label: "Name (as per SSC)", kind: "text", sample: "Required; full name exactly as on SSC (10th) certificate", required: true, primary: true, aliases: ["Name", "Student Name", "Full Name"], placeholder: "P. Sai Kumar" },
   { key: "studentType", label: "Student Type", kind: "select", sample: "Optional: Regular / Lateral - defaults to Regular when left blank", primary: true, options: ["Regular", "Lateral"] },
   // Course/Department/Academic Year are always primary identity fields (the
@@ -75,7 +74,7 @@ export const ROSTER_FIELDS: RosterField[] = [
   // per-student via the Add/Edit form.
   { key: "secondaryDepartment", label: "Core Department", kind: "select", sample: "Optional; same name/Code rules as Department - only for a 1st-year pre-registered to a core branch while enrolled under a shared/Basic Science department", primary: true,
     aliases: ["Secondary Department", "Secondary Dept", "Core Branch"] },
-  { key: "year", label: "Academic Year", kind: "select", sample: "Required; the academic year number (1-4)", required: true, primary: true, aliases: ["Year"] },
+  { key: "year", label: "Current year of Study", kind: "select", sample: "Required; the current year of study (1-4)", required: true, primary: true, aliases: ["Year", "Academic Year"] },
 
   { key: "admissionNo", label: "Admission No", kind: "text", sample: "Optional; text" },
   { key: "hallTicketNo", label: "Hall Ticket No", kind: "text", sample: "Optional; text" },
@@ -157,7 +156,7 @@ export const ROSTER_SAMPLE_ROWS: Record<string, string>[] = [
     remarks: "",
   },
   {
-    rollNumber: "", name: "K. Divya Sree", studentType: "Regular", course: "Bachelor of Technology", department: "Information Technology",
+    rollNumber: "26A91A0114", name: "K. Divya Sree", studentType: "Regular", course: "Bachelor of Technology", department: "Information Technology",
     secondaryDepartment: "", year: "1",
     admissionNo: "ADM2026014", hallTicketNo: "2345678901", dateOfAdmission: "2026-06-01",
     admissionType: "Management", entranceType: "JEE", entranceRank: "", jeeRank: "18452", jeePercentage: "95.5",
@@ -176,7 +175,7 @@ export const ROSTER_SAMPLE_ROWS: Record<string, string>[] = [
     remarks: "Hostel room 214",
   },
   {
-    rollNumber: "", name: "M. Rahul Varma", studentType: "Regular", course: "Bachelor of Technology", department: "Basic Science",
+    rollNumber: "26A91A0417", name: "M. Rahul Varma", studentType: "Regular", course: "Bachelor of Technology", department: "Basic Science",
     secondaryDepartment: "Electronics and Communication Engineering", year: "1",
     admissionNo: "ADM2026028", hallTicketNo: "3456789012", dateOfAdmission: "2026-06-01",
     admissionType: "Direct", entranceType: "ECET", entranceRank: "902", jeeRank: "", jeePercentage: "",

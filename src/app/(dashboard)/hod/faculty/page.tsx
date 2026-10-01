@@ -580,6 +580,7 @@ export default function HODFacultyPage() {
       )}
 
       <DataTable
+        paginate
         data={visibleFaculty}
         columns={columns}
         isLoading={isLoading}

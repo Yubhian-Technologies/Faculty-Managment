@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { useRouter, usePathname, notFound } from "next/navigation";
 import { Sidebar } from "@/components/layout/Sidebar";
-import { BottomNav } from "@/components/layout/BottomNav";
+import { BottomNav, hasBottomNav } from "@/components/layout/BottomNav";
 import { MobileDrawer } from "@/components/layout/MobileDrawer";
 import { TopBar } from "@/components/layout/TopBar";
 import { SummerHolidayBanner } from "@/components/layout/SummerHolidayBanner";
@@ -47,7 +47,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <div className="md:ml-64 flex flex-col min-h-screen">
         <TopBar hiddenItems={hiddenItems} />
         <SummerHolidayBanner />
-        <main className="flex-1 p-4 md:p-6 pb-24 md:pb-6 max-w-7xl mx-auto w-full">
+        <main className={`flex-1 p-4 md:p-6 md:pb-6 max-w-7xl mx-auto w-full ${hasBottomNav(user.role, pathname) ? "pb-24" : "pb-6"}`}>
           {children}
         </main>
         <footer className="hidden md:flex items-center justify-between px-6 py-3 border-t bg-background text-xs text-muted-foreground">

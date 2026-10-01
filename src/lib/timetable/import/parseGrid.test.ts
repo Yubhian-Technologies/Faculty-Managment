@@ -185,14 +185,14 @@ describe("matchTimetableGrid", () => {
     expect(wednesday).toMatchObject({ status: "unmatched", startPeriod: 3 });
   });
 
-  it("reports a conflict when a cell would double-book a faculty already busy elsewhere", () => {
-    // f1 (Ramesh Rao) is already teaching another section MON period 1.
+  it("still matches a cell when the faculty teaches another section at that period number (years have their own timings)", () => {
+    // f1 (Ramesh Rao) is already teaching another section MON period 1 - allowed.
     const busyFaculty = new Map([["f1", new Set(["MON:1"])]]);
     const ctx = makeContext({ assignments: [a1, a2], subjectsById, busyFaculty });
     const result = matchTimetableGrid(grid, ctx, []);
     if ("error" in result) throw new Error(`expected placements, got error: ${result.error}`);
     const monday = result.placements.find((p) => p.day === "MON")!;
-    expect(monday.status).toBe("conflict");
+    expect(monday.status).toBe("matched");
   });
 
   it("catches a conflict between two cells within the same uploaded document", () => {

@@ -68,7 +68,7 @@ import { PROFILE_MODULES } from "@/lib/faculty/profileModules";
 import {
   EMPLOYEE_CATEGORY_LABELS,
   FACULTY_STATUS_LABELS,
-  SELECTABLE_FACULTY_STATUS_VALUES,
+  MANUALLY_SELECTABLE_FACULTY_STATUS_VALUES,
   FACULTY_STATUS_DATE_FIELD,
   FACULTY_STATUS_DATE_LABELS,
 } from "@/types";
@@ -821,7 +821,7 @@ export default function NewFacultyPage() {
                           <SelectValue placeholder="Select status" />
                         </SelectTrigger>
                         <SelectContent>
-                          {SELECTABLE_FACULTY_STATUS_VALUES.map((s) => (
+                          {MANUALLY_SELECTABLE_FACULTY_STATUS_VALUES.map((s) => (
                             <SelectItem key={s} value={s}>
                               {FACULTY_STATUS_LABELS[s]}
                             </SelectItem>

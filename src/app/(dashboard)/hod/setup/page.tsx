@@ -88,6 +88,7 @@ export default function HODSetupPage() {
       />
 
       <DataTable
+        paginate
         data={batches}
         columns={columns}
         isLoading={isLoading}

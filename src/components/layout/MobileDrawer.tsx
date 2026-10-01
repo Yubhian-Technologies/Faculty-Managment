@@ -44,12 +44,27 @@ export function MobileDrawer({ hiddenModules, hiddenItems }: MobileDrawerProps) 
   const { coordinatorBatchId } = useAssignedCoordinator();
   const { hideSubDepartmentsLink } = useIsSubDepartmentHod();
   const { pendingCount: pendingHiringCount } = usePrincipalPendingHiring();
-  const { items: contextItems, contexts } = useWorkContext();
+  const { items: contextItems } = useWorkContext();
   const { isIncharge } = useIsTimetableIncharge();
 
   useEffect(() => {
     setSidebarOpen(false);
   }, [pathname, setSidebarOpen]);
+
+  // While the drawer is open: lock background scroll and let Escape close it.
+  useEffect(() => {
+    if (!sidebarOpen) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setSidebarOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [sidebarOpen, setSidebarOpen]);
 
   if (!user || user.role === "CLASS_LEADER" || pathname?.startsWith("/class-leader")) return null;
 
@@ -96,15 +111,20 @@ export function MobileDrawer({ hiddenModules, hiddenItems }: MobileDrawerProps) 
         <div
           className="fixed inset-0 z-50 bg-black/60 md:hidden"
           onClick={() => setSidebarOpen(false)}
+          aria-hidden="true"
         />
       )}
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Navigation menu"
+        aria-hidden={!sidebarOpen}
         className={cn(
-          "fixed top-0 left-0 z-50 h-full w-72 bg-background border-r shadow-xl transition-transform duration-300 md:hidden",
+          "fixed top-0 left-0 z-50 flex h-dvh w-[85vw] max-w-72 flex-col bg-background border-r shadow-xl transition-transform duration-300 md:hidden",
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         )}
       >
-        <div className="flex items-center justify-between h-16 px-4 border-b">
+        <div className="flex items-center justify-between h-16 px-4 border-b shrink-0">
           <div className="flex items-center gap-3">
             <img src="https://res.cloudinary.com/dl88qtudz/image/upload/v1781675822/vishnulogo_r2jsjl.png" alt="Vishnu Logo" className="h-9 w-9 rounded-md object-contain shrink-0" />
             <div>
@@ -114,6 +134,7 @@ export function MobileDrawer({ hiddenModules, hiddenItems }: MobileDrawerProps) 
           </div>
           <button
             onClick={() => setSidebarOpen(false)}
+            aria-label="Close menu"
             className="h-9 w-9 flex items-center justify-center rounded-lg hover:bg-muted"
           >
             <X className="h-5 w-5" />
@@ -123,7 +144,7 @@ export function MobileDrawer({ hiddenModules, hiddenItems }: MobileDrawerProps) 
         <WorkContextSwitcher />
         <LocationDeptSwitcher />
 
-        <nav className={cn("flex-1 px-3 py-4 space-y-1 overflow-y-auto", contexts.length > 0 ? "h-[calc(100vh-13rem)]" : "h-[calc(100vh-8rem)]")}>
+        <nav className="flex-1 min-h-0 px-3 py-4 space-y-1 overflow-y-auto overscroll-contain">
           {navItems.map((item) => {
             const isActive = isNavItemActive(item, pathname, navItems);
             return (
@@ -155,7 +176,7 @@ export function MobileDrawer({ hiddenModules, hiddenItems }: MobileDrawerProps) 
           })}
         </nav>
 
-        <div className="border-t p-4 absolute bottom-0 left-0 right-0">
+        <div className="border-t px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] shrink-0">
           <div className="flex items-center gap-3 mb-3">
             <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold shrink-0 overflow-hidden">
               {user.profilePhotoUrl ? (

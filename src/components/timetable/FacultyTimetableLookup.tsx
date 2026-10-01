@@ -45,7 +45,9 @@ interface ScheduleSlot {
 // against the faculty's real slots, the same convention busyFaculty/
 // FacultyAssignmentRequest.busyPeriods already use everywhere else - not a
 // clock-time translation.
-export function FacultyTimetableLookup() {
+// `embedded`: rendered inside another page (the Timetable editor) - no page
+// header, and nothing shown until a faculty is picked.
+export function FacultyTimetableLookup({ ownOnly = false, embedded = false }: { ownOnly?: boolean; embedded?: boolean } = {}) {
   const [departments, setDepartments] = useState<Department[]>([]);
   const [isLoadingOptions, setIsLoadingOptions] = useState(true);
 
@@ -59,6 +61,7 @@ export function FacultyTimetableLookup() {
   const [isLoadingSchedule, setIsLoadingSchedule] = useState(false);
 
   useEffect(() => {
+    if (ownOnly) return;
     void (async () => {
       setIsLoadingOptions(true);
       try {
@@ -71,10 +74,11 @@ export function FacultyTimetableLookup() {
         setIsLoadingOptions(false);
       }
     })();
-  }, []);
+  }, [ownOnly]);
 
   // Faculty picker resets whenever the department changes.
   useEffect(() => {
+    if (ownOnly) return;
     void (async () => {
       setFacultyId("");
       setSchedule(null);
@@ -92,15 +96,15 @@ export function FacultyTimetableLookup() {
         setIsLoadingFaculty(false);
       }
     })();
-  }, [departmentId]);
+  }, [departmentId, ownOnly]);
 
   // The faculty's real schedule, and the periods to lay it out against.
   useEffect(() => {
     void (async () => {
-      if (!facultyId) { setSchedule(null); return; }
+      if (!ownOnly && !facultyId) { setSchedule(null); return; }
       setIsLoadingSchedule(true);
       try {
-        const res = await fetch(`/api/college/faculty-schedule?facultyId=${encodeURIComponent(facultyId)}`);
+        const res = await fetch(`/api/college/faculty-schedule?${ownOnly ? "me=1" : `facultyId=${encodeURIComponent(facultyId)}`}`);
         const json = await res.json() as { facultyName?: string; slots?: ScheduleSlot[]; periods?: PeriodTiming[]; error?: string };
         if (!res.ok) throw new Error(json.error ?? "Failed to load schedule");
         setSchedule({ facultyName: json.facultyName ?? "", slots: json.slots ?? [], periods: json.periods ?? [] });
@@ -111,7 +115,7 @@ export function FacultyTimetableLookup() {
         setIsLoadingSchedule(false);
       }
     })();
-  }, [facultyId]);
+  }, [facultyId, ownOnly]);
 
   const periodTimes = schedule?.periods ?? [];
 
@@ -121,16 +125,20 @@ export function FacultyTimetableLookup() {
     return map;
   }, [schedule]);
 
-  const readyForGrid = Boolean(facultyId && schedule && periodTimes.length > 0);
+  const readyForGrid = Boolean((ownOnly || facultyId) && schedule && periodTimes.length > 0);
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Faculty Timetable"
-        description="Look up any department's faculty and their real schedule - read-only, useful before sending or allocating an Assignment Request, or marking busy periods"
-      />
+      {!embedded && (
+        <PageHeader
+          title={ownOnly ? "My Timetable" : "Faculty Timetable"}
+          description={ownOnly
+            ? "Your real weekly schedule - every period you are booked for, across every course and section"
+            : "Look up any department's faculty and their real schedule - read-only, useful before sending or allocating an Assignment Request, or marking busy periods"}
+        />
+      )}
 
-      <Card>
+      {!ownOnly && <Card>
         <CardContent className="p-4">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1">
@@ -155,12 +163,12 @@ export function FacultyTimetableLookup() {
             </div>
           </div>
         </CardContent>
-      </Card>
+      </Card>}
 
-      {!facultyId || !schedule ? (
-        <EmptyState
+      {(!ownOnly && !facultyId) || !schedule ? (
+        embedded && !isLoadingSchedule ? null : <EmptyState
           icon={<CalendarSearch className="h-8 w-8" />}
-          title={isLoadingSchedule ? "Loading…" : "Pick a department and a faculty member"}
+          title={isLoadingSchedule ? "Loading…" : ownOnly ? "No timetable found" : "Pick a department and a faculty member"}
           description="Their real week shows here - every period they are already booked for, across every course and section."
         />
       ) : !readyForGrid ? (

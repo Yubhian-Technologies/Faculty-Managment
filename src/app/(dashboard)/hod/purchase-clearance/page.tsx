@@ -130,6 +130,7 @@ export default function HODPurchaseClearancePage() {
       />
 
       <DataTable
+        paginate
         data={rows}
         columns={columns}
         isLoading={isLoading}

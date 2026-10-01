@@ -45,9 +45,10 @@ export async function provisionStudentLogin(
 
   // Reject a second login for a roll number that already has one in this
   // college - this is what keeps /api/auth/resolve-student-login's own
-  // "more than one match" case rare instead of routine (roll numbers are only
-  // unique within one branch+year, not across the whole college - see
-  // students/[id]/route.ts's own doc-comment on this).
+  // "more than one match" case rare (roll numbers are unique across a college
+  // for everything added from now on - see rollNumberUniqueness.ts - though
+  // older data can still contain duplicates, and two different colleges may
+  // legitimately share one).
   // Single-field query on rollNumberUpper avoids requiring a Firestore composite index.
   const dupSnap = await collegeRef
     .collection("students")

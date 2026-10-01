@@ -1,5 +1,6 @@
 "use client";
 
+import { FacultyTimetableLookup } from "@/components/timetable/FacultyTimetableLookup";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -15,7 +16,8 @@ import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
-import { formatDMY, formatTime12h } from "@/lib/utils";
+import { formatDMY } from "@/lib/utils";
+import { formatTime12h } from "@/lib/timetable/facultyTimetablePdf";
 import { useMyDepartments } from "@/hooks/useMyDepartments";
 import { buildRows, defaultPeriodTimings } from "@/lib/timetable/buildGrid";
 import { ordinalYear, resolveTimetableDays } from "@/lib/timetable/gridModel";
@@ -77,7 +79,11 @@ interface TimetableGridEditorProps {
   // route, or the Timetable Incharge's own equivalent for theirs (see
   // panel/timetable-incharge/[courseId]/[year]/[sectionId]/page.tsx). Kept as
   // a prop rather than hardcoded so this one component serves both URLs.
-  backHref: string;
+  // Optional: omitted when the grid is embedded under its own filter controls
+  // (hod/timetable's Course/Year/Section pickers sit directly above it), where
+  // "Back to sections" is meaningless - the filters ARE the way back. The
+  // header, title and every export/edit action still render either way.
+  backHref?: string;
 }
 
 // Shared by both hod/timetable/[courseId]/[year]/[sectionId]/page.tsx and
@@ -316,9 +322,9 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref }: Tim
     addingAt ? rawCellEntriesFor(addingAt.day, addingAt.period).map((e) => e.slot.assignmentId) : []
   );
   // A cell that already holds something is a split-add - only a lab
-  // (PRACTICAL) subject may join it (see draft/route.ts's own allowSplit
-  // gate), whether the existing occupant is itself a lab or a theory class,
-  // so the picker never offers a theory subject there in the first place.
+  // (PRACTICAL) subject may join it, and only when the existing occupant is a
+  // lab too (validatePlacement enforces both), so the picker never offers a
+  // theory subject there and the Split button never shows on a theory cell.
   const isSplitTarget = addingAt ? rawCellEntriesFor(addingAt.day, addingAt.period).length > 0 : false;
   const pickableAssignments = assignments.filter(
     (a) => myAssignmentIds.includes(a.id) && !occupyingAtTarget.has(a.id) && (!isSplitTarget || a.subjectType === "PRACTICAL")
@@ -818,9 +824,11 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref }: Tim
         }
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            <Button variant="outline" onClick={() => router.push(backHref)}>
-              <ArrowLeft className="h-4 w-4 mr-2" />Back
-            </Button>
+            {backHref && (
+              <Button variant="outline" onClick={() => router.push(backHref)}>
+                <ArrowLeft className="h-4 w-4 mr-2" />Back
+              </Button>
+            )}
             {timing && slots.length > 0 && (
               <>
                 <Button variant="outline" onClick={handleDownloadPdf} disabled={isExportingPdf || isExportingXlsx}>
@@ -1053,14 +1061,9 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref }: Tim
         </ul>
       ) : null}
 
-      <div className="flex items-center gap-2">
-        <span className="text-xs font-medium text-muted-foreground">Show:</span>
-        {(["ALL", "THEORY", "PRACTICAL"] as const).map((t) => (
-          <Button key={t} size="sm" variant={typeFilter === t ? "default" : "outline"} onClick={() => setTypeFilter(t)}>
-            {t === "ALL" ? "All" : t === "THEORY" ? "Theory" : "Practical"}
-          </Button>
-        ))}
-      </div>
+      {/* Any department's faculty and their real week - to check who is free
+          before placing a subject. Replaces the old Theory/Practical toggle. */}
+      <FacultyTimetableLookup embedded />
 
       {/* ── Grid ──────────────────────────────────────────────────────────── */}
       {isLoading ? (
@@ -1137,7 +1140,12 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref }: Tim
                     // the existing entries, never replacing the "empty cell"
                     // Add button below, and never available in move-mode
                     // (a slot is selected) to avoid ambiguity with "Place here".
-                    const canAddAnother = mode === "draft" && isEditing && !selected;
+                    // Only a cell of lab (PRACTICAL) subjects, and not already
+                    // shared by two, can be split any further.
+                    const rawEntries = rawCellEntriesFor(d, row.period);
+                    const canAddAnother = mode === "draft" && isEditing && !selected
+                      && rawEntries.length < 2
+                      && rawEntries.every((e) => assignments.find((a) => a.id === e.slot.assignmentId)?.subjectType === "PRACTICAL");
 
                     return (
                       <td key={`period_${row.period}`} className="p-2 align-top">

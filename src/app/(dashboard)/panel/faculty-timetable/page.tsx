@@ -2,9 +2,8 @@
 
 import { FacultyTimetableLookup } from "@/components/timetable/FacultyTimetableLookup";
 
-// Thin wrapper - see hod/faculty-timetable and college-staff/faculty-timetable's
-// own copies of this same pattern; all three render FacultyTimetableLookup, the
-// actual shared logic (same convention as hod/assignment-requests etc.).
+// A panel member is a faculty member - show their own timetable directly, no
+// department/faculty filters (those stay on the HOD and college-staff copies).
 export default function PanelFacultyTimetablePage() {
-  return <FacultyTimetableLookup />;
+  return <FacultyTimetableLookup ownOnly />;
 }

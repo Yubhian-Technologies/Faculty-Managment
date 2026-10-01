@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, X, Clock, CalendarRange, Coffee, CheckCircle2, AlertCircle } from "lucide-react";
+import { Plus, X, Clock, CalendarRange, Coffee, CheckCircle2, AlertCircle, GraduationCap } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/useToast";
+import { yearOrdinalLabel } from "@/lib/college/academicYears";
 import { stripLeadingZeros, toDateInputValue } from "@/lib/utils";
 import type { BreakConfig, CourseYearTiming } from "@/types";
 
@@ -82,6 +83,13 @@ interface CourseYearTimingFormProps {
   departmentId: string;
   courseId: string;
   year: number;
+  /**
+   * Displayed in the "editing Year N of <course>" strip above the form. Purely
+   * presentational - the page header already names the year, but this form is
+   * two columns of scroll and the header is long gone by the time you're in the
+   * bottom of it, with no other mention of the year anywhere in the left column.
+   */
+  courseName?: string;
   // Called after a successful save - the caller decides where "back" means
   // (Principal's own department page vs Office's Department/Course/Year
   // picker), rather than this shared form hardcoding a redirect.
@@ -96,7 +104,7 @@ interface CourseYearTimingFormProps {
 // exists once. The HOD-only period-by-period clock-time breakdown (PATCH,
 // filled in on top of these bounds) is a separate, finer-grained privilege
 // not part of this form - see hod/timetable's own editor for that.
-export function CourseYearTimingForm({ departmentId, courseId, year, onSaved, onCancel }: CourseYearTimingFormProps) {
+export function CourseYearTimingForm({ departmentId, courseId, year, courseName, onSaved, onCancel }: CourseYearTimingFormProps) {
   const [timingForm, setTimingForm] = useState<TimingForm>(EMPTY_TIMING_FORM);
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -266,6 +274,22 @@ export function CourseYearTimingForm({ departmentId, courseId, year, onSaved, on
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
+      {/* Which year this is, kept in view for the whole form. Every field below
+          writes to this one course-year, so editing the wrong one silently
+          overwrites a year you weren't looking at - and the page header naming
+          it scrolls off the top long before the last semester date. */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-primary/30 bg-primary/5 px-4 py-3">
+        <GraduationCap className="h-4 w-4 shrink-0 text-primary" />
+        <p className="text-sm">
+          <span className="font-semibold text-foreground">Editing Year {year}</span>
+          {courseName && <span className="text-muted-foreground"> of {courseName}</span>}
+          <span className="text-muted-foreground">
+            {" "}
+            ({yearOrdinalLabel(year)}) - the hours, breaks and semester dates below apply to this year only.
+          </span>
+        </p>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* Left Column (7 cols): College Schedule & Periods */}
         <div className="lg:col-span-7 space-y-6">
