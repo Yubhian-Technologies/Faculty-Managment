@@ -27,10 +27,14 @@ export function SectionFilterBar({
 }) {
   const [sections, setSections] = useState<SectionListItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [department, setDepartment] = useState("");
-  const [course, setCourse] = useState("");
-  const [year, setYear] = useState("");
-  const [sectionId, setSectionId] = useState("");
+  // What the user explicitly picked at each level. The EFFECTIVE value below
+  // falls back to the only option when a level has exactly one, so a
+  // one-department HOD isn't asked to pick the only department they have
+  // (derived during render - no effect, no extra state).
+  const [pickedDepartment, setDepartment] = useState("");
+  const [pickedCourse, setCourse] = useState("");
+  const [pickedYear, setYear] = useState("");
+  const [pickedSectionId, setSectionId] = useState("");
 
   useEffect(() => {
     void (async () => {
@@ -48,36 +52,28 @@ export function SectionFilterBar({
   }, []);
 
   const courseKey = (s: SectionListItem) => s.courseName || s.courseId || "";
+  const only = <T,>(options: T[], picked: T | ""): T | "" => (picked !== "" ? picked : options.length === 1 ? options[0] : "");
+
   const departments = useMemo(
     () => Array.from(new Set(sections.map((s) => s.department).filter(Boolean))).sort(),
     [sections]
   );
+  const department = only(departments, pickedDepartment);
   const inDepartment = useMemo(() => sections.filter((s) => s.department === department), [sections, department]);
   const courses = useMemo(
     () => Array.from(new Set(inDepartment.map(courseKey).filter(Boolean))).sort(),
     [inDepartment]
   );
+  const course = department ? only(courses, pickedCourse) : "";
   const inCourse = useMemo(() => inDepartment.filter((s) => courseKey(s) === course), [inDepartment, course]);
   const years = useMemo(
     () => Array.from(new Set(inCourse.map((s) => Number(s.year)))).filter((y) => Number.isFinite(y)).sort((a, b) => a - b),
     [inCourse]
   );
+  const year = course ? only(years.map(String), pickedYear) : "";
   const inYear = useMemo(() => inCourse.filter((s) => String(s.year) === year), [inCourse, year]);
   const sectionOptions = useMemo(() => [...inYear].sort((a, b) => a.name.localeCompare(b.name)), [inYear]);
-
-  // Single-option levels pick themselves (cascading down), once data is in.
-  useEffect(() => {
-    if (!department && departments.length === 1) setDepartment(departments[0]);
-  }, [departments, department]);
-  useEffect(() => {
-    if (department && !course && courses.length === 1) setCourse(courses[0]);
-  }, [department, courses, course]);
-  useEffect(() => {
-    if (course && !year && years.length === 1) setYear(String(years[0]));
-  }, [course, years, year]);
-  useEffect(() => {
-    if (year && !sectionId && sectionOptions.length === 1) setSectionId(sectionOptions[0].id);
-  }, [year, sectionOptions, sectionId]);
+  const sectionId = year ? only(sectionOptions.map((s) => s.id), pickedSectionId) : "";
 
   // Report the resolved section upward (null while any level is unpicked).
   useEffect(() => {
