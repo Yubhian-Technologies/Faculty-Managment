@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { ClipboardList, GraduationCap, Search, UserCog, Users } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -44,6 +45,11 @@ interface LoadedSection {
 
 function SectionTimetable() {
   const myDepartments = useMyDepartments();
+  // Optional deep link (?courseId=&year=) - preselects the filters only; the
+  // timetable still loads on the Load button.
+  const searchParams = useSearchParams();
+  const presetCourseId = searchParams.get("courseId");
+  const presetYear = searchParams.get("year");
   const [courses, setCourses] = useState<Course[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -61,11 +67,20 @@ function SectionTimetable() {
       fetch("/api/college/departments").then((r) => r.json() as Promise<{ departments: Department[] }>),
     ])
       .then(([coursesRes, deptsRes]) => {
-        setCourses((coursesRes.courses ?? []).sort((a, b) => a.name.localeCompare(b.name)));
+        const loadedCourses = (coursesRes.courses ?? []).sort((a, b) => a.name.localeCompare(b.name));
+        setCourses(loadedCourses);
         setDepartments(deptsRes.departments ?? []);
+        if (presetCourseId) {
+          const group = buildCourseGroups(loadedCourses).find((g) => g.courseIds.includes(presetCourseId));
+          if (group) {
+            setCourseKey(group.key);
+            if (presetYear) setYear(presetYear);
+          }
+        }
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load courses" }))
       .finally(() => setIsLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Collapse the several Course docs that represent one catalog programme into
@@ -323,7 +338,7 @@ function SectionTimetable() {
               <Button variant="outline" size="sm" asChild>
                 <Link href={`/hod/timetable/${selectedCourse.id}/${year}`}>
                   <GraduationCap className="h-3.5 w-3.5 mr-1.5" />
-                  Timetable Incharge &amp; all sections
+                  Timetable Incharge
                 </Link>
               </Button>
             </div>

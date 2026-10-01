@@ -144,6 +144,7 @@ export default function CollegeAccountsCandidatesPage() {
         data={visibleCandidates}
         columns={columns}
         isLoading={isLoading}
+        paginate={false}
         groupBy={(row) => row.department || "Unassigned"}
         onRowClick={(r) => router.push(`/candidate-profile/${r.candidateId}`)}
         keyExtractor={(r) => r.id}

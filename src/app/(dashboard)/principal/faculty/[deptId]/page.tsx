@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, BookOpen, ChevronRight, Eye, Trash2, UsersRound, History } from "lucide-react";
+import { ArrowLeft, BookOpen, ChevronRight, Eye, FileDown, LogIn, Pencil, Trash2, Upload, UserPlus, UsersRound, History } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Avatar } from "@/components/shared/Avatar";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { ExportFacultyDialog } from "@/components/faculty/ExportFacultyDialog";
+import { ResumeSectionsDialog } from "@/components/faculty/ResumeSectionsDialog";
+import { downloadFacultyResume } from "@/lib/faculty/downloadFacultyResume";
+import type { ResumeSectionKey } from "@/lib/pdf/resumeSections";
 import { toast } from "@/hooks/useToast";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { isFacultyDestination } from "@/lib/departments/facultyDepartmentOptions";
@@ -56,6 +59,32 @@ export default function PrincipalDepartmentFacultyPage() {
   const [statusFilter, setStatusFilter] = useState("");
   const [removingHod, setRemovingHod] = useState(false);
   const [isRemoving, setIsRemoving] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<FacultyRow | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [downloadingResumeId, setDownloadingResumeId] = useState<string | null>(null);
+  // The row whose Download was clicked - the section picker opens against it,
+  // and generation waits until the choice is made (same flow as hod/faculty).
+  const [resumeTarget, setResumeTarget] = useState<FacultyRow | null>(null);
+  const [collegeName, setCollegeName] = useState("");
+
+  useEffect(() => {
+    fetch("/api/college/info")
+      .then((r) => r.json() as Promise<{ name?: string }>)
+      .then((d) => setCollegeName(d.name ?? ""))
+      .catch(() => {});
+  }, []);
+
+  async function handleDownloadResume(row: FacultyRow, sections: ResumeSectionKey[]) {
+    setDownloadingResumeId(row.id as string);
+    try {
+      await downloadFacultyResume(row, collegeName, sections);
+    } catch (err) {
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to generate resume" });
+    } finally {
+      setDownloadingResumeId(null);
+      setResumeTarget(null);
+    }
+  }
   // Export-only selection - when empty, ExportFacultyDialog exports everyone
   // currently shown (unchanged default behavior); picking specific rows here
   // narrows it to just those faculty members. Same pattern as hod/faculty/page.tsx.
@@ -103,6 +132,10 @@ export default function PrincipalDepartmentFacultyPage() {
         .then((r) => r.json() as Promise<{ faculty: FacultyRow[] }>)
         .then((d) => d.faculty ?? []),
     enabled: !!department,
+    // The roster changes from other pages (Add/Import/Edit/Set Login all land
+    // back here) and the app-wide 2-minute staleTime would otherwise show the
+    // pre-change list.
+    refetchOnMount: "always",
   });
 
   // An HOD is almost always ALSO a teaching Faculty member - when they have a
@@ -122,6 +155,7 @@ export default function PrincipalDepartmentFacultyPage() {
         .then((r) => r.json() as Promise<{ faculty: FacultyRow[] }>)
         .then((d) => d.faculty?.[0] ?? null),
     enabled: !!hod?.uid,
+    refetchOnMount: "always",
   });
 
   // Switching status tabs (or departments) changes which rows exist at all -
@@ -165,6 +199,36 @@ export default function PrincipalDepartmentFacultyPage() {
       toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to remove HOD" });
     } finally {
       setIsRemoving(false);
+    }
+  }
+
+  // Same delete the HOD's Faculty Register offers - DELETE /api/college/faculty/[id]
+  // refuses (409) while the person still has teaching assignments/timetable slots,
+  // and that reason is surfaced as-is rather than a blanket "failed".
+  async function handleDelete() {
+    if (!deleteTarget) return;
+    setIsDeleting(true);
+    try {
+      const res = await fetch(`/api/college/faculty/${deleteTarget.id}`, { method: "DELETE" });
+      const json = await res.json().catch(() => ({})) as { error?: string };
+      if (!res.ok) {
+        toast({ variant: "destructive", title: "Failed to delete faculty record", description: json.error });
+        return;
+      }
+      toast({ variant: "success", title: `${facultyDisplayName(deleteTarget)} removed from faculty register` });
+      const deletedId = deleteTarget.id as string;
+      setDeleteTarget(null);
+      setSelectedIds((prev) => {
+        if (!prev.has(deletedId)) return prev;
+        const next = new Set(prev);
+        next.delete(deletedId);
+        return next;
+      });
+      await queryClient.invalidateQueries({ queryKey: ["principal-dept-faculty"] });
+    } catch {
+      toast({ variant: "destructive", title: "Failed to delete faculty record", description: "Network error - please try again." });
+    } finally {
+      setIsDeleting(false);
     }
   }
 
@@ -235,6 +299,43 @@ export default function PrincipalDepartmentFacultyPage() {
         </Badge>
       ),
     },
+    {
+      key: "actions",
+      header: "",
+      render: (row) => (
+        <div className="flex items-center gap-1">
+          {!row.userUid && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+              title="Create login account"
+              onClick={(e) => { e.stopPropagation(); router.push(`/principal/faculty/${deptId}/${row.id}/credentials`); }}
+            >
+              <LogIn className="h-3.5 w-3.5" /><span className="ml-1 hidden sm:inline">Set Login</span>
+            </Button>
+          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            title="Download resume PDF"
+            loading={downloadingResumeId === (row.id as string)}
+            onClick={(e) => { e.stopPropagation(); setResumeTarget(row); }}
+          >
+            <FileDown className="h-3.5 w-3.5" /><span className="ml-1 hidden sm:inline">Download</span>
+          </Button>
+          <Button variant="ghost" size="sm" title="Edit faculty details"
+            onClick={(e) => { e.stopPropagation(); router.push(`/principal/faculty/${deptId}/${row.id}/edit`); }}>
+            <Pencil className="h-3.5 w-3.5" /><span className="ml-1 hidden sm:inline">Edit</span>
+          </Button>
+          <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive hover:bg-destructive/10"
+            title="Delete faculty record"
+            onClick={(e) => { e.stopPropagation(); setDeleteTarget(row); }}>
+            <Trash2 className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      ),
+    },
   ];
 
   return (
@@ -252,10 +353,16 @@ export default function PrincipalDepartmentFacultyPage() {
                 </Button>
               </span>
             )}
+            <Button variant="outline" onClick={() => router.push("/principal/faculty/import")}>
+              <Upload className="h-4 w-4 mr-2" />Import
+            </Button>
             <ExportFacultyDialog
               faculty={selectedIds.size > 0 ? faculty.filter((f) => selectedIds.has(f.id as string)) : faculty}
               isSelection={selectedIds.size > 0}
             />
+            <Button onClick={() => router.push("/principal/faculty/new")}>
+              <UserPlus className="h-4 w-4 mr-2" />Add Faculty
+            </Button>
             <Button variant="outline" onClick={() => router.push("/principal/faculty")}>
               <ArrowLeft className="h-4 w-4 mr-2" />Back
             </Button>
@@ -394,6 +501,27 @@ export default function PrincipalDepartmentFacultyPage() {
           <UsersRound className="h-4 w-4" /> Resolving department…
         </p>
       )}
+
+      {resumeTarget && (
+        <ResumeSectionsDialog
+          open
+          onOpenChange={(o) => { if (!o) setResumeTarget(null); }}
+          personName={facultyDisplayName(resumeTarget) || "this faculty member"}
+          downloading={downloadingResumeId === (resumeTarget.id as string)}
+          onDownload={(sections) => handleDownloadResume(resumeTarget, sections)}
+        />
+      )}
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}
+        title="Delete faculty record?"
+        description={`This will permanently remove ${facultyDisplayName(deleteTarget) || "this faculty member"} (${(deleteTarget?.employeeId as string) ?? ""}) from the register${deleteTarget?.userUid ? " and delete their login account" : ""}. This cannot be undone.`}
+        confirmLabel="Delete"
+        variant="destructive"
+        onConfirm={() => void handleDelete()}
+        loading={isDeleting}
+      />
 
       <ConfirmDialog
         open={removingHod}

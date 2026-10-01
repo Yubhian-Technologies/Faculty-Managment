@@ -1,7 +1,5 @@
-"use client";
+import { redirect } from "next/navigation";
 
-import { StudentAttendanceHistoryPicker } from "@/components/attendance/StudentAttendanceHistoryPicker";
-
-export default function HodAttendanceHistoryPage() {
-  return <StudentAttendanceHistoryPicker hrefBase="/hod/students" />;
+export default function Page() {
+  redirect("/hod/attendance-reports");
 }

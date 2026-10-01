@@ -279,7 +279,7 @@ function FieldInput({ field, values, onChange, departments, courseNames, courses
     // doesn't look like a different, unformatted field.
     const displayValue = field.key === "year" && value ? ordinalYear(Number(value)) : value;
     const caption = field.key === "rollNumber"
-      ? "Set by the department once the student is sectioned."
+      ? "The student's unique Roll No. Corrections are made by the department (Students page)."
       : "Set when the student was added - use Sectioning/Promotion to move them, not this form.";
     return (
       <div className="space-y-2">
