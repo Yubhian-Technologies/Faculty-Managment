@@ -217,7 +217,7 @@ export default function PrincipalDepartmentFacultyPage() {
   async function handleDownloadResume(row: FacultyRow, sections: ResumeSectionKey[]) {
     setDownloadingResumeId(row.id as string);
     try {
-      await downloadFacultyResume(row, { collegeName, sections });
+      await downloadFacultyResume(row, collegeName, sections);
     } catch (err) {
       toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to generate resume" });
     } finally {
@@ -529,6 +529,16 @@ export default function PrincipalDepartmentFacultyPage() {
         </p>
       )}
 
+      {resumeTarget && (
+        <ResumeSectionsDialog
+          open
+          onOpenChange={(o) => { if (!o) setResumeTarget(null); }}
+          personName={facultyDisplayName(resumeTarget) || "this faculty member"}
+          downloading={downloadingResumeId === (resumeTarget.id as string)}
+          onDownload={(sections) => handleDownloadResume(resumeTarget, sections)}
+        />
+      )}
+
       <ConfirmDialog
         open={!!deleteTarget}
         onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}
@@ -539,16 +549,6 @@ export default function PrincipalDepartmentFacultyPage() {
         onConfirm={() => void handleDelete()}
         loading={isDeleting}
       />
-
-      {resumeTarget && (
-        <ResumeSectionsDialog
-          open
-          onOpenChange={(o) => { if (!o) setResumeTarget(null); }}
-          personName={facultyDisplayName(resumeTarget) || "this faculty member"}
-          downloading={downloadingResumeId === (resumeTarget.id as string)}
-          onDownload={(sections) => handleDownloadResume(resumeTarget, sections)}
-        />
-      )}
 
       <ConfirmDialog
         open={removingHod}

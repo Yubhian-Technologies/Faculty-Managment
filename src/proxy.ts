@@ -21,6 +21,9 @@ const PUBLIC_PATHS = [
   "/offer-acceptance",
   "/faculty-public",
   "/about-team-illustration.png",
+  // Letterhead logo for generated timetables (lib/timetable/logoAsset.ts) -
+  // fetched by the PDF renderer and the spreadsheet export.
+  "/vishnulogo.png",
   // face-api.js model weights (public/models/) - fetched client-side by
   // MarkAttendanceDialog regardless of which authenticated role is checking
   // in, so this must stay reachable rather than fall under role path gating.

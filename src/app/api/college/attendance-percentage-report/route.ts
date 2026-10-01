@@ -6,6 +6,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { getDepartmentTreeNames } from "@/lib/departments/scope";
 import { fetchSectionStudents } from "@/lib/students/sectionRoster";
 import { calcPercent } from "@/lib/studentAttendance/percentage";
+import { indexSessions, tallyStudentBySubject } from "@/lib/studentAttendance/counting";
 import { matchesCurrentSemester } from "@/lib/college/semester";
 import type { Section, StudentAttendanceSession, TeachingAssignment } from "@/types";
 
@@ -134,25 +135,25 @@ export async function GET(request: Request) {
         }),
       ]);
 
-      const sessionsBySubject = new Map<string, StudentAttendanceSession[]>();
-      for (const d of sessionsSnap.docs) {
-        const r = d.data() as StudentAttendanceSession;
-        // Same leniency as sectionSubjectIds above - a session never tagged
-        // with a semester still counts regardless of what was requested.
-        if (requestedSemester != null && !matchesCurrentSemester(r.semester, requestedSemester)) continue;
-        if (!sessionsBySubject.has(r.subjectId)) sessionsBySubject.set(r.subjectId, []);
-        sessionsBySubject.get(r.subjectId)!.push(r);
-      }
+      // Same leniency as sectionSubjectIds above - a session never tagged
+      // with a semester still counts regardless of what was requested.
+      const sessions = sessionsSnap.docs
+        .map((d) => d.data() as StudentAttendanceSession)
+        .filter((r) => requestedSemester == null || matchesCurrentSemester(r.semester, requestedSemester));
+      // One shared definition of held/attended (lib/studentAttendance/counting.ts):
+      // only sessions that list the student count, so a split lab's other
+      // batch is never charged to them as an absence.
+      const indexed = indexSessions(sessions);
 
       for (const stu of roster) {
         let held = 0;
         let attended = 0;
+        const tallies = tallyStudentBySubject(indexed, stu.id);
         for (const subjectId of subjectIds) {
-          const sessionsForSubject = sessionsBySubject.get(subjectId) ?? [];
-          held += sessionsForSubject.length;
-          attended += sessionsForSubject.filter(
-            (r) => r.entries.find((e) => e.studentId === stu.id)?.status === "PRESENT"
-          ).length;
+          const t = tallies.get(subjectId);
+          if (!t) continue;
+          held += t.held;
+          attended += t.attended;
         }
         // null (not 0) when no periods have been held yet - a student with
         // no data recorded is not the same as a confirmed 0% attendance

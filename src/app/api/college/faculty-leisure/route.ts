@@ -8,7 +8,25 @@ import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { resolveCurrentSemester, matchesCurrentSemester } from "@/lib/college/semester";
 import { isFacultyAvailable, DEFAULT_TIMETABLE_RULES } from "@/types";
 import { defaultPeriodTimings } from "@/lib/timetable/buildGrid";
-import type { CourseYearTiming, DayOfWeek, TimetableDraft, TimetableRules, TimetableSlot } from "@/types";
+import type { CourseYearTiming, DayOfWeek, PeriodTiming, TimetableDraft, TimetableRules, TimetableSlot } from "@/types";
+
+// "HH:MM" or nothing. Anything else is ignored rather than guessed at.
+function normalizeHHMM(v: string | null): string | null {
+  const t = (v ?? "").trim();
+  return /^([01]\d|2[0-3]):[0-5]\d$/.test(t) ? t : null;
+}
+
+// Parsed as a plain calendar date, not an instant - "2026-10-05" is that
+// Monday whatever the server timezone is, which `new Date(iso)` alone would
+// not guarantee.
+function dayOfWeekFromISODate(iso: string): DayOfWeek | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso.trim());
+  if (!m) return null;
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  if (Number.isNaN(d.getTime())) return null;
+  // Sunday (0) is never a working day in this app DayOfWeek union.
+  return ([null, "MON", "TUE", "WED", "THU", "FRI", "SAT"] as const)[d.getDay()] ?? null;
+}
 
 // College-wide "who is free at this time": every available faculty member with
 // NO class on the given day + period, in any department. Restricted to the
@@ -28,38 +46,77 @@ export async function GET(request: Request) {
   try {
     const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "EXAM_CELL", "COLLEGE_ADMIN", "DIRECTOR", "SUPER_ADMIN");
     const { searchParams } = new URL(request.url);
-    const day = searchParams.get("day") as DayOfWeek | null;
+    // The filter asks for a DATE, not a weekday - a date is what someone
+    // scheduling an exam or a meeting actually has in hand. The timetable is
+    // still keyed by weekday, so the date is resolved to one here.
+    const dateParam = searchParams.get("date");
+    const day = dateParam ? dayOfWeekFromISODate(dateParam) : (searchParams.get("day") as DayOfWeek | null);
     const period = Number(searchParams.get("period"));
+    // Optional clock window, as an alternative to a single period: every
+    // period OVERLAPPING it counts, so a 10:00-12:00 window still catches
+    // someone teaching only its last ten minutes.
+    const from = normalizeHHMM(searchParams.get("from"));
+    const to = normalizeHHMM(searchParams.get("to"));
+    const departmentFilter = (searchParams.get("department") ?? "").trim();
+    const byWindow = !!from && !!to && from < to;
 
     const db = getAdminDb();
     const collegeRef = db.collection("colleges").doc(session.collegeId);
 
-    const [rulesSnap, timingsSnap] = await Promise.all([
+    const [rulesSnap, timingsSnap, deptsSnap] = await Promise.all([
       collegeRef.collection("settings").doc("timetableRules").get(),
       collegeRef.collection("courseYearTimings").get(),
+      collegeRef.collection("departments").get(),
     ]);
     const rules: TimetableRules = rulesSnap.exists
       ? { ...DEFAULT_TIMETABLE_RULES, ...(rulesSnap.data() as Partial<TimetableRules>) }
       : DEFAULT_TIMETABLE_RULES;
     const timingByCourseYear = new Map<string, CourseYearTiming>();
     let periodCount = 0;
+    // The widest course-year clock, sent to the client only so the Period
+    // picker can show times and prefill the window. Busy-checking never uses
+    // it - that resolves each slot against ITS OWN course-year (periodsFor
+    // below), since two course-years can run the same period number at
+    // different times.
+    let periods: PeriodTiming[] = [];
     for (const d of timingsSnap.docs) {
       const t = d.data() as CourseYearTiming;
       timingByCourseYear.set(`${t.courseId}_${t.year}`, t);
-      const n = t.periods && t.periods.length > 0 ? t.periods.length : defaultPeriodTimings(t).length;
-      periodCount = Math.max(periodCount, n);
+      const own = t.periods && t.periods.length > 0 ? t.periods : defaultPeriodTimings(t);
+      if (own.length > periodCount) { periodCount = own.length; periods = own; }
     }
+    const periodsFor = (courseId: string, year: number): PeriodTiming[] => {
+      const t = timingByCourseYear.get(`${courseId}_${year}`);
+      if (!t) return periods;
+      return t.periods && t.periods.length > 0 ? t.periods : defaultPeriodTimings(t);
+    };
+    const overlapsWindow = (courseId: string, year: number, periodNumber: number): boolean => {
+      const pt = periodsFor(courseId, year).find((x) => x.period === periodNumber);
+      if (!pt || !from || !to) return false;
+      return pt.startTime < to && pt.endTime > from;
+    };
 
-    if (!day || !Number.isInteger(period) || period < 1) {
-      return NextResponse.json({ workingDays: rules.workingDays, periodCount });
+    const departmentNames = deptsSnap.docs
+      .map((d) => ((d.data() as { name?: string }).name ?? "").trim())
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b));
+
+    // Options-only call: no usable date yet, or neither a period nor a window.
+    if (!day || (!byWindow && (!Number.isInteger(period) || period < 1))) {
+      return NextResponse.json({ workingDays: rules.workingDays, periodCount, periods, departments: departmentNames });
     }
     if (!rules.workingDays.includes(day)) {
-      return NextResponse.json({ error: "Not a working day" }, { status: 400 });
+      return NextResponse.json({ error: "That date is not a working day" }, { status: 400 });
     }
 
     const [facultySnap, slotsSnap, draftsSnap] = await Promise.all([
       collegeRef.collection("facultyMembers").get(),
-      collegeRef.collection("timetableSlots").where("day", "==", day).where("periodNumber", "==", period).get(),
+      // A window cannot be narrowed to one periodNumber up front - which
+      // numbers fall inside it differs per course-year - so the whole day is
+      // fetched and filtered below. One day of slots, not the whole term.
+      byWindow
+        ? collegeRef.collection("timetableSlots").where("day", "==", day).get()
+        : collegeRef.collection("timetableSlots").where("day", "==", day).where("periodNumber", "==", period).get(),
       collegeRef.collection("timetableDrafts").get(),
     ]);
 
@@ -69,13 +126,19 @@ export async function GET(request: Request) {
     const busy = new Set<string>();
     for (const d of slotsSnap.docs) {
       const s = d.data() as TimetableSlot;
-      if (s.facultyId && inCurrentSemester(s.courseId, s.year, s.semester)) busy.add(s.facultyId);
+      if (!s.facultyId || !inCurrentSemester(s.courseId, s.year, s.semester)) continue;
+      if (byWindow && !overlapsWindow(s.courseId, s.year, s.periodNumber)) continue;
+      busy.add(s.facultyId);
     }
     for (const d of draftsSnap.docs) {
       const draft = d.data() as TimetableDraft;
       if (draft.status !== "DRAFT" || !inCurrentSemester(draft.courseId, draft.year, draft.semester)) continue;
       for (const ds of draft.slots ?? []) {
-        if (ds.facultyId && ds.day === day && ds.periodNumber === period) busy.add(ds.facultyId);
+        if (!ds.facultyId || ds.day !== day) continue;
+        const hit = byWindow
+          ? overlapsWindow(draft.courseId, draft.year, ds.periodNumber)
+          : ds.periodNumber === period;
+        if (hit) busy.add(ds.facultyId);
       }
     }
 
@@ -86,11 +149,13 @@ export async function GET(request: Request) {
 
     const faculty = facultySnap.docs
       .map((d) => ({ id: d.id, ...d.data() }) as { id: string; legalName?: string; status?: string; department?: string; employeeId?: string })
-      .filter((f) => isFacultyAvailable(f.status) && !busy.has(f.id) && (!hodDepartments || hodDepartments.has(f.department ?? "")))
+      .filter((f) => isFacultyAvailable(f.status) && !busy.has(f.id)
+        && (!hodDepartments || hodDepartments.has(f.department ?? ""))
+        && (!departmentFilter || (f.department ?? "") === departmentFilter))
       .map((f) => ({ id: f.id, employeeId: f.employeeId ?? "", name: facultyDisplayName(f), department: f.department ?? "" }))
       .sort((a, b) => a.department.localeCompare(b.department) || a.name.localeCompare(b.name));
 
-    return NextResponse.json({ workingDays: rules.workingDays, periodCount, faculty });
+    return NextResponse.json({ workingDays: rules.workingDays, periodCount, periods, departments: departmentNames, faculty });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

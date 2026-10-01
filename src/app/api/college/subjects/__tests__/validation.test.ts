@@ -40,7 +40,7 @@ describe("Subject Validation", () => {
 
   describe("Common required fields", () => {
     it("always requires name and code", () => {
-      const valid = (body: Record<string, any>) => !!body.name?.trim() && !!body.code?.trim();
+      const valid = (body: Record<string, string | undefined>) => !!body.name?.trim() && !!body.code?.trim();
       expect(valid({ name: "Test", code: "TC" })).toBe(true);
       expect(valid({ name: "", code: "TC" })).toBe(false);
       expect(valid({ name: "Test", code: "" })).toBe(false);

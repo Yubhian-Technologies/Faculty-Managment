@@ -7,6 +7,7 @@ import { toast } from "@/hooks/useToast";
 import { WeekNavigator } from "@/components/timetable/WeekNavigator";
 import { buildSectionTimetablePdfHtml } from "@/lib/timetable/sectionTimetablePdf";
 import { downloadSectionTimetableXlsx } from "@/lib/timetable/timetableExport";
+import { resolveLogoUrl } from "@/lib/timetable/logoAsset";
 import { renderHtmlToPdf } from "@/lib/pdf/htmlToPdf";
 import {
   buildAllocationList,
@@ -321,13 +322,12 @@ export function InstitutionalTimetableTable({
       <div className="rounded-lg border bg-card shadow-sm overflow-hidden">
         <div className="border-b bg-muted/20 px-4 py-3 text-center sm:text-left flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
-            {(logoUrl ?? collegeInfo?.logoUrl) && (
-              <img
-                src={logoUrl ?? collegeInfo?.logoUrl}
-                alt=""
-                className="h-10 w-10 shrink-0 object-contain rounded border bg-background p-0.5"
-              />
-            )}
+            {/* Same logo the PDF / spreadsheet letterhead uses: the college's own, else the Vishnu logo. */}
+            <img
+              src={resolveLogoUrl(logoUrl ?? collegeInfo?.logoUrl)}
+              alt=""
+              className="h-10 w-10 shrink-0 object-contain rounded border bg-background p-0.5"
+            />
             <div className="min-w-0">
               <h3 className="text-sm font-bold tracking-wide uppercase text-foreground break-words">
                 {activeCollegeName || (collegeLoading ? "Loading college…" : collegeFailed ? "College" : "Time Table")}

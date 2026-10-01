@@ -49,7 +49,21 @@
 
 * {
   box-sizing: border-box;
-  border-color: var(--border);
+}
+
+/* Default border color reset, Tailwind-preflight style. Must live in
+   @layer base (not plain unlayered CSS) - Tailwind v4's utility classes
+   (border-black, border-slate-500, etc.) are generated inside @layer
+   utilities, and CSS cascade layers resolve by layer order before selector
+   specificity: unlayered CSS always beats ANY layered rule, no matter how
+   specific the layered selector is. A bare `* { border-color: ... }` here
+   therefore silently won over every `border-*` color utility in the app,
+   regardless of that utility's own specificity - e.g. hod/faculty/page.tsx's
+   checkbox border staying invisible no matter which color class it used. */
+@layer base {
+  * {
+    border-color: var(--border);
+  }
 }
 
 body {

@@ -29,7 +29,7 @@ describe("downloadFacultyResume", () => {
     const calls = mockFetch((url) =>
       url.includes("teaching-assignments") ? { assignments: [{ id: "a1" }] } : { publications: [{ id: "p1" }] }
     );
-    await downloadFacultyResume(row, { collegeName: "Vishnu Institute", sections });
+    await downloadFacultyResume(row, "Vishnu Institute", sections);
 
     expect(calls).toEqual([
       "/api/college/teaching-assignments?facultyId=f1",
@@ -49,19 +49,19 @@ describe("downloadFacultyResume", () => {
 
   it("falls back to the legalName for the filename when there is no employee id", async () => {
     mockFetch(() => ({}));
-    await downloadFacultyResume({ ...row, employeeId: "" }, { collegeName: "", sections });
+    await downloadFacultyResume({ ...row, employeeId: "" }, "", sections);
     expect((downloadResumePdf.mock.calls[0] as unknown as [unknown, string])[1]).toBe("Asha Rao");
   });
 
   it("uses the faculty id with URL encoding, and skips publications when there is no login uid", async () => {
     const calls = mockFetch(() => ({ assignments: [] }));
-    await downloadFacultyResume({ id: "a b/c", employeeId: "E1" }, { collegeName: "", sections });
+    await downloadFacultyResume({ id: "a b/c", employeeId: "E1" }, "", sections);
     expect(calls).toEqual(["/api/college/teaching-assignments?facultyId=a%20b%2Fc"]);
   });
 
   it("still produces the resume when both lookups fail", async () => {
     vi.stubGlobal("fetch", async () => { throw new Error("network down"); });
-    await downloadFacultyResume(row, { collegeName: "X", sections });
+    await downloadFacultyResume(row, "X", sections);
     const record = (downloadResumePdf.mock.calls[0] as unknown as [Record<string, unknown>])[0];
     expect(record.teachingAssignments).toEqual([]);
     expect(record.researchPublications).toEqual([]);
@@ -70,6 +70,6 @@ describe("downloadFacultyResume", () => {
   it("surfaces a failure of the PDF step itself", async () => {
     mockFetch(() => ({}));
     downloadResumePdf.mockRejectedValueOnce(new Error("Your session needs a refresh - reload the page and try again."));
-    await expect(downloadFacultyResume(row, { collegeName: "", sections })).rejects.toThrow(/session needs a refresh/);
+    await expect(downloadFacultyResume(row, "", sections)).rejects.toThrow(/session needs a refresh/);
   });
 });

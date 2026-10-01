@@ -288,7 +288,9 @@ function renderTeachingLoadGroups(groups: { current: TeachingLoadRow[]; past: Te
  *  body is empty - a person's record with no data for a module simply
  *  doesn't get a module in their resume, rather than a placeholder. */
 export function renderSection(title: string, body: string): string {
-  return body.trim() ? `${sectionTitle(title)}${body}` : "";
+  // Wrapped in .section so the PDF renderer can keep a short section whole on
+  // one page (see SECTION_SELECTOR in htmlToPdf.ts).
+  return body.trim() ? `<div class="section">${sectionTitle(title)}${body}</div>` : "";
 }
 
 function degreeEntry(label: string, d?: DegreeDetail, useSpecialization = false): string {
@@ -525,7 +527,6 @@ export function getResumeHTML(rawData: ResumeData): string {
       <div>
         <div class="name">${esc(facultyDisplayName(data))}</div>
         ${subtitle ? `<div class="subtitle">${esc(subtitle)}</div>` : ""}
-        ${data.collegeName ? `<div class="college">${esc(data.collegeName)}</div>` : ""}
       </div>
     </div>
     <div class="contact-block">
@@ -560,18 +561,23 @@ export const DOCUMENT_STYLES = `
   html, body { margin: 0; padding: 0; }
   body { font-family: Calibri, Arial, Helvetica, sans-serif; font-size: 12.5px; line-height: 1.45; color: #111827; background: #ffffff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 
+  /* Nothing may run past its box: long words, URLs, emails and names wrap
+     wherever they have to instead of overflowing or overlapping a neighbour. */
+  .page, .page * { overflow-wrap: anywhere; word-break: break-word; min-width: 0; }
+  .section { margin: 0; }
+
   /* Free-flowing document - spans as many A4 pages as the content needs, with
      the top/bottom breathing room supplied per-page via page.pdf()'s margin. */
-  .page { width: 210mm; background: #ffffff; padding: 0 15mm; }
+  .page { width: 210mm; background: #ffffff; padding: 0 15mm 8mm; }
 
-  .resume-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #111827; padding-bottom: 8px; margin-bottom: 10px; }
-  .header-left { display: flex; align-items: center; gap: 14px; }
+  .resume-header { display: flex; justify-content: space-between; align-items: center; gap: 16px; border-bottom: 2px solid #111827; padding-bottom: 8px; margin-bottom: 10px; }
+  .header-left { display: flex; align-items: center; gap: 14px; flex: 1 1 55%; min-width: 0; }
   .avatar { width: 66px; height: 66px; border-radius: 50%; object-fit: cover; border: 1.5px solid #111827; flex-shrink: 0; }
   .avatar-fallback { width: 66px; height: 66px; border-radius: 50%; background: #111827; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: bold; flex-shrink: 0; }
   .name { font-size: 26px; font-weight: bold; color: #000000; }
   .subtitle { font-size: 13.5px; font-weight: 600; color: #1f2937; margin-top: 3px; }
   .college { font-size: 12px; color: #4b5563; margin-top: 2px; }
-  .contact-block { text-align: right; font-size: 11.5px; line-height: 1.6; white-space: nowrap; }
+  .contact-block { text-align: right; font-size: 11.5px; line-height: 1.6; flex: 0 1 45%; min-width: 0; }
 
   /* Centered with flexbox (not padding + line-height) - html2canvas approximates
      font baseline position with a measurement heuristic that isn't always exact,
@@ -580,10 +586,12 @@ export const DOCUMENT_STYLES = `
   .section-title { display: flex; align-items: center; justify-content: center; padding: 12px 0; line-height: 1; font-weight: bold; font-size: 13px; letter-spacing: 0.6px; text-transform: uppercase; border-top: 1px solid #111827; border-bottom: 1px solid #111827; margin: 14px 0 8px; break-after: avoid-page; }
 
   .entry { margin-bottom: 6px; break-inside: avoid-page; }
-  .entry-row { display: flex; justify-content: space-between; gap: 10px; font-weight: bold; font-size: 12.5px; color: #000000; }
-  .entry-row .r { white-space: nowrap; }
-  .entry-sub { display: flex; justify-content: space-between; gap: 10px; font-size: 12px; font-style: italic; color: #374151; }
-  .entry-sub .r { font-weight: bold; font-style: normal; white-space: nowrap; }
+  .entry-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; font-weight: bold; font-size: 12.5px; color: #000000; }
+  .entry-row .l { flex: 1 1 auto; min-width: 0; }
+  .entry-row .r { flex: 0 1 auto; max-width: 45%; text-align: right; }
+  .entry-sub { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; font-size: 12px; font-style: italic; color: #374151; }
+  .entry-sub .l { flex: 1 1 auto; min-width: 0; }
+  .entry-sub .r { flex: 0 1 auto; max-width: 45%; text-align: right; font-weight: bold; font-style: normal; }
 
   .bullets { margin: 2px 0 10px; padding: 0; list-style: none; }
   .bullets li { position: relative; padding-left: 14px; margin-bottom: 3px; font-size: 12px; break-inside: avoid-page; }
@@ -612,7 +620,7 @@ export const DOCUMENT_STYLES = `
      browser, but html2canvas doesn't reliably resolve that implicit default
      (same class of measurement quirk as .section-title above), so text drifts
      down to sit on the bottom border instead of centering in the cell. */
-  table.data-table { width: 100%; border-collapse: collapse; margin: 4px 0 10px; }
+  table.data-table { width: 100%; border-collapse: collapse; table-layout: auto; margin: 4px 0 10px; }
   table.data-table tr { break-inside: avoid-page; }
   table.data-table th { background: #e5e7eb; color: #111827; padding: 4px 8px; font-size: 11.5px; text-align: left; vertical-align: middle; border: 1px solid #9ca3af; }
   table.data-table td { padding: 4px 8px; font-size: 11.5px; vertical-align: middle; border: 1px solid #d1d5db; }

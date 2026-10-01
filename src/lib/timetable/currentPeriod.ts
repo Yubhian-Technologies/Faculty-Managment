@@ -55,14 +55,34 @@ function collegeNow(now: Date): { date: string; day: DayOfWeek | undefined; minu
 // a faculty member can have same-day/period slots from two different
 // semesters once a college turns semesters on, and only the live one should
 // ever gate "is this class in session right now").
+// Per-call memo of courseYearTimings docs. A faculty's day (or the cron's
+// whole-college sweep) resolves many slots that share a course-year; without
+// this every slot re-read the same timing doc.
+export type TimingCache = Map<string, Promise<CourseYearTiming | null>>;
+
+function loadTiming(
+  collegeRef: FirebaseFirestore.DocumentReference,
+  timingId: string,
+  cache: TimingCache,
+): Promise<CourseYearTiming | null> {
+  let hit = cache.get(timingId);
+  if (!hit) {
+    hit = collegeRef.collection("courseYearTimings").doc(timingId).get().then((snap) =>
+      snap.exists ? ({ id: snap.id, ...snap.data() } as CourseYearTiming) : null
+    );
+    cache.set(timingId, hit);
+  }
+  return hit;
+}
+
 async function resolvePeriodWindow(
   collegeRef: FirebaseFirestore.DocumentReference,
   slot: Pick<TimetableSlot, "courseId" | "year" | "periodNumber" | "semester">,
+  cache: TimingCache = new Map(),
 ): Promise<{ startTime: string; endTime: string } | null> {
   const timingId = `${slot.courseId}_year${slot.year}`;
-  const timingSnap = await collegeRef.collection("courseYearTimings").doc(timingId).get();
-  if (!timingSnap.exists) return null;
-  const timing = { id: timingSnap.id, ...timingSnap.data() } as CourseYearTiming;
+  const timing = await loadTiming(collegeRef, timingId, cache);
+  if (!timing) return null;
   if (!matchesCurrentSemester(slot.semester, resolveCurrentSemester(timing))) return null;
   const periods = timing.periods?.length ? timing.periods : defaultPeriodTimings(timing);
   const period = periods.find((p) => p.period === slot.periodNumber);
@@ -116,8 +136,9 @@ export async function getCurrentTimetableSlot(
   const todaySlots = [...ownTodaySlots, ...subSlots];
   if (todaySlots.length === 0) return null;
 
+  const timingCache: TimingCache = new Map();
   for (const slot of todaySlots) {
-    const window = await resolvePeriodWindow(collegeRef, slot);
+    const window = await resolvePeriodWindow(collegeRef, slot, timingCache);
     if (!window) continue;
     const start = toMinutes(window.startTime);
     const end = toMinutes(window.endTime);
@@ -153,6 +174,9 @@ export async function getFacultyPeriodsForDate(
   collegeId: string,
   facultyId: string,
   dateISO: string,
+  // Pass one cache across many calls (e.g. the cron looping over every
+  // faculty in a college) so a shared course-year timing is read once.
+  timingCache: TimingCache = new Map(),
 ): Promise<FacultyPeriodOnDate[]> {
   // Same weekday-from-date convention as class-work-records/route.ts's
   // resolvePeriodNumber - a plain JS Date parsed from "YYYY-MM-DD" components
@@ -188,10 +212,11 @@ export async function getFacultyPeriodsForDate(
   const daySlots = [...ownDaySlots, ...subSlots];
 
   const resolved: FacultyPeriodOnDate[] = [];
-  for (const slot of daySlots) {
-    const window = await resolvePeriodWindow(collegeRef, slot);
+  const windows = await Promise.all(daySlots.map((slot) => resolvePeriodWindow(collegeRef, slot, timingCache)));
+  daySlots.forEach((slot, i) => {
+    const window = windows[i];
     if (window) resolved.push({ slot, ...window });
-  }
+  });
   resolved.sort((a, b) => toMinutes(a.startTime) - toMinutes(b.startTime));
   return resolved;
 }
@@ -281,10 +306,12 @@ export async function checkFacultyPeriodWindow(
   if (todaySlots.length === 0) return { ok: false, reason: "NOT_SCHEDULED" };
 
   const resolved: { slot: TimetableSlot & { id: string }; startTime: string; endTime: string }[] = [];
-  for (const slot of todaySlots) {
-    const window = await resolvePeriodWindow(collegeRef, slot);
+  const timingCache: TimingCache = new Map();
+  const windows = await Promise.all(todaySlots.map((slot) => resolvePeriodWindow(collegeRef, slot, timingCache)));
+  todaySlots.forEach((slot, i) => {
+    const window = windows[i];
     if (window) resolved.push({ slot, ...window });
-  }
+  });
   if (resolved.length === 0) return { ok: false, reason: "NOT_SCHEDULED" };
   resolved.sort((a, b) => toMinutes(a.startTime) - toMinutes(b.startTime));
 

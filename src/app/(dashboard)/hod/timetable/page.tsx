@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { ClipboardList, GraduationCap, Search, UserCog, Users } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -11,7 +12,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { TimetableGridEditor } from "@/components/timetable/TimetableGridEditor";
 import { toast } from "@/hooks/useToast";
 import { useMyDepartments } from "@/hooks/useMyDepartments";
-import { buildCourseGroups, deriveHodScope, managerEffectiveYears } from "@/lib/departments/hodScope";
+import {
+  buildCourseGroups, deriveHodScope, managedBranchYearsMap, managerEffectiveYears, mergeOwnDepartmentOptions, yearsInScope,
+} from "@/lib/departments/hodScope";
 import { ordinalYear } from "@/lib/timetable/gridModel";
 import { sectionDisplayLabel } from "@/lib/sections/sectionLabel";
 import type { Course, Department, Section } from "@/types";
@@ -42,6 +45,11 @@ interface LoadedSection {
 
 function SectionTimetable() {
   const myDepartments = useMyDepartments();
+  // Optional deep link (?courseId=&year=) - preselects the filters only; the
+  // timetable still loads on the Load button.
+  const searchParams = useSearchParams();
+  const presetCourseId = searchParams.get("courseId");
+  const presetYear = searchParams.get("year");
   const [courses, setCourses] = useState<Course[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -59,11 +67,20 @@ function SectionTimetable() {
       fetch("/api/college/departments").then((r) => r.json() as Promise<{ departments: Department[] }>),
     ])
       .then(([coursesRes, deptsRes]) => {
-        setCourses((coursesRes.courses ?? []).sort((a, b) => a.name.localeCompare(b.name)));
+        const loadedCourses = (coursesRes.courses ?? []).sort((a, b) => a.name.localeCompare(b.name));
+        setCourses(loadedCourses);
         setDepartments(deptsRes.departments ?? []);
+        if (presetCourseId) {
+          const group = buildCourseGroups(loadedCourses).find((g) => g.courseIds.includes(presetCourseId));
+          if (group) {
+            setCourseKey(group.key);
+            if (presetYear) setYear(presetYear);
+          }
+        }
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load courses" }))
       .finally(() => setIsLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Collapse the several Course docs that represent one catalog programme into
@@ -125,12 +142,24 @@ function SectionTimetable() {
       if (!ownDept) return [];
       return managerEffectiveYears(ownDept, departments, selectedCourse.catalogId);
     }
-    // Plain viewer: this course doc's own department's own effective years -
-    // same helper, just pointed at the doc's own department instead.
-    const dept = departments.find((d) => d.id === selectedCourse.departmentId);
-    if (!dept) return [];
-    return managerEffectiveYears(dept, departments, selectedCourse.catalogId);
-  }, [selectedCourse, departments, ownDept, viewsManagedBranchYears]);
+    // Plain viewer: the years come from THIS HOD's own departments (and their
+    // sub-departments), not from whichever Course doc happened to be picked -
+    // a sub-department owns no Course doc of its own (it shows its parent's),
+    // so resolving through that doc's department read the PARENT's years (e.g.
+    // Basic Science's year 1) for a core branch like ECE-VLSI that actually
+    // teaches 2-4. Same resolution hod/sections uses: Years Taught per course
+    // (courseScopes), minus any year a feeder department has claimed (fedYears).
+    const relevant = mergeOwnDepartmentOptions(departments, myDepartments);
+    if (relevant.length === 0) return [];
+    return yearsInScope(
+      selectedGroup?.durationYears ?? selectedCourse.durationYears,
+      relevant,
+      managedBranchYearsMap(departments, selectedCourse.catalogId),
+      false,
+      selectedCourse.catalogId,
+      departments,
+    );
+  }, [selectedCourse, selectedGroup, departments, myDepartments, ownDept, viewsManagedBranchYears]);
 
   // Sections for the picked course+year. Every Course doc for the same catalog
   // programme is queried, across departments - a shared-first-year section
@@ -309,7 +338,7 @@ function SectionTimetable() {
               <Button variant="outline" size="sm" asChild>
                 <Link href={`/hod/timetable/${selectedCourse.id}/${year}`}>
                   <GraduationCap className="h-3.5 w-3.5 mr-1.5" />
-                  Timetable Incharge &amp; all sections
+                  Timetable Incharge
                 </Link>
               </Button>
             </div>

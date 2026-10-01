@@ -7,7 +7,7 @@ import { FacultyPublicProfileView, type FacultyPublicProfile } from "@/component
 // "/demo" segment, which Next.js matches ahead of the "[param]" dynamic
 // route, so it doesn't collide with real facultyid= links.
 const DEMO_PROFILE: FacultyPublicProfile = {
-  collegeName: "Shree Vishnu Educational Society",
+  collegeName: "Sri Vishnu Educational Society",
   name: "Dr. Ananya Reddy",
   designation: "PROFESSOR",
   department: "Computer Science & Engineering",
@@ -75,7 +75,7 @@ const DEMO_PROFILE: FacultyPublicProfile = {
   },
   recognition: {
     awardsRecognition: [
-      { titleOfAward: "Best Teacher Award", awardingAgencyBody: "Shree Vishnu Educational Society", dateOfAward: "2023-09-05" },
+      { titleOfAward: "Best Teacher Award", awardingAgencyBody: "Sri Vishnu Educational Society", dateOfAward: "2023-09-05" },
       { titleOfAward: "Outstanding Reviewer Award", awardingAgencyBody: "IEEE Transactions on Neural Networks", dateOfAward: "2022-03-14" },
       { titleOfAward: "Early Career Research Excellence Award", awardingAgencyBody: "Indian Society for Technical Education", year: 2019 },
     ],
@@ -93,7 +93,7 @@ const DEMO_PROFILE: FacultyPublicProfile = {
       { facilityDetails: "AI & Distributed Systems Research Lab", outcomes: "Supports 6 ongoing PhD projects and 3 externally funded grants" },
     ],
     fdpsWorkshopsMoocsCertifications: [
-      { type: "FDP", titleOfTheProgram: "Faculty Development Program on Federated Learning", nameOfTheFacultyCoordinator: "Shree Vishnu Educational Society", fromDate: "2023-05-15" },
+      { type: "FDP", titleOfTheProgram: "Faculty Development Program on Federated Learning", nameOfTheFacultyCoordinator: "Sri Vishnu Educational Society", fromDate: "2023-05-15" },
       { type: "WORKSHOP", titleOfTheProgram: "Advanced GPU Computing Workshop", nameOfTheFacultyCoordinator: "NVIDIA Deep Learning Institute", fromDate: "2022-11-02" },
       { type: "CERTIFICATION", titleOfTheProgram: "TensorFlow Advanced Techniques Specialization", nameOfTheFacultyCoordinator: "Coursera / DeepLearning.AI", year: 2021 },
     ],

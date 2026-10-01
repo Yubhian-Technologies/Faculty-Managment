@@ -11,7 +11,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/useToast";
-import { ChevronsRight, ChevronsLeft, Plus } from "lucide-react";
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
+import { ChevronsRight, ChevronsLeft, Plus, Pencil, Trash2, Check, X } from "lucide-react";
 import type { Section, StudentRecord } from "@/types";
 
 // A section's own lab sub-groups (e.g. "Batch 1", "Batch 2" for split
@@ -29,6 +30,14 @@ export default function LabBatchesPage() {
   const [sectionId, setSectionId] = useState("");
   const [batch, setBatch] = useState("");
   const [newBatchName, setNewBatchName] = useState("");
+  // A batch is not a record anywhere - it is just the labBatch string on each
+  // student (see StudentRecord.labBatch), so renaming one is a bulk rewrite of
+  // that string and deleting one is a bulk clear. Both stage into `pending`
+  // like every other move here, so they are undoable with Cancel and go out in
+  // the same single save.
+  const [renameTarget, setRenameTarget] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [leftChecked, setLeftChecked] = useState<Set<string>>(new Set());
   const [rightChecked, setRightChecked] = useState<Set<string>>(new Set());
   // Staged, not yet saved - studentId -> the labBatch value >>/<< moved them
@@ -51,6 +60,8 @@ export default function LabBatchesPage() {
         setPending(new Map());
         setLeftChecked(new Set());
         setRightChecked(new Set());
+        setRenameTarget(null);
+        setDeleteTarget(null);
         setSectionId((current) => (current && sec.some((s) => s.id === current) ? current : sec[0]?.id ?? ""));
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load students" }))
@@ -116,6 +127,8 @@ export default function LabBatchesPage() {
     setPending(new Map());
     setLeftChecked(new Set());
     setRightChecked(new Set());
+    setRenameTarget(null);
+    setDeleteTarget(null);
   }
 
   function handleBatchChange(value: string) {
@@ -150,12 +163,60 @@ export default function LabBatchesPage() {
     setRightChecked(new Set());
   }
 
+  function startRename(b: string) {
+    setRenameTarget(b);
+    setRenameValue(b);
+  }
+
+  function handleRenameBatch() {
+    const from = renameTarget;
+    const to = renameValue.trim();
+    if (!from || !to) return;
+    if (to === from) { setRenameTarget(null); return; }
+    // labBatch is matched case/whitespace-insensitively downstream (see
+    // lib/students/sectionRoster.ts), so two batches differing only in case
+    // would silently behave as one. Renaming ONTO another batch is a merge,
+    // which is not what the pencil suggests - refuse it and say so.
+    if (batchOptions.some((b) => b !== from && b.toLowerCase() === to.toLowerCase())) {
+      toast({ variant: "destructive", title: `"${to}" already exists`, description: "Pick a different name, or move the students across instead." });
+      return;
+    }
+    setPending((prev) => {
+      const next = new Map(prev);
+      for (const s of sectionStudents) {
+        if ((prev.get(s.id) ?? s.labBatch ?? "").trim() === from) next.set(s.id, to);
+      }
+      return next;
+    });
+    if (batch === from) setBatch(to);
+    setRenameTarget(null);
+  }
+
+  // Deleting a batch never removes a student - it only takes them out of the
+  // batch, back into the unassigned pool on the left.
+  function handleDeleteBatch() {
+    const target = deleteTarget;
+    if (!target) return;
+    setPending((prev) => {
+      const next = new Map(prev);
+      for (const s of sectionStudents) {
+        if ((prev.get(s.id) ?? s.labBatch ?? "").trim() === target) next.set(s.id, "");
+      }
+      return next;
+    });
+    if (batch === target) setBatch("");
+    setDeleteTarget(null);
+    setLeftChecked(new Set());
+    setRightChecked(new Set());
+  }
+
   // Before any batch is picked ("Select batch" still showing), the left list
   // is just everyone in the section - there's no batch to exclude yet.
   // Filtering by `effectiveBatch(s) !== batch` even then would wrongly drop
   // every still-unassigned student too, since their own effective batch is
   // also "" - the same empty string `batch` itself is.
   const leftList = batch ? sectionStudents.filter((s) => effectiveBatch(s) !== batch) : sectionStudents;
+  const unassignedCount = sectionStudents.filter((s) => effectiveBatch(s) === "").length;
   const rightList = batch ? sectionStudents.filter((s) => effectiveBatch(s) === batch) : [];
 
   function toggle(set: Set<string>, setSet: (s: Set<string>) => void, id: string, checked: boolean) {
@@ -235,9 +296,10 @@ export default function LabBatchesPage() {
         <Card>
           <CardHeader className="pb-3 space-y-3">
             <CardTitle className="text-base">Divide into batches</CardTitle>
-            <div className="grid gap-3 sm:grid-cols-2 sm:max-w-lg">
+            {/* Step 1 - whose roster are we splitting. */}
+            <div className="grid gap-3 sm:grid-cols-2 sm:max-w-2xl">
               <div className="space-y-2">
-                <Label>Section</Label>
+                <Label>1. Section</Label>
                 <Select value={sectionId} onValueChange={handleSectionChange}>
                   <SelectTrigger><SelectValue placeholder="Select a section" /></SelectTrigger>
                   <SelectContent>
@@ -247,31 +309,113 @@ export default function LabBatchesPage() {
                   </SelectContent>
                 </Select>
               </div>
+              {/* Step 2 - the button sits beside the name it acts on, so typing
+                  a name and creating it read as the single action they are.
+                  It used to sit a row below, next to the batch PICKER, where
+                  it looked like it acted on the batch already selected. */}
+              {/* Add / rename / delete all live on this one row, acting on the
+                  batch picked below. Rename reuses this same input rather than
+                  opening a second one: the field either names a new batch or
+                  renames the chosen one, never both at once. */}
               <div className="space-y-2">
-                <Label className="text-xs text-muted-foreground">New batch name</Label>
-                <Input
-                  value={newBatchName}
-                  onChange={(e) => setNewBatchName(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleCreateBatch(); } }}
-                  placeholder="e.g. Batch 1"
-                  disabled={!selectedSection}
-                />
+                <Label htmlFor="new-batch-name">
+                  {renameTarget ? `2. Rename ${renameTarget}` : "2. Add a batch"}
+                </Label>
+                <div className="flex flex-wrap gap-2">
+                  <Input
+                    id="new-batch-name"
+                    className="flex-1 min-w-0"
+                    value={renameTarget ? renameValue : newBatchName}
+                    onChange={(e) => {
+                      if (renameTarget) setRenameValue(e.target.value);
+                      else setNewBatchName(e.target.value);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        if (renameTarget) handleRenameBatch();
+                        else handleCreateBatch();
+                      }
+                      if (e.key === "Escape" && renameTarget) {
+                        e.preventDefault();
+                        setRenameTarget(null);
+                      }
+                    }}
+                    placeholder={renameTarget ? "New name" : "e.g. Batch 1"}
+                    disabled={!selectedSection}
+                  />
+                  {renameTarget ? (
+                    <>
+                      <Button type="button" className="shrink-0" onClick={handleRenameBatch} disabled={!renameValue.trim()}>
+                        <Check className="h-4 w-4 mr-1.5" />Save name
+                      </Button>
+                      <Button type="button" variant="outline" size="icon" className="shrink-0" onClick={() => setRenameTarget(null)} title="Cancel rename" aria-label="Cancel rename">
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <Button type="button" variant="outline" className="shrink-0" onClick={handleCreateBatch} disabled={!selectedSection || !newBatchName.trim()}>
+                        <Plus className="h-4 w-4 mr-1.5" />Add batch
+                      </Button>
+                      <Button
+                        type="button" variant="outline" size="icon" className="shrink-0"
+                        onClick={() => { if (batch) startRename(batch); }}
+                        disabled={!batch}
+                        title={batch ? `Rename ${batch}` : "Pick a batch below first"}
+                        aria-label={batch ? `Rename ${batch}` : "Rename batch"}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        type="button" variant="outline" size="icon"
+                        className="shrink-0 text-destructive hover:text-destructive"
+                        onClick={() => { if (batch) setDeleteTarget(batch); }}
+                        disabled={!batch}
+                        title={batch ? `Delete ${batch}` : "Pick a batch below first"}
+                        aria-label={batch ? `Delete ${batch}` : "Delete batch"}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
-            <div className="flex items-end gap-2 sm:max-w-lg">
-              <div className="flex-1 space-y-2">
-                <Label>Batch</Label>
-                <Select value={batch || undefined} onValueChange={handleBatchChange} disabled={!selectedSection}>
-                  <SelectTrigger><SelectValue placeholder="Select batch" /></SelectTrigger>
-                  <SelectContent>
-                    {batchOptions.map((b) => <SelectItem key={b} value={b}>{b}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+
+            {/* Step 3 - which batch the mover below fills. Chips rather than a
+                dropdown: a section has two or three batches, and their sizes
+                are the whole point of the screen, so showing them all with
+                their counts beats hiding them behind a closed Select. */}
+            {selectedSection && batchOptions.length > 0 && (
+              <div className="space-y-2">
+                <Label>3. Batch to fill</Label>
+                <div className="flex flex-wrap gap-2">
+                  {batchOptions.map((b) => {
+                    const active = b === batch;
+                    return (
+                      <button
+                        key={b}
+                        type="button"
+                        aria-pressed={active}
+                        onClick={() => handleBatchChange(b)}
+                        className={`rounded-full border px-3 py-1 text-sm transition-colors ${
+                          active
+                            ? "border-primary bg-primary text-primary-foreground"
+                            : "bg-background hover:bg-muted"
+                        }`}
+                      >
+                        {b}
+                      </button>
+                    );
+                  })}
+                  <span className="inline-flex items-center px-1 text-xs text-muted-foreground">
+                    {unassignedCount} not in any batch
+                  </span>
+                </div>
               </div>
-              <Button type="button" variant="outline" onClick={handleCreateBatch} disabled={!selectedSection || !newBatchName.trim()}>
-                <Plus className="h-4 w-4 mr-1.5" />Add batch
-              </Button>
-            </div>
+            )}
+
             {selectedSection && batchOptions.length === 0 && (
               <p className="text-xs text-muted-foreground">
                 This section has no batches yet - the first one you add gets everyone. Add a second batch, then move specific students into it below.
@@ -285,6 +429,15 @@ export default function LabBatchesPage() {
               <p className="text-sm text-muted-foreground text-center py-8">Select a section to get started.</p>
             ) : (
               <>
+                {/* Step 4 - names the batch being filled, so the two lists are
+                    never ambiguous about which batch "in" and "not in" mean. */}
+                <p className="mb-3 text-sm font-medium">
+                  {batch
+                    ? <>4. Move students into <span className="text-primary">{batch}</span></>
+                    : batchOptions.length === 0
+                      ? "4. Move students - add a batch above first"
+                      : "4. Move students - pick a batch above first"}
+                </p>
                 <div className="grid gap-3 sm:grid-cols-[1fr_auto_1fr] items-stretch">
                   <StudentListBox
                     title={batch ? "Not in this batch" : "Students"}
@@ -305,12 +458,14 @@ export default function LabBatchesPage() {
                   </div>
 
                   <StudentListBox
-                    title={batch ? `In ${batch} (${rightList.length})` : "Pick a batch above"}
+                    title={batch ? `In ${batch} (${rightList.length})` : "No batch picked"}
                     students={rightList}
                     checked={rightChecked}
                     onToggle={(id, checked) => toggle(rightChecked, setRightChecked, id, checked)}
                     effectiveBatch={effectiveBatch}
-                    emptyLabel={batch ? "No students in this batch yet - check some on the left and use →" : undefined}
+                    emptyLabel={batch
+                      ? "No students in this batch yet - tick some on the left, then use the → button."
+                      : "Pick a batch above to start moving students into it."}
                   />
                 </div>
 
@@ -332,6 +487,20 @@ export default function LabBatchesPage() {
           </CardContent>
         </Card>
       )}
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}
+        title={`Delete ${deleteTarget ?? ""}?`}
+        description={
+          deleteTarget
+            ? `${sectionStudents.filter((s) => effectiveBatch(s) === deleteTarget).length} student(s) go back to being unassigned. No student is removed from the section. Nothing is saved until you press Update.`
+            : undefined
+        }
+        confirmLabel="Delete batch"
+        variant="destructive"
+        onConfirm={handleDeleteBatch}
+      />
     </div>
   );
 }

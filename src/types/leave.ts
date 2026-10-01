@@ -513,6 +513,15 @@ export interface LeaveRequest {
   handoverToUid?: string;
   handoverToName?: string;
   handoverNote?: string;
+  // Role handover (see lib/leave/roleDelegation.ts): for a requester who holds
+  // seat roles, the person who acts in those seats while this leave is
+  // APPROVED and in progress. Dates are the leave's YYYY-MM-DD range (IST).
+  roleHandoverToUid?: string;
+  roleHandoverToName?: string;
+  roleHandoverRoles?: string[];
+  roleHandoverDepartments?: string[];
+  roleHandoverFrom?: string;
+  roleHandoverTo?: string;
   // Every named substitute/handover person's accept/decline state - see
   // AdjustmentRequest above. Undefined/empty when there was nothing to name
   // (a non-teaching leave with no handover picked) or the request predates

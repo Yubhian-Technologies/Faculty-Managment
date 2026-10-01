@@ -27,6 +27,9 @@ interface ScheduleSlot {
   sectionName: string;
   /** Built but not yet published - still occupies the faculty (see the API). */
   isDraft: boolean;
+  /** Marked busy by the lending department of an Assignment Request - no section/subject of its own. */
+  isDeclared?: boolean;
+  declaredFor?: string;
 }
 
 // Checks a faculty member's real schedule before sending/allocating a lend
@@ -228,6 +231,7 @@ export function FacultyTimetableLookup({ ownOnly = false, embedded = false }: { 
                                   // The section's own name alone - "Section"
                                   // in front of it just said nothing.
                                   slot.sectionName || null,
+                                  slot.isDeclared ? `Marked busy${slot.declaredFor ? ` for ${slot.declaredFor}` : ""}` : null,
                                 ].filter(Boolean).map((part, i) => (
                                   <span key={part}>
                                     {i > 0 && <span className="text-red-400"> · </span>}
