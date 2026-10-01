@@ -370,3 +370,17 @@ Detailed lists: Appendices A, B, E.
 | `super-admin/locations/page.tsx` | 1 |
 | `super-admin/vacancies/page.tsx` | 1 |
 | `webmaster/users/page.tsx` | 1 |
+
+---
+
+## 11. Navigation remediation status (F-50 – F-53)
+
+| Item | Status | What changed |
+|---|---|---|
+| F-52 paginate by default | **Done** | `DataTable` paginates by default (`paginate={false}` opts out; the 3 `groupBy` tables opt out). Bar hidden while ≤ 10 rows. Custom card lists were paginated on HOD pages earlier. |
+| F-50 drill-down → filter + Load (attendance) | **Done** | New `SectionFilterBar` (Department → Course → Year → Section on one page). Principal/HOD Attendance Reports: **Reports** and **By Student** are Load pages. Faculty (`panel/monthly-records`): one `FacultyAttendanceReportView` (Section + Day/Month/Period/Semester/Till now + Load). Retired the `principal/attendance-reports/[dept]/…`, `principal/attendance-history/[dept]/…`, `hod/monthly-records/…`, `panel/monthly-records/[section]/…` trees; old URLs redirect. |
+| F-50 filter + Load (timetable) | **Done** for the Principal/VP/Academics Timetable View (Load button added). HOD Timetable already used Load. |
+| F-51 duplicate timetable trees | **Partly done** | One shared `InchargeTimetableWorkspace` replaces the duplicated panel/college-staff landing + section-picker pages; `hod/timetable/[courseId]` year picker redirects; `hod/timetable/[courseId]/[year]` is now only the Timetable Incharge management page. Section grid and teaching-assignment routes remain as deep-link targets (assignment-request links, `requesterTimetableLink`). |
+| F-53 merged attendance tabs | **Partly done** | Each tab is now a Load page. Splitting them into separate sidebar items needs a `navConfig.ts` change (protected file) — not done. |
+| Still auto-fetching on filter change | **Left** | `hod/subjects`, `hod/teaching-assignments`, `exam-cell/configure`, `principal/internal-marks`, `hod/mid-paper-setter`: their later filters (semester, regulation) are derived from the data the first filters fetch, so a Load button changes their flow and needs a product decision. |
+| Remaining multi-segment pages | **Left** | `*/leave-history/[dept]/[uid]/history/[type]`, `college-office/timings/…/edit`, `principal/departments/…/timing|academic-year/[year]/edit`, `management/faculty/[college]/…`, `finance|purchase/browse/[location]/[college]` — organisation/config drills, not report filter chains. |
