@@ -106,6 +106,7 @@ function updatedAtIso(s: StudentAttendanceSession | null): string | undefined {
 
 export default function MarkAttendancePage() {
   const [periods, setPeriods] = useState<TodayPeriod[]>([]);
+  const [noClassReason, setNoClassReason] = useState<string | null>(null);
   const [dateStr, setDateStr] = useState<string>(todayStr());
   const [isLoadingPeriods, setIsLoadingPeriods] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -180,7 +181,8 @@ export default function MarkAttendancePage() {
     try {
       const res = await fetch("/api/college/student-attendance/today-periods");
       if (!res.ok) throw new Error("Failed to load periods");
-      const json = (await res.json()) as TodayPeriodsResponse;
+      const json = (await res.json()) as TodayPeriodsResponse & { noClassReason?: string };
+      setNoClassReason(json.noClassReason ?? null);
       const fetched = json.periods ?? [];
       setPeriods(fetched);
       setDateStr(json.date ?? todayStr());
@@ -403,7 +405,7 @@ export default function MarkAttendancePage() {
         <Card>
           <CardContent className="py-12 text-center text-sm text-muted-foreground">
             <CalendarClock className="mx-auto mb-3 h-8 w-8 text-muted-foreground/60" />
-            No class assigned for today.
+            {noClassReason ? `No classes today - ${noClassReason}.` : "No class assigned for today."}
           </CardContent>
         </Card>
       ) : (

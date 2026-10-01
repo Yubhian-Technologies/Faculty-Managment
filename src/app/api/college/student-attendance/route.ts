@@ -6,6 +6,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 import { checkFacultyPeriodWindow, periodWindowMessage } from "@/lib/timetable/currentPeriod";
 import { resolveSubstituteSlotsForDate } from "@/lib/leave/periodCoverage";
+import { getNoClassReason } from "@/lib/studentAttendance/classDay";
 import { fetchSectionStudents } from "@/lib/students/sectionRoster";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import type { FacultyMember, Section, StudentAttendanceEntry, StudentAttendanceSession, TeachingAssignment } from "@/types";
@@ -25,6 +26,13 @@ export async function POST(request: Request) {
 
     const db = getAdminDb();
     const collegeRef = db.collection("colleges").doc(session.collegeId);
+
+    // No attendance on a day the college isn't teaching (holiday, summer
+    // break, a day outside its configured working days).
+    const closedReason = await getNoClassReason(db, session.collegeId, date);
+    if (closedReason) {
+      return NextResponse.json({ error: `No classes today - ${closedReason}.` }, { status: 403 });
+    }
 
     // Only load a subject this faculty member is currently (not historically)
     // assigned to teach — prevents loading an arbitrary assignment's roster.

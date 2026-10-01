@@ -65,10 +65,13 @@ export function StudentAttendanceHistoryReport({
   studentId,
   studentName,
   backHref,
+  onBack,
 }: {
   studentId: string;
   studentName: string;
-  backHref: string;
+  /** Where Back navigates. Omit when the report is shown inline and `onBack` closes it instead. */
+  backHref?: string;
+  onBack?: () => void;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -194,7 +197,7 @@ export function StudentAttendanceHistoryReport({
         title={`${studentName} — Attendance History`}
         description="Cumulative subject-wise attendance, by month, a custom date range, or the student's entire history."
         actions={
-          <Button variant="outline" onClick={() => router.push(backHref)}>
+          <Button variant="outline" onClick={() => (onBack ? onBack() : backHref ? router.push(backHref) : router.back())}>
             <ArrowLeft className="h-4 w-4 mr-2" />Back
           </Button>
         }

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, ChevronRight, ClipboardList, Layers, Users, UserCog, X } from "lucide-react";
+import { ArrowLeft, CalendarDays, ChevronRight, ClipboardList, Layers, Users, UserCog, X } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,6 @@ import {
 } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
-import { sectionDisplayLabel } from "@/lib/sections/sectionLabel";
 import { buildCourseGroups } from "@/lib/departments/hodScope";
 import { findBranchManager } from "@/lib/departments/managedBranches";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
@@ -312,8 +311,8 @@ export default function HODTimetableSectionsPage() {
           !activeUnit && unitGroups.length > 1
             ? "Pick a sub-department"
             : activeUnit && unitGroups.length > 1
-            ? `Pick a section · ${activeUnit.name}`
-            : "Pick a section"
+            ? `Timetable Incharge · ${activeUnit.name}`
+            : "Timetable Incharge"
         }
         actions={
           <div className="flex items-center gap-2">
@@ -322,9 +321,9 @@ export default function HODTimetableSectionsPage() {
             </Button>
             <Button
               variant="outline"
-              onClick={() => (activeUnit && unitGroups.length > 1 ? setPickedUnitKey(null) : router.push(`/hod/timetable/${courseId}`))}
+              onClick={() => (activeUnit && unitGroups.length > 1 ? setPickedUnitKey(null) : router.push("/hod/timetable"))}
             >
-              <ArrowLeft className="h-4 w-4 mr-2" />{activeUnit && unitGroups.length > 1 ? "Back to Sub-Departments" : "Back to Years"}
+              <ArrowLeft className="h-4 w-4 mr-2" />{activeUnit && unitGroups.length > 1 ? "Back to Sub-Departments" : "Back to Timetable"}
             </Button>
           </div>
         }
@@ -390,41 +389,22 @@ export default function HODTimetableSectionsPage() {
       </Card>
 
       {isLoading ? (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {[1, 2, 3].map((i) => <div key={i} className="h-20 rounded-lg border bg-muted/30 animate-pulse" />)}
-        </div>
+        <div className="h-20 rounded-lg border bg-muted/30 animate-pulse" />
       ) : !activeUnit || activeUnit.sections.length === 0 ? (
         <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
           No sections have been created for this year yet. Add sections under the Sections module first.
         </div>
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {activeUnit.sections.map((s) => (
-            <Card
-              key={s.id}
-              className="cursor-pointer transition-colors hover:border-primary/50"
-              // This section's OWN real courseId, not the (possibly sibling)
-              // one in the URL - the list above now joins every Course doc for
-              // this catalog programme, so a managed branch's section (e.g.
-              // BSC-CSE-A, filed under CSE's own Course doc) must still open
-              // under ITS OWN courseId, or its saved timetable would be keyed
-              // to the wrong Course doc entirely.
-              onClick={() => router.push(`/hod/timetable/${s.courseId}/${year}/${s.id}`)}
-            >
-              <CardContent className="p-4 flex items-center justify-between gap-2">
-                <div>
-                  {/* Department code included: a parent HOD sees their own "A"
-                      alongside each sub-department's "A". */}
-                  <p className="font-semibold text-sm">{sectionDisplayLabel(s, departments)}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
-                    <Users className="h-3 w-3" />{s.studentCount ?? 0} students
-                  </p>
-                </div>
-                <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+        <Card>
+          <CardContent className="p-4 flex items-center justify-between gap-3 flex-wrap">
+            <p className="text-sm text-muted-foreground">
+              {activeUnit.sections.length} section{activeUnit.sections.length === 1 ? "" : "s"} · open any of them from the Timetable page&rsquo;s filters.
+            </p>
+            <Button variant="outline" size="sm" onClick={() => router.push(`/hod/timetable?courseId=${encodeURIComponent(courseId)}&year=${encodeURIComponent(year)}`)}>
+              <CalendarDays className="h-3.5 w-3.5 mr-1.5" />Open timetable
+            </Button>
+          </CardContent>
+        </Card>
       )}
       </>
       )}

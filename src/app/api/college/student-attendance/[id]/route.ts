@@ -78,49 +78,59 @@ export async function PATCH(
       return NextResponse.json({ error: periodWindowMessage(windowCheck) }, { status: 403 });
     }
 
-    let entries: StudentAttendanceEntry[] = existing.entries;
     if (body.entries) {
-      const updates = new Map(body.entries.map((e) => [e.studentId, e.status]));
-      for (const status of updates.values()) {
-        if (status !== null && !VALID_MARKS.includes(status)) {
+      for (const e of body.entries) {
+        if (e.status !== null && !VALID_MARKS.includes(e.status)) {
           return NextResponse.json({ error: "Attendance status must be PRESENT or ABSENT" }, { status: 400 });
         }
       }
-      entries = existing.entries.map((e) => {
-        if (!updates.has(e.studentId)) return e;
-        return { ...e, status: updates.get(e.studentId) ?? null };
-      });
     }
-    const presentCount = entries.filter((e) => e.status === "PRESENT").length;
-    const markedCount = entries.filter((e) => e.status != null).length;
-
+    const updates = body.entries ? new Map(body.entries.map((e) => [e.studentId, e.status])) : null;
     const now = new Date();
-    const update: Record<string, unknown> = { entries, presentCount, updatedAt: now };
-    if (body.classNotes !== undefined) {
-      update.classNotes = body.classNotes.trim();
-    }
 
-    if (body.submit) {
-      if (existing.totalStudents === 0) {
-        // genuinely empty section — allow submit provided classNotes present (same gate below)
-      } else if (markedCount < existing.totalStudents) {
-        return NextResponse.json(
-          { error: "Please mark attendance for all students before submitting" },
-          { status: 400 }
-        );
+    // Read-merge-write inside a transaction: the merge is applied to the doc as
+    // it is NOW, not to the copy read above, so two devices saving different
+    // students' marks can't overwrite each other, and a submit that lands
+    // between the read and the write can't be edited afterward.
+    type TxResult = { error: { message: string; status: number } } | { merged: Record<string, unknown>; fresh: StudentAttendanceSession };
+    const result: TxResult = await db.runTransaction(async (tx) => {
+      const freshSnap = await tx.get(ref);
+      if (!freshSnap.exists) return { error: { message: "Not found", status: 404 } };
+      const fresh = freshSnap.data() as StudentAttendanceSession;
+      if (fresh.status === "SUBMITTED") {
+        return { error: { message: "Attendance has already been submitted and cannot be edited", status: 409 } };
       }
-      const classNotes = ((update.classNotes as string | undefined) ?? existing.classNotes ?? "").trim();
-      if (!classNotes) {
-        return NextResponse.json(
-          { error: "Record of the Class Work is required before submitting attendance" },
-          { status: 400 }
-        );
-      }
-      update.status = "SUBMITTED";
-      update.submittedAt = now;
-    }
 
-    await ref.update(update);
+      const entries: StudentAttendanceEntry[] = updates
+        ? fresh.entries.map((e) => (updates.has(e.studentId) ? { ...e, status: updates.get(e.studentId) ?? null } : e))
+        : fresh.entries;
+      const presentCount = entries.filter((e) => e.status === "PRESENT").length;
+      const markedCount = entries.filter((e) => e.status != null).length;
+
+      const update: Record<string, unknown> = { entries, presentCount, updatedAt: now };
+      if (body.classNotes !== undefined) update.classNotes = body.classNotes.trim();
+
+      if (body.submit) {
+        if (fresh.totalStudents > 0 && markedCount < fresh.totalStudents) {
+          return { error: { message: "Please mark attendance for all students before submitting", status: 400 } };
+        }
+        const classNotes = ((update.classNotes as string | undefined) ?? fresh.classNotes ?? "").trim();
+        if (!classNotes) {
+          return { error: { message: "Record of the Class Work is required before submitting attendance", status: 400 } };
+        }
+        update.status = "SUBMITTED";
+        update.submittedAt = now;
+      }
+
+      tx.update(ref, update);
+      return { merged: update, fresh };
+    });
+
+    if ("error" in result) {
+      return NextResponse.json({ error: result.error.message }, { status: result.error.status });
+    }
+    const update = result.merged;
+    Object.assign(existing, result.fresh);
 
     return NextResponse.json({ session: { ...existing, ...update, id } });
   } catch (err) {

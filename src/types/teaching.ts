@@ -256,6 +256,12 @@ export interface FacultyAssignmentRequest {
   // stored, which are read in the requesting section's own numbering. Entries
   // for another year are mapped by clock time - see lib/timetable/declaredBusy.ts.
   busyPeriods?: { day: DayOfWeek; period: number; year?: number }[];
+  // The lending side is done with the busy-periods step: set by "Notify &
+  // close" (notify_timetable_updated), cleared by "Edit" (reopen_busy_periods).
+  // While closed the declared periods are view-only; they keep blocking the
+  // requester's placement either way. Absent = still open.
+  busyClosed?: boolean;
+  busyClosedAt?: Timestamp;
   declineReason?: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
