@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useAuthStore } from "@/store/authStore";
 import type { CollegeType } from "@/types";
 
 // Fetches the current session's college's `type` once - used to pick the
@@ -9,15 +10,25 @@ import type { CollegeType } from "@/types";
 // helpers, which fall back to the Engineering-default lists for either case.
 export function useCollegeType() {
   const [collegeType, setCollegeType] = useState<CollegeType | undefined>(undefined);
-  const [loading, setLoading] = useState(true);
+  const collegeId = useAuthStore((s) => s.user?.collegeId);
+  const [loading, setLoading] = useState(Boolean(collegeId));
 
   useEffect(() => {
+    if (!collegeId) return;
+    let cancelled = false;
     fetch("/api/college/info")
       .then((r) => r.json() as Promise<{ type?: CollegeType }>)
-      .then((d) => setCollegeType(d.type))
+      .then((d) => {
+        if (!cancelled) setCollegeType(d.type);
+      })
       .catch(() => {})
-      .finally(() => setLoading(false));
-  }, []);
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [collegeId]);
 
   return { collegeType, loading };
 }

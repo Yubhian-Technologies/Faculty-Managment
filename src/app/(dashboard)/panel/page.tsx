@@ -6,14 +6,15 @@ import {
   CalendarDays,
   ClipboardCheck,
   BookOpen,
-  Wallet,
-  TrendingUp,
   GraduationCap,
-  AlertCircle,
-  FolderOpen,
+  CalendarCheck,
+  CalendarRange,
+  ClipboardList,
+  MessageSquare,
+  UserCircle,
+  CalendarClock,
   QrCode,
   ChevronRight,
-  Clock,
   CheckCircle2,
 } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -26,19 +27,11 @@ import { isPathHidden } from "@/components/layout/navConfig";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { formatDate } from "@/lib/utils";
 import { CardSkeleton } from "@/components/shared/SkeletonLoader";
-import { EmptyState } from "@/components/shared/EmptyState";
 import { MyDashboardOverview } from "@/components/dashboard/MyDashboardOverview";
 import { MidPaperBanner } from "@/components/dashboard/MidPaperBanner";
 import type { HiringBatch } from "@/types";
 
-const STATIC_MODULES = [
-  {
-    label: "Attendance",
-    description: "Monthly attendance record",
-    href: "/panel/attendance",
-    icon: ClipboardCheck,
-    color: "bg-emerald-50 text-emerald-600",
-  },
+const FACULTY_MODULES = [
   {
     label: "Teaching Load",
     description: "Subjects & timetable",
@@ -47,38 +40,66 @@ const STATIC_MODULES = [
     color: "bg-violet-50 text-violet-600",
   },
   {
-    label: "Payslips",
-    description: "Monthly salary slips",
-    href: "/panel/payslips",
-    icon: Wallet,
-    color: "bg-amber-50 text-amber-600",
+    label: "Student Attendance",
+    description: "Mark period attendance",
+    href: "/panel/mark-attendance",
+    icon: CalendarCheck,
+    color: "bg-emerald-50 text-emerald-600",
   },
   {
-    label: "Appraisal",
-    description: "Performance appraisal",
-    href: "/panel/appraisal",
-    icon: TrendingUp,
-    color: "bg-pink-50 text-pink-600",
+    label: "Attendance Report",
+    description: "Monthly student records",
+    href: "/panel/monthly-records",
+    icon: CalendarRange,
+    color: "bg-blue-50 text-blue-600",
   },
   {
-    label: "Training",
-    description: "FDPs & workshops",
-    href: "/panel/training",
+    label: "Students",
+    description: "Section rosters & students",
+    href: "/panel/students",
     icon: GraduationCap,
     color: "bg-cyan-50 text-cyan-600",
   },
   {
-    label: "Grievance",
-    description: "Raise & track issues",
-    href: "/panel/grievance",
-    icon: AlertCircle,
-    color: "bg-red-50 text-red-600",
+    label: "Internal Exam",
+    description: "Assessment marks & batches",
+    href: "/panel/internal-exam",
+    icon: ClipboardList,
+    color: "bg-orange-50 text-orange-600",
   },
   {
-    label: "My Documents",
-    description: "Upload & verify docs",
-    href: "/panel/documents",
-    icon: FolderOpen,
+    label: "Mid Question Bank",
+    description: "Question papers & bank",
+    href: "/panel/mid-bank",
+    icon: BookOpen,
+    color: "bg-amber-50 text-amber-600",
+  },
+  {
+    label: "My Attendance",
+    description: "Daily punch & check-in",
+    href: "/panel/attendance",
+    icon: ClipboardCheck,
+    color: "bg-teal-50 text-teal-600",
+  },
+  {
+    label: "My Leave",
+    description: "Apply & view leave balance",
+    href: "/panel/leave",
+    icon: CalendarClock,
+    color: "bg-pink-50 text-pink-600",
+  },
+  {
+    label: "My Feedback",
+    description: "Student feedback scores",
+    href: "/panel/feedback",
+    icon: MessageSquare,
+    color: "bg-indigo-50 text-indigo-600",
+  },
+  {
+    label: "My Profile",
+    description: "Personal, research & docs",
+    href: "/panel/profile",
+    icon: UserCircle,
     color: "bg-slate-50 text-slate-600",
   },
 ];
@@ -112,9 +133,15 @@ export default function FacultyDashboard() {
 
   // Only show interview module card when assigned to batches
   const modules = (batches.length > 0
-    ? [INTERVIEW_MODULE, ...STATIC_MODULES]
-    : STATIC_MODULES
+    ? [INTERVIEW_MODULE, ...FACULTY_MODULES]
+    : FACULTY_MODULES
   ).filter((mod) => !isHidden(mod.href));
+
+  const isInterviewsHidden = isHidden("/panel/interviews");
+  const isAttendanceHidden = isHidden("/panel/attendance");
+  const isTeachingHidden = isHidden("/panel/teaching");
+  const showInterviewStat = !isInterviewsHidden && (isLoading || upcomingInterviews.length > 0);
+  const showQuickStats = showInterviewStat || !isAttendanceHidden || !isTeachingHidden;
 
   return (
     <div className="space-y-6">
@@ -128,41 +155,49 @@ export default function FacultyDashboard() {
       <MyDashboardOverview />
 
       {/* Quick Stats */}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
-        <Card>
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="h-10 w-10 rounded-lg flex items-center justify-center shrink-0 bg-blue-50 text-blue-600">
-              <CalendarDays className="h-5 w-5" />
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Upcoming Interviews</p>
-              <p className="text-xl font-bold">{isLoading ? "-" : upcomingInterviews.length}</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="h-10 w-10 rounded-lg flex items-center justify-center shrink-0 bg-emerald-50 text-emerald-600">
-              <ClipboardCheck className="h-5 w-5" />
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Attendance (June)</p>
-              <p className="text-xl font-bold text-emerald-600">-</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="h-10 w-10 rounded-lg flex items-center justify-center shrink-0 bg-violet-50 text-violet-600">
-              <BookOpen className="h-5 w-5" />
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Subjects (Sem)</p>
-              <p className="text-xl font-bold">-</p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      {showQuickStats && (
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+          {showInterviewStat && (
+            <Card>
+              <CardContent className="p-4 flex items-center gap-3">
+                <div className="h-10 w-10 rounded-lg flex items-center justify-center shrink-0 bg-blue-50 text-blue-600">
+                  <CalendarDays className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Upcoming Interviews</p>
+                  <p className="text-xl font-bold">{isLoading ? "-" : upcomingInterviews.length}</p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+          {!isAttendanceHidden && (
+            <Card>
+              <CardContent className="p-4 flex items-center gap-3">
+                <div className="h-10 w-10 rounded-lg flex items-center justify-center shrink-0 bg-emerald-50 text-emerald-600">
+                  <ClipboardCheck className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Attendance</p>
+                  <p className="text-xl font-bold text-emerald-600">-</p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+          {!isTeachingHidden && (
+            <Card>
+              <CardContent className="p-4 flex items-center gap-3">
+                <div className="h-10 w-10 rounded-lg flex items-center justify-center shrink-0 bg-violet-50 text-violet-600">
+                  <BookOpen className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Teaching Load</p>
+                  <p className="text-xl font-bold">-</p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
 
       {/* Module Grid */}
       {modules.length > 0 && (

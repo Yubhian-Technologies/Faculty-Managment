@@ -793,6 +793,7 @@ export function isPathHidden(
   hiddenModules: string[],
   hiddenItems: string[]
 ): boolean {
+  if (hiddenItems.includes(pathname)) return true;
   const items = getNavItemsForRole(role);
   let idx = items.findIndex((item) => item.href === pathname);
   if (idx === -1) {
