@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { Plus, Save, Trash2 } from "lucide-react";
+import { Plus, Save, Search, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -55,6 +55,10 @@ function ExamCellConfigureForm() {
   const [existingConfig, setExistingConfig] = useState<ExamConfiguration | null>(null);
   const [isLoadingConfig, setIsLoadingConfig] = useState(false);
   const [saving, setSaving] = useState(false);
+  // What the Load button last asked for - the configuration is fetched for
+  // this, never while the filters are still being chosen. Any filter change
+  // clears it (see resetConfigFields).
+  const [applied, setApplied] = useState<{ courseId: string; year: string; examType: ExamType } | null>(null);
 
   useEffect(() => {
     void (async () => {
@@ -81,6 +85,8 @@ function ExamCellConfigureForm() {
             setDepartmentId(course.departmentId);
             if (preselectedExamType && EXAM_TYPES.includes(preselectedExamType)) {
               setExamType(preselectedExamType);
+              // A link that names the full identity (dashboard "Edit") opens it directly.
+              setApplied({ courseId: course.id, year: preselectedYear, examType: preselectedExamType });
             }
           }
         }
@@ -164,6 +170,7 @@ function ExamCellConfigureForm() {
   const branchName = departmentNameById.get(departmentId) ?? "";
 
   function resetConfigFields() {
+    setApplied(null);
     setExistingConfig(null);
     setInternalMaxMarks("");
     setExternalMaxMarks("");
@@ -186,15 +193,14 @@ function ExamCellConfigureForm() {
     resetConfigFields();
   }
 
-  // Load the configuration whenever the resolved course + year + examType
-  // changes to a real selection — this is now the FULL identity (branch is
-  // implied by courseId), no subject involved.
+  // Load the configuration for the applied course + year + examType - the
+  // FULL identity (branch is implied by courseId), no subject involved.
   useEffect(() => {
-    if (!resolvedCourse || !year || !examType) return;
+    if (!applied) return;
     void (async () => {
       setIsLoadingConfig(true);
       try {
-        const res = await fetch(`/api/college/exam-configurations?courseId=${resolvedCourse.id}&year=${year}&examType=${examType}`);
+        const res = await fetch(`/api/college/exam-configurations?courseId=${applied.courseId}&year=${applied.year}&examType=${applied.examType}`);
         const json = (await res.json()) as { configuration?: ExamConfiguration | null };
         if (json.configuration) {
           const cfg = json.configuration;
@@ -218,7 +224,7 @@ function ExamCellConfigureForm() {
         setIsLoadingConfig(false);
       }
     })();
-  }, [resolvedCourse, year, examType]);
+  }, [applied]);
 
   // A configuration already saved for this exact course+year+branch+examType
   // is locked to view-only - Exam Cell can look at it but never edit/re-save
@@ -343,11 +349,26 @@ function ExamCellConfigureForm() {
                 </SelectContent>
               </Select>
             </div>
+
+            <div className="space-y-2 flex flex-col justify-end">
+              <Button
+                onClick={() => resolvedCourse && year && examType && setApplied({ courseId: resolvedCourse.id, year, examType })}
+                disabled={!resolvedCourse || !year || !examType}
+              >
+                <Search className="h-4 w-4 mr-2" />{applied ? "Reload" : "Load Configuration"}
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
 
-      {departmentId && examType && (
+      {!applied && (
+        <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+          Select a course, year, branch and exam type, then press Load Configuration.
+        </div>
+      )}
+
+      {applied && (
         isLoadingConfig ? (
           <div className="h-72 rounded-lg border bg-muted/30 animate-pulse" />
         ) : (

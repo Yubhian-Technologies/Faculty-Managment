@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
+import { getNoClassReason } from "@/lib/studentAttendance/classDay";
 import { getFacultyPeriodsForDate } from "@/lib/timetable/currentPeriod";
 import type { StudentAttendanceSession, TeachingAssignment } from "@/types";
 
@@ -53,15 +54,29 @@ export async function GET() {
     }
     const today = todayStrIST();
     const nowMinutes = collegeNowMinutes();
-    const slots = await getFacultyPeriodsForDate(db, session.collegeId, facultyMemberId, today);
+    const [closedReason, slots] = await Promise.all([
+      getNoClassReason(db, session.collegeId, today),
+      getFacultyPeriodsForDate(db, session.collegeId, facultyMemberId, today),
+    ]);
+    // Holiday / summer break / non-working day: nothing to mark today.
+    if (closedReason) return NextResponse.json({ date: today, periods: [], noClassReason: closedReason });
 
     const collegeRef = db.collection("colleges").doc(session.collegeId);
-    // Collect assignment names
+    // One batched read for the assignment docs and one for today's sessions,
+    // instead of a sequential get() per assignment and per period.
     const assignmentIds = [...new Set(slots.map((s) => s.slot.assignmentId))];
     const assignMap = new Map<string, TeachingAssignment>();
-    for (const id of assignmentIds) {
-      const snap = await collegeRef.collection("teachingAssignments").doc(id).get();
-      if (snap.exists) assignMap.set(id, snap.data() as TeachingAssignment);
+    if (assignmentIds.length > 0) {
+      const snaps = await db.getAll(...assignmentIds.map((id) => collegeRef.collection("teachingAssignments").doc(id)));
+      for (const snap of snaps) if (snap.exists) assignMap.set(snap.id, snap.data() as TeachingAssignment);
+    }
+    const sessionIds = slots.map((s) => `${s.slot.assignmentId}_${today}_${s.slot.periodNumber}`);
+    const sessionMap = new Map<string, StudentAttendanceSession & { id: string }>();
+    if (sessionIds.length > 0) {
+      const snaps = await db.getAll(...sessionIds.map((id) => collegeRef.collection("studentAttendance").doc(id)));
+      for (const snap of snaps) {
+        if (snap.exists) sessionMap.set(snap.id, { ...(snap.data() as StudentAttendanceSession), id: snap.id });
+      }
     }
 
     const periods = await Promise.all(
@@ -70,11 +85,7 @@ export async function GET() {
         // Where "now" sits against the period: not started yet, running, or over.
         const phase: "UPCOMING" | "OPEN" | "ENDED" = isOpen ? "OPEN" : nowMinutes < toMinutes(startTime) ? "UPCOMING" : "ENDED";
         const id = `${slot.assignmentId}_${today}_${slot.periodNumber}`;
-        let sess: (StudentAttendanceSession & { id: string }) | null = null;
-        try {
-          const snap = await collegeRef.collection("studentAttendance").doc(id).get();
-          if (snap.exists) sess = { ...(snap.data() as StudentAttendanceSession), id } as StudentAttendanceSession & { id: string };
-        } catch {}
+        const sess = sessionMap.get(id) ?? null;
         const assignment = assignMap.get(slot.assignmentId);
         return {
           assignmentId: slot.assignmentId,

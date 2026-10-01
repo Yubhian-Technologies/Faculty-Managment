@@ -192,9 +192,6 @@ export const NAV_ITEMS: NavItem[] = [
   // see the matching guard in api/leave/applications/[id]/route.ts.
   { label: "Leave Approvals", href: "/principal/leave-approvals", iconName: "CalendarClock", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], hideForRealRoles: ["COLLEGE_ADMIN"] },
   { label: "Leave History", href: "/principal/leave-history", iconName: "History", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
-  // Arrange cover for someone below them (Vice Principal / Academics / HODs) who has
-  // other work on a date or range - see StaffAdjustmentsPage.
-  { label: "Adjustments", href: "/principal/adjustments", iconName: "UserCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   // Was 7 separate sidebar items (Student Attendance History, Attendance
   // Report, Attendance Completion, Absent Report, Shortage Report, Faculty
   // Not Posted, Import Attendance), all ungrouped. Now split into two:
@@ -273,9 +270,6 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Timetable View", href: "/hod/timetable-view", iconName: "CalendarSearch", roles: ["HOD"], module: "timetable-incharge" },
   { label: "Leave Approvals", href: "/hod/leave-approvals", iconName: "CalendarClock", roles: ["HOD"], section: "Approvals", module: "leave-approvals" },
   { label: "Leave History", href: "/hod/leave-history", iconName: "History", roles: ["HOD"], module: "leave-approvals" },
-  // Arrange cover for their department's faculty / supporting staff who have
-  // other work on a date or range - see StaffAdjustmentsPage.
-  { label: "Adjustments", href: "/hod/adjustments", iconName: "UserCheck", roles: ["HOD"] },
   // Was 8 separate sidebar items (Attendance Reports, Attendance History,
   // Faculty Attendance, Attendance Completion, Absent Report, Shortage
   // Report, Faculty Not Posted, Import Attendance), all ungrouped and, on
@@ -321,7 +315,6 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Leave History", href: "/college-office/leave-history", iconName: "History", roles: ["COLLEGE_OFFICE"], section: "Leave & Attendance" },
   { label: "Leave Profiles", href: "/college-office/leave/profiles", iconName: "ClipboardList", roles: ["COLLEGE_OFFICE"] },
   // Arrange cover for supporting staff who have other work on a date or range.
-  { label: "Adjustments", href: "/college-office/adjustments", iconName: "UserCheck", roles: ["COLLEGE_OFFICE"] },
   { label: "Holidays", href: "/college-office/holidays", iconName: "CalendarDays", roles: ["COLLEGE_OFFICE"] },
   { label: "Staff Attendance", href: "/college-office/staff-attendance", iconName: "ClipboardCheck", roles: ["COLLEGE_OFFICE"] },
   { label: "Import Attendance", href: "/college-office/attendance-import", iconName: "Upload", roles: ["COLLEGE_OFFICE"] },
@@ -733,7 +726,7 @@ export function filterVisibleNavItems(
   // Apply assigned-modules filtering first: if the user has assigned
   // modules, only keep items whose module is in that set (personal
   // items like profile/leave/attendance/dashboard are always kept).
-  let working = filterByAssignedModules(items, assignedModules);
+  const working = filterByAssignedModules(items, assignedModules);
 
   // Each item's module is fixed from the FULL list before anything is
   // removed. Computing it after removal let the items following a

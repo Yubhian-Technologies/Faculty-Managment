@@ -1,5 +1,6 @@
 import { getAdminDb } from "@/lib/firebase/admin";
 import { orderHeldRoles } from "@/lib/roles/seatRoles";
+import { activeDelegatedRoles } from "@/lib/leave/roleDelegation";
 import { ROLE_SCOPE } from "@/types/core";
 import type { UserRole } from "@/types/core";
 
@@ -45,7 +46,10 @@ async function resolveLiveRoleInfo(session: SessionLike): Promise<CacheEntry> {
       // A deactivated account (e.g. a retired role login) loses access at once,
       // not when its cookie eventually expires.
       const rawRole = u.role ?? session.role;
-      const held = u.isActive === false ? [] : orderHeldRoles(rawRole, u.seatRoles ?? []);
+      // Seats handed over for someone's leave count only while that leave is
+      // in progress (see lib/leave/roleDelegation.ts).
+      const delegated = u.isActive === false ? [] : (await activeDelegatedRoles(getAdminDb(), session.collegeId, session.uid)).roles;
+      const held = u.isActive === false ? [] : orderHeldRoles(rawRole, [...(u.seatRoles ?? []), ...delegated]);
       // Mirrors api/auth/session's realRole derivation: only COLLEGE_ADMIN and
       // DEPARTMENT_OFFICE ever diverge from the normalized `role`, and holding
       // the College Admin seat overrides even that - see SessionPayload.realRole.

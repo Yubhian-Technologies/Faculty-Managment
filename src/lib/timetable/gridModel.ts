@@ -236,7 +236,10 @@ export function buildAllocationList(
     if (slot.labBatch && !entry.labBatches.includes(slot.labBatch)) {
       entry.labBatches.push(slot.labBatch);
     }
-    const name = slotFacultyName(slot) || opts.assignments?.find((a) => a.subjectId === slot.subjectId)?.facultyName;
+    // The assigned faculty, not a one-day substitute - the allocation table
+    // describes who owns the subject, and a leave cover would otherwise be
+    // listed as a permanent second teacher.
+    const name = slot.facultyName || opts.assignments?.find((a) => a.subjectId === slot.subjectId)?.facultyName;
     if (name) entry.facultySet.add(name);
   }
 
@@ -271,4 +274,14 @@ export function sectionTimetableTitleLine(parts: {
 export function ordinalYear(year: number): string {
   const suffix = year === 1 ? "st" : year === 2 ? "nd" : year === 3 ? "rd" : "th";
   return `${year}${suffix} Year`;
+}
+
+/**
+ * Whether the allocation table needs a separate official-code column. The grid
+ * prints each subject's short code, so the table's first column must be that
+ * same code (otherwise a reader can't match a grid cell to its row); the
+ * subject's official code only earns its own column when it actually differs.
+ */
+export function allocationNeedsOfficialCode(allocation: AllocationEntry[]): boolean {
+  return allocation.some((a) => a.code && a.code !== a.shortCode);
 }

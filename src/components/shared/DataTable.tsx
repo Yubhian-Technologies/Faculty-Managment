@@ -49,12 +49,12 @@ interface DataTableProps<T extends Record<string, unknown>> {
   // When set, rows are grouped under a header row per returned label (e.g.
   // department), sorted alphabetically - search/export still apply first.
   groupBy?: (row: T) => string;
-  // Opt-in client-side pagination (default page size 20, same 10/20/30/50
-  // choices as the shared Pagination component used by the Office/Principal
-  // Students pages) - off by default so every other, non-student list already
-  // using this table is unaffected. Paginates AFTER search/groupBy so typing
-  // in the search box still searches the whole `data` array, not just the
-  // current page.
+  // Client-side pagination, ON by default (page size 20, same 10/20/30/50
+  // choices as the shared Pagination component). Pass `paginate={false}` to
+  // opt out - required with `groupBy`, which groups only the current page's
+  // rows. Paginates AFTER search so typing in the search box still searches
+  // the whole `data` array, not just the current page. The page bar is hidden
+  // while everything fits in the smallest page size (10 rows).
   paginate?: boolean;
   defaultPageSize?: number;
 }
@@ -74,7 +74,7 @@ export function DataTable<T extends Record<string, unknown>>({
   onRowClick,
   keyExtractor,
   groupBy,
-  paginate,
+  paginate = true,
   defaultPageSize,
 }: DataTableProps<T>) {
   const [search, setSearch] = useState("");
@@ -264,7 +264,7 @@ export function DataTable<T extends Record<string, unknown>>({
         </div>
       )}
 
-      {paginate && filtered.length > 0 && (
+      {paginate && filtered.length > 10 && (
         <Pagination
           page={effectivePage}
           pageSize={pageSize}

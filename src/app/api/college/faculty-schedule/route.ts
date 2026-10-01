@@ -9,7 +9,7 @@ import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 import { resolveCurrentSemester, matchesCurrentSemester } from "@/lib/college/semester";
 import { isFacultyAvailable } from "@/types";
 import { defaultPeriodTimings } from "@/lib/timetable/buildGrid";
-import type { CourseYearTiming, PeriodTiming, Section, TimetableDraft, TimetableSlot } from "@/types";
+import type { CourseYearTiming, FacultyAssignmentRequest, PeriodTiming, Section, TimetableDraft, TimetableSlot } from "@/types";
 
 // A deliberately narrow, read-only cross-department lookup: unlike
 // /api/college/faculty and /api/college/courses (which reject a department
@@ -53,7 +53,7 @@ export async function GET(request: Request) {
       if (!facultySnap.exists) return NextResponse.json({ error: "Faculty not found" }, { status: 404 });
       const facultyName = facultyDisplayName(facultySnap.data() as { legalName?: string });
 
-      const [slotsSnap, draftsSnap] = await Promise.all([
+      const [slotsSnap, draftsSnap, requestsSnap] = await Promise.all([
         collegeRef.collection("timetableSlots").where("facultyId", "==", facultyId).get(),
         // An unpublished draft occupies this faculty just as surely as a live
         // slot does - loadTimetableContext already refuses to double-book
@@ -61,6 +61,12 @@ export async function GET(request: Request) {
         // drafts showed someone "Free" in a period the app itself would not
         // let you give away. Small collection: one doc per section+semester.
         collegeRef.collection("timetableDrafts").get(),
+        // Busy periods another department declared when it borrowed this
+        // faculty (see FacultyAssignmentRequest.busyPeriods) - they never
+        // become timetable slots, so without this the lookup showed the
+        // faculty as free (or as having nothing booked at all) in hours the
+        // timetable editor itself refuses to place them in.
+        collegeRef.collection("facultyAssignmentRequests").where("allocatedFacultyId", "==", facultyId).get(),
       ]);
       const rawSlots = slotsSnap.docs.map((d) => d.data() as TimetableSlot);
 
@@ -77,6 +83,22 @@ export async function GET(request: Request) {
             day: ds.day, periodNumber: ds.periodNumber, subjectName: ds.subjectName,
             courseId: draft.courseId, year: draft.year, sectionId: draft.sectionId,
             semester: draft.semester ?? null, isDraft: true,
+          } as unknown as TimetableSlot & { isDraft: true });
+        }
+      }
+
+      // Declared-busy periods, reshaped like slots in the course-year they were
+      // declared against (the lender picks that year explicitly; older entries
+      // fall back to the request's own), so the period grid below lays out
+      // against the right timings.
+      for (const d of requestsSnap.docs) {
+        const r = d.data() as FacultyAssignmentRequest;
+        if (r.status !== "ALLOCATED") continue;
+        for (const bp of r.busyPeriods ?? []) {
+          draftSlots.push({
+            day: bp.day, periodNumber: bp.period, subjectName: r.subjectName,
+            courseId: r.courseId, year: bp.year ?? r.year, sectionId: "",
+            semester: null, isDraft: false, isDeclared: true, declaredFor: r.requestingDepartment,
           } as unknown as TimetableSlot & { isDraft: true });
         }
       }
@@ -128,6 +150,8 @@ export async function GET(request: Request) {
           year: s.year,
           sectionName: section?.name ?? "",
           isDraft: (s as { isDraft?: boolean }).isDraft === true,
+          isDeclared: (s as { isDeclared?: boolean }).isDeclared === true,
+          declaredFor: (s as { declaredFor?: string }).declaredFor ?? "",
         };
       });
 

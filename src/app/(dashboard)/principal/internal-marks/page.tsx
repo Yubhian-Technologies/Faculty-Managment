@@ -48,6 +48,12 @@ export default function PrincipalInternalMarksPage() {
   const [departmentId, setDepartmentId] = useState("");
   const [sectionName, setSectionName] = useState("");
   const [subjectId, setSubjectId] = useState("");
+  // What the Load button last asked for. The marks table and the per-batch
+  // breakdown fetches are driven by THIS snapshot, never by the live filters,
+  // so nothing is shown (or fetched) until Load, and any filter change clears it.
+  const [applied, setApplied] = useState<{
+    courseName: string; year: string; departmentId: string; sectionName: string; subjectId: string;
+  } | null>(null);
   const [search, setSearch] = useState("");
 
   const [sections, setSections] = useState<Section[]>([]);
@@ -232,6 +238,7 @@ export default function PrincipalInternalMarksPage() {
   }, [semesterAssignments, courseName, year, departmentId]);
 
   function resetDownstream(from: "course" | "year" | "branch" | "section") {
+    setApplied(null);
     if (from === "course") { setYear(""); setDepartmentId(""); setSectionName(""); setSubjectId(""); setSections([]); }
     if (from === "year") { setDepartmentId(""); setSectionName(""); setSubjectId(""); setSections([]); }
     if (from === "branch") { setSectionName(""); setSubjectId(""); }
@@ -246,22 +253,24 @@ export default function PrincipalInternalMarksPage() {
   // so "All" actually queries every matching existing record, not just a
   // label change.
   const matchingBatches = useMemo(() => {
-    if (!courseName || !year || !departmentId || !sectionName || !subjectId) return [];
+    if (!applied) return [];
+    const appliedCourseIds = new Set(courses.filter((c) => c.name === applied.courseName).map((c) => c.id));
+    const appliedBranch = applied.departmentId !== ALL ? (departmentById.get(applied.departmentId)?.name ?? "") : "";
     return allBatches.filter((b) => {
-      if (!matchingCourseIds.has(b.courseId ?? "")) return false;
-      if (b.year !== Number(year)) return false;
-      if (departmentId !== ALL && b.department !== branchName) return false;
-      if (sectionName !== ALL && b.sectionName !== sectionName) return false;
-      if (subjectId !== ALL && b.subjectId !== subjectId) return false;
+      if (!appliedCourseIds.has(b.courseId ?? "")) return false;
+      if (b.year !== Number(applied.year)) return false;
+      if (applied.departmentId !== ALL && b.department !== appliedBranch) return false;
+      if (applied.sectionName !== ALL && b.sectionName !== applied.sectionName) return false;
+      if (applied.subjectId !== ALL && b.subjectId !== applied.subjectId) return false;
       return true;
     });
-  }, [allBatches, courseName, year, departmentId, branchName, sectionName, subjectId, matchingCourseIds]);
+  }, [allBatches, applied, courses, departmentById]);
 
   // Any level set to "All" means matchingBatches can span multiple distinct
   // (department, section, subject) contexts at once, so it's rendered as one
   // flat, fully-labeled table instead of the single per-batch block used
   // when every level pins to one exact record.
-  const isAllMode = departmentId === ALL || sectionName === ALL || subjectId === ALL;
+  const isAllMode = !!applied && (applied.departmentId === ALL || applied.sectionName === ALL || applied.subjectId === ALL);
 
   const flatRows = useMemo(() => {
     if (!isAllMode) return [];
@@ -514,7 +523,7 @@ export default function PrincipalInternalMarksPage() {
 
             <div className="space-y-2">
               <Label>Subject</Label>
-              <Select value={subjectId} onValueChange={setSubjectId} disabled={!sectionName}>
+              <Select value={subjectId} onValueChange={(v) => { setSubjectId(v); setApplied(null); }} disabled={!sectionName}>
                 <SelectTrigger><SelectValue placeholder="Select subject" /></SelectTrigger>
                 <SelectContent>
                   {subjectOptions.length === 0 ? (
@@ -526,11 +535,26 @@ export default function PrincipalInternalMarksPage() {
                 </SelectContent>
               </Select>
             </div>
+
+            <div className="space-y-2 flex flex-col justify-end">
+              <Button
+                onClick={() => courseName && year && departmentId && sectionName && subjectId && setApplied({ courseName, year, departmentId, sectionName, subjectId })}
+                disabled={!courseName || !year || !departmentId || !sectionName || !subjectId}
+              >
+                <Search className="h-4 w-4 mr-2" />{applied ? "Reload Marks" : "Load Marks"}
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
 
-      {!loadError && subjectId && matchingBatches.length === 0 && (
+      {!applied && !loadError && (
+        <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+          Select a course, year, branch, section and subject, then press Load Marks.
+        </div>
+      )}
+
+      {!loadError && applied && matchingBatches.length === 0 && (
         <Card>
           <CardContent className="py-12 text-center text-sm text-muted-foreground">
             No internal exam marks found for this selection — either no faculty has been assigned to teach it yet,
