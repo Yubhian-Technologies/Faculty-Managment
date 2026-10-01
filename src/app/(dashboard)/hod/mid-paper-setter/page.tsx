@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { UserPlus } from "lucide-react";
+import { Search, UserPlus } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -35,6 +35,10 @@ export default function MidPaperSetterPage() {
   const [midNumber, setMidNumber] = useState<MidNumber>(1);
   const [facultyId, setFacultyId] = useState("");
 
+  // What the Load button last asked for. Course + Semester are the filters;
+  // pressing Load fetches that semester's subjects, and only then do the
+  // Subject / Mid / Faculty fields of the assignment form unlock.
+  const [applied, setApplied] = useState<{ courseName: string; semester: string } | null>(null);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [isLoadingSubjects, setIsLoadingSubjects] = useState(false);
   const [facultyOptions, setFacultyOptions] = useState<FacultyOption[]>([]);
@@ -82,6 +86,7 @@ export default function MidPaperSetterPage() {
   const semesterOptions = useMemo(() => Array.from({ length: totalSemesters }, (_, i) => i + 1), [totalSemesters]);
 
   function resetDownstream(from: "course" | "semester" | "subject") {
+    if (from !== "subject") { setApplied(null); setSubjects([]); }
     if (from === "course") { setSemester(""); setSubjectId(""); setFacultyId(""); }
     if (from === "semester") { setSubjectId(""); setFacultyId(""); }
     if (from === "subject") setFacultyId("");
@@ -89,7 +94,9 @@ export default function MidPaperSetterPage() {
 
   useEffect(() => {
     void (async () => {
-      if (!resolvedCourse || !semester) { setSubjects([]); return; }
+      if (!applied) return;
+      const appliedCourse = courses.find((c) => c.name === applied.courseName);
+      if (!appliedCourse) return;
       setIsLoadingSubjects(true);
       try {
         // catalogId when available, not courseId alone - a master subject is
@@ -98,9 +105,9 @@ export default function MidPaperSetterPage() {
         // Course doc created it, which need not be `resolvedCourse.id` (the
         // first course matching this name in this HOD's own scope) even
         // when the subject legitimately belongs to this course's programme.
-        const params = resolvedCourse.catalogId
-          ? new URLSearchParams({ catalogId: resolvedCourse.catalogId })
-          : new URLSearchParams({ courseId: resolvedCourse.id, year: String(yearForSemester(Number(semester))) });
+        const params = appliedCourse.catalogId
+          ? new URLSearchParams({ catalogId: appliedCourse.catalogId })
+          : new URLSearchParams({ courseId: appliedCourse.id, year: String(yearForSemester(Number(applied.semester))) });
         const res = await fetch(`/api/college/subjects?${params}`);
         const data = (await res.json()) as { subjects?: Subject[] };
         setSubjects(data.subjects ?? []);
@@ -110,7 +117,7 @@ export default function MidPaperSetterPage() {
         setIsLoadingSubjects(false);
       }
     })();
-  }, [resolvedCourse, semester]);
+  }, [applied, courses]);
 
   useEffect(() => {
     void (async () => {
@@ -183,10 +190,20 @@ export default function MidPaperSetterPage() {
             </Select>
           </div>
 
+          <div className="sm:col-span-2 flex justify-start">
+            <Button
+              variant="outline"
+              onClick={() => courseName && semester && setApplied({ courseName, semester })}
+              disabled={!courseName || !semester || isLoadingSubjects}
+            >
+              <Search className="h-4 w-4 mr-2" />{applied ? "Reload Subjects" : "Load Subjects"}
+            </Button>
+          </div>
+
           <div className="space-y-2 sm:col-span-2">
             <Label>Subject</Label>
-            <Select value={subjectId} onValueChange={(v) => { setSubjectId(v); resetDownstream("subject"); }} disabled={!semester || isLoadingSubjects}>
-              <SelectTrigger><SelectValue placeholder={isLoadingSubjects ? "Loading…" : "Select subject"} /></SelectTrigger>
+            <Select value={subjectId} onValueChange={(v) => { setSubjectId(v); resetDownstream("subject"); }} disabled={!applied || isLoadingSubjects}>
+              <SelectTrigger><SelectValue placeholder={isLoadingSubjects ? "Loading…" : applied ? "Select subject" : "Load subjects first"} /></SelectTrigger>
               <SelectContent>
                 {subjects.length === 0 && (
                   <div className="px-2 py-1.5 text-xs text-muted-foreground">No subjects for this course/semester</div>

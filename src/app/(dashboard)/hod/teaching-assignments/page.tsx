@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { Trash2, Send } from "lucide-react";
+import { Search, Trash2, Send } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -73,6 +73,11 @@ export default function TeachingAssignmentsPage() {
   // see buildCourseGroups for why one programme spans several docs.
   const [courseKey, setCourseKey] = useState("");
   const [year, setYear] = useState("");
+  // What the Load button last asked for. Course/Year only choose WHAT to load;
+  // the sections/subjects/timings fetches below run for the applied pair, and
+  // Semester / Sub-department are filters over what that returned (their
+  // options come from it). Changing Course/Year clears it.
+  const [applied, setApplied] = useState<{ key: string; year: string } | null>(null);
   // "" = every department this HOD manages. Set once a sub-department is picked.
   const [departmentFilter, setDepartmentFilter] = useState("");
   const [sectionsCache, setSectionsCache] = useState<Record<string, SectionListItem[]>>({});
@@ -339,7 +344,7 @@ const effectiveSemester = semesterOptions.length === 0
     // skipped filtering forever for any course lacking one (a legacy,
     // pre-catalog-migration course/group), leaving the raw "every subject for
     // this year" list in subjectsCache[key] in place with no way to recover.
-    if (effectiveSemester == null || activeCourseIds.length === 0 || !year) return;
+    if (!applied || effectiveSemester == null || activeCourseIds.length === 0 || !year) return;
     const filterKey = `${key}_sem${effectiveSemester}`;
     if (semesterFilteredKeys.current.has(filterKey)) return;
     semesterFilteredKeys.current.add(filterKey);
@@ -440,11 +445,13 @@ const effectiveSemester = semesterOptions.length === 0
     setPickedTopDepartment(v);
     // A different top-level department has a different course list, sub-
     // department cascade, and assigned years - clear everything downstream.
+    setApplied(null);
     setCourseKey(""); setYear(""); setDepartmentFilter(""); setSelectedSemester(null);
     setAssignForm({ sectionId: "", subjectId: "", facultyId: "" });
   }
 
   function handleCourseChange(v: string) {
+    setApplied(null);
     setCourseKey(v);
     setYear("");
     setDepartmentFilter("");
@@ -453,6 +460,7 @@ const effectiveSemester = semesterOptions.length === 0
   }
 
   function handleYearChange(v: string) {
+    setApplied(null);
     setYear(v);
     setDepartmentFilter("");
     setSelectedSemester(null);
@@ -465,14 +473,14 @@ const effectiveSemester = semesterOptions.length === 0
   // ensureCourseYearData's own cache checks handle the settled ones.
   const fetchedKeys = useRef<Set<string>>(new Set());
   useEffect(() => {
-    if (activeCourseIds.length === 0 || !year) return;
+    if (!applied || activeCourseIds.length === 0 || !year) return;
     if (fetchedKeys.current.has(fetchKey)) return;
     fetchedKeys.current.add(fetchKey);
     void (async () => { await ensureCourseYearData(activeCourseIds, key, year, effectiveSemester, course?.catalogId); })();
     // ensureCourseYearData is redefined every render but reads only its
     // arguments and the caches it guards on, so it is deliberately not a dep.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, year, effectiveSemester, activeCourseIds, course]);
+  }, [applied, key, year, effectiveSemester, activeCourseIds, course]);
 
   function handleDepartmentChange(v: string) {
     // ALL is a sentinel: Radix Select can't hold "" as an item value.
@@ -829,7 +837,7 @@ const effectiveSemester = semesterOptions.length === 0
                 College Office/Principal's "Semester Timings") - otherwise
                 there's nothing to pick and the page behaves exactly as
                 before this feature existed. */}
-            {semesterOptions.length > 0 && (
+            {applied && semesterOptions.length > 0 && (
               <div className="space-y-2">
                 <Label>Semester</Label>
                 <Select value={String(effectiveSemester ?? "")} onValueChange={(v) => setSelectedSemester(Number(v))}>
@@ -843,7 +851,7 @@ const effectiveSemester = semesterOptions.length === 0
             {/* Only for an HOD who actually has sub-departments. A sub-HOD has
                 none beneath them and works solely within their own, so the
                 field is omitted rather than shown with a single option. */}
-            {subDepartmentOptions.length > 0 && (
+            {applied && subDepartmentOptions.length > 0 && (
               <div className="space-y-2">
                 <Label>Sub-department</Label>
                 <Select
@@ -866,6 +874,11 @@ const effectiveSemester = semesterOptions.length === 0
                 </Select>
               </div>
             )}
+            <div className="space-y-2 flex flex-col justify-end">
+              <Button onClick={() => courseKey && year && setApplied({ key: courseKey, year })} disabled={!courseKey || !year}>
+                <Search className="h-4 w-4 mr-2" />{applied ? "Reload" : "Load"}
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -874,8 +887,8 @@ const effectiveSemester = semesterOptions.length === 0
         <Card>
           <CardHeader className="pb-3"><CardTitle className="text-base">Unstaffed Subjects</CardTitle></CardHeader>
           <CardContent>
-            {!courseKey || !year ? (
-              <p className="text-sm text-muted-foreground text-center py-6">Select a course and year above to see staffing gaps.</p>
+            {!applied ? (
+              <p className="text-sm text-muted-foreground text-center py-6">Select a course and year above, then press Load to see staffing gaps.</p>
             ) : !subjectsSemesterReady ? (
               <div className="space-y-2">{[1, 2, 3].map((i) => <div key={i} className="h-14 bg-muted animate-pulse rounded-lg" />)}</div>
             ) : subjects.length === 0 ? (
@@ -908,8 +921,8 @@ const effectiveSemester = semesterOptions.length === 0
         <Card>
           <CardHeader className="pb-3"><CardTitle className="text-base">Assign Faculty</CardTitle></CardHeader>
           <CardContent>
-            {!courseKey || !year ? (
-              <p className="text-sm text-muted-foreground text-center py-6">Select a course and year above to assign faculty.</p>
+            {!applied ? (
+              <p className="text-sm text-muted-foreground text-center py-6">Select a course and year above, then press Load to assign faculty.</p>
             ) : sections.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-6">No sections created yet for {course?.name} · {ordinalYear(Number(year))}.</p>
             ) : (

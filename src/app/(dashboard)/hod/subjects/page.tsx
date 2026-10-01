@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useMemo } from "react";
-import { BookOpen, Pencil, Trash2 } from "lucide-react";
+import { BookOpen, Pencil, Search, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -77,6 +77,11 @@ export default function HODSubjectsPage() {
   const [pickedRegulation, setPickedRegulation] = useState("");
 
   const [unassignTarget, setUnassignTarget] = useState<SubjectSemesterAssignment | null>(null);
+  // What the Load button last asked for. Course/Year only choose WHAT to load;
+  // Semester and Regulation are filters over the loaded course-year (their
+  // options come from the timings/assignments it returns), so they only
+  // appear once something is loaded and never trigger a fetch themselves.
+  const [applied, setApplied] = useState<{ courseId: string; year: string } | null>(null);
 
   const loadCourses = useCallback(async () => {
     setIsLoading(true);
@@ -285,11 +290,22 @@ export default function HODSubjectsPage() {
   }, []);
 
   useEffect(() => {
-    if (!selectedCourse || !selectedYear) { setSubjects([]); setTimings([]); setAssignments([]); return; }
-    void loadAssignments(selectedCourse, selectedYear);
-  }, [selectedCourse, selectedYear, loadAssignments]);
+    if (!applied) return;
+    const course = courses.find((c) => c.id === applied.courseId);
+    if (course) void loadAssignments(course, applied.year);
+  }, [applied, courses, loadAssignments]);
+
+  // A changed Course/Year invalidates what's on screen - cleared here, in the
+  // handlers, not in an effect.
+  function clearLoaded() {
+    setApplied(null);
+    setSubjects([]);
+    setTimings([]);
+    setAssignments([]);
+  }
 
   function selectCourse(courseId: string) {
+    clearLoaded();
     setPickedCourseId(courseId);
     setPickedYear(""); // fall back to the new course's own first year
     setPickedSemester(null);
@@ -297,6 +313,7 @@ export default function HODSubjectsPage() {
   }
 
   function selectYear(year: string) {
+    clearLoaded();
     setPickedYear(year);
     setPickedSemester(null);
     setPickedRegulation("");
@@ -423,7 +440,7 @@ export default function HODSubjectsPage() {
               </div>
               <div className="space-y-1.5">
                 <Label>Semester</Label>
-                {selectedYear && semesterOptions.length === 0 ? (
+                {applied && semesterOptions.length === 0 ? (
                   <div className="flex h-9 items-center rounded-md border bg-muted/30 px-3">
                     <span className="text-xs text-muted-foreground">Not configured for this year</span>
                   </div>
@@ -431,7 +448,7 @@ export default function HODSubjectsPage() {
                   <Select
                     value={effectiveSemester != null ? String(effectiveSemester) : ""}
                     onValueChange={(v) => setPickedSemester(Number(v))}
-                    disabled={!selectedYear || semesterOptions.length === 0}
+                    disabled={!applied || semesterOptions.length === 0}
                   >
                     <SelectTrigger><SelectValue placeholder="Select semester" /></SelectTrigger>
                     <SelectContent>
@@ -445,7 +462,7 @@ export default function HODSubjectsPage() {
                 <Select
                   value={pickedRegulation || ALL_REGULATIONS}
                   onValueChange={(v) => setPickedRegulation(v === ALL_REGULATIONS ? "" : v)}
-                  disabled={regulationOptions.length === 0}
+                  disabled={!applied || regulationOptions.length === 0}
                 >
                   <SelectTrigger><SelectValue placeholder="All regulations" /></SelectTrigger>
                   <SelectContent>
@@ -453,20 +470,36 @@ export default function HODSubjectsPage() {
                     {regulationOptions.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
                   </SelectContent>
                 </Select>
-                {regulationEmptyReason && (
+                {applied && regulationEmptyReason && (
                   <p className="text-xs text-muted-foreground">{regulationEmptyReason}</p>
                 )}
+              </div>
+              <div className="space-y-1.5 flex flex-col justify-end sm:col-span-2 lg:col-span-4">
+                <div>
+                  <Button
+                    onClick={() => selectedCourseId && selectedYear && setApplied({ courseId: selectedCourseId, year: selectedYear })}
+                    disabled={!selectedCourseId || !selectedYear || isLoadingAssignments}
+                  >
+                    <Search className="h-4 w-4 mr-2" />{applied ? "Reload Subjects" : "Load Subjects"}
+                  </Button>
+                </div>
               </div>
             </CardContent>
           </Card>
 
-          {selectedYear && semesterOptions.length === 0 && (
+          {!applied && (
+            <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+              Pick a course and year, then press Load Subjects. Semester and regulation filters appear once it loads.
+            </div>
+          )}
+
+          {applied && !isLoadingAssignments && semesterOptions.length === 0 && (
             <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
               This course-year has no semesters configured yet. Set them up in Course-Year Timings first.
             </div>
           )}
 
-          {selectedCourseId && selectedYear && effectiveSemester != null && (
+          {applied && effectiveSemester != null && (
             <Card>
               <CardContent className="p-4 space-y-4">
                 <h2 className="font-semibold text-sm flex items-center gap-2">
