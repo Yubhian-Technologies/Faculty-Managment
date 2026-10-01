@@ -23,6 +23,8 @@ import { validatePeriodSubstitutions, type PeriodSubstitutionInput } from "@/lib
 import { buildAdjustmentRequests, notifyAdjustmentAssignees, notifyPendingApprover } from "@/lib/leave/adjustmentRequests";
 import { approverStageToStatus, resolveApproverStageForHeldRoles } from "@/lib/leave/approvalRouting";
 import { listHandoverCandidates } from "@/lib/leave/handoverPool";
+import { handoverableRoles } from "@/lib/leave/roleDelegation";
+import { listDepartmentPeople } from "@/lib/leave/roleHandoverPool";
 import { notifyRole } from "@/lib/notify";
 import type { AdjustmentRequest, LeaveRequest, LeaveTypeCode, PeriodSubstitution } from "@/types/leave";
 import type { UserRole } from "@/types/core";
@@ -283,6 +285,10 @@ export async function POST(request: Request) {
       extendsRequestId?: string;
       periodSubstitutions?: PeriodSubstitutionInput[];
       handoverToUid?: string;
+      // Role handover for seat-holders: who acts in the requester's seats
+      // during the leave (see lib/leave/roleDelegation.ts).
+      roleHandoverToUid?: string;
+      roleHandoverDepartment?: string;
       placeOfVisit?: string;
       pointOfContact?: string;
       // SCL only - the URL /api/upload/leave-apply-proof just returned.
@@ -419,14 +425,20 @@ export async function POST(request: Request) {
     // lib/leave/leaveCertificate.ts for that separate, after-the-fact flow).
     // Uploaded via /api/upload/leave-apply-proof, a uid-keyed route with no
     // pre-existing LeaveRequest to validate against (there isn't one yet).
-    if (body.leaveTypeCode === "SCL") {
+    // SL may also attach a doctor's prescription up front, but it's optional -
+    // only validated when supplied.
+    if (body.leaveTypeCode === "SCL" || (body.leaveTypeCode === "SL" && body.proofUrl)) {
       const expectedPrefix = `leave-proofs/${session.collegeId}/${session.uid}/apply/`;
       if (
         !body.proofUrl?.startsWith("https://firebasestorage.googleapis.com/") ||
         !body.proofUrl.includes(encodeURIComponent(expectedPrefix))
       ) {
         return NextResponse.json(
-          { error: "Supporting evidence is required for Special Casual Leave" },
+          {
+            error: body.leaveTypeCode === "SCL"
+              ? "Supporting evidence is required for Special Casual Leave"
+              : "Invalid document upload",
+          },
           { status: 400 }
         );
       }
@@ -600,6 +612,34 @@ export async function POST(request: Request) {
       handover = { uid: chosen.uid, name: chosen.name };
     }
 
+    let roleHandover: {
+      uid: string; name: string; roles: string[]; departments: string[];
+    } | null = null;
+    if (body.roleHandoverToUid) {
+      if (body.roleHandoverToUid === session.uid) {
+        return NextResponse.json({ error: "You can't hand your role over to yourself" }, { status: 400 });
+      }
+      const me = await db.collection("colleges").doc(session.collegeId).collection("users").doc(session.uid).get();
+      const myData = me.data() as { role?: string; seatRoles?: string[]; department?: string; departments?: string[] } | undefined;
+      const roles = handoverableRoles(myData);
+      if (roles.length === 0) {
+        return NextResponse.json({ error: "You don't hold a role that can be handed over" }, { status: 400 });
+      }
+      const department = body.roleHandoverDepartment?.trim() ?? "";
+      const person = department
+        ? (await listDepartmentPeople(db, session.collegeId, department, session.uid)).find((p) => p.uid === body.roleHandoverToUid)
+        : undefined;
+      if (!person) {
+        return NextResponse.json({ error: "Pick someone from the chosen department" }, { status: 400 });
+      }
+      const departments = roles.includes("HOD")
+        ? Array.from(new Set(
+            (myData?.departments?.length ? myData.departments : [myData?.department ?? ""]).map((n) => n.trim()).filter(Boolean)
+          ))
+        : [];
+      roleHandover = { uid: person.uid, name: person.name, roles, departments };
+    }
+
     const now = new Date();
     // Faculty (PANEL_MEMBER - covers both Teaching and Technical designations)
     // always report to their department's HOD. Supporting Staff (COLLEGE_STAFF,
@@ -656,9 +696,19 @@ export async function POST(request: Request) {
       ...(body.placeOfVisit?.trim() ? { placeOfVisit: body.placeOfVisit.trim() } : {}),
       ...(body.pointOfContact?.trim() ? { pointOfContact: body.pointOfContact.trim() } : {}),
       // SCL only - already validated as required and path-checked above.
-      ...(body.leaveTypeCode === "SCL" && body.proofUrl ? { applyProofUrl: body.proofUrl } : {}),
+      ...((body.leaveTypeCode === "SCL" || body.leaveTypeCode === "SL") && body.proofUrl ? { applyProofUrl: body.proofUrl } : {}),
       ...(periodSubstitutions ? { periodSubstitutions } : {}),
       ...(handover ? { handoverToUid: handover.uid, handoverToName: handover.name } : {}),
+      ...(roleHandover
+        ? {
+            roleHandoverToUid: roleHandover.uid,
+            roleHandoverToName: roleHandover.name,
+            roleHandoverRoles: roleHandover.roles,
+            roleHandoverDepartments: roleHandover.departments,
+            roleHandoverFrom: body.fromDate,
+            roleHandoverTo: body.toDate,
+          }
+        : {}),
       ...(adjustmentRequests.length > 0 ? { adjustmentRequests, postAcceptanceStatus } : {}),
       fromDate: fromDate as unknown as LeaveRequest["fromDate"],
       toDate: toDate as unknown as LeaveRequest["toDate"],

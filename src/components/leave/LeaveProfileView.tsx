@@ -264,8 +264,8 @@ export function LeaveProfileView({ uid, applyHref, historyBaseHref }: LeaveProfi
 
       <Card>
         <CardContent className="p-4">
-          <div className="grid gap-6 sm:grid-cols-[1.3fr_1fr]">
-            <div>
+          <div className="space-y-4">
+            <div className="w-full">
               <p className="text-sm text-muted-foreground mb-1">Leave usage this year</p>
               <LeaveUsageBar
                 order={usageOrder}
@@ -273,7 +273,7 @@ export function LeaveProfileView({ uid, applyHref, historyBaseHref }: LeaveProfi
                 totalLabel={`${totalDaysThisYear} day${totalDaysThisYear === 1 ? "" : "s"}`}
               />
             </div>
-            <div className="grid grid-cols-2 gap-3 content-start sm:border-l sm:pl-6">
+            <div className="grid grid-cols-2 gap-3 border-t pt-4 sm:grid-cols-4">
               <div>
                 <p className="text-xl font-semibold">{statCounts.total}</p>
                 <p className="text-xs text-muted-foreground">Requests this year</p>
@@ -614,6 +614,26 @@ export function LeaveHistoryRow({
             className="text-xs text-primary hover:underline"
           >
             View attached proof
+          </a>
+        )}
+        {request.odProofUrl && (
+          <a
+            href={request.odProofUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs text-primary hover:underline"
+          >
+            View duty proof
+          </a>
+        )}
+        {request.certificateUrl && (
+          <a
+            href={request.certificateUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs text-primary hover:underline"
+          >
+            View certificate
           </a>
         )}
         {!!onCancel && request.status === "PENDING_ACCEPTANCE" && request.adjustmentRequests?.some((a) => a.status === "DECLINED") && (

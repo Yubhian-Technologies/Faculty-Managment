@@ -211,20 +211,29 @@ export async function GET(request: Request) {
       parentDeptQuery ? parentDeptQuery.get() : Promise.resolve(null),
     ]);
 
-    const faculty: { id: string; accessLevel: "primary"; [key: string]: unknown }[] =
-      primarySnap.docs.map((d) => ({ id: d.id, ...migrateFacultyDoc(d.data()), accessLevel: "primary" }));
+    // The three queries are not guaranteed disjoint - an HOD who heads both a
+    // parent and one of its own children has that child's name in BOTH
+    // ownDepartmentNames and childDepartmentNames (see scope.ts), so the same
+    // record comes back from more than one of them. Without this, the caller
+    // gets the same person twice and every list keyed on the record id (the
+    // Faculty Register, every faculty picker) renders duplicate React keys.
+    // `api/college/sections` keeps the same `seen` set for the same reason.
+    const seenFacultyIds = new Set<string>();
+    const faculty: { id: string; accessLevel: "primary"; [key: string]: unknown }[] = [];
+    const addFaculty = (d: FirebaseFirestore.QueryDocumentSnapshot) => {
+      if (seenFacultyIds.has(d.id)) return;
+      seenFacultyIds.add(d.id);
+      faculty.push({ id: d.id, ...migrateFacultyDoc(d.data()), accessLevel: "primary" });
+    };
+    for (const d of primarySnap.docs) addFaculty(d);
     if (childDeptSnap) {
       // "primary": for an HOD this query holds their own sub-departments'
       // faculty, which they fully manage (canHodEditDepartment), so the UI
       // must not mark them view-only.
-      for (const d of childDeptSnap.docs) {
-        faculty.push({ id: d.id, ...migrateFacultyDoc(d.data()), accessLevel: "primary" });
-      }
+      for (const d of childDeptSnap.docs) addFaculty(d);
     }
     if (parentDeptSnap) {
-      for (const d of parentDeptSnap.docs) {
-        faculty.push({ id: d.id, ...migrateFacultyDoc(d.data()), accessLevel: "primary" });
-      }
+      for (const d of parentDeptSnap.docs) addFaculty(d);
     }
     // Technical designations belong to Supporting Staff now (see
     // LEGACY_TECHNICAL_DESIGNATIONS) - excluded here rather than at query time
