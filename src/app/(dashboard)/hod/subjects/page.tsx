@@ -82,6 +82,12 @@ export default function HODSubjectsPage() {
   // options come from the timings/assignments it returns), so they only
   // appear once something is loaded and never trigger a fetch themselves.
   const [applied, setApplied] = useState<{ courseId: string; year: string } | null>(null);
+  // Which course-year the loaded `timings` belong to - so "no semesters
+  // configured" is only claimed once that lookup has actually finished.
+  const [timingsFor, setTimingsFor] = useState("");
+  // Semester and Regulation are real filters chosen BEFORE Load - their options
+  // come from a light lookup (the course-year's timings + the catalog) that
+  // runs when Course and Year are picked, not from the loaded subject list.
 
   const loadCourses = useCallback(async () => {
     setIsLoading(true);
@@ -189,6 +195,7 @@ export default function HODSubjectsPage() {
     [catalogItems, selectedCourse]
   );
 
+  const timingsReady = timingsFor === `${selectedCourseId}|${selectedYear}`;
   const semesterOptions = useMemo(() => {
     const nums = new Set<number>();
     for (const t of timings) for (const s of t.semesters ?? []) nums.add(s.semester);
@@ -269,18 +276,15 @@ export default function HODSubjectsPage() {
     setIsLoadingAssignments(true);
     try {
       const catalogId = course.catalogId ?? "";
-      const [subjectsRes, timingsRes, assignmentsRes] = await Promise.all([
+      const [subjectsRes, assignmentsRes] = await Promise.all([
         fetch(catalogId
           ? `/api/college/subjects?catalogId=${encodeURIComponent(catalogId)}`
           : `/api/college/subjects?courseId=${encodeURIComponent(course.id)}`),
-        fetch(`/api/college/course-year-timings?courseId=${encodeURIComponent(course.id)}`),
         fetch(`/api/college/subject-semester-assignments?courseId=${encodeURIComponent(course.id)}&departmentId=${encodeURIComponent(course.departmentId)}&year=${encodeURIComponent(year)}`),
       ]);
       const subjectsData = await subjectsRes.json() as { subjects?: Subject[] };
-      const timingsData = await timingsRes.json() as { timings?: CourseYearTiming[] };
       const assignmentsData = await assignmentsRes.json() as { assignments?: SubjectSemesterAssignment[] };
       setSubjects(subjectsData.subjects ?? []);
-      setTimings((timingsData.timings ?? []).filter((t) => t.year === Number(year)));
       setAssignments(assignmentsData.assignments ?? []);
     } catch {
       toast({ variant: "destructive", title: "Failed to load subjects" });
@@ -288,6 +292,27 @@ export default function HODSubjectsPage() {
       setIsLoadingAssignments(false);
     }
   }, []);
+
+  // Option lookup for the Semester filter: the picked course-year's timings.
+  // Runs on selection (it only fills a dropdown); the subject list itself waits
+  // for Load.
+  useEffect(() => {
+    if (!selectedCourseId || !selectedYear) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch(`/api/college/course-year-timings?courseId=${encodeURIComponent(selectedCourseId)}`);
+        const json = (await res.json()) as { timings?: CourseYearTiming[] };
+        if (!cancelled) {
+          setTimings((json.timings ?? []).filter((t) => t.year === Number(selectedYear)));
+          setTimingsFor(`${selectedCourseId}|${selectedYear}`);
+        }
+      } catch {
+        if (!cancelled) toast({ variant: "destructive", title: "Failed to load semesters" });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [selectedCourseId, selectedYear]);
 
   useEffect(() => {
     if (!applied) return;
@@ -303,6 +328,7 @@ export default function HODSubjectsPage() {
     setTimings([]);
     setAssignments([]);
   }
+  // Changing Semester or Regulation also invalidates the loaded view.
 
   function selectCourse(courseId: string) {
     clearLoaded();
@@ -440,15 +466,15 @@ export default function HODSubjectsPage() {
               </div>
               <div className="space-y-1.5">
                 <Label>Semester</Label>
-                {applied && semesterOptions.length === 0 ? (
+                {timingsReady && semesterOptions.length === 0 ? (
                   <div className="flex h-9 items-center rounded-md border bg-muted/30 px-3">
                     <span className="text-xs text-muted-foreground">Not configured for this year</span>
                   </div>
                 ) : (
                   <Select
                     value={effectiveSemester != null ? String(effectiveSemester) : ""}
-                    onValueChange={(v) => setPickedSemester(Number(v))}
-                    disabled={!applied || semesterOptions.length === 0}
+                    onValueChange={(v) => { setApplied(null); setPickedSemester(Number(v)); }}
+                    disabled={!selectedYear || semesterOptions.length === 0}
                   >
                     <SelectTrigger><SelectValue placeholder="Select semester" /></SelectTrigger>
                     <SelectContent>
@@ -461,8 +487,8 @@ export default function HODSubjectsPage() {
                 <Label>Regulation</Label>
                 <Select
                   value={pickedRegulation || ALL_REGULATIONS}
-                  onValueChange={(v) => setPickedRegulation(v === ALL_REGULATIONS ? "" : v)}
-                  disabled={!applied || regulationOptions.length === 0}
+                  onValueChange={(v) => { setApplied(null); setPickedRegulation(v === ALL_REGULATIONS ? "" : v); }}
+                  disabled={!selectedYear || regulationOptions.length === 0}
                 >
                   <SelectTrigger><SelectValue placeholder="All regulations" /></SelectTrigger>
                   <SelectContent>
@@ -470,15 +496,15 @@ export default function HODSubjectsPage() {
                     {regulationOptions.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
                   </SelectContent>
                 </Select>
-                {applied && regulationEmptyReason && (
+                {selectedYear && regulationEmptyReason && (
                   <p className="text-xs text-muted-foreground">{regulationEmptyReason}</p>
                 )}
               </div>
               <div className="space-y-1.5 flex flex-col justify-end sm:col-span-2 lg:col-span-4">
                 <div>
                   <Button
-                    onClick={() => selectedCourseId && selectedYear && setApplied({ courseId: selectedCourseId, year: selectedYear })}
-                    disabled={!selectedCourseId || !selectedYear || isLoadingAssignments}
+                    onClick={() => selectedCourseId && selectedYear && effectiveSemester != null && setApplied({ courseId: selectedCourseId, year: selectedYear })}
+                    disabled={!selectedCourseId || !selectedYear || effectiveSemester == null || isLoadingAssignments}
                   >
                     <Search className="h-4 w-4 mr-2" />{applied ? "Reload Subjects" : "Load Subjects"}
                   </Button>
@@ -489,11 +515,11 @@ export default function HODSubjectsPage() {
 
           {!applied && (
             <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-              Pick a course and year, then press Load Subjects. Semester and regulation filters appear once it loads.
+              Select the course, year, semester and regulation, then press Load Subjects.
             </div>
           )}
 
-          {applied && !isLoadingAssignments && semesterOptions.length === 0 && (
+          {timingsReady && semesterOptions.length === 0 && (
             <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
               This course-year has no semesters configured yet. Set them up in Course-Year Timings first.
             </div>

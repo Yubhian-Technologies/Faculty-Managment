@@ -326,6 +326,9 @@ const effectiveSemester = semesterOptions.length === 0
   );
 
   const fetchKey = `${key}_sem${effectiveSemester ?? ""}`;
+  // Timings for the picked course-year have been looked up - Semester is only
+  // known (or known to be absent) once they are, so Load waits for them.
+  const timingsLoaded = key in timingsCache;
 
   // ensureCourseYearData's own subjects fetch (below) is unfiltered -
   // effectiveSemester isn't known yet the first time it runs. Once a real
@@ -471,6 +474,34 @@ const effectiveSemester = semesterOptions.length === 0
   // grows after a year was already picked refetches instead of leaving the
   // panels empty. The ref stops it re-firing for a key already in flight;
   // ensureCourseYearData's own cache checks handle the settled ones.
+  // Option lookup for the Semester filter: this course-year's timings. Runs when
+  // Course and Year are picked (it only fills a dropdown); sections, subjects
+  // and everything else wait for Load.
+  const timingsRequested = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (activeCourseIds.length === 0 || !year || key in timingsCache) return;
+    if (timingsRequested.current.has(key)) return;
+    timingsRequested.current.add(key);
+    const ids = activeCourseIds;
+    const y = year;
+    const k = key;
+    void (async () => {
+      try {
+        const lists = await Promise.all(
+          ids.map((cId) =>
+            fetch(`/api/college/course-year-timings?courseId=${encodeURIComponent(cId)}`)
+              .then((r) => r.json() as Promise<{ timings: CourseYearTiming[] }>)
+              .then((d) => (d.timings ?? []).filter((t) => t.year === Number(y)))
+          )
+        );
+        setTimingsCache((c) => ({ ...c, [k]: lists.flat() }));
+      } catch {
+        timingsRequested.current.delete(k);
+        toast({ variant: "destructive", title: "Failed to load semesters" });
+      }
+    })();
+  }, [activeCourseIds, year, key, timingsCache]);
+
   const fetchedKeys = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (!applied || activeCourseIds.length === 0 || !year) return;
@@ -484,6 +515,7 @@ const effectiveSemester = semesterOptions.length === 0
 
   function handleDepartmentChange(v: string) {
     // ALL is a sentinel: Radix Select can't hold "" as an item value.
+    setApplied(null);
     setDepartmentFilter(v === ALL_DEPARTMENTS ? "" : v);
     setAssignForm({ sectionId: "", subjectId: "", facultyId: "" });
   }
@@ -837,10 +869,10 @@ const effectiveSemester = semesterOptions.length === 0
                 College Office/Principal's "Semester Timings") - otherwise
                 there's nothing to pick and the page behaves exactly as
                 before this feature existed. */}
-            {applied && semesterOptions.length > 0 && (
+            {semesterOptions.length > 0 && (
               <div className="space-y-2">
                 <Label>Semester</Label>
-                <Select value={String(effectiveSemester ?? "")} onValueChange={(v) => setSelectedSemester(Number(v))}>
+                <Select value={String(effectiveSemester ?? "")} onValueChange={(v) => { setApplied(null); setSelectedSemester(Number(v)); }}>
                   <SelectTrigger><SelectValue placeholder="Select semester" /></SelectTrigger>
                   <SelectContent>
                     {semesterOptions.map((s) => <SelectItem key={s} value={String(s)}>Semester {s}</SelectItem>)}
@@ -851,7 +883,7 @@ const effectiveSemester = semesterOptions.length === 0
             {/* Only for an HOD who actually has sub-departments. A sub-HOD has
                 none beneath them and works solely within their own, so the
                 field is omitted rather than shown with a single option. */}
-            {applied && subDepartmentOptions.length > 0 && (
+            {subDepartmentOptions.length > 0 && (
               <div className="space-y-2">
                 <Label>Sub-department</Label>
                 <Select
@@ -875,7 +907,10 @@ const effectiveSemester = semesterOptions.length === 0
               </div>
             )}
             <div className="space-y-2 flex flex-col justify-end">
-              <Button onClick={() => courseKey && year && setApplied({ key: courseKey, year })} disabled={!courseKey || !year}>
+              <Button
+                onClick={() => courseKey && year && setApplied({ key: courseKey, year })}
+                disabled={!courseKey || !year || !timingsLoaded || (semesterOptions.length > 0 && effectiveSemester == null)}
+              >
                 <Search className="h-4 w-4 mr-2" />{applied ? "Reload" : "Load"}
               </Button>
             </div>
@@ -888,7 +923,7 @@ const effectiveSemester = semesterOptions.length === 0
           <CardHeader className="pb-3"><CardTitle className="text-base">Unstaffed Subjects</CardTitle></CardHeader>
           <CardContent>
             {!applied ? (
-              <p className="text-sm text-muted-foreground text-center py-6">Select a course and year above, then press Load to see staffing gaps.</p>
+              <p className="text-sm text-muted-foreground text-center py-6">Select the course, year, semester and sub-department, then press Load to see staffing gaps.</p>
             ) : !subjectsSemesterReady ? (
               <div className="space-y-2">{[1, 2, 3].map((i) => <div key={i} className="h-14 bg-muted animate-pulse rounded-lg" />)}</div>
             ) : subjects.length === 0 ? (
@@ -922,7 +957,7 @@ const effectiveSemester = semesterOptions.length === 0
           <CardHeader className="pb-3"><CardTitle className="text-base">Assign Faculty</CardTitle></CardHeader>
           <CardContent>
             {!applied ? (
-              <p className="text-sm text-muted-foreground text-center py-6">Select a course and year above, then press Load to assign faculty.</p>
+              <p className="text-sm text-muted-foreground text-center py-6">Select the course, year, semester and sub-department, then press Load to assign faculty.</p>
             ) : sections.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-6">No sections created yet for {course?.name} · {ordinalYear(Number(year))}.</p>
             ) : (
