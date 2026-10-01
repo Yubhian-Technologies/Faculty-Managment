@@ -778,6 +778,7 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref }: Tim
           affiliation: collegeInfo?.affiliation,
           address: collegeInfo?.address,
           phone: collegeInfo?.phone,
+          logoUrl: collegeInfo?.logoUrl,
           departmentName,
           courseName: course?.name || fallbackCourseName || undefined,
           academicYear: slots[0]?.academicYear,

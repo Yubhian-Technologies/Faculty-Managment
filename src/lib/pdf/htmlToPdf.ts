@@ -20,7 +20,7 @@ const RENDER_SCALE = 2; // canvas px per CSS px - crisp text at print resolution
 // split "View Certificate ↗" across two pages, and - worse - extractLinkAnnotations
 // assigns the whole <a>'s bounding rect to a single page, so a straddling link
 // gets a corrupted (out-of-bounds) /Rect and stops being clickable entirely.
-const ATOMIC_SELECTOR = ".entry, .bullets li, table.data-table tr, .fitem, .section-title, .subheading, .doc-link";
+const ATOMIC_SELECTOR = ".entry, .bullets li, table tr, .fitem, .section-title, .subheading, .doc-link";
 
 // Plain body copy (letter paragraphs, numbered terms-and-conditions clauses,
 // table cells) isn't a single-line atom like the selector above - a <p> can
@@ -54,6 +54,34 @@ function lineRanges(container: HTMLElement): { top: number; bottom: number }[] {
     }
   }
   return ranges;
+}
+
+// html2canvas finds where to draw each line of text by measuring a hidden probe
+// (a <div> holding a <span> of sample text and a 1px <img>) appended to the TOP
+// document's <body> - not the iframe the document is rendered in. This app's
+// global Tailwind reset styles that probe: `img { display: block }` pushes the
+// image off the text's baseline, and the page's inherited `line-height: 1.5`
+// adds half-leading that html2canvas does not expect. Both make every baseline
+// measure too low, so all text was painted a few px below where the browser
+// lays it out - onto the bottom border of table cells, clipping descenders.
+// The probe is recognisable by its inline styles; neutralise just those two
+// rules for the duration of the render. (vertical-align is left alone: the
+// probe sets it inline and that is exactly what must win.)
+const PROBE_FIX_CSS = `
+  body > div[style*="visibility: hidden"][style*="white-space: nowrap"] { line-height: normal !important; }
+  body > div[style*="visibility: hidden"][style*="white-space: nowrap"] > img { display: inline !important; }
+`;
+
+async function withCleanTextMetrics<T>(run: () => Promise<T>): Promise<T> {
+  const style = document.createElement("style");
+  style.setAttribute("data-html2canvas-probe-fix", "");
+  style.textContent = PROBE_FIX_CSS;
+  document.head.appendChild(style);
+  try {
+    return await run();
+  } finally {
+    style.remove();
+  }
 }
 
 function waitForImages(doc: Document): Promise<void> {
@@ -179,6 +207,15 @@ function atomicRanges(container: HTMLElement, pageHeightPx: number): Range1D[] {
     const top = (el.getBoundingClientRect().top - originTop) * RENDER_SCALE;
     ranges.push({ top, bottom: Math.max(top, leadBottom(el, originTop)) });
   }
+  // A repeated header row must stay glued to the row that follows it: without
+  // this it can fit at the very foot of one page while its data row starts the
+  // next, leaving a header with nothing under it.
+  for (const head of Array.from(container.querySelectorAll<HTMLElement>("tr.repeat-head"))) {
+    const following = head.nextElementSibling as HTMLElement | null;
+    const top = (head.getBoundingClientRect().top - originTop) * RENDER_SCALE;
+    const bottom = ((following ?? head).getBoundingClientRect().bottom - originTop) * RENDER_SCALE;
+    ranges.push({ top, bottom });
+  }
   for (const el of Array.from(container.querySelectorAll<HTMLElement>(SECTION_SELECTOR))) {
     const rect = el.getBoundingClientRect();
     const top = (rect.top - originTop) * RENDER_SCALE;
@@ -302,7 +339,7 @@ function repeatTableHeaders(target: HTMLElement, pageHeightPx: number): void {
     const wanted = new Set<HTMLTableRowElement>();
     const top0 = originTop();
     for (const at of breaks) {
-      for (const table of Array.from(target.querySelectorAll<HTMLTableElement>("table.data-table"))) {
+      for (const table of Array.from(target.querySelectorAll<HTMLTableElement>("table"))) {
         const header = headerOf(table);
         if (!header) continue;
         const rect = table.getBoundingClientRect();
@@ -394,7 +431,7 @@ async function renderHtmlToPdfDocument(html: string): Promise<jsPDF> {
     for (let i = 0; i < breaks.length; i++) {
       const breakAt = breaks[i];
       const sliceHeightPx = Math.max(1, Math.round(breakAt - cursor));
-      const canvas = await html2canvas(target, {
+      const canvas = await withCleanTextMetrics(() => html2canvas(target, {
         scale: RENDER_SCALE,
         useCORS: true,
         backgroundColor: "#ffffff",
@@ -406,7 +443,7 @@ async function renderHtmlToPdfDocument(html: string): Promise<jsPDF> {
         windowHeight: totalCss,
         scrollX: 0,
         scrollY: 0,
-      });
+      }));
       const imgData = canvas.toDataURL("image/jpeg", 0.95);
       if (i > 0) pdf.addPage();
       pdf.addImage(imgData, "JPEG", 0, 0, A4_WIDTH_MM, sliceHeightPx / pxPerMm);

@@ -11,6 +11,7 @@ import ExcelJS from "exceljs";
 import type { CourseYearTiming, DayOfWeek, PeriodTiming, Subject, TeachingAssignment, TimetableSlot } from "@/types";
 import { DAY_LABELS } from "@/types";
 import { formatTime12h } from "./facultyTimetablePdf";
+import { loadExcelLogo } from "./logoAsset";
 import {
   allocationNeedsOfficialCode,
   buildAllocationList,
@@ -27,11 +28,8 @@ export interface SectionTimetableXlsxOptions {
   affiliation?: string;
   address?: string;
   phone?: string;
-  // The spreadsheet letterhead is text-only on purpose: embedding a remote
-  // logo needs a CORS-permissive Storage URL and a Buffer/base64 encoder that
-  // isn't guaranteed in a client bundle, and a failed embed must never take the
-  // whole download down with it. The PDF export (sectionTimetablePdf.ts) does
-  // render the logo.
+  /** The college's own logo; the bundled Vishnu logo is used when absent or unreachable. */
+  logoUrl?: string;
   departmentName?: string;
   courseName?: string;
   sectionName?: string;
@@ -177,20 +175,51 @@ export async function buildSectionTimetableXlsxBuffer(opts: SectionTimetableXlsx
 
   // ── Letterhead: college, affiliation, address, phone, title, class line ───
   let r = 1;
-  const putAcross = (text: string, font: Partial<ExcelJS.Font>) => {
+  // Letterhead text sits to the right of the logo, which occupies the Day
+  // column - so the two can never overlap, however narrow the grid is.
+  const textFrom = lastCol >= 2 ? 2 : 1;
+  const letterheadRows: number[] = [];
+  const putAcross = (text: string, font: Partial<ExcelJS.Font>, fromCol = 1) => {
     const row = sheet.getRow(r);
-    row.getCell(1).value = text;
-    row.getCell(1).font = font;
-    row.getCell(1).alignment = { horizontal: "center", vertical: "middle", wrapText: true };
-    sheet.mergeCells(r, 1, r, lastCol);
-    row.height = Math.max(16, (font.size ?? 10) * 1.6);
+    row.getCell(fromCol).value = text;
+    row.getCell(fromCol).font = font;
+    row.getCell(fromCol).alignment = { horizontal: "center", vertical: "middle", wrapText: true };
+    if (lastCol > fromCol) sheet.mergeCells(r, fromCol, r, lastCol);
+    // Wrapped text needs a taller row: estimate how many lines it takes across the merged width.
+    const widthChars = Math.max(10, (lastCol - fromCol + 1) * 14);
+    const lines = Math.max(1, Math.ceil((text.length * ((font.size ?? 10) / 10)) / widthChars));
+    row.height = Math.max(16, (font.size ?? 10) * 1.6) * lines;
+    if (fromCol === textFrom) letterheadRows.push(r);
     r++;
   };
+  const letterheadStart = r;
 
-  if (collegeName) putAcross(`${collegeName}${collegeCode ? ` ( Code: ${collegeCode} )` : ""}`, { bold: true, size: 14 });
-  if (affiliation) putAcross(affiliation, { bold: true, size: 10 });
-  if (address) putAcross(address, { bold: true, size: 10 });
-  if (phone) putAcross(`Tel : ${phone}`, { bold: true, size: 10 });
+  if (collegeName) putAcross(`${collegeName}${collegeCode ? ` ( Code: ${collegeCode} )` : ""}`, { bold: true, size: 14 }, textFrom);
+  if (affiliation) putAcross(affiliation, { bold: true, size: 10 }, textFrom);
+  if (address) putAcross(address, { bold: true, size: 10 }, textFrom);
+  if (phone) putAcross(`Tel : ${phone}`, { bold: true, size: 10 }, textFrom);
+  // Logo: fitted inside the Day column and the letterhead rows above the title.
+  const logo = await loadExcelLogo(opts.logoUrl);
+  if (logo && r > letterheadStart) {
+    try {
+      const rowsPx = (sheet.getRows(letterheadStart, r - letterheadStart) ?? []).reduce((n, row) => n + ((row.height ?? 15) * 96) / 72, 0);
+      const colPx = DAY_COL_WIDTH * 7 + 5;
+      const box = Math.max(24, Math.min(rowsPx - 6, colPx - 8, 84));
+      const ratio = logo.width && logo.height ? logo.width / logo.height : 1;
+      const w = ratio >= 1 ? box : box * ratio;
+      const h = ratio >= 1 ? box / ratio : box;
+      const imageId = workbook.addImage({ base64: logo.base64, extension: logo.extension });
+      const firstRowPx = (((sheet.getRow(letterheadStart).height ?? 15) * 96) / 72) || 20;
+      sheet.addImage(imageId, {
+        tl: { col: Math.max(0, (colPx - w) / 2 / colPx), row: letterheadStart - 1 + Math.min(0.9, Math.max(0, (rowsPx - h) / 2 / firstRowPx)) },
+        ext: { width: w, height: h },
+        editAs: "oneCell",
+      });
+    } catch {
+      // A logo that can't be placed must never fail the download.
+    }
+  }
+
   putAcross("TIME TABLE", { bold: true, size: 13 });
 
   const classLine = [

@@ -9,6 +9,7 @@ import type {
 } from "@/types";
 import { DAY_LABELS } from "@/types";
 import { escapeHtml, formatTime12h } from "./facultyTimetablePdf";
+import { resolveLogoUrl } from "./logoAsset";
 import {
   allocationNeedsOfficialCode,
   buildAllocationList,
@@ -159,9 +160,9 @@ export function buildSectionTimetablePdfHtml(opts: SectionTimetablePdfOptions): 
     .join("  |  ");
   const inchargeLine = resolvedIncharge ? `Class In-charge: ${escapeHtml(resolvedIncharge)}` : "";
 
-  const logoTd = logoUrl
-    ? `<td class="logo-cell"><img src="${escapeHtml(logoUrl)}" alt="${escapeHtml(collegeName)} logo"></td>`
-    : "";
+  // Always a logo: the college's own, else the bundled Vishnu logo.
+  const resolvedLogo = resolveLogoUrl(logoUrl);
+  const logoTd = `<td class="logo-cell"><img src="${escapeHtml(resolvedLogo)}" alt="${escapeHtml(collegeName)} logo"></td>`;
 
   const headerHtml = `
   <table class="letterhead" cellspacing="0" cellpadding="0">
@@ -171,7 +172,7 @@ export function buildSectionTimetablePdfHtml(opts: SectionTimetablePdfOptions): 
         ${nameLine}
         ${identityLines}
       </td>
-      ${logoUrl ? `<td class="logo-cell"></td>` : ""}
+      <td class="logo-cell"></td>
     </tr>
   </table>
   <div class="doc-title">${escapeHtml(title || "TIME TABLE")}</div>
@@ -191,8 +192,8 @@ export function buildSectionTimetablePdfHtml(opts: SectionTimetablePdfOptions): 
   const headerCells = columns
     .map((col) =>
       col.kind === "break"
-        ? `<th class="cell break-head"><div class="head-label">${escapeHtml(col.breakKind === "lunch" ? "Lunch" : "Break")}</div>${timeStack(col.startTime, col.endTime)}</th>`
-        : `<th class="cell"><div class="head-label">Period ${col.periodNumber}</div>${timeStack(col.startTime, col.endTime)}</th>`
+        ? `<th class="cell break-head"><div class="fx"><div class="head-label">${escapeHtml(col.breakKind === "lunch" ? "Lunch" : "Break")}</div>${timeStack(col.startTime, col.endTime)}</div></th>`
+        : `<th class="cell"><div class="fx"><div class="head-label">Period ${col.periodNumber}</div>${timeStack(col.startTime, col.endTime)}</div></th>`
     )
     .join("");
 
@@ -200,9 +201,9 @@ export function buildSectionTimetablePdfHtml(opts: SectionTimetablePdfOptions): 
     .map((day) => {
       const cells = columns
         .map((col) => {
-          if (col.kind === "break") return `<td class="cell break-cell">&nbsp;</td>`;
+          if (col.kind === "break") return `<td class="cell break-cell"><div class="fx">&nbsp;</div></td>`;
           const cellSlots = slots.filter((s) => s.day === day && s.periodNumber === col.periodNumber);
-          if (cellSlots.length === 0) return `<td class="cell">&nbsp;</td>`;
+          if (cellSlots.length === 0) return `<td class="cell"><div class="fx">&nbsp;</div></td>`;
           const inner = cellSlots
             .map((s) => {
               const sub = s.substituteFacultyName;
@@ -213,10 +214,10 @@ export function buildSectionTimetablePdfHtml(opts: SectionTimetablePdfOptions): 
               </div>`;
             })
             .join("");
-          return `<td class="cell">${inner}</td>`;
+          return `<td class="cell"><div class="fx">${inner}</div></td>`;
         })
         .join("");
-      return `<tr><th class="cell day-cell">${escapeHtml(DAY_LABELS[day] ?? day)}</th>${cells}</tr>`;
+      return `<tr><th class="cell day-cell"><div class="fx fx-left">${escapeHtml(DAY_LABELS[day] ?? day)}</div></th>${cells}</tr>`;
     })
     .join("");
 
@@ -236,7 +237,7 @@ export function buildSectionTimetablePdfHtml(opts: SectionTimetablePdfOptions): 
   const gridHtml = `
   <table class="grid" cellspacing="0" cellpadding="0">
     ${colGroup}
-    <thead><tr><th class="cell">Day</th>${headerCells}</tr></thead>
+    <thead><tr><th class="cell"><div class="fx">Day</div></th>${headerCells}</tr></thead>
     <tbody>${bodyRows}</tbody>
   </table>`;
 
@@ -247,31 +248,33 @@ export function buildSectionTimetablePdfHtml(opts: SectionTimetablePdfOptions): 
   const officialCodeCol = allocationNeedsOfficialCode(allocation);
   const allocationHtml = allocation.length
     ? `
+  <div class="section">
   <div class="section-title">Allocation of Subjects</div>
   <table class="allocation" cellspacing="0" cellpadding="0">
     <thead>
       <tr>
-        <th class="cell left" style="width:15%">Code</th>
-        ${officialCodeCol ? `<th class="cell left" style="width:15%">Subject Code</th>` : ""}
-        <th class="cell left">Subject</th>
-        <th class="cell left" style="width:30%">Name of Faculty</th>
-        <th class="cell left" style="width:15%">Faculty Initials</th>
+        <th class="cell left" style="width:15%"><div class="fx fx-left">Code</div></th>
+        ${officialCodeCol ? `<th class="cell left" style="width:15%"><div class="fx fx-left">Subject Code</div></th>` : ""}
+        <th class="cell left"><div class="fx fx-left">Subject</div></th>
+        <th class="cell left" style="width:30%"><div class="fx fx-left">Name of Faculty</div></th>
+        <th class="cell left" style="width:15%"><div class="fx fx-left">Faculty Initials</div></th>
       </tr>
     </thead>
     <tbody>
       ${allocation
         .map(
           (a) => `<tr>
-        <td class="cell left">${escapeHtml(a.shortCode)}</td>
-        ${officialCodeCol ? `<td class="cell left">${escapeHtml(a.code)}</td>` : ""}
-        <td class="cell left">${escapeHtml(a.name)}${a.labBatches.length ? ` (${escapeHtml(a.labBatches.join(", "))})` : ""}</td>
-        <td class="cell left">${escapeHtml(a.faculty)}</td>
-        <td class="cell left">&nbsp;</td>
+        <td class="cell left"><div class="fx fx-left">${escapeHtml(a.shortCode)}</div></td>
+        ${officialCodeCol ? `<td class="cell left"><div class="fx fx-left">${escapeHtml(a.code)}</div></td>` : ""}
+        <td class="cell left"><div class="fx fx-left">${escapeHtml(a.name)}${a.labBatches.length ? ` (${escapeHtml(a.labBatches.join(", "))})` : ""}</div></td>
+        <td class="cell left"><div class="fx fx-left">${escapeHtml(a.faculty)}</div></td>
+        <td class="cell left"><div class="fx fx-left">&nbsp;</div></td>
       </tr>`
         )
         .join("")}
     </tbody>
-  </table>`
+  </table>
+  </div>`
     : "";
 
   // Optional - off unless a caller asks for it.
@@ -302,33 +305,50 @@ export function buildSectionTimetablePdfHtml(opts: SectionTimetablePdfOptions): 
     .logo-cell { width: 26mm; vertical-align: middle; text-align: center; }
     .logo-cell img { max-width: 24mm; max-height: 24mm; object-fit: contain; }
     .letterhead-text { vertical-align: middle; text-align: center; }
-    .inst-name { font-size: 13pt; font-weight: 700; }
-    .identity-line { font-size: 10pt; font-weight: 700; }
+    .inst-name { font-size: 13pt; font-weight: 700; overflow-wrap: anywhere; }
+    .identity-line { font-size: 10pt; font-weight: 700; overflow-wrap: anywhere; }
     .doc-title { text-align: center; font-size: 12pt; font-weight: 700; margin: 12px 0 4px; }
-    .class-line { text-align: center; font-size: 9pt; }
+    .class-line { text-align: center; font-size: 9pt; overflow-wrap: anywhere; }
     .letterhead { margin-bottom: 0; }
     table.grid { margin-top: 8px; }
 
     /* Right/bottom borders on each cell plus top/left on the table: with
        border-collapse the canvas capture drew every shared edge twice. */
     table.grid, table.allocation { width: 100%; table-layout: fixed; border-collapse: separate; border-spacing: 0; border-top: 1px solid #555; border-left: 1px solid #555; }
-    .cell { border-right: 1px solid #555; border-bottom: 1px solid #555; padding: 4px 3px; text-align: center; vertical-align: middle; }
+    /* Every cell's content sits in a flex box (.fx) that supplies the row
+       height and centres vertically. html2canvas paints text a few px low
+       whenever a plain table cell has vertical padding / margin / loose
+       line-height (the text ended up on the bottom border); flex centring is
+       geometric, so it lands where the layout puts it. The td itself carries
+       no vertical padding. A cell with more lines just grows past min-height. */
+    .cell { border-right: 1px solid #555; border-bottom: 1px solid #555; padding: 0; text-align: center; vertical-align: middle; line-height: 1.2; overflow-wrap: anywhere; }
+    .fx { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; min-height: 32px; padding: 0 3px; }
+    .fx-left { align-items: flex-start; text-align: left; padding: 0 6px; }
     th.cell { font-weight: 700; font-size: 8.5pt; background: #fff; }
-    .left { text-align: left; padding: 4px 6px; }
+    th.cell > .fx { min-height: 44px; }
     .head-label { font-size: 8.5pt; font-weight: 700; }
-    .col-time { font-size: 7pt; font-weight: 400; margin-top: 1px; white-space: nowrap; }
+    .col-time { font-size: 7pt; font-weight: 400; white-space: nowrap; }
     .break-head .head-label { font-size: 7pt; }
 
     .col-day { width: 19mm; }
     .col-break { width: 13mm; }
-    th.day-cell { font-weight: 400; text-align: left; padding-left: 5px; font-size: 8.5pt; }
-    .grid td.cell { height: 28px; padding: 4px 1px; overflow-wrap: break-word; }
-    .slot-code { font-size: ${slotPt.toFixed(1)}pt; white-space: nowrap; }
-    .slot-note { font-size: 7pt; color: #333; }
+    th.day-cell { font-weight: 400; font-size: 8.5pt; }
+    th.day-cell > .fx { min-height: 32px; padding-left: 5px; }
+    .grid td.cell > .fx { padding: 0 1px; }
+    /* Font is sized so the longest code fits its column; if even the smallest
+       size can't hold a code it wraps inside the cell instead of spilling into
+       the neighbouring one. */
+    .slot { text-align: center; }
+    .slot + .slot { margin-top: 3px; }
+    .slot-code { font-size: ${slotPt.toFixed(1)}pt; overflow-wrap: anywhere; word-break: break-word; line-height: 1.2; }
+    .slot-note { font-size: 7pt; color: #333; overflow-wrap: anywhere; line-height: 1.2; }
 
     .section-title { text-align: center; font-size: 12pt; font-weight: 700; margin: 22px 0 8px; }
     table.allocation td.cell, table.allocation th.cell { font-size: 9pt; overflow-wrap: anywhere; }
+    table.allocation .fx { min-height: 26px; }
     table.allocation th.cell { font-weight: 700; }
+    table.allocation th.cell > .fx { min-height: 28px; }
+
 
     .signature-row { display: flex; justify-content: space-around; margin-top: 48px; }
     .signature-block { text-align: center; width: 26%; font-size: 9pt; }
