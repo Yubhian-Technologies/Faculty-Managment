@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import { Send, Inbox, CalendarDays, Plus, X } from "lucide-react";
+import { Send, Inbox, CalendarDays, Plus, X, Pencil } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -229,9 +229,32 @@ export function AssignmentRequestsPanel({ timetableHrefFor }: AssignmentRequests
       });
       const json = await res.json() as { error?: string };
       if (!res.ok) throw new Error(json.error ?? "Failed to notify");
-      toast({ variant: "success", title: "Requesting department notified" });
+      toast({ variant: "success", title: "Requesting department notified - closed" });
+      setBusyBuilderOpenId(null);
+      await load();
     } catch (err) {
       toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to notify" });
+    } finally {
+      setNotifyingId(null);
+    }
+  }
+
+  /** Edit after close: reopens the builder (view-only until now) - Notify & close again when done. */
+  async function handleEdit(r: FacultyAssignmentRequest) {
+    setNotifyingId(r.id);
+    try {
+      const res = await fetch(`/api/college/faculty-assignment-requests/${r.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "reopen_busy_periods" }),
+      });
+      const json = await res.json() as { error?: string };
+      if (!res.ok) throw new Error(json.error ?? "Failed to reopen");
+      await load();
+      setBusyDraftByRequest((prev) => ({ ...prev, [r.id]: r.busyPeriods ?? [] }));
+      await toggleBusyBuilder({ ...r, busyClosed: false });
+    } catch (err) {
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to reopen" });
     } finally {
       setNotifyingId(null);
     }
@@ -304,15 +327,24 @@ export function AssignmentRequestsPanel({ timetableHrefFor }: AssignmentRequests
                           the subject via their own Timetable page's "Add a
                           subject" flow, which is blocked from those cells. */}
                       {tab === "incoming" ? (
-                        <div className="flex items-center gap-2">
-                          <Button size="sm" variant="outline" onClick={() => void toggleBusyBuilder(r)}>
-                            <CalendarDays className="h-3.5 w-3.5 mr-1.5" />
-                            {busyBuilderOpenId === r.id ? "Close" : "Mark busy periods"}
-                          </Button>
-                          <Button size="sm" variant="outline" loading={notifyingId === r.id} onClick={() => void handleNotify(r)}>
-                            <Send className="h-3.5 w-3.5 mr-1.5" />Notify department
-                          </Button>
-                        </div>
+                        r.busyClosed ? (
+                          <div className="flex items-center gap-2">
+                            <Badge variant="approved">Closed</Badge>
+                            <Button size="sm" variant="outline" loading={notifyingId === r.id} onClick={() => void handleEdit(r)}>
+                              <Pencil className="h-3.5 w-3.5 mr-1.5" />Edit
+                            </Button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <Button size="sm" variant="outline" onClick={() => void toggleBusyBuilder(r)}>
+                              <CalendarDays className="h-3.5 w-3.5 mr-1.5" />
+                              {busyBuilderOpenId === r.id ? "Hide" : "Mark busy periods"}
+                            </Button>
+                            <Button size="sm" variant="outline" loading={notifyingId === r.id} onClick={() => void handleNotify(r)}>
+                              <Send className="h-3.5 w-3.5 mr-1.5" />Notify department &amp; close
+                            </Button>
+                          </div>
+                        )
                       ) : (
                         <Button size="sm" variant="outline" asChild>
                           <Link href={timetableHrefFor(r)}>
@@ -322,7 +354,26 @@ export function AssignmentRequestsPanel({ timetableHrefFor }: AssignmentRequests
                       )}
                     </div>
 
-                    {tab === "incoming" && busyBuilderOpenId === r.id && (() => {
+                    {/* View: what was declared. Read-only once closed (and for the
+                        requesting side), editable only through the builder below. */}
+                    {(r.busyClosed || tab === "outgoing") && (
+                      <div className="rounded-md border bg-muted/20 p-3 space-y-1.5">
+                        <p className="text-xs font-medium">Busy periods declared for {r.allocatedFacultyName ?? "this faculty"}</p>
+                        {(r.busyPeriods ?? []).length === 0 ? (
+                          <p className="text-xs text-muted-foreground">None - the faculty is free for every period.</p>
+                        ) : (
+                          <div className="flex flex-wrap gap-1.5">
+                            {(r.busyPeriods ?? []).map((bp) => (
+                              <span key={`${bp.day}_${bp.period}_${bp.year ?? ""}`} className="rounded-full border bg-background px-2 py-1 text-[11px]">
+                                {bp.year ? `${ordinalYear(bp.year)} · ` : ""}{DAY_LABELS[bp.day]} P{bp.period}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {tab === "incoming" && !r.busyClosed && busyBuilderOpenId === r.id && (() => {
                       const activeTiming = (timingsByRequest[r.id] ?? []).find((t) => Number(t.year) === pickerYear) ?? null;
                       const saving = busySavingId === r.id;
                       return (
@@ -331,7 +382,7 @@ export function AssignmentRequestsPanel({ timetableHrefFor }: AssignmentRequests
                             Mark when {r.allocatedFacultyName ?? "this faculty"} already has other classes, by Year, Day
                             and Period - each one saves immediately. {r.requestingDepartment} will be blocked from
                             placing this subject at any period marked busy here; once you&apos;re done, use Notify
-                            department so they know to go add it to their timetable.
+                            department &amp; close so they know to go add it to their timetable.
                           </p>
 
                           <div className="flex flex-wrap items-end gap-2">

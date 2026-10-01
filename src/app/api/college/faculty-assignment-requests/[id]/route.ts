@@ -35,7 +35,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const session = await requireCollegeMember("HOD", "PANEL_MEMBER", "COLLEGE_STAFF");
     const { id } = await params;
     const body = (await request.json()) as {
-      action?: "allocate" | "decline" | "notify_timetable_updated" | "set_busy_periods";
+      action?: "allocate" | "decline" | "notify_timetable_updated" | "set_busy_periods" | "reopen_busy_periods";
       facultyId?: string;
       facultyName?: string;
       declineReason?: string;
@@ -82,6 +82,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (body.action === "set_busy_periods") {
       if (reqData.status !== "ALLOCATED") {
         return NextResponse.json({ error: "This request hasn't been allocated yet" }, { status: 409 });
+      }
+      // Closed = view-only until the lending side clicks Edit (reopen below).
+      if (reqData.busyClosed) {
+        return NextResponse.json({ error: "Busy periods are closed - click Edit to change them" }, { status: 409 });
       }
       const raw = body.busyPeriods ?? [];
       if (raw.length > 100) {
@@ -162,6 +166,16 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       return NextResponse.json({ ok: true, busyPeriods: deduped, conflicts });
     }
 
+    // Edit after close: reopens the busy-periods step so the lender can change
+    // what they declared, then Notify & close again. Nothing is notified here.
+    if (body.action === "reopen_busy_periods") {
+      if (reqData.status !== "ALLOCATED") {
+        return NextResponse.json({ error: "This request hasn't been allocated yet" }, { status: 409 });
+      }
+      await reqRef.update({ busyClosed: false, updatedAt: now });
+      return NextResponse.json({ ok: true });
+    }
+
     // Fired once the lending side considers this lend "ready" - whether or
     // not they declared any busy periods (none can legitimately mean "fully
     // free") - so the requesting department knows they can go place the
@@ -171,10 +185,15 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         return NextResponse.json({ error: "This request hasn't been allocated yet" }, { status: 409 });
       }
       const requesterRole = await loadUserRole(db, session.collegeId, reqData.requestedBy);
+      // A second close (after an Edit) tells the requester the periods changed.
+      const isUpdate = reqData.busyClosedAt != null;
+      await reqRef.update({ busyClosed: true, busyClosedAt: now, updatedAt: now });
       await notify(
         db, session.collegeId, reqData.requestedBy, "FACULTY_ASSIGNMENT_ALLOCATED",
-        "Ready to schedule",
-        `${reqData.targetDepartmentName} shared ${reqData.allocatedFacultyName ?? "the allocated faculty"}'s busy periods for ${reqData.subjectName} (Section ${reqData.sectionName}) - you can now place it on your Timetable page`,
+        isUpdate ? "Busy periods updated" : "Ready to schedule",
+        isUpdate
+          ? `${reqData.targetDepartmentName} updated ${reqData.allocatedFacultyName ?? "the allocated faculty"}'s busy periods for ${reqData.subjectName} (Section ${reqData.sectionName}) - check your Timetable page`
+          : `${reqData.targetDepartmentName} shared ${reqData.allocatedFacultyName ?? "the allocated faculty"}'s busy periods for ${reqData.subjectName} (Section ${reqData.sectionName}) - you can now place it on your Timetable page`,
         requesterTimetableLink(requesterRole, reqData)
       );
       return NextResponse.json({ ok: true });

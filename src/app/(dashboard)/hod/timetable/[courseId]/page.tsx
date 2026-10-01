@@ -8,7 +8,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/useToast";
 import { useMyDepartments } from "@/hooks/useMyDepartments";
-import { deriveHodScope, managerEffectiveYears } from "@/lib/departments/hodScope";
+import {
+  deriveHodScope, managedBranchYearsMap, managerEffectiveYears, mergeOwnDepartmentOptions, yearsInScope,
+} from "@/lib/departments/hodScope";
 import type { Course, Department } from "@/types";
 
 function ordinalYear(year: number) {
@@ -63,11 +65,13 @@ export default function HODTimetableYearsPage() {
       if (!ownDept) return [];
       return managerEffectiveYears(ownDept, departments, course.catalogId);
     }
-    // Plain viewer: this course doc's own department's own effective years -
-    // same helper, just pointed at the doc's own department instead.
-    const dept = departments.find((d) => d.id === course.departmentId);
-    if (!dept) return [];
-    return managerEffectiveYears(dept, departments, course.catalogId);
+    // Plain viewer: years come from THIS HOD's own departments, not the Course
+    // doc's department - a sub-department (e.g. ECE-VLSI) owns no Course doc,
+    // so the doc's department can be its parent (Basic Science -> year 1 only).
+    // Same resolution as hod/timetable/page.tsx and hod/sections.
+    const relevant = mergeOwnDepartmentOptions(departments, myDepartments);
+    if (relevant.length === 0) return [];
+    return yearsInScope(course.durationYears, relevant, managedBranchYearsMap(departments, course.catalogId), false, course.catalogId, departments);
   })();
 
   return (
