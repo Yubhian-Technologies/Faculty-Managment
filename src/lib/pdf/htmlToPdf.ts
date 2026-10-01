@@ -256,39 +256,53 @@ async function renderHtmlToPdfDocument(html: string): Promise<jsPDF> {
     const target = (doc.querySelector(".page") as HTMLElement | null) ?? doc.body;
     iframe.style.height = `${target.scrollHeight}px`;
 
-    const canvas = await html2canvas(target, {
-      scale: RENDER_SCALE,
-      useCORS: true,
-      backgroundColor: "#ffffff",
-      windowWidth: target.scrollWidth,
-      windowHeight: target.scrollHeight,
-    });
+    // Page geometry in CSS px (the template is a fixed 210mm-wide column).
+    // Measured with getBoundingClientRect, not scrollHeight, so a fractional
+    // height is rounded UP rather than down - rounding down shaved the last
+    // line (the footer) off the final page.
+    const widthCss = Math.ceil(target.getBoundingClientRect().width);
+    const totalCss = Math.ceil(target.getBoundingClientRect().height);
+    iframe.style.height = `${totalCss}px`;
 
-    const pxPerMm = canvas.width / A4_WIDTH_MM;
+    // Canvas-px (CSS px x RENDER_SCALE) geometry, as the break helpers expect.
+    const totalHeight = totalCss * RENDER_SCALE;
+    const pxPerMm = (widthCss * RENDER_SCALE) / A4_WIDTH_MM;
     const pageHeightPx = A4_HEIGHT_MM * pxPerMm;
     const ranges = atomicRanges(target);
-    const breaks = computePageBreaks(canvas.height, pageHeightPx, ranges);
+    const breaks = computePageBreaks(totalHeight, pageHeightPx, ranges);
 
-    // Extract link positions while the iframe is still in the DOM - after
-    // canvas capture so layout is stable, before the finally block removes it.
+    // Extract link positions while the iframe is still in the DOM - before
+    // the finally block removes it.
     const linkAnnotations = extractLinkAnnotations(target, pxPerMm, breaks);
 
+    // Each page is captured on its OWN small canvas (html2canvas crops to the
+    // y/height window) instead of rasterising the whole document once and
+    // slicing it. One canvas for a long resume gets enormous (width x scale x
+    // total height), and browsers cap canvas size - iOS Safari and many
+    // Android browsers at ~16.7M pixels, i.e. only a few pages - so a long
+    // resume came out blank/truncated past that point. A single page is always
+    // well inside every browser's limit, so the full document is always kept.
     const pdf = new jsPDF({ unit: "mm", format: "a4" });
     let cursor = 0;
-    breaks.forEach((breakAt, i) => {
-      const sliceHeight = Math.max(1, Math.round(breakAt - cursor));
-      const sliceCanvas = document.createElement("canvas");
-      sliceCanvas.width = canvas.width;
-      sliceCanvas.height = sliceHeight;
-      const ctx = sliceCanvas.getContext("2d");
-      if (ctx) {
-        ctx.fillStyle = "#ffffff";
-        ctx.fillRect(0, 0, sliceCanvas.width, sliceCanvas.height);
-        ctx.drawImage(canvas, 0, cursor, canvas.width, sliceHeight, 0, 0, canvas.width, sliceHeight);
-      }
-      const imgData = sliceCanvas.toDataURL("image/jpeg", 0.95);
+    for (let i = 0; i < breaks.length; i++) {
+      const breakAt = breaks[i];
+      const sliceHeightPx = Math.max(1, Math.round(breakAt - cursor));
+      const canvas = await html2canvas(target, {
+        scale: RENDER_SCALE,
+        useCORS: true,
+        backgroundColor: "#ffffff",
+        x: 0,
+        y: cursor / RENDER_SCALE,
+        width: widthCss,
+        height: sliceHeightPx / RENDER_SCALE,
+        windowWidth: widthCss,
+        windowHeight: totalCss,
+        scrollX: 0,
+        scrollY: 0,
+      });
+      const imgData = canvas.toDataURL("image/jpeg", 0.95);
       if (i > 0) pdf.addPage();
-      pdf.addImage(imgData, "JPEG", 0, 0, A4_WIDTH_MM, sliceHeight / pxPerMm);
+      pdf.addImage(imgData, "JPEG", 0, 0, A4_WIDTH_MM, sliceHeightPx / pxPerMm);
 
       // Stamp invisible clickable hyperlink rectangles over each link on this page
       for (const ann of linkAnnotations) {
@@ -298,7 +312,7 @@ async function renderHtmlToPdfDocument(html: string): Promise<jsPDF> {
       }
 
       cursor = breakAt;
-    });
+    }
 
     return pdf;
   } finally {

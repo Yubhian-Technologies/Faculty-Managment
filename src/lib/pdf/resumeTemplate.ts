@@ -525,7 +525,6 @@ export function getResumeHTML(rawData: ResumeData): string {
       <div>
         <div class="name">${esc(facultyDisplayName(data))}</div>
         ${subtitle ? `<div class="subtitle">${esc(subtitle)}</div>` : ""}
-        ${data.collegeName ? `<div class="college">${esc(data.collegeName)}</div>` : ""}
       </div>
     </div>
     <div class="contact-block">
@@ -562,7 +561,7 @@ export const DOCUMENT_STYLES = `
 
   /* Free-flowing document - spans as many A4 pages as the content needs, with
      the top/bottom breathing room supplied per-page via page.pdf()'s margin. */
-  .page { width: 210mm; background: #ffffff; padding: 0 15mm; }
+  .page { width: 210mm; background: #ffffff; padding: 0 15mm 8mm; }
 
   .resume-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #111827; padding-bottom: 8px; margin-bottom: 10px; }
   .header-left { display: flex; align-items: center; gap: 14px; }
