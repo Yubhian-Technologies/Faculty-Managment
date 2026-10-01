@@ -8,11 +8,15 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { PeopleNotOnRoster } from "@/components/roles/PeopleNotOnRoster";
 import { EmptyState } from "@/components/shared/EmptyState";
+import { SegmentedTabs } from "@/components/shared/SegmentedTabs";
+import { useCollegeType } from "@/hooks/useCollegeType";
+import { hasSupportingStaffSplit } from "@/lib/designations/config";
 import type { Department, FacultyMember } from "@/types";
 
 export default function PrincipalFacultyDepartmentsPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const { collegeType, loading: collegeTypeLoading } = useCollegeType();
 
   const { data: departments = [], isLoading } = useQuery({
     queryKey: ["principal-faculty-departments"],
@@ -53,6 +57,18 @@ export default function PrincipalFacultyDepartmentsPage() {
           </div>
         }
       />
+
+      {/* Only colleges that keep supporting staff separate get this tab; the
+          Supporting Staff view is read-only for Principal / College Admin. */}
+      {!collegeTypeLoading && hasSupportingStaffSplit(collegeType) && (
+        <SegmentedTabs
+          value="faculty"
+          options={[
+            { key: "faculty", label: "Teaching Faculty", href: "/principal/faculty" },
+            { key: "supporting", label: "Supporting Staff", href: "/principal/faculty/supporting-staff" },
+          ]}
+        />
+      )}
 
       <PeopleNotOnRoster departments={departments} />
 

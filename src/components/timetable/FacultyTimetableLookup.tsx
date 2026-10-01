@@ -24,6 +24,9 @@ interface ScheduleSlot {
   sectionName: string;
   /** Built but not yet published - still occupies the faculty (see the API). */
   isDraft: boolean;
+  /** Marked busy by the lending department of an Assignment Request - no section/subject of its own. */
+  isDeclared?: boolean;
+  declaredFor?: string;
 }
 
 // Checks a faculty member's real schedule before sending/allocating a lend
@@ -226,9 +229,12 @@ export function FacultyTimetableLookup({ ownOnly = false, embedded = false }: { 
                               <X className="h-3.5 w-3.5 shrink-0 text-red-600 mt-[1px]" />
                               {/* Compact "III · CSE-A": roman year and the section
                                   name, on one line. The period is the column
-                                  heading (P1, P2, ...), not repeated here. */}
-                              <p className="min-w-0 text-[11px] font-semibold text-red-800 leading-snug whitespace-nowrap">
-                                {[toRoman(slot.year), slot.sectionName || null].filter(Boolean).join(" · ")}
+                                  heading (P1, P2, ...), not repeated here.
+                                  Declared busy slots show their target department. */}
+                              <p className="min-w-0 text-[11px] font-semibold text-red-800 leading-snug">
+                                {slot.isDeclared
+                                  ? `Marked busy${slot.declaredFor ? ` for ${slot.declaredFor}` : ""}`
+                                  : [toRoman(slot.year), slot.sectionName || null].filter(Boolean).join(" · ")}
                               </p>
                             </div>
                           ) : (

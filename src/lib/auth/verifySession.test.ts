@@ -22,7 +22,10 @@ function fakeDocRef(path: string) {
   };
 }
 function fakeCollectionRef(path: string) {
-  return { doc: (id: string) => fakeDocRef(`${path}/${id}`) };
+  // where().where().get() - the role-delegation lookup (leaveRequests); no
+  // delegations exist in these tests, so it always resolves empty.
+  const query = { where: () => query, get: async () => ({ docs: [] }) };
+  return { doc: (id: string) => fakeDocRef(`${path}/${id}`), where: query.where };
 }
 vi.mock("@/lib/firebase/admin", () => ({
   getAdminDb: () => ({ collection: (name: string) => fakeCollectionRef(name) }),

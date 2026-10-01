@@ -4,57 +4,85 @@ import { useEffect, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "@/hooks/useToast";
 import { downloadFreeFacultyPdf, downloadFreeFacultyXlsx } from "@/lib/timetable/freeFacultyExport";
-import type { DayOfWeek } from "@/types";
-import { DAY_LABELS } from "@/types";
-
 interface LeisureFaculty { id: string; employeeId: string; name: string; department: string }
 
 // College-wide "who is free at this time" (Principal, Vice Principal, Exam
-// Cell): pick a day + period and every faculty member with no class then, in
-// any department, is listed grouped by department. Backed by
+// Cell): pick a date and a clock window, and every faculty member with no
+// class then is listed grouped by department. Backed by
 // /api/college/faculty-leisure, which enforces the same role list.
+//
+// The filters are a DATE rather than a weekday, a from/to window, and an
+// optional department. A date is what someone arranging an exam or a meeting
+// actually holds; the server resolves it to the weekday the timetable is
+// keyed by, and refuses a date that is not a working day. The window matches
+// any period it OVERLAPS, so it never has to line up with period boundaries -
+// which is why there is no period picker here.
 export function FacultyLeisureFilter({ scopeLabel = "in the college" }: { scopeLabel?: string } = {}) {
-  const [workingDays, setWorkingDays] = useState<DayOfWeek[]>([]);
-  const [periodCount, setPeriodCount] = useState(0);
-  const [day, setDay] = useState("");
-  const [period, setPeriod] = useState("");
+  const [departments, setDepartments] = useState<string[]>([]);
+
+  const [department, setDepartment] = useState("");
+  const [date, setDate] = useState("");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+
   const [faculty, setFaculty] = useState<LeisureFaculty[] | null>(null);
-  
+  const [isLoading, setIsLoading] = useState(false);
+  // What the loaded list is actually for - the pickers may have moved on since.
+  const [loadedSlot, setLoadedSlot] = useState("");
+  const [exporting, setExporting] = useState<"" | "pdf" | "xlsx">("");
+
   useEffect(() => {
     let cancelled = false;
     void (async () => {
       try {
-        const d = await fetch("/api/college/faculty-leisure").then((r) => r.json() as Promise<{ workingDays?: DayOfWeek[]; periodCount?: number }>);
+        const d = await fetch("/api/college/faculty-leisure").then((r) => r.json() as Promise<{
+          departments?: string[];
+        }>);
         if (cancelled) return;
-        setWorkingDays(d.workingDays ?? []);
-        setPeriodCount(d.periodCount ?? 0);
+        setDepartments(d.departments ?? []);
       } catch {
-        if (!cancelled) toast({ variant: "destructive", title: "Failed to load leisure filter" });
+        if (!cancelled) toast({ variant: "destructive", title: "Failed to load the free-faculty filter" });
       }
     })();
     return () => { cancelled = true; };
   }, []);
 
-  // Only fetched when Load is clicked, never on picking a day/period.
-  const [isLoading, setIsLoading] = useState(false);
+  // Any change to the criteria invalidates the list already on screen - it was
+  // loaded for different criteria and would otherwise be read as this one.
+  function change<T>(set: (v: T) => void) {
+    return (v: T) => { set(v); setFaculty(null); };
+  }
+
+  const windowValid = !!from && !!to && from < to;
+  const canLoad = !!date && windowValid && !isLoading;
+
   async function load() {
-    if (!day || !period) return;
+    if (!canLoad) return;
     setIsLoading(true);
     try {
-      const d = await fetch(`/api/college/faculty-leisure?day=${day}&period=${period}`).then((r) => r.json() as Promise<{ faculty?: LeisureFaculty[]; error?: string }>);
+      const qs = new URLSearchParams({ date, from, to });
+      if (department) qs.set("department", department);
+
+      const d = await fetch(`/api/college/faculty-leisure?${qs.toString()}`).then((r) => r.json() as Promise<{
+        faculty?: LeisureFaculty[]; error?: string;
+      }>);
       if (d.error) throw new Error(d.error);
       setFaculty(d.faculty ?? []);
-      setLoadedSlot(`${DAY_LABELS[day as DayOfWeek] ?? day}, Period ${period}`);
-    } catch {
+      setLoadedSlot(describeSlot());
+    } catch (err) {
       setFaculty(null);
-      toast({ variant: "destructive", title: "Failed to load free faculty" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to load free faculty" });
     } finally {
       setIsLoading(false);
     }
   }
-  // The slot the loaded list is for (day/period pickers may have moved on).
-  const [loadedSlot, setLoadedSlot] = useState("");
-  const [exporting, setExporting] = useState<"" | "pdf" | "xlsx">("");
+
+  function describeSlot(): string {
+    const parts = [formatDate(date), `${from}-${to}`];
+    if (department) parts.push(department);
+    return parts.join(", ");
+  }
+
   async function exportList(kind: "pdf" | "xlsx") {
     if (!faculty) return;
     setExporting(kind);
@@ -68,14 +96,11 @@ export function FacultyLeisureFilter({ scopeLabel = "in the college" }: { scopeL
       setExporting("");
     }
   }
-  function pickDay(v: string) { setDay(v); setFaculty(null); }
-  function pickPeriod(v: string) { setPeriod(v); setFaculty(null); }
-  const key = "loaded";
 
-  const selectClass =
+  const fieldClass =
     "h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus:border-primary focus:outline-none";
   const byDepartment = new Map<string, LeisureFaculty[]>();
-  for (const f of key ? faculty ?? [] : []) {
+  for (const f of faculty ?? []) {
     byDepartment.set(f.department || "Unassigned", [...(byDepartment.get(f.department || "Unassigned") ?? []), f]);
   }
 
@@ -84,35 +109,63 @@ export function FacultyLeisureFilter({ scopeLabel = "in the college" }: { scopeL
       <CardContent className="space-y-3 pt-6">
         <div>
           <h3 className="text-sm font-semibold">Free faculty</h3>
-          <p className="text-xs text-muted-foreground">Pick a day and period to list every faculty member {scopeLabel} with no class then.</p>
+          <p className="text-xs text-muted-foreground">
+            Pick a date and a time range to list every faculty member {scopeLabel} with no class then.
+          </p>
         </div>
+
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <select aria-label="Day" className={selectClass} value={day} onChange={(e) => pickDay(e.target.value)}>
-            <option value="">Select a day</option>
-            {workingDays.map((d) => <option key={d} value={d}>{DAY_LABELS[d] ?? d}</option>)}
-          </select>
-          <select aria-label="Period" className={selectClass} value={period} onChange={(e) => pickPeriod(e.target.value)}>
-            <option value="">Select a period</option>
-            {Array.from({ length: periodCount }, (_, i) => i + 1).map((n) => <option key={n} value={n}>Period {n}</option>)}
-          </select>
+          <label className="space-y-1">
+            <span className="text-xs text-muted-foreground">Department</span>
+            <select aria-label="Department" className={fieldClass} value={department} onChange={(e) => change(setDepartment)(e.target.value)}>
+              <option value="">All departments</option>
+              {departments.map((d) => <option key={d} value={d}>{d}</option>)}
+            </select>
+          </label>
+
+          <label className="space-y-1">
+            <span className="text-xs text-muted-foreground">Date</span>
+            <input type="date" aria-label="Date" className={fieldClass} value={date} onChange={(e) => change(setDate)(e.target.value)} />
+          </label>
+
+          <label className="space-y-1">
+            <span className="text-xs text-muted-foreground">Time from</span>
+            <input type="time" aria-label="Time from" className={fieldClass} value={from} onChange={(e) => change(setFrom)(e.target.value)} />
+          </label>
+
+          <label className="space-y-1">
+            <span className="text-xs text-muted-foreground">Time to</span>
+            <input type="time" aria-label="Time to" className={fieldClass} value={to} onChange={(e) => change(setTo)(e.target.value)} />
+          </label>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3">
           <button
             type="button"
             className="h-9 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground disabled:opacity-50"
             onClick={() => void load()}
-            disabled={!day || !period || isLoading}
+            disabled={!canLoad}
           >
             {isLoading ? "Loading..." : "Load"}
           </button>
+          {from && to && from >= to && (
+            <p className="text-xs text-destructive">&ldquo;Time to&rdquo; must be after &ldquo;Time from&rdquo;.</p>
+          )}
+          {!date && <p className="text-xs text-muted-foreground">Pick a date to start.</p>}
+          {date && !from && !to && (
+            <p className="text-xs text-muted-foreground">Set a time range.</p>
+          )}
         </div>
+
         {isLoading ? (
           <div className="h-16 rounded-md bg-muted/30 animate-pulse" />
-        ) : key && faculty ? (
+        ) : faculty ? (
           faculty.length === 0 ? (
             <p className="text-sm text-muted-foreground">No faculty are free at this time.</p>
           ) : (
             <div className="space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-sm font-medium">{faculty.length} free</p>
+                <p className="text-sm font-medium">{faculty.length} free &middot; <span className="font-normal text-muted-foreground">{loadedSlot}</span></p>
                 <div className="flex gap-2">
                   <button type="button" className="h-8 rounded-md border border-input bg-background px-3 text-xs font-medium hover:bg-muted disabled:opacity-50" onClick={() => void exportList("xlsx")} disabled={exporting !== ""}>
                     {exporting === "xlsx" ? "Exporting..." : "Export Excel"}
@@ -153,4 +206,13 @@ export function FacultyLeisureFilter({ scopeLabel = "in the college" }: { scopeL
       </CardContent>
     </Card>
   );
+}
+
+// "2026-10-05" -> "Mon, 05 Oct 2026". Built from the parts rather than
+// new Date(iso) so the day never slips a date either side of UTC midnight.
+function formatDate(iso: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  if (!m) return iso;
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  return d.toLocaleDateString("en-GB", { weekday: "short", day: "2-digit", month: "short", year: "numeric" });
 }

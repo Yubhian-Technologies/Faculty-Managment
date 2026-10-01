@@ -154,7 +154,7 @@ export async function GET(request: Request) {
 
       const todayStart = istMidnightUTC(new Date());
       // Working-day override for this date — if the role is named, Sunday is treated as working day
-      let overriddenRoles: Set<string> = new Set();
+      const overriddenRoles: Set<string> = new Set();
       if (isSunday(start)) {
         const endExclusive = new Date(start.getTime() + 24 * 60 * 60 * 1000);
         const wdSnap = await collegeRef.collection("workingDays").where("date", ">=", start).where("date", "<", endExclusive).get();
@@ -310,7 +310,7 @@ export async function GET(request: Request) {
     //     and didn't. Before registration, or today, stays NOT_MARKED.
     //   Working-day override on a Sunday flips it to ABSENT (same as check-in gate).
     const todayStart = istMidnightUTC(new Date());
-    let overriddenRolesMain: Set<string> = new Set();
+    const overriddenRolesMain: Set<string> = new Set();
     if (isSunday(start)) {
       const endExclusive = new Date(start.getTime() + 24 * 60 * 60 * 1000);
       const wdSnap = await collegeRef.collection("workingDays").where("date", ">=", start).where("date", "<", endExclusive).get();

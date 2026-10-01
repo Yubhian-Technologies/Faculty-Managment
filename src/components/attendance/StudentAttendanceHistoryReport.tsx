@@ -177,7 +177,7 @@ export function StudentAttendanceHistoryReport({
       .then((r) => r.json() as Promise<{ availableSemesters?: number[] }>)
       .then((json) => setAvailableSemesters(json.availableSemesters ?? []))
       .catch(() => { /* Semester tab just stays hidden */ });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [studentId]);
 
   useEffect(() => {

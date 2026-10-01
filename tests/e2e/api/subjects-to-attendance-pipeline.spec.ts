@@ -483,7 +483,7 @@ test.describe.serial("Subjects to Attendance Reports API Pipeline", () => {
     test("5.6 PATCH /api/college/student-attendance/[id] rejects unauthorized mark status", async () => {
       const res = await facultyCtx.patch("/api/college/student-attendance/non-existent-session-id", {
         data: {
-          entries: [{ studentId: "s1", status: "INVALID_STATUS" as any }],
+          entries: [{ studentId: "s1", status: "INVALID_STATUS" as unknown as "PRESENT" }],
         },
       });
       // 404 if doc does not exist, or 400 for invalid mark
