@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { UserPlus } from "lucide-react";
+import { Search, UserPlus } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -35,6 +35,10 @@ export default function MidPaperSetterPage() {
   const [midNumber, setMidNumber] = useState<MidNumber>(1);
   const [facultyId, setFacultyId] = useState("");
 
+  // Set by the Load button (last in the filter row): the subject whose
+  // teaching faculty were loaded. Faculty + Assign only appear for it, and any
+  // filter change clears it.
+  const [facultyLoadedFor, setFacultyLoadedFor] = useState("");
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [isLoadingSubjects, setIsLoadingSubjects] = useState(false);
   const [facultyOptions, setFacultyOptions] = useState<FacultyOption[]>([]);
@@ -82,6 +86,8 @@ export default function MidPaperSetterPage() {
   const semesterOptions = useMemo(() => Array.from({ length: totalSemesters }, (_, i) => i + 1), [totalSemesters]);
 
   function resetDownstream(from: "course" | "semester" | "subject") {
+    setFacultyLoadedFor("");
+    setFacultyOptions([]);
     if (from === "course") { setSemester(""); setSubjectId(""); setFacultyId(""); }
     if (from === "semester") { setSubjectId(""); setFacultyId(""); }
     if (from === "subject") setFacultyId("");
@@ -89,6 +95,8 @@ export default function MidPaperSetterPage() {
 
   useEffect(() => {
     void (async () => {
+      // Option lookup: fills the Subject dropdown as soon as Course + Semester
+      // are picked (the report-style fetch is Load, further down).
       if (!resolvedCourse || !semester) { setSubjects([]); return; }
       setIsLoadingSubjects(true);
       try {
@@ -112,23 +120,22 @@ export default function MidPaperSetterPage() {
     })();
   }, [resolvedCourse, semester]);
 
-  useEffect(() => {
-    void (async () => {
-      if (!subjectId) { setFacultyOptions([]); return; }
-      setIsLoadingFaculty(true);
-      try {
-        const params = new URLSearchParams({ subjectId, listFaculty: "true" });
-        const res = await fetch(`/api/college/mid-paper-assignments?${params}`);
-        const data = (await res.json()) as { faculty?: FacultyOption[]; error?: string };
-        if (!res.ok) throw new Error(data.error ?? "Failed to load faculty");
-        setFacultyOptions(data.faculty ?? []);
-      } catch (e) {
-        toast({ variant: "destructive", title: e instanceof Error ? e.message : "Failed to load faculty" });
-      } finally {
-        setIsLoadingFaculty(false);
-      }
-    })();
-  }, [subjectId]);
+  async function loadFaculty() {
+    if (!subjectId) return;
+    setIsLoadingFaculty(true);
+    try {
+      const params = new URLSearchParams({ subjectId, listFaculty: "true" });
+      const res = await fetch(`/api/college/mid-paper-assignments?${params}`);
+      const data = (await res.json()) as { faculty?: FacultyOption[]; error?: string };
+      if (!res.ok) throw new Error(data.error ?? "Failed to load faculty");
+      setFacultyOptions(data.faculty ?? []);
+      setFacultyLoadedFor(subjectId);
+    } catch (e) {
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Failed to load faculty" });
+    } finally {
+      setIsLoadingFaculty(false);
+    }
+  }
 
   async function assign() {
     if (!subjectId) { toast({ variant: "destructive", title: "Select a subject" }); return; }
@@ -198,7 +205,7 @@ export default function MidPaperSetterPage() {
 
           <div className="space-y-2">
             <Label>Mid</Label>
-            <RadioGroup value={String(midNumber)} onValueChange={(v) => setMidNumber(Number(v) as MidNumber)} className="flex gap-4 pt-1.5">
+            <RadioGroup value={String(midNumber)} onValueChange={(v) => { setMidNumber(Number(v) as MidNumber); setFacultyLoadedFor(""); }} className="flex gap-4 pt-1.5">
               <div className="flex items-center gap-2">
                 <RadioGroupItem value="1" id="mid-1" />
                 <Label htmlFor="mid-1" className="font-normal">Mid 1</Label>
@@ -210,25 +217,46 @@ export default function MidPaperSetterPage() {
             </RadioGroup>
           </div>
 
-          <div className="space-y-2">
-            <Label>Faculty <span className="font-normal text-muted-foreground">(currently teaching this subject)</span></Label>
-            <Select value={facultyId} onValueChange={setFacultyId} disabled={!subjectId || isLoadingFaculty}>
-              <SelectTrigger><SelectValue placeholder={isLoadingFaculty ? "Loading…" : "Select faculty"} /></SelectTrigger>
-              <SelectContent>
-                {subjectId && facultyOptions.length === 0 && !isLoadingFaculty && (
-                  <div className="px-2 py-1.5 text-xs text-muted-foreground">Nobody is currently assigned to teach this subject</div>
-                )}
-                {facultyOptions.map((f) => <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="sm:col-span-2 flex justify-end">
-            <Button onClick={() => void assign()} loading={isAssigning} disabled={!subjectId || !facultyId}>
-              <UserPlus className="h-4 w-4 mr-2" />
-              Assign Mid {midNumber}{selectedSubject ? ` - ${selectedSubject.name}` : ""}
+          {/* Load is LAST: it needs every filter above (course, semester,
+              subject, mid), then fetches who is teaching that subject. */}
+          <div className="sm:col-span-2 flex justify-start">
+            <Button
+              variant="outline"
+              onClick={() => void loadFaculty()}
+              loading={isLoadingFaculty}
+              disabled={!courseName || !semester || !subjectId}
+            >
+              <Search className="h-4 w-4 mr-2" />{facultyLoadedFor === subjectId && subjectId ? "Reload Faculty" : "Load Faculty"}
             </Button>
           </div>
+
+          {facultyLoadedFor === subjectId && subjectId ? (
+            <>
+              <div className="space-y-2 sm:col-span-2">
+                <Label>Faculty <span className="font-normal text-muted-foreground">(currently teaching this subject)</span></Label>
+                <Select value={facultyId} onValueChange={setFacultyId} disabled={isLoadingFaculty}>
+                  <SelectTrigger><SelectValue placeholder="Select faculty" /></SelectTrigger>
+                  <SelectContent>
+                    {facultyOptions.length === 0 && (
+                      <div className="px-2 py-1.5 text-xs text-muted-foreground">Nobody is currently assigned to teach this subject</div>
+                    )}
+                    {facultyOptions.map((f) => <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="sm:col-span-2 flex justify-end">
+                <Button onClick={() => void assign()} loading={isAssigning} disabled={!subjectId || !facultyId}>
+                  <UserPlus className="h-4 w-4 mr-2" />
+                  Assign Mid {midNumber}{selectedSubject ? ` - ${selectedSubject.name}` : ""}
+                </Button>
+              </div>
+            </>
+          ) : (
+            <p className="sm:col-span-2 text-sm text-muted-foreground">
+              Select the course, semester, subject and mid, then press Load Faculty to choose who sets the paper.
+            </p>
+          )}
         </CardContent>
       </Card>
 

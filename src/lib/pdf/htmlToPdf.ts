@@ -20,7 +20,7 @@ const RENDER_SCALE = 2; // canvas px per CSS px - crisp text at print resolution
 // split "View Certificate ↗" across two pages, and - worse - extractLinkAnnotations
 // assigns the whole <a>'s bounding rect to a single page, so a straddling link
 // gets a corrupted (out-of-bounds) /Rect and stops being clickable entirely.
-const ATOMIC_SELECTOR = ".entry, .bullets li, table.data-table tr, .fitem, .section-title, .subheading, .doc-link";
+const ATOMIC_SELECTOR = ".entry, .bullets li, table tr, .fitem, .section-title, .subheading, .doc-link";
 
 // Plain body copy (letter paragraphs, numbered terms-and-conditions clauses,
 // table cells) isn't a single-line atom like the selector above - a <p> can
@@ -29,6 +29,14 @@ const ATOMIC_SELECTOR = ".entry, .bullets li, table.data-table tr, .fitem, .sect
 // landing inside a wrapped line sliced the canvas mid-glyph: the tail of a
 // sentence at the bottom of one page, its head at the top of the next.
 const LINE_TEXT_SELECTOR = "p, li, td, th";
+
+// A whole `.section` (heading + body, see resumeTemplate's renderSection) that
+// fits on one page is kept together: if a page break would land inside it, the
+// break moves up to just before the section instead, so a short section is
+// never split across two pages. A section too tall for any single page still
+// has to split - it does so only between entries/rows (the atomic elements
+// above), and a split table repeats its header row on the next page.
+const SECTION_SELECTOR = ".section";
 
 /** Per-rendered-line ranges (not per-element) for LINE_TEXT_SELECTOR elements,
  *  via Range.getClientRects() - one rect per wrapped line, so a page break can
@@ -46,6 +54,34 @@ function lineRanges(container: HTMLElement): { top: number; bottom: number }[] {
     }
   }
   return ranges;
+}
+
+// html2canvas finds where to draw each line of text by measuring a hidden probe
+// (a <div> holding a <span> of sample text and a 1px <img>) appended to the TOP
+// document's <body> - not the iframe the document is rendered in. This app's
+// global Tailwind reset styles that probe: `img { display: block }` pushes the
+// image off the text's baseline, and the page's inherited `line-height: 1.5`
+// adds half-leading that html2canvas does not expect. Both make every baseline
+// measure too low, so all text was painted a few px below where the browser
+// lays it out - onto the bottom border of table cells, clipping descenders.
+// The probe is recognisable by its inline styles; neutralise just those two
+// rules for the duration of the render. (vertical-align is left alone: the
+// probe sets it inline and that is exactly what must win.)
+const PROBE_FIX_CSS = `
+  body > div[style*="visibility: hidden"][style*="white-space: nowrap"] { line-height: normal !important; }
+  body > div[style*="visibility: hidden"][style*="white-space: nowrap"] > img { display: inline !important; }
+`;
+
+async function withCleanTextMetrics<T>(run: () => Promise<T>): Promise<T> {
+  const style = document.createElement("style");
+  style.setAttribute("data-html2canvas-probe-fix", "");
+  style.textContent = PROBE_FIX_CSS;
+  document.head.appendChild(style);
+  try {
+    return await run();
+  } finally {
+    style.remove();
+  }
 }
 
 function waitForImages(doc: Document): Promise<void> {
@@ -133,14 +169,59 @@ async function inlineCrossOriginImages(doc: Document): Promise<void> {
   );
 }
 
-/** Canvas-pixel [top, bottom] ranges for every atomic element, sorted by top -
- *  used to nudge page-break offsets so they never land inside one of them. */
-function atomicRanges(container: HTMLElement): { top: number; bottom: number }[] {
+type Range1D = { top: number; bottom: number };
+
+/** Bottom (canvas px) of the first thing that must stay on the same page as
+ *  the heading `el` directly above it - so a heading is never stranded alone
+ *  at the foot of a page. For a table that is the header row plus the first
+ *  data row; for a stacked heading (section title straight above a
+ *  subheading) it chains to what follows that one. */
+function leadBottom(el: HTMLElement, originTop: number): number {
+  const rectBottom = (e: Element) => (e.getBoundingClientRect().bottom - originTop) * RENDER_SCALE;
+  const next = el.nextElementSibling as HTMLElement | null;
+  if (!next) return rectBottom(el);
+  if (next.matches(".subheading")) return leadBottom(next, originTop);
+  if (next.matches("table")) {
+    const rows = next.querySelectorAll("tr");
+    return rectBottom(rows[Math.min(1, rows.length - 1)] ?? next);
+  }
+  const unit = next.matches(ATOMIC_SELECTOR) ? next : next.querySelector<HTMLElement>(ATOMIC_SELECTOR);
+  if (unit) return rectBottom(unit);
+  const range = el.ownerDocument.createRange();
+  range.selectNodeContents(next);
+  const first = Array.from(range.getClientRects()).find((r) => r.height > 0);
+  return first ? (first.bottom - originTop) * RENDER_SCALE : rectBottom(next);
+}
+
+/** Canvas-pixel [top, bottom] ranges a page break must not land inside, sorted
+ *  by top: every atomic element, every wrapped text line, each heading together
+ *  with its first piece of content, and every section short enough to fit on
+ *  one page whole. */
+function atomicRanges(container: HTMLElement, pageHeightPx: number): Range1D[] {
   const originTop = container.getBoundingClientRect().top;
-  const ranges = Array.from(container.querySelectorAll<HTMLElement>(ATOMIC_SELECTOR)).map((el) => {
+  const ranges: Range1D[] = Array.from(container.querySelectorAll<HTMLElement>(ATOMIC_SELECTOR)).map((el) => {
     const rect = el.getBoundingClientRect();
     return { top: (rect.top - originTop) * RENDER_SCALE, bottom: (rect.bottom - originTop) * RENDER_SCALE };
   });
+  for (const el of Array.from(container.querySelectorAll<HTMLElement>(".section-title, .subheading"))) {
+    const top = (el.getBoundingClientRect().top - originTop) * RENDER_SCALE;
+    ranges.push({ top, bottom: Math.max(top, leadBottom(el, originTop)) });
+  }
+  // A repeated header row must stay glued to the row that follows it: without
+  // this it can fit at the very foot of one page while its data row starts the
+  // next, leaving a header with nothing under it.
+  for (const head of Array.from(container.querySelectorAll<HTMLElement>("tr.repeat-head"))) {
+    const following = head.nextElementSibling as HTMLElement | null;
+    const top = (head.getBoundingClientRect().top - originTop) * RENDER_SCALE;
+    const bottom = ((following ?? head).getBoundingClientRect().bottom - originTop) * RENDER_SCALE;
+    ranges.push({ top, bottom });
+  }
+  for (const el of Array.from(container.querySelectorAll<HTMLElement>(SECTION_SELECTOR))) {
+    const rect = el.getBoundingClientRect();
+    const top = (rect.top - originTop) * RENDER_SCALE;
+    const bottom = (rect.bottom - originTop) * RENDER_SCALE;
+    if (bottom - top <= pageHeightPx) ranges.push({ top, bottom });
+  }
   ranges.push(...lineRanges(container));
   ranges.sort((a, b) => a.top - b.top);
   return ranges;
@@ -205,17 +286,20 @@ function extractLinkAnnotations(
 }
 
 /** Walks forward in page-height increments, pulling each proposed break back to
- *  just before any atomic element it would otherwise cut through. Falls back to
+ *  just before any range it would otherwise cut through - the outermost one
+ *  that starts on this page, repeated until nothing straddles it. Falls back to
  *  cutting anyway if a single element is taller than a full page. */
-function computePageBreaks(totalHeight: number, pageHeight: number, ranges: { top: number; bottom: number }[]): number[] {
+function computePageBreaks(totalHeight: number, pageHeight: number, ranges: Range1D[]): number[] {
   const breaks: number[] = [];
   let cursor = 0;
   while (cursor < totalHeight) {
     let proposed = Math.min(cursor + pageHeight, totalHeight);
     if (proposed < totalHeight) {
-      const straddling = ranges.find((r) => r.top < proposed && r.bottom > proposed);
-      if (straddling && straddling.top > cursor) {
-        proposed = straddling.top;
+      for (;;) {
+        const at = proposed;
+        const straddling = ranges.filter((r) => r.top < at && r.bottom > at && r.top > cursor);
+        if (straddling.length === 0) break;
+        proposed = Math.min(...straddling.map((r) => r.top));
       }
     }
     if (proposed <= cursor) proposed = Math.min(cursor + pageHeight, totalHeight); // unavoidable oversized element
@@ -223,6 +307,63 @@ function computePageBreaks(totalHeight: number, pageHeight: number, ranges: { to
     cursor = proposed;
   }
   return breaks;
+}
+
+/** A table that continues onto another page gets its header row repeated at
+ *  the top of that page, so a reader of page 2 still knows what each column is.
+ *
+ *  Inserting a header row shifts everything below it, which can move the page
+ *  breaks, so this iterates: lay out with the headers placed so far, find where
+ *  the breaks now fall, and re-place headers - until the placement stops
+ *  changing (it settles within a couple of passes; capped as a safety net). */
+function repeatTableHeaders(target: HTMLElement, pageHeightPx: number): void {
+  const originTop = () => target.getBoundingClientRect().top;
+  const headerOf = (table: HTMLTableElement): HTMLTableRowElement | null => {
+    const first = table.querySelector<HTMLTableRowElement>("tr:not(.repeat-head)");
+    return first && first.querySelector("th") ? first : null;
+  };
+
+  let applied = new Set<HTMLTableRowElement>(); // data rows that currently have a header clone inserted above them
+  for (let pass = 0; pass < 8; pass++) {
+    target.querySelectorAll("tr.repeat-head").forEach((r) => r.remove());
+    for (const row of applied) {
+      const header = headerOf(row.closest("table") as HTMLTableElement);
+      if (!header) continue;
+      const clone = header.cloneNode(true) as HTMLTableRowElement;
+      clone.classList.add("repeat-head");
+      row.parentNode?.insertBefore(clone, row);
+    }
+
+    const total = target.getBoundingClientRect().height * RENDER_SCALE;
+    const breaks = computePageBreaks(total, pageHeightPx, atomicRanges(target, pageHeightPx)).slice(0, -1);
+    const wanted = new Set<HTMLTableRowElement>();
+    const top0 = originTop();
+    for (const at of breaks) {
+      for (const table of Array.from(target.querySelectorAll<HTMLTableElement>("table"))) {
+        const header = headerOf(table);
+        if (!header) continue;
+        const rect = table.getBoundingClientRect();
+        if (!((rect.top - top0) * RENDER_SCALE < at && (rect.bottom - top0) * RENDER_SCALE > at)) continue;
+        // First real data row at or below the break (skipping the header and any clones).
+        const next = Array.from(table.querySelectorAll<HTMLTableRowElement>("tr:not(.repeat-head)")).find(
+          (r) => r !== header && (r.getBoundingClientRect().top - top0) * RENDER_SCALE >= at - 1
+        );
+        if (next) wanted.add(next);
+      }
+    }
+    const same = wanted.size === applied.size && Array.from(wanted).every((r) => applied.has(r));
+    applied = wanted;
+    if (same) return;
+  }
+  // Not settled within the cap: leave the last placement in the DOM and carry on.
+  target.querySelectorAll("tr.repeat-head").forEach((r) => r.remove());
+  for (const row of applied) {
+    const header = headerOf(row.closest("table") as HTMLTableElement);
+    if (!header) continue;
+    const clone = header.cloneNode(true) as HTMLTableRowElement;
+    clone.classList.add("repeat-head");
+    row.parentNode?.insertBefore(clone, row);
+  }
 }
 
 /** Renders `html` off-screen, captures it as a canvas, and slices it into A4
@@ -256,39 +397,56 @@ async function renderHtmlToPdfDocument(html: string): Promise<jsPDF> {
     const target = (doc.querySelector(".page") as HTMLElement | null) ?? doc.body;
     iframe.style.height = `${target.scrollHeight}px`;
 
-    const canvas = await html2canvas(target, {
-      scale: RENDER_SCALE,
-      useCORS: true,
-      backgroundColor: "#ffffff",
-      windowWidth: target.scrollWidth,
-      windowHeight: target.scrollHeight,
-    });
-
-    const pxPerMm = canvas.width / A4_WIDTH_MM;
+    // Page geometry in CSS px (the template is a fixed 210mm-wide column).
+    // Measured with getBoundingClientRect, not scrollHeight, so a fractional
+    // height is rounded UP rather than down - rounding down shaved the last
+    // line (the footer) off the final page.
+    const widthCss = Math.ceil(target.getBoundingClientRect().width);
+    const pxPerMm = (widthCss * RENDER_SCALE) / A4_WIDTH_MM;
     const pageHeightPx = A4_HEIGHT_MM * pxPerMm;
-    const ranges = atomicRanges(target);
-    const breaks = computePageBreaks(canvas.height, pageHeightPx, ranges);
 
-    // Extract link positions while the iframe is still in the DOM - after
-    // canvas capture so layout is stable, before the finally block removes it.
+    // Repeat table headers on continuation pages BEFORE measuring the final
+    // layout (it inserts rows, so the height and break positions change).
+    repeatTableHeaders(target, pageHeightPx);
+    const totalCss = Math.ceil(target.getBoundingClientRect().height);
+    iframe.style.height = `${totalCss + 40}px`;
+
+    // Canvas-px (CSS px x RENDER_SCALE) geometry, as the break helpers expect.
+    const totalHeight = totalCss * RENDER_SCALE;
+    const breaks = computePageBreaks(totalHeight, pageHeightPx, atomicRanges(target, pageHeightPx));
+
+    // Extract link positions while the iframe is still in the DOM - before
+    // the finally block removes it.
     const linkAnnotations = extractLinkAnnotations(target, pxPerMm, breaks);
 
+    // Each page is captured on its OWN small canvas (html2canvas crops to the
+    // y/height window) instead of rasterising the whole document once and
+    // slicing it. One canvas for a long resume gets enormous (width x scale x
+    // total height), and browsers cap canvas size - iOS Safari and many
+    // Android browsers at ~16.7M pixels, i.e. only a few pages - so a long
+    // resume came out blank/truncated past that point. A single page is always
+    // well inside every browser's limit, so the full document is always kept.
     const pdf = new jsPDF({ unit: "mm", format: "a4" });
     let cursor = 0;
-    breaks.forEach((breakAt, i) => {
-      const sliceHeight = Math.max(1, Math.round(breakAt - cursor));
-      const sliceCanvas = document.createElement("canvas");
-      sliceCanvas.width = canvas.width;
-      sliceCanvas.height = sliceHeight;
-      const ctx = sliceCanvas.getContext("2d");
-      if (ctx) {
-        ctx.fillStyle = "#ffffff";
-        ctx.fillRect(0, 0, sliceCanvas.width, sliceCanvas.height);
-        ctx.drawImage(canvas, 0, cursor, canvas.width, sliceHeight, 0, 0, canvas.width, sliceHeight);
-      }
-      const imgData = sliceCanvas.toDataURL("image/jpeg", 0.95);
+    for (let i = 0; i < breaks.length; i++) {
+      const breakAt = breaks[i];
+      const sliceHeightPx = Math.max(1, Math.round(breakAt - cursor));
+      const canvas = await withCleanTextMetrics(() => html2canvas(target, {
+        scale: RENDER_SCALE,
+        useCORS: true,
+        backgroundColor: "#ffffff",
+        x: 0,
+        y: cursor / RENDER_SCALE,
+        width: widthCss,
+        height: sliceHeightPx / RENDER_SCALE,
+        windowWidth: widthCss,
+        windowHeight: totalCss,
+        scrollX: 0,
+        scrollY: 0,
+      }));
+      const imgData = canvas.toDataURL("image/jpeg", 0.95);
       if (i > 0) pdf.addPage();
-      pdf.addImage(imgData, "JPEG", 0, 0, A4_WIDTH_MM, sliceHeight / pxPerMm);
+      pdf.addImage(imgData, "JPEG", 0, 0, A4_WIDTH_MM, sliceHeightPx / pxPerMm);
 
       // Stamp invisible clickable hyperlink rectangles over each link on this page
       for (const ann of linkAnnotations) {
@@ -298,7 +456,7 @@ async function renderHtmlToPdfDocument(html: string): Promise<jsPDF> {
       }
 
       cursor = breakAt;
-    });
+    }
 
     return pdf;
   } finally {

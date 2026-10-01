@@ -16,7 +16,7 @@ import { SegmentedTabs } from "@/components/shared/SegmentedTabs";
 import { ExportFacultyDialog } from "@/components/faculty/ExportFacultyDialog";
 import { toast } from "@/hooks/useToast";
 import { useMyDepartments } from "@/hooks/useMyDepartments";
-import { downloadResumePdf } from "@/lib/pdf/downloadResume";
+import { downloadFacultyResume } from "@/lib/faculty/downloadFacultyResume";
 import { ResumeSectionsDialog } from "@/components/faculty/ResumeSectionsDialog";
 import type { ResumeSectionKey } from "@/lib/pdf/resumeSections";
 import { hasSupportingStaffSplit } from "@/lib/designations/config";
@@ -250,22 +250,7 @@ export default function HODFacultyPage() {
   async function handleDownloadResume(row: FacultyRow, sections: ResumeSectionKey[]) {
     setDownloadingResumeId(row.id as string);
     try {
-      let teachingAssignments: unknown[] = [];
-      try {
-        const taRes = await fetch(`/api/college/teaching-assignments?facultyId=${encodeURIComponent(row.id as string)}`);
-        const taData = await taRes.json() as { assignments?: unknown[] };
-        teachingAssignments = taData.assignments ?? [];
-      } catch { /* non-critical - resume still generates without the live teaching-load table */ }
-      let researchPublications: unknown[] = [];
-      const researchUid = (row.userUid as string | undefined) ?? (row.uid as string | undefined);
-      if (researchUid) {
-        try {
-          const pubRes = await fetch(`/api/college/publications?uid=${encodeURIComponent(researchUid)}`);
-          const pubData = await pubRes.json() as { publications?: unknown[] };
-          researchPublications = pubData.publications ?? [];
-        } catch { /* non-critical - resume falls back to self-reported publications, if any */ }
-      }
-      await downloadResumePdf({ ...row, teachingAssignments, researchPublications, collegeName, sections }, (row.employeeId as string) || facultyDisplayName(row));
+      await downloadFacultyResume(row, collegeName, sections);
     } catch (err) {
       toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to generate resume" });
     } finally {

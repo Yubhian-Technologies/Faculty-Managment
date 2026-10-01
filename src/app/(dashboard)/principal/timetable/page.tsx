@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { Search } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/useToast";
 import { useAuth } from "@/hooks/useAuth";
 import { FacultyLeisureFilter } from "@/components/timetable/FacultyLeisureFilter";
@@ -49,7 +51,12 @@ export default function PrincipalTimetablePage() {
   // Derived rather than a separate flag: a synchronous setIsLoading(true) inside
   // the fetch effect would be a cascading render (react-hooks/set-state-in-effect).
   const [loadedFor, setLoadedFor] = useState("");
-  const isLoadingGrid = Boolean(sectionId) && loadedFor !== sectionId;
+  // What the Load button last asked for. Changing any filter clears it, so the
+  // grid never shows a section the filters no longer describe, and nothing is
+  // fetched while the user is still choosing.
+  const [applied, setApplied] = useState<{ sectionId: string; semester: number | null } | null>(null);
+  const appliedKey = applied ? `${applied.sectionId}|${applied.semester ?? ""}` : "";
+  const isLoadingGrid = Boolean(appliedKey) && loadedFor !== appliedKey;
   // Monday of the week currently on screen - navigable via WeekNavigator,
   // defaulting to this calendar week. weekDates pairs positionally with
   // DAYS above, labelling each column with its actual date.
@@ -58,6 +65,7 @@ export default function PrincipalTimetablePage() {
 
   /** Cascading selects clear their downstream state here, not inside an effect. */
   function resetBelowCourse() {
+    setApplied(null);
     setDepartmentId("");
     setYear("");
     setSemester(null);
@@ -71,6 +79,7 @@ export default function PrincipalTimetablePage() {
     resetBelowCourse();
   }
   function chooseDepartment(id: string) {
+    setApplied(null);
     setDepartmentId(id);
     setYear("");
     setSemester(null);
@@ -80,6 +89,7 @@ export default function PrincipalTimetablePage() {
     setSlots([]);
   }
   function chooseYear(y: string) {
+    setApplied(null);
     setYear(y);
     setSemester(null);
     setSections([]);
@@ -183,11 +193,12 @@ export default function PrincipalTimetablePage() {
   }, [departmentId, year, courseId, courseName, courses]);
 
   useEffect(() => {
-    if (!sectionId) return;
+    if (!applied) return;
+    const { sectionId: appliedSection, semester: appliedSemester } = applied;
     let cancelled = false;
     void (async () => {
       try {
-        const d = await fetch(`/api/college/timetable-slots?sectionId=${encodeURIComponent(sectionId)}&week=${isoDateKey(weekStart)}${effectiveSemester != null ? "&semester=" + effectiveSemester : ""}`)
+        const d = await fetch(`/api/college/timetable-slots?sectionId=${encodeURIComponent(appliedSection)}&week=${isoDateKey(weekStart)}${appliedSemester != null ? "&semester=" + appliedSemester : ""}`)
           .then((r) => r.json() as Promise<{ slots: TimetableSlot[]; subjects?: Subject[]; workingDays?: DayOfWeek[] }>);
         if (cancelled) return;
         setSlots(d.slots ?? []);
@@ -196,11 +207,11 @@ export default function PrincipalTimetablePage() {
       } catch {
         if (!cancelled) toast({ variant: "destructive", title: "Failed to load timetable" });
       } finally {
-        if (!cancelled) setLoadedFor(sectionId);
+        if (!cancelled) setLoadedFor(`${appliedSection}|${appliedSemester ?? ""}`);
       }
     })();
     return () => { cancelled = true; };
-  }, [sectionId, weekStart, effectiveSemester]);
+  }, [applied, weekStart]);
 
   const selectClass =
     "h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus:border-primary focus:outline-none";
@@ -262,7 +273,7 @@ export default function PrincipalTimetablePage() {
              id="tt-semester"
              className={selectClass}
              value={effectiveSemester != null ? String(effectiveSemester) : ""}
-             onChange={(e) => setSemester(e.target.value ? Number(e.target.value) : null)}
+             onChange={(e) => { setApplied(null); setSemester(e.target.value ? Number(e.target.value) : null); }}
              disabled={!timing || semesterOptions.length === 0}
            >
              <option value="">Select semester</option>
@@ -278,7 +289,7 @@ export default function PrincipalTimetablePage() {
              id="tt-section"
              className={selectClass}
              value={sectionId}
-             onChange={(e) => setSectionId(e.target.value)}
+             onChange={(e) => { setApplied(null); setSectionId(e.target.value); }}
              disabled={visibleSections.length === 0}
            >
              <option value="">{visibleSections.length === 0 ? "No sections" : "Select a section"}</option>
@@ -288,6 +299,12 @@ export default function PrincipalTimetablePage() {
                <option key={s.id} value={s.id}>{sectionDisplayLabel(s, departments)}</option>
              ))}
            </select>
+         </div>
+
+         <div className="space-y-1.5 flex flex-col justify-end">
+           <Button onClick={() => setApplied({ sectionId, semester: effectiveSemester })} disabled={!sectionId}>
+             <Search className="h-4 w-4 mr-2" />{applied ? "Reload Timetable" : "Load Timetable"}
+           </Button>
          </div>
       </div>
 
@@ -304,9 +321,9 @@ export default function PrincipalTimetablePage() {
         </div>
       )}
 
-      {!sectionId ? (
+      {!applied ? (
         <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-          Pick a course, department, year and section to view its published timetable.
+          Pick a course, department, year and section, then press Load Timetable.
         </div>
       ) : isLoadingGrid ? (
         <div className="h-96 rounded-lg border bg-muted/30 animate-pulse" />
