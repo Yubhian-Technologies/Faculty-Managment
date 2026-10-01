@@ -9,6 +9,7 @@ import { toast } from "@/hooks/useToast";
 import { exportToCSV } from "@/lib/utils";
 import { calcPercent, formatPercent } from "@/lib/studentAttendance/percentage";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { SectionFilterBar } from "@/components/shared/SectionFilterBar";
 
 type RangeMode = "daily" | "monthly" | "period" | "tillNow";
 type ViewMode = "subject" | "consolidated";
@@ -62,7 +63,6 @@ function visibleSubjects(subjects: SubjectCol[], viewMode: ViewMode, subjectId: 
 }
 
 export function SectionReportsView({ sectionId, title }: { sectionId?: string; title: string }) {
-  const [sections, setSections] = useState<{ id: string; name: string }[]>([]);
   const [resolvedSectionId, setResolvedSectionId] = useState(sectionId ?? "");
   const [rangeMode, setRangeMode] = useState<RangeMode>("daily");
   const [viewMode, setViewMode] = useState<ViewMode>("subject");
@@ -85,11 +85,6 @@ export function SectionReportsView({ sectionId, title }: { sectionId?: string; t
   // response shapes from the API, not just a filter on one shape).
   const [loadedMode, setLoadedMode] = useState<RangeMode | null>(null);
   const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    if (sectionId) return;
-    void fetch("/api/college/sections").then((r) => r.json()).then((j) => setSections(j.sections ?? j.data ?? [])).catch(() => {});
-  }, [sectionId]);
 
   // Fetch semester options when a section is resolved
   useEffect(() => {
@@ -323,13 +318,14 @@ export function SectionReportsView({ sectionId, title }: { sectionId?: string; t
         <CardHeader><CardTitle>{title}</CardTitle></CardHeader>
         <CardContent className="space-y-4">
           {!sectionId && (
-            <div>
-              <Label>Section</Label>
-              <Select value={resolvedSectionId} onValueChange={setResolvedSectionId}>
-                <SelectTrigger><SelectValue placeholder="Pick section" /></SelectTrigger>
-                <SelectContent>{sections.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
+            <SectionFilterBar
+              onSelect={(sec) => {
+                // A different section invalidates whatever report is on screen.
+                setResolvedSectionId(sec?.id ?? "");
+                setData(null);
+                setLoadedMode(null);
+              }}
+            />
           )}
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <div>
