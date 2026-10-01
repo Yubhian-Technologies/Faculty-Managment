@@ -16,9 +16,8 @@ import {
   allocationNeedsOfficialCode,
   buildAllocationList,
   buildTimetableColumns,
-  ordinalYear,
+  timetableClassLine,
   resolveTimetableDays,
-  slotFacultyName,
   slotShortCode,
 } from "./gridModel";
 
@@ -121,11 +120,7 @@ export async function buildSectionTimetableXlsxBuffer(opts: SectionTimetableXlsx
     courseName,
     sectionName,
     sectionYear,
-    batch,
-    regulation,
-    academicYear,
     semesterLabel,
-    classroom,
     classInchargeName,
     periodTimings,
     slots,
@@ -223,15 +218,7 @@ export async function buildSectionTimetableXlsxBuffer(opts: SectionTimetableXlsx
   putAcross("TIME TABLE", { bold: true, size: 13 });
 
   const classLine = [
-    courseName,
-    departmentName,
-    sectionYear != null ? ordinalYear(sectionYear) : undefined,
-    sectionName ? `Section ${sectionName}` : undefined,
-    batch,
-    regulation,
-    semesterLabel,
-    academicYear,
-    classroom ? `Room ${classroom}` : undefined,
+    timetableClassLine({ courseName, year: sectionYear, semesterLabel, sectionName, departmentName }),
     classInchargeName ? `Class In-charge: ${classInchargeName}` : undefined,
   ].filter((v): v is string => !!v);
   if (classLine.length) putAcross(classLine.join("  |  "), { size: 10 });
