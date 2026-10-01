@@ -14,7 +14,7 @@ npm run test     # vitest run (unit)
 npm run test:e2e # playwright test (e2e)
 ```
 
-* `node scripts/bootstrap-admin.mjs` — one-time SUPER_ADMIN promotion (edit UID/EMAIL + service-account path first). `scripts/` trimmed to 3 files (`ensure-deps.mjs`, `bootstrap-admin.mjs`, `create-admin.mjs`); historical migrate/backfill/diagnose scripts (incl. `lib/departmentRefs.mjs`, unused) deleted per 2026-09-28 cleanup.
+* `node scripts/bootstrap-admin.mjs` — one-time SUPER_ADMIN promotion (edit UID/EMAIL + service-account path first). `scripts/` trimmed to `bootstrap-admin.mjs`, `create-admin.mjs` (`ensure-deps.mjs` removed: the pre* hooks re-ran `npm install` on every deploy build); historical migrate/backfill/diagnose scripts (incl. `lib/departmentRefs.mjs`, unused) deleted per 2026-09-28 cleanup.
 * Firestore rules/indexes + Storage rules: `firebase deploy --only firestore:rules` etc.; config in `firebase.json` / `firestore.rules` / `firestore.indexes.json` / `storage.rules`. Indexes now include 8 composites for `studentAttendance` (status+sectionId/date, facultyId/date, subjectId/date, department/date, date).
 
 ## Stack
@@ -71,7 +71,7 @@ Cross-cutting writes create `AuditLog` + `AppNotification` per `src/types/core.t
 
 ### UI conventions
 
-`src/components/shared` (`DataTable`, `PageHeader`, `StatusBadge`, `FileUpload`, …), `src/components/circular` (`CircularCard`, `CircularForm`, `CircularViewer`), layout `src/components/layout` (`Sidebar`, `TopBar`, `BottomNav`, `MobileDrawer`) via `navConfig.ts` (now `Circulars`, `Absent/Shortage/Faculty Not Posted` for HOD/Principal), finance in `src/components/finance`, notifications in `src/components/notifications`. Toasts `useToast()`, auth `useAuth()`+`authStore` (Zustand). Mobile via `useMobile`/`MobileCard`. Previous `docs/` (`docs/hiring/*.doc`) and root `*.excalidraw`/`ATTENDANCE_MODULE_COMPLETE_ARCHITECTURE.md` archived/deleted 2026-09; `scripts/` trimmed to `ensure-deps.mjs`/`bootstrap-admin.mjs`/`create-admin.mjs`/`lib/departmentRefs.mjs` (historical migrate/backfill removed).
+`src/components/shared` (`DataTable`, `PageHeader`, `StatusBadge`, `FileUpload`, …), `src/components/circular` (`CircularCard`, `CircularForm`, `CircularViewer`), layout `src/components/layout` (`Sidebar`, `TopBar`, `BottomNav`, `MobileDrawer`) via `navConfig.ts` (now `Circulars`, `Absent/Shortage/Faculty Not Posted` for HOD/Principal), finance in `src/components/finance`, notifications in `src/components/notifications`. Toasts `useToast()`, auth `useAuth()`+`authStore` (Zustand). Mobile via `useMobile`/`MobileCard`. Previous `docs/` (`docs/hiring/*.doc`) and root `*.excalidraw`/`ATTENDANCE_MODULE_COMPLETE_ARCHITECTURE.md` archived/deleted 2026-09; `scripts/` trimmed to `bootstrap-admin.mjs`/`create-admin.mjs`/`lib/departmentRefs.mjs` (historical migrate/backfill removed).
 
 ### Docs
 
