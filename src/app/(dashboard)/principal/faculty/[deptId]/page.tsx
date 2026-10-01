@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, BookOpen, ChevronRight, Eye, LogIn, Pencil, Trash2, Upload, UserPlus, UsersRound, History } from "lucide-react";
+import { ArrowLeft, BookOpen, ChevronRight, Eye, FileDown, LogIn, Pencil, Trash2, Upload, UserPlus, UsersRound, History } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Button } from "@/components/ui/button";
@@ -14,11 +14,16 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Avatar } from "@/components/shared/Avatar";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { ExportFacultyDialog } from "@/components/faculty/ExportFacultyDialog";
+import { ResumeSectionsDialog } from "@/components/faculty/ResumeSectionsDialog";
+import { FacultyDesignationCell, FacultyExperienceCell, FacultyStatusCell, JoiningLine, type FacultyListRow } from "@/components/faculty/facultyListCells";
+import { SegmentedTabs } from "@/components/shared/SegmentedTabs";
 import { toast } from "@/hooks/useToast";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
+import { downloadFacultyResume } from "@/lib/faculty/downloadFacultyResume";
+import type { ResumeSectionKey } from "@/lib/pdf/resumeSections";
 import { isFacultyDestination } from "@/lib/departments/facultyDepartmentOptions";
-import { DESIGNATION_LABELS, FACULTY_STATUS_LABELS } from "@/types";
-import type { Department, Designation, FacultyMember, FacultyStatus, FMSUser } from "@/types";
+import { hasSupportingStaffSplit } from "@/lib/designations/config";
+import type { CollegeType, Department, FMSUser } from "@/types";
 
 // Selection checkboxes on this list (header "select all" + every row) - same
 // sizing as the HOD Faculty Register's own export selection so both read
@@ -28,16 +33,7 @@ const SELECT_CHECKBOX_CLASS =
   "data-[state=checked]:border-primary data-[state=indeterminate]:border-primary " +
   "data-[state=indeterminate]:bg-primary data-[state=indeterminate]:text-primary-foreground";
 
-type FacultyRow = Record<string, unknown> & FacultyMember;
-
-const STATUS_VARIANTS: Record<FacultyStatus, "default" | "secondary" | "outline" | "destructive"> = {
-  INTERVIEW_DONE: "outline",
-  ACTIVE: "default",
-  ON_LEAVE: "outline",
-  RESIGNED: "secondary",
-  RETIRED: "secondary",
-  RETAINERSHIP: "default",
-};
+type FacultyRow = FacultyListRow;
 
 const STATUS_TABS = [
   { key: "", label: "All" },
@@ -62,6 +58,19 @@ export default function PrincipalDepartmentFacultyPage() {
   // currently shown (unchanged default behavior); picking specific rows here
   // narrows it to just those faculty members. Same pattern as hod/faculty/page.tsx.
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  // Resume download - same flow as the HOD Faculty Register: Download opens a
+  // section picker against the row, and generation waits for the choice.
+  const [resumeTarget, setResumeTarget] = useState<FacultyRow | null>(null);
+  const [downloadingResumeId, setDownloadingResumeId] = useState<string | null>(null);
+
+  const { data: collegeInfo } = useQuery({
+    queryKey: ["college-info"],
+    queryFn: () =>
+      fetch("/api/college/info")
+        .then((r) => r.json() as Promise<{ name?: string; type?: CollegeType }>)
+        .then((d) => ({ name: d.name ?? "", type: d.type })),
+  });
+  const collegeName = collegeInfo?.name ?? "";
 
   const { data: departments = [] } = useQuery({
     queryKey: ["principal-faculty-departments"],
@@ -205,6 +214,18 @@ export default function PrincipalDepartmentFacultyPage() {
     }
   }
 
+  async function handleDownloadResume(row: FacultyRow, sections: ResumeSectionKey[]) {
+    setDownloadingResumeId(row.id as string);
+    try {
+      await downloadFacultyResume(row, { collegeName, sections });
+    } catch (err) {
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to generate resume" });
+    } finally {
+      setDownloadingResumeId(null);
+      setResumeTarget(null);
+    }
+  }
+
   const columns: Column<FacultyRow>[] = [
     {
       key: "select",
@@ -236,12 +257,14 @@ export default function PrincipalDepartmentFacultyPage() {
     {
       key: "name",
       header: "Faculty Member",
+      className: "whitespace-normal min-w-[13rem]",
       render: (row) => (
-        <div className="flex items-center gap-3">
-          <Avatar name={facultyDisplayName(row)} photoUrl={row.profilePhotoUrl} size="sm" />
-          <div>
+        <div className="flex items-start gap-3 min-w-0">
+          <Avatar name={facultyDisplayName(row)} photoUrl={row.profilePhotoUrl} size="sm" className="mt-0.5" />
+          <div className="space-y-0.5 min-w-0">
             <p className="font-medium leading-tight">{facultyDisplayName(row)}</p>
             <p className="text-xs text-muted-foreground">ID: {row.employeeId}</p>
+            <JoiningLine row={row} />
           </div>
         </div>
       ),
@@ -249,16 +272,34 @@ export default function PrincipalDepartmentFacultyPage() {
     {
       key: "designation",
       header: "Designation",
-      render: (row) => DESIGNATION_LABELS[row.designation as Designation] ?? row.designation,
+      className: "whitespace-normal min-w-[9rem]",
+      render: (row) => <FacultyDesignationCell row={row} />,
     },
-    { key: "department", header: "Department", hideOnMobile: true },
+    // Cells are nowrap by default; Department, Date of Joining, Contact and
+    // Actions are allowed to wrap onto a second line so the extra
+    // Joining/Experience columns don't push the table wider than the page.
+    { key: "department", header: "Department", hideOnMobile: true, className: "whitespace-normal min-w-[8rem]" },
+    {
+      key: "joiningDate",
+      header: "Date of Joining",
+      hideOnMobile: true,
+      className: "whitespace-normal min-w-[7rem]",
+      render: (row) => <JoiningLine row={row} />,
+    },
+    {
+      key: "totalYearsOfExperience",
+      header: "Total Experience",
+      hideOnMobile: true,
+      render: (row) => <FacultyExperienceCell row={row} />,
+    },
     {
       key: "email",
       header: "Contact",
       hideOnMobile: true,
+      className: "whitespace-normal min-w-[8rem]",
       render: (row) => (
         <div className="space-y-0.5">
-          <p className="text-xs">{row.collegeEmail || row.email}</p>
+          <p className="text-xs break-all">{row.collegeEmail || row.email}</p>
           {row.mobileNo && <p className="text-xs text-muted-foreground">{row.mobileNo}</p>}
         </div>
       ),
@@ -266,17 +307,16 @@ export default function PrincipalDepartmentFacultyPage() {
     {
       key: "status",
       header: "Status",
-      render: (row) => (
-        <Badge variant={STATUS_VARIANTS[row.status as FacultyStatus] ?? "secondary"}>
-          {FACULTY_STATUS_LABELS[row.status as FacultyStatus] ?? row.status}
-        </Badge>
-      ),
+      render: (row) => <FacultyStatusCell row={row} />,
     },
     {
       key: "actions",
       header: "",
+      // May wrap onto a second line of buttons when the table is tight, so
+      // every action stays visible without a sideways scroll.
+      className: "whitespace-normal min-w-[16rem]",
       render: (row) => (
-        <div className="flex items-center gap-1">
+        <div className="flex flex-wrap items-center gap-1">
           {!row.userUid && (
             <Button
               variant="ghost"
@@ -288,6 +328,18 @@ export default function PrincipalDepartmentFacultyPage() {
               <LogIn className="h-3.5 w-3.5" /><span className="ml-1 hidden sm:inline">Set Login</span>
             </Button>
           )}
+          <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); router.push(`/principal/faculty/${deptId}/${row.id}`); }}>
+            <Eye className="h-3.5 w-3.5" /><span className="ml-1 hidden sm:inline">View</span>
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            title="Download resume PDF"
+            loading={downloadingResumeId === (row.id as string)}
+            onClick={(e) => { e.stopPropagation(); setResumeTarget(row); }}
+          >
+            <FileDown className="h-3.5 w-3.5" /><span className="ml-1 hidden sm:inline">Download</span>
+          </Button>
           <Button variant="ghost" size="sm" title="Edit faculty details"
             onClick={(e) => { e.stopPropagation(); router.push(`/principal/faculty/${deptId}/${row.id}/edit`); }}>
             <Pencil className="h-3.5 w-3.5" /><span className="ml-1 hidden sm:inline">Edit</span>
@@ -333,6 +385,16 @@ export default function PrincipalDepartmentFacultyPage() {
           </div>
         }
       />
+
+      {hasSupportingStaffSplit(collegeInfo?.type) && collegeInfo && (
+        <SegmentedTabs
+          value="faculty"
+          options={[
+            { key: "faculty", label: "Teaching Faculty", href: "/principal/faculty" },
+            { key: "supporting", label: "Supporting Staff", href: "/principal/faculty/supporting-staff" },
+          ]}
+        />
+      )}
 
       {department && (
         <div className="rounded-lg border p-4 flex items-center justify-between gap-3">
@@ -439,12 +501,13 @@ export default function PrincipalDepartmentFacultyPage() {
           </div>
 
           <DataTable
+            paginate
             data={faculty}
             columns={columns}
             isLoading={isLoading}
             keyExtractor={(f) => f.id}
             searchPlaceholder="Search by name, employee ID, or email..."
-            searchKeys={["legalName", "nameAsPerPan", "employeeId", "email"] as (keyof FacultyRow)[]}
+            searchKeys={["legalName", "nameAsPerPan", "employeeId", "email", "specialization"] as (keyof FacultyRow)[]}
             // Same historical date-range view as hod/faculty's own Faculty
             // Timeline, scoped to this department - kept beside the search box
             // via DataTable's own filterComponent slot, same placement as hod/faculty.
@@ -476,6 +539,16 @@ export default function PrincipalDepartmentFacultyPage() {
         onConfirm={() => void handleDelete()}
         loading={isDeleting}
       />
+
+      {resumeTarget && (
+        <ResumeSectionsDialog
+          open
+          onOpenChange={(o) => { if (!o) setResumeTarget(null); }}
+          personName={facultyDisplayName(resumeTarget) || "this faculty member"}
+          downloading={downloadingResumeId === (resumeTarget.id as string)}
+          onDownload={(sections) => handleDownloadResume(resumeTarget, sections)}
+        />
+      )}
 
       <ConfirmDialog
         open={removingHod}
