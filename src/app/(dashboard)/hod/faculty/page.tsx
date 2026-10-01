@@ -50,11 +50,12 @@ function joiningLabel(status: unknown): string {
 type FacultyRow = Record<string, unknown> & FacultyMember;
 
 // Selection checkboxes on this list (header "select all" + every row): a bit larger than
-// the shared Checkbox default, with a clear 2px slate border and a white fill so an
-// unchecked box reads against the white table. Applied via className here so the shared
-// Checkbox - used across the app - keeps its default look everywhere else.
+// the shared Checkbox default, with a clear 2px black border and a white fill so an
+// unchecked box reads against the white table - slate-500 still blended into the table's
+// light background, so this is black instead of just a darker gray. Applied via className
+// here so the shared Checkbox - used across the app - keeps its default look everywhere else.
 const SELECT_CHECKBOX_CLASS =
-  "h-5 w-5 border-2 border-slate-500 bg-white hover:border-primary [&_svg]:h-3.5 [&_svg]:w-3.5 " +
+  "h-5 w-5 border-2 border-black bg-white hover:border-primary [&_svg]:h-3.5 [&_svg]:w-3.5 " +
   "data-[state=checked]:border-primary data-[state=indeterminate]:border-primary " +
   "data-[state=indeterminate]:bg-primary data-[state=indeterminate]:text-primary-foreground";
 

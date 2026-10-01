@@ -41,6 +41,17 @@ const STATUS_VARIANTS: Record<string, "default" | "secondary" | "outline" | "des
   GRADUATED: "secondary",
 };
 
+// Selection checkboxes on this list (header "select all" + every row) - same
+// treatment as hod/faculty/page.tsx's own SELECT_CHECKBOX_CLASS: a bit larger
+// than the shared Checkbox default, with a clear 2px black border and a white
+// fill so an unchecked box reads against the white table. Applied via
+// className here so the shared Checkbox - used across the app - keeps its
+// default look everywhere else.
+const SELECT_CHECKBOX_CLASS =
+  "h-5 w-5 border-2 border-black bg-white hover:border-primary [&_svg]:h-3.5 [&_svg]:w-3.5 " +
+  "data-[state=checked]:border-primary data-[state=indeterminate]:border-primary " +
+  "data-[state=indeterminate]:bg-primary data-[state=indeterminate]:text-primary-foreground";
+
 // Roster (the original page) vs the live Strength report - see
 // components/students/StudentStrengthDashboard.tsx.
 const HOD_VIEWS = [
@@ -116,6 +127,16 @@ export default function HodStudentsPage() {
   const [bulkPlan, setBulkPlan] = useState<BulkPlan | null>(null);
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [isBulkApplying, setIsBulkApplying] = useState(false);
+  // "Select by roll number range" - adds every currently-visible (filtered)
+  // student whose rollNumber falls between these two, inclusive, to the
+  // existing selection (never replaces it, so it composes with ticking
+  // individual rows or a previous range). Plain string comparison, not
+  // numeric - a real roll number is an alphanumeric code (e.g.
+  // "23471A0427"), and as long as the two ends share the same prefix/width
+  // (the normal case for one section's contiguous block), lexicographic
+  // order matches numeric order on the varying suffix.
+  const [rollFrom, setRollFrom] = useState("");
+  const [rollTo, setRollTo] = useState("");
 
   async function load() {
     setIsLoading(true);
@@ -508,6 +529,28 @@ export default function HodStudentsPage() {
     });
   }
 
+  // Adds every currently-filtered student whose rollNumber falls between
+  // rollFrom/rollTo (inclusive, whichever order they were typed in) to the
+  // selection, so an HOD can tick e.g. 23471A0401-23471A0460 in one go
+  // instead of checking 60 rows by hand, then run the existing Move/Assign
+  // bulk action on the result.
+  function selectRollRange() {
+    const from = rollFrom.trim().toUpperCase();
+    const to = rollTo.trim().toUpperCase();
+    if (!from || !to) return;
+    const [lo, hi] = from <= to ? [from, to] : [to, from];
+    const matches = filtered.filter((s) => {
+      const roll = (s.rollNumber ?? "").toUpperCase();
+      return roll >= lo && roll <= hi;
+    });
+    if (matches.length === 0) {
+      toast({ variant: "destructive", title: `No students found with roll numbers between ${lo} and ${hi}` });
+      return;
+    }
+    setAllSelected(matches, true);
+    toast({ variant: "success", title: `${matches.length} student${matches.length === 1 ? "" : "s"} selected (roll ${lo} - ${hi})` });
+  }
+
   async function requestBulk(body: Record<string, unknown>): Promise<BulkPlan & { moved: number }> {
     const res = await fetch("/api/college/students/bulk-move", {
       method: "POST",
@@ -748,6 +791,7 @@ export default function HodStudentsPage() {
           checked={allInViewSelected ? true : someInViewSelected ? "indeterminate" : false}
           onCheckedChange={(checked) => setAllSelected(filtered, checked === true)}
           aria-label="Select all students in view"
+          className={SELECT_CHECKBOX_CLASS}
         />
       ),
       // The row itself navigates on click - keep the tick from doing that too.
@@ -757,6 +801,7 @@ export default function HodStudentsPage() {
             checked={selectedIds.has(r.id)}
             onCheckedChange={(checked) => toggleSelected(r.id, checked === true)}
             aria-label={`Select ${r.name}`}
+            className={SELECT_CHECKBOX_CLASS}
           />
         </div>
       ),
@@ -1073,6 +1118,25 @@ export default function HodStudentsPage() {
               )}
             </>
           )}
+          <div className="flex w-full flex-wrap items-center gap-2 border-t pt-2 mt-1">
+            <span className="text-xs text-muted-foreground shrink-0">Select by roll no. range:</span>
+            <Input
+              placeholder="From roll no."
+              value={rollFrom}
+              onChange={(e) => setRollFrom(e.target.value)}
+              className="h-8 w-36"
+            />
+            <span className="text-xs text-muted-foreground">to</span>
+            <Input
+              placeholder="To roll no."
+              value={rollTo}
+              onChange={(e) => setRollTo(e.target.value)}
+              className="h-8 w-36"
+            />
+            <Button size="sm" variant="outline" disabled={!rollFrom.trim() || !rollTo.trim()} onClick={selectRollRange}>
+              Select Range
+            </Button>
+          </div>
         </div>
       )}
 
