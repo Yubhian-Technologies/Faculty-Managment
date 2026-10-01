@@ -86,26 +86,28 @@ export function SectionReportsView({ sectionId, title }: { sectionId?: string; t
   const [loadedMode, setLoadedMode] = useState<RangeMode | null>(null);
   const [loading, setLoading] = useState(false);
 
+  // The section's course + year, taken from the section the filter bar picked
+  // (it already carries both) - used to look up that course-year's semesters.
+  const [sectionCourseYear, setSectionCourseYear] = useState<{ courseId: string; year: number } | null>(null);
+
   // Fetch semester options when a section is resolved
   useEffect(() => {
-    const sid = resolvedSectionId || sectionId;
-    if (!sid) { setSemesterOptions([]); setSemester(null); return; }
+    if (!sectionCourseYear) return;
+    const { courseId, year: sectionYear } = sectionCourseYear;
+    let cancelled = false;
     void (async () => {
       try {
-        const s = await fetch(`/api/college/sections?sectionId=${sid}`).then((r) => r.json() as Promise<{ sections: { courseId: string; year: number }[] }>);
-        const secList = s.sections ?? [];
-        if (secList.length === 0) { setSemesterOptions([]); setSemester(null); return; }
-        const sec = secList[0];
-        const t = await fetch(`/api/college/course-year-timings?courseId=${encodeURIComponent(sec.courseId)}`).then((r) => r.json() as Promise<{ timings: { semesters: number[]; year: number }[] }>);
-        const timing = (t.timings ?? []).find((x) => x.year === sec.year);
-        if (timing?.semesters?.length) {
-          setSemesterOptions([...timing.semesters].sort((a, b) => a - b));
-        } else {
-          setSemesterOptions([]);
-        }
-      } catch { setSemesterOptions([]); }
+        const t = await fetch(`/api/college/course-year-timings?courseId=${encodeURIComponent(courseId)}`)
+          .then((r) => r.json() as Promise<{ timings?: { semesters?: { semester: number }[]; year: number }[] }>);
+        const timing = (t.timings ?? []).find((x) => x.year === sectionYear);
+        // `semesters` is a list of { semester, startDate, endDate } ranges, not bare numbers.
+        const numbers = (timing?.semesters ?? []).map((x) => x.semester).filter((n) => Number.isFinite(n));
+        if (cancelled) return;
+        setSemesterOptions(Array.from(new Set(numbers)).sort((a, b) => a - b));
+      } catch { if (!cancelled) setSemesterOptions([]); }
     })();
-  }, [resolvedSectionId, sectionId]);
+    return () => { cancelled = true; };
+  }, [sectionCourseYear]);
 
   async function load() {
     const sid = resolvedSectionId || sectionId;
@@ -322,6 +324,9 @@ export function SectionReportsView({ sectionId, title }: { sectionId?: string; t
               onSelect={(sec) => {
                 // A different section invalidates whatever report is on screen.
                 setResolvedSectionId(sec?.id ?? "");
+                setSectionCourseYear(sec ? { courseId: sec.courseId, year: Number(sec.year) } : null);
+                setSemesterOptions([]);
+                setSemester(null);
                 setData(null);
                 setLoadedMode(null);
               }}
