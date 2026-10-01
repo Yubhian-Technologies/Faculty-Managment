@@ -1,10 +1,10 @@
 "use client";
 
 import { FacultyTimetableLookup } from "@/components/timetable/FacultyTimetableLookup";
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
-  ArrowLeft, ChevronDown, ChevronRight, Clock, Coffee, FileDown, FileSpreadsheet, Lock, PencilLine, Plus, Send,
+  ArrowLeft, ChevronDown, ChevronRight, Clock, Coffee, Lock, PencilLine, Plus, Send,
   Trash2, Upload, Utensils, X,
 } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -21,13 +21,7 @@ import { formatTime12h } from "@/lib/timetable/facultyTimetablePdf";
 import { useMyDepartments } from "@/hooks/useMyDepartments";
 import { buildRows, defaultPeriodTimings } from "@/lib/timetable/buildGrid";
 import { ordinalYear, resolveTimetableDays } from "@/lib/timetable/gridModel";
-import { SegmentedTabs } from "@/components/shared/SegmentedTabs";
-import { TimetableHistoryPanel } from "@/components/timetable/TimetableHistoryPanel";
 import { InstitutionalTimetableTable } from "@/components/timetable/InstitutionalTimetableTable";
-import { buildSectionTimetablePdfHtml } from "@/lib/timetable/sectionTimetablePdf";
-import { downloadSectionTimetableXlsx } from "@/lib/timetable/timetableExport";
-import { renderHtmlToPdf } from "@/lib/pdf/htmlToPdf";
-import { useCollegeInfo } from "@/hooks/useCollegeInfo";
 import type {
   Course, Section, CourseYearTiming, TimetableSlot, DayOfWeek, DraftSlot, TimetableDraft,
   TeachingAssignment, FacultyAssignmentRequest, PeriodTiming, Subject,
@@ -36,40 +30,6 @@ import { DAY_LABELS, DEFAULT_TIMETABLE_RULES } from "@/types";
 
 /** What the grid is currently showing. */
 type Mode = "published" | "draft";
-
-// Mirrors ImportPlacement from src/lib/timetable/import/parseGrid.ts (a
-// server-only module - it pulls in mammoth/cheerio/firebase-admin, so this
-// client component defines its own copy of the shape rather than importing
-// it) plus the one client-side field (`included`) driving the preview's
-// checkboxes.
-interface ImportRow {
-  day: DayOfWeek;
-  startPeriod: number;
-  blockSize: number;
-  rawText: string;
-  status: "matched" | "unmatched" | "ambiguous" | "conflict" | "unparsed";
-  assignmentId?: string;
-  subjectName?: string;
-  facultyName?: string;
-  candidates?: { assignmentId: string; subjectName: string; facultyName: string }[];
-  error?: string;
-  included: boolean;
-}
-
-const IMPORT_STATUS_LABEL: Record<ImportRow["status"], string> = {
-  matched: "Matched",
-  unmatched: "No match",
-  ambiguous: "Ambiguous",
-  conflict: "Conflict",
-  unparsed: "Could not read",
-};
-const IMPORT_STATUS_VARIANT: Record<ImportRow["status"], "approved" | "rejected" | "pending"> = {
-  matched: "approved",
-  unmatched: "rejected",
-  ambiguous: "pending",
-  conflict: "rejected",
-  unparsed: "pending",
-};
 
 interface TimetableGridEditorProps {
   courseId: string;
@@ -121,7 +81,6 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref }: Tim
   const fulfillingAssignmentId = searchParams.get("assignmentId") || null;
 
   const [course, setCourse] = useState<Course | null>(null);
-  const { collegeInfo } = useCollegeInfo();
   const [section, setSection] = useState<Section | null>(null);
   const [timing, setTiming] = useState<CourseYearTiming | null>(null);
   // Every year's own CourseYearTiming for this course (not just the one
@@ -144,11 +103,6 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref }: Tim
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [draft, setDraft] = useState<TimetableDraft | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  // Which top-level tab is showing - "History" is a fully separate,
-  // read-only view (see TimetableHistoryPanel) of a PAST cohort's own
-  // published timetable for this section; everything below (build/edit/
-  // publish/discard) stays exactly as it always has and is untouched by it.
-  const [activeView, setActiveView] = useState<"timetable" | "history">("timetable");
 
   const [modeState, setModeState] = useState<Mode>("published");
   // View filter, independent of edit mode - "ALL" shows everything as before.
@@ -189,17 +143,6 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref }: Tim
   const [showPeriodDialog, setShowPeriodDialog] = useState(false);
   const [editPeriods, setEditPeriods] = useState<{ startTime: string; endTime: string }[]>([]);
   const [savingPeriods, setSavingPeriods] = useState(false);
-
-  // Import-from-document: upload a Word/Excel timetable grid, preview what
-  // it resolves to against this section's real teaching assignments, then
-  // write only the rows the HOD kept checked into the draft (see
-  // handleImportFile/handleImportConfirm below).
-  const [showImportDialog, setShowImportDialog] = useState(false);
-  const [importUploading, setImportUploading] = useState(false);
-  const [importConfirming, setImportConfirming] = useState(false);
-  const [importError, setImportError] = useState<string | null>(null);
-  const [importRows, setImportRows] = useState<ImportRow[] | null>(null);
-  const importFileRef = useRef<HTMLInputElement>(null);
 
   // The days this grid can offer, in one place, for both published and draft
   // mode. Order comes from the college's TimetableRules.workingDays (the same
@@ -383,76 +326,6 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref }: Tim
   function cellEntriesFor(day: DayOfWeek, period: number): { slot: TimetableSlot | DraftSlot; isPinned: boolean }[] {
     const entries = rawCellEntriesFor(day, period);
     return typeFilter === "ALL" ? entries : entries.filter((e) => e.slot.subjectType === typeFilter);
-  }
-
-  /** Opens the import dialog fresh - any previous preview/error is cleared. */
-  function openImportDialog() {
-    setImportRows(null);
-    setImportError(null);
-    setShowImportDialog(true);
-  }
-
-  /** Uploads a Word/Excel timetable grid and previews what it resolves to. Writes nothing yet. */
-  async function handleImportFile(file: File) {
-    setImportUploading(true);
-    setImportError(null);
-    setImportRows(null);
-    try {
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("sectionId", sectionId);
-      const res = await fetch("/api/college/timetable/import", { method: "POST", body: formData });
-      const json = (await res.json()) as { placements?: Omit<ImportRow, "included">[]; error?: string };
-      if (!res.ok) {
-        setImportError(json.error ?? "Could not read this file");
-        return;
-      }
-      // Pre-check only the cleanly matched rows - unmatched/ambiguous/conflict/
-      // unparsed rows need the HOD's own judgment, never a default-on checkbox.
-      setImportRows((json.placements ?? []).map((p) => ({ ...p, included: p.status === "matched" })));
-    } catch {
-      setImportError("Could not read this file");
-    } finally {
-      setImportUploading(false);
-      if (importFileRef.current) importFileRef.current.value = "";
-    }
-  }
-
-  /** Writes the checked, matched rows from the import preview into the draft. */
-  async function handleImportConfirm() {
-    if (!importRows) return;
-    const toImport = importRows.filter((r) => r.included && r.status === "matched" && r.assignmentId);
-    if (toImport.length === 0) return;
-    setImportConfirming(true);
-    try {
-      const res = await fetch("/api/college/timetable/import/confirm", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sectionId,
-          placements: toImport.map((r) => ({
-            assignmentId: r.assignmentId, day: r.day, startPeriod: r.startPeriod, blockSize: r.blockSize,
-          })),
-        }),
-      });
-      const json = (await res.json()) as { imported?: number; failed?: { error?: string }[]; error?: string };
-      if (!res.ok) {
-        toast({ variant: "destructive", title: json.error ?? "Import failed" });
-        return;
-      }
-      await loadAll();
-      setModeState("draft");
-      setIsEditing(true);
-      setShowImportDialog(false);
-      toast({
-        title: `Imported ${json.imported ?? 0} period${json.imported === 1 ? "" : "s"}`,
-        description: json.failed && json.failed.length > 0
-          ? `${json.failed.length} row(s) could not be placed - they may now conflict with something else on the grid.`
-          : undefined,
-      });
-    } finally {
-      setImportConfirming(false);
-    }
   }
 
   /** Starts an empty draft so the whole timetable can be built by hand. */
@@ -708,105 +581,11 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref }: Tim
     }
   }
 
-  const [isExportingPdf, setIsExportingPdf] = useState(false);
-  const [isExportingXlsx, setIsExportingXlsx] = useState(false);
-
-  // The section document is the only source of batch/regulation/in-charge. When
-  // it hasn't loaded we pass a name-only stand-in rather than the old fabricated
-  // one (a four-year batch computed from the calendar, a studentCount of 60 and
-  // an id echoed as a department) - printing a made-up batch is worse than
-  // printing none.
-  const printableSection: Partial<Section> | undefined =
-    section ??
-    (fallbackSectionName
-      ? { name: fallbackSectionName, year: Number(year), courseName: course?.name ?? fallbackCourseName ?? undefined }
-      : undefined);
-
-  const exportFileBase = `Timetable_${(course?.name || fallbackCourseName || "Class").replace(/\s+/g, "_")}_Sec_${section?.name || fallbackSectionName || "A"}`;
-
   // `Section.department` is the department NAME string (see the join-key comment
   // on POST college/departments), so it is already printable - no name lookup
   // round-trip is needed for the header.
   const departmentName = section?.department;
 
-  async function handleDownloadPdf() {
-    if (!timing || slots.length === 0) return;
-    setIsExportingPdf(true);
-    try {
-      const html = buildSectionTimetablePdfHtml({
-        collegeName: collegeInfo?.name || "College",
-        collegeCode: collegeInfo?.code,
-        affiliation: collegeInfo?.affiliation,
-        address: collegeInfo?.address,
-        phone: collegeInfo?.phone,
-        email: collegeInfo?.email,
-        logoUrl: collegeInfo?.logoUrl,
-        courseName: course?.name || fallbackCourseName || undefined,
-        departmentName,
-        section: printableSection,
-        days,
-        periods: Array.from({ length: timing.numberOfPeriods }, (_, i) => i + 1),
-        periodTimings: timing.periods ?? [],
-        timing,
-        slots,
-        subjects,
-        assignments,
-        lunchBreak: timing.lunchBreak,
-        shortBreaks: timing.shortBreaks,
-        academicYear: slots[0]?.academicYear,
-      });
-      const filename = `${exportFileBase}.pdf`;
-      await renderHtmlToPdf(html, filename);
-      toast({ title: "Timetable downloaded", description: `Saved as ${filename}` });
-    } catch (err) {
-      console.error(err);
-      toast({ title: "Download failed", description: "Failed to generate timetable PDF", variant: "destructive" });
-    } finally {
-      setIsExportingPdf(false);
-    }
-  }
-
-  async function handleDownloadXls() {
-    if (!timing || slots.length === 0) return;
-    setIsExportingXlsx(true);
-    try {
-      const filename = `${exportFileBase}.xlsx`;
-      await downloadSectionTimetableXlsx(
-        {
-          collegeName: collegeInfo?.name,
-          collegeCode: collegeInfo?.code,
-          affiliation: collegeInfo?.affiliation,
-          address: collegeInfo?.address,
-          phone: collegeInfo?.phone,
-          logoUrl: collegeInfo?.logoUrl,
-          departmentName,
-          courseName: course?.name || fallbackCourseName || undefined,
-          academicYear: slots[0]?.academicYear,
-          sectionName: printableSection?.name,
-          sectionYear: printableSection?.year,
-          batch: printableSection?.batch,
-          regulation: printableSection?.regulation,
-          classInchargeName: printableSection?.facultyInchargeName,
-          days,
-          periods: Array.from({ length: timing.numberOfPeriods }, (_, i) => i + 1),
-          periodTimings: timing.periods ?? [],
-          timing,
-          slots,
-          subjects,
-          assignments,
-          lunchBreak: timing.lunchBreak,
-          shortBreaks: timing.shortBreaks,
-        },
-        filename
-      );
-      toast({ title: "Timetable exported", description: `Saved as ${filename}` });
-    } catch (err) {
-      console.error(err);
-      toast({ title: "Export failed", description: "Failed to export timetable spreadsheet", variant: "destructive" });
-    } finally {
-      setIsExportingXlsx(false);
-    }
-  }
 
   return (
     <div className="space-y-6">
@@ -830,18 +609,6 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref }: Tim
                 <ArrowLeft className="h-4 w-4 mr-2" />Back
               </Button>
             )}
-            {timing && slots.length > 0 && (
-              <>
-                <Button variant="outline" onClick={handleDownloadPdf} disabled={isExportingPdf || isExportingXlsx}>
-                  <FileDown className="h-4 w-4 mr-2" />
-                  {isExportingPdf ? "Preparing…" : "Download PDF"}
-                </Button>
-                <Button variant="outline" onClick={handleDownloadXls} disabled={isExportingPdf || isExportingXlsx}>
-                  <FileSpreadsheet className="h-4 w-4 mr-2 text-emerald-600" />
-                  {isExportingXlsx ? "Preparing…" : "Export Excel"}
-                </Button>
-              </>
-            )}
             {/* Manual route: an HOD can always build a timetable by hand -
                 kept available cross-department too, since a lending HOD may
                 be the first to touch this section's timetable at all and
@@ -850,16 +617,6 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref }: Tim
               <Button variant="outline" onClick={handleStartBlank} loading={busy === "blank"} disabled={busy !== null}>
                 <PencilLine className="h-4 w-4 mr-2" />
                 {slots.length > 0 ? "Edit Timetable" : "Build manually"}
-              </Button>
-            )}
-            {/* Upload an existing Word/Excel timetable grid instead of
-                clicking every period by hand - same cross-department
-                availability as Build manually above, and works whether or
-                not a draft already exists (it appends into one either way,
-                creating it first if needed - see the import/confirm route). */}
-            {timing && (
-              <Button variant="outline" onClick={openImportDialog}>
-                <Upload className="h-4 w-4 mr-2" />Import
               </Button>
             )}
             {/* The college day's outer bounds are Principal-set - this only
@@ -976,18 +733,7 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref }: Tim
         </div>
       )}
 
-      <SegmentedTabs
-        value={activeView}
-        onChange={(v) => setActiveView(v as "timetable" | "history")}
-        options={[
-          { key: "timetable", label: "Timetable" },
-          { key: "history", label: "History" },
-        ]}
-      />
-
-      {activeView === "history" ? (
-        <TimetableHistoryPanel courseId={courseId} year={year} sectionId={sectionId} />
-      ) : (
+      {/* History tab removed from this editor: the view is always the live timetable. */}
       <>
       {/* ── Draft toolbar ─────────────────────────────────────────────────── */}
       {hasDraft && (
@@ -1308,123 +1054,6 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref }: Tim
         </DialogContent>
       </Dialog>
 
-      {/* Upload a Word/Excel timetable grid, preview what it resolves to
-          against this section's real teaching assignments, then write only
-          the checked rows into the draft (see handleImportFile/
-          handleImportConfirm above). */}
-      <Dialog
-        open={showImportDialog}
-        onOpenChange={(o) => { if (!o && !importUploading && !importConfirming) setShowImportDialog(false); }}
-      >
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Import Timetable</DialogTitle>
-            <DialogDescription>
-              Upload a Word (.docx) or Excel (.xlsx) timetable grid for this section - the same Day x Period
-              layout the department already keeps it in. Each cell is matched against this section&apos;s
-              teaching assignments; only cleanly matched periods are pre-selected below.
-            </DialogDescription>
-          </DialogHeader>
-
-          <input
-            ref={importFileRef}
-            type="file"
-            accept=".docx,.xlsx"
-            className="hidden"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) void handleImportFile(file);
-            }}
-          />
-
-          {!importRows && (
-            <button
-              type="button"
-              disabled={importUploading}
-              onClick={() => importFileRef.current?.click()}
-              className="w-full border-2 border-dashed border-border rounded-lg p-8 flex flex-col items-center gap-3 hover:border-primary hover:bg-primary/5 transition-colors cursor-pointer disabled:opacity-50"
-            >
-              <Upload className="h-10 w-10 text-muted-foreground" />
-              <p className="font-medium text-sm">
-                {importUploading ? "Reading file…" : "Click to select a .docx or .xlsx file"}
-              </p>
-            </button>
-          )}
-
-          {importError && <p className="text-sm text-destructive">{importError}</p>}
-
-          {importRows && (
-            <>
-              {importRows.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No filled-in periods were found in this document.</p>
-              ) : (
-                <div className="max-h-96 space-y-1.5 overflow-y-auto">
-                  {importRows.map((row, i) => (
-                    <label
-                      key={i}
-                      className="flex items-start gap-3 rounded-md border p-2.5 text-sm has-[:disabled]:opacity-60"
-                    >
-                      <input
-                        type="checkbox"
-                        className="mt-1"
-                        checked={row.included}
-                        disabled={row.status !== "matched"}
-                        onChange={(e) => {
-                          const checked = e.target.checked;
-                          setImportRows((rows) => rows?.map((r, idx) => (idx === i ? { ...r, included: checked } : r)) ?? rows);
-                        }}
-                      />
-                      <span className="min-w-0 flex-1">
-                        <span className="flex flex-wrap items-center gap-2">
-                          <span className="font-medium">
-                            {DAY_LABELS[row.day]}, period {row.startPeriod}
-                            {row.blockSize > 1 ? `-${row.startPeriod + row.blockSize - 1}` : ""}
-                          </span>
-                          <Badge variant={IMPORT_STATUS_VARIANT[row.status]} className="text-xs">
-                            {IMPORT_STATUS_LABEL[row.status]}
-                          </Badge>
-                        </span>
-                        <span className="block truncate text-xs text-muted-foreground">&quot;{row.rawText}&quot;</span>
-                        {row.status === "matched" && (
-                          <span className="block text-xs text-muted-foreground">{row.subjectName} - {row.facultyName}</span>
-                        )}
-                        {row.error && <span className="block text-xs text-destructive">{row.error}</span>}
-                        {row.candidates && row.candidates.length > 0 && (
-                          <span className="block text-xs text-muted-foreground">
-                            Matches: {row.candidates.map((c) => `${c.subjectName} (${c.facultyName})`).join(", ")}
-                          </span>
-                        )}
-                      </span>
-                    </label>
-                  ))}
-                </div>
-              )}
-              <div className="flex items-center justify-between gap-2 pt-2">
-                <p className="text-xs text-muted-foreground">
-                  {importRows.filter((r) => r.included).length} of {importRows.length} selected
-                </p>
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    onClick={() => { setImportRows(null); setImportError(null); }}
-                    disabled={importConfirming}
-                  >
-                    Choose a different file
-                  </Button>
-                  <Button
-                    onClick={() => void handleImportConfirm()}
-                    loading={importConfirming}
-                    disabled={importConfirming || importRows.filter((r) => r.included).length === 0}
-                  >
-                    Import {importRows.filter((r) => r.included).length} row(s)
-                  </Button>
-                </div>
-              </div>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
-
       {/* Free-form per-period start/end, within the college day the Principal
           already bounded (timing.collegeStartTime/collegeEndTime) - see
           PATCH /api/college/course-year-timings. Shared by every section of
@@ -1515,7 +1144,6 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref }: Tim
         onConfirm={handleDiscard}
       />
       </>
-      )}
     </div>
   );
 }
