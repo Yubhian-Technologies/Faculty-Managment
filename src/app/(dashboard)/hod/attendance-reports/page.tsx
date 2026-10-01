@@ -5,12 +5,11 @@ import { SegmentedTabs } from "@/components/shared/SegmentedTabs";
 import { SectionReportsView } from "@/components/attendance/SectionReportsView";
 import { FacultyAttendanceCompletionView } from "@/components/attendance/FacultyAttendanceCompletionView";
 import { FacultyNotPostedView } from "@/components/attendance/FacultyNotPostedView";
-import { StudentAttendanceHistoryPicker } from "@/components/attendance/StudentAttendanceHistoryPicker";
-import { SectionAttendanceCalendarPicker } from "@/components/attendance/SectionAttendanceCalendarPicker";
+import { StudentAttendanceByStudentView } from "@/components/attendance/StudentAttendanceByStudentView";
 
 type Person = "faculty" | "students";
 type FacultySub = "completion" | "notposted";
-type StudentSub = "reports" | "byStudent" | "bySection";
+type StudentSub = "reports" | "byStudent";
 
 // Every attendance REPORT module in one place - was 6 separate sidebar
 // items (Attendance Reports, Attendance History, Attendance Completion,
@@ -66,18 +65,11 @@ export default function HodAttendanceReportsPage() {
               options={[
                 { key: "reports", label: "Reports" },
                 { key: "byStudent", label: "By Student" },
-                { key: "bySection", label: "By Section" },
               ]}
             />
           </div>
           {studentSub === "reports" && <SectionReportsView title="Student Attendance" />}
-          {studentSub === "byStudent" && <StudentAttendanceHistoryPicker hrefBase="/hod/students" />}
-          {studentSub === "bySection" && (
-            <SectionAttendanceCalendarPicker
-              hrefBase="/hod/monthly-records"
-              description="Pick a section to view its day-wise monthly attendance calendar."
-            />
-          )}
+          {studentSub === "byStudent" && <StudentAttendanceByStudentView />}
         </>
       )}
     </div>

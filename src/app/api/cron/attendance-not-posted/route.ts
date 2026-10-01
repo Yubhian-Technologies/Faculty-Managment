@@ -3,8 +3,9 @@ import { NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getNotPostedSettings, markSweptToday } from "@/lib/attendance/notPostedSettings";
 import { istDateKey, istTimeHHMM } from "@/lib/attendance/istTime";
-import { DAY_BY_JS_DAY, getFacultyPeriodsForDate } from "@/lib/timetable/currentPeriod";
+import { DAY_BY_JS_DAY, getFacultyPeriodsForDate, type TimingCache } from "@/lib/timetable/currentPeriod";
 import { resolvePeriodCompletionStatus } from "@/lib/attendance/periodAttendanceStatus";
+import { getNoClassReason } from "@/lib/studentAttendance/classDay";
 import { emitWorkflowNotification } from "@/lib/notifications/workflowNotifications";
 import type { FacultyMember, StudentAttendanceSession } from "@/types";
 
@@ -39,7 +40,15 @@ async function sweepCollege(db: FirebaseFirestore.Firestore, collegeId: string, 
   if (settings.lastRunDate === today) return { swept: false, notified: 0 };
   if (istTimeHHMM(now) < settings.cutoffTime) return { swept: false, notified: 0 };
 
+  // Nobody is expected to post attendance on a holiday / summer break / a day
+  // outside the college's working days - mark swept so it isn't rechecked.
+  if (await getNoClassReason(db, collegeId, today)) {
+    await markSweptToday(db, collegeId, today);
+    return { swept: true, notified: 0 };
+  }
+
   const collegeRef = db.collection("colleges").doc(collegeId);
+  const timingCache: TimingCache = new Map();
   const [y, m, d] = today.split("-").map(Number);
   const jsDay = new Date(y, m - 1, d).getDay();
   const dayName = DAY_BY_JS_DAY[jsDay];
@@ -55,7 +64,7 @@ async function sweepCollege(db: FirebaseFirestore.Firestore, collegeId: string, 
 
   let notified = 0;
   for (const facultyId of facultyIds) {
-    const periods = await getFacultyPeriodsForDate(db, collegeId, facultyId, today);
+    const periods = await getFacultyPeriodsForDate(db, collegeId, facultyId, today, timingCache);
     if (periods.length === 0) continue;
 
     const sessionSnaps = await Promise.all(
