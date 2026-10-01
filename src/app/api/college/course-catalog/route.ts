@@ -40,7 +40,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");
+    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "ACADEMICS");
     const body = (await request.json()) as {
       name?: string;
       code?: string;

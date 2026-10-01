@@ -13,7 +13,25 @@ import {
 import { getHodDepartmentScope, canHodEditDepartment, ownDepartmentNames } from "@/lib/departments/scope";
 import { isTimetableIncharge } from "@/lib/departments/timetableIncharge";
 import { resolveRequestedSemester, draftDocId } from "@/lib/college/semester";
-import type { DayOfWeek, DraftSlot } from "@/types";
+import type { DayOfWeek, DraftSlot, TimetableDraft } from "@/types";
+
+type Outcome =
+  | { ok: true; slots: DraftSlot[]; adjustedNote: string | null }
+  | { ok: false; status: number; error: string };
+
+// Heads-up (never a rejection) when a placement lands on a period the lending
+// department marked busy for this faculty.
+function declaredBusyNote(
+  ctx: { declaredBusyFaculty: Map<string, Set<string>> },
+  facultyId: string, facultyName: string, day: string, startPeriod: number, blockSize: number,
+): string | null {
+  const cells = ctx.declaredBusyFaculty.get(facultyId);
+  if (!cells) return null;
+  const hit = Array.from({ length: blockSize }, (_, i) => startPeriod + i).filter((p) => cells.has(cellKey(day, p)));
+  return hit.length > 0
+    ? `${facultyName || "This faculty"} was marked busy by their department at ${day} period${hit.length > 1 ? "s" : ""} ${hit.join(", ")} - placed anyway.`
+    : null;
+}
 
 // Read, hand-build, hand-edit, or discard the draft for one section.
 //
@@ -209,8 +227,7 @@ export async function PATCH(request: Request) {
 
     const ctx = await loadTimetableContext(db, session.collegeId, sectionId, requestedSemester);
     if (!ctx || !ctx.timing) return NextResponse.json({ error: "Section not found" }, { status: 404 });
-    const draft = await loadDraft(db, session.collegeId, sectionId, ctx.currentSemester);
-    if (!draft) return NextResponse.json({ error: "No draft to edit" }, { status: 404 });
+    if (!(await loadDraft(db, session.collegeId, sectionId, ctx.currentSemester))) return NextResponse.json({ error: "No draft to edit" }, { status: 404 });
 
     if (session.role === "HOD") {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
@@ -231,131 +248,156 @@ export async function PATCH(request: Request) {
       }
     }
 
-    let slots: DraftSlot[];
-    // Set only when canPlaceAcrossBreak actually let a lab block span a
-    // break - surfaced to the client as a heads-up, not a warning (the
-    // block still landed exactly where clicked/dragged).
-    let adjustedNote: string | null = null;
+    // Pure over the draft it's handed, so it can be re-run against a fresher
+    // copy if the transaction below retries.
+    const compute = (draft: TimetableDraft): Outcome => {
+      let slots: DraftSlot[];
+      // Set only when canPlaceAcrossBreak actually let a lab block span a
+      // break - surfaced to the client as a heads-up, not a warning (the
+      // block still landed exactly where clicked/dragged).
+      let adjustedNote: string | null = null;
 
-    if (action === "remove") {
-      const { fromDay, fromPeriod } = body;
-      if (!fromDay || !fromPeriod) {
-        return NextResponse.json({ error: "fromDay and fromPeriod are required" }, { status: 400 });
-      }
-      const block = blockAt(draft, assignmentId, fromDay, Number(fromPeriod));
-      if (block.length === 0) {
-        return NextResponse.json({ error: "That slot is not in the draft" }, { status: 404 });
-      }
-      // Drop only this assignment's own slots, not every slot that happens to
-      // share a cell (a split period has two assignments at the same
-      // day+period) - `block` holds direct references into draft.slots, so
-      // identity comparison scopes the removal correctly.
-      slots = draft.slots.filter((s) => !block.includes(s));
-    } else if (action === "add") {
-      const { toDay, toPeriod } = body;
-      if (!toDay || !toPeriod) {
-        return NextResponse.json({ error: "toDay and toPeriod are required" }, { status: 400 });
-      }
-
-      const assignment = ctx.assignments.find((a) => a.id === assignmentId && !a.isPast);
-      if (!assignment) {
-        return NextResponse.json({ error: "That teaching assignment is not on this section" }, { status: 404 });
-      }
-      const subject = ctx.subjectsById.get(assignment.subjectId);
-      const subjectType = subject?.type ?? "THEORY";
-      const blockSize = subjectType === "PRACTICAL" ? Math.max(1, ctx.rules.labBlockSize) : 1;
-
-      // Same gate as timetable-slots/route.ts's manual pin path - a split
-      // period (two+ subjects/faculty sharing one cell) only makes sense for
-      // parallel lab batches, not two theory classes at once.
-      if (body.allowSplit && subjectType !== "PRACTICAL") {
-        return NextResponse.json({ error: "Only lab (PRACTICAL) subjects can be split into batches" }, { status: 400 });
-      }
-
-      const placeAt = Number(toPeriod);
-      const placementOpts = {
-        facultyId: assignment.facultyId,
-        facultyName: assignment.facultyName,
-        subjectId: assignment.subjectId,
-        day: toDay,
-        startPeriod: placeAt,
-        blockSize,
-        ignore: new Set<string>(),
-        allowSplit: body.allowSplit,
-      };
-      const problem = validatePlacement(ctx, draft, placementOpts);
-      if (problem) {
-        const acrossBreak = checkPlacementAcrossBreak(ctx, draft, placementOpts, problem);
-        if (!acrossBreak.ok) {
-          return NextResponse.json({ error: acrossBreak.problem }, { status: 409 });
+      if (action === "remove") {
+        const { fromDay, fromPeriod } = body;
+        if (!fromDay || !fromPeriod) {
+          return { ok: false, status: 400, error: "fromDay and fromPeriod are required" };
         }
-        adjustedNote = `This lab spans a break between periods ${placeAt} and ${placeAt + blockSize - 1} - placed as requested.`;
-      }
-
-      const added: DraftSlot[] = Array.from({ length: blockSize }, (_, i) => ({
-        assignmentId,
-        facultyId: assignment.facultyId,
-        facultyName: assignment.facultyName,
-        subjectId: assignment.subjectId,
-        subjectName: assignment.subjectName || subject?.name || "",
-        subjectType,
-        day: toDay as DayOfWeek,
-        periodNumber: placeAt + i,
-        isBlockContinuation: i > 0,
-      }));
-      slots = [...draft.slots, ...added];
-    } else {
-      const { fromDay, fromPeriod, toDay, toPeriod } = body;
-      if (!fromDay || !fromPeriod || !toDay || !toPeriod) {
-        return NextResponse.json(
-          { error: "fromDay, fromPeriod, toDay and toPeriod are required" },
-          { status: 400 },
-        );
-      }
-      const block = blockAt(draft, assignmentId, fromDay, Number(fromPeriod));
-      if (block.length === 0) {
-        return NextResponse.json({ error: "That slot is not in the draft" }, { status: 404 });
-      }
-      const moving = new Set(block.map((s) => cellKey(s.day, s.periodNumber)));
-
-      const placeAt = Number(toPeriod);
-      const placementOpts = {
-        facultyId: block[0].facultyId,
-        facultyName: block[0].facultyName,
-        subjectId: block[0].subjectId,
-        day: toDay,
-        startPeriod: placeAt,
-        blockSize: block.length,
-        ignore: moving,
-      };
-      const problem = validatePlacement(ctx, draft, placementOpts);
-      if (problem) {
-        const acrossBreak = checkPlacementAcrossBreak(ctx, draft, placementOpts, problem);
-        if (!acrossBreak.ok) {
-          return NextResponse.json({ error: acrossBreak.problem }, { status: 409 });
+        const block = blockAt(draft, assignmentId, fromDay, Number(fromPeriod));
+        if (block.length === 0) {
+          return { ok: false, status: 404, error: "That slot is not in the draft" };
         }
-        adjustedNote = `This lab spans a break between periods ${placeAt} and ${placeAt + block.length - 1} - placed as requested.`;
+        // Drop only this assignment's own slots, not every slot that happens to
+        // share a cell (a split period has two assignments at the same
+        // day+period) - `block` holds direct references into draft.slots, so
+        // identity comparison scopes the removal correctly.
+        slots = draft.slots.filter((s) => !block.includes(s));
+      } else if (action === "add") {
+        const { toDay, toPeriod } = body;
+        if (!toDay || !toPeriod) {
+          return { ok: false, status: 400, error: "toDay and toPeriod are required" };
+        }
+
+        const assignment = ctx.assignments.find((a) => a.id === assignmentId && !a.isPast);
+        if (!assignment) {
+          return { ok: false, status: 404, error: "That teaching assignment is not on this section" };
+        }
+        const subject = ctx.subjectsById.get(assignment.subjectId);
+        const subjectType = subject?.type ?? "THEORY";
+        const blockSize = subjectType === "PRACTICAL" ? Math.max(1, ctx.rules.labBlockSize) : 1;
+
+        // Same gate as timetable-slots/route.ts's manual pin path - a split
+        // period (two+ subjects/faculty sharing one cell) only makes sense for
+        // parallel lab batches, not two theory classes at once.
+        if (body.allowSplit && subjectType !== "PRACTICAL") {
+          return { ok: false, status: 400, error: "Only lab (PRACTICAL) subjects can be split into batches" };
+        }
+
+        const placeAt = Number(toPeriod);
+        const placementOpts = {
+          facultyId: assignment.facultyId,
+          facultyName: assignment.facultyName,
+          subjectId: assignment.subjectId,
+          day: toDay,
+          startPeriod: placeAt,
+          blockSize,
+          ignore: new Set<string>(),
+          allowSplit: body.allowSplit,
+        };
+        const problem = validatePlacement(ctx, draft, placementOpts);
+        if (problem) {
+          const acrossBreak = checkPlacementAcrossBreak(ctx, draft, placementOpts, problem);
+          if (!acrossBreak.ok) {
+            return { ok: false, status: 409, error: acrossBreak.problem };
+          }
+          adjustedNote = `This lab spans a break between periods ${placeAt} and ${placeAt + blockSize - 1} - placed as requested.`;
+        }
+
+        const added: DraftSlot[] = Array.from({ length: blockSize }, (_, i) => ({
+          assignmentId,
+          facultyId: assignment.facultyId,
+          facultyName: assignment.facultyName,
+          subjectId: assignment.subjectId,
+          subjectName: assignment.subjectName || subject?.name || "",
+          subjectType,
+          day: toDay as DayOfWeek,
+          periodNumber: placeAt + i,
+          isBlockContinuation: i > 0,
+        }));
+        slots = [...draft.slots, ...added];
+      } else {
+        const { fromDay, fromPeriod, toDay, toPeriod } = body;
+        if (!fromDay || !fromPeriod || !toDay || !toPeriod) {
+          return { ok: false, status: 400, error: "fromDay, fromPeriod, toDay and toPeriod are required" };
+        }
+        const block = blockAt(draft, assignmentId, fromDay, Number(fromPeriod));
+        if (block.length === 0) {
+          return { ok: false, status: 404, error: "That slot is not in the draft" };
+        }
+        const moving = new Set(block.map((s) => cellKey(s.day, s.periodNumber)));
+
+        const placeAt = Number(toPeriod);
+        const placementOpts = {
+          facultyId: block[0].facultyId,
+          facultyName: block[0].facultyName,
+          subjectId: block[0].subjectId,
+          day: toDay,
+          startPeriod: placeAt,
+          blockSize: block.length,
+          ignore: moving,
+        };
+        const problem = validatePlacement(ctx, draft, placementOpts);
+        if (problem) {
+          const acrossBreak = checkPlacementAcrossBreak(ctx, draft, placementOpts, problem);
+          if (!acrossBreak.ok) {
+            return { ok: false, status: 409, error: acrossBreak.problem };
+          }
+          adjustedNote = `This lab spans a break between periods ${placeAt} and ${placeAt + block.length - 1} - placed as requested.`;
+        }
+
+        slots = draft.slots
+          // Same identity-based scoping as the "remove" branch above - `moving`
+          // (cellKey-based) stays for the occupancy check in validatePlacement,
+          // but vacating the source cell must not also drop a split partner
+          // (a different assignment) that shares the same day+period.
+          .filter((s) => !block.includes(s))
+          .concat(
+            block.map((s, i) => ({
+              ...s,
+              day: toDay as DayOfWeek,
+              periodNumber: placeAt + i,
+              isBlockContinuation: i > 0,
+            })),
+          );
       }
 
-      slots = draft.slots
-        // Same identity-based scoping as the "remove" branch above - `moving`
-        // (cellKey-based) stays for the occupancy check in validatePlacement,
-        // but vacating the source cell must not also drop a split partner
-        // (a different assignment) that shares the same day+period.
-        .filter((s) => !block.includes(s))
-        .concat(
-          block.map((s, i) => ({
-            ...s,
-            day: toDay as DayOfWeek,
-            periodNumber: placeAt + i,
-            isBlockContinuation: i > 0,
-          })),
-        );
-    }
+      // Advisory only - see declaredBusyNote.
+      if (!adjustedNote && action !== "remove") {
+        const placed = slots.find((sl) => sl.assignmentId === assignmentId && sl.day === (body.toDay as string) && sl.periodNumber === Number(body.toPeriod));
+        if (placed) {
+          const size = slots.filter((sl) => sl.assignmentId === assignmentId && sl.day === placed.day && sl.periodNumber >= placed.periodNumber && sl.periodNumber < placed.periodNumber + 8).length;
+          adjustedNote = declaredBusyNote(ctx, placed.facultyId, placed.facultyName, placed.day, placed.periodNumber, Math.max(1, size));
+        }
+      }
+      return { ok: true, slots, adjustedNote };
+    };
 
-    // Any hand edit returns the timetable to draft state until republished.
-    await draftRef(db, session.collegeId, sectionId, ctx.currentSemester)
-      .set({ slots: sortSlots(slots), status: "DRAFT" }, { merge: true });
+    // Read-modify-write of the whole `slots` array, and this draft is edited by
+    // both the section's own HOD and a lending department at the same time -
+    // without a transaction, whichever write lands last silently discards the
+    // other's placements. The draft is re-read inside the transaction and every
+    // constraint is re-validated against that fresh copy.
+    const ref = draftRef(db, session.collegeId, sectionId, ctx.currentSemester);
+    const outcome = await db.runTransaction(async (tx): Promise<Outcome> => {
+      const snap = await tx.get(ref);
+      if (!snap.exists) return { ok: false, status: 404, error: "No draft to edit" };
+      const result = compute({ id: snap.id, ...snap.data() } as TimetableDraft);
+      if (!result.ok) return result;
+      // Any hand edit returns the timetable to draft state until republished.
+      tx.set(ref, { slots: sortSlots(result.slots), status: "DRAFT" }, { merge: true });
+      return result;
+    });
+    if (!outcome.ok) return NextResponse.json({ error: outcome.error }, { status: outcome.status });
+    const { slots, adjustedNote } = outcome;
 
     return NextResponse.json({ slots: sortSlots(slots), adjustedNote });
   } catch (err) {

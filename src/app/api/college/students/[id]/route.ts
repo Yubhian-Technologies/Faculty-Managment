@@ -11,6 +11,7 @@ import { isConfiguredSecondaryDepartmentOrChild } from "@/lib/departments/codeOr
 import { getFacultyIdCandidates } from "@/lib/faculty/resolveFacultyMemberId";
 import { getAcademicStructure, type DepartmentWithId } from "@/lib/college/academicStructure";
 import { findCurrentSectionDoc } from "@/lib/students/findCurrentSectionDoc";
+import { findRollNumberConflict, rollNumberTakenMessage } from "@/lib/students/rollNumberUniqueness";
 import type { Section, StudentRecord, StudentStatus } from "@/types";
 
 // Move a single student to a different section (roster-management fix-up -
@@ -381,19 +382,25 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
       if (body.rollNumber !== undefined) {
         const roll = body.rollNumber.trim();
-        // Roll numbers are unique within a branch + year. Skip the check when
-        // clearing the roll (empty) - many roll-less students can coexist.
-        if (roll) {
-          const dupSnap = await collegeRef.collection("students")
-            .where("rollNumber", "==", roll)
-            .where("department", "==", student.department)
-            .where("year", "==", student.year)
-            .get();
-          if (dupSnap.docs.some((d) => d.id !== id)) {
-            return NextResponse.json(
-              { error: `Roll number ${roll} is already used in ${student.department} Year ${student.year}` },
-              { status: 400 }
-            );
+        const currentRoll = (student.rollNumber ?? "").trim();
+        // The roll number is the student's unique identity - it can be
+        // corrected to another free number but never removed. A student who
+        // has none yet (legacy import) may be saved with it still blank: the
+        // edit dialog re-sends the empty value along with a status / lab-batch
+        // change, and that must not be blocked.
+        if (!roll && currentRoll) {
+          return NextResponse.json({ error: "A student's roll number can't be removed - change it to the correct number instead" }, { status: 400 });
+        }
+        // Roll numbers are unique across the whole college (like a faculty
+        // member's employee id). Only checked when the roll is actually
+        // CHANGING: the edit dialog re-sends the current roll along with a
+        // status / lab-batch change, and a student who already shares a roll
+        // with someone (data saved before this rule) must still be editable
+        // without first having to change it.
+        if (roll && roll !== currentRoll) {
+          const clash = await findRollNumberConflict(collegeRef.collection("students"), roll, id);
+          if (clash) {
+            return NextResponse.json({ error: rollNumberTakenMessage(roll, clash.name) }, { status: 400 });
           }
         }
         updates.rollNumber = roll;

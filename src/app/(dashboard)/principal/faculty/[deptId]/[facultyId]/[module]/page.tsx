@@ -3,7 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Pencil } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { FacultyProfileModuleContent } from "@/components/faculty/FacultyProfileModuleContent";
@@ -24,6 +24,8 @@ export default function PrincipalFacultyModulePage() {
       fetch(`/api/college/faculty/${facultyId}`)
         .then((r) => r.json() as Promise<{ faculty?: FacultyMember }>)
         .then((d) => d.faculty ?? null),
+    // Edited from this page's own Edit route - see the profile hub page.
+    refetchOnMount: "always",
   });
 
   const { data: teachingAssignments = [] } = useQuery({
@@ -33,6 +35,7 @@ export default function PrincipalFacultyModulePage() {
         .then((r) => r.json() as Promise<{ assignments?: TeachingAssignment[] }>)
         .then((d) => d.assignments ?? []),
     enabled: moduleKey === "teaching-load",
+    refetchOnMount: "always",
   });
 
   if (!moduleDef) return <p className="text-sm text-muted-foreground">Unknown section.</p>;
@@ -43,9 +46,18 @@ export default function PrincipalFacultyModulePage() {
         title={moduleDef.label}
         description={facultyDisplayName(faculty)}
         actions={
-          <Button variant="outline" asChild>
-            <Link href={`/principal/faculty/${deptId}/${facultyId}`}><ArrowLeft className="h-4 w-4 mr-2" />Back</Link>
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" asChild>
+              <Link href={`/principal/faculty/${deptId}/${facultyId}`}><ArrowLeft className="h-4 w-4 mr-2" />Back</Link>
+            </Button>
+            {/* Same modules the HOD can edit - Research and Financial stay read-only
+                (Research is the faculty's own publications; Financial is College Office's). */}
+            {moduleKey !== "research" && moduleKey !== "financial" && (
+              <Button asChild>
+                <Link href={`/principal/faculty/${deptId}/${facultyId}/${moduleKey}/edit`}><Pencil className="h-4 w-4 mr-2" />Edit</Link>
+              </Button>
+            )}
+          </div>
         }
       />
 
