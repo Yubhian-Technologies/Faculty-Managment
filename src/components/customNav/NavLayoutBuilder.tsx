@@ -13,16 +13,15 @@ import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { NavIcon } from "@/components/layout/NavIcon";
 import { AddTabDialog } from "./AddTabDialog";
 import {
-  getNavItemsForRole, getRolesWithNavModules, isProfileNavItem, isSettingsNavItem, computeItemModule,
+  getNavItemsForRole, isProfileNavItem, isSettingsNavItem, computeItemModule,
 } from "@/components/layout/navConfig";
 import { useAdminColleges } from "@/hooks/useAdminColleges";
 import { toast } from "@/hooks/useToast";
+import { CUSTOMIZABLE_ROLES } from "@/lib/customNav/roles";
 import { buildRows, insertRow, mergeHidden, moveRow, toOrder, type BuilderRow } from "@/lib/customNav/builderModel";
-import { ROLE_LABELS, ROLE_SCOPE, customPageHref } from "@/types";
+import { ROLE_LABELS, customPageHref } from "@/types";
 import type { CustomNavLayout, CustomPage, CustomPageSummary, NavVisibilitySettings, UserRole } from "@/types";
 
-// Roles that have a college sidebar to customise.
-const COLLEGE_ROLES: UserRole[] = getRolesWithNavModules().filter((r) => ROLE_SCOPE[r] === "COLLEGE");
 
 const json = (body: unknown) => ({ method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 
@@ -140,7 +139,7 @@ export function NavLayoutBuilder() {
     await load();
   }
 
-  const customRoles = COLLEGE_ROLES;
+  const customRoles = CUSTOMIZABLE_ROLES;
 
   return (
     <Card>
@@ -164,7 +163,7 @@ export function NavLayoutBuilder() {
             <Label>Role</Label>
             <Select value={role} onValueChange={(v) => setRole(v as UserRole)}>
               <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>{COLLEGE_ROLES.map((r) => <SelectItem key={r} value={r}>{ROLE_LABELS[r]}</SelectItem>)}</SelectContent>
+              <SelectContent>{CUSTOMIZABLE_ROLES.map((r) => <SelectItem key={r} value={r}>{ROLE_LABELS[r]}</SelectItem>)}</SelectContent>
             </Select>
           </div>
         </div>

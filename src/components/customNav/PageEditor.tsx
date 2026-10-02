@@ -12,15 +12,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { NavIcon, NAV_ICON_NAMES } from "@/components/layout/NavIcon";
-import { getRolesWithNavModules } from "@/components/layout/navConfig";
 import { BlockRenderer } from "./BlockRenderer";
 import { toast } from "@/hooks/useToast";
+import { CUSTOMIZABLE_ROLES } from "@/lib/customNav/roles";
 import { isSafeHref, isSafeImageUrl } from "@/lib/customNav/safeUrl";
 import { moveRow } from "@/lib/customNav/builderModel";
-import { ROLE_LABELS, ROLE_SCOPE } from "@/types";
+import { ROLE_LABELS } from "@/types";
 import type { CustomPage, CustomPageBlock, CustomPageBlockType, UserRole } from "@/types";
 
-const COLLEGE_ROLES: UserRole[] = getRolesWithNavModules().filter((r) => ROLE_SCOPE[r] === "COLLEGE");
 
 const BLOCK_LABELS: Record<CustomPageBlockType, string> = {
   heading: "Heading", text: "Text", button: "Button", image: "Image", divider: "Divider", linkList: "Link list", infoCard: "Info card",
@@ -158,7 +157,7 @@ export function PageEditor({ collegeId, pageId }: { collegeId: string; pageId: s
           <div className="space-y-1.5">
             <Label>Shown to</Label>
             <div className="grid gap-2 sm:grid-cols-3 max-h-40 overflow-y-auto rounded-md border p-3">
-              {COLLEGE_ROLES.map((r) => (
+              {CUSTOMIZABLE_ROLES.map((r) => (
                 <label key={r} className="flex items-center gap-2 text-sm">
                   <Checkbox
                     checked={page.roles.includes(r)}
