@@ -15,6 +15,7 @@ import { hasSupportingStaffSplit } from "@/lib/designations/config";
 import { isNavItemActive, filterVisibleNavItems, isPathHidden, ROLES_WITH_EMBEDDED_PANEL_ACCESS, type NavItem } from "./navConfig";
 import { useIsTimetableIncharge } from "@/hooks/useIsTimetableIncharge";
 import { NavIcon } from "./NavIcon";
+import { useCustomNav } from "@/hooks/useCustomNav";
 import { WorkContextSwitcher } from "./WorkContextSwitcher";
 import { LocationDeptSwitcher } from "./LocationDeptSwitcher";
 import { useWorkContext } from "@/hooks/useWorkContext";
@@ -51,6 +52,7 @@ export function Sidebar({ hiddenModules, hiddenItems }: SidebarProps) {
   const { pendingCount: pendingHiringCount } = usePrincipalPendingHiring();
   const { collegeType } = useCollegeType();
   const { items: contextItems } = useWorkContext();
+  const { apply: applyCustomNav } = useCustomNav();
   const { isIncharge } = useIsTimetableIncharge();
 
   if (!user) return null;
@@ -103,6 +105,9 @@ export function Sidebar({ hiddenModules, hiddenItems }: SidebarProps) {
       navItems = [baseNavItems[0], ...injected, ...baseNavItems.slice(1)];
     }
   }
+
+  // Super-Admin-built tabs and tab order for this college (no-op when none).
+  navItems = applyCustomNav(navItems, hiddenItems);
 
   return (
     <aside className="hidden md:flex md:flex-col w-64 border-r bg-background h-screen fixed top-0 left-0 z-30">

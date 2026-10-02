@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Building2, Users, ScrollText, TrendingUp } from "lucide-react";
+import { Building2, Users, ScrollText, TrendingUp, LayoutDashboard } from "lucide-react";
 import Link from "next/link";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -137,6 +137,7 @@ export default function SuperAdminDashboard() {
             {[
               { href: "/super-admin/colleges/new", icon: Building2, label: "Add New College" },
               { href: "/super-admin/users/new", icon: Users, label: "Create User" },
+              { href: "/super-admin/customize", icon: LayoutDashboard, label: "Customise Dashboards" },
               { href: "/super-admin/audit-logs", icon: ScrollText, label: "View Audit Logs" },
             ].filter((a) => !isHidden(a.href)).map((a) => (
               <Button key={a.href} variant="outline" asChild className="justify-start">

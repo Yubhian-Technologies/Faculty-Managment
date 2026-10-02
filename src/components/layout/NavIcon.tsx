@@ -127,6 +127,9 @@ const icons: Record<string, React.ComponentType<LucideProps>> = {
   CalendarSearch,
 };
 
+/** Every icon name a nav item (built-in or custom) may use. */
+export const NAV_ICON_NAMES: string[] = Object.keys(icons);
+
 export function NavIcon({ name, ...props }: { name: string } & LucideProps) {
   const Icon = icons[name] ?? LayoutDashboard;
   return <Icon {...props} />;
