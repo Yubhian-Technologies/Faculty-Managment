@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { createFirebaseUser } from "@/lib/firebase/authRest";
+import { loadTakenEmployeeIds } from "@/lib/firestore/employeeIds";
 import { ChunkedBatch, ChunkedBatchError } from "@/lib/firestore/chunkedBatch";
 import {
   matchOption, normalizeDigits, isScientificNotation,
@@ -171,25 +172,20 @@ export async function POST(request: Request) {
       return { name: matched.name };
     }
 
-    // Load existing employeeIds/collegeEmails to detect duplicates - lowercased,
-    // since "VIT001"/"vit001" or two different casings of the same email are
-    // the same real-world identifier and Firestore would otherwise let both
-    // through as separate documents. employeeId is checked across every
-    // college, not just this one - the public faculty-profile link is keyed
-    // on employeeId alone (see /api/public/faculty-public), so a collision
-    // between colleges would let one person's link resolve to a different
-    // person's profile.
-    // ponytail: full collectionGroup scan on every import, not an indexed
-    // per-ID lookup - fine at hundreds of faculty across all colleges,
-    // revisit (e.g. a global employeeId registry doc) if that grows to
-    // thousands and imports start feeling slow.
-    const [facultyEmailSnap, employeeIdSnap] = await Promise.all([
+    // Existing employeeIds/collegeEmails to detect duplicates - lowercased, since
+    // "VIT001"/"vit001" or two different casings of the same email are the same
+    // real-world identifier and Firestore would otherwise let both through as
+    // separate documents. employeeId follows the one rule faculty and staff share
+    // (lib/firestore/employeeIds.ts): unique across every college among faculty -
+    // the public faculty-profile link is keyed on employeeId alone (see
+    // /api/public/faculty-public) - and not shared with this college's supporting
+    // staff. Only the IDs in this file are looked up; the importer used to scan
+    // every faculty member of every college on every call.
+    const [facultyEmailSnap, takenIds] = await Promise.all([
       db.collection("colleges").doc(collegeId).collection("facultyMembers").select("collegeEmail").get(),
-      db.collectionGroup("facultyMembers").select("employeeId").get(),
+      loadTakenEmployeeIds(db, collegeId, (body.records ?? []).map((r) => r.employeeId ?? "")),
     ]);
-    const existingIds = new Set(
-      employeeIdSnap.docs.map((d) => (d.data() as { employeeId?: string }).employeeId?.toLowerCase()).filter((v): v is string => !!v)
-    );
+    const existingIds = takenIds;
     const existingEmails = new Set(
       facultyEmailSnap.docs.map((d) => (d.data() as { collegeEmail?: string }).collegeEmail?.toLowerCase()).filter((v): v is string => !!v)
     );

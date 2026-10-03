@@ -28,10 +28,10 @@ function degreeCells(d: DegreeDetail | undefined): [string, string, string, stri
 
 // PhD entries take Specialization instead of Course/Branch/Percentage-CGPA (see
 // DegreeFields in ProfileFieldPrimitives.tsx) and use Year of Award.
-function phdDegreeCells(d: DegreeDetail | undefined): [string, string, string] {
-  if (!d) return ["", "", ""];
+function phdDegreeCells(d: DegreeDetail | undefined): [string, string, string, string] {
+  if (!d) return ["", "", "", ""];
   const year = degreeYear(d, true);
-  return [d.specialization ?? "", d.institutionName ?? "", year ? String(year) : ""];
+  return [d.specialization ?? "", d.institutionName ?? "", year ? String(year) : "", d.departmentName ?? ""];
 }
 
 function courseCells(courses: CourseAssignment[] | undefined, i: number): [string, string, string] {
@@ -39,14 +39,14 @@ function courseCells(courses: CourseAssignment[] | undefined, i: number): [strin
   return c ? [c.code ?? "", c.name ?? "", c.weeklyCreditHours ? String(c.weeklyCreditHours) : ""] : ["", "", ""];
 }
 
-function academicExperienceCells(items: PreviousInstitution[] | undefined, i: number): [string, string, string, string] {
+function academicExperienceCells(items: PreviousInstitution[] | undefined, i: number): [string, string, string, string, string] {
   const p = items?.[i];
-  if (!p) return ["", "", "", ""];
+  if (!p) return ["", "", "", "", ""];
   // Prefers the real dates; falls back to the legacy year-only value for a
   // record that hasn't been re-saved under the new shape yet.
   const from = p.fromDate ?? (p.fromYear ? String(p.fromYear) : "");
   const to = p.toDate ?? (p.toYear ? String(p.toYear) : "");
-  return [p.institutionName ?? "", p.designation ?? "", from, to];
+  return [p.institutionName ?? "", p.designation ?? "", from, to, p.place ?? ""];
 }
 
 function publicationCells(items: Publication[] | undefined, i: number): [string, string, string, string, string] {
@@ -77,7 +77,7 @@ function buildRow(rawUser: FMSUser): Record<string, string> {
   const p: Partial<FacultyProfileFields> = normalizeAcademicProfile(user.academicProfile) ?? {};
   const [ugDegree, ugUniv, ugPct, ugYear] = degreeCells(p.ugDetails);
   const [pgDegree, pgUniv, pgPct, pgYear] = degreeCells(p.pgDetails);
-  const [phdSpecialization, phdUniv, phdYear] = phdDegreeCells(p.phdDetails);
+  const [phdSpecialization, phdUniv, phdYear, phdDepartment] = phdDegreeCells(p.phdDetails);
 
   const row: Record<string, string> = {
     role: ROLE_LABELS[user.role] ?? s(user.role),
@@ -123,7 +123,7 @@ function buildRow(rawUser: FMSUser): Record<string, string> {
     highestQualification: s(p.highestQualification),
     ug_degreeAndBranch: ugDegree, ug_university: ugUniv, ug_percentage: ugPct, ug_year: ugYear,
     pg_degreeAndBranch: pgDegree, pg_university: pgUniv, pg_percentage: pgPct, pg_year: pgYear,
-    phd_specialization: phdSpecialization, phd_university: phdUniv, phd_year: phdYear,
+    phd_specialization: phdSpecialization, phd_university: phdUniv, phd_department: phdDepartment, phd_year: phdYear,
     netSletSetGateOthers: s(p.netSletSetGateOthers === "YES" ? "Yes" : p.netSletSetGateOthers === "NO" ? "No" : undefined),
     qualifiedExam: s(p.qualifiedExam),
     examScore: s(p.examScore),
@@ -150,8 +150,8 @@ function buildRow(rawUser: FMSUser): Record<string, string> {
     const [code, name, hours] = courseCells(p.teachingAssignment?.courses, n - 1);
     row[`course${n}_code`] = code; row[`course${n}_name`] = name; row[`course${n}_hours`] = hours;
 
-    const [expName, expDesignation, expFrom, expTo] = academicExperienceCells(p.academicExperience, n - 1);
-    row[`academicExperience${n}_institutionName`] = expName; row[`academicExperience${n}_designation`] = expDesignation;
+    const [expName, expDesignation, expFrom, expTo, expPlace] = academicExperienceCells(p.academicExperience, n - 1);
+    row[`academicExperience${n}_institutionName`] = expName; row[`academicExperience${n}_place`] = expPlace; row[`academicExperience${n}_designation`] = expDesignation;
     row[`academicExperience${n}_fromDate`] = expFrom; row[`academicExperience${n}_toDate`] = expTo;
 
     const [pubTitle, pubCoAuthors, pubJournal, pubYear, pubIndexing] = publicationCells(p.publications, n - 1);

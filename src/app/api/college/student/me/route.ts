@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
+import { passwordChangeRequired, passwordChangeRequiredResponse } from "@/lib/students/passwordGate";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { findCurrentSectionDoc } from "@/lib/students/findCurrentSectionDoc";
@@ -29,6 +30,7 @@ export async function GET() {
 
     const studentDoc = studentSnap.docs[0];
     const student = { ...(studentDoc.data() as StudentRecord), id: studentDoc.id };
+    if (passwordChangeRequired(student)) return passwordChangeRequiredResponse();
 
     const sectionDoc = await findCurrentSectionDoc(db, session.collegeId, student);
     const section = sectionDoc ? ({ ...(sectionDoc.data() as Section), id: sectionDoc.id }) : null;

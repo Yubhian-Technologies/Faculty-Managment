@@ -9,9 +9,9 @@
 
 let modelsLoadedPromise: Promise<void> | null = null;
 
-// face-api.js's own documented threshold for "same person" on its bundled
-// recognition model — below this euclidean distance counts as a match.
-export const FACE_MATCH_THRESHOLD = 0.6;
+// The threshold (and the descriptor maths) live in faceThreshold.ts so the server
+// uses the very same values - see attendanceProof.ts, which is the real judge.
+export { FACE_MATCH_THRESHOLD } from "@/lib/attendance/faceThreshold";
 
 export async function loadFaceModels(): Promise<void> {
   if (!modelsLoadedPromise) {

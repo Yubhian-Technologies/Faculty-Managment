@@ -598,8 +598,8 @@ export default function UsersPage() {
           keyExtractor={(r) => r.uid as string}
           paginate
           defaultPageSize={20}
-          searchPlaceholder="Search users..."
-          searchKeys={["name", "email", "department"] as (keyof UserRow)[]}
+          searchPlaceholder="Search by name, email, employee ID or department..."
+          searchKeys={["name", "email", "employeeId", "department"] as (keyof UserRow)[]}
           emptyTitle={deptEmptyTitle}
           emptyDescription={deptEmptyDescription}
           emptyAction={

@@ -529,7 +529,7 @@ export default function HODFacultyPage() {
         open={!!deleteTarget}
         onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}
         title="Delete faculty record?"
-        description={`This will permanently remove ${facultyDisplayName(deleteTarget) || "this faculty member"} (${(deleteTarget?.employeeId as string) ?? ""}) from the register. This cannot be undone.`}
+        description={`This removes ${facultyDisplayName(deleteTarget) || "this faculty member"} (${(deleteTarget?.employeeId as string) ?? ""}) from the register and disables their login. The record is archived, not erased - an administrator can restore it. It is refused while they still have teaching assignments, hold a role seat or are an in-charge; to keep them on the register, set their status to Resigned/Retired instead.`}
         confirmLabel="Delete"
         variant="destructive"
         onConfirm={() => void handleDelete()}

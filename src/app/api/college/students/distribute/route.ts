@@ -308,6 +308,9 @@ export async function POST(request: Request) {
           batch: studentBatch,
           courseId: section.courseId,
           course: section.courseName ?? null,
+          // A lab batch belongs to the section it was set in - cleared only when the
+          // student actually changes section (a re-run leaves settled students alone).
+          ...(move.fromSectionName !== section.name ? { labBatch: "" } : {}),
           updatedAt: now,
         });
         const history = departmentHistoryEntry(

@@ -1,6 +1,6 @@
 import type { Firestore } from "firebase-admin/firestore";
-import { REQUESTS_COL, commitApproval, releasePending, splitLeaveDays } from "@/lib/leave/balanceEngine";
 import { LEAVE_TYPE_SEED } from "@/lib/leave/seedData";
+import { transitionLeaveRequest, type BalanceEffect } from "@/lib/leave/decisionTx";
 import { notify } from "@/lib/notify";
 import { resolveWorkflowNotifications } from "@/lib/notifications/workflowNotifications";
 import { notifySubstitutes } from "@/lib/leave/periodCoverage";
@@ -38,7 +38,6 @@ export async function decideFinalStageLeave(params: {
   isPaidLeave?: boolean;
 }): Promise<{ lopDays: number }> {
   const { db, collegeId, id, req, action, remarks, decidedByUid, decidedByEmail, decider, isPaidLeave } = params;
-  const ref = REQUESTS_COL(collegeId, db).doc(id);
   const now = new Date();
   const year = (req.fromDate as unknown as { toDate(): Date }).toDate().getFullYear();
   const roleLabel = decider === "PRINCIPAL" ? "Principal" : "Management";
@@ -57,38 +56,43 @@ export async function decideFinalStageLeave(params: {
     ...(newlyTaggedPaidLeave !== undefined ? { isPaidLeave: newlyTaggedPaidLeave } : {}),
   };
 
+  // The status precondition, the balance change and the status update commit
+  // together (decisionTx.ts) - a second decider acting on the same request, or
+  // a failed status update, can no longer double-deduct or strand a deduction.
+  // Throws LeaveStateConflictError when the request is no longer what `req`
+  // says it is; callers map that to a 409.
+  const trackedType = req.leaveTypeCode ? LEAVE_TYPE_SEED.find((t) => t.code === req.leaveTypeCode) : undefined;
+  const tracked = !!trackedType && !trackedType.rules.unlimited;
+  const expected = { status: req.status, updatedAt: req.updatedAt };
+
   let lopDays = 0;
   if (action === "REJECT") {
-    if (req.leaveTypeCode) {
-      const lt = LEAVE_TYPE_SEED.find((t) => t.code === req.leaveTypeCode);
-      if (lt && !lt.rules.unlimited) {
-        await releasePending(db, collegeId, req.uid, req.leaveTypeCode, year, req.totalDays);
-      }
-    }
-    await ref.update({ status: "REJECTED", [actionField]: actionRecord, updatedAt: now });
+    const balance: BalanceEffect | undefined = tracked
+      ? { kind: "RELEASE_PENDING", uid: req.uid, code: req.leaveTypeCode!, year, days: req.totalDays }
+      : undefined;
+    await transitionLeaveRequest({
+      db, collegeId, id, expected, balance,
+      buildUpdate: () => ({ status: "REJECTED", [actionField]: actionRecord, updatedAt: now }),
+    });
   } else {
     // Insufficient balance never blocks this - the excess becomes Loss of Pay.
-    if (req.leaveTypeCode) {
-      const lt = LEAVE_TYPE_SEED.find((t) => t.code === req.leaveTypeCode);
-      if (lt && !lt.rules.unlimited) {
-        const split = await splitLeaveDays(db, collegeId, req.uid, lt, year, req.totalDays);
-        lopDays = split.lopDays;
-        if (split.withinBalance > 0) {
-          await commitApproval(db, collegeId, req.uid, req.leaveTypeCode, year, split.withinBalance);
-        }
-      }
-    }
-    await ref.update({
-      status: "APPROVED",
-      [actionField]: actionRecord,
-      lopDays,
-      updatedAt: now,
-      ...(newlyTaggedPaidLeave !== undefined ? { isPaidLeave: newlyTaggedPaidLeave } : {}),
-      // Same OD proof obligation the HOD approval path stamps - this branch
-      // covers an HOD's own OD (Principal-decided) and a Principal's own
-      // (Management-decided). See lib/leave/odProof.ts.
-      ...(req.leaveTypeCode === "OD" ? { odProofRequired: true } : {}),
-    });
+    const balance: BalanceEffect | undefined = tracked
+      ? { kind: "COMMIT_SPLIT", uid: req.uid, code: req.leaveTypeCode!, year, days: req.totalDays, leaveType: trackedType! }
+      : undefined;
+    ({ lopDays } = await transitionLeaveRequest({
+      db, collegeId, id, expected, balance,
+      buildUpdate: (r) => ({
+        status: "APPROVED",
+        [actionField]: actionRecord,
+        lopDays: r.lopDays,
+        updatedAt: now,
+        ...(newlyTaggedPaidLeave !== undefined ? { isPaidLeave: newlyTaggedPaidLeave } : {}),
+        // Same OD proof obligation the HOD approval path stamps - this branch
+        // covers an HOD's own OD (Principal-decided) and a Principal's own
+        // (Management-decided). See lib/leave/odProof.ts.
+        ...(req.leaveTypeCode === "OD" ? { odProofRequired: true } : {}),
+      }),
+    }));
   }
 
   await db.collection("colleges").doc(collegeId).collection("auditLogs").add({

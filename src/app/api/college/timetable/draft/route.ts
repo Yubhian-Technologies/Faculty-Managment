@@ -8,7 +8,7 @@ import {
   blockAt, cellKey, checkPlacementAcrossBreak, validatePlacement,
 } from "@/lib/timetable/draftPlacement";
 import {
-  buildSeededDraft, draftRef, inchargeOwnDepartmentNames, isCrossDepartmentLender, loadDraft,
+  buildSeededDraft, draftFacultyIds, draftRef, inchargeOwnDepartmentNames, isCrossDepartmentLender, loadDraft,
 } from "@/lib/timetable/draftAccess";
 import { getHodDepartmentScope, canHodEditDepartment, ownDepartmentNames } from "@/lib/departments/scope";
 import { isTimetableIncharge } from "@/lib/departments/timetableIncharge";
@@ -393,7 +393,7 @@ export async function PATCH(request: Request) {
       const result = compute({ id: snap.id, ...snap.data() } as TimetableDraft);
       if (!result.ok) return result;
       // Any hand edit returns the timetable to draft state until republished.
-      tx.set(ref, { slots: sortSlots(result.slots), status: "DRAFT" }, { merge: true });
+      tx.set(ref, { slots: sortSlots(result.slots), status: "DRAFT", facultyIds: draftFacultyIds(result.slots) }, { merge: true });
       return result;
     });
     if (!outcome.ok) return NextResponse.json({ error: outcome.error }, { status: outcome.status });

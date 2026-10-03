@@ -109,7 +109,10 @@ export async function GET(request: Request) {
 // as a concrete snapshot copy for a Department + Course + Year + Semester.
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "ACADEMICS", "HOD");
+    // HOD is deliberately not in this list: curriculum assignment belongs to
+    // Academics/Principal, and the HOD Subjects page is read-only. No client in
+    // the app calls this write path as an HOD (every caller only GETs, above).
+    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "ACADEMICS");
     const body = (await request.json()) as {
       subjectId?: string;
       subjectIds?: string[];
@@ -132,14 +135,6 @@ export async function POST(request: Request) {
         { error: "departmentId and semester are required" },
         { status: 400 }
       );
-    }
-
-    if (session.role === "HOD") {
-      const db = getAdminDb();
-      const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
-      if (!canHodEditDepartmentId(scope, departmentId)) {
-        return NextResponse.json({ error: "That department is not yours or one of your sub-departments" }, { status: 403 });
-      }
     }
 
     const service = new SubjectInstanceService();
@@ -189,7 +184,10 @@ export async function POST(request: Request) {
 // Unassign - removes one subject instance from one department's semester mapping.
 export async function DELETE(request: Request) {
   try {
-    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "ACADEMICS", "HOD");
+    // HOD is deliberately not in this list: curriculum assignment belongs to
+    // Academics/Principal, and the HOD Subjects page is read-only. No client in
+    // the app calls this write path as an HOD (every caller only GETs, above).
+    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "ACADEMICS");
     const { searchParams } = new URL(request.url);
     const subjectId = searchParams.get("subjectId");
     const departmentId = searchParams.get("departmentId");
@@ -198,14 +196,6 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: "subjectId, departmentId and semester are required" }, { status: 400 });
     }
     const semester = Number(semesterParam);
-
-    if (session.role === "HOD") {
-      const db = getAdminDb();
-      const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
-      if (!canHodEditDepartmentId(scope, departmentId)) {
-        return NextResponse.json({ error: "That department is not yours or one of your sub-departments" }, { status: 403 });
-      }
-    }
 
     const service = new SubjectInstanceService();
     await service.unassignSubjectInstance(session.collegeId, subjectId, departmentId, semester);

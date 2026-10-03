@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { employeeIdTaken, employeeIdTakenMessage } from "@/lib/firestore/employeeIds";
 import { getHodDepartmentScope, canHodManageFacultyDepartment } from "@/lib/departments/scope";
 import { SUPPORTING_STAFF_ROLE_CATEGORY, canRolePostCategory } from "@/lib/supportingStaff/roleCategory";
 import { unitLabelForHeadRole } from "@/lib/attendance/collegeStaffUnits";
@@ -185,15 +186,11 @@ export async function PATCH(
       const newEmployeeId = body.employeeId.trim();
       const currentEmployeeId = (snap.data() as { employeeId?: string }).employeeId;
       if (newEmployeeId !== currentEmployeeId) {
-        const dupSnap = await db
-          .collection("colleges")
-          .doc(session.collegeId)
-          .collection("supportingStaff")
-          .where("employeeId", "==", newEmployeeId)
-          .limit(1)
-          .get();
-        if (!dupSnap.empty) {
-          return NextResponse.json({ error: "Employee ID already exists" }, { status: 409 });
+        // Same rule as creation (lib/firestore/employeeIds.ts): not held by another
+        // staff member of this college AND not by any faculty member.
+        const idCheck = await employeeIdTaken(db, session.collegeId, newEmployeeId, { collection: "supportingStaff", id });
+        if (idCheck.taken) {
+          return NextResponse.json({ error: employeeIdTakenMessage(idCheck) }, { status: 409 });
         }
       }
       updates.employeeId = newEmployeeId;

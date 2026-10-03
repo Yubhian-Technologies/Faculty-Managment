@@ -21,6 +21,7 @@ import { Pagination } from "@/components/shared/Pagination";
 import { toast } from "@/hooks/useToast";
 import { departmentsOfferingCourse, yearOptionsForDepartment, yearOptionsForCourse } from "@/components/students/RosterFieldInputs";
 import { StudentFormDialog } from "@/components/students/StudentFormDialog";
+import { StudentPasswordDialog } from "@/components/students/StudentPasswordDialog";
 import { EDITABLE_ROSTER_FIELDS, LIST_ROSTER_FIELDS, rosterFieldDisplay } from "@/lib/students/rosterFields";
 import { toCSV, downloadCSV } from "@/lib/utils/csv";
 import { GraduatedStudentsView } from "@/components/students/GraduatedStudentsView";
@@ -492,6 +493,7 @@ export default function OfficeStudentsPage() {
     setBulkProgress({ done: 0, total: selectedIds.length });
     let deletedTotal = 0;
     let skippedTotal = 0;
+    const notRemoved: { id: string; reason: string }[] = [];
     try {
       for (let i = 0; i < selectedIds.length; i += BULK_DELETE_CHUNK_SIZE) {
         const chunk = selectedIds.slice(i, i + BULK_DELETE_CHUNK_SIZE);
@@ -500,19 +502,36 @@ export default function OfficeStudentsPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ studentIds: chunk }),
         });
-        const json = await res.json() as { deletedCount?: number; skipped?: string[]; error?: string };
+        const json = await res.json() as {
+          deletedCount?: number;
+          skipped?: string[];
+          blocked?: { id: string; reason: string }[];
+          failed?: { id: string; reason: string }[];
+          error?: string;
+        };
         if (!res.ok) {
           toast({ variant: "destructive", title: json.error ?? "Failed to remove some students" });
           break;
         }
         deletedTotal += json.deletedCount ?? 0;
         skippedTotal += json.skipped?.length ?? 0;
+        notRemoved.push(...(json.blocked ?? []), ...(json.failed ?? []));
         setBulkProgress({ done: Math.min(i + chunk.length, selectedIds.length), total: selectedIds.length });
       }
       if (deletedTotal > 0) {
         toast({
           variant: "success",
           title: `${deletedTotal} student${deletedTotal === 1 ? "" : "s"} removed${skippedTotal ? ` (${skippedTotal} already gone)` : ""}`,
+        });
+      }
+      if (notRemoved.length > 0) {
+        // e.g. a student who still holds a library book - say who and why, so
+        // Office can fix it and remove them again.
+        const nameById = new Map(students.map((st) => [st.id, st.name]));
+        toast({
+          variant: "destructive",
+          title: `${notRemoved.length} student${notRemoved.length === 1 ? " was" : "s were"} not removed`,
+          description: notRemoved.slice(0, 3).map((n) => `${nameById.get(n.id) ?? n.id}: ${n.reason}`).join(" · ") + (notRemoved.length > 3 ? " …" : ""),
         });
       }
       setBulkDeleteOpen(false);
@@ -526,62 +545,81 @@ export default function OfficeStudentsPage() {
     }
   }
 
-  // Password is a fixed, shared constant (never per-student) - the toast is a
-  // convenience reminder for Office, not the real distribution mechanism.
-  async function handleCreateOrResetLogin(s: StudentListItem) {
+  // The office types the password (it is never generated). It goes to the server,
+  // which hands it to Firebase Auth - nothing stores or shows it again.
+  const [passwordDialog, setPasswordDialog] = useState<
+    | { kind: "single"; student: StudentListItem }
+    | { kind: "bulk" }
+    | null
+  >(null);
+
+  function handleCreateOrResetLogin(s: StudentListItem) {
+    setPasswordDialog({ kind: "single", student: s });
+  }
+
+  async function submitSinglePassword(s: StudentListItem, password: string): Promise<string | null> {
     const isReset = !!s.uid;
     const url = isReset
       ? `/api/college/students/${s.id}/reset-login-password`
       : `/api/college/students/${s.id}/create-login`;
     try {
-      const res = await fetch(url, { method: "POST" });
-      const json = (await res.json()) as { ok?: boolean; error?: string; password?: string };
-      if (!res.ok || !json.ok) {
-        toast({ variant: "destructive", title: json.error ?? "Failed to update login" });
-        return;
-      }
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
+      });
+      const json = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string; alreadyExisted?: boolean };
+      if (!res.ok || !json.ok) return json.error ?? "Failed to update login";
       toast({
         variant: "success",
-        title: isReset ? `Password reset for ${s.name}` : `Login created for ${s.name}`,
-        description: json.password ? `Password: ${json.password}` : undefined,
+        title: isReset
+          ? `Password updated for ${s.name}`
+          : json.alreadyExisted ? `${s.name} already has a login` : `Login created for ${s.name}`,
       });
       if (!isReset) void loadStudents();
+      return null;
     } catch {
-      toast({ variant: "destructive", title: "Network error - please try again" });
+      return "Network error - please try again";
     }
   }
 
   const [isBulkCreatingLogins, setIsBulkCreatingLogins] = useState(false);
 
-  async function handleBulkCreateLogins() {
-    if (selectedIds.length === 0) return;
+  async function submitBulkPassword(password: string): Promise<string | null> {
+    if (selectedIds.length === 0) return "Select at least one student";
     setIsBulkCreatingLogins(true);
     try {
       const res = await fetch("/api/college/students/bulk-create-login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ studentIds: selectedIds }),
+        body: JSON.stringify({ studentIds: selectedIds, password }),
       });
-      const json = (await res.json()) as {
+      const json = (await res.json().catch(() => ({}))) as {
         ok?: boolean;
         created?: { id: string }[];
         skipped?: { id: string; reason: string }[];
         error?: string;
       };
-      if (!res.ok || !json.ok) {
-        toast({ variant: "destructive", title: json.error ?? "Failed to create logins" });
-        return;
-      }
+      if (!res.ok || !json.ok) return json.error ?? "Failed to create logins";
       const createdCount = json.created?.length ?? 0;
-      const skippedCount = json.skipped?.length ?? 0;
+      const skipped = json.skipped ?? [];
       toast({
         variant: "success",
-        title: `${createdCount} login${createdCount === 1 ? "" : "s"} created${skippedCount ? ` (${skippedCount} skipped)` : ""}`,
+        title: `${createdCount} login${createdCount === 1 ? "" : "s"} created${skipped.length ? ` (${skipped.length} skipped)` : ""}`,
       });
+      if (skipped.length > 0) {
+        const nameById = new Map(students.map((st) => [st.id, st.name]));
+        toast({
+          variant: "destructive",
+          title: "Some students were skipped",
+          description: skipped.slice(0, 5).map((sk) => `${nameById.get(sk.id) ?? sk.id}: ${sk.reason}`).join("; ") + (skipped.length > 5 ? `; and ${skipped.length - 5} more` : ""),
+        });
+      }
       setSelected({});
       void loadStudents();
+      return null;
     } catch {
-      toast({ variant: "destructive", title: "Network error - please try again" });
+      return "Network error - please try again";
     } finally {
       setIsBulkCreatingLogins(false);
     }
@@ -693,7 +731,7 @@ export default function OfficeStudentsPage() {
           </div>
           <div className="flex items-center gap-2">
             <Button variant="ghost" size="sm" onClick={() => setSelected({})}>Clear selection</Button>
-            <Button variant="outline" size="sm" onClick={() => void handleBulkCreateLogins()} loading={isBulkCreatingLogins}>
+            <Button variant="outline" size="sm" onClick={() => setPasswordDialog({ kind: "bulk" })} loading={isBulkCreatingLogins}>
               <KeyRound className="h-4 w-4 mr-2" />Create Logins
             </Button>
             <Button variant="destructive" size="sm" onClick={() => setBulkDeleteOpen(true)}>
@@ -788,7 +826,7 @@ export default function OfficeStudentsPage() {
                           <FileText className="h-4 w-4" />
                         </button>
                         <button
-                          onClick={(e) => { e.stopPropagation(); void handleCreateOrResetLogin(s); }}
+                          onClick={(e) => { e.stopPropagation(); handleCreateOrResetLogin(s); }}
                           className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
                           title={s.uid ? "Reset login password" : "Create login"}
                         >
@@ -900,11 +938,32 @@ export default function OfficeStudentsPage() {
         open={!!deleteTarget}
         onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}
         title={`Remove ${deleteTarget?.name ?? ""}?`}
-        description={`This will permanently remove ${deleteTarget?.name ?? "this student"}${deleteTarget?.department ? ` (${deleteTarget.department}, ${ordinalYear(deleteTarget.year)})` : ""}. This cannot be undone.`}
+        description={`This removes ${deleteTarget?.name ?? "this student"}${deleteTarget?.department ? ` (${deleteTarget.department}, ${ordinalYear(deleteTarget.year)})` : ""} from the roster and disables their login. The record is archived, not erased - an administrator can restore it. A student with unreturned library books can't be removed.`}
         confirmLabel="Remove"
         variant="destructive"
         onConfirm={() => void handleDelete()}
         loading={isDeleting}
+      />
+
+      <StudentPasswordDialog
+        open={passwordDialog !== null}
+        onClose={() => setPasswordDialog(null)}
+        title={
+          passwordDialog?.kind === "single"
+            ? (passwordDialog.student.uid ? `New password for ${passwordDialog.student.name}` : `Create login for ${passwordDialog.student.name}`)
+            : `Create logins for ${selectedIds.length} student${selectedIds.length === 1 ? "" : "s"}`
+        }
+        description={
+          passwordDialog?.kind === "single"
+            ? (passwordDialog.student.uid
+                ? "Set the password this student will sign in with, together with their Roll Number. The old password stops working."
+                : "Choose the password this student will sign in with, together with their Roll Number.")
+            : "Every selected student gets a login with this same password, signing in with their own Roll Number. They can change it after signing in, or you can reset any one of them later."
+        }
+        submitLabel={passwordDialog?.kind === "single" && passwordDialog.student.uid ? "Set password" : "Create login"}
+        onSubmit={(password) =>
+          passwordDialog?.kind === "single" ? submitSinglePassword(passwordDialog.student, password) : submitBulkPassword(password)
+        }
       />
 
       {/* ── Bulk remove confirm ── */}
@@ -913,7 +972,7 @@ export default function OfficeStudentsPage() {
         onOpenChange={(open) => { if (!open && !isBulkDeleting) setBulkDeleteOpen(false); }}
         title={`Remove ${selectedCount} student${selectedCount === 1 ? "" : "s"}?`}
         description={
-          `This will permanently remove ${selectedCount} student${selectedCount === 1 ? "" : "s"}. This cannot be undone.`
+          `This removes ${selectedCount} student${selectedCount === 1 ? "" : "s"} from the roster and disables their logins. Records are archived, not erased - an administrator can restore them. Anyone with unreturned library books is skipped.`
           + (bulkProgress ? ` Removing ${bulkProgress.done} of ${bulkProgress.total}…` : "")
         }
         confirmLabel="Remove All"

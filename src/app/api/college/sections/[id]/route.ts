@@ -1,6 +1,8 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
+import { cascadeDeleteSection, findSectionHistory, sectionHistoryMessage } from "@/lib/sections/sectionDeletion";
+import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodEditDepartment, canHodEditDepartmentId } from "@/lib/departments/scope";
@@ -517,6 +519,18 @@ export async function PATCH(
     }
 
     await batch.commit();
+    await writeAuditLogSafe(db, session.collegeId, {
+      action: "SECTION_UPDATED",
+      performedBy: session.uid,
+      performedByName: session.email || session.role,
+      targetId: id,
+      details: {
+        fields: Object.keys(updates).filter((k) => k !== "updatedAt"),
+        from: { name: oldSection.name, department: sectionDept, year: oldSection.year, courseId: oldSection.courseId },
+        to: { name: newName, department: newDepartment, year: newYear, courseId: newCourseId },
+        studentsMoved: identityChanged,
+      },
+    });
     return NextResponse.json({ success: true });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
@@ -607,24 +621,36 @@ export async function DELETE(
       );
     }
 
+    // A section that has been taught has attendance sessions (and maybe internal
+    // marks) hanging off it. Deleting it would orphan that record for good, so
+    // it is refused - see lib/sections/sectionDeletion.ts.
+    const historyMessage = sectionHistoryMessage(await findSectionHistory(db, session.collegeId, id));
+    if (historyMessage) {
+      return NextResponse.json({ error: historyMessage }, { status: 409 });
+    }
+
     // A section owns its own teachingAssignments/timetableSlots/timetableDraft
     // (all keyed by sectionId, unreachable any other way) - left behind
     // otherwise as orphans referencing a sectionId that no longer exists, the
     // same class of bug scripts/cleanup-orphaned-timetable-slots.mjs was
     // written to clean up for assignment deletion, which already cascades
-    // this way - see teaching-assignments/[id]/route.ts DELETE.
-    const collegeRef = db.collection("colleges").doc(session.collegeId);
-    const [assignmentsSnap, slotsSnap, draftsSnap] = await Promise.all([
-      collegeRef.collection("teachingAssignments").where("sectionId", "==", id).get(),
-      collegeRef.collection("timetableSlots").where("sectionId", "==", id).get(),
-      collegeRef.collection("timetableDrafts").where("sectionId", "==", id).get(),
-    ]);
-    const cascadeBatch = new ChunkedBatch(db);
-    for (const d of assignmentsSnap.docs) cascadeBatch.delete(d.ref);
-    for (const d of slotsSnap.docs) cascadeBatch.delete(d.ref);
-    for (const d of draftsSnap.docs) cascadeBatch.delete(d.ref);
-    cascadeBatch.delete(ref);
-    await cascadeBatch.commit();
+    // this way - see teaching-assignments/[id]/route.ts DELETE. Children go
+    // first and the section last, one committed chunk at a time, so a failure
+    // leaves the section standing to be retried instead of stranding them.
+    const removed = await cascadeDeleteSection(db, session.collegeId, id);
+
+    await writeAuditLogSafe(db, session.collegeId, {
+      action: "SECTION_DELETED",
+      performedBy: session.uid,
+      performedByName: session.email || session.role,
+      targetId: id,
+      details: {
+        name: data.name, department: data.department, year: data.year, courseId: data.courseId,
+        removedTeachingAssignments: removed.teachingAssignments,
+        removedTimetableSlots: removed.timetableSlots,
+        removedTimetableDrafts: removed.timetableDrafts,
+      },
+    });
 
     return NextResponse.json({ success: true });
   } catch (err) {

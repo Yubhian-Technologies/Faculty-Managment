@@ -1,10 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Shuffle, Pencil, ArrowRightLeft, CalendarCheck } from "lucide-react";
+import { Shuffle, Pencil, ArrowRightLeft, CalendarCheck, Search, Filter, Users } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
-import { DataTable, type Column } from "@/components/shared/DataTable";
+import type { Column } from "@/components/shared/DataTable";
+import { Pagination } from "@/components/shared/Pagination";
+import { EmptyState } from "@/components/shared/EmptyState";
+import { TableSkeleton } from "@/components/shared/SkeletonLoader";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -35,6 +39,8 @@ interface BulkPlan {
   skipped: { id: string; name: string; reason: string }[];
 }
 
+const DEFAULT_PAGE_SIZE = 20;
+
 const STATUS_VARIANTS: Record<string, "default" | "secondary" | "outline" | "destructive"> = {
   REGULAR: "default",
   DETAINED: "outline",
@@ -62,7 +68,37 @@ const HOD_VIEWS = [
 export default function HodStudentsPage() {
   const router = useRouter();
   const [view, setView] = useState<(typeof HOD_VIEWS)[number]["key"]>("roster");
+  // Only the CURRENT PAGE of the roster (or of the read-only incoming list) is
+  // ever held here - never the whole department. The list is fetched on Load
+  // and paged on the server (see lib/students/hodPagedList.ts); everything that
+  // used to be derived from the full list now has its own on-demand source.
   const [students, setStudents] = useState<StudentRow[]>([]);
+  const [total, setTotal] = useState(0);
+  const [unassignedTotal, setUnassignedTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+  const [hasLoaded, setHasLoaded] = useState(false);
+  const [isFetching, setIsFetching] = useState(false);
+  const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The list request returns every matching id (signed, in display order) plus
+  // one page; later pages are fetched by id, so paging reads only that page's
+  // documents. Rows already fetched are kept, so revisiting a page is free.
+  const orderedIds = useRef<string[]>([]);
+  const rowCache = useRef(new Map<string, StudentRow>());
+  const pageSizeRef = useRef(DEFAULT_PAGE_SIZE);
+  const requestSeq = useRef(0);
+  // Department names this HOD's students can be filed under, and the Freshman's
+  // Departments currently holding students pre-registered to them - both from
+  // the cheap hodMeta request, not from reading the roster.
+  const [metaDepartmentNames, setMetaDepartmentNames] = useState<string[]>([]);
+  const [freshmanDeptOptions, setFreshmanDeptOptions] = useState<string[]>([]);
+  // Unassigned students only (section == "") - the Distribute dialog's cohort,
+  // fetched when it opens.
+  const [unassignedStudents, setUnassignedStudents] = useState<StudentRow[]>([]);
+  const [isCohortLoading, setIsCohortLoading] = useState(false);
+  const [isSelecting, setIsSelecting] = useState(false);
   const [sections, setSections] = useState<SectionRow[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
@@ -119,9 +155,12 @@ export default function HodStudentsPage() {
   const [isUnassigning, setIsUnassigning] = useState(false);
 
   // Manual multi-select Move / Assign / Unassign. Selection is tracked by id
-  // but only ever ACTED ON through the rows currently in view (selectedStudents
-  // below), so a row hidden by a filter can never be moved by accident.
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  // (with the row it was ticked from - the list is paged, so the row may not be
+  // on screen any more) but only ever ACTED ON through the rows matching the
+  // current filters (selectedStudents below), so a row hidden by a filter can
+  // never be moved by accident.
+  const [selectedRows, setSelectedRows] = useState<Map<string, StudentRow>>(new Map());
+  const selectedIds = useMemo(() => new Set(selectedRows.keys()), [selectedRows]);
   const [bulkMode, setBulkMode] = useState<BulkMode | null>(null);
   const [bulkSectionId, setBulkSectionId] = useState("");
   const [bulkPlan, setBulkPlan] = useState<BulkPlan | null>(null);
@@ -138,21 +177,23 @@ export default function HodStudentsPage() {
   const [rollFrom, setRollFrom] = useState("");
   const [rollTo, setRollTo] = useState("");
 
-  async function load() {
+  // Filter options and the Freshman's Department switch - the small
+  // collections plus one cheap hodMeta request. No student is read here: the
+  // roster itself only loads when Load is pressed.
+  async function loadMetadata() {
     setIsLoading(true);
     try {
-      const [studentsRes, sectionsRes, deptsRes, coursesRes, yearsRes] = await Promise.all([
-        fetch("/api/college/students").then((r) => r.json() as Promise<{ students: StudentRow[] }>),
-        fetch("/api/college/sections").then((r) => r.json() as Promise<{ sections: SectionRow[] }>),
+      const [deptsRes, coursesRes, yearsRes, metaRes] = await Promise.all([
         fetch("/api/college/departments").then((r) => r.json() as Promise<{ departments: Department[] }>),
         fetch("/api/college/courses").then((r) => r.json() as Promise<{ courses?: Course[] }>).catch(() => ({ courses: [] })),
         fetch("/api/college/academic-years").then((r) => r.json() as Promise<{ academicYears?: AcademicYear[] }>).catch(() => ({ academicYears: [] })),
+        fetch("/api/college/students?hodMeta=1").then((r) => r.json() as Promise<{ departmentNames?: string[]; freshmanDepartments?: string[] }>),
       ]);
-      setStudents(studentsRes.students ?? []);
-      setSections(sectionsRes.sections ?? []);
       setDepartments(deptsRes.departments ?? []);
       setCourses(coursesRes.courses ?? []);
       setAcademicYears(yearsRes.academicYears ?? []);
+      setMetaDepartmentNames(metaRes.departmentNames ?? []);
+      setFreshmanDeptOptions(metaRes.freshmanDepartments ?? []);
     } catch {
       toast({ variant: "destructive", title: "Failed to load students" });
     } finally {
@@ -160,11 +201,163 @@ export default function HodStudentsPage() {
     }
   }
 
+  const sectionsLoaded = useRef(false);
+  async function loadSections() {
+    try {
+      const res = await fetch("/api/college/sections").then((r) => r.json() as Promise<{ sections: SectionRow[] }>);
+      setSections(res.sections ?? []);
+      sectionsLoaded.current = true;
+    } catch {
+      toast({ variant: "destructive", title: "Failed to load sections" });
+    }
+  }
+
   useEffect(() => {
     // Wrapped so the loader's setState calls aren't synchronously reachable
     // from the effect body (react-hooks/set-state-in-effect).
-    void (async () => { await load(); })();
+    void (async () => { await loadMetadata(); })();
   }, []);
+
+  // The Department/Course/Year filters (or, in the Freshman's Department view,
+  // which department's incoming students) as query params.
+  const filterQuery = useCallback((): URLSearchParams => {
+    const params = new URLSearchParams();
+    if (freshmanView !== "none") {
+      params.set("incoming", freshmanView);
+      return params;
+    }
+    if (deptFilter !== "all") params.set("department", deptFilter);
+    if (courseFilter !== "all") params.set("course", courseFilter);
+    if (yearFilter !== "all") params.set("year", yearFilter);
+    return params;
+  }, [freshmanView, deptFilter, courseFilter, yearFilter]);
+
+  const executeLoad = useCallback(async (targetPage: number, targetSize: number) => {
+    const seq = ++requestSeq.current;
+    setIsFetching(true);
+    try {
+      const params = filterQuery();
+      params.set("page", String(targetPage));
+      params.set("pageSize", String(targetSize));
+      if (debouncedSearch) params.set("search", debouncedSearch);
+      const res = await fetch(`/api/college/students?${params.toString()}`);
+      const json = await res.json() as { students?: StudentRow[]; total?: number; unassignedTotal?: number; orderedIds?: string[]; page?: number; error?: string };
+      if (seq !== requestSeq.current) return; // a newer search/filter/refresh superseded this one
+      if (!res.ok) {
+        toast({ variant: "destructive", title: json.error ?? "Failed to load students" });
+        return;
+      }
+      const rows = json.students ?? [];
+      orderedIds.current = json.orderedIds ?? [];
+      rowCache.current = new Map(rows.map((r) => [r.id, r]));
+      setStudents(rows);
+      setTotal(json.total ?? 0);
+      setUnassignedTotal(json.unassignedTotal ?? 0);
+      setPage(json.page ?? targetPage);
+    } catch {
+      if (seq === requestSeq.current) toast({ variant: "destructive", title: "Failed to load students" });
+    } finally {
+      if (seq === requestSeq.current) setIsFetching(false);
+    }
+  }, [filterQuery, debouncedSearch]);
+
+  // Once loaded, a changed filter, Freshman's Department or search fetches the
+  // first page again (the page SIZE is read from a ref so changing it doesn't).
+  useEffect(() => {
+    if (!hasLoaded) return;
+    void (async () => { await executeLoad(1, pageSizeRef.current); })();
+  }, [hasLoaded, executeLoad]);
+
+  // A later page (or a new page size) of the list already loaded: only the ids
+  // not already fetched are read.
+  async function showPage(nextPage: number, nextSize: number) {
+    const tokens = orderedIds.current.slice((nextPage - 1) * nextSize, nextPage * nextSize);
+    const missing = tokens.filter((t) => !rowCache.current.has(t.split(".")[0]));
+    if (missing.length > 0) {
+      const seq = ++requestSeq.current;
+      setIsFetching(true);
+      try {
+        const params = new URLSearchParams({ ids: missing.join(",") });
+        if (freshmanView !== "none") params.set("incoming", freshmanView);
+        const res = await fetch(`/api/college/students?${params.toString()}`);
+        const json = await res.json() as { students?: StudentRow[]; error?: string };
+        if (seq !== requestSeq.current) return;
+        if (!res.ok) {
+          toast({ variant: "destructive", title: json.error ?? "Failed to load students" });
+          return;
+        }
+        for (const r of json.students ?? []) rowCache.current.set(r.id, r);
+      } catch {
+        if (seq === requestSeq.current) toast({ variant: "destructive", title: "Failed to load students" });
+        return;
+      } finally {
+        if (seq === requestSeq.current) setIsFetching(false);
+      }
+    }
+    pageSizeRef.current = nextSize;
+    setStudents(tokens.map((t) => rowCache.current.get(t.split(".")[0])).filter((r): r is StudentRow => !!r));
+    setPage(nextPage);
+    setPageSize(nextSize);
+  }
+
+  function handleLoad() {
+    const nextSearch = search.trim().toLowerCase();
+    // The sections (for the Assign / Move / Distribute dialogs) are read once,
+    // then again after a change - not on every Refresh.
+    if (!sectionsLoaded.current) void loadSections();
+    if (!hasLoaded) {
+      setDebouncedSearch(nextSearch);
+      setHasLoaded(true); // the effect above fetches the first page
+      return;
+    }
+    // A changed search term re-creates executeLoad, which the effect above
+    // answers - fetching here too would just read the same list twice.
+    if (nextSearch !== debouncedSearch) {
+      setDebouncedSearch(nextSearch);
+      return;
+    }
+    void executeLoad(1, pageSizeRef.current);
+  }
+
+  function onSearchChange(value: string) {
+    setSearch(value);
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    searchDebounceRef.current = setTimeout(() => setDebouncedSearch(value.trim().toLowerCase()), 350);
+  }
+
+  async function refreshMeta() {
+    try {
+      const meta = await fetch("/api/college/students?hodMeta=1").then((r) => r.json() as Promise<{ departmentNames?: string[]; freshmanDepartments?: string[] }>);
+      setMetaDepartmentNames(meta.departmentNames ?? []);
+      setFreshmanDeptOptions(meta.freshmanDepartments ?? []);
+    } catch { /* the filter options just stay as they were */ }
+  }
+
+  // After a change to a student/section: fetch the current page again (the
+  // order, the total and the section counts may all have moved).
+  async function reload() {
+    await Promise.all([
+      hasLoaded ? executeLoad(page, pageSizeRef.current) : Promise.resolve(),
+      loadSections(),
+      refreshMeta(),
+    ]);
+  }
+
+  // The Distribute dialog's cohort: only students not yet in a section, read
+  // when the dialog opens.
+  async function loadCohort() {
+    setIsCohortLoading(true);
+    try {
+      const res = await fetch("/api/college/students?selectAll=1&unassigned=1");
+      const json = await res.json() as { students?: StudentRow[]; error?: string };
+      if (!res.ok) throw new Error(json.error ?? "Failed to load unassigned students");
+      setUnassignedStudents(json.students ?? []);
+    } catch (err) {
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to load unassigned students" });
+    } finally {
+      setIsCohortLoading(false);
+    }
+  }
 
   // Only departments the sub-HOD fully manages (primary sections) can be
   // distributed / sectioned - a genuinely cross-listed (secondary) section
@@ -209,12 +402,10 @@ export default function HodStudentsPage() {
   // shared-first-year parent (e.g. VISHNU's "BASIC SCIENCE") whenever any of
   // its children already appear - such a parent never itself shows up in
   // student data (it never houses a student directly), so without this it
-  // could never be picked at all even though `filtered` below already handles
-  // it correctly as a rollup target.
+  // could never be picked at all even though the server-side Department
+  // filter already handles it correctly as a rollup target.
   const departmentNames = useMemo(() => {
-    const names = new Set(
-      students.filter((s) => s.accessLevel !== "secondary").map((s) => s.department).filter((d): d is string => !!d)
-    );
+    const names = new Set(metaDepartmentNames);
     const allDepts = departments as DepartmentWithId[];
     for (const d of allDepts) {
       if (!d.name) continue;
@@ -222,41 +413,24 @@ export default function HodStudentsPage() {
       if (children && children.some((c) => names.has(c.name))) names.add(d.name);
     }
     return Array.from(names).sort();
-  }, [students, departments]);
-  // Students currently held by some OTHER (Freshman's) department who are
-  // pre-registered toward one of THIS HOD's own departments - accessLevel
-  // "secondary" (students/route.ts's own secondaryQuery: secondaryDepartment
-  // matches one of this HOD's own/child department names). View-only: they
-  // aren't this HOD's to edit/assign until distributed/promoted into one of
-  // their own real sections - drives the Freshman's Department selector
-  // below rather than being mixed into the manageable roster.
-  const incomingStudents = useMemo(
-    () => students.filter((s) => s.accessLevel === "secondary"),
-    [students]
-  );
-  // Which Freshman's Department(s) are actually holding any such students -
-  // a college can run more than one, independent of the others (see
-  // getFreshmanDepartmentIds's own doc-comment), so this lets the selector
-  // below only ever offer ones that actually have someone pre-registered
-  // toward this HOD right now.
-  const freshmanDeptOptions = useMemo(
-    () => Array.from(new Set(incomingStudents.map((s) => s.department).filter(Boolean))).sort(),
-    [incomingStudents]
-  );
+  }, [metaDepartmentNames, departments]);
+  // The "Freshman's Department" view: students currently held by some OTHER
+  // (Freshman's) department who are pre-registered toward one of THIS HOD's own
+  // departments - accessLevel "secondary" (students/route.ts's own
+  // secondaryQuery: secondaryDepartment matches one of this HOD's own/child
+  // department names). View-only: they aren't this HOD's to edit/assign until
+  // distributed/promoted into one of their own real sections - drives the
+  // Freshman's Department selector below rather than being mixed into the
+  // manageable roster. Which departments currently hold any such students
+  // (freshmanDeptOptions) comes from hodMeta; the students themselves are the
+  // same paged list as the roster, asked for with `incoming`.
   const isFreshmanView = freshmanView !== "none";
-  const incomingFiltered = useMemo(
-    () => (isFreshmanView ? incomingStudents.filter((s) => s.department === freshmanView) : []),
-    [incomingStudents, freshmanView, isFreshmanView]
-  );
-  // Unassigned students this HOD can actually section - excludes view-only
-  // ("secondary") cross-listed students, e.g. someone else's branch merely
-  // pre-registered here. Drives the Department/Year pickers below so a branch
-  // with unassigned students but no sections *yet* still shows up (steering
-  // the HOD to create sections first) instead of the pickers looking empty.
-  const unassignedStudents = useMemo(
-    () => students.filter((s) => !s.section && s.accessLevel !== "secondary"),
-    [students]
-  );
+  // `unassignedStudents` (state above) is the cohort of unassigned students this
+  // HOD can actually section - excludes view-only ("secondary") cross-listed
+  // students, e.g. someone else's branch merely pre-registered here. Drives the
+  // Department/Year pickers below so a branch with unassigned students but no
+  // sections *yet* still shows up (steering the HOD to create sections first)
+  // instead of the pickers looking empty.
   const distDepartments = useMemo(
     () => Array.from(new Set(unassignedStudents.map((s) => s.department).filter(Boolean))).sort(),
     [unassignedStudents]
@@ -426,22 +600,22 @@ export default function HodStudentsPage() {
     [departments, deptFilter]
   );
 
-  const filtered = useMemo(
-    () => students.filter((s) => {
-      // The manage table is this HOD's OWN roster only - a merely
-      // cross-listed (accessLevel "secondary") student, pre-registered toward
-      // one of this HOD's departments while still held by a Freshman's
-      // Department elsewhere, isn't theirs to edit/assign yet. Surfaced
-      // separately, view-only, via the Freshman's Department selector below
-      // (incomingStudents/incomingFiltered).
-      if (s.accessLevel === "secondary") return false;
-      if (deptFilterRollupNames && !deptFilterRollupNames.includes(s.department)) return false;
-      if (courseFilter !== "all" && s.course !== courseFilter) return false;
-      if (yearFilter !== "all" && s.year !== Number(yearFilter)) return false;
-      return true;
-    }),
-    [students, deptFilterRollupNames, courseFilter, yearFilter]
-  );
+  // Which rows the current Department/Course/Year filters keep in view. The
+  // filtering itself now happens on the server (the list is fetched with these
+  // as params); this is the same rule, used to decide which SELECTED rows are
+  // still in view - a row a filter has hidden must never be moved by accident.
+  const matchesFilters = useCallback((s: StudentRow) => {
+    // The manage table is this HOD's OWN roster only - a merely
+    // cross-listed (accessLevel "secondary") student, pre-registered toward
+    // one of this HOD's departments while still held by a Freshman's
+    // Department elsewhere, isn't theirs to edit/assign yet. Surfaced
+    // separately, view-only, via the Freshman's Department selector below.
+    if (s.accessLevel === "secondary") return false;
+    if (deptFilterRollupNames && !deptFilterRollupNames.includes(s.department)) return false;
+    if (courseFilter !== "all" && s.course !== courseFilter) return false;
+    if (yearFilter !== "all" && s.year !== Number(yearFilter)) return false;
+    return true;
+  }, [deptFilterRollupNames, courseFilter, yearFilter]);
 
   // Sections a single student can be assigned into - their real branch's (if
   // pre-registered to one via secondaryDepartment) or their own department's,
@@ -491,11 +665,10 @@ export default function HodStudentsPage() {
   // What's ticked AND visible right now - the only students any bulk action
   // touches.
   const selectedStudents = useMemo(
-    () => filtered.filter((s) => selectedIds.has(s.id)),
-    [filtered, selectedIds]
+    () => Array.from(selectedRows.values()).filter(matchesFilters),
+    [selectedRows, matchesFilters]
   );
   const selectedYears = useMemo(() => Array.from(new Set(selectedStudents.map((s) => s.year))), [selectedStudents]);
-  const unassignedInView = useMemo(() => filtered.filter((s) => !s.section), [filtered]);
   const selectedPlacedCount = selectedStudents.filter((s) => s.section).length;
   // "12 unassigned · 3 in A" - a quick read of where the picked students are now.
   const selectedFromSummary = useMemo(() => {
@@ -514,41 +687,93 @@ export default function HodStudentsPage() {
     [bulkTargetSections, departments]
   );
 
-  function toggleSelected(id: string, checked: boolean) {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (checked) next.add(id); else next.delete(id);
+  function toggleSelected(row: StudentRow, checked: boolean) {
+    setSelectedRows((prev) => {
+      const next = new Map(prev);
+      if (checked) next.set(row.id, row); else next.delete(row.id);
       return next;
     });
   }
   function setAllSelected(rows: StudentRow[], checked: boolean) {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      for (const r of rows) { if (checked) next.add(r.id); else next.delete(r.id); }
+    setSelectedRows((prev) => {
+      const next = new Map(prev);
+      for (const r of rows) { if (checked) next.set(r.id, r); else next.delete(r.id); }
+      return next;
+    });
+  }
+  // A student whose row was just changed (assigned, unassigned, edited) leaves
+  // the selection - the row it was ticked from is out of date now.
+  function dropFromSelection(id: string) {
+    setSelectedRows((prev) => {
+      if (!prev.has(id)) return prev;
+      const next = new Map(prev);
+      next.delete(id);
       return next;
     });
   }
 
-  // Adds every currently-filtered student whose rollNumber falls between
-  // rollFrom/rollTo (inclusive, whichever order they were typed in) to the
-  // selection, so an HOD can tick e.g. 23471A0401-23471A0460 in one go
+  // Everything below asks the server for the matching students instead of
+  // looking through a downloaded list: the roster is paged, so the rows a bulk
+  // selection means are mostly not on screen. Always scoped by the current
+  // Department/Course/Year filters (never the search box), as before.
+  async function fetchMatching(extra: Record<string, string>): Promise<{ students: StudentRow[]; truncated: boolean }> {
+    const params = filterQuery();
+    params.set("selectAll", "1");
+    for (const [k, v] of Object.entries(extra)) params.set(k, v);
+    const res = await fetch(`/api/college/students?${params.toString()}`);
+    const json = await res.json() as { students?: StudentRow[]; truncated?: boolean; error?: string };
+    if (!res.ok) throw new Error(json.error ?? "Failed to load students");
+    return { students: json.students ?? [], truncated: !!json.truncated };
+  }
+
+  // Adds every unassigned student matching the current filters to the selection.
+  async function selectAllUnassigned() {
+    setIsSelecting(true);
+    try {
+      const { students: matches, truncated } = await fetchMatching({ unassigned: "1" });
+      setAllSelected(matches, true);
+      toast({
+        variant: truncated ? "destructive" : "success",
+        title: truncated
+          ? `Only the first ${matches.length} unassigned students were selected`
+          : `${matches.length} unassigned student${matches.length === 1 ? "" : "s"} selected`,
+      });
+    } catch (err) {
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to select students" });
+    } finally {
+      setIsSelecting(false);
+    }
+  }
+
+  // Adds every student matching the current filters whose rollNumber falls
+  // between rollFrom/rollTo (inclusive, whichever order they were typed in) to
+  // the selection, so an HOD can tick e.g. 23471A0401-23471A0460 in one go
   // instead of checking 60 rows by hand, then run the existing Move/Assign
   // bulk action on the result.
-  function selectRollRange() {
+  async function selectRollRange() {
     const from = rollFrom.trim().toUpperCase();
     const to = rollTo.trim().toUpperCase();
     if (!from || !to) return;
     const [lo, hi] = from <= to ? [from, to] : [to, from];
-    const matches = filtered.filter((s) => {
-      const roll = (s.rollNumber ?? "").toUpperCase();
-      return roll >= lo && roll <= hi;
-    });
-    if (matches.length === 0) {
-      toast({ variant: "destructive", title: `No students found with roll numbers between ${lo} and ${hi}` });
-      return;
+    setIsSelecting(true);
+    try {
+      const { students: matches, truncated } = await fetchMatching({ rollFrom: lo, rollTo: hi });
+      if (matches.length === 0) {
+        toast({ variant: "destructive", title: `No students found with roll numbers between ${lo} and ${hi}` });
+        return;
+      }
+      setAllSelected(matches, true);
+      toast({
+        variant: truncated ? "destructive" : "success",
+        title: truncated
+          ? `Only the first ${matches.length} students in roll ${lo} - ${hi} were selected`
+          : `${matches.length} student${matches.length === 1 ? "" : "s"} selected (roll ${lo} - ${hi})`,
+      });
+    } catch (err) {
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to select students" });
+    } finally {
+      setIsSelecting(false);
     }
-    setAllSelected(matches, true);
-    toast({ variant: "success", title: `${matches.length} student${matches.length === 1 ? "" : "s"} selected (roll ${lo} - ${hi})` });
   }
 
   async function requestBulk(body: Record<string, unknown>): Promise<BulkPlan & { moved: number }> {
@@ -604,9 +829,9 @@ export default function HodStudentsPage() {
           : `Moved ${result.moved} student${result.moved === 1 ? "" : "s"} to Section ${sectionName ?? ""}`.trim(),
         description: result.skipped.length > 0 ? `${result.skipped.length} skipped - left as they were.` : undefined,
       });
-      setSelectedIds(new Set());
+      setSelectedRows(new Map());
       closeBulk();
-      void load();
+      void reload();
     } catch (err) {
       toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to move students" });
     } finally {
@@ -620,14 +845,29 @@ export default function HodStudentsPage() {
   // that would silently exclude them from that batch's attendance roster
   // (labBatch match is case/whitespace-insensitive, but only once it's an
   // exact word-for-word match otherwise - see sectionRoster.ts).
-  const editLabBatchSuggestions = useMemo(() => {
-    if (!editTarget) return [];
-    const labels = students
-      .filter((s) => s.department === editTarget.department && s.section === editTarget.section && s.year === editTarget.year)
-      .map((s) => (s.labBatch as string | undefined)?.trim())
-      .filter((v): v is string => !!v);
-    return Array.from(new Set(labels)).sort();
-  }, [editTarget, students]);
+  // They're read from the student's own section when the Edit dialog opens (a
+  // section is a few dozen students), and kept per section until one of its
+  // students is saved - the full roster is no longer loaded to derive them.
+  const labBatchCache = useRef(new Map<string, string[]>());
+  const [editLabBatchSuggestions, setEditLabBatchSuggestions] = useState<string[]>([]);
+  async function loadLabBatchSuggestions(student: StudentRow) {
+    if (!student.section) { setEditLabBatchSuggestions([]); return; }
+    const key = `${student.department}|${student.section}|${student.year}`;
+    const cached = labBatchCache.current.get(key);
+    if (cached) { setEditLabBatchSuggestions(cached); return; }
+    setEditLabBatchSuggestions([]);
+    try {
+      const res = await fetch(`/api/college/students?section=${encodeURIComponent(student.section)}&year=${student.year}`);
+      const json = await res.json() as { students?: StudentRow[] };
+      const labels = (json.students ?? [])
+        .filter((s) => s.department === student.department && s.section === student.section && s.year === student.year)
+        .map((s) => (s.labBatch as string | undefined)?.trim())
+        .filter((v): v is string => !!v);
+      const suggestions = Array.from(new Set(labels)).sort();
+      labBatchCache.current.set(key, suggestions);
+      setEditLabBatchSuggestions(suggestions);
+    } catch { /* suggestions are only a convenience */ }
+  }
 
   // Mirrors the Office Students page's own onCourseFilterChange/
   // onDeptFilterChange: dropping a previously-picked Year that no longer
@@ -654,6 +894,7 @@ export default function HodStudentsPage() {
   }
 
   function openEdit(student: StudentRow) {
+    void loadLabBatchSuggestions(student);
     setEditTarget(student);
     setEditRoll(student.rollNumber ?? "");
     setEditStatus(student.status ?? "REGULAR");
@@ -677,8 +918,9 @@ export default function HodStudentsPage() {
       const json = await res.json() as { error?: string };
       if (!res.ok) throw new Error(json.error ?? "Failed to assign section");
       toast({ variant: "success", title: `${assignTarget.name} assigned` });
+      dropFromSelection(assignTarget.id);
       setAssignTarget(null);
-      void load();
+      void reload();
     } catch (err) {
       toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to assign section" });
     } finally {
@@ -701,8 +943,9 @@ export default function HodStudentsPage() {
       const json = await res.json() as { error?: string };
       if (!res.ok) throw new Error(json.error ?? "Failed to unassign");
       toast({ variant: "success", title: `${assignTarget.name} unassigned` });
+      dropFromSelection(assignTarget.id);
       setAssignTarget(null);
-      void load();
+      void reload();
     } catch (err) {
       toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to unassign" });
     } finally {
@@ -722,8 +965,10 @@ export default function HodStudentsPage() {
       const json = await res.json() as { error?: string };
       if (!res.ok) throw new Error(json.error ?? "Failed to update student");
       toast({ variant: "success", title: "Student updated" });
+      labBatchCache.current.delete(`${editTarget.department}|${editTarget.section}|${editTarget.year}`);
+      dropFromSelection(editTarget.id);
       setEditTarget(null);
-      void load();
+      void reload();
     } catch (err) {
       toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to update student" });
     } finally {
@@ -770,7 +1015,8 @@ export default function HodStudentsPage() {
       setDistributeOpen(false);
       setDistCourseId("");
       setDistSectionIds([]);
-      void load();
+      setSelectedRows(new Map());
+      void reload();
     } catch (err) {
       toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to distribute" });
     } finally {
@@ -778,8 +1024,10 @@ export default function HodStudentsPage() {
     }
   }
 
-  const allInViewSelected = filtered.length > 0 && filtered.every((s) => selectedIds.has(s.id));
-  const someInViewSelected = filtered.some((s) => selectedIds.has(s.id)) && !allInViewSelected;
+  // The header tick covers the page on screen (the list is paged); "Select all N
+  // unassigned" and the roll-number range reach beyond it.
+  const allInViewSelected = students.length > 0 && students.every((s) => selectedIds.has(s.id));
+  const someInViewSelected = students.some((s) => selectedIds.has(s.id)) && !allInViewSelected;
 
   const columns: Column<StudentRow>[] = [
     {
@@ -789,7 +1037,7 @@ export default function HodStudentsPage() {
       header: (
         <Checkbox
           checked={allInViewSelected ? true : someInViewSelected ? "indeterminate" : false}
-          onCheckedChange={(checked) => setAllSelected(filtered, checked === true)}
+          onCheckedChange={(checked) => setAllSelected(students, checked === true)}
           aria-label="Select all students in view"
           className={SELECT_CHECKBOX_CLASS}
         />
@@ -799,7 +1047,7 @@ export default function HodStudentsPage() {
         <div onClick={(e) => e.stopPropagation()}>
           <Checkbox
             checked={selectedIds.has(r.id)}
-            onCheckedChange={(checked) => toggleSelected(r.id, checked === true)}
+            onCheckedChange={(checked) => toggleSelected(r, checked === true)}
             aria-label={`Select ${r.name}`}
             className={SELECT_CHECKBOX_CLASS}
           />
@@ -885,6 +1133,9 @@ export default function HodStudentsPage() {
     },
   ];
 
+  // The read-only incoming list has no select / action columns.
+  const visibleColumns = isFreshmanView ? columns.filter((c) => c.key !== "actions" && c.key !== "select") : columns;
+
   // Same header - title, description and tab strip - for both views, so
   // switching tabs moves and resizes nothing; only the active pill changes.
   const studentsHeader = (
@@ -916,6 +1167,12 @@ export default function HodStudentsPage() {
           open={distributeOpen}
           onOpenChange={(open) => {
             setDistributeOpen(open);
+            if (open) {
+              // The cohort of unassigned students (and the sections to put
+              // them in) is read now, not with the roster.
+              void loadCohort();
+              if (!sectionsLoaded.current) void loadSections();
+            }
             if (!open) { setDistBranch(""); setDistCourseId(""); setDistSectionIds([]); }
           }}
         >
@@ -940,6 +1197,7 @@ export default function HodStudentsPage() {
                   <Select
                     value={distDept}
                     onValueChange={(v) => { setDistDept(v); setDistBranch(""); setDistYear(""); setDistCourseId(""); setDistSectionIds([]); }}
+                    disabled={isCohortLoading}
                   >
                     <SelectTrigger><SelectValue placeholder="Select branch" /></SelectTrigger>
                     <SelectContent>
@@ -1103,7 +1361,7 @@ export default function HodStudentsPage() {
                     Unassign
                   </Button>
                 )}
-                <Button size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())}>Clear</Button>
+                <Button size="sm" variant="ghost" onClick={() => setSelectedRows(new Map())}>Clear</Button>
               </div>
             </>
           ) : (
@@ -1111,9 +1369,9 @@ export default function HodStudentsPage() {
               <span className="text-xs text-muted-foreground">
                 Tick students below to move or assign several to a section at once.
               </span>
-              {unassignedInView.length > 0 && (
-                <Button size="sm" variant="outline" className="ml-auto" onClick={() => setAllSelected(unassignedInView, true)}>
-                  Select all {unassignedInView.length} unassigned
+              {hasLoaded && unassignedTotal > 0 && (
+                <Button size="sm" variant="outline" className="ml-auto" onClick={() => void selectAllUnassigned()} disabled={isSelecting}>
+                  Select all {unassignedTotal} unassigned
                 </Button>
               )}
             </>
@@ -1133,54 +1391,142 @@ export default function HodStudentsPage() {
               onChange={(e) => setRollTo(e.target.value)}
               className="h-8 w-36"
             />
-            <Button size="sm" variant="outline" disabled={!rollFrom.trim() || !rollTo.trim()} onClick={selectRollRange}>
+            <Button size="sm" variant="outline" disabled={!rollFrom.trim() || !rollTo.trim() || isSelecting} onClick={() => void selectRollRange()}>
               Select Range
             </Button>
           </div>
         </div>
       )}
 
-      <DataTable
-        data={isFreshmanView ? incomingFiltered : filtered}
-        columns={isFreshmanView ? columns.filter((c) => c.key !== "actions" && c.key !== "select") : columns}
-        onRowClick={(r) => router.push(`/hod/students/${r.id}`)}
-        isLoading={isLoading}
-        keyExtractor={(r) => r.id}
-        paginate
-        searchPlaceholder="Search by roll number or name..."
-        searchKeys={["rollNumber", "name"] as (keyof StudentRow)[]}
-        emptyTitle={isFreshmanView ? "No incoming students here" : "No students yet"}
-        emptyDescription={
-          isFreshmanView
-            ? `No students are currently held by ${freshmanView} and pre-registered to your department(s).`
-            : "Once the College Office imports your branches' students, they show up here to be sectioned."
-        }
-        filterComponent={isFreshmanView ? undefined : (
-          <>
-            <Select value={courseFilter} onValueChange={onCourseFilterChange}>
-              <SelectTrigger className="w-44"><SelectValue placeholder="All courses" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All courses</SelectItem>
-                {courseNames.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-              </SelectContent>
-            </Select>
-            <Select value={deptFilter} onValueChange={onDeptFilterChange}>
-              <SelectTrigger className="w-48"><SelectValue placeholder="All departments" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All departments</SelectItem>
-                {departmentNames.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
-              </SelectContent>
-            </Select>
-            <Select value={yearFilter} onValueChange={setYearFilter}>
-              <SelectTrigger className="w-36"><SelectValue placeholder="All years" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All years</SelectItem>
-                {yearFilterOptions.map((y) => <SelectItem key={y} value={String(y)}>{yearOrdinalLabel(y)}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </>
+      {/* Same toolbar and table as before, but the rows are one server-side page
+          (fetched on Load) rather than a download of the whole department. */}
+      <div className="space-y-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="relative flex-1 max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search by roll number or name..."
+              value={search}
+              onChange={(e) => onSearchChange(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") handleLoad(); }}
+              className="pl-9"
+              autoComplete="off"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            {!isFreshmanView && (
+              <div className="flex items-center gap-2">
+                <Filter className="h-4 w-4 text-muted-foreground" />
+                <Select value={courseFilter} onValueChange={onCourseFilterChange}>
+                  <SelectTrigger className="w-44"><SelectValue placeholder="All courses" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All courses</SelectItem>
+                    {courseNames.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <Select value={deptFilter} onValueChange={onDeptFilterChange}>
+                  <SelectTrigger className="w-48"><SelectValue placeholder="All departments" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All departments</SelectItem>
+                    {departmentNames.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <Select value={yearFilter} onValueChange={setYearFilter}>
+                  <SelectTrigger className="w-36"><SelectValue placeholder="All years" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All years</SelectItem>
+                    {yearFilterOptions.map((y) => <SelectItem key={y} value={String(y)}>{yearOrdinalLabel(y)}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            <Button type="button" onClick={handleLoad} disabled={isFetching || isLoading} className="whitespace-nowrap">
+              {isFetching ? "Loading…" : hasLoaded ? "Refresh" : "Load"}
+            </Button>
+          </div>
+        </div>
+
+        {!hasLoaded ? (
+          <div className="flex flex-col items-center justify-center py-20 text-center border rounded-lg bg-card">
+            <Users className="h-10 w-10 text-muted-foreground mb-3" />
+            <p className="font-medium text-base">Click Load to view students</p>
+            <p className="text-sm text-muted-foreground mt-1 max-w-sm">
+              Pick a course, department or year above (or leave them as all) and click Load. Students come in pages, so only the ones you look at are fetched.
+            </p>
+          </div>
+        ) : isFetching && students.length === 0 ? (
+          <TableSkeleton rows={5} cols={visibleColumns.length} />
+        ) : students.length === 0 ? (
+          <EmptyState
+            title={isFreshmanView ? "No incoming students here" : "No students yet"}
+            description={
+              isFreshmanView
+                ? `No students are currently held by ${freshmanView} and pre-registered to your department(s).`
+                : "Once the College Office imports your branches' students, they show up here to be sectioned."
+            }
+          />
+        ) : (
+          <div className={cn("rounded-lg border overflow-hidden transition-opacity", isFetching && "opacity-60")}>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/50 sticky top-0">
+                  <tr>
+                    {visibleColumns.map((col) => (
+                      <th
+                        key={col.key}
+                        className={cn(
+                          "px-4 py-3 text-left font-medium text-muted-foreground whitespace-nowrap",
+                          col.hideOnMobile && "hidden md:table-cell",
+                          col.className
+                        )}
+                      >
+                        {col.header}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {students.map((row) => (
+                    <tr
+                      key={row.id}
+                      onClick={() => router.push(`/hod/students/${row.id}`)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          router.push(`/hod/students/${row.id}`);
+                        }
+                      }}
+                      tabIndex={0}
+                      role="button"
+                      className="bg-background hover:bg-muted/30 transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-primary focus-visible:-outline-offset-2"
+                    >
+                      {visibleColumns.map((col) => (
+                        <td
+                          key={col.key}
+                          className={cn("px-4 py-3 whitespace-nowrap", col.hideOnMobile && "hidden md:table-cell", col.className)}
+                        >
+                          {col.render ? col.render(row) : String(row[col.key] ?? "-")}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
         )}
-      />
+
+        {hasLoaded && total > 10 && (
+          <Pagination
+            page={page}
+            pageSize={pageSize}
+            total={total}
+            onPageChange={(p) => void showPage(p, pageSize)}
+            onPageSizeChange={(size) => void showPage(1, size)}
+            disabled={isFetching}
+          />
+        )}
+      </div>
 
       <Dialog open={!!editTarget} onOpenChange={(open) => { if (!open) setEditTarget(null); }}>
         <DialogContent>

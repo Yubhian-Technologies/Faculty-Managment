@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
+import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodEditDepartmentId } from "@/lib/departments/scope";
@@ -736,6 +737,14 @@ export async function POST(request: Request) {
       createdAt: now,
       updatedAt: now,
     }, deptIndex));
+
+    await writeAuditLogSafe(db, session.collegeId, {
+      action: "SECTION_CREATED",
+      performedBy: session.uid,
+      performedByName: session.email || session.role,
+      targetId: ref.id,
+      details: { name: sectionName, department: dept, year: Number(body.year), courseId: body.courseId, batch },
+    });
 
     return NextResponse.json({ id: ref.id }, { status: 201 });
   } catch (err) {

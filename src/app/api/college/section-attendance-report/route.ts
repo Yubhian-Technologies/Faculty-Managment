@@ -10,6 +10,15 @@ import { calcPercent } from "@/lib/studentAttendance/percentage";
 import { countFullyAbsentDays, indexSessions, tallyStudentBySubject } from "@/lib/studentAttendance/counting";
 import { isShortageByPercent } from "@/lib/studentAttendance/shortage";
 import { matchesCurrentSemester } from "@/lib/college/semester";
+import { compareStudentsForList } from "@/lib/students/listOrder";
+import {
+  loadAcademicYearConfig, resolveAcademicYearRequest, sessionInAcademicYear, windowForAcademicYear,
+  type AcademicYearConfig, type AcademicYearWindow,
+} from "@/lib/studentAttendance/academicYearWindow";
+import {
+  denominatorNumbers, loadNotPostedIndex, resolveDenominatorMode, type DenominatorResult, type HeldDenominatorMode,
+} from "@/lib/studentAttendance/heldDenominator";
+import { istDateKey } from "@/lib/attendance/istTime";
 import type { Section, StudentAttendanceMark, StudentAttendanceSession, TeachingAssignment } from "@/types";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -74,6 +83,19 @@ async function currentSectionSubjects(
 //                                            it since the two disagree on subject scope and response shape;
 //                                            distinguished by the presence of `summary=true`, which this
 //                                            mode never sends.)
+// Cohort integrity (audit F-24): a Section is a year-slot that a new cohort
+// occupies each academic year, so the two UNBOUNDED modes ("Till now" /
+// summary+allTime) read ONE academic year - the current one, or
+// `academicYear=2025-26`, or `all` for the old everything-ever behaviour. A
+// session's year is its own stamp or, for one written before stamping, its date.
+// Explicit ranges (`from`/`to`, year/month) are the caller's choice and are
+// never overridden.
+//
+// Held denominator (audit F-25): the two cumulative modes can count published-
+// timetable periods nobody posted as held (`denominator=timetable`, or the
+// college's own setting). The default is the original submitted-only numbers;
+// `compare=true` adds the other definition beside each figure as `alt`.
+//
 // The `from`/`to`/`tillNow`/`summary` modes are all checked BEFORE the
 // year/month/date drill chain and are mutually exclusive with it (the
 // Monthly flow never sends them), so the existing Monthly behavior below is
@@ -121,6 +143,7 @@ export async function GET(request: Request) {
     const thresholdRaw = searchParams.get("threshold");
     const threshold = thresholdRaw != null ? Math.max(0, Math.min(100, Number(thresholdRaw) || 75)) : 75;
     const dailyPercent = searchParams.get("dailyPercent") === "true";
+    const compare = searchParams.get("compare") === "true";
     const hostellerParam = searchParams.get("hosteller") as "yes" | "no" | null;
     // Optional - narrows every mode below (they all derive from allSessions/
     // currentSectionSubjects) to one semester's own subjects/sessions.
@@ -195,9 +218,23 @@ export async function GET(request: Request) {
     // one month was the dominant cost of this route. Only the year/month
     // pickers (which need every date to list what exists) stay unbounded, and
     // those read just the two fields they use.
+    // The cumulative modes with no range of their own are the ones a promoted
+    // cohort used to leak into - bound them to one academic year.
+    const rangeIsUnbounded = tillNow || (summaryParam && allTimeParam && !fromParam && !toParam);
+    let yearCfg: AcademicYearConfig | null = null;
+    let academicWindow: AcademicYearWindow | null = null;
+    if (rangeIsUnbounded) {
+      yearCfg = await loadAcademicYearConfig(db, session.collegeId);
+      const yearRequest = resolveAcademicYearRequest(searchParams.get("academicYear"), yearCfg);
+      if (yearRequest.error) return NextResponse.json({ error: yearRequest.error }, { status: 400 });
+      academicWindow = yearRequest.window ?? null;
+    }
     let dateFrom: string | null = null;
     let dateTo: string | null = null;
-    if (summaryParam && (fromParam || toParam)) {
+    if (rangeIsUnbounded && academicWindow) {
+      dateFrom = academicWindow.from;
+      dateTo = academicWindow.to;
+    } else if (summaryParam && (fromParam || toParam)) {
       dateFrom = fromParam;
       dateTo = toParam;
     } else if (!summaryParam && fromParam && toParam) {
@@ -226,7 +263,33 @@ export async function GET(request: Request) {
     // place a semester filter needs to apply for all of them to be correct.
     const allSessions = sessionsSnap.docs
       .map((d) => d.data() as StudentAttendanceSession)
-      .filter((r) => requestedSemester == null || matchesCurrentSemester(r.semester, requestedSemester));
+      .filter((r) => requestedSemester == null || matchesCurrentSemester(r.semester, requestedSemester))
+      // A stamped session belongs to its own academic year; an unstamped one was
+      // placed by its date in the query above.
+      .filter((r) => !rangeIsUnbounded || !yearCfg || sessionInAcademicYear(r, academicWindow));
+
+    // The held-classes definition for the two cumulative modes below. Resolved
+    // (and the not-posted periods loaded) only when the request asks for the
+    // timetable denominator or a comparison - the default path reads nothing extra.
+    const denominator: HeldDenominatorMode = (summaryParam && (fromParam || toParam || allTimeParam)) || tillNow || (fromParam && toParam)
+      ? await resolveDenominatorMode(db, session.collegeId, searchParams.get("denominator"))
+      : "SUBMITTED";
+    const loadNotPosted = async (submitted: StudentAttendanceSession[]): Promise<DenominatorResult | null> => {
+      if (denominator !== "TIMETABLE" && !compare) return null;
+      // The published timetable describes the CURRENT cohort, so the not-posted
+      // periods are only ever computed inside the current academic year - whatever
+      // range the report itself covers (a past year is reported as unavailable).
+      const cfg = yearCfg ?? await loadAcademicYearConfig(db, session.collegeId);
+      const currentWindow = windowForAcademicYear(cfg.currentLabel, cfg);
+      return loadNotPostedIndex({
+        db, collegeId: session.collegeId, section: { id: sectionId, courseId: section.courseId, year: section.year },
+        from: fromParam ?? academicWindow?.from ?? currentWindow?.from ?? `${new Date().getFullYear()}-01-01`,
+        to: toParam ?? academicWindow?.to ?? istDateKey(),
+        window: academicWindow && !academicWindow.isCurrent ? academicWindow : currentWindow,
+        requestedSemester,
+        submittedSessions: submitted.map((r) => ({ assignmentId: r.assignmentId, date: r.date, periodNumber: r.periodNumber })),
+      });
+    };
 
     // "Period" (from/to) or "Till now" (allTime, no bounds) - every student
     // x every subject's Held/Attend/% across an arbitrary range, mirroring
@@ -253,6 +316,16 @@ export async function GET(request: Request) {
       for (const r of inRange) {
         if (!subjectsMap.has(r.subjectId)) subjectsMap.set(r.subjectId, { subjectName: r.subjectName, subjectCode: r.subjectCode });
       }
+      // Periods the timetable says were held but nobody posted (only loaded on request).
+      const notPosted = await loadNotPosted(inRange);
+      // A subject nobody has posted a single session for yet has no session to
+      // derive a column from - exactly the case the timetable denominator is for.
+      if (denominator === "TIMETABLE" && notPosted) {
+        for (const p of notPosted.index.periods) {
+          const meta = notPosted.subjects?.get(p.subjectId);
+          if (!subjectsMap.has(p.subjectId)) subjectsMap.set(p.subjectId, { subjectName: meta?.subjectName ?? "", subjectCode: meta?.subjectCode ?? "" });
+        }
+      }
       const subjects = Array.from(subjectsMap.entries())
         .map(([subjectId, v]) => ({ subjectId, subjectName: v.subjectName, subjectCode: v.subjectCode }))
         .sort((a, b) => a.subjectName.localeCompare(b.subjectName));
@@ -269,19 +342,31 @@ export async function GET(request: Request) {
 
       let students = roster
         .map((stu) => {
-          const bySubject: Record<string, { held: number; attend: number; percent: number | null }> = {};
+          type Cell = { held: number; attend: number; percent: number | null };
+          const bySubject: Record<string, Cell & { alt?: Cell & { mode: HeldDenominatorMode } }> = {};
           const tallies = tallyStudentBySubject(indexedInRange, stu.id);
+          const owed = notPosted?.index.forStudent(stu);
+          let aHeld = 0, aAttend = 0;
           for (const sub of subjects) {
-            const { held, attended: attend } = tallies.get(sub.subjectId) ?? { held: 0, attended: 0 };
-            bySubject[sub.subjectId] = { held, attend, percent: calcPercent(attend, held) };
+            const { main, alt } = denominatorNumbers(tallies.get(sub.subjectId), owed?.get(sub.subjectId) ?? 0, denominator);
+            bySubject[sub.subjectId] = {
+              held: main.held, attend: main.attended, percent: main.percentage,
+              ...(compare ? { alt: { mode: alt.mode, held: alt.held, attend: alt.attended, percent: alt.percentage } } : {}),
+            };
+            aHeld += alt.held; aAttend += alt.attended;
           }
           // consolidated overall for this range
           let cHeld = 0, cAttend = 0;
           for (const v of Object.values(bySubject)) { cHeld += v.held; cAttend += v.attend; }
-          const overall = { held: cHeld, attended: cAttend, percentage: calcPercent(cAttend, cHeld) };
+          const overall = {
+            held: cHeld, attended: cAttend, percentage: calcPercent(cAttend, cHeld),
+            ...(compare ? { alt: { held: aHeld, attended: aAttend, percentage: calcPercent(aAttend, aHeld) } } : {}),
+          };
           return { id: stu.id, rollNumber: stu.rollNumber, name: stu.name, bySubject, overall };
         })
-        .sort((a, b) => a.rollNumber.localeCompare(b.rollNumber, undefined, { numeric: true }));
+        // compareStudentsForList, not rollNumber.localeCompare: a student with no
+        // roll number sorts last by name instead of throwing.
+        .sort(compareStudentsForList);
 
       // Apply absentOnly / shortage / subjectFilter / consolidated filters
       if (subjectFilter) {
@@ -307,7 +392,15 @@ export async function GET(request: Request) {
         });
       }
 
-      return NextResponse.json({ subjects, students, meta: { absentOnly, shortage, threshold, consolidated, subjectFilter, total: students.length } });
+      return NextResponse.json({
+        subjects, students,
+        meta: {
+          absentOnly, shortage, threshold, consolidated, subjectFilter, total: students.length,
+          academicYear: rangeIsUnbounded ? (academicWindow?.label ?? "all") : undefined,
+          denominator,
+          ...(notPosted?.unavailable ? { denominatorUnavailable: notPosted.unavailable } : {}),
+        },
+      });
     }
 
     // A second, independently built Period/Till Now mode (bare `from`/`to`,
@@ -346,17 +439,26 @@ export async function GET(request: Request) {
       });
       roster = filterByHosteller(roster as unknown as { hosteller?: boolean }[]) as typeof roster;
 
+      // Periods the timetable says were held but nobody posted (only loaded on request).
+      const notPosted = await loadNotPosted(rangeSessions);
+
       let students = roster
         .map((stu) => {
           let overallHeld = 0;
           let overallAttended = 0;
-          const bySubject: Record<string, { held: number; attended: number; percentage: number | null }> = {};
+          let altHeld = 0;
+          let altAttended = 0;
+          type Cell = { held: number; attended: number; percentage: number | null };
+          const bySubject: Record<string, Cell & { alt?: Cell & { mode: HeldDenominatorMode } }> = {};
           const tallies = tallyStudentBySubject(indexedRange, stu.id);
+          const owed = notPosted?.index.forStudent(stu);
           for (const s of subjects) {
-            const { held, attended } = tallies.get(s.subjectId) ?? { held: 0, attended: 0 };
-            bySubject[s.subjectId] = { held, attended, percentage: calcPercent(attended, held) };
-            overallHeld += held;
-            overallAttended += attended;
+            const { main, alt } = denominatorNumbers(tallies.get(s.subjectId), owed?.get(s.subjectId) ?? 0, denominator);
+            bySubject[s.subjectId] = { ...main, ...(compare ? { alt } : {}) };
+            overallHeld += main.held;
+            overallAttended += main.attended;
+            altHeld += alt.held;
+            altAttended += alt.attended;
           }
           const overallPercentage = calcPercent(overallAttended, overallHeld);
           return {
@@ -366,10 +468,14 @@ export async function GET(request: Request) {
             labBatch: stu.labBatch ?? "",
             absentDays: countFullyAbsentDays(indexedRange, stu.id),
             bySubject,
-            overall: { held: overallHeld, attended: overallAttended, percentage: overallPercentage },
+            overall: {
+              held: overallHeld, attended: overallAttended, percentage: overallPercentage,
+              ...(compare ? { alt: { held: altHeld, attended: altAttended, percentage: calcPercent(altAttended, altHeld) } } : {}),
+            },
           };
         })
-        .sort((a, b) => a.rollNumber.localeCompare(b.rollNumber, undefined, { numeric: true }));
+        .sort((a, b) =>
+          compareStudentsForList({ id: a.studentId, rollNumber: a.rollNumber, name: a.name }, { id: b.studentId, rollNumber: b.rollNumber, name: b.name }));
 
       if (absentOnly) {
         students = students.filter((s: {
@@ -413,7 +519,14 @@ export async function GET(request: Request) {
         overallPercentage: totalPossibleMarks > 0 ? Math.round((totalPresentMarks / totalPossibleMarks) * 100) : 0,
       };
 
-      return NextResponse.json({ subjects, students, summary });
+      return NextResponse.json({
+        subjects, students, summary,
+        meta: {
+          academicYear: rangeIsUnbounded ? (academicWindow?.label ?? "all") : undefined,
+          denominator,
+          ...(notPosted?.unavailable ? { denominatorUnavailable: notPosted.unavailable } : {}),
+        },
+      });
     }
 
     if (!yearParam) {
@@ -490,7 +603,7 @@ export async function GET(request: Request) {
           }
           return { id: stu.id, rollNumber: stu.rollNumber, name: stu.name, bySubject };
         })
-        .sort((a, b) => a.rollNumber.localeCompare(b.rollNumber, undefined, { numeric: true }));
+        .sort(compareStudentsForList);
 
       // Apply absentOnly / shortage filters for month view
       if (absentOnly) {
@@ -575,7 +688,7 @@ export async function GET(request: Request) {
         const overall = { held: cHeld, attended: cAtt, percentage: calcPercent(cAtt, cHeld) };
         return { id: stu.id, rollNumber: stu.rollNumber, name: stu.name, statusBySubject, bySubjectDaily, overall };
       })
-      .sort((a, b) => a.rollNumber.localeCompare(b.rollNumber, undefined, { numeric: true }));
+      .sort(compareStudentsForList);
 
     if (absentOnly) {
       students = students.filter((s) => {

@@ -1,5 +1,6 @@
 import type { StudentListItem, StudentRecord } from "@/types";
 import { compareStudentsForList } from "@/lib/students/listOrder";
+import { compareGraduates, graduateBatchLabel, graduateCourseLabel, graduateFacets } from "@/lib/students/graduates";
 
 // Server-side pagination for the College Office / Principal-tier Students
 // list (the roles that see the whole college unscoped - no HOD/PANEL_MEMBER
@@ -156,6 +157,105 @@ export async function fetchMatchingStudentIds(
 ): Promise<string[]> {
   const candidates = await resolveCandidates(studentsColl, params);
   return candidates.filter((d) => matchesRemaining(d.data(), params)).map((d) => d.id);
+}
+
+// ── Graduated students ───────────────────────────────────────────────────
+// The Graduated view used to download EVERY student in the college and keep
+// only status === "GRADUATED" in the browser. `status` is now the one
+// structural filter pushed down to Firestore (a bare equality, so the automatic
+// single-field index serves it - same reasoning as the top-of-file comment), so
+// only graduates are read, and the browser gets exactly one page.
+//
+// Course/batch/search are applied in memory over that candidate set: a
+// graduate's course and batch are labelled with an "Unspecified" bucket when
+// blank (lib/students/graduates.ts), which an equality filter can't express.
+//
+// The list request also returns `orderedIds` - every matching id, in display
+// order, and nothing else about them. Paging then needs no further candidate
+// read: the client asks for just the ids of the page it wants
+// (fetchGraduatesByIds) and Firestore reads exactly that many documents.
+
+export interface GraduatesQuery {
+  page: number;
+  pageSize: number;
+  /** Trimmed, lower-cased. "" means no search. Matches name, roll number or department. */
+  search: string;
+  /** A course label as in graduateFacets(). "" means every course. */
+  course: string;
+  /** A batch label as in graduateFacets(). "" means every batch. */
+  batch: string;
+}
+
+export interface GraduatesPage {
+  students: StudentListItem[];
+  /** Graduates matching the filters. */
+  total: number;
+  /** Every graduate, ignoring the filters - the "N graduated total" figure. */
+  overallTotal: number;
+  /** Every matching id in display order, so later pages can be fetched by id. */
+  orderedIds: string[];
+  /** Drop-down options over every graduate, so they don't shrink as filters narrow. */
+  facets: { courses: string[]; batches: string[] };
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
+export async function fetchGraduatesPage(
+  studentsColl: FirebaseFirestore.CollectionReference,
+  params: GraduatesQuery
+): Promise<GraduatesPage> {
+  const snap = await studentsColl.where("status", "==", "GRADUATED").get();
+  const all = snap.docs
+    .map((d) => ({ id: d.id, ...(d.data() as Omit<StudentRecord, "id">), accessLevel: "primary" as const }))
+    .sort(compareGraduates) as StudentListItem[];
+
+  const filtered = all.filter((s) => {
+    if (params.course && graduateCourseLabel(s) !== params.course) return false;
+    if (params.batch && graduateBatchLabel(s) !== params.batch) return false;
+    if (params.search) {
+      const name = String(s.name ?? "").toLowerCase();
+      const roll = String(s.rollNumber ?? "").toLowerCase();
+      const dept = String(s.department ?? "").toLowerCase();
+      if (!name.includes(params.search) && !roll.includes(params.search) && !dept.includes(params.search)) return false;
+    }
+    return true;
+  });
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / params.pageSize));
+  const page = Math.min(Math.max(1, params.page), totalPages);
+  const start = (page - 1) * params.pageSize;
+  return {
+    students: filtered.slice(start, start + params.pageSize),
+    total: filtered.length,
+    overallTotal: all.length,
+    orderedIds: filtered.map((s) => s.id),
+    facets: graduateFacets(all),
+    page,
+    pageSize: params.pageSize,
+    totalPages,
+  };
+}
+
+/**
+ * The graduates among `ids`, in the order asked - one document read per id.
+ * An id that no longer exists, or whose student isn't (any longer) graduated,
+ * is simply left out.
+ */
+export async function fetchGraduatesByIds(
+  studentsColl: FirebaseFirestore.CollectionReference,
+  ids: string[]
+): Promise<StudentListItem[]> {
+  if (ids.length === 0) return [];
+  const snaps = await studentsColl.firestore.getAll(...ids.map((id) => studentsColl.doc(id)));
+  const out: StudentListItem[] = [];
+  for (const d of snaps) {
+    if (!d.exists) continue;
+    const data = d.data() as Omit<StudentRecord, "id">;
+    if (data.status !== "GRADUATED") continue;
+    out.push({ id: d.id, ...data, accessLevel: "primary" });
+  }
+  return out;
 }
 
 // ── CSV export ───────────────────────────────────────────────────────────

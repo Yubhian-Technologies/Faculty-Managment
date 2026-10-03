@@ -3,6 +3,8 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
+import { deleteAssignmentWithSlots } from "@/lib/teaching/deleteAssignment";
 import { getHodDepartmentScope, canHodManageAssignment } from "@/lib/departments/scope";
 import type { Department } from "@/types";
 import type { DepartmentYearRow } from "@/lib/departments/managedBranches";
@@ -71,6 +73,13 @@ export async function PATCH(
     else if (body.studentFeedback === null) updates.studentFeedback = null;
 
     await ref.update(updates);
+    await writeAuditLogSafe(db, session.collegeId, {
+      action: "TEACHING_ASSIGNMENT_UPDATED",
+      performedBy: session.uid,
+      performedByName: session.email || session.role,
+      targetId: id,
+      details: { fields: Object.keys(updates).filter((k) => k !== "updatedAt") },
+    });
     return NextResponse.json({ success: true });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
@@ -102,11 +111,20 @@ export async function DELETE(
       }
     }
 
-    const slotsSnap = await collegeRef.collection("timetableSlots").where("assignmentId", "==", id).get();
-    const batch = db.batch();
-    slotsSnap.docs.forEach((d) => batch.delete(d.ref));
-    batch.delete(ref);
-    await batch.commit();
+    const removed = await deleteAssignmentWithSlots(db, session.collegeId, id, session.uid);
+    if (removed) {
+      const d = removed.data as { facultyId?: string; facultyName?: string; sectionId?: string; sectionName?: string; subjectId?: string; subjectName?: string; year?: number };
+      await writeAuditLogSafe(db, session.collegeId, {
+        action: "TEACHING_ASSIGNMENT_DELETED",
+        performedBy: session.uid,
+        performedByName: session.email || session.role,
+        targetId: id,
+        details: {
+          facultyId: d.facultyId, facultyName: d.facultyName, sectionId: d.sectionId, sectionName: d.sectionName,
+          subjectId: d.subjectId, subjectName: d.subjectName, year: d.year, removedSlots: removed.slotCount,
+        },
+      });
+    }
 
     return NextResponse.json({ success: true });
   } catch (err) {

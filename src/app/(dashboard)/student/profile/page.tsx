@@ -5,6 +5,7 @@ import { Avatar } from "@/components/shared/Avatar";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { CardSkeleton } from "@/components/shared/SkeletonLoader";
 import { Card, CardContent } from "@/components/ui/card";
+import { ChangePasswordDialog } from "@/components/shared/ChangePasswordDialog";
 
 interface Row {
   label: string;
@@ -53,7 +54,11 @@ export default function StudentProfilePage() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-5">
-      <PageHeader title="My Profile" description="The details your college holds for you. To correct anything, contact the College Office." />
+      <PageHeader
+        title="My Profile"
+        description="The details your college holds for you. To correct anything, contact the College Office."
+        actions={<ChangePasswordDialog />}
+      />
 
       {isLoading ? (
         <div className="space-y-4">

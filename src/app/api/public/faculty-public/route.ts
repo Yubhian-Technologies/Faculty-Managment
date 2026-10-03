@@ -39,7 +39,8 @@ function publicDegree(d: DegreeDetail | undefined, doctoral: boolean) {
     branch: d.branch,
     specialization: d.specialization,
     institutionName: d.institutionName,
-    ...(doctoral ? { yearOfAward: d.yearOfAward } : { yearOfPassing: d.yearOfPassing }),
+    // Doctoral entries only (Ph.D. - the department it was pursued in).
+    ...(doctoral ? { departmentName: d.departmentName, yearOfAward: d.yearOfAward } : { yearOfPassing: d.yearOfPassing }),
   };
 }
 
@@ -143,6 +144,7 @@ export async function GET(request: Request) {
         // (not undefined) keys are dropped by JSON serialisation anyway.
         academicExperience: (ap?.academicExperience ?? []).map((p) => ({
           institutionName: p.institutionName,
+          place: p.place,
           designation: p.designation,
           fromDate: p.fromDate,
           toDate: p.toDate,

@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
+import { passwordChangeRequired, passwordChangeRequiredResponse } from "@/lib/students/passwordGate";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { findOwnStudent, isLiveAcademicYear, loadOwnSectionContext, slotVisibleToStudent } from "@/lib/students/ownContext";
@@ -32,6 +33,7 @@ export async function GET() {
     if (!found.ok) {
       return NextResponse.json({ student: null, message: UNLINKED_MESSAGE });
     }
+    if (passwordChangeRequired(found.student)) return passwordChangeRequiredResponse();
     const ctx = await loadOwnSectionContext(db, session.collegeId, found.student);
     const { student, section, course, timing } = ctx;
 

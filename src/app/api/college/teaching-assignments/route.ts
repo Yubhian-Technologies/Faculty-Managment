@@ -2,6 +2,9 @@ export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
+import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
+import { createAssignmentWithSlots } from "@/lib/teaching/createAssignment";
+import { deleteAssignmentWithSlots } from "@/lib/teaching/deleteAssignment";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { FieldPath } from "firebase-admin/firestore";
 import { requiredFacultyCount } from "@/lib/college/facultyRatio";
@@ -12,12 +15,12 @@ import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { getActiveSubstitutionsForDates, currentWeekDateKeys } from "@/lib/leave/periodCoverage";
 import { resolveSectionCurrentSemester, resolveRequestedSemester, matchesCurrentSemester } from "@/lib/college/semester";
 import { inheritedAssignmentDepartmentId } from "@/lib/timetable/sharedYearTiming";
-import { matchesCurrentAcademicYear } from "@/lib/college/academicSession";
 import { isTimetableIncharge } from "@/lib/departments/timetableIncharge";
 import { isFacultyAvailable } from "@/types";
 import type { Department, SubjectType, TeachingAssignment, TimetableSlot } from "@/types";
 import { loadDepartmentIndex, stampDepartmentIds } from "@/lib/departments/stampIds";
 import { resolveCollegeAcademicYear } from "@/lib/college/collegeAcademicYear";
+import { countStudentsOfDepartment } from "@/lib/students/countStudents";
 
 export async function GET(request: Request) {
   try {
@@ -558,51 +561,16 @@ export async function POST(request: Request) {
         }
       }
 
-      // Conflict check: this faculty already teaching this exact section+subject
-      // IN THIS SAME SEMESTER? Only applies to current assignments - past ones
-      // are historical records and may legitimately repeat the same
-      // section+subject across different years. A different semester's own
-      // assignment for the same section+subject isn't a conflict - each
-      // semester is its own independent timetable (see matchesCurrentSemester).
-      if (!body.isPast) {
-        // Firestore's "!=" excludes docs missing the field entirely, which every
-        // pre-existing current assignment does - so the isPast!==true filter has
-        // to happen in application code, not the query, to still catch them.
-        const existing = await collegeRef.collection("teachingAssignments")
-          .where("facultyId", "==", facultyId)
-          .where("sectionId", "==", sectionId)
-          .where("subjectId", "==", subjectId)
-          .get();
-        if (existing.docs.some((d) => {
-          const data = d.data() as { isPast?: boolean; timetableSemester?: number | null };
-          return !data.isPast && matchesCurrentSemester(data.timetableSemester, timetableSemester);
-        })) {
-          return NextResponse.json({ error: "This faculty is already assigned to this subject for this section" }, { status: 409 });
-        }
-        // Lab-only split: THEORY/TUTORIAL/PROJECT stay single-faculty per section; only PRACTICAL may have 2 faculties (Batch 1/Batch 2 half-half)
-        const subjectTypeForGuard = (subject as unknown as { type?: string }).type;
-        const isLab = subjectTypeForGuard === "PRACTICAL";
-        const anyExisting = await collegeRef.collection("teachingAssignments")
-          .where("sectionId", "==", sectionId)
-          .where("subjectId", "==", subjectId)
-          .get();
-        const countInSemester = anyExisting.docs.filter((d) => {
-          const data = d.data() as { isPast?: boolean; timetableSemester?: number | null };
-          return !data.isPast && matchesCurrentSemester(data.timetableSemester, timetableSemester);
-        }).length;
-        if (!isLab && countInSemester >= 1) {
-          return NextResponse.json({ error: "This subject is already assigned for this section — only lab (PRACTICAL) subjects can have 2 faculties (Batch 1/Batch 2)" }, { status: 409 });
-        }
-        if (isLab && countInSemester >= 2) {
-          return NextResponse.json({ error: "Lab subject already has 2 faculties assigned for this section (Batch 1 & Batch 2)" }, { status: 409 });
-        }
-      }
-
+      // Everything below - the duplicate / one-faculty-unless-lab / cell-taken /
+      // faculty-clash checks AND the writes - is ONE transaction that first
+      // locks this section's guard document (lib/teaching/createAssignment.ts),
+      // so two requests landing together can no longer both pass the checks.
+      // It is also all-or-nothing: a clashing slot now means nothing was
+      // written, where it used to leave the assignment (and any earlier slots)
+      // behind under a 409.
       const now = new Date();
-      const ref = collegeRef.collection("teachingAssignments").doc();
-
       const deptIndex = await loadDepartmentIndex(db, session.collegeId);
-      await ref.set(stampDepartmentIds({
+      const assignmentDoc = stampDepartmentIds({
         collegeId: session.collegeId,
         facultyId,
         facultyName: resolvedFacultyName,
@@ -630,67 +598,46 @@ export async function POST(request: Request) {
           ...(body.passPercentage != null ? { passPercentage: Number(body.passPercentage) } : {}),
           ...(body.studentFeedback != null ? { studentFeedback: Number(body.studentFeedback) } : {}),
         } : {}),
-      }, deptIndex));
+      }, deptIndex);
 
-      // Create any staged timetable slots (day + period) for this assignment -
-      // past rows never have any (no live schedule to book).
-      const createdSlots: string[] = [];
-      if (!body.isPast && body.slots?.length) {
-        for (const slot of body.slots) {
-          // Same-semester only - a different semester's own slot in this
-          // exact day/period isn't a real clash, it's a separate timetable
-          // (see matchesCurrentSemester). Fetched un-filtered by semester
-          // (day+period narrows this to at most a couple of docs already)
-          // and matched in application code for the same null-tolerant
-          // semantics used everywhere else this concept appears.
-          // Skipped entirely when this specific slot opts into a split
-          // period (see slots' own allowSplit doc-comment above).
-          const conflictSnap = slot.allowSplit ? null : await collegeRef.collection("timetableSlots")
-            .where("sectionId", "==", sectionId)
-            .where("day", "==", slot.day)
-            .where("periodNumber", "==", slot.periodNumber)
-            .get();
-          const conflict = conflictSnap?.docs.find((d) => {
-            const data = d.data() as { semester?: number | null; academicYear?: string };
-            return matchesCurrentSemester(data.semester, timetableSemester) && matchesCurrentAcademicYear(data.academicYear, currentAcademicYear);
-          });
-          if (conflict) {
-            return NextResponse.json({
-              error: `Conflict: Section ${section.name} already has a subject scheduled on ${slot.day} period ${slot.periodNumber}`,
-              assignmentId: ref.id,
-            }, { status: 409 });
-          }
-
-          // No faculty-clash check across sections - years have their own
-          // period timings, so the same faculty may hold the same period
-          // number in two sections on purpose.
-
-          const slotRef = collegeRef.collection("timetableSlots").doc();
-          await slotRef.set({
-            collegeId: session.collegeId,
-            department: section.department,
-            assignmentId: ref.id,
-            facultyId,
-            facultyName: resolvedFacultyName,
-            courseId,
-            year: section.year,
-            sectionId,
-            subjectId,
-            subjectName: subject.name,
-            day: slot.day,
-            periodNumber: slot.periodNumber,
-            classroom: slot.classroom ?? null,
-            ...(slot.labBatch ? { labBatch: slot.labBatch } : {}),
-            ...(timetableSemester != null ? { semester: timetableSemester } : {}),
-            academicYear: currentAcademicYear,
-            createdAt: now,
-            updatedAt: now,
-          });
-          createdSlots.push(slotRef.id);
-        }
+      const created = await createAssignmentWithSlots({
+        db,
+        collegeId: session.collegeId,
+        assignment: assignmentDoc,
+        facultyId,
+        facultyName: resolvedFacultyName,
+        sectionId,
+        sectionName: section.name,
+        subjectId,
+        subjectName: subject.name,
+        courseId,
+        year: section.year,
+        department: section.department,
+        timetableSemester,
+        isPast: !!body.isPast,
+        isLab: (subject as unknown as { type?: string }).type === "PRACTICAL",
+        slots: body.isPast ? [] : (body.slots ?? []),
+        currentAcademicYear,
+        writer: session.uid,
+        now,
+      });
+      if (!created.ok) {
+        return NextResponse.json({ error: created.error }, { status: 409 });
       }
 
-      return NextResponse.json({ id: ref.id, slotIds: createdSlots }, { status: 201 });
+      await writeAuditLogSafe(db, session.collegeId, {
+        action: "TEACHING_ASSIGNMENT_CREATED",
+        performedBy: session.uid,
+        performedByName: session.email || session.role,
+        targetId: created.id,
+        details: {
+          facultyId, facultyName: resolvedFacultyName, sectionId, sectionName: section.name, subjectId,
+          subjectName: subject.name, year: section.year, timetableSemester: timetableSemester ?? null,
+          isPast: !!body.isPast, slotCount: created.slotIds.length,
+        },
+      });
+
+      return NextResponse.json({ id: created.id, slotIds: created.slotIds }, { status: 201 });
     } else if (body.academicYear && body.semester) {
       // This legacy semester-scoped shape (no section/course link) is
       // unrelated to Timetable Incharge delegation - PANEL_MEMBER is only in
@@ -764,18 +711,16 @@ export async function POST(request: Request) {
         // union sections/route.ts's studentCount aggregation and
         // faculty-requirement's own count use, so this warning isn't
         // undercounting a branch's incoming year-1 cohort.
-        const [studentsSnap, studentsSecondarySnap, assignmentsSnap] = await Promise.all([
-          collegeRef.collection("students").where("department", "==", dept).get(),
-          collegeRef.collection("students").where("secondaryDepartment", "==", dept).get(),
+        // Only the headcount is needed, so the student side is a count()
+        // aggregation over that same union (a student matching both fields
+        // counted once) instead of reading every matching student document.
+        const [totalStudents, assignmentsSnap] = await Promise.all([
+          countStudentsOfDepartment(collegeRef.collection("students"), dept),
           collegeRef.collection("teachingAssignments")
             .where("department", "==", dept)
             .where("academicYear", "==", body.academicYear)
             .get(),
         ]);
-        const countedStudentIds = new Set<string>();
-        for (const d of studentsSnap.docs) countedStudentIds.add(d.id);
-        for (const d of studentsSecondarySnap.docs) countedStudentIds.add(d.id);
-        const totalStudents = countedStudentIds.size;
         const required = requiredFacultyCount(totalStudents);
         const distinctFaculty = new Set(
           assignmentsSnap.docs.map((d) => (d.data() as { facultyId?: string }).facultyId).filter(Boolean)
@@ -784,6 +729,17 @@ export async function POST(request: Request) {
           ratioWarning = `${dept} now has ${distinctFaculty.size} faculty assigned against a ratio-based requirement of ${required} (1:15 student-faculty ratio).`;
         }
       }
+
+      await writeAuditLogSafe(db, session.collegeId, {
+        action: "TEACHING_ASSIGNMENT_CREATED",
+        performedBy: session.uid,
+        performedByName: session.email || session.role,
+        targetId: ref.id,
+        details: {
+          facultyId: body.facultyId, facultyName: facultyDisplayName(faculty), subjectId: body.subjectId,
+          subjectName: subject.name ?? "", academicYear: body.academicYear, semester: Number(body.semester), shape: "SEMESTER_SCOPED",
+        },
+      });
 
       return NextResponse.json({ id: ref.id, ...(ratioWarning ? { ratioWarning } : {}) }, { status: 201 });
     } else {
@@ -856,11 +812,20 @@ export async function DELETE(request: Request) {
       }
     }
 
-    const slotsSnap = await collegeRef.collection("timetableSlots").where("assignmentId", "==", assignmentId).get();
-    const batch = db.batch();
-    slotsSnap.docs.forEach((d) => batch.delete(d.ref));
-    batch.delete(ref);
-    await batch.commit();
+    const removed = await deleteAssignmentWithSlots(db, session.collegeId, assignmentId, session.uid);
+    if (removed) {
+      const d = removed.data as { facultyId?: string; facultyName?: string; sectionId?: string; sectionName?: string; subjectId?: string; subjectName?: string; year?: number };
+      await writeAuditLogSafe(db, session.collegeId, {
+        action: "TEACHING_ASSIGNMENT_DELETED",
+        performedBy: session.uid,
+        performedByName: session.email || session.role,
+        targetId: assignmentId,
+        details: {
+          facultyId: d.facultyId, facultyName: d.facultyName, sectionId: d.sectionId, sectionName: d.sectionName,
+          subjectId: d.subjectId, subjectName: d.subjectName, year: d.year, removedSlots: removed.slotCount,
+        },
+      });
+    }
 
     return NextResponse.json({ ok: true });
   } catch (err) {

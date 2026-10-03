@@ -84,7 +84,19 @@ const STEP1_FIELDS = STEP1_FIELD_KEYS.map((k) => ROSTER_FIELDS.find((f) => f.key
 
 // These fields are always supplied via the mandatory dropdown, never per-row.
 const PICKER_KEY_SET = new Set<string>([...PICKER_KEYS, "secondaryDepartment"]);
-const TEMPLATE_COLUMNS = COLUMNS.filter((c) => !PICKER_KEY_SET.has(c.key));
+// Optional login password, one per row. It is NOT a stored roster field (it is not in
+// ROSTER_FIELDS, so no Add/Edit form or detail view ever shows it): the server hands
+// it to Firebase Auth only, to create that student's login with exactly this password.
+// The sample cell is deliberately blank so the template's guidance row can never
+// create a login.
+const PASSWORD_COLUMN = {
+  key: "loginPassword",
+  label: "Login Password (optional)",
+  required: false,
+  sample: "",
+  aliases: ["Login Password", "Password", "Initial Password", "Student Password"],
+};
+const TEMPLATE_COLUMNS = [...COLUMNS.filter((c) => !PICKER_KEY_SET.has(c.key)), PASSWORD_COLUMN];
 
 // Section-locked mode (arriving from a section card's own "Add Students"
 // button) only ever supplies Department/Year via the URL - it has no Course
@@ -92,11 +104,12 @@ const TEMPLATE_COLUMNS = COLUMNS.filter((c) => !PICKER_KEY_SET.has(c.key));
 // dropdown-driven mode above which supplies all three. Core Department is
 // excluded here too - see the comment above STEP1_FIELD_KEYS.
 const LOCKED_KEY_SET = new Set(["department", "year", "secondaryDepartment"]);
-const LOCKED_TEMPLATE_COLUMNS = COLUMNS.filter((c) => !LOCKED_KEY_SET.has(c.key));
+const LOCKED_TEMPLATE_COLUMNS = [...COLUMNS.filter((c) => !LOCKED_KEY_SET.has(c.key)), PASSWORD_COLUMN];
 
 const HINTS = [
   "Course, Department and Current year of Study are selected once above — they are not columns in the file. Roll No and Name are the required fields in the file.",
-  "Roll No is the student's unique identity: it is required on every row and must not be used by any other student in the college (or by another row in the same file). A row with a missing or already-used Roll No is skipped.",
+  "Roll No is the student's unique identity and their login username: it is required on every row and must not be used by any other student in ANY college (or by another row in the same file) - upper/lower case, spaces and dashes don't make a roll different. A row with a missing or already-used Roll No is skipped.",
+  "Login Password (optional): when a row has one, that student's login is created with exactly this password (at least 8 characters, no leading/trailing space) and they sign in with their Roll No and it. It is never saved anywhere readable; students can change it, and you can reset it later. Leave it blank to create logins afterwards from the Students list.",
   "Name (as per SSC): enter the name exactly as it appears on the student's SSC (10th) certificate - this is the name used on statutory/academic paperwork.",
   "Section is NOT collected here - the department assigns it later (the sub-HOD divides students into sections). Every student is imported as \"unassigned\" until then.",
   "Core Department (the real branch a 1st-year is pre-registered to while under a shared/Basic Science department) isn't a column in the file either - it's picked once above, for the whole file, the same way Department itself is.",
@@ -111,7 +124,18 @@ const HINTS = [
 ];
 
 type ParsedRow = Record<string, string>;
-type ImportResult = { created: number; failed: { row: number; rollNumber: string; error: string }[] };
+// Rows the server accepts per call (students/import-excel) and a sanity cap on one
+// file - anything above SERVER_CHUNK_SIZE is sent as consecutive chunks.
+const SERVER_CHUNK_SIZE = 500;
+const MAX_ROWS_PER_FILE = 5000;
+
+type ImportResult = {
+  created: number;
+  failed: { row: number; rollNumber: string; error: string }[];
+  /** Logins created from the Password column, and the rows whose student was imported but whose login was not. */
+  loginsCreated?: number;
+  loginFailed?: { row: number; rollNumber: string; error: string }[];
+};
 // A skipped row plus its own original field values (snapshotted from `rows`
 // before it's cleared on partial success - see handleImport) and the row's
 // live status: "failed" until fixed and retried, then "fixed" (kept in the
@@ -139,6 +163,7 @@ export default function OfficeStudentImportPage() {
   const [rows, setRows] = useState<ParsedRow[]>([]);
   const [parseError, setParseError] = useState("");
   const [isImporting, setIsImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState<{ done: number; total: number } | null>(null);
   const [result, setResult] = useState<ImportResult | null>(null);
   const [failedRows, setFailedRows] = useState<FailedRow[]>([]);
   const [isBuildingTemplate, setIsBuildingTemplate] = useState(false);
@@ -217,6 +242,8 @@ export default function OfficeStudentImportPage() {
 
   function openFix(f: FailedRow) {
     const form: ParsedRow = Object.fromEntries(EDITABLE_ROSTER_FIELDS.map((field) => [field.key, f.data[field.key] ?? ""]));
+    // The row's own login password (not a roster field, so it is not in the list above).
+    if (f.data.loginPassword) form.loginPassword = f.data.loginPassword;
     // Locked-mode imports carry no Department/Course/Year columns at all -
     // seed the fix form from whatever context supplied them, so the office
     // isn't asked to re-pick values it already gave once for the whole file.
@@ -267,10 +294,12 @@ export default function OfficeStudentImportPage() {
     setFixError("");
     try {
       const payload = rosterFormToPayload(form);
+      // A row's own password (from the file) travels with the corrected row.
+      const rowPassword = fixTarget.form.loginPassword?.trim() ? fixTarget.form.loginPassword : undefined;
       const res = await fetch("/api/college/students", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(rowPassword ? { ...payload, loginPassword: rowPassword } : payload),
       });
       const json = await res.json() as { id?: string; error?: string };
       if (!res.ok) { setFixError(json.error ?? "Failed to save"); return; }
@@ -375,7 +404,10 @@ export default function OfficeStudentImportPage() {
       }).filter((r) => Object.values(r).some((v) => v.trim())); // skip fully-blank rows
 
       if (dataRows.length === 0) { setParseError("No data rows found after the header - check that your data starts on the row right after the header, with no blank rows in between."); return; }
-      if (dataRows.length > 500) { setParseError("Maximum 500 rows allowed per import."); return; }
+      // The server takes at most SERVER_CHUNK_SIZE rows per call; a bigger file is
+      // sent in consecutive chunks by handleImport, so there is no 500-row limit
+      // for the person importing - only a sanity cap on one file.
+      if (dataRows.length > MAX_ROWS_PER_FILE) { setParseError(`Maximum ${MAX_ROWS_PER_FILE.toLocaleString()} rows allowed per file - split the file and import it in parts.`); return; }
 
       setRows(dataRows);
     } catch {
@@ -390,36 +422,71 @@ export default function OfficeStudentImportPage() {
     setIsImporting(true);
     setResult(null);
     setFailedRows([]);
+    setImportProgress(null);
+    const records = rows.map((r) => ({
+      ...r,
+      ...(isLocked
+        ? { section: lockedSection, department: lockedDepartment, year: Number(lockedYear) }
+        : {
+            department: pickValues.department, course: pickValues.course, year: Number(pickValues.year),
+            ...(pickValues.secondaryDepartment ? { secondaryDepartment: pickValues.secondaryDepartment } : {}),
+          }),
+    }));
+
+    // Sent in chunks the server accepts, one after another, with the results
+    // merged. Row numbers the server reports are relative to its chunk, so each
+    // is shifted back to the row's place in the file. A chunk that fails stops the
+    // run; everything before it is already saved, and re-importing the file is
+    // safe - rows that already exist are rejected as duplicates, not created twice.
+    let created = 0;
+    let loginsCreated = 0;
+    const loginFailed: NonNullable<ImportResult["loginFailed"]> = [];
+    const failed: ImportResult["failed"] = [];
+    let stoppedAt: number | null = null;
     try {
-      const records = rows.map((r) => ({
-        ...r,
-        ...(isLocked
-          ? { section: lockedSection, department: lockedDepartment, year: Number(lockedYear) }
-          : {
-              department: pickValues.department, course: pickValues.course, year: Number(pickValues.year),
-              ...(pickValues.secondaryDepartment ? { secondaryDepartment: pickValues.secondaryDepartment } : {}),
-            }),
-      }));
-      const res = await fetch("/api/college/students/import-excel", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ records }),
-      });
-      const json = await res.json() as ImportResult & { error?: string };
-      if (!res.ok) { toast({ variant: "destructive", title: json.error ?? "Import failed" }); return; }
-      setResult(json);
-      // Snapshot each failed row's own original values before `rows` is
-      // cleared below (on any partial success) - the "fix and retry" dialog
-      // needs them, and this is the only place they still exist.
-      setFailedRows(json.failed.map((f) => ({ ...f, data: rows[f.row - 2] ?? {}, status: "failed" as const })));
-      if (json.created > 0) {
-        toast({ variant: "success", title: `${json.created} students imported successfully` });
-        setRows([]);
+      for (let start = 0; start < records.length; start += SERVER_CHUNK_SIZE) {
+        const chunk = records.slice(start, start + SERVER_CHUNK_SIZE);
+        setImportProgress({ done: start, total: records.length });
+        const res = await fetch("/api/college/students/import-excel", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ records: chunk }),
+        });
+        const json = await res.json().catch(() => ({})) as Partial<ImportResult> & { error?: string };
+        if (!res.ok) {
+          toast({ variant: "destructive", title: json.error ?? "Import failed" });
+          stoppedAt = start;
+          break;
+        }
+        created += json.created ?? 0;
+        for (const f of json.failed ?? []) failed.push({ ...f, row: f.row + start });
+        loginsCreated += json.loginsCreated ?? 0;
+        for (const f of json.loginFailed ?? []) loginFailed.push({ ...f, row: f.row + start });
       }
     } catch {
       toast({ variant: "destructive", title: "Network error - import failed" });
+      stoppedAt = stoppedAt ?? 0;
     } finally {
       setIsImporting(false);
+      setImportProgress(null);
+    }
+
+    if (created === 0 && failed.length === 0 && stoppedAt === 0) return; // nothing happened
+    setResult({ created, failed, loginsCreated, loginFailed });
+    // Snapshot each failed row's own original values before `rows` is
+    // cleared below (on any partial success) - the "fix and retry" dialog
+    // needs them, and this is the only place they still exist.
+    setFailedRows(failed.map((f) => ({ ...f, data: rows[f.row - 2] ?? {}, status: "failed" as const })));
+    if (stoppedAt !== null && stoppedAt > 0) {
+      toast({
+        variant: "destructive",
+        title: `Stopped after ${stoppedAt} of ${records.length} rows`,
+        description: `${created} students were imported. Fix the problem and import the file again - rows already saved are skipped as duplicates.`,
+      });
+    }
+    if (created > 0 && stoppedAt === null) {
+      toast({ variant: "success", title: `${created} students imported successfully` });
+      setRows([]);
     }
   }
 
@@ -567,7 +634,9 @@ export default function OfficeStudentImportPage() {
                         <td className="p-2 text-muted-foreground">{i + 2}</td>
                         {columns.filter((c) => rows.some((r) => r[c.key])).map((c) => (
                           <td key={c.key} className={`p-2 whitespace-nowrap ${c.required && !row[c.key]?.trim() ? "text-red-600 font-medium" : ""}`}>
-                            {row[c.key] || <span className="text-muted-foreground/40">-</span>}
+                            {row[c.key]
+                              ? (c.key === "loginPassword" ? "••••••••" : row[c.key])
+                              : <span className="text-muted-foreground/40">-</span>}
                           </td>
                         ))}
                       </tr>
@@ -598,7 +667,9 @@ export default function OfficeStudentImportPage() {
             <div className="flex gap-3">
               <Button onClick={() => void handleImport()} loading={isImporting} disabled={isImporting}>
                 <Upload className="h-4 w-4 mr-2" />
-                Import {rows.length} Record{rows.length !== 1 ? "s" : ""}
+                {importProgress
+                  ? `Importing ${Math.min(importProgress.done + SERVER_CHUNK_SIZE, importProgress.total)} of ${importProgress.total}...`
+                  : `Import ${rows.length} Record${rows.length !== 1 ? "s" : ""}`}
               </Button>
               <Button variant="outline" onClick={() => { setRows([]); setResult(null); }}>
                 Clear
@@ -629,6 +700,19 @@ export default function OfficeStudentImportPage() {
                   )}
                 </div>
               </div>
+              {(result.loginsCreated ?? 0) > 0 && (
+                <p className="text-sm text-muted-foreground">{result.loginsCreated} login{result.loginsCreated !== 1 ? "s" : ""} created from the password column</p>
+              )}
+              {(result.loginFailed?.length ?? 0) > 0 && (
+                <div className="space-y-1 rounded-lg border border-amber-200 bg-amber-50 p-3">
+                  <p className="text-xs font-medium text-amber-900">
+                    {result.loginFailed?.length} student{result.loginFailed?.length !== 1 ? "s were" : " was"} imported but the login was not created - use Create login on the Students list
+                  </p>
+                  <ul className="max-h-40 list-disc space-y-0.5 overflow-y-auto pl-4 text-xs text-amber-900">
+                    {result.loginFailed?.map((f) => <li key={f.row}>Row {f.row} · {f.rollNumber}: {f.error}</li>)}
+                  </ul>
+                </div>
+              )}
               {failedRows.length > 0 && (
                 <div className="space-y-1">
                   <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Skipped rows</p>
