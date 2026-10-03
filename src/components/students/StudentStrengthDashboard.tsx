@@ -11,13 +11,18 @@ import { toast } from "@/hooks/useToast";
 import { toCSV, downloadCSV } from "@/lib/utils/csv";
 import { romanYear, UNSET_LABELS } from "@/lib/students/strength/config";
 import {
+  courseYearSummary,
   buildReport,
   describeFilters,
+  describeScope,
   describeStatus,
   filterOptions,
   sanitizeFilters,
   summarize,
+  totalCardLabel,
   totalFor,
+  type CourseYearSummary,
+  type ScopePart,
 } from "@/lib/students/strength/query";
 import { downloadStrengthXlsx, printStrengthReport, strengthCsvRows, type ExportContext } from "@/lib/students/strength/exporters";
 import type { ProgramMatrix, SectionRow, StrengthFilters, StrengthPayload } from "@/lib/students/strength/types";
@@ -120,6 +125,12 @@ export function StudentStrengthDashboard() {
   const summary = useMemo(() => (cells && meta ? summarize(cells, meta, f.status) : null), [cells, meta, f.status]);
   const report = useMemo(() => (cells && meta ? buildReport(cells, meta, f, { includeEmptyDepartments: showEmpty }) : null), [cells, meta, f, showEmpty]);
   const answer = useMemo(() => (cells ? totalFor(cells, f) : 0), [cells, f]);
+  // Each course with its years, for the answer card - read from the same report
+  // logic (configured-but-empty courses included, as an exact 0).
+  const courseYears = useMemo(
+    () => (cells && meta ? courseYearSummary(buildReport(cells, meta, f, { includeEmptyDepartments: true }), meta) : []),
+    [cells, meta, f]
+  );
 
   function change(patch: Partial<StrengthFilters>) {
     if (!cells || !meta) return;
@@ -180,18 +191,11 @@ export function StudentStrengthDashboard() {
 
   const hasStudents = data.health.totalRecords > 0;
   const scoped = data.scope === "department";
-  const selectionText = describeFilters(f, meta).replace(/^Whole college$/, scoped ? "All students under your department" : "Whole college");
   const filtered = f.program !== undefined || f.branch !== undefined || f.year !== undefined || f.section !== undefined || f.batch !== undefined;
   const observedStatuses = new Set(cells.map((c) => c.status));
   const statusOptions = meta.statuses.filter((s) => s.countsInStrength || observedStatuses.has(s.key));
 
-  // Answer breakdown: by year until a year is chosen, then by section.
-  const breakdown =
-    f.year === undefined
-      ? options.years.map((y) => ({ label: y ? `${romanYear(y)} Year` : "Year not set", count: totalFor(cells, { ...f, year: y }) }))
-      : f.section === undefined
-      ? options.sections.map((s) => ({ label: s.key === "" ? UNSET_LABELS.section : s.label, count: totalFor(cells, { ...f, section: s.key }) }))
-      : [];
+  const scopeParts = describeScope(f, meta);
 
   return (
     <div className="space-y-5">
@@ -238,7 +242,7 @@ export function StudentStrengthDashboard() {
       <Card>
         <CardContent className="space-y-3 p-4">
           <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-            <FilterSelect label="Program" value={toSel(f.program)} onChange={(v) => change({ program: fromSel(v) })} allLabel="All programs">
+            <FilterSelect label="Course" value={toSel(f.program)} onChange={(v) => change({ program: fromSel(v) })} allLabel="All courses">
               {options.programs.map((p) => <SelectItem key={p.key || NONE} value={toSel(p.key)}>{p.label}</SelectItem>)}
             </FilterSelect>
             <FilterSelect label="Department" value={toSel(f.branch)} onChange={(v) => change({ branch: fromSel(v) })} allLabel="All departments">
@@ -292,21 +296,18 @@ export function StudentStrengthDashboard() {
         <>
           {/* The answer */}
           <Card className="border-primary/30 bg-primary/5">
-            <CardContent className="flex flex-col gap-4 p-5 md:flex-row md:items-center md:justify-between">
-              <div>
-                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{filtered ? "Exact count for your selection" : scoped ? "Total strength - your department" : "Total college strength"}</p>
-                <p className="mt-1 text-5xl font-bold tabular-nums text-primary" data-testid="strength-answer">{fmt(answer)}</p>
-                <p className="mt-1 text-sm font-medium">{selectionText}</p>
-                <p className="text-xs text-muted-foreground">{describeStatus(f.status, meta)}</p>
+            <CardContent className="space-y-4 p-5">
+              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                <div>
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{filtered ? "Exact count for your selection" : scoped ? "Total strength - your department" : "Total college strength"}</p>
+                  <p className="mt-1 text-5xl font-bold tabular-nums text-primary" data-testid="strength-answer">{fmt(answer)}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">{describeStatus(f.status, meta)}</p>
+                </div>
+                <ScopeChips parts={scopeParts} scoped={scoped} />
               </div>
-              {breakdown.length > 0 && (
-                <div className="flex max-w-xl flex-wrap gap-2 md:justify-end">
-                  {breakdown.map((b) => (
-                    <div key={b.label} className="min-w-[4.5rem] rounded-lg border bg-background px-3 py-1.5 text-center">
-                      <p className="text-[11px] text-muted-foreground">{b.label}</p>
-                      <p className="text-lg font-semibold tabular-nums">{fmt(b.count)}</p>
-                    </div>
-                  ))}
+              {courseYears.length > 0 && (
+                <div className="border-t border-primary/20 pt-3">
+                  <CourseYearList courses={courseYears} onPick={(patch) => change(patch)} />
                 </div>
               )}
             </CardContent>
@@ -314,13 +315,10 @@ export function StudentStrengthDashboard() {
 
           {/* Summary cards */}
           <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-            <StatCard label={f.status === "ENROLLED" ? (scoped ? "Total students (your department)" : "Total college students") : "Students (this status rule)"} value={summary.total} accent />
+            <StatCard label={totalCardLabel(f.status, meta, scoped)} value={summary.total} accent />
             {summary.byProgram.map((p) => (
               <StatCard key={p.key || NONE} label={`Total ${p.label}`} value={p.count} onClick={() => change({ program: p.key })} active={f.program === p.key} />
             ))}
-            <StatCard label="Detained" value={summary.detained} onClick={() => change({ status: "DETAINED" })} active={f.status === "DETAINED"} />
-            <StatCard label="Without a section" value={summary.unsectioned} tone={summary.unsectioned > 0 ? "warn" : undefined} onClick={() => change({ program: undefined, branch: undefined, year: undefined, section: "", batch: undefined, status: "ENROLLED" })} active={f.section === ""} />
-            <StatCard label="Graduated (alumni)" value={summary.graduated} onClick={() => change({ status: "GRADUATED" })} active={f.status === "GRADUATED"} />
           </div>
 
           {/* Department x Year */}
@@ -384,6 +382,62 @@ function FilterSelect({
         </SelectContent>
       </Select>
     </div>
+  );
+}
+
+/** What the number covers, one dimension at a time ("Course: All courses", "Department: IT", ...). */
+function ScopeChips({ parts, scoped }: { parts: ScopePart[]; scoped: boolean }) {
+  return (
+    <div className="flex flex-wrap gap-1.5 md:max-w-xl md:justify-end" data-testid="strength-scope">
+      {parts.map((p) => (
+        <span
+          key={p.label}
+          className={`rounded-full border px-2.5 py-1 text-xs ${p.all ? "bg-background text-muted-foreground" : "border-primary/40 bg-primary/10 font-medium text-primary"}`}
+        >
+          <span className="opacity-70">{p.label}:</span> {p.value}
+        </span>
+      ))}
+      {scoped && <span className="rounded-full border bg-background px-2.5 py-1 text-xs text-muted-foreground">Your department only</span>}
+    </div>
+  );
+}
+
+/**
+ * Each course, one after another, with its total and its year-wise counts -
+ * nothing finer (no departments, no sections; those live in the tables below).
+ * Course names and year chips filter to themselves when clicked.
+ */
+function CourseYearList({ courses, onPick }: { courses: CourseYearSummary[]; onPick: (patch: Partial<StrengthFilters>) => void }) {
+  return (
+    <ul className="divide-y divide-primary/15" data-testid="strength-courses">
+      {courses.map((c) => (
+        <li key={c.key || NONE} className="flex flex-wrap items-center gap-x-4 gap-y-1.5 py-2" data-testid="strength-course">
+          <button
+            type="button"
+            title={`Filter to ${c.label}`}
+            onClick={() => onPick({ program: c.key })}
+            className={`flex min-w-[15rem] items-baseline gap-2 text-left hover:underline ${c.count === 0 ? "opacity-50" : ""}`}
+          >
+            <span className="text-sm font-bold">{c.label}</span>
+            <span className="text-lg font-bold tabular-nums text-primary" data-testid="strength-course-count">{fmt(c.count)}</span>
+          </button>
+          <div className="flex flex-wrap gap-1.5">
+            {c.years.map((y) => (
+              <button
+                key={y.year}
+                type="button"
+                title={`Filter to ${c.label} · ${y.label}`}
+                onClick={() => onPick({ program: c.key, year: y.year })}
+                className={`flex items-baseline gap-1.5 rounded-lg border bg-background px-2.5 py-1 transition-colors hover:border-primary hover:bg-primary/5 ${y.count === 0 ? "opacity-50" : ""}`}
+              >
+                <span className="text-xs text-muted-foreground">{y.label}</span>
+                <span className="text-sm font-semibold tabular-nums">{fmt(y.count)}</span>
+              </button>
+            ))}
+          </div>
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -566,7 +620,7 @@ function DataChecks({ health }: { health: StrengthPayload["health"] }) {
     });
   }
   if (health.enrolledWithoutSection > 0) issues.push({ label: `${fmt(health.enrolledWithoutSection)} enrolled student(s) not yet placed in a section` });
-  if (health.enrolledWithoutProgram > 0) issues.push({ label: `${fmt(health.enrolledWithoutProgram)} enrolled student(s) have no program (course) recorded` });
+  if (health.enrolledWithoutProgram > 0) issues.push({ label: `${fmt(health.enrolledWithoutProgram)} enrolled student(s) have no course recorded` });
   if (health.enrolledWithoutYear > 0) issues.push({ label: `${fmt(health.enrolledWithoutYear)} enrolled student(s) have no year of study` });
   if (health.enrolledUnknownBranch > 0) issues.push({ label: `${fmt(health.enrolledUnknownBranch)} enrolled student(s) sit under a department that isn't in the Departments list` });
   if (health.unrecognizedStatus > 0) issues.push({ label: `${fmt(health.unrecognizedStatus)} student(s) have an unrecognized status and are excluded from strength` });
@@ -577,7 +631,7 @@ function DataChecks({ health }: { health: StrengthPayload["health"] }) {
         <h2 className="text-sm font-semibold">Data checks</h2>
         {issues.length === 0 ? (
           <p className="flex items-center gap-1.5 text-sm text-emerald-700 dark:text-emerald-400">
-            <CheckCircle2 className="h-4 w-4" /> Every student is assigned to a program, department, year and section, and every roll number is unique.
+            <CheckCircle2 className="h-4 w-4" /> Every student is assigned to a course, department, year and section, and every roll number is unique.
           </p>
         ) : (
           <ul className="space-y-1.5">

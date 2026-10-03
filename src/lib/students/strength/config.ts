@@ -74,7 +74,7 @@ export function romanYear(year: number): string {
 }
 
 export const UNSET_LABELS = {
-  program: "Program not set",
+  program: "Course not set",
   branch: "Department not set",
   section: "No section",
   batch: "No batch",

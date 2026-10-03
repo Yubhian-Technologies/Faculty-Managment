@@ -50,13 +50,13 @@ export default function StudentDocumentsPage() {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {documents.map((d) => (
-            <a key={d.id} href={d.fileUrl} target="_blank" rel="noopener noreferrer">
+            <a key={d.id} href={d.fileUrl} target="_blank" rel="noopener noreferrer" className="min-w-0">
               <Card className="hover:bg-muted/20 transition-colors cursor-pointer h-full">
                 <CardContent className="p-4 space-y-2">
-                  <Badge variant="outline" className="rounded-full bg-primary/10 text-primary border-primary/20 font-medium">
+                  <Badge variant="outline" className="h-auto max-w-full whitespace-normal break-words rounded-full bg-primary/10 text-primary border-primary/20 font-medium">
                     {resolveStudentDocumentTypeLabel(d)}
                   </Badge>
-                  {d.description && <p className="text-xs text-muted-foreground line-clamp-2">{d.description}</p>}
+                  {d.description && <p className="break-words text-xs text-muted-foreground line-clamp-3">{d.description}</p>}
                   <div className="flex items-center gap-1.5 pt-2 border-t border-border/60 text-xs text-primary font-medium">
                     <Download className="h-3.5 w-3.5" /> Download
                   </div>

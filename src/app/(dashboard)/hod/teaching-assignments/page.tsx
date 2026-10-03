@@ -827,7 +827,15 @@ const effectiveSemester = semesterOptions.length === 0
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Teaching Assignments" description="Find staffing gaps and assign faculty to subjects, course &amp; year wise" />
+      <PageHeader
+        title="Teaching Assignments"
+        description="Find staffing gaps and assign faculty to subjects, course &amp; year wise"
+        actions={
+          <Button asChild variant="outline">
+            <Link href="/hod/assignment-requests"><Send className="h-4 w-4 mr-2" />Assignment Requests</Link>
+          </Button>
+        }
+      />
 
       <Card>
         <CardHeader className="pb-3"><CardTitle className="text-base">Course, Year &amp; Department</CardTitle></CardHeader>

@@ -284,10 +284,6 @@ export interface StrengthSummary {
   /** Students counted under the chosen status rule, whole college (program/department filters ignored). */
   total: number;
   byProgram: { key: string; label: string; count: number }[];
-  detained: number;
-  graduated: number;
-  /** Enrolled students who aren't in a section yet. */
-  unsectioned: number;
 }
 
 /**
@@ -300,13 +296,98 @@ export function summarize(cells: StrengthCell[], meta: StrengthMeta, status: Str
   const byProgram = meta.programs
     .map((p) => ({ key: p.key, label: p.label, count: totalFor(cells, { ...base, program: p.key }) }))
     .filter((p) => p.count > 0);
-  return {
-    total: totalFor(cells, base),
-    byProgram,
-    detained: totalFor(cells, { status: "DETAINED" }),
-    graduated: totalFor(cells, { status: "GRADUATED" }),
-    unsectioned: totalFor(cells, { status: "ENROLLED", section: "" }),
-  };
+  return { total: totalFor(cells, base), byProgram };
+}
+
+// ─── Course -> Year summary for the answer card ─────────────────────────────
+
+export interface CourseYearSummary {
+  /** Program key - the value to filter on when the course is clicked. */
+  key: string;
+  label: string;
+  /** Students in this course under the current filters. */
+  count: number;
+  years: { year: number; label: string; count: number }[];
+}
+
+/**
+ * The answer as "each course, then its years": one entry per course with its
+ * total and one count per year. This adds NO counting of its own - it reads the
+ * Department x Year report (`buildReport`), whose per-course year totals are
+ * the sums of the very same filtered cells every other number comes from, so
+ * the years of a course always add up to that course's total, and the courses
+ * to the big number.
+ *
+ * Pass a report built with `includeEmptyDepartments: true` so a course nobody
+ * has joined yet is still listed (as an exact 0), while a course the current
+ * filters rule out entirely (a department it doesn't offer, a year past its
+ * length) is not.
+ */
+export function courseYearSummary(report: StrengthReport, meta: StrengthMeta): CourseYearSummary[] {
+  return report.matrices
+    .map((m) => ({
+      key: m.program,
+      label: m.label,
+      count: m.total,
+      years: m.years.map((y) => ({ year: y, label: y ? `${romanYear(y)} Year` : "Year not set", count: m.byYear[y] ?? 0 })),
+    }))
+    // An empty course the selected year doesn't exist in (e.g. "III Year" for a
+    // 2-year M.Tech) has nothing to show, so it is left out rather than shown as a 0.
+    .filter((c) => {
+      const length = meta.programs.find((p) => p.key === c.key)?.durationYears ?? 0;
+      return !(c.count === 0 && length > 0 && c.years.every((y) => y.year > length));
+    });
+}
+
+export interface ScopePart {
+  label: string;
+  /** What is selected, or the "All ..." wording. */
+  value: string;
+  /** true when this dimension is not narrowed (shows as "All"). */
+  all: boolean;
+}
+
+/**
+ * The selection spelled out one dimension at a time - "Course: All courses",
+ * "Department: IT" - so it is always clear what the number covers, including
+ * what it does NOT narrow. Admission batch is listed only when chosen.
+ */
+export function describeScope(f: StrengthFilters, meta: StrengthMeta): ScopePart[] {
+  const parts: ScopePart[] = [
+    {
+      label: "Course",
+      all: f.program === undefined,
+      value: f.program === undefined ? "All courses" : programInfo(meta, f.program).label,
+    },
+    {
+      label: "Department",
+      all: f.branch === undefined,
+      value: f.branch === undefined ? "All departments" : (() => { const b = branchInfo(meta, f.branch); return b.code || b.label; })(),
+    },
+    {
+      label: "Year",
+      all: f.year === undefined,
+      value: f.year === undefined ? "All years" : f.year ? `${romanYear(f.year)} Year` : "Year not set",
+    },
+    {
+      label: "Section",
+      all: f.section === undefined,
+      value: f.section === undefined ? "All sections" : f.section === "" ? UNSET_LABELS.section : `Section ${sectionLabel(meta, f.section)}`,
+    },
+  ];
+  if (f.batch !== undefined) {
+    parts.push({ label: "Batch", all: false, value: meta.batches.find((b) => b.key === f.batch)?.label ?? f.batch });
+  }
+  return parts;
+}
+
+/** Wording for the college-wide total card, by the status rule in force. */
+export function totalCardLabel(status: StrengthFilters["status"], meta: StrengthMeta, scoped: boolean): string {
+  const who = scoped ? "your department" : "college";
+  if (status === "ENROLLED") return scoped ? "Total students (your department)" : "Total college students";
+  if (status === "ALL") return `Total students in ${who} (all statuses)`;
+  const label = meta.statuses.find((s) => s.key === status)?.label ?? status;
+  return `${label} students in ${who}`;
 }
 
 // ─── Plain-language description of the current selection ───────────────────

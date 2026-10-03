@@ -11,6 +11,7 @@ import { isConfiguredSecondaryDepartmentOrChild, resolveDepartmentByNameOrCode }
 import { getFacultyIdCandidates } from "@/lib/faculty/resolveFacultyMemberId";
 import { resolveDepartmentCourseScope, resolveCatalogId, freshmanLandingDepartmentNames, expandDepartmentNameForRollup, type DepartmentWithId } from "@/lib/college/academicStructure";
 import { fetchStudentsPage, fetchMatchingStudentIds, fetchStudentsForExport } from "@/lib/students/paginatedList";
+import { fetchPanelStudentsPage } from "@/lib/students/panelPagedList";
 import { isLikelySameUnassignedStudent } from "@/lib/students/duplicateDetection";
 import { sortStudentsForList } from "@/lib/students/listOrder";
 import { findRollNumberConflict, rollNumberTakenMessage } from "@/lib/students/rollNumberUniqueness";
@@ -143,6 +144,19 @@ export async function GET(request: Request) {
       const sections = await getInchargeSections(db, session.collegeId, session.uid);
       if (sections.length === 0) {
         return NextResponse.json({ students: [] });
+      }
+      // Opt-in cursor-paged roster (the faculty Students page) - every other
+      // PANEL_MEMBER caller omits `paged` and gets the full list below.
+      if (searchParams.get("paged") === "1") {
+        const limitRaw = Number(searchParams.get("limit"));
+        const page = await fetchPanelStudentsPage(studentsColl, sections, {
+          sectionId: (searchParams.get("sectionId") ?? "").trim(),
+          labBatch: (searchParams.get("labBatch") ?? "").trim(),
+          limit: PAGE_SIZES.includes(limitRaw) ? limitRaw : 30,
+          cursor: searchParams.get("cursor") ?? "",
+          page: Math.max(1, Number(searchParams.get("pageNo")) || 1),
+        });
+        return NextResponse.json(page);
       }
       // Section *names* aren't unique across years or departments (e.g. "A" exists
       // in both Year 1 and Year 2, and independently in both CSE and AIDS) - a
