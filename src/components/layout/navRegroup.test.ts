@@ -62,7 +62,6 @@ const EXPECTED: Record<string, string[]> = {
   "HOD": [
     "/hod",
     "/hod/faculty",
-    "/hod/supporting-staff",
     "/hod/sections",
     "/hod/students",
     "/hod/settings/sub-departments",
