@@ -16,6 +16,14 @@ import { calcPercent } from "./percentage";
 // sessions from before the student joined the section. Session ids are unique
 // per (assignment, date, period), so there is nothing to dedupe.
 
+/**
+ * An ON_DUTY mark (an approved permission) counts as neither held nor attended:
+ * that period is left out of the student's percentage altogether, so being away
+ * on official work can't lower it - and can't inflate it either. Every place
+ * that turns marks into held/attended must go through this.
+ */
+export const isOnDutyMark = (mark: string | null | undefined): boolean => mark === "ON_DUTY";
+
 export interface CountableSession {
   subjectId: string;
   status?: string;
@@ -46,6 +54,7 @@ export function tallyStudent(sessions: IndexedSession[], studentId: string): Hel
   let attended = 0;
   for (const { marks } of sessions) {
     if (!marks.has(studentId)) continue;
+    if (isOnDutyMark(marks.get(studentId))) continue;
     held += 1;
     if (marks.get(studentId) === "PRESENT") attended += 1;
   }
@@ -57,6 +66,7 @@ export function tallyStudentBySubject(sessions: IndexedSession[], studentId: str
   const out = new Map<string, HeldAttend>();
   for (const { session, marks } of sessions) {
     if (!marks.has(studentId)) continue;
+    if (isOnDutyMark(marks.get(studentId))) continue;
     const cur = out.get(session.subjectId) ?? { held: 0, attended: 0 };
     cur.held += 1;
     if (marks.get(studentId) === "PRESENT") cur.attended += 1;

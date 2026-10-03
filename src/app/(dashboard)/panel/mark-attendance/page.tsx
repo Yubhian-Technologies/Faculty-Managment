@@ -104,6 +104,11 @@ function updatedAtIso(s: StudentAttendanceSession | null): string | undefined {
   try { return new Date(u as string).toISOString(); } catch { return undefined; }
 }
 
+// Approved student permission: attendance is On Duty for this period and can't be changed here.
+function OnDutyTag() {
+  return <span title="Approved permission - locked" className="inline-flex items-center rounded-full border border-blue-300 bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-800">On Duty</span>;
+}
+
 export default function MarkAttendancePage() {
   const [periods, setPeriods] = useState<TodayPeriod[]>([]);
   const [noClassReason, setNoClassReason] = useState<string | null>(null);
@@ -274,7 +279,8 @@ export default function MarkAttendancePage() {
     if (!attendanceSession) return;
     if (checked) {
       setMode(next);
-      setDraft(Object.fromEntries(attendanceSession.entries.map((e) => [e.studentId, defaultFillFor(next)])));
+      // On-duty students are locked (set by an approved permission), so bulk fill skips them.
+      setDraft(Object.fromEntries(attendanceSession.entries.map((e) => [e.studentId, e.status === "ON_DUTY" ? "ON_DUTY" : defaultFillFor(next)])));
     } else {
       setMode((prev) => (prev === next ? null : prev));
     }
@@ -526,7 +532,8 @@ export default function MarkAttendancePage() {
                 <span className="mx-2 text-blue-300">|</span>
                 Present: <strong>{presentCount}</strong>
                 <span className="mx-2 text-blue-300">|</span>
-                Absent: <strong>{markedCount - presentCount}</strong>
+                Absent: <strong>{attendanceSession.entries.filter((e) => draft[e.studentId] === "ABSENT").length}</strong>
+                {attendanceSession.entries.some((e) => e.status === "ON_DUTY") && (<><span className="mx-2 text-blue-300">|</span>On Duty: <strong>{attendanceSession.entries.filter((e) => e.status === "ON_DUTY").length}</strong></>)}
               </span>
             </div>
             {isQueuedPending ? (
@@ -586,7 +593,7 @@ export default function MarkAttendancePage() {
                         <p className="font-medium text-foreground">{i + 1}. {entry.name}</p>
                         <p className="text-muted-foreground">Reg No. {entry.rollNumber}</p>
                       </div>
-                      <Switch checked={value === meaning} disabled={isReadOnly || !isExpandedOpen || !mode} onCheckedChange={(c) => handleRowCheck(entry.studentId, c)} aria-label={`Mark ${entry.name} ${meaning === "PRESENT" ? "present" : "absent"}`} />
+                      {entry.status === "ON_DUTY" ? <OnDutyTag /> : <Switch checked={value === meaning} disabled={isReadOnly || !isExpandedOpen || !mode} onCheckedChange={(c) => handleRowCheck(entry.studentId, c)} aria-label={`Mark ${entry.name} ${meaning === "PRESENT" ? "present" : "absent"}`} />}
                     </div>
                   );
                 })}
@@ -611,7 +618,7 @@ export default function MarkAttendancePage() {
                           <td className="px-4 py-2.5">{entry.rollNumber}</td>
                           <td className="px-4 py-2.5 font-medium text-foreground">{entry.name}</td>
                           <td className="px-4 py-2.5 text-center">
-                            <Switch checked={value === meaning} disabled={isReadOnly || !isExpandedOpen || !mode} onCheckedChange={(c) => handleRowCheck(entry.studentId, c)} aria-label={`Mark ${entry.name} ${meaning === "PRESENT" ? "present" : "absent"}`} />
+                            {entry.status === "ON_DUTY" ? <OnDutyTag /> : <Switch checked={value === meaning} disabled={isReadOnly || !isExpandedOpen || !mode} onCheckedChange={(c) => handleRowCheck(entry.studentId, c)} aria-label={`Mark ${entry.name} ${meaning === "PRESENT" ? "present" : "absent"}`} />}
                           </td>
                         </tr>
                       );

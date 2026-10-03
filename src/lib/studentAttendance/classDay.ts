@@ -63,3 +63,39 @@ export async function getNoClassReason(db: Firestore, collegeId: string, dateISO
     }),
   });
 }
+
+/**
+ * The dates in [fromISO, toISO] (inclusive) on which classes are actually held.
+ * Loads the college calendar ONCE for the whole range - 3 reads however long the
+ * range - instead of getNoClassReason's 3 reads per date.
+ */
+export async function getClassDays(db: Firestore, collegeId: string, fromISO: string, toISO: string): Promise<string[]> {
+  const [fy, fm, fd] = fromISO.split("-").map(Number);
+  const [ty, tm, td] = toISO.split("-").map(Number);
+  const start = istDateFromParts(fy, fm, fd);
+  const endExclusive = new Date(istDateFromParts(ty, tm, td).getTime() + 24 * 60 * 60 * 1000);
+  const collegeRef = db.collection("colleges").doc(collegeId);
+
+  const [rulesSnap, holidaySnap, summerSnap] = await Promise.all([
+    collegeRef.collection("settings").doc("timetableRules").get(),
+    collegeRef.collection("holidays").where("date", ">=", start).where("date", "<", endExclusive).get(),
+    collegeRef.collection("summerHolidays").where("toDate", ">=", start).get(),
+  ]);
+  const rules = rulesSnap.exists ? (rulesSnap.data() as { workingDays?: DayOfWeek[] }) : null;
+  const workingDays = rules?.workingDays?.length ? rules.workingDays : DEFAULT_TIMETABLE_RULES.workingDays;
+  const holidays = holidaySnap.docs.map((doc) => {
+    const data = doc.data() as { date: { toDate(): Date }; name?: string };
+    return { dateKey: istDateKey(data.date.toDate()), name: data.name ?? "" };
+  });
+  const summerBreaks = summerSnap.docs.map((doc) => {
+    const data = doc.data() as { fromDate: { toDate(): Date }; toDate: { toDate(): Date } };
+    return { fromKey: istDateKey(data.fromDate.toDate()), toKey: istDateKey(data.toDate.toDate()) };
+  });
+
+  const out: string[] = [];
+  for (let t = Date.UTC(fy, fm - 1, fd); t <= Date.UTC(ty, tm - 1, td) && out.length < 400; t += 86_400_000) {
+    const dateISO = new Date(t).toISOString().slice(0, 10);
+    if (noClassReason({ dateISO, workingDays, holidays, summerBreaks }) === null) out.push(dateISO);
+  }
+  return out;
+}

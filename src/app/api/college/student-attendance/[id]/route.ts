@@ -5,6 +5,7 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 import { checkFacultyPeriodWindow, periodWindowMessage } from "@/lib/timetable/currentPeriod";
+import { mergeMarkUpdates } from "@/lib/studentAttendance/onDuty";
 import type { StudentAttendanceEntry, StudentAttendanceMark, StudentAttendanceSession } from "@/types";
 
 const VALID_MARKS: StudentAttendanceMark[] = ["PRESENT", "ABSENT"];
@@ -101,9 +102,10 @@ export async function PATCH(
         return { error: { message: "Attendance has already been submitted and cannot be edited", status: 409 } };
       }
 
-      const entries: StudentAttendanceEntry[] = updates
-        ? fresh.entries.map((e) => (updates.has(e.studentId) ? { ...e, status: updates.get(e.studentId) ?? null } : e))
-        : fresh.entries;
+      // An ON_DUTY entry (a student officially away for this period) is locked: a
+      // faculty member's save can neither change nor clear it. It is lifted only
+      // when the permission behind it is withdrawn.
+      const entries: StudentAttendanceEntry[] = updates ? mergeMarkUpdates(fresh.entries, updates as Map<string, "PRESENT" | "ABSENT" | null>) : fresh.entries;
       const presentCount = entries.filter((e) => e.status === "PRESENT").length;
       const markedCount = entries.filter((e) => e.status != null).length;
 

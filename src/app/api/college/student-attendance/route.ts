@@ -7,6 +7,7 @@ import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 import { checkFacultyPeriodWindow, periodWindowMessage } from "@/lib/timetable/currentPeriod";
 import { resolveSubstituteSlotsForDate } from "@/lib/leave/periodCoverage";
 import { getNoClassReason } from "@/lib/studentAttendance/classDay";
+import { applyOnDutyToEntries, loadOnDutyDay, presentCountOf } from "@/lib/studentAttendance/onDuty";
 import { fetchSectionStudents } from "@/lib/students/sectionRoster";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import type { FacultyMember, Section, StudentAttendanceEntry, StudentAttendanceSession, TeachingAssignment } from "@/types";
@@ -159,6 +160,12 @@ export async function POST(request: Request) {
       labBatch,
     })).sort((a, b) => a.rollNumber.localeCompare(b.rollNumber, undefined, { numeric: true }));
 
+    // Students who are officially away for this period (an approved permission,
+    // an event, ...) arrive already marked ON_DUTY: one document read for the
+    // whole college-day, however many students are away. Resolved here, outside
+    // the transaction, like the roster itself.
+    const onDutyDay = await loadOnDutyDay(db, session.collegeId, date);
+
     // Wrap the whole DRAFT-create in a transaction so a concurrent
     // submission can't silently discard an in-flight roster merge. The
     // roster itself is fetched outside the transaction (two collection
@@ -177,13 +184,18 @@ export async function POST(request: Request) {
         }
         // DRAFT reconcile — preserve marks for still-present students
         const existingByStudent = new Map(existing.entries.map((e) => [e.studentId, e]));
-        const entries: StudentAttendanceEntry[] = students.map((s) => ({
-          studentId: s.id,
-          rollNumber: s.rollNumber,
-          name: s.name,
-          status: existingByStudent.get(s.id)?.status ?? null,
-        }));
-        const presentCount = entries.filter((e) => e.status === "PRESENT").length;
+        const entries: StudentAttendanceEntry[] = applyOnDutyToEntries(students.map((s) => {
+          const prior = existingByStudent.get(s.id);
+          return {
+            studentId: s.id,
+            rollNumber: s.rollNumber,
+            name: s.name,
+            status: prior?.status ?? null,
+            // Keep what an ON_DUTY entry remembered, so a withdrawal can restore it.
+            ...(prior?.previousStatus !== undefined ? { previousStatus: prior.previousStatus } : {}),
+          };
+        }), onDutyDay, periodNumber);
+        const presentCount = presentCountOf(entries);
         // Self-heals a draft created before `semester` started being stamped
         // (existing.semester == null) - never overwrites one already set.
         const semesterFix = existing.semester == null && semester != null ? { semester } : {};
@@ -199,12 +211,11 @@ export async function POST(request: Request) {
         return;
       }
 
-      const entries: StudentAttendanceEntry[] = students.map((s) => ({
-        studentId: s.id,
-        rollNumber: s.rollNumber,
-        name: s.name,
-        status: null,
-      }));
+      const entries: StudentAttendanceEntry[] = applyOnDutyToEntries(
+        students.map((s) => ({ studentId: s.id, rollNumber: s.rollNumber, name: s.name, status: null })),
+        onDutyDay,
+        periodNumber
+      );
       let facultyNameToStore = assignment.facultyName ?? "";
       if (substituteFor) {
         const subFacSnap = await collegeRef.collection("facultyMembers").doc(facultyMemberId).get();

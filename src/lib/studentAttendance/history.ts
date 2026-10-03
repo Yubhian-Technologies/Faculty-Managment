@@ -1,5 +1,6 @@
 import type { Firestore } from "firebase-admin/firestore";
 import type { StudentAttendanceSession } from "@/types";
+import { isOnDutyMark } from "./counting";
 
 export interface AttendanceHistoryRange {
   from?: string | null; // yyyy-mm-dd inclusive
@@ -78,6 +79,7 @@ export async function computeStudentAttendanceHistory(
   const bySubject = new Map<string, { subjectName: string; subjectCode: string; held: number; attend: number }>();
   for (const r of inRange) {
     const entry = r.entries.find((e) => e.studentId === studentId)!;
+    if (isOnDutyMark(entry.status)) continue; // away on approved duty: not part of held or attended
     const cur = bySubject.get(r.subjectId) ?? { subjectName: r.subjectName, subjectCode: r.subjectCode, held: 0, attend: 0 };
     cur.held += 1;
     if (entry.status === "PRESENT") cur.attend += 1;

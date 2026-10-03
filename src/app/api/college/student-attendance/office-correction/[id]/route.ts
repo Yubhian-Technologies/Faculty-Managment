@@ -9,6 +9,7 @@ import { getFacultyPeriodsForDate } from "@/lib/timetable/currentPeriod";
 import { resolvePeriodCompletionStatus } from "@/lib/attendance/periodAttendanceStatus";
 import { istDateFromParts } from "@/lib/attendance/istTime";
 import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
+import { mergeMarkUpdates } from "@/lib/studentAttendance/onDuty";
 import type { StudentAttendanceEntry, StudentAttendanceMark, StudentAttendanceSession } from "@/types";
 
 const VALID_MARKS: StudentAttendanceMark[] = ["PRESENT", "ABSENT"];
@@ -95,7 +96,9 @@ export async function PATCH(
           return NextResponse.json({ error: "Attendance status must be PRESENT or ABSENT" }, { status: 400 });
         }
       }
-      entries = existing.entries.map((e) => (updates.has(e.studentId) ? { ...e, status: updates.get(e.studentId) ?? null } : e));
+      // ON_DUTY is locked here too: the Office can correct a mark, but not
+      // override an approved permission.
+      entries = mergeMarkUpdates(existing.entries, updates as Map<string, "PRESENT" | "ABSENT" | null>);
     }
     const presentCount = entries.filter((e) => e.status === "PRESENT").length;
     const markedCount = entries.filter((e) => e.status != null).length;

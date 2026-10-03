@@ -8,6 +8,7 @@ import { isManualEditWindowOpen, MANUAL_EDIT_WINDOW_CLOSED_MESSAGE } from "@/lib
 import { getFacultyPeriodsForDate } from "@/lib/timetable/currentPeriod";
 import { resolvePeriodCompletionStatus } from "@/lib/attendance/periodAttendanceStatus";
 import { istDateFromParts, istMidnightUTC } from "@/lib/attendance/istTime";
+import { applyOnDutyToEntries, loadOnDutyDay, presentCountOf } from "@/lib/studentAttendance/onDuty";
 import { fetchSectionStudents } from "@/lib/students/sectionRoster";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import type { FacultyMember, Section, StudentAttendanceSession, TeachingAssignment } from "@/types";
@@ -162,6 +163,12 @@ export async function POST(request: Request) {
     const markerSnap = await collegeRef.collection("users").doc(session.uid).get();
     const markerName = (markerSnap.data() as { name?: string } | undefined)?.name ?? "";
     const now = new Date();
+    // Same overlay the faculty's own session gets: students officially away arrive ON_DUTY.
+    const roster = applyOnDutyToEntries(
+      students.map((s) => ({ studentId: s.id, rollNumber: s.rollNumber, name: s.name, status: null as null })),
+      await loadOnDutyDay(db, session.collegeId, date),
+      periodNumber
+    );
 
     const attendanceSession = {
       collegeId: session.collegeId,
@@ -185,9 +192,9 @@ export async function POST(request: Request) {
       periodNumber,
       ...(labBatch ? { labBatch } : {}),
       status: "DRAFT" as const,
-      entries: students.map((s) => ({ studentId: s.id, rollNumber: s.rollNumber, name: s.name, status: null })),
+      entries: roster,
       totalStudents: students.length,
-      presentCount: 0,
+      presentCount: presentCountOf(roster),
       classNotes: "",
       submittedAt: null,
       postedBy: "OFFICE" as const,
