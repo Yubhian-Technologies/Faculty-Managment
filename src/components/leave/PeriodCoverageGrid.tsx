@@ -8,6 +8,15 @@ export interface PeriodCoverageEntry {
   timetableSlotId: string;
   sectionName?: string;
   subjectName: string;
+  // Course short code, semester and subject short code - all optional, since
+  // each has a source that may be unset (a deleted course doc, a slot
+  // published before TimetableSlot.semester existed, a subject with no
+  // shortCode). Only LeaveApplyForm's card renders them today; the other
+  // callers of this grid keep their existing layout.
+  courseCode?: string;
+  year?: number;
+  semester?: number | null;
+  subjectCode?: string;
   // "HH:MM" clock time, when this period's course-year has a CourseYearTiming
   // configured - see lib/leave/periodCoverage.ts's RequiredPeriod.
   startTime?: string;

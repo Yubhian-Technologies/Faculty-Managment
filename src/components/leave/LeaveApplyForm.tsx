@@ -16,6 +16,7 @@ import { OD_PROOF_GRACE_DAYS } from "@/lib/leave/odProof";
 import { AlertTriangle, CalendarPlus, Users } from "lucide-react";
 import { countWorkingDays, dateKey, isoDateKey, todayISODate } from "@/lib/leave/dayCounter";
 import { toDate as toJsDate, formatDate, formatTime12h } from "@/lib/utils";
+import { toRoman } from "@/lib/academic/format";
 import { useAuthStore } from "@/store/authStore";
 import { PeriodCoverageGrid, type PeriodCoverageEntry } from "@/components/leave/PeriodCoverageGrid";
 import { HANDOVER_ENABLED } from "@/lib/leave/featureFlags";
@@ -816,8 +817,20 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
                     return (
                       <div key={key} className="space-y-1 rounded-md border p-2">
                         <p className="text-xs font-medium leading-tight">Period {p.periodNumber}</p>
+                        {/* Course - year - semester, then subject - section.
+                            Short codes and Roman year/semester, because three
+                            of these cards sit side by side: the full subject
+                            name alone used to wrap over two lines while still
+                            not saying which year or semester the class was.
+                            Each part is dropped rather than shown blank when
+                            its source is unset - a slot published before
+                            `semester` existed, a subject with no short code,
+                            a course doc since deleted. */}
                         <p className="text-xs leading-tight">
-                          {p.subjectName}
+                          {[p.courseCode, toRoman(p.year), toRoman(p.semester)].filter(Boolean).join(" · ")}
+                        </p>
+                        <p className="text-xs leading-tight">
+                          {p.subjectCode || p.subjectName}
                           {p.sectionName && <span className="text-muted-foreground"> · {p.sectionName}</span>}
                         </p>
                         {p.startTime && p.endTime && (

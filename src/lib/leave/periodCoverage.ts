@@ -105,11 +105,22 @@ export interface RequiredPeriod {
   sectionId: string;
   sectionName?: string;
   courseId?: string;
+  // The course's short code ("BTECH"), resolved from courseId. Shown instead
+  // of the full course name wherever a period has to identify itself in a
+  // card narrow enough to hold three of them side by side.
+  courseCode?: string;
   // Needed alongside courseId to look up this period's own CourseYearTiming
   // (id `${courseId}_year${year}`) for startTime/endTime below.
   year?: number;
+  // Which of the course-year's semesters this slot sits in (TimetableSlot.
+  // semester). Null/absent on slots published before that field existed.
+  semester?: number | null;
   subjectId: string;
   subjectName: string;
+  // The subject's own short mnemonic - Subject.shortCode where someone has
+  // filled it in, else the formal `code`. Absent when the subject doc is
+  // gone, in which case callers fall back to subjectName.
+  subjectCode?: string;
   // This period's clock time ("HH:MM"), resolved from its course-year's
   // CourseYearTiming (explicit periods[] if the HOD broke it down, else the
   // same defaultPeriodTimings formula the timetable grid itself falls back
@@ -168,7 +179,8 @@ export async function resolveRequiredPeriods(
     for (const s of daySlots) {
       required.push({
         date: dateISO, day, periodNumber: s.periodNumber, timetableSlotId: s.id,
-        sectionId: s.sectionId, courseId: s.courseId, year: s.year, subjectId: s.subjectId, subjectName: s.subjectName,
+        sectionId: s.sectionId, courseId: s.courseId, year: s.year, semester: s.semester ?? null,
+        subjectId: s.subjectId, subjectName: s.subjectName,
       });
     }
   }
@@ -180,6 +192,30 @@ export async function resolveRequiredPeriods(
     sectionSnaps.filter((s) => s.exists).map((s) => [s.id, (s.data() as { name?: string } | undefined)?.name])
   );
   for (const p of required) p.sectionName = sectionNameById.get(p.sectionId) ?? undefined;
+
+  // Course and subject short codes, fetched once per distinct id - a leave
+  // spanning many periods usually repeats a handful of each. A missing doc
+  // simply leaves the code unset; callers fall back to the name they already
+  // have rather than showing a gap.
+  const courseIds = Array.from(new Set(required.map((p) => p.courseId).filter((v): v is string => !!v)));
+  const subjectIds = Array.from(new Set(required.map((p) => p.subjectId).filter(Boolean)));
+  const [courseSnaps, subjectSnaps] = await Promise.all([
+    Promise.all(courseIds.map((id) => collegeRef.collection("courses").doc(id).get())),
+    Promise.all(subjectIds.map((id) => collegeRef.collection("subjects").doc(id).get())),
+  ]);
+  const courseCodeById = new Map(
+    courseSnaps.filter((d) => d.exists).map((d) => [d.id, (d.data() as { code?: string } | undefined)?.code])
+  );
+  const subjectCodeById = new Map(
+    subjectSnaps.filter((d) => d.exists).map((d) => {
+      const data = d.data() as { shortCode?: string; code?: string } | undefined;
+      return [d.id, data?.shortCode || data?.code];
+    })
+  );
+  for (const p of required) {
+    p.courseCode = (p.courseId ? courseCodeById.get(p.courseId) : undefined) ?? undefined;
+    p.subjectCode = subjectCodeById.get(p.subjectId) ?? undefined;
+  }
 
   await attachPeriodTimes(collegeRef, required);
 
