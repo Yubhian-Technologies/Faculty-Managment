@@ -2,14 +2,10 @@
 
 import { useState } from "react";
 import { SegmentedTabs } from "@/components/shared/SegmentedTabs";
-import { SectionReportsView } from "@/components/attendance/SectionReportsView";
-import { FacultyAttendanceCompletionView } from "@/components/attendance/FacultyAttendanceCompletionView";
+import { StudentAttendanceReportView } from "@/components/attendance/StudentAttendanceReportView";
 import { FacultyNotPostedView } from "@/components/attendance/FacultyNotPostedView";
-import { StudentAttendanceByStudentView } from "@/components/attendance/StudentAttendanceByStudentView";
 
 type Person = "faculty" | "students";
-type FacultySub = "completion" | "notposted";
-type StudentSub = "reports" | "byStudent";
 
 // Every attendance REPORT module in one place - was 6 separate sidebar
 // items (Attendance Reports, Attendance History, Attendance Completion,
@@ -21,8 +17,6 @@ type StudentSub = "reports" | "byStudent";
 // not deleted) for any existing notification links/bookmarks.
 export default function HodAttendanceReportsPage() {
   const [person, setPerson] = useState<Person>("students");
-  const [facultySub, setFacultySub] = useState<FacultySub>("completion");
-  const [studentSub, setStudentSub] = useState<StudentSub>("reports");
 
   return (
     <div className="space-y-4">
@@ -36,41 +30,9 @@ export default function HodAttendanceReportsPage() {
       />
 
       {person === "faculty" ? (
-        <>
-          <div className="overflow-x-auto pb-1">
-            <SegmentedTabs
-              value={facultySub}
-              onChange={(k) => setFacultySub(k as FacultySub)}
-              options={[
-                { key: "completion", label: "Completion" },
-                { key: "notposted", label: "Not Posted" },
-              ]}
-            />
-          </div>
-          {facultySub === "completion" && (
-            <FacultyAttendanceCompletionView
-              title="Attendance Completion"
-              description="Check whether your department's faculty submitted student attendance for their scheduled periods, and whether it was on time"
-              hodScoped
-            />
-          )}
-          {facultySub === "notposted" && <FacultyNotPostedView hodScoped />}
-        </>
+        <FacultyNotPostedView hodScoped />
       ) : (
-        <>
-          <div className="overflow-x-auto pb-1">
-            <SegmentedTabs
-              value={studentSub}
-              onChange={(k) => setStudentSub(k as StudentSub)}
-              options={[
-                { key: "reports", label: "Reports" },
-                { key: "byStudent", label: "By Student" },
-              ]}
-            />
-          </div>
-          {studentSub === "reports" && <SectionReportsView title="Student Attendance" />}
-          {studentSub === "byStudent" && <StudentAttendanceByStudentView />}
-        </>
+        <StudentAttendanceReportView title="Student Attendance" scoped />
       )}
     </div>
   );

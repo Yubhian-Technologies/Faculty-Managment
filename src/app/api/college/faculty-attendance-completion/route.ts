@@ -4,9 +4,10 @@ import { NextResponse } from "next/server";
 import type { Timestamp } from "firebase-admin/firestore";
 import { requireCollegeMember, isCollegeAdmin } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
+import { getHodDepartmentScope, canHodEditDepartment, facultyManageableDepartmentNames } from "@/lib/departments/scope";
 import { resolveMergedCourseIds } from "@/lib/departments/courseGrouping";
 import { getFacultyPeriodsForDate } from "@/lib/timetable/currentPeriod";
+import { isFacultyAvailable } from "@/types";
 import { resolvePeriodCompletionStatus } from "@/lib/attendance/periodAttendanceStatus";
 import { aggregateNotPosted, type PeriodSlotWithStatus } from "@/lib/studentAttendance/notPostedAggregation";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
@@ -14,6 +15,36 @@ import { istDateFromParts, istDateKey } from "@/lib/attendance/istTime";
 import type { Course, FacultyMember, StudentAttendanceSession, TeachingAssignment } from "@/types";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+// Faculty who actually teach `courseId` in `department`, via teachingAssignments.
+// The Course dropdown a courseId came from can legally list two different doc
+// ids for the same conceptual course (a legacy pre-catalog doc alongside a
+// properly catalog-linked one - see lib/departments/courseGrouping.ts) and
+// teachingAssignments may be attached to either, so the whole duplicate group is
+// resolved here, live, rather than trusting the caller to have deduped.
+async function facultyIdsTeachingCourse(
+  collegeRef: FirebaseFirestore.DocumentReference,
+  department: string,
+  courseId: string
+): Promise<string[]> {
+  let courseIdsToQuery = [courseId];
+  const courseSnap = await collegeRef.collection("courses").doc(courseId).get();
+  if (courseSnap.exists) {
+    const courseDeptId = (courseSnap.data() as Course).departmentId;
+    const siblingsSnap = await collegeRef.collection("courses").where("departmentId", "==", courseDeptId).get();
+    const siblings = siblingsSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as Course & { id: string });
+    courseIdsToQuery = resolveMergedCourseIds(siblings, courseId);
+  }
+  const assignmentsSnap = await collegeRef
+    .collection("teachingAssignments")
+    .where("department", "==", department)
+    .where("courseId", "in", courseIdsToQuery)
+    .get();
+  return Array.from(
+    new Set(assignmentsSnap.docs.map((d) => (d.data() as TeachingAssignment).facultyId).filter(Boolean))
+  );
+}
+
 
 // "HH:MM" in the college's local calendar - sent to the client instead of the
 // raw Firestore Timestamp so it doesn't need its own Timestamp deserialization
@@ -199,6 +230,68 @@ export async function GET(request: Request) {
       return NextResponse.json({ facultyId, facultyName: facultyDisplayName(faculty), date, periods });
     }
 
+    // Everyone at once ("All departments" in the picker): per-faculty not-posted
+    // counts for a day or a short period. Principal/VP: the whole college; an
+    // HOD: their own department tree only (same boundary as the single-faculty
+    // path above). Capped at 31 days because every faculty x day is a timetable
+    // lookup, and run a handful of faculty at a time rather than all at once.
+    if (searchParams.get("all") === "true") {
+      const dates: string[] = [];
+      if (fromParam && toParam) {
+        if (!DATE_RE.test(fromParam) || !DATE_RE.test(toParam) || fromParam > toParam) {
+          return NextResponse.json({ error: "Valid from/to (YYYY-MM-DD) with from <= to required" }, { status: 400 });
+        }
+        for (let cur = new Date(fromParam + "T00:00:00"); cur <= new Date(toParam + "T00:00:00"); cur.setDate(cur.getDate() + 1)) {
+          dates.push(`${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, "0")}-${String(cur.getDate()).padStart(2, "0")}`);
+        }
+        if (dates.length > 31) return NextResponse.json({ error: "Pick at most 31 days when viewing all faculty" }, { status: 400 });
+      } else if (DATE_RE.test(date)) {
+        dates.push(date);
+      } else {
+        return NextResponse.json({ error: "A valid date or from/to is required" }, { status: 400 });
+      }
+
+      const hodScope = session.role === "HOD" ? await getHodDepartmentScope(db, session.collegeId, session.uid) : null;
+      const hodDepartments = hodScope ? new Set(facultyManageableDepartmentNames(hodScope)) : null;
+      // A department + course narrows "everyone" to the faculty teaching that course.
+      let teachingCourse: Set<string> | null = null;
+      if (department && courseId) {
+        if (hodScope && !canHodEditDepartment(hodScope, department)) {
+          return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+        }
+        teachingCourse = new Set(await facultyIdsTeachingCourse(collegeRef, department, courseId));
+      }
+      const facultySnap = await collegeRef.collection("facultyMembers").get();
+      const people = facultySnap.docs
+        .map((d) => ({ ...(d.data() as FacultyMember), id: d.id }))
+        .filter((f) => isFacultyAvailable(f.status) && (!hodDepartments || hodDepartments.has(f.department ?? ""))
+          && (!teachingCourse || teachingCourse.has(f.id)));
+
+      const timingCache = new Map();
+      const rows: { facultyId: string; name: string; department: string; totalPeriods: number; onTime: number; late: number; notMarked: number; pending: number }[] = [];
+      for (let i = 0; i < people.length; i += 8) {
+        const chunk = await Promise.all(people.slice(i, i + 8).map(async (f) => {
+          const statuses: PeriodSlotWithStatus[] = [];
+          for (const d of dates) {
+            const slots = await getFacultyPeriodsForDate(db, session.collegeId, f.id, d, timingCache);
+            const snaps = await Promise.all(slots.map((p) => collegeRef.collection("studentAttendance").doc(`${p.slot.assignmentId}_${d}_${p.slot.periodNumber}`).get()));
+            slots.forEach((p, k) => {
+              const sess = snaps[k].exists ? (snaps[k].data() as StudentAttendanceSession) : null;
+              statuses.push({
+                periodNumber: p.slot.periodNumber, startTime: p.startTime, endTime: p.endTime, assignmentId: p.slot.assignmentId,
+                status: resolvePeriodCompletionStatus({ dateISO: d, endTime: p.endTime, session: sess }),
+              });
+            });
+          }
+          const agg = aggregateNotPosted(statuses);
+          return { facultyId: f.id, name: facultyDisplayName(f), department: f.department ?? "", totalPeriods: agg.totalPeriods, onTime: agg.onTime, late: agg.late, notMarked: agg.notMarked, pending: agg.pending };
+        }));
+        rows.push(...chunk);
+      }
+      rows.sort((a, b) => a.department.localeCompare(b.department) || a.name.localeCompare(b.name));
+      return NextResponse.json({ dates, rows });
+    }
+
     if (!department || !courseId) {
       return NextResponse.json({ error: "department and courseId are required" }, { status: 400 });
     }
@@ -210,31 +303,7 @@ export async function GET(request: Request) {
       }
     }
 
-    // The Course dropdown this courseId came from can legally list two
-    // different doc ids for the same conceptual course (a legacy pre-catalog
-    // doc alongside a properly catalog-linked one - see
-    // lib/departments/courseGrouping.ts) - teachingAssignments may be
-    // attached to either one. Resolve the full duplicate-group id set here,
-    // live, rather than trusting the caller to have already deduped, so
-    // faculty don't silently disappear depending on which duplicate got
-    // picked.
-    let courseIdsToQuery = [courseId];
-    const courseSnap = await collegeRef.collection("courses").doc(courseId).get();
-    if (courseSnap.exists) {
-      const courseDeptId = (courseSnap.data() as Course).departmentId;
-      const siblingsSnap = await collegeRef.collection("courses").where("departmentId", "==", courseDeptId).get();
-      const siblings = siblingsSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as Course & { id: string });
-      courseIdsToQuery = resolveMergedCourseIds(siblings, courseId);
-    }
-
-    const assignmentsSnap = await collegeRef
-      .collection("teachingAssignments")
-      .where("department", "==", department)
-      .where("courseId", "in", courseIdsToQuery)
-      .get();
-    const facultyIds = Array.from(
-      new Set(assignmentsSnap.docs.map((d) => (d.data() as TeachingAssignment).facultyId).filter(Boolean))
-    );
+    const facultyIds = await facultyIdsTeachingCourse(collegeRef, department, courseId);
 
     if (facultyIds.length === 0) {
       return NextResponse.json({ faculty: [] });

@@ -2,7 +2,9 @@ import ExcelJS from "exceljs";
 import { escapeHtml } from "./facultyTimetablePdf";
 import { renderHtmlToPdf } from "@/lib/pdf/htmlToPdf";
 
-export interface FreeFacultyRow { employeeId: string; name: string; department: string }
+export interface FreeFacultyRow { employeeId: string; name: string; department: string; freeRanges?: [string, string][] }
+
+const freeText = (f: FreeFacultyRow) => (f.freeRanges ? f.freeRanges.map(([a, b]) => `${a}-${b}`).join(", ") : "Whole range");
 
 // Downloads for the "Show free faculty" list: one block per department with
 // S.No / Employee ID / Name, matching the on-screen tables. `slotLabel` is e.g.
@@ -26,22 +28,23 @@ export async function downloadFreeFacultyXlsx(rows: FreeFacultyRow[], slotLabel:
   sheet.getColumn(1).width = 8;
   sheet.getColumn(2).width = 18;
   sheet.getColumn(3).width = 40;
+  sheet.getColumn(4).width = 24;
   const title = sheet.addRow([`Free faculty - ${slotLabel}`]);
   title.font = { bold: true, size: 13 };
-  sheet.mergeCells(1, 1, 1, 3);
+  sheet.mergeCells(1, 1, 1, 4);
   const thin = { style: "thin" as const };
   const border = { top: thin, left: thin, bottom: thin, right: thin };
   for (const [dept, list] of groupByDepartment(rows)) {
     sheet.addRow([]); // spacer
     const deptRow = sheet.addRow([`${dept} (${list.length})`]);
-    sheet.mergeCells(deptRow.number, 1, deptRow.number, 3);
+    sheet.mergeCells(deptRow.number, 1, deptRow.number, 4);
     deptRow.font = { bold: true, size: 12 };
     deptRow.getCell(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE8EEF7" } };
-    const header = sheet.addRow(["S.No", "Employee ID", "Name"]);
+    const header = sheet.addRow(["S.No", "Employee ID", "Name", "Free"]);
     header.font = { bold: true };
     header.eachCell((c) => { c.border = border; });
     list.forEach((f, i) => {
-      const row = sheet.addRow([i + 1, f.employeeId || "-", f.name]);
+      const row = sheet.addRow([i + 1, f.employeeId || "-", f.name, freeText(f)]);
       row.eachCell({ includeEmpty: true }, (c) => { c.border = border; });
       row.getCell(1).alignment = { horizontal: "left" };
     });
@@ -66,11 +69,13 @@ export async function downloadFreeFacultyPdf(rows: FreeFacultyRow[], slotLabel: 
         <th style="border:1px solid #999;padding:5px;width:50px;text-align:left">S.No</th>
         <th style="border:1px solid #999;padding:5px;text-align:left">Employee ID</th>
         <th style="border:1px solid #999;padding:5px;text-align:left">Name</th>
+        <th style="border:1px solid #999;padding:5px;text-align:left">Free</th>
       </tr></thead>
       <tbody>${list.map((f, i) => `<tr>
         <td style="border:1px solid #999;padding:5px">${i + 1}</td>
         <td style="border:1px solid #999;padding:5px">${escapeHtml(f.employeeId || "-")}</td>
         <td style="border:1px solid #999;padding:5px">${escapeHtml(f.name)}</td>
+        <td style="border:1px solid #999;padding:5px">${escapeHtml(freeText(f))}</td>
       </tr>`).join("")}</tbody>
     </table>`).join("");
   const html = `<!doctype html><html><head><meta charset="utf-8"><title>Free faculty</title></head>
