@@ -1,17 +1,19 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { TableSkeleton } from "@/components/shared/SkeletonLoader";
+import { SegmentedTabs } from "@/components/shared/SegmentedTabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/useToast";
 import { currentWeekDates } from "@/lib/utils";
 import { isoDateKey } from "@/lib/leave/dayCounter";
 import { InstitutionalTimetableTable } from "@/components/timetable/InstitutionalTimetableTable";
-import { ordinalYear } from "@/lib/timetable/gridModel";
+import { StudentDayTimetable } from "@/components/timetable/StudentDayTimetable";
+import { ALL_DAYS, ordinalYear } from "@/lib/timetable/gridModel";
 import { toRoman, formatAcademicShortNotation } from "@/lib/academic/format";
 import type { Course, Department, Section, CourseYearTiming, TimetableSlot, SubjectType, Subject, TeachingAssignment, DayOfWeek } from "@/types";
 
@@ -28,14 +30,22 @@ interface ApiResponse {
   availableSemesters?: { semester: number; label?: string }[];
   workingDays?: DayOfWeek[];
   departments?: Department[];
+  myLabBatch?: string;
   error?: string;
 }
 
-// Own-section weekly timetable for a STUDENT login - same page as
-// (dashboard)/class-leader/timetable/page.tsx (semester switcher, theory/
-// practical/batch filters, week nav, full PDF/Excel export via
-// InstitutionalTimetableTable), pointed at the student-scoped API instead of
-// a class-rep's bound section.
+function todayDay(): DayOfWeek {
+  const idx = new Date().getDay(); // 0 = Sunday
+  return idx === 0 ? "MON" : ALL_DAYS[idx - 1];
+}
+
+function shortDate(d: Date): string {
+  return d.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+}
+
+// Own-section weekly timetable for a STUDENT login. On a phone it opens on one
+// day at a time (day buttons + that day's periods); "Week" and wide screens
+// show the whole grid, which also carries the PDF / Excel / print downloads.
 export default function StudentTimetablePage() {
   const [course, setCourse] = useState<Course | null>(null);
   const [section, setSection] = useState<Section | null>(null);
@@ -46,12 +56,14 @@ export default function StudentTimetablePage() {
   const [departments, setDepartments] = useState<Department[]>([]);
   const [availableSemesters, setAvailableSemesters] = useState<{ semester: number; label?: string }[]>([]);
   const [workingDays, setWorkingDays] = useState<DayOfWeek[]>([]);
+  const [myLabBatch, setMyLabBatch] = useState("");
   const [selectedSemester, setSelectedSemester] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   const [typeFilter, setTypeFilter] = useState<"ALL" | "THEORY" | "PRACTICAL">("ALL");
   const [batchValue, setBatchValue] = useState("");
-
+  const [view, setView] = useState<"day" | "week">("day");
+  const [selectedDay, setSelectedDay] = useState<DayOfWeek>(todayDay);
   const [weekStart, setWeekStart] = useState<Date>(() => currentWeekDates()[0]);
 
   function changeWeek(d: Date) {
@@ -66,9 +78,7 @@ export default function StudentTimetablePage() {
 
   useEffect(() => {
     const params = new URLSearchParams({ week: isoDateKey(weekStart) });
-    if (selectedSemester != null) {
-      params.set("semester", String(selectedSemester));
-    }
+    if (selectedSemester != null) params.set("semester", String(selectedSemester));
 
     fetch(`/api/college/student/me/timetable?${params.toString()}`)
       .then((r) => r.json() as Promise<ApiResponse>)
@@ -82,9 +92,8 @@ export default function StudentTimetablePage() {
         setDepartments(d.departments ?? []);
         setAvailableSemesters(d.availableSemesters ?? []);
         setWorkingDays(d.workingDays ?? []);
-        if (selectedSemester == null && d.resolvedSemester != null) {
-          setSelectedSemester(d.resolvedSemester);
-        }
+        setMyLabBatch(d.myLabBatch ?? "");
+        if (selectedSemester == null && d.resolvedSemester != null) setSelectedSemester(d.resolvedSemester);
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load timetable" }))
       .finally(() => setIsLoading(false));
@@ -104,143 +113,158 @@ export default function StudentTimetablePage() {
     return name.includes("lab") || name.includes("practical");
   }
 
+  // When the server already narrowed lab periods to this student's own batch
+  // there is nothing to pick; the batch filter only appears for a student with
+  // no batch assigned yet.
   const batchOptions = useMemo(
-    () => Array.from(new Set(slots.map((s) => s.labBatch).filter((b): b is string => !!b))),
-    [slots]
+    () => (myLabBatch ? [] : Array.from(new Set(slots.map((s) => s.labBatch).filter((b): b is string => !!b)))),
+    [slots, myLabBatch]
   );
 
-  const hasActiveFilters = typeFilter !== "ALL" || Boolean(batchValue);
-
-  const filteredSlots = useMemo(() => {
-    return slots.filter((s) => {
-      if (typeFilter === "THEORY" && !isTheorySlot(s)) return false;
-      if (typeFilter === "PRACTICAL" && !isPracticalSlot(s)) return false;
-      if (batchValue && s.labBatch !== batchValue) return false;
-      return true;
-    });
-  }, [slots, typeFilter, batchValue]);
+  const filteredSlots = useMemo(
+    () =>
+      slots.filter((s) => {
+        if (typeFilter === "THEORY" && !isTheorySlot(s)) return false;
+        if (typeFilter === "PRACTICAL" && !isPracticalSlot(s)) return false;
+        if (batchValue && s.labBatch !== batchValue) return false;
+        return true;
+      }),
+    [slots, typeFilter, batchValue]
+  );
 
   const departmentName = useMemo(() => {
     if (!section) return "";
     return departments.find((d) => d.id === section.department || d.name === section.department)?.name || section.department;
   }, [departments, section]);
 
-  return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-card/90 backdrop-blur-sm p-5 rounded-3xl border border-border/60 shadow-xs">
-        <PageHeader
-          title={
-            section
-              ? `${formatAcademicShortNotation({
-                  year: section.year,
-                  courseName: course?.name,
-                  courseCode: course?.code,
-                  semester: selectedSemester,
-                  sectionName: section.name,
-                })} · Timetable`
-              : "My Timetable"
-          }
-          description={section && course ? `${departmentName} · Weekly Schedule` : "Your weekly class schedule"}
-          className="mb-0"
-        />
-        <div className="flex items-center gap-2 shrink-0">
-          <Button asChild variant="outline" size="sm" className="rounded-full border-border/60">
-            <Link href="/student">
-              <ArrowLeft className="h-4 w-4 mr-1.5" /> Back to Dashboard
-            </Link>
-          </Button>
-        </div>
-      </div>
+  const weekEnd = new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate() + 5);
+  const isThisWeek = isoDateKey(weekStart) === isoDateKey(currentWeekDates()[0]);
+  const shiftWeek = (days: number) =>
+    changeWeek(new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate() + days));
 
-      {isLoading ? (
-        <div className="rounded-3xl border border-border/60 bg-card/90 shadow-xs p-4">
-          <TableSkeleton rows={6} cols={6} />
+  const showSemesterPicker = availableSemesters.length > 1;
+  const showBatchPicker = batchOptions.length > 0;
+
+  return (
+    <div className="space-y-4">
+      <PageHeader
+        title={
+          section
+            ? `${formatAcademicShortNotation({
+                year: section.year,
+                courseName: course?.name,
+                courseCode: course?.code,
+                semester: selectedSemester,
+                sectionName: section.name,
+              })}`
+            : "My Timetable"
+        }
+        description={section && course ? `${departmentName} · Timetable` : "Your weekly class schedule"}
+      />
+
+      {isLoading && !timing ? (
+        <div className="rounded-2xl border border-border/60 bg-card/90 p-4 shadow-xs">
+          <TableSkeleton rows={6} cols={4} />
         </div>
       ) : !section ? (
-        <div className="rounded-3xl border border-dashed p-8 text-center text-sm text-muted-foreground bg-muted/10">
-          <p className="font-semibold text-foreground text-base">No Section Linked</p>
-          <p className="mt-1 text-xs">No class/section is linked to your login yet. Please contact your College Office.</p>
+        <div className="rounded-2xl border border-dashed bg-muted/10 p-8 text-center text-sm text-muted-foreground">
+          <p className="text-base font-semibold text-foreground">No class linked</p>
+          <p className="mt-1 text-xs">No class or section is linked to your login yet. Please contact your College Office.</p>
         </div>
       ) : !timing ? (
-        <div className="rounded-3xl border border-dashed p-8 text-center text-sm text-muted-foreground bg-muted/10">
-          <p className="font-semibold text-foreground text-base">Timings Not Configured</p>
+        <div className="rounded-2xl border border-dashed bg-muted/10 p-8 text-center text-sm text-muted-foreground">
+          <p className="text-base font-semibold text-foreground">Timings not set up</p>
           <p className="mt-1 text-xs">Timings haven&rsquo;t been configured for {course?.name} - {ordinalYear(section.year)} yet.</p>
         </div>
       ) : (
-        <div className="space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-3xl border border-border/60 bg-card/90 shadow-xs">
-            {availableSemesters.length > 1 && (
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold text-muted-foreground">Semester:</span>
-                <div className="inline-flex p-1 bg-muted/60 rounded-full border border-border/50 shadow-xs gap-1">
-                  {availableSemesters.map((sem) => (
-                    <Button
-                      key={sem.semester}
-                      type="button"
-                      size="sm"
-                      variant={selectedSemester === sem.semester ? "default" : "ghost"}
-                      className="h-7 text-xs px-3 rounded-full font-medium"
-                      onClick={() => changeSemester(sem.semester)}
-                    >
-                      {toRoman(sem.semester)} Sem
-                    </Button>
-                  ))}
-                </div>
+        <>
+          <div className="space-y-3 rounded-2xl border border-border/60 bg-card/90 p-3 shadow-xs sm:p-4">
+            {/* Week: prev / label / next, and a way back to this week */}
+            <div className="flex items-center justify-between gap-2">
+              <Button variant="outline" size="icon" className="h-9 w-9 shrink-0" onClick={() => shiftWeek(-7)} aria-label="Previous week">
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <div className="min-w-0 text-center">
+                <p className="text-sm font-medium">{shortDate(weekStart)} – {shortDate(weekEnd)}</p>
+                {!isThisWeek && (
+                  <button type="button" className="text-xs text-primary underline-offset-2 hover:underline" onClick={() => changeWeek(currentWeekDates()[0])}>
+                    Back to this week
+                  </button>
+                )}
               </div>
-            )}
+              <Button variant="outline" size="icon" className="h-9 w-9 shrink-0" onClick={() => shiftWeek(7)} aria-label="Next week">
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
 
-            <div className="flex items-center gap-2 flex-wrap">
-              <div className="inline-flex p-1 bg-muted/60 rounded-full border border-border/50 shadow-xs gap-1">
-                {(["ALL", "THEORY", "PRACTICAL"] as const).map((t) => (
-                  <Button
-                    key={t}
-                    type="button"
-                    size="sm"
-                    variant={typeFilter === t ? "default" : "ghost"}
-                    className="h-7 text-xs px-3 rounded-full font-medium transition-all"
-                    onClick={() => setTypeFilter(t)}
-                  >
-                    {t === "ALL" ? "All" : t === "THEORY" ? "Theory" : "Practical"}
-                  </Button>
-                ))}
-              </div>
-
-              {batchOptions.length > 0 && (
-                <div className="flex items-center gap-1.5">
-                  <Select value={batchValue || "__all__"} onValueChange={(v) => setBatchValue(v === "__all__" ? "" : v)}>
-                    <SelectTrigger className="h-8 text-xs w-28 rounded-full border-border/60 bg-muted/30">
-                      <SelectValue placeholder="Batch: All" />
-                    </SelectTrigger>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              {showSemesterPicker && (
+                <div className="space-y-1">
+                  <Label className="text-xs">Semester</Label>
+                  <Select value={selectedSemester != null ? String(selectedSemester) : ""} onValueChange={(v) => changeSemester(Number(v))}>
+                    <SelectTrigger className="h-9"><SelectValue placeholder="Semester" /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="__all__">All Batches</SelectItem>
-                      {batchOptions.map((b) => (
-                        <SelectItem key={b} value={b}>
-                          {b}
-                        </SelectItem>
+                      {availableSemesters.map((s) => (
+                        <SelectItem key={s.semester} value={String(s.semester)}>{toRoman(s.semester)} Sem</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
               )}
-
-              {hasActiveFilters && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setTypeFilter("ALL");
-                    setBatchValue("");
-                  }}
-                  className="h-8 text-xs px-2 rounded-full text-muted-foreground hover:text-foreground"
-                >
-                  Clear filters
-                </Button>
+              <div className="space-y-1">
+                <Label className="text-xs">Show</Label>
+                <Select value={typeFilter} onValueChange={(v) => setTypeFilter(v as typeof typeFilter)}>
+                  <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ALL">All</SelectItem>
+                    <SelectItem value="THEORY">Theory</SelectItem>
+                    <SelectItem value="PRACTICAL">Practical</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {showBatchPicker && (
+                <div className="space-y-1">
+                  <Label className="text-xs">Lab batch</Label>
+                  <Select value={batchValue || "__all__"} onValueChange={(v) => setBatchValue(v === "__all__" ? "" : v)}>
+                    <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__all__">All batches</SelectItem>
+                      {batchOptions.map((b) => <SelectItem key={b} value={b}>{b}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
               )}
+            </div>
+
+            <div className="lg:hidden">
+              <SegmentedTabs
+                className="w-full [&>button]:flex-1"
+                options={[{ key: "day", label: "Day" }, { key: "week", label: "Week" }]}
+                value={view}
+                onChange={(k) => setView(k as "day" | "week")}
+              />
             </div>
           </div>
 
-          <div className="w-full min-w-0 rounded-3xl border border-border/60 bg-card/90 shadow-xs p-3 sm:p-4 overflow-hidden">
+          {isLoading && (
+            <p className="text-center text-xs text-muted-foreground" role="status">Loading…</p>
+          )}
+
+          {/* Phone: one day at a time */}
+          <div className={view === "day" ? "lg:hidden" : "hidden"}>
+            <StudentDayTimetable
+              weekStart={weekStart}
+              timing={timing}
+              slots={filteredSlots}
+              subjects={subjects}
+              workingDays={workingDays}
+              selectedDay={selectedDay}
+              onSelectDay={setSelectedDay}
+            />
+          </div>
+
+          {/* Whole week: always on wide screens, on request on phones */}
+          <div className={`min-w-0 overflow-hidden rounded-2xl border border-border/60 bg-card/90 p-2 shadow-xs sm:p-4 ${view === "day" ? "hidden lg:block" : ""}`}>
             <InstitutionalTimetableTable
               section={section}
               timing={timing}
@@ -252,12 +276,12 @@ export default function StudentTimetablePage() {
               workingDays={workingDays}
               weekStart={weekStart}
               onWeekChange={changeWeek}
-              showWeekNav={true}
+              showWeekNav={false}
               assignments={assignments}
               subjects={subjects}
             />
           </div>
-        </div>
+        </>
       )}
     </div>
   );

@@ -117,25 +117,25 @@ export default function StudentPermissionsPage() {
               return (
                 <AccordionItem key={category.id} value={category.id}>
                   <AccordionTrigger className="hover:no-underline">
-                    <div className="flex items-center gap-3 text-left">
+                    <div className="flex min-w-0 items-center gap-3 text-left">
                       <div className="h-8 w-8 rounded-xl bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shrink-0">
                         <Icon className="h-4 w-4" />
                       </div>
-                      <div>
-                        <p className="font-semibold text-sm text-foreground">{category.label}</p>
+                      <div className="min-w-0">
+                        <p className="font-semibold text-sm text-foreground break-words">{category.label}</p>
                         <p className="text-xs text-muted-foreground">{category.items.length} request types</p>
                       </div>
                     </div>
                   </AccordionTrigger>
                   <AccordionContent>
-                    <div className="space-y-2 pl-11">
+                    <div className="space-y-2 sm:pl-11">
                       {category.items.map((item) => (
                         <div
                           key={item}
                           className="flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-muted/20 px-3 py-2.5"
                         >
-                          <span className="text-sm text-foreground">{item}</span>
-                          <Button size="sm" variant="outline" onClick={handleRequest}>
+                          <span className="min-w-0 break-words text-sm text-foreground">{item}</span>
+                          <Button size="sm" variant="outline" className="shrink-0" onClick={handleRequest}>
                             Request
                           </Button>
                         </div>

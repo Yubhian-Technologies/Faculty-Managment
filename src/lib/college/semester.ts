@@ -130,7 +130,7 @@ export function draftDocId(sectionId: string, semester: number | null): string {
 // Assignments, Class Work Records, Student Attendance History) agrees with
 // the Timetable editor about which CourseYearTiming doc actually governs a
 // shared-year branch instead of reporting it as unconfigured.
-async function loadEffectiveTiming(
+export async function loadEffectiveTiming(
   db: Firestore,
   collegeId: string,
   courseId: string,
