@@ -1,3 +1,5 @@
+import { appendFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { beforeAll, describe, expect, it } from "vitest";
 import { getApps, initializeApp } from "firebase-admin/app";
 import { getFirestore, Timestamp, type Firestore } from "firebase-admin/firestore";
@@ -16,7 +18,7 @@ let db: Firestore;
 let reads = 0;
 function instrument() {
   /* eslint-disable @typescript-eslint/no-explicit-any */
-  const fs = require("@google-cloud/firestore") as any;
+  const fs = createRequire(import.meta.url)("@google-cloud/firestore") as any;
   const wrap = (proto: any, name: string, count: (r: any) => number) => {
     const orig = proto[name];
     proto[name] = async function (...a: unknown[]) { const r = await orig.apply(this, a); reads += count(r); return r; };
@@ -58,8 +60,7 @@ describe.skipIf(!RUN)("substitution lookup reads", () => {
     invalidateSubstitutionCache();
     reads = 0;
     await getFacultyPeriodsForDate(db, C, "F1", TODAY);
-    // eslint-disable-next-line no-console
-    require("fs").appendFileSync("/tmp/reads.out", `leaves=${LEAVES} periodLookupReads=${reads}\n`);
+    appendFileSync("/tmp/reads.out", `leaves=${LEAVES} periodLookupReads=${reads}\n`);
     expect(reads).toBeLessThan(LEAVES / 10);
   });
 
@@ -76,7 +77,7 @@ describe.skipIf(!RUN)("substitution lookup reads", () => {
     const first = reads;
     reads = 0;
     for (let i = 0; i < 50; i++) await getActiveSubstitutionsForDates(db, C, [TODAY]);
-    require("fs").appendFileSync("/tmp/reads.out", `firstLookup=${first} fiftyMore=${reads}\n`);
+    appendFileSync("/tmp/reads.out", `firstLookup=${first} fiftyMore=${reads}\n`);
     expect(reads).toBe(0);
   });
 });
