@@ -50,7 +50,7 @@ describe("Excel export", () => {
     expect(report.total).toBe(59 + 64 + 256 + 12 + 7 + 3);
 
     const sec = back.getWorksheet("Section-wise")!;
-    expect(sec.getRow(1).values).toEqual([undefined, "Program", "Department", "Year", "Section", "Students"]);
+    expect(sec.getRow(1).values).toEqual([undefined, "Course", "Department", "Year", "Section", "Students"]);
     const last = sec.getRow(sec.rowCount).values as (string | number)[];
     expect(last[1]).toBe("TOTAL");
     expect(last[5]).toBe(report.total);
@@ -64,7 +64,7 @@ describe("Excel export", () => {
 describe("CSV export", () => {
   it("emits one row per program/department/year/section plus a TOTAL that matches", () => {
     const csv = strengthCsvRows(report);
-    expect(csv[0]).toEqual(["Program", "Department", "Year", "Section", "Students"]);
+    expect(csv[0]).toEqual(["Course", "Department", "Year", "Section", "Students"]);
     expect(csv.slice(1, -1).reduce((s, r) => s + Number(r[4]), 0)).toBe(report.total);
     expect(csv[csv.length - 1]).toEqual(["TOTAL", "", "", "", String(report.total)]);
     expect(csv).toContainEqual(["M.Tech", "AMFS", "II", "M", "7"]);

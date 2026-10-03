@@ -42,8 +42,18 @@ export interface NavItem {
 // highlights its parent). The exact-match guard prevents a shorter href
 // (e.g. "/super-admin/users") from also lighting up when a sibling item's
 // href (e.g. "/super-admin/users/new") is the one that exactly matches.
+const SUB_PAGE_PARENT: Record<string, string> = {
+  "/hod/supporting-staff": "/hod/faculty", // tab of the Faculty page
+  "/hod/assignment-requests": "/hod/teaching-assignments", // button on the Teaching Assignments page
+};
+
 export function isNavItemActive(item: NavItem, pathname: string, allItems: NavItem[]): boolean {
   if (pathname === item.href) return true;
+  // Pages reached from a button/tab on another page have no sidebar item of
+  // their own - they highlight that page's item instead (and nothing else).
+  for (const [subPage, parentHref] of Object.entries(SUB_PAGE_PARENT)) {
+    if (pathname === subPage || pathname.startsWith(subPage + "/")) return item.href === parentHref;
+  }
   if (allItems.some((i) => i.href === pathname)) return false;
   return item.href !== "/" && pathname.startsWith(item.href + "/");
 }
@@ -250,7 +260,8 @@ export const NAV_ITEMS: NavItem[] = [
   // visible per college via the Nav Visibility settings (filterVisibleNavItems).
   { label: "Dashboard", href: "/hod", iconName: "LayoutDashboard", roles: ["HOD"] },
   { label: "Faculty", href: "/hod/faculty", iconName: "UsersRound", roles: ["HOD"], section: "Department" },
-  { label: "Supporting Staff", href: "/hod/supporting-staff", iconName: "UsersRound", roles: ["HOD"] },
+  // No separate "Supporting Staff" item: it is a tab on the Faculty page
+  // (hod/faculty/page.tsx), and isNavItemActive keeps Faculty highlighted there.
   { label: "Sections", href: "/hod/sections", iconName: "BookMarked", roles: ["HOD"] },
   { label: "Students", href: "/hod/students", iconName: "GraduationCap", roles: ["HOD"], module: "students" },
   { label: "Sub-Departments", href: "/hod/settings/sub-departments", iconName: "Settings2", roles: ["HOD"] },
@@ -262,7 +273,8 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Department Office", href: "/hod/settings/department-office", iconName: "UserCog", roles: ["HOD"], hideForRealRoles: ["DEPARTMENT_OFFICE"] },
   { label: "Subjects", href: "/hod/subjects", iconName: "Library", roles: ["HOD"] },
   { label: "Teaching Assignments", href: "/hod/teaching-assignments", iconName: "BookOpen", roles: ["HOD"], module: "timetable-incharge" },
-  { label: "Assignment Requests", href: "/hod/assignment-requests", iconName: "Send", roles: ["HOD"], module: "assignment-requests" },
+  // No separate "Assignment Requests" item: it is a button on the Teaching
+  // Assignments page, and SUB_PAGE_PARENT keeps Teaching Assignments highlighted there.
   { label: "Internal Exam", href: "/hod/internal-exam", iconName: "ClipboardCheck", roles: ["HOD"] },
   { label: "Mid Paper Setter", href: "/hod/mid-paper-setter", iconName: "UserCog", roles: ["HOD"] },
   // Sits directly below Teaching Assignments: subjects are assigned there first,
@@ -471,6 +483,8 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Library", href: "/student/library", iconName: "BookOpen", roles: ["STUDENT"] },
   { label: "Documents", href: "/student/documents", iconName: "FileText", roles: ["STUDENT"] },
   { label: "Permissions", href: "/student/permissions", iconName: "ShieldCheck", roles: ["STUDENT"] },
+  // Reached from the avatar in the top bar (see getProfileHref), not the sidebar.
+  { label: "My Profile", href: "/student/profile", iconName: "UserCircle", roles: ["STUDENT"] },
 
   // Webmaster
   { label: "Dashboard", href: "/webmaster", iconName: "LayoutDashboard", roles: ["WEBMASTER"] },

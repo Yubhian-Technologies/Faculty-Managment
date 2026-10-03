@@ -60,12 +60,12 @@ export function Sidebar({ hiddenModules, hiddenItems }: SidebarProps) {
   // "Sub-Departments" is hidden unless the HOD's own department both isn't
   // itself a sub-department and has sub-departments enabled by the Principal
   // - see useIsSubDepartmentHod for why either gap makes the page a dead end.
-  // "Supporting Staff" is hidden for college types with no Technical/Non-
+  // "Designations" is hidden for college types with no Technical/Non-
   // Technical split (School) - HOD has nothing to manage there, it's all
   // centrally owned by Principal (see hasSupportingStaffSplit).
   const baseNavItems = filterVisibleNavItems(contextItems, hiddenModules, hiddenItems, user.realRole, true)
     .filter((item) => !hideSubDepartmentsLink || item.href !== "/hod/settings/sub-departments")
-    .filter((item) => hasSupportingStaffSplit(collegeType) || (item.href !== "/hod/supporting-staff" && item.href !== "/hod/settings/designations"))
+    .filter((item) => hasSupportingStaffSplit(collegeType) || item.href !== "/hod/settings/designations")
     .filter((item) => {
       // Timetable Incharge is delegated — hide the nav entry when the user holds
       // no such delegation (checked once on mount via useIsTimetableIncharge).
