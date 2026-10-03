@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
-import { computeStudentAttendanceHistory } from "@/lib/studentAttendance/history";
+import { computeStudentAttendanceHistory, studentDepartmentsForHistory } from "@/lib/studentAttendance/history";
 import type { CourseYearTiming, StudentRecord } from "@/types";
 
 function toDateStr(v: unknown): string {
@@ -113,17 +113,17 @@ export async function GET(request: Request) {
     }
 
     // Scoped by department (an indexed scalar field every session doc
-    // carries) as a practical narrowing - correct for the overwhelming
-    // majority of students, who never change department. A rare
-    // cross-department transfer's PRE-transfer history wouldn't be
-    // included; every candidate is still individually confirmed by an
-    // actual matching `entries` row below, never assumed from the
-    // department match alone. (See computeStudentAttendanceHistory.)
+    // carries) as a practical narrowing - every department the student has
+    // been in (current, shared-first-year branch, departmentHistory), so a
+    // promoted student's earlier years are still found. Every candidate is
+    // still individually confirmed by an actual matching `entries` row, never
+    // assumed from the department match alone. (See computeStudentAttendanceHistory.)
+    const departments = await studentDepartmentsForHistory(db, session.collegeId, student);
     const { subjects, total } = await computeStudentAttendanceHistory(
       db,
       session.collegeId,
       studentId,
-      student.department,
+      departments,
       {
         from: laterDate(semesterFrom, fromParam),
         to: earlierDate(semesterTo, toParam),

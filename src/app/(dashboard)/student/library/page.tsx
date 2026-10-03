@@ -64,17 +64,17 @@ export default function StudentLibraryPage() {
             ) : (
               <div className="divide-y rounded-2xl border border-border/60 bg-card/90 shadow-xs sm:hidden">
                 {loans.map((l) => (
-                  <div key={l.id} className="p-3.5 flex items-center justify-between gap-3">
+                  <div key={l.id} className="p-3.5 flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
                     <div className="min-w-0">
-                      <p className="font-medium text-sm text-foreground truncate">{l.bookTitle}</p>
+                      <p className="font-medium text-sm text-foreground break-words">{l.bookTitle}</p>
                       <p className="text-xs text-muted-foreground mt-0.5">Due {toDate(l.dueAt).toDateString()}</p>
                     </div>
                     {l.isOverdue ? (
-                      <Badge variant="outline" className="shrink-0 bg-red-500/10 text-red-600 border-red-500/20">
+                      <Badge variant="outline" className="w-fit shrink-0 bg-red-500/10 text-red-600 border-red-500/20">
                         {l.daysOverdue}d overdue{l.liveFineAmount ? ` · ₹${l.liveFineAmount}` : ""}
                       </Badge>
                     ) : (
-                      <Badge variant="outline" className="shrink-0 bg-emerald-500/10 text-emerald-600 border-emerald-500/20">Active</Badge>
+                      <Badge variant="outline" className="w-fit shrink-0 bg-emerald-500/10 text-emerald-600 border-emerald-500/20">Active</Badge>
                     )}
                   </div>
                 ))}
@@ -121,11 +121,11 @@ export default function StudentLibraryPage() {
             ) : (
               <div className="divide-y rounded-2xl border border-border/60 bg-card/90 shadow-xs">
                 {reservations.map((r) => (
-                  <div key={r.id} className="p-3.5 flex items-center justify-between gap-3">
-                    <p className="font-medium text-sm text-foreground truncate">{r.bookTitle}</p>
+                  <div key={r.id} className="p-3.5 flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+                    <p className="font-medium text-sm text-foreground break-words min-w-0">{r.bookTitle}</p>
                     <Badge
                       variant={r.status === "NOTIFIED" ? "outline" : "secondary"}
-                      className={r.status === "NOTIFIED" ? "shrink-0 bg-amber-500/10 text-amber-600 border-amber-500/20" : "shrink-0"}
+                      className={r.status === "NOTIFIED" ? "w-fit h-auto whitespace-normal bg-amber-500/10 text-amber-600 border-amber-500/20" : "w-fit"}
                     >
                       {r.status === "NOTIFIED" ? "Available - visit the library" : "Waiting"}
                     </Badge>

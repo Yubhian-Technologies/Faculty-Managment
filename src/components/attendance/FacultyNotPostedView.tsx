@@ -4,85 +4,60 @@ import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { toast } from "@/hooks/useToast";
 import { useMyDepartments } from "@/hooks/useMyDepartments";
+import { downloadTablePdf, downloadTableXlsx, type TableExport } from "@/lib/attendance/tableExport";
 import type { Department, Course } from "@/types";
 
-interface PeriodRow {
-  assignmentId: string;
-  periodNumber: number;
-  startTime: string;
-  endTime: string;
-  sectionName: string | null;
-  subjectName: string;
-  status: "ON_TIME" | "LATE" | "NOT_MARKED" | "PENDING" | "IN_PROGRESS";
-  submittedAtDisplay: string | null;
-}
-interface DailyResult {
-  facultyName: string;
-  date: string;
-  periods: PeriodRow[];
-}
-interface RangeResult {
-  facultyName: string;
+interface AllRow {
+  facultyId: string;
+  name: string;
+  department: string;
   totalPeriods: number;
   onTime: number;
   late: number;
   notMarked: number;
   pending: number;
-  byDate: Record<string, { periods: number; notMarked: number }>;
 }
-interface FacultyOption {
-  facultyId: string;
-  name: string;
-  designation: string;
-}
+interface AllResult { dates: string[]; rows: AllRow[] }
 
-function todayISO(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
+const ALL = "__all__";
 
-// Cascading picker: Department -> Course -> Faculty, same real APIs and
-// pattern as FacultyAttendanceCompletionView's own picker (department scoped
-// to an HOD's own department(s) when hodScoped, course narrowed to that
-// department, faculty narrowed to who actually teaches that course) -
-// replacing the old raw facultyId text field. `facultyId` here is always the
-// facultyMembers doc id (see /api/college/faculty-attendance-completion's own
-// doc-comment), matching what /api/college/faculty-attendance-completion
-// itself expects for both the daily and range queries below.
+// Department -> Course picker, then a daily or period query. The report lists
+// every faculty member teaching that course (or, for "All" departments, every
+// faculty member) with their periods and how many were not posted. Department is
+// scoped to an HOD's own department(s) when hodScoped.
 export function FacultyNotPostedView({
   title = "Not Posted Faculty Reports",
-  description = "Faculty who did not submit student attendance — daily, monthly, period, till now. For daily, also use the office correction flow.",
+  description = "Faculty who did not submit student attendance — daily or for a period. For daily, also use the office correction flow.",
   hodScoped,
 }: {
   title?: string;
   description?: string;
   hodScoped?: boolean;
 }) {
-  const [date, setDate] = useState(todayISO());
+  const [date, setDate] = useState("");
   const [departments, setDepartments] = useState<Department[]>([]);
   const [selectedDepartmentId, setSelectedDepartmentId] = useState("");
   const [courses, setCourses] = useState<Course[]>([]);
   const [isLoadingCourses, setIsLoadingCourses] = useState(false);
   const [selectedCourseId, setSelectedCourseId] = useState("");
 
-  const [faculty, setFaculty] = useState<FacultyOption[]>([]);
-  const [isLoadingFaculty, setIsLoadingFaculty] = useState(false);
-  const [selectedFacultyId, setSelectedFacultyId] = useState("");
-
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
-  const [year, setYear] = useState("");
-  const [month, setMonth] = useState("");
-  const [data, setData] = useState<DailyResult | RangeResult | null>(null);
-  const [loadedMode, setLoadedMode] = useState<"daily" | "range" | null>(null);
+  const [data, setData] = useState<AllResult | null>(null);
+  const [onlyNotPosted, setOnlyNotPosted] = useState(true);
+  const [downloading, setDownloading] = useState<"" | "pdf" | "xlsx">("");
   const [loading, setLoading] = useState(false);
 
+  // For an HOD a level with one option is not a choice: Department is asked only
+  // when there are sub-departments, Course only when there are several courses.
+  const departmentId = selectedDepartmentId || (hodScoped && departments.length === 1 ? departments[0].id : "");
   const myDepartments = useMyDepartments();
   const hodOwnDepartments = hodScoped ? myDepartments.filter(Boolean) : null;
 
@@ -91,7 +66,9 @@ export function FacultyNotPostedView({
       .then((r) => r.json() as Promise<{ departments: Department[] }>)
       .then((d) => {
         const active = (d.departments ?? []).filter((dep) => dep.isActive);
-        const scoped = hodOwnDepartments ? active.filter((dep) => hodOwnDepartments.includes(dep.name)) : active;
+        // An HOD sees their own department(s) plus the sub-departments beneath them.
+        const ownIds = hodOwnDepartments ? new Set(active.filter((dep) => hodOwnDepartments.includes(dep.name)).map((dep) => dep.id)) : null;
+        const scoped = ownIds ? active.filter((dep) => ownIds.has(dep.id) || (!!dep.parentDepartmentId && ownIds.has(dep.parentDepartmentId))) : active;
         setDepartments(scoped.sort((a, b) => a.name.localeCompare(b.name)));
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load departments" }));
@@ -105,75 +82,102 @@ export function FacultyNotPostedView({
     void (async () => {
       setSelectedCourseId("");
       setCourses([]);
-      if (!selectedDepartmentId) return;
+      if (!departmentId || departmentId === ALL) return;
       setIsLoadingCourses(true);
       try {
-        const res = await fetch(`/api/college/courses?departmentId=${selectedDepartmentId}`);
+        const res = await fetch(`/api/college/courses?departmentId=${departmentId}`);
         const d = await res.json() as { courses: Course[] };
-        const ownOnly = (d.courses ?? []).filter((c) => c.isActive && c.departmentId === selectedDepartmentId);
-        setCourses(ownOnly.sort((a, b) => a.name.localeCompare(b.name)));
+        // The API already scopes this list to the department: a sub-department
+        // gets its parent's courses and a feeder department (e.g. Basic Science)
+        // the courses it feeds, none of which are docs the department itself
+        // owns, so the list is not narrowed any further here.
+        const active = (d.courses ?? []).filter((c) => c.isActive);
+        setCourses(active.sort((a, b) => a.name.localeCompare(b.name)));
       } catch {
         toast({ variant: "destructive", title: "Failed to load courses" });
       } finally {
         setIsLoadingCourses(false);
       }
     })();
-  }, [selectedDepartmentId]);
+  }, [departmentId]);
 
-  const selectedDepartment = departments.find((d) => d.id === selectedDepartmentId) ?? null;
+  const courseId = selectedCourseId || (hodScoped && courses.length === 1 ? courses[0].id : "");
+  const showDepartment = !hodScoped || departments.length !== 1;
+  const allDepartments = departmentId === ALL;
+  const showCourse = !!departmentId && !allDepartments && (!hodScoped || courses.length !== 1);
+  const selectedDepartment = departments.find((d) => d.id === departmentId) ?? null;
+  // A report needs "All", or a department AND a course.
+  const canLoad = allDepartments || (!!selectedDepartment && !!courseId);
 
-  useEffect(() => {
-    void (async () => {
-      setSelectedFacultyId("");
-      setFaculty([]);
-      setData(null);
-      setLoadedMode(null);
-      if (!selectedDepartment || !selectedCourseId || !date) return;
-      setIsLoadingFaculty(true);
-      try {
-        const params = new URLSearchParams({ date, department: selectedDepartment.name, courseId: selectedCourseId });
-        const res = await fetch(`/api/college/faculty-attendance-completion?${params.toString()}`);
-        const d = await res.json() as { faculty?: FacultyOption[]; error?: string };
-        setFaculty(d.faculty ?? []);
-      } catch {
-        toast({ variant: "destructive", title: "Failed to load faculty" });
-      } finally {
-        setIsLoadingFaculty(false);
-      }
-    })();
-  }, [selectedDepartment, selectedCourseId, date]);
-
-  const selectedFaculty = faculty.find((f) => f.facultyId === selectedFacultyId) ?? null;
-
-  async function load(mode: "daily" | "period" | "month" | "tillNow") {
-    if (!selectedFacultyId) {
-      toast({ variant: "destructive", title: "Select faculty" });
+  async function load(mode: "daily" | "period") {
+    if (!canLoad) {
+      toast({ variant: "destructive", title: "Select a department and course" });
       return;
     }
     setLoading(true);
     try {
-      const p = new URLSearchParams({ facultyId: selectedFacultyId });
+      const p = new URLSearchParams({ all: "true" });
+      if (!allDepartments && selectedDepartment) {
+        p.set("department", selectedDepartment.name);
+        p.set("courseId", courseId);
+      }
       if (mode === "daily") {
         if (!date) throw new Error("Pick date");
         p.set("date", date);
-      } else if (mode === "period") {
+      } else {
         if (!from || !to) throw new Error("Pick from and to");
         p.set("from", from); p.set("to", to);
-      } else if (mode === "month") {
-        if (!year || !month) throw new Error("Pick year+month");
-        p.set("year", year); p.set("month", month);
-      } else if (mode === "tillNow") p.set("allTime", "true");
+      }
       const res = await fetch(`/api/college/faculty-attendance-completion?${p.toString()}`);
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Failed");
       setData(json);
-      setLoadedMode(mode === "daily" ? "daily" : "range");
     } catch (e) {
       toast({ variant: "destructive", title: e instanceof Error ? e.message : "Failed" });
     } finally {
       setLoading(false);
     }
   }
+
+  // The report on screen as a plain table, so the downloads match it exactly
+  // (including the "only not posted" tick for the all-faculty view).
+  function currentTable(): TableExport | null {
+    if (data == null) return null;
+    const rows = onlyNotPosted ? data.rows.filter((r) => r.notMarked > 0) : data.rows;
+    const range = data.dates.length === 1 ? data.dates[0] : `${data.dates[0]} to ${data.dates[data.dates.length - 1]}`;
+    const scope = allDepartments ? "All departments" : `${selectedDepartment?.name ?? ""} - ${courses.find((c) => c.id === courseId)?.name ?? ""}`;
+    return {
+      title: "Faculty not posted", subtitle: `${scope} - ${range}${onlyNotPosted ? " - only faculty with not-posted periods" : ""}`,
+      headers: ["Faculty", "Department", "Periods", "On time", "Late", "Not posted", "Pending"],
+      rows: rows.map((r) => [r.name, r.department || "-", r.totalPeriods, r.onTime, r.late, r.notMarked, r.pending]),
+    };
+  }
+
+  async function download(kind: "pdf" | "xlsx") {
+    const table = currentTable();
+    if (!table) return;
+    setDownloading(kind);
+    try {
+      const base = `not-posted-${Date.now()}`;
+      if (kind === "pdf") await downloadTablePdf(table, base);
+      else await downloadTableXlsx(table, base);
+    } catch {
+      toast({ variant: "destructive", title: "Download failed" });
+    } finally {
+      setDownloading("");
+    }
+  }
+
+  const downloadButtons = data != null ? (
+    <div className="flex gap-2">
+      <Button variant="outline" size="sm" onClick={() => void download("xlsx")} disabled={downloading !== ""}>
+        {downloading === "xlsx" ? "Exporting…" : "Download Excel"}
+      </Button>
+      <Button variant="outline" size="sm" onClick={() => void download("pdf")} disabled={downloading !== ""}>
+        {downloading === "pdf" ? "Generating…" : "Download PDF"}
+      </Button>
+    </div>
+  ) : null;
 
   return (
     <div className="space-y-6">
@@ -183,23 +187,24 @@ export function FacultyNotPostedView({
         <CardHeader><CardTitle>Faculty Not Posted — Query</CardTitle></CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <div>
+            {showDepartment && <div>
               <Label htmlFor="faculty-notposted-department">Department</Label>
-              <Select value={selectedDepartmentId} onValueChange={setSelectedDepartmentId}>
+              <Select value={selectedDepartmentId} onValueChange={(v) => { setSelectedDepartmentId(v); setData(null); }}>
                 <SelectTrigger id="faculty-notposted-department">
                   <SelectValue placeholder="Select department" />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value={ALL}>All</SelectItem>
                   {departments.map((d) => (
                     <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-            </div>
-            {selectedDepartmentId && (
+            </div>}
+            {showCourse && (
               <div>
                 <Label htmlFor="faculty-notposted-course">Course</Label>
-                <Select value={selectedCourseId} onValueChange={setSelectedCourseId} disabled={isLoadingCourses}>
+                <Select value={selectedCourseId} onValueChange={(v) => { setSelectedCourseId(v); setData(null); }} disabled={isLoadingCourses}>
                   <SelectTrigger id="faculty-notposted-course">
                     <SelectValue placeholder={isLoadingCourses ? "Loading courses…" : "Select course"} />
                   </SelectTrigger>
@@ -211,26 +216,7 @@ export function FacultyNotPostedView({
                 </Select>
               </div>
             )}
-            {selectedCourseId && (
-              <div>
-                <Label htmlFor="faculty-notposted-faculty">Faculty</Label>
-                <Select value={selectedFacultyId} onValueChange={setSelectedFacultyId} disabled={isLoadingFaculty}>
-                  <SelectTrigger id="faculty-notposted-faculty">
-                    <SelectValue placeholder={isLoadingFaculty ? "Loading faculty…" : "Select faculty"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {faculty.map((f) => (
-                      <SelectItem key={f.facultyId} value={f.facultyId}>{f.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
           </div>
-          {selectedCourseId && !isLoadingFaculty && faculty.length === 0 && (
-            <p className="text-xs text-muted-foreground">No faculty found for this course.</p>
-          )}
-
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label htmlFor="faculty-notposted-date">Daily date</Label>
@@ -242,7 +228,7 @@ export function FacultyNotPostedView({
               />
             </div>
             <div className="flex items-end">
-              <Button onClick={() => void load("daily")} disabled={loading || !selectedFacultyId}>Load Daily</Button>
+              <Button onClick={() => void load("daily")} disabled={loading || !canLoad}>Load</Button>
             </div>
           </div>
           <div className="grid grid-cols-3 gap-3">
@@ -255,105 +241,61 @@ export function FacultyNotPostedView({
               <Input id="faculty-notposted-to" type="date" value={to} onChange={(e) => setTo(e.target.value)} />
             </div>
             <div className="flex items-end">
-              <Button onClick={() => void load("period")} disabled={loading || !selectedFacultyId}>Load Period</Button>
+              <Button onClick={() => void load("period")} disabled={loading || !canLoad}>Load</Button>
             </div>
           </div>
-          <div className="grid grid-cols-3 gap-3">
-            <div>
-              <Label htmlFor="faculty-notposted-year">Year</Label>
-              <Input id="faculty-notposted-year" value={year} onChange={(e) => setYear(e.target.value)} placeholder="2026" />
-            </div>
-            <div>
-              <Label htmlFor="faculty-notposted-month">Month</Label>
-              <Input id="faculty-notposted-month" value={month} onChange={(e) => setMonth(e.target.value)} placeholder="4" />
-            </div>
-            <div className="flex items-end">
-              <Button onClick={() => void load("month")} disabled={loading || !selectedFacultyId}>Load Monthly</Button>
-            </div>
-          </div>
-          <Button variant="outline" onClick={() => void load("tillNow")} disabled={loading || !selectedFacultyId}>
-            Load Till Now (365d cap)
-          </Button>
         </CardContent>
       </Card>
 
-      {!selectedDepartmentId ? (
+      {!departmentId ? (
         <EmptyState title="Select a department to get started" />
-      ) : !selectedCourseId ? (
-        <EmptyState title="Select a course to see its faculty" />
-      ) : !selectedFacultyId ? (
-        <EmptyState title="Select a faculty member, then pick a query above" />
+      ) : allDepartments ? null : !courseId ? (
+        <EmptyState title="Select a course, then pick a query above" />
       ) : null}
 
-      {data != null && loadedMode === "daily" && (() => {
-        const d = data as DailyResult;
+      {data != null && (() => {
+        const d = data;
+        const rows = onlyNotPosted ? d.rows.filter((r) => r.notMarked > 0) : d.rows;
+        const range = d.dates.length === 1 ? d.dates[0] : `${d.dates[0]} to ${d.dates[d.dates.length - 1]}`;
         return (
           <Card>
-            <CardHeader><CardTitle>{selectedFaculty?.name ?? d.facultyName} — {d.date}</CardTitle></CardHeader>
+            <CardHeader>
+              <CardTitle className="flex flex-wrap items-center justify-between gap-2">
+                <span>All faculty — {range}</span>
+                <label className="flex cursor-pointer items-center gap-2 text-sm font-normal">
+                  <Checkbox checked={onlyNotPosted} onCheckedChange={(v) => setOnlyNotPosted(v === true)} />
+                  Only faculty with not-posted periods
+                </label>
+                {downloadButtons}
+              </CardTitle>
+            </CardHeader>
             <CardContent className="overflow-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b text-left text-muted-foreground">
-                    <th className="px-3 py-2">Period</th>
-                    <th className="px-3 py-2">Time</th>
-                    <th className="px-3 py-2">Section</th>
-                    <th className="px-3 py-2">Subject</th>
-                    <th className="px-3 py-2">Status</th>
-                    <th className="px-3 py-2">Submitted At</th>
+                    <th className="px-3 py-2">Faculty</th>
+                    <th className="px-3 py-2">Department</th>
+                    <th className="px-3 py-2 text-center">Periods</th>
+                    <th className="px-3 py-2 text-center">On time</th>
+                    <th className="px-3 py-2 text-center">Late</th>
+                    <th className="px-3 py-2 text-center">Not posted</th>
+                    <th className="px-3 py-2 text-center">Pending</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
-                  {d.periods.map((p) => (
-                    <tr key={`${p.assignmentId}_${p.periodNumber}`}>
-                      <td className="px-3 py-2">{p.periodNumber}</td>
-                      <td className="px-3 py-2">{p.startTime}–{p.endTime}</td>
-                      <td className="px-3 py-2">{p.sectionName ?? "—"}</td>
-                      <td className="px-3 py-2">{p.subjectName}</td>
-                      <td className="px-3 py-2">{p.status}</td>
-                      <td className="px-3 py-2">{p.submittedAtDisplay ?? "—"}</td>
+                  {rows.map((r) => (
+                    <tr key={r.facultyId}>
+                      <td className="px-3 py-2 font-medium">{r.name}</td>
+                      <td className="px-3 py-2">{r.department || "—"}</td>
+                      <td className="px-3 py-2 text-center">{r.totalPeriods}</td>
+                      <td className="px-3 py-2 text-center">{r.onTime}</td>
+                      <td className="px-3 py-2 text-center">{r.late}</td>
+                      <td className="px-3 py-2 text-center font-semibold">{r.notMarked}</td>
+                      <td className="px-3 py-2 text-center">{r.pending}</td>
                     </tr>
                   ))}
-                  {d.periods.length === 0 && (
-                    <tr><td className="px-3 py-4 text-center text-muted-foreground" colSpan={6}>No scheduled periods that day.</td></tr>
-                  )}
-                </tbody>
-              </table>
-            </CardContent>
-          </Card>
-        );
-      })()}
-      {data != null && loadedMode === "range" && (() => {
-        const d = data as RangeResult;
-        const dates = Object.keys(d.byDate).sort();
-        return (
-          <Card>
-            <CardHeader><CardTitle>{selectedFaculty?.name ?? d.facultyName} — Summary</CardTitle></CardHeader>
-            <CardContent className="space-y-4 overflow-auto">
-              <div className="flex flex-wrap gap-4 text-sm">
-                <span>Total periods: <strong>{d.totalPeriods}</strong></span>
-                <span>On time: <strong>{d.onTime}</strong></span>
-                <span>Late: <strong>{d.late}</strong></span>
-                <span>Not posted: <strong>{d.notMarked}</strong></span>
-                <span>Pending: <strong>{d.pending}</strong></span>
-              </div>
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b text-left text-muted-foreground">
-                    <th className="px-3 py-2">Date</th>
-                    <th className="px-3 py-2">Periods</th>
-                    <th className="px-3 py-2">Not Posted</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
-                  {dates.map((date) => (
-                    <tr key={date}>
-                      <td className="px-3 py-2">{date}</td>
-                      <td className="px-3 py-2">{d.byDate[date].periods}</td>
-                      <td className="px-3 py-2">{d.byDate[date].notMarked}</td>
-                    </tr>
-                  ))}
-                  {dates.length === 0 && (
-                    <tr><td className="px-3 py-4 text-center text-muted-foreground" colSpan={3}>No scheduled periods in range.</td></tr>
+                  {rows.length === 0 && (
+                    <tr><td className="px-3 py-4 text-center text-muted-foreground" colSpan={7}>{onlyNotPosted ? "No faculty have not-posted periods." : "No faculty found."}</td></tr>
                   )}
                 </tbody>
               </table>

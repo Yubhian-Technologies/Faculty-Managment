@@ -14,6 +14,7 @@ import { useCollegeType } from "@/hooks/useCollegeType";
 import { hasSupportingStaffSplit } from "@/lib/designations/config";
 import { isNavItemActive, filterVisibleNavItems, isPathHidden, ROLES_WITH_EMBEDDED_PANEL_ACCESS, type NavItem } from "./navConfig";
 import { NavIcon } from "./NavIcon";
+import { useCustomNav } from "@/hooks/useCustomNav";
 import { WorkContextSwitcher } from "./WorkContextSwitcher";
 import { LocationDeptSwitcher } from "./LocationDeptSwitcher";
 import { useWorkContext } from "@/hooks/useWorkContext";
@@ -50,18 +51,19 @@ export function Sidebar({ hiddenModules, hiddenItems }: SidebarProps) {
   const { pendingCount: pendingHiringCount } = usePrincipalPendingHiring();
   const { collegeType } = useCollegeType();
   const { items: contextItems } = useWorkContext();
+  const { apply: applyCustomNav } = useCustomNav();
 
   if (!user) return null;
 
   // "Sub-Departments" is hidden unless the HOD's own department both isn't
   // itself a sub-department and has sub-departments enabled by the Principal
   // - see useIsSubDepartmentHod for why either gap makes the page a dead end.
-  // "Supporting Staff" is hidden for college types with no Technical/Non-
+  // "Designations" is hidden for college types with no Technical/Non-
   // Technical split (School) - HOD has nothing to manage there, it's all
   // centrally owned by Principal (see hasSupportingStaffSplit).
   const baseNavItems = filterVisibleNavItems(contextItems, hiddenModules, hiddenItems, user.realRole, true)
     .filter((item) => !hideSubDepartmentsLink || item.href !== "/hod/settings/sub-departments")
-    .filter((item) => hasSupportingStaffSplit(collegeType) || (item.href !== "/hod/supporting-staff" && item.href !== "/hod/settings/designations"));
+    .filter((item) => hasSupportingStaffSplit(collegeType) || item.href !== "/hod/settings/designations");
 
   // Inject dynamic nav items based on panel assignments (any role can be a panel member)
   let navItems = baseNavItems;
@@ -91,6 +93,9 @@ export function Sidebar({ hiddenModules, hiddenItems }: SidebarProps) {
       navItems = [baseNavItems[0], ...injected, ...baseNavItems.slice(1)];
     }
   }
+
+  // Super-Admin-built tabs and tab order for this college (no-op when none).
+  navItems = applyCustomNav(navItems, hiddenItems);
 
   return (
     <aside className="hidden md:flex md:flex-col w-64 border-r bg-background h-screen fixed top-0 left-0 z-30">

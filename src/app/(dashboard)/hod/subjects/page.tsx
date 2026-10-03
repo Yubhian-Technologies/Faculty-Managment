@@ -1,16 +1,13 @@
 "use client";
 
 import { useEffect, useState, useCallback, useMemo } from "react";
-import { BookOpen, Pencil, Search, Trash2 } from "lucide-react";
+import { BookOpen, Search } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
 import { useMyDepartments } from "@/hooks/useMyDepartments";
 import type { Course, CourseCatalogItem, CourseYearTiming, Department, Subject, SubjectSemesterAssignment } from "@/types";
@@ -39,11 +36,9 @@ function ordinalYear(year: number) {
 //
 // Rebuilt on the actual current model: what's "offered" to an HOD's
 // department is a SubjectSemesterAssignment (Assign to Semester's own
-// output) - department+semester scoped, not a raw master-subject list. Edit
-// here means adjusting THIS department's own hours/credits override
-// (customOverrides on the assignment) - never the shared master subject's
-// name/code/category, which stays Academics/Principal-owned. Delete means
-// unassigning from this semester, never deleting the master subject.
+// output) - department+semester scoped, not a raw master-subject list. This
+// page is read-only for an HOD: subjects (and what's assigned to each
+// semester) are managed by Academics.
 export default function HODSubjectsPage() {
   const myDepartments = useMyDepartments();
   const [courses, setCourses] = useState<Course[]>([]);
@@ -76,7 +71,6 @@ export default function HODSubjectsPage() {
   // (e.g. a transition batch).
   const [pickedRegulation, setPickedRegulation] = useState("");
 
-  const [unassignTarget, setUnassignTarget] = useState<SubjectSemesterAssignment | null>(null);
   // What the Load button last asked for. Course/Year only choose WHAT to load;
   // Semester and Regulation are filters over the loaded course-year (their
   // options come from the timings/assignments it returns), so they only
@@ -345,90 +339,6 @@ export default function HODSubjectsPage() {
     setPickedRegulation("");
   }
 
-  async function handleUnassign() {
-    if (!unassignTarget || !selectedCourse) return;
-    try {
-      const res = await fetch(
-        `/api/college/subject-semester-assignments?subjectId=${encodeURIComponent(unassignTarget.subjectId)}&departmentId=${encodeURIComponent(unassignTarget.departmentId || selectedCourse.departmentId)}&semester=${encodeURIComponent(unassignTarget.semester)}`,
-        { method: "DELETE" }
-      );
-      const json = await res.json() as { error?: string };
-      if (!res.ok) throw new Error(json.error ?? "Failed to remove subject");
-      toast({ variant: "success", title: `${unassignTarget.subjectName} removed from this semester` });
-      await loadAssignments(selectedCourse, selectedYear);
-    } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to remove subject" });
-    } finally {
-      setUnassignTarget(null);
-    }
-  }
-
-  // ── Edit dialog: adjusts THIS department's own hours/credits override for
-  // an already-assigned subject (SubjectSemesterAssignment.customOverrides) -
-  // never the shared master subject's name/code/category, which stays
-  // Academics/Principal-owned and would otherwise change for every other
-  // department teaching the same catalog course. ─────────────────────────────
-  const [editTarget, setEditTarget] = useState<{
-    assignment: SubjectSemesterAssignment;
-    lectureHours: string;
-    tutorialHours: string;
-    practicalHours: string;
-    credits: string;
-  } | null>(null);
-  const [editSaving, setEditSaving] = useState(false);
-  const [editError, setEditError] = useState("");
-
-  function openEdit(a: SubjectSemesterAssignment) {
-    setEditError("");
-    setEditTarget({
-      assignment: a,
-      lectureHours: String(a.lectureHours ?? 0),
-      tutorialHours: String(a.tutorialHours ?? 0),
-      practicalHours: String(a.practicalHours ?? 0),
-      credits: String(a.credits ?? 0),
-    });
-  }
-
-  async function handleEditSave() {
-    if (!editTarget || !selectedCourse) return;
-    const { assignment, lectureHours, tutorialHours, practicalHours, credits } = editTarget;
-    if (lectureHours === "" || tutorialHours === "" || practicalHours === "") {
-      setEditError("L, T and P are required");
-      return;
-    }
-    setEditSaving(true);
-    setEditError("");
-    try {
-      const res = await fetch("/api/college/subject-semester-assignments", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          subjectId: assignment.subjectId,
-          departmentId: selectedCourse.departmentId,
-          departmentName: deptNameById.get(selectedCourse.departmentId),
-          semester: assignment.semester,
-          year: Number(selectedYear),
-          courseId: selectedCourse.id,
-          customOverrides: {
-            lectureHours: Number(lectureHours),
-            tutorialHours: Number(tutorialHours),
-            practicalHours: Number(practicalHours),
-            credits: credits === "" ? undefined : Number(credits),
-          },
-        }),
-      });
-      const json = await res.json() as { error?: string };
-      if (!res.ok) throw new Error(json.error ?? "Failed to save");
-      toast({ variant: "success", title: `${assignment.subjectName} updated` });
-      setEditTarget(null);
-      await loadAssignments(selectedCourse, selectedYear);
-    } catch (err) {
-      setEditError(err instanceof Error ? err.message : "Failed to save");
-    } finally {
-      setEditSaving(false);
-    }
-  }
-
   return (
     <div className="space-y-6">
       <PageHeader
@@ -558,7 +468,6 @@ export default function HODSubjectsPage() {
                             <th className="px-4 py-3 text-center">T</th>
                             <th className="px-4 py-3 text-center">P</th>
                             <th className="px-4 py-3 text-center">Credits</th>
-                            <th className="px-4 py-3" />
                           </tr>
                         </thead>
                         <tbody className="divide-y">
@@ -587,16 +496,6 @@ export default function HODSubjectsPage() {
                                 <td className="px-4 py-2.5 text-center">{a.tutorialHours ?? subject?.tutorialHours ?? "—"}</td>
                                 <td className="px-4 py-2.5 text-center">{a.practicalHours ?? subject?.practicalHours ?? "—"}</td>
                                 <td className="px-4 py-2.5 text-center">{a.credits ?? subject?.credits ?? "—"}</td>
-                                <td className="px-4 py-2.5 text-right">
-                                  <div className="flex justify-end gap-1">
-                                    <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={`Edit ${a.subjectName}`} onClick={() => openEdit(a)}>
-                                      <Pencil className="h-3.5 w-3.5" />
-                                    </Button>
-                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" aria-label={`Remove ${a.subjectName}`} onClick={() => setUnassignTarget(a)}>
-                                      <Trash2 className="h-3.5 w-3.5" />
-                                    </Button>
-                                  </div>
-                                </td>
                               </tr>
                             );
                           })}
@@ -610,48 +509,6 @@ export default function HODSubjectsPage() {
           )}
         </>
       )}
-
-      <ConfirmDialog
-        open={!!unassignTarget}
-        onOpenChange={(open) => !open && setUnassignTarget(null)}
-        title={`Remove ${unassignTarget?.subjectName ?? "subject"} from this semester?`}
-        description="This only unassigns it from your department's semester - the shared master subject itself isn't affected, and it can be re-assigned later from Assign to Semester."
-        confirmLabel="Remove"
-        variant="destructive"
-        onConfirm={() => void handleUnassign()}
-      />
-
-      <Dialog open={!!editTarget} onOpenChange={(o) => !o && setEditTarget(null)}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>{editTarget?.assignment.subjectName}</DialogTitle>
-          </DialogHeader>
-          {editTarget && (
-            <div className="space-y-4">
-              <p className="text-xs text-muted-foreground">
-                Adjusts this department&apos;s own hours/credits for this subject - the shared subject itself (name, code, category) is managed by Academics.
-              </p>
-              <div className="space-y-2">
-                <Label>L / T / P</Label>
-                <div className="grid grid-cols-3 gap-3">
-                  <Input type="number" min={0} placeholder="L" aria-label="Lecture hours" value={editTarget.lectureHours} onChange={(e) => setEditTarget((prev) => prev && { ...prev, lectureHours: e.target.value })} />
-                  <Input type="number" min={0} placeholder="T" aria-label="Tutorial hours" value={editTarget.tutorialHours} onChange={(e) => setEditTarget((prev) => prev && { ...prev, tutorialHours: e.target.value })} />
-                  <Input type="number" min={0} placeholder="P" aria-label="Practical hours" value={editTarget.practicalHours} onChange={(e) => setEditTarget((prev) => prev && { ...prev, practicalHours: e.target.value })} />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label>Credits</Label>
-                <Input type="number" min={0} step="any" value={editTarget.credits} onChange={(e) => setEditTarget((prev) => prev && { ...prev, credits: e.target.value })} />
-              </div>
-              {editError && <p className="text-sm text-red-600">{editError}</p>}
-            </div>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditTarget(null)}>Cancel</Button>
-            <Button onClick={() => void handleEditSave()} loading={editSaving}>Save</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

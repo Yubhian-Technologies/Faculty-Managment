@@ -70,7 +70,6 @@ const EXPECTED: Record<string, string[]> = {
     "/hod/settings/department-office",
     "/hod/subjects",
     "/hod/teaching-assignments",
-    "/hod/assignment-requests",
     "/hod/internal-exam",
     "/hod/mid-paper-setter",
     "/hod/timetable",
@@ -117,7 +116,8 @@ const EXPECTED: Record<string, string[]> = {
     "/student/attendance",
     "/student/library",
     "/student/documents",
-    "/student/permissions"
+    "/student/permissions",
+    "/student/profile"
   ]
 };
 

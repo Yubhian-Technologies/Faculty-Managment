@@ -78,3 +78,25 @@ export function tallyStudentBySubject(sessions: IndexedSession[], studentId: str
 export function withPercent(v: HeldAttend): HeldAttend & { percentage: number | null } {
   return { ...v, percentage: calcPercent(v.attended, v.held) };
 }
+
+/**
+ * Days on which a student was absent for EVERY period held for them that day
+ * (a day they attended even one period does not count). Powers the "absent N
+ * days" list; each submitted session is one period, as everywhere above.
+ */
+export function countFullyAbsentDays(
+  sessions: IndexedSession<CountableSession & { date: string }>[],
+  studentId: string
+): number {
+  const byDate = new Map<string, { held: number; absent: number }>();
+  for (const { session, marks } of sessions) {
+    if (!marks.has(studentId)) continue;
+    const day = byDate.get(session.date) ?? { held: 0, absent: 0 };
+    day.held += 1;
+    if (marks.get(studentId) !== "PRESENT") day.absent += 1;
+    byDate.set(session.date, day);
+  }
+  let days = 0;
+  for (const d of byDate.values()) if (d.held > 0 && d.absent === d.held) days += 1;
+  return days;
+}

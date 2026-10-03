@@ -46,8 +46,18 @@ export interface NavItem {
 // highlights its parent). The exact-match guard prevents a shorter href
 // (e.g. "/super-admin/users") from also lighting up when a sibling item's
 // href (e.g. "/super-admin/users/new") is the one that exactly matches.
+const SUB_PAGE_PARENT: Record<string, string> = {
+  "/hod/supporting-staff": "/hod/faculty", // tab of the Faculty page
+  "/hod/assignment-requests": "/hod/teaching-assignments", // button on the Teaching Assignments page
+};
+
 export function isNavItemActive(item: NavItem, pathname: string, allItems: NavItem[]): boolean {
   if (pathname === item.href) return true;
+  // Pages reached from a button/tab on another page have no sidebar item of
+  // their own - they highlight that page's item instead (and nothing else).
+  for (const [subPage, parentHref] of Object.entries(SUB_PAGE_PARENT)) {
+    if (pathname === subPage || pathname.startsWith(subPage + "/")) return item.href === parentHref;
+  }
   if (allItems.some((i) => i.href === pathname)) return false;
   return item.href !== "/" && pathname.startsWith(item.href + "/");
 }
@@ -137,6 +147,7 @@ export const NAV_ITEMS: NavItem[] = [
   // Exam Cell
   { label: "Dashboard", href: "/exam-cell", iconName: "LayoutDashboard", roles: ["EXAM_CELL"] },
   { label: "Exam Configuration", href: "/exam-cell/configure", iconName: "ClipboardList", roles: ["EXAM_CELL"] },
+  { label: "Exam Seating", href: "/exam-cell/seating", iconName: "Armchair", roles: ["EXAM_CELL"] },
   { label: "Exam Cell Guidelines", href: "/exam-cell/guidelines", iconName: "BookOpen", roles: ["EXAM_CELL"] },
   { label: "Mid Timings & Dates", href: "/exam-cell/mid-timings", iconName: "CalendarRange", roles: ["EXAM_CELL"] },
   { label: "Timetable View", href: "/exam-cell/timetable-view", iconName: "CalendarDays", roles: ["EXAM_CELL"] },
@@ -253,7 +264,8 @@ export const NAV_ITEMS: NavItem[] = [
   // visible per college via the Nav Visibility settings (filterVisibleNavItems).
   { label: "Dashboard", href: "/hod", iconName: "LayoutDashboard", roles: ["HOD"] },
   { label: "Faculty", href: "/hod/faculty", iconName: "UsersRound", roles: ["HOD"], section: "Department" },
-  { label: "Supporting Staff", href: "/hod/supporting-staff", iconName: "UsersRound", roles: ["HOD"] },
+  // No separate "Supporting Staff" item: it is a tab on the Faculty page
+  // (hod/faculty/page.tsx), and isNavItemActive keeps Faculty highlighted there.
   { label: "Sections", href: "/hod/sections", iconName: "BookMarked", roles: ["HOD"] },
   { label: "Students", href: "/hod/students", iconName: "GraduationCap", roles: ["HOD"], module: "students" },
   { label: "Sub-Departments", href: "/hod/settings/sub-departments", iconName: "Settings2", roles: ["HOD"] },
@@ -265,7 +277,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Department Office", href: "/hod/settings/department-office", iconName: "UserCog", roles: ["HOD"], hideForRealRoles: ["DEPARTMENT_OFFICE"] },
   { label: "Subjects", href: "/hod/subjects", iconName: "Library", roles: ["HOD"], section: "Academics", legacyModule: "Department" },
   { label: "Teaching Assignments", href: "/hod/teaching-assignments", iconName: "BookOpen", roles: ["HOD"], module: "timetable-incharge", legacyModule: "Department" },
-  { label: "Assignment Requests", href: "/hod/assignment-requests", iconName: "Send", roles: ["HOD"], module: "assignment-requests", legacyModule: "Department" },
+  // No separate "Assignment Requests" item: it is a button on the Teaching Assignments page.
   // Sits directly below Teaching Assignments: subjects are assigned there first,
   // then scheduled here.
   { label: "Timetable", href: "/hod/timetable", iconName: "CalendarDays", roles: ["HOD"], module: "timetable-incharge", legacyModule: "Department" },
@@ -321,8 +333,11 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Leave Profiles", href: "/college-office/leave/profiles", iconName: "ClipboardList", roles: ["COLLEGE_OFFICE"] },
   // Arrange cover for supporting staff who have other work on a date or range.
   { label: "Holidays", href: "/college-office/holidays", iconName: "CalendarDays", roles: ["COLLEGE_OFFICE"] },
+  { label: "Exam Rooms", href: "/college-office/exam-rooms", iconName: "DoorOpen", roles: ["COLLEGE_OFFICE"] },
   { label: "Staff Attendance", href: "/college-office/staff-attendance", iconName: "ClipboardCheck", roles: ["COLLEGE_OFFICE"] },
   { label: "Import Attendance", href: "/college-office/attendance-import", iconName: "Upload", roles: ["COLLEGE_OFFICE"] },
+  // Student attendance reports with filters, view-only for the whole college.
+  { label: "Attendance Reports", href: "/college-office/attendance-reports", iconName: "CalendarRange", roles: ["COLLEGE_OFFICE"] },
   // College Admin's login has COLLEGE_OFFICE as its primary role (the seat is
   // layered on top - see api/administration/college-people), so it inherits
   // this whole section too, including these personal items - same reasoning
@@ -473,6 +488,8 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Permissions", href: "/student/permissions", iconName: "ShieldCheck", roles: ["STUDENT"] },
   { label: "Library", href: "/student/library", iconName: "BookOpen", roles: ["STUDENT"], section: "Resources" },
   { label: "Documents", href: "/student/documents", iconName: "FileText", roles: ["STUDENT"] },
+  // Reached from the avatar in the top bar (see getProfileHref), not the sidebar.
+  { label: "My Profile", href: "/student/profile", iconName: "UserCircle", roles: ["STUDENT"] },
 
   // Webmaster
   { label: "Dashboard", href: "/webmaster", iconName: "LayoutDashboard", roles: ["WEBMASTER"] },

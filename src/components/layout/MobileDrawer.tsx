@@ -14,6 +14,7 @@ import { useIsSubDepartmentHod } from "@/hooks/useIsSubDepartmentHod";
 import { usePrincipalPendingHiring } from "@/hooks/usePrincipalPendingHiring";
 import { isNavItemActive, filterVisibleNavItems, isPathHidden, ROLES_WITH_EMBEDDED_PANEL_ACCESS, type NavItem } from "./navConfig";
 import { NavIcon } from "./NavIcon";
+import { useCustomNav } from "@/hooks/useCustomNav";
 import { WorkContextSwitcher } from "./WorkContextSwitcher";
 import { LocationDeptSwitcher } from "./LocationDeptSwitcher";
 import { useWorkContext } from "@/hooks/useWorkContext";
@@ -44,6 +45,7 @@ export function MobileDrawer({ hiddenModules, hiddenItems }: MobileDrawerProps) 
   const { hideSubDepartmentsLink } = useIsSubDepartmentHod();
   const { pendingCount: pendingHiringCount } = usePrincipalPendingHiring();
   const { items: contextItems } = useWorkContext();
+  const { apply: applyCustomNav } = useCustomNav();
 
   useEffect(() => {
     setSidebarOpen(false);
@@ -94,6 +96,9 @@ export function MobileDrawer({ hiddenModules, hiddenItems }: MobileDrawerProps) 
       navItems = [baseNavItems[0], ...injected, ...baseNavItems.slice(1)];
     }
   }
+
+  // Super-Admin-built tabs and tab order for this college (no-op when none).
+  navItems = applyCustomNav(navItems, hiddenItems);
 
   return (
     <>

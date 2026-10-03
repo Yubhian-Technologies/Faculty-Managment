@@ -7,6 +7,8 @@ import {
   ClipboardList,
   CalendarCheck,
   UserCheck,
+  Armchair,
+  DoorOpen,
   BarChart3,
   ClipboardPlus,
   Layers,
@@ -72,6 +74,8 @@ const icons: Record<string, React.ComponentType<LucideProps>> = {
   ClipboardList,
   CalendarCheck,
   UserCheck,
+  Armchair,
+  DoorOpen,
   BarChart3,
   ClipboardPlus,
   Layers,
@@ -126,6 +130,9 @@ const icons: Record<string, React.ComponentType<LucideProps>> = {
   KeyRound,
   CalendarSearch,
 };
+
+/** Every icon name a nav item (built-in or custom) may use. */
+export const NAV_ICON_NAMES: string[] = Object.keys(icons);
 
 export function NavIcon({ name, ...props }: { name: string } & LucideProps) {
   const Icon = icons[name] ?? LayoutDashboard;
