@@ -142,7 +142,10 @@ export async function proxy(request: NextRequest) {
       // The API guards do the real, live check; this is coarse gating only.
       const heldRoles = Array.from(new Set([role, ...(payload.roles ?? [])]));
       const allowedPaths = Array.from(new Set(heldRoles.flatMap((r) => allowedPathsForRole(r))));
-      const hasAccess = allowedPaths.some((p) => pathname.startsWith(p));
+      // /pages/<id> are Super-Admin-built tabs (lib/customNav): open to every
+      // signed-in role here, because who may open a given page is enforced by
+      // its API (enabled + the page's roles + nav visibility), not by path.
+      const hasAccess = allowedPaths.some((p) => pathname.startsWith(p)) || pathname.startsWith("/pages/");
       if (!hasAccess && pathname !== "/") {
         const defaultPath =
           allowedPaths[0] ?? "/login";

@@ -271,6 +271,50 @@ export function sectionTimetableTitleLine(parts: {
     .join(" · ");
 }
 
+const ROMAN = ["", "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"];
+const roman = (n: number) => ROMAN[n] ?? String(n);
+/** Year/semester as a roman numeral ("III"); falls back to the plain number past 12. */
+export const toRoman = roman;
+
+/** "Bachelor Of Technology" -> "B.Tech" etc.; anything unrecognised is left as written. */
+function shortCourseName(course: string): string {
+  const c = course.trim();
+  if (/^(bachelor of technology|b\.?\s?tech)\b/i.test(c)) return "B.Tech";
+  if (/^(master of technology|m\.?\s?tech)\b/i.test(c)) return "M.Tech";
+  if (/^(bachelor of engineering|b\.?\s?e)\.?$/i.test(c)) return "B.E";
+  if (/^(master of business administration|mba)$/i.test(c)) return "MBA";
+  if (/^(master of computer applications|mca)$/i.test(c)) return "MCA";
+  return c;
+}
+
+/**
+ * The short class line printed on a section timetable, e.g. "III B.Tech I Sem CSE A":
+ * year and semester in roman numerals, the course abbreviated, and the section as
+ * "<branch> <letter>" (a name stored as "CSE-A" reads "CSE A"; a bare "A" is prefixed
+ * with the department's initials). Batch, regulation and academic year are left out.
+ */
+export function timetableClassLine(parts: {
+  courseName?: string;
+  year?: number;
+  semesterLabel?: string;
+  sectionName?: string;
+  departmentName?: string;
+}): string {
+  const semNumber = parts.semesterLabel?.match(/\d+/)?.[0];
+  const semester = semNumber ? `${roman(Number(semNumber))} Sem` : parts.semesterLabel;
+  let section = (parts.sectionName ?? "").trim().replace(/[-_]+/g, " ");
+  if (section && !/[A-Za-z]{2,}/.test(section) && parts.departmentName) {
+    const initials = parts.departmentName.split(/[\s&]+/).filter((w) => /^[A-Za-z]/.test(w) && !/^(and|of)$/i.test(w)).map((w) => w[0].toUpperCase()).join("");
+    section = `${initials} ${section}`;
+  }
+  return [
+    parts.year != null ? roman(parts.year) : undefined,
+    parts.courseName ? shortCourseName(parts.courseName) : undefined,
+    semester,
+    section || undefined,
+  ].filter(Boolean).join(" ");
+}
+
 export function ordinalYear(year: number): string {
   const suffix = year === 1 ? "st" : year === 2 ? "nd" : year === 3 ? "rd" : "th";
   return `${year}${suffix} Year`;

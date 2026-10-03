@@ -181,8 +181,8 @@ export function LeaveCalendar({ uid }: LeaveCalendarProps) {
   }
 
   return (
-    <div className="flex flex-col lg:flex-row items-start gap-4">
-      <Card className="max-w-sm w-full">
+    <div className="grid gap-4 lg:grid-cols-2 items-stretch">
+      <Card className="w-full">
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <CardTitle className="flex items-center gap-2 text-base">
@@ -215,7 +215,7 @@ export function LeaveCalendar({ uid }: LeaveCalendarProps) {
                     key={i}
                     title={c.inMonth && c.status ? ATTENDANCE_STATUS_LABELS[c.status] + (c.late ? " · Late" : "") : undefined}
                     className={[
-                      "relative aspect-square rounded-md border text-xs flex items-center justify-center",
+                      "relative aspect-[5/3] rounded-md border text-xs flex items-center justify-center",
                       !c.inMonth ? "border-transparent" : cellClass(c.status),
                     ].join(" ")}
                   >
@@ -247,7 +247,7 @@ export function LeaveCalendar({ uid }: LeaveCalendarProps) {
       {/* Same month's numbers as the grid on the left, just counted instead
           of colored - fills the space a bare max-w-sm calendar would
           otherwise leave empty next to it on a wide screen. */}
-      <Card className="max-w-xs w-full">
+      <Card className="w-full">
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-base">
             <BarChart3 className="h-4 w-4 text-muted-foreground" />
@@ -258,11 +258,11 @@ export function LeaveCalendar({ uid }: LeaveCalendarProps) {
           {isLoading ? (
             <div className="h-40 rounded-lg bg-muted/30 animate-pulse" />
           ) : (
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid h-full grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-2 xl:grid-cols-4 content-start">
               {STAT_TILES.map((t) => (
-                <div key={t.key} className={`rounded-lg border p-2.5 ${tileClass(t.key)}`}>
-                  <p className="text-xl font-semibold leading-none">{stats[t.key]}</p>
-                  <p className="mt-1 text-[11px] font-medium">{t.label}</p>
+                <div key={t.key} className={`rounded-lg border p-4 ${tileClass(t.key)}`}>
+                  <p className="text-2xl font-semibold leading-none">{stats[t.key]}</p>
+                  <p className="mt-1.5 text-xs font-medium">{t.label}</p>
                 </div>
               ))}
             </div>

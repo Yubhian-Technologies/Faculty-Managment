@@ -16,7 +16,7 @@
 ## Commands
 
 ```bash
-npm run dev        # Next.js dev server (Turbopack); predev runs scripts/ensure-deps.mjs
+npm run dev        # Next.js dev server (Turbopack); run `npm install` after pulling a changed package-lock.json
 npm run build      # production build (~180s)
 npm run start      # serve production build
 npm run lint       # eslint 9  (NOTE: currently fails on main — 128 errors, mostly one React Compiler rule; CI runs lint FIRST so later CI steps never execute. See SHARED_FILES.md)

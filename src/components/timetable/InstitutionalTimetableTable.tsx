@@ -442,11 +442,8 @@ export function InstitutionalTimetableTable({
                       return (
                         <th
                           key={col.id}
-                          className="border-r p-2 text-center font-semibold text-muted-foreground bg-muted/30 min-w-[70px]"
+                          className="border-r p-2 text-center font-semibold text-muted-foreground bg-muted/30 w-12"
                         >
-                          <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                            {col.label}
-                          </div>
                           {periodTimeRange(col.startTime, col.endTime) && (
                             <div className="text-[9.5px] font-normal text-muted-foreground whitespace-nowrap mt-0.5">
                               {periodTimeRange(col.startTime, col.endTime)}
@@ -474,7 +471,7 @@ export function InstitutionalTimetableTable({
                 </tr>
               </thead>
               <tbody>
-                {days.map((d) => {
+                {days.map((d, dayIndex) => {
                   return (
                     <tr key={d} className="border-b last:border-b-0 hover:bg-muted/10">
                       <td className="border-r p-2.5 text-center font-bold text-foreground sticky left-0 z-[5] backdrop-blur bg-muted/90">
@@ -483,9 +480,17 @@ export function InstitutionalTimetableTable({
 
                       {columns.map((col) => {
                         if (col.kind === "break") {
+                          // One tall cell across every day row, titled vertically.
+                          if (dayIndex > 0) return null;
                           return (
-                            <td key={col.id} className="border-r p-2 text-center bg-muted/25">
-                              <span className="text-muted-foreground/40 font-mono select-none">—</span>
+                            <td
+                              key={col.id}
+                              rowSpan={days.length}
+                              className="border-r bg-muted/25 text-center align-middle w-12"
+                            >
+                              <span className="inline-block text-[11px] font-bold uppercase tracking-[0.2em] text-muted-foreground [writing-mode:vertical-rl] rotate-180">
+                                {col.breakKind === "lunch" ? "Lunch Break" : "Short Break"}
+                              </span>
                             </td>
                           );
                         }
