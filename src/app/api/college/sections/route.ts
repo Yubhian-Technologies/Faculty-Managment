@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { getSectionStudentCounts } from "@/lib/students/sectionCounts";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -320,50 +321,7 @@ export async function GET(request: Request) {
     // field.
     const deptNames = Array.from(new Set(sections.map((s) => s.department as string).filter(Boolean)));
     if (deptNames.length > 0) {
-      const chunks: string[][] = [];
-      for (let i = 0; i < deptNames.length; i += 30) chunks.push(deptNames.slice(i, i + 30));
-
-      const [primaryStudentSnaps, secondaryStudentSnaps] = await Promise.all([
-        Promise.all(
-          chunks.map((chunk) =>
-            db.collection("colleges").doc(session.collegeId).collection("students")
-              .where("department", "in", chunk)
-              .get()
-          )
-        ),
-        Promise.all(
-          chunks.map((chunk) =>
-            db.collection("colleges").doc(session.collegeId).collection("students")
-              .where("secondaryDepartment", "in", chunk)
-              .get()
-          )
-        ),
-      ]);
-
-      const countMap = new Map<string, number>();
-      const countedIds = new Set<string>();
-      for (const snap of primaryStudentSnaps) {
-        for (const d of snap.docs) {
-          if (countedIds.has(d.id)) continue;
-          countedIds.add(d.id);
-          const s = d.data() as { department?: string; section?: string; year?: number; secondaryDepartment?: string; courseId?: string };
-          const key = `${s.department ?? ""}|${s.section ?? ""}|${s.year ?? 0}|${(s.secondaryDepartment ?? "").toLowerCase()}|${s.courseId ?? ""}`;
-          countMap.set(key, (countMap.get(key) ?? 0) + 1);
-        }
-      }
-      for (const snap of secondaryStudentSnaps) {
-        for (const d of snap.docs) {
-          if (countedIds.has(d.id)) continue;
-          countedIds.add(d.id);
-          const s = d.data() as { secondaryDepartment?: string; section?: string; year?: number; courseId?: string };
-          // The section a shared-first-year student actually sits in is their
-          // real branch's own - never itself cross-listed (see hod/sections/
-          // new's managed-branch mode) - so the disambiguator stays "", same
-          // as such a section's own (always-empty) secondaryDepartments.
-          const key = `${s.secondaryDepartment ?? ""}|${s.section ?? ""}|${s.year ?? 0}|${""}|${s.courseId ?? ""}`;
-          countMap.set(key, (countMap.get(key) ?? 0) + 1);
-        }
-      }
+      const countMap = await getSectionStudentCounts(db, session.collegeId, deptNames);
 
       for (const sec of sections) {
         const secondaryDepts = sec.secondaryDepartments as string[] | undefined;

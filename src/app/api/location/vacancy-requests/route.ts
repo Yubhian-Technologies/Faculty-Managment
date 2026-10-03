@@ -15,7 +15,10 @@ export async function GET(request: Request) {
     }
 
     const { searchParams } = new URL(request.url);
-    const locationId = searchParams.get("locationId") ?? session.locationId;
+    // Only a Super Admin may look at another location; everyone else is held to their own.
+    const locationId = session.role === "SUPER_ADMIN"
+      ? (searchParams.get("locationId") ?? session.locationId)
+      : session.locationId;
     if (!locationId) return NextResponse.json({ error: "locationId required" }, { status: 400 });
     const collegeIdFilter = searchParams.get("collegeId");
 

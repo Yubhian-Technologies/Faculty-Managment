@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { clientIp, rateLimit } from "@/lib/security/rateLimit";
 import { NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebase/admin";
 
@@ -21,6 +22,11 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+
+  const limited = rateLimit(`student-feedback:${clientIp(request)}`, 60, 3600000);
+  if (!limited.ok) {
+    return NextResponse.json({ error: "Too many requests - please try again later" }, { status: 429, headers: { "Retry-After": String(limited.retryAfterSeconds) } });
+  }
   try {
     const body = (await request.json()) as {
       batchId: string;

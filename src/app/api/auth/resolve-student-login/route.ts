@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { clientIp, rateLimit } from "@/lib/security/rateLimit";
 import { NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebase/admin";
 
@@ -13,8 +14,20 @@ import { getAdminDb } from "@/lib/firebase/admin";
 // loginEmail.
 export async function POST(request: Request) {
   try {
+    // Many students sign in from one campus address, so the per-address ceiling is high: it only
+    // stops a flood. The per-roll-number limit is what slows someone probing one account.
+    const ipLimit = rateLimit(`resolve-ip:${clientIp(request)}`, 3000, 10 * 60 * 1000);
+    if (!ipLimit.ok) {
+      return NextResponse.json({ error: "Too many requests - please try again later" }, { status: 429, headers: { "Retry-After": String(ipLimit.retryAfterSeconds) } });
+    }
     const body = (await request.json()) as { rollNumber?: string };
     const rollNumber = body.rollNumber?.trim();
+    if (rollNumber) {
+      const rollLimit = rateLimit(`resolve-roll:${rollNumber.toUpperCase()}`, 30, 10 * 60 * 1000);
+      if (!rollLimit.ok) {
+        return NextResponse.json({ error: "Too many attempts - please try again later" }, { status: 429, headers: { "Retry-After": String(rollLimit.retryAfterSeconds) } });
+      }
+    }
     if (!rollNumber) {
       return NextResponse.json({ error: "Roll Number is required" }, { status: 400 });
     }

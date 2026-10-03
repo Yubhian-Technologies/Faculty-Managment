@@ -40,6 +40,16 @@ export async function GET() {
       return NextResponse.json({ error: "No profile photo on file" }, { status: 404 });
     }
 
+    // Only ever fetch from Firebase Storage over https. photoUrl comes from a profile field the
+    // account owner can write, so it must not be allowed to point the server at another host.
+    let photoHost = "";
+    try {
+      const parsed = new URL(photoUrl);
+      photoHost = parsed.protocol === "https:" ? parsed.hostname : "";
+    } catch { /* falls through to the rejection below */ }
+    if (photoHost !== "firebasestorage.googleapis.com") {
+      return NextResponse.json({ error: "No profile photo on file" }, { status: 404 });
+    }
     const upstream = await fetch(photoUrl);
     if (!upstream.ok || !upstream.body) {
       return NextResponse.json({ error: "Failed to fetch reference photo" }, { status: 502 });

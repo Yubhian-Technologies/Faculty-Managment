@@ -5,6 +5,7 @@ import type {
 } from "@/types";
 import { DEFAULT_TIMETABLE_RULES } from "@/types";
 import { resolveCurrentSemester, matchesCurrentSemester } from "@/lib/college/semester";
+import { loadSlotsForSectionAndFaculty } from "@/lib/timetable/slotQueries";
 import { declaredBusyByFaculty } from "@/lib/timetable/declaredBusy";
 import { inheritedTimingCourseId } from "@/lib/timetable/sharedYearTiming";
 import type { Course, Department } from "@/types";
@@ -71,7 +72,7 @@ export async function loadTimetableContext(
   if (!sectionSnap.exists) return null;
   const section = { id: sectionSnap.id, ...sectionSnap.data() } as Section;
 
-  const [allTimingsSnap, rulesSnap, assignmentsSnap, subjectsSnap, allSlotsSnap, allocatedRequestsSnap, allDraftsSnap] = await Promise.all([
+  const [allTimingsSnap, rulesSnap, assignmentsSnap, subjectsSnap, allocatedRequestsSnap, allDraftsSnap] = await Promise.all([
     // Every course-year's timing, not just this section's own course - a
     // slot from ANOTHER section can belong to an entirely different course-
     // year with its own independent semester calendar (see "per course +
@@ -83,11 +84,6 @@ export async function loadTimetableContext(
     collegeRef.collection("settings").doc("timetableRules").get(),
     collegeRef.collection("teachingAssignments").where("sectionId", "==", sectionId).get(),
     collegeRef.collection("subjects").where("courseId", "==", section.courseId).get(),
-    // Every slot in the college: we need this section's pinned ones AND every
-    // other section's slots, to keep a faculty from being double-booked across
-    // sections. Generation is per-section, so this global view is what makes
-    // section-at-a-time safe.
-    collegeRef.collection("timetableSlots").get(),
     // ALLOCATED cross-department lends onto this section - see
     // FacultyAssignmentRequest.busyPeriods. The lending department never
     // places real TimetableSlot rows for these, so without this query their
@@ -185,7 +181,14 @@ export async function loadTimetableContext(
     }
   }
 
-  const allSlotsRaw = allSlotsSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as TimetableSlot);
+  // This section's own slots plus those of the faculty on its assignments (the only ones
+  // busyFaculty is ever asked about) - not the college's whole slots collection.
+  const allSlotsSnapDocs = await loadSlotsForSectionAndFaculty(
+    collegeRef,
+    sectionId,
+    assignments.map((a) => a.facultyId),
+  );
+  const allSlotsRaw = allSlotsSnapDocs.map((d) => ({ id: d.id, ...d.data() }) as TimetableSlot);
 
   // A slot from a DIFFERENT, prior semester of ITS OWN course-year (see
   // CourseYearTiming.semesters) is history, not something the current build

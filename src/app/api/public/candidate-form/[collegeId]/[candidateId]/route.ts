@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { clientIp, rateLimit } from "@/lib/security/rateLimit";
 import { NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebase/admin";
 import type { Candidate, CandidateApplication, CandidateBioData, HiringBatch } from "@/types";
@@ -60,6 +61,11 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ collegeId: string; candidateId: string }> }
 ) {
+
+  const limited = rateLimit(`candidate-form:${clientIp(request)}`, 60, 3600000);
+  if (!limited.ok) {
+    return NextResponse.json({ error: "Too many requests - please try again later" }, { status: 429, headers: { "Retry-After": String(limited.retryAfterSeconds) } });
+  }
   try {
     const { collegeId, candidateId } = await params;
     const { searchParams } = new URL(request.url);

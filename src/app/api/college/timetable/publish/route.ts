@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { loadSlotsForSectionAndFaculty } from "@/lib/timetable/slotQueries";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -125,8 +126,10 @@ export async function POST(request: Request) {
     // front the same way loadContext.ts scopes busyFaculty for the solver, so
     // a faculty free again once their prior-semester/prior-session class
     // ended isn't wrongly blocked from a new placement at the same day/period.
-    const allSlotsSnap = await collegeRef.collection("timetableSlots").get();
-    const allSlots = allSlotsSnap.docs
+    // Only this section's slots (the stale ones it replaces) and the publishing faculty's slots in
+    // other sections (the clash re-check) - not the whole college's slot history.
+    const allSlotsSnapDocs = await loadSlotsForSectionAndFaculty(collegeRef, sectionId, publishableSlots.map((s) => s.facultyId));
+    const allSlots = allSlotsSnapDocs
       .map((d) => ({ id: d.id, ...d.data() }) as TimetableSlot)
       .filter((s) =>
         matchesCurrentSemester(s.semester, currentSemesterByCourseYear.get(`${s.courseId}_${s.year}`) ?? null) &&

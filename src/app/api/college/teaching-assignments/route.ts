@@ -758,31 +758,40 @@ export async function POST(request: Request) {
       // for the same STUDENT_FACULTY_RATIO used during hiring/vacancy sizing.
       let ratioWarning: string | undefined;
       const dept = subject.department ?? faculty.department ?? "";
-      if (dept) {
-        // Includes shared-first-year students pre-registered to `dept` via
-        // secondaryDepartment (department preserved until promotion) - same
-        // union sections/route.ts's studentCount aggregation and
-        // faculty-requirement's own count use, so this warning isn't
-        // undercounting a branch's incoming year-1 cohort.
-        const [studentsSnap, studentsSecondarySnap, assignmentsSnap] = await Promise.all([
-          collegeRef.collection("students").where("department", "==", dept).get(),
-          collegeRef.collection("students").where("secondaryDepartment", "==", dept).get(),
-          collegeRef.collection("teachingAssignments")
-            .where("department", "==", dept)
-            .where("academicYear", "==", body.academicYear)
-            .get(),
-        ]);
-        const countedStudentIds = new Set<string>();
-        for (const d of studentsSnap.docs) countedStudentIds.add(d.id);
-        for (const d of studentsSecondarySnap.docs) countedStudentIds.add(d.id);
-        const totalStudents = countedStudentIds.size;
-        const required = requiredFacultyCount(totalStudents);
-        const distinctFaculty = new Set(
-          assignmentsSnap.docs.map((d) => (d.data() as { facultyId?: string }).facultyId).filter(Boolean)
-        );
-        if (required > 0 && distinctFaculty.size >= required) {
-          ratioWarning = `${dept} now has ${distinctFaculty.size} faculty assigned against a ratio-based requirement of ${required} (1:15 student-faculty ratio).`;
+      // Advisory only: the assignment is already saved, so a failure here must not turn it into a 500.
+      try {
+        if (dept) {
+          // Includes shared-first-year students pre-registered to `dept` via
+          // secondaryDepartment (department preserved until promotion) - same
+          // union sections/route.ts's studentCount aggregation and
+          // faculty-requirement's own count use, so this warning isn't
+          // undercounting a branch's incoming year-1 cohort.
+          // Counted with aggregation queries (one read per 1,000 index entries) instead of reading
+          // every student document: |primary| + |secondary| - |both|, which is exactly the size of
+          // the union of the two id sets this used to build by hand.
+          const studentsColl = collegeRef.collection("students");
+          const [primaryCount, secondaryCount, bothCount] = await Promise.all([
+            studentsColl.where("department", "==", dept).count().get(),
+            studentsColl.where("secondaryDepartment", "==", dept).count().get(),
+            studentsColl.where("department", "==", dept).where("secondaryDepartment", "==", dept).count().get(),
+          ]);
+          const totalStudents = primaryCount.data().count + secondaryCount.data().count - bothCount.data().count;
+          const required = requiredFacultyCount(totalStudents);
+          const assignmentsSnap = required > 0
+            ? await collegeRef.collection("teachingAssignments")
+                .where("department", "==", dept)
+                .where("academicYear", "==", body.academicYear)
+                .get()
+            : null;
+          const distinctFaculty = new Set(
+            (assignmentsSnap?.docs ?? []).map((d) => (d.data() as { facultyId?: string }).facultyId).filter(Boolean)
+          );
+          if (required > 0 && distinctFaculty.size >= required) {
+            ratioWarning = `${dept} now has ${distinctFaculty.size} faculty assigned against a ratio-based requirement of ${required} (1:15 student-faculty ratio).`;
+          }
         }
+      } catch (err) {
+        console.error("[college/teaching-assignments POST ratioWarning]", err);
       }
 
       return NextResponse.json({ id: ref.id, ...(ratioWarning ? { ratioWarning } : {}) }, { status: 201 });

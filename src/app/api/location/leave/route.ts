@@ -45,18 +45,19 @@ export async function GET(request: Request) {
     if (deptId) {
       query = query.where("departmentId", "==", deptId);
     }
-    if (dateFrom) {
-      query = query.where("startDate", ">=", dateFrom);
-    }
-    if (dateTo) {
-      query = query.where("startDate", "<=", dateTo);
-    }
-
+    // The date range is applied after the read: Firestore refuses a range filter on startDate
+    // combined with the createdAt ordering below (the first sort must be the range field), so
+    // asking for a date range used to fail outright.
     const snap = await query
       .orderBy("createdAt", "desc")
       .limit(200)
       .get();
-    const leaveRequests = snap.docs.map((d) => ({ id: d.id, ...d.data() })) as LeaveRequest[];
+    const leaveRequests = (snap.docs.map((d) => ({ id: d.id, ...d.data() })) as LeaveRequest[]).filter((lr) => {
+      const start = (lr as { startDate?: string }).startDate ?? "";
+      if (dateFrom && start < dateFrom) return false;
+      if (dateTo && start > dateTo) return false;
+      return true;
+    });
 
     // Resolve staff names for dept head view
     if (session.role === "LOCATION_DEPT_HEAD" && !staffId) {

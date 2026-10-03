@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { clientIp, rateLimit } from "@/lib/security/rateLimit";
 import { findUsersSnapshot } from "@/lib/roles/findUsersByRoles";
 import { NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -49,6 +50,11 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ collegeId: string; offerId: string }> }
 ) {
+
+  const limited = rateLimit(`offer-accept:${clientIp(request)}`, 30, 3600000);
+  if (!limited.ok) {
+    return NextResponse.json({ error: "Too many requests - please try again later" }, { status: 429, headers: { "Retry-After": String(limited.retryAfterSeconds) } });
+  }
   try {
     const { collegeId, offerId } = await params;
     const body = (await request.json()) as {

@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { invalidateSectionCountCache } from "@/lib/students/sectionCounts";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -88,6 +89,7 @@ export async function POST(request: Request) {
     // Principal, Vice Principal or Panel role may bulk-import. (Super Admin keeps
     // access as the platform-wide override, consistent with every other route.)
     const session = await requireCollegeMember("COLLEGE_OFFICE", "SUPER_ADMIN");
+    invalidateSectionCountCache(session.collegeId); // student counts on the Sections list change with this write
     const body = (await request.json()) as { records: BulkImportRow[] };
 
     if (!body.records || !Array.isArray(body.records) || body.records.length === 0) {

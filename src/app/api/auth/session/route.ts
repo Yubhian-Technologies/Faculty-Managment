@@ -144,6 +144,12 @@ export async function POST(request: Request) {
     // seat it holds (see types/roleSeats.ts). The sidebar and page access are
     // built from this list; API guards re-check it live, so a seat handed to
     // someone else takes effect immediately, not when this cookie expires.
+    // A deactivated account is also disabled in Firebase Auth; this stops a session being issued
+    // from an ID token that was minted just before that happened.
+    if (profile && profile.isActive === false) {
+      return NextResponse.json({ error: "This account has been deactivated" }, { status: 403 });
+    }
+
     const seatRoles = Array.isArray(profile?.seatRoles) ? (profile.seatRoles as string[]) : [];
     // Holding the College Admin seat makes someone a College Admin for the few
     // things that tell it apart from a Principal (see SessionPayload.realRole),

@@ -41,7 +41,11 @@ export async function GET(request: Request) {
     }
 
     const { searchParams } = new URL(request.url);
-    const filterLocationId = searchParams.get("locationId") ?? (session.role !== "SUPER_ADMIN" ? session.locationId : "");
+    // A location-scoped login is held to its own location; only Super Admin and the global
+    // roles (no location of their own, e.g. Finance) may choose one.
+    const filterLocationId = session.role !== "SUPER_ADMIN" && session.locationId
+      ? session.locationId
+      : (searchParams.get("locationId") ?? "");
     // Optional pagination/projection — additive, defaults to existing behavior (return all, full docs)
     const limitParam = searchParams.get("limit");
     const limitNum = limitParam ? Math.min(Math.max(parseInt(limitParam, 10) || 0, 1), 100) : 0;

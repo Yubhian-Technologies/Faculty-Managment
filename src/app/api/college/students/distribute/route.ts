@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { invalidateSectionCountCache } from "@/lib/students/sectionCounts";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -51,6 +52,7 @@ import type { Section, StudentRecord } from "@/types";
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "COLLEGE_OFFICE");
+    invalidateSectionCountCache(session.collegeId); // student counts on the Sections list change with this write
     const body = (await request.json()) as {
       departmentId?: string;
       department?: string;

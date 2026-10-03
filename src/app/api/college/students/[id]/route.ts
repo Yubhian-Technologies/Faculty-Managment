@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { invalidateSectionCountCache } from "@/lib/students/sectionCounts";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -115,6 +116,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const session = await requireCollegeMember(
       "PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "COLLEGE_OFFICE"
     );
+    invalidateSectionCountCache(session.collegeId); // student counts on the Sections list change with this write
     const { id } = await params;
     const body = (await request.json()) as {
       targetSectionId?: string;
@@ -555,6 +557,7 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
     const session = await requireCollegeMember(
       "PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "COLLEGE_OFFICE"
     );
+    invalidateSectionCountCache(session.collegeId); // student counts on the Sections list change with this write
     const { id } = await params;
 
     const db = getAdminDb();
