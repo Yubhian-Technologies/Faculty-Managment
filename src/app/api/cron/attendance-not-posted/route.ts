@@ -32,6 +32,8 @@ function isAuthorized(request: Request): boolean {
 // same period-window and completion-status logic the "Not Posted Faculty"
 // report and Faculty Attendance Completion view already use, so this sweep
 // can never disagree with what a human reviewing those reports would see.
+const SWEEP_CONCURRENCY = 10;
+
 async function sweepCollege(db: FirebaseFirestore.Firestore, collegeId: string, now: Date): Promise<{ swept: boolean; notified: number }> {
   const settings = await getNotPostedSettings(db, collegeId);
   if (!settings.enabled) return { swept: false, notified: 0 };
@@ -62,10 +64,10 @@ async function sweepCollege(db: FirebaseFirestore.Firestore, collegeId: string, 
   const todaySlotsSnap = await collegeRef.collection("timetableSlots").where("day", "==", dayName).get();
   const facultyIds = [...new Set(todaySlotsSnap.docs.map((s) => (s.data() as { facultyId?: string }).facultyId).filter((v): v is string => !!v))];
 
-  let notified = 0;
-  for (const facultyId of facultyIds) {
+  // One faculty member's check: returns 1 when a reminder was sent.
+  const checkFaculty = async (facultyId: string): Promise<number> => {
     const periods = await getFacultyPeriodsForDate(db, collegeId, facultyId, today, timingCache);
-    if (periods.length === 0) continue;
+    if (periods.length === 0) return 0;
 
     const sessionSnaps = await Promise.all(
       periods.map((p) => collegeRef.collection("studentAttendance").doc(`${p.slot.assignmentId}_${today}_${p.slot.periodNumber}`).get())
@@ -75,13 +77,13 @@ async function sweepCollege(db: FirebaseFirestore.Firestore, collegeId: string, 
       const session = snap.exists ? (snap.data() as StudentAttendanceSession) : null;
       return resolvePeriodCompletionStatus({ dateISO: today, endTime: p.endTime, session, now }) === "NOT_MARKED";
     });
-    if (missed.length === 0) continue;
+    if (missed.length === 0) return 0;
 
     // StudentAttendanceSession.facultyId (what notify() needs) is the LOGIN
     // uid, not the facultyMembers doc id timetableSlots.facultyId already is
     // - same resolution office-correction/route.ts already does.
     const facultySnap = await collegeRef.collection("facultyMembers").doc(facultyId).get();
-    if (!facultySnap.exists) continue;
+    if (!facultySnap.exists) return 0;
     const faculty = facultySnap.data() as FacultyMember;
     const toUid = faculty.userUid ?? facultyId;
 
@@ -106,8 +108,19 @@ async function sweepCollege(db: FirebaseFirestore.Firestore, collegeId: string, 
       // notifications default to.
       actionable: false,
     });
-    notified++;
+    return 1;
+  };
+
+  // A bounded number at a time: the loop used to await each faculty member in turn,
+  // which at ~1,500 faculty outlasts a serverless function. The substitution lookup
+  // inside getFacultyPeriodsForDate is shared across these calls (see periodCoverage),
+  // so the parallelism doesn't multiply its reads.
+  let notified = 0;
+  for (let i = 0; i < facultyIds.length; i += SWEEP_CONCURRENCY) {
+    const results = await Promise.all(facultyIds.slice(i, i + SWEEP_CONCURRENCY).map(checkFaculty));
+    notified += results.reduce((n, r) => n + r, 0);
   }
+
 
   await markSweptToday(db, collegeId, today);
   return { swept: true, notified };

@@ -55,7 +55,7 @@ export async function POST(request: Request) {
     // it has to be resolved fresh here).
     let substituteFor: { originalFacultyId: string; originalFacultyName: string } | null = null;
     if (assignment.facultyId !== facultyMemberId) {
-      const substituted = await resolveSubstituteSlotsForDate(db, session.collegeId, facultyMemberId, date);
+      const substituted = await resolveSubstituteSlotsForDate(db, session.collegeId, facultyMemberId, date, { fresh: true });
       if (substituted.size > 0) {
         const assignmentSlotsSnap = await collegeRef.collection("timetableSlots")
           .where("assignmentId", "==", assignmentId).get();

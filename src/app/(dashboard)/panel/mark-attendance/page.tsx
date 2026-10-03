@@ -12,7 +12,9 @@ import { toast } from "@/hooks/useToast";
 import { enqueueSubmission, getQueue, trySyncQueue, type QueuedSubmission } from "@/lib/attendance/offlineSubmitQueue";
 import type { StudentAttendanceMark, StudentAttendanceSession } from "@/types";
 
-const PERIOD_POLL_MS = 30_000;
+// Polled only while the tab is visible: period open/close times are minute-granular,
+// and a hidden tab nobody is looking at was the bulk of the server load.
+const PERIOD_POLL_MS = 60_000;
 
 interface TodayPeriod {
   assignmentId: string;
@@ -201,7 +203,7 @@ export default function MarkAttendancePage() {
   }
 
   // Load the first report without touching state synchronously, then keep the
-  // view current with a 30s poll.
+  // view current with a 60s poll.
   useEffect(() => {
     void (async () => {
       await fetchTodayPeriods();
@@ -210,11 +212,15 @@ export default function MarkAttendancePage() {
       await syncPendingSubmissions();
     })();
     const id = setInterval(() => {
+      if (document.visibilityState !== "visible") return;
       void (async () => {
         await fetchTodayPeriods();
       })();
     }, PERIOD_POLL_MS);
-    return () => clearInterval(id);
+    // Catch up straight away when the tab comes back, rather than waiting for the next tick.
+    const onVisible = () => { if (document.visibilityState === "visible") void fetchTodayPeriods(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => { clearInterval(id); document.removeEventListener("visibilitychange", onVisible); };
     // syncPendingSubmissions is a stable useCallback (empty deps) - adding
     // it here doesn't cause extra re-runs, just satisfies the linter.
   }, [syncPendingSubmissions]);
