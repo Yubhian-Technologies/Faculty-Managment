@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import { createFirebaseUser } from "@/lib/firebase/authRest";
+import { withAuthUser } from "@/lib/firebase/withAuthUser";
 import { getHodDepartmentScope, canHodManageFacultyDepartment } from "@/lib/departments/scope";
 import { SUPPORTING_STAFF_ROLE_CATEGORY } from "@/lib/supportingStaff/roleCategory";
 import { unitLabelForHeadRole } from "@/lib/attendance/collegeStaffUnits";
@@ -94,17 +94,13 @@ export async function POST(
         ? data.otherDesignationTitle
         : designationLabel(data.designation ?? "OTHER");
 
-    const uid = await createFirebaseUser(email, password, name);
-
+    // The login and its documents are one unit (withAuthUser) - see the faculty
+    // login route; a failure removes the Auth user again instead of orphaning it.
     const now = new Date();
-
-    await db
-      .collection("colleges")
-      .doc(session.collegeId)
-      .collection("users")
-      .doc(uid)
-      .set({
-        uid,
+    const uid = await withAuthUser({ email, password, displayName: name, db }, async (newUid) => {
+      const batch = db.batch();
+      batch.set(db.collection("colleges").doc(session.collegeId).collection("users").doc(newUid), {
+        uid: newUid,
         collegeId: session.collegeId,
         name,
         email,
@@ -116,17 +112,18 @@ export async function POST(
         createdAt: now,
         updatedAt: now,
       });
-
-    await db.collection("systemUsers").doc(uid).set({
-      uid,
-      role: "COLLEGE_STAFF",
-      collegeId: session.collegeId,
-      email,
-      name,
-      ...(profilePhotoUrl ? { profilePhotoUrl } : {}),
+      batch.set(db.collection("systemUsers").doc(newUid), {
+        uid: newUid,
+        role: "COLLEGE_STAFF",
+        collegeId: session.collegeId,
+        email,
+        name,
+        ...(profilePhotoUrl ? { profilePhotoUrl } : {}),
+      });
+      batch.update(ref, { userUid: newUid, updatedAt: now });
+      await batch.commit();
+      return newUid;
     });
-
-    await ref.update({ userUid: uid, updatedAt: now });
 
     return NextResponse.json({ uid }, { status: 201 });
   } catch (err) {

@@ -1,6 +1,8 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
+import { sortStudentsForList } from "@/lib/students/listOrder";
+import { resolveCollegeAcademicYear } from "@/lib/college/collegeAcademicYear";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodManageFacultyDepartment } from "@/lib/departments/scope";
@@ -156,12 +158,13 @@ export async function POST(request: Request) {
     // than the roster the faculty's own live session would have used (see
     // student-attendance/route.ts's own POST).
     const labBatch = matchedPeriod.slot.labBatch ?? undefined;
-    const students = (await fetchSectionStudents(collegeRef, { department, sectionName, year, courseId, labBatch }))
-      .sort((a, b) => a.rollNumber.localeCompare(b.rollNumber, undefined, { numeric: true }));
+    const students = sortStudentsForList(await fetchSectionStudents(collegeRef, { department, sectionName, year, courseId, labBatch }));
 
     const markerSnap = await collegeRef.collection("users").doc(session.uid).get();
     const markerName = (markerSnap.data() as { name?: string } | undefined)?.name ?? "";
     const now = new Date();
+    // The academic year this session belongs to - see student-attendance/route.ts.
+    const academicYear = await resolveCollegeAcademicYear(db, session.collegeId, now);
 
     const attendanceSession = {
       collegeId: session.collegeId,
@@ -170,6 +173,7 @@ export async function POST(request: Request) {
       ...(sectionId ? { sectionId } : {}),
       sectionName,
       ...(year != null ? { year } : {}),
+      academicYear,
       subjectId: assignment.subjectId,
       subjectName: assignment.subjectName,
       subjectCode: assignment.subjectCode,

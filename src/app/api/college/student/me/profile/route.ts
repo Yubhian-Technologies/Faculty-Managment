@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
+import { passwordChangeRequired, passwordChangeRequiredResponse } from "@/lib/students/passwordGate";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { findCurrentSectionDoc } from "@/lib/students/findCurrentSectionDoc";
@@ -28,6 +29,7 @@ export async function GET() {
       return NextResponse.json({ error: UNLINKED_MESSAGE }, { status: 404 });
     }
     const student = { ...(studentSnap.docs[0].data() as StudentRecord), id: studentSnap.docs[0].id };
+    if (passwordChangeRequired(student)) return passwordChangeRequiredResponse();
 
     const sectionDoc = await findCurrentSectionDoc(db, session.collegeId, student);
     const section = sectionDoc ? (sectionDoc.data() as Section) : null;

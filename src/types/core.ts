@@ -1266,6 +1266,10 @@ export interface DegreeDetail {
   institutionType?: "UNIVERSITY" | "INSTITUTE";
   affiliatedUniversity?: string; // UG/PG only, when institutionType === "INSTITUTE"
   institutionName: string;
+  // Doctoral (Ph.D.) only - UI label "Name of the Department": the department
+  // of the university/institute the doctorate was pursued in. Optional, so
+  // every record saved before this existed stays valid (it simply shows nothing).
+  departmentName?: string;
   place?: string; // city/town where the institute is located
   percentageCgpa: string;
   // "Year of Passing" everywhere except Doctoral/Post-Doctoral, which use
@@ -1334,6 +1338,11 @@ export interface TeachingAssignmentSummary {
 
 export interface PreviousInstitution {
   institutionName: string;
+  // UI label "Place of the University/College" - where this institution is
+  // located. Shared by all three experience lists (Academic / Industry /
+  // Research), which use this one shape. Optional, so every record saved before
+  // this existed stays valid (it simply shows nothing).
+  place?: string;
   designation?: string;
   // "YYYY-MM-DD" - the actual dates worked. fromYear/toYear below are the
   // legacy, year-only shape this replaced (same read-time-fallback pattern as
@@ -2923,6 +2932,11 @@ export interface StudentRecord {
   // pipeline) - used solely by /api/auth/resolve-student-login and
   // provisionLogin's own duplicate-Roll-Number check.
   rollNumberUpper?: string;
+  // True while the password is still the one-time one the office issued; the
+  // student portal holds them at a "set a new password" screen until they change
+  // it (see lib/students/passwordGate.ts). Absent on logins created before this existed.
+  mustChangePassword?: boolean;
+  passwordChangedAt?: Timestamp;
   loginCreatedAt?: Timestamp;
   loginCreatedBy?: string; // uid of the Office user who issued it
   createdAt: Timestamp;
@@ -3132,6 +3146,14 @@ export type AuditAction =
   | "FACULTY_UPDATED"
   | "FACULTY_STATUS_CHANGED"
   | "FACULTY_DELETED"
+  // Academic structure (sections, teaching assignments, published timetables)
+  | "SECTION_CREATED"
+  | "SECTION_UPDATED"
+  | "SECTION_DELETED"
+  | "TEACHING_ASSIGNMENT_CREATED"
+  | "TEACHING_ASSIGNMENT_UPDATED"
+  | "TEACHING_ASSIGNMENT_DELETED"
+  | "TIMETABLE_PUBLISHED"
   // Supporting Staff module
   | "SUPPORTING_STAFF_CREATED"
   | "SUPPORTING_STAFF_UPDATED"

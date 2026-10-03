@@ -8,7 +8,8 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { canAccessLeaveProfile } from "@/lib/leave/access";
 import { resolveHodDepartments } from "@/lib/budget/departmentScope";
 import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
-import { REQUESTS_COL, commitApproval, releasePending, releaseApproval, splitLeaveDays } from "@/lib/leave/balanceEngine";
+import { REQUESTS_COL, splitLeaveDays } from "@/lib/leave/balanceEngine";
+import { LeaveStateConflictError, transitionLeaveRequest, type BalanceEffect } from "@/lib/leave/decisionTx";
 import { decideFinalStageLeave } from "@/lib/leave/decideFinalStage";
 import { getHolidayDateKeys } from "@/lib/leave/holidaysCount";
 import { resolveStaffGender, resolveEmployeeIdentity } from "@/lib/leave/identity";
@@ -187,24 +188,32 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
           return NextResponse.json({ error: "This leave has already been completed and can no longer be cancelled" }, { status: 400 });
         }
       }
-      if (req.leaveTypeCode) {
-        const lt = LEAVE_TYPE_SEED.find((t) => t.code === req.leaveTypeCode);
-        if (lt && !lt.rules.unlimited) {
-          if (wasApproved) {
-            // Restore whatever days approval had committed to `used` -
-            // the extra beyond balance (lopDays) was never committed in the
-            // first place, so only the within-balance portion is reversed.
-            const committedDays = req.totalDays - (req.lopDays ?? 0);
-            if (committedDays > 0) {
-              await releaseApproval(db, session.collegeId, req.uid, req.leaveTypeCode, year, committedDays);
-            }
-          } else {
-            await releasePending(db, session.collegeId, req.uid, req.leaveTypeCode, year, req.totalDays);
+      const cancelReason = body.reason!.trim();
+      // Balance release + status flip are one transaction against the request as
+      // it was read here (decisionTx.ts) - a double-click or an approver acting
+      // at the same moment can no longer release days twice or release them for
+      // a request that was just decided the other way.
+      const cancelledType = req.leaveTypeCode ? LEAVE_TYPE_SEED.find((t) => t.code === req.leaveTypeCode) : undefined;
+      let cancelBalance: BalanceEffect | undefined;
+      if (req.leaveTypeCode && cancelledType && !cancelledType.rules.unlimited) {
+        if (wasApproved) {
+          // Restore whatever days approval had committed to `used` -
+          // the extra beyond balance (lopDays) was never committed in the
+          // first place, so only the within-balance portion is reversed.
+          const committedDays = req.totalDays - (req.lopDays ?? 0);
+          if (committedDays > 0) {
+            cancelBalance = { kind: "RELEASE_APPROVAL", uid: req.uid, code: req.leaveTypeCode, year, days: committedDays };
           }
+        } else {
+          cancelBalance = { kind: "RELEASE_PENDING", uid: req.uid, code: req.leaveTypeCode, year, days: req.totalDays };
         }
       }
-      const cancelReason = body.reason!.trim();
-      await ref.update({ status: "CANCELLED", cancelReason, updatedAt: now });
+      await transitionLeaveRequest({
+        db, collegeId: session.collegeId, id,
+        expected: { status: req.status, updatedAt: req.updatedAt },
+        balance: cancelBalance,
+        buildUpdate: () => ({ status: "CANCELLED", cancelReason, updatedAt: now }),
+      });
       if (wasApproved) {
         await revokeFutureLeaveFromAttendance(db, session.collegeId, req, id);
       }
@@ -958,13 +967,15 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       };
 
       if (body.action === "REJECT") {
-        if (req.leaveTypeCode) {
-          const lt = LEAVE_TYPE_SEED.find((t) => t.code === req.leaveTypeCode);
-          if (lt && !lt.rules.unlimited) {
-            await releasePending(db, session.collegeId, req.uid, req.leaveTypeCode, year, req.totalDays);
-          }
-        }
-        await ref.update({ status: "REJECTED", hodAction: actionRecord, updatedAt: now });
+        const rejectedType = req.leaveTypeCode ? LEAVE_TYPE_SEED.find((t) => t.code === req.leaveTypeCode) : undefined;
+        await transitionLeaveRequest({
+          db, collegeId: session.collegeId, id,
+          expected: { status: req.status, updatedAt: req.updatedAt },
+          balance: req.leaveTypeCode && rejectedType && !rejectedType.rules.unlimited
+            ? { kind: "RELEASE_PENDING", uid: req.uid, code: req.leaveTypeCode, year, days: req.totalDays }
+            : undefined,
+          buildUpdate: () => ({ status: "REJECTED", hodAction: actionRecord, updatedAt: now }),
+        });
         await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
           collegeId: session.collegeId, action: "LEAVE_REJECTED", performedBy: session.uid,
           performedByName: session.email || decidedByLabel, targetId: id, details: {}, timestamp: now,
@@ -998,8 +1009,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         // (see the notify loop below, unchanged). PENDING_VICE_PRINCIPAL is
         // the status that keeps both of them eligible; PENDING_PRINCIPAL is
         // now Principal-only (see its comment in types/leave.ts).
-        await ref.update({
-          status: "PENDING_VICE_PRINCIPAL", isPaidLeave: body.isPaidLeave, hodAction: actionRecord, updatedAt: now,
+        await transitionLeaveRequest({
+          db, collegeId: session.collegeId, id,
+          expected: { status: req.status, updatedAt: req.updatedAt },
+          buildUpdate: () => ({
+            status: "PENDING_VICE_PRINCIPAL", isPaidLeave: body.isPaidLeave, hodAction: actionRecord, updatedAt: now,
+          }),
         });
         await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
           collegeId: session.collegeId, action: "LEAVE_HOD_FORWARDED", performedBy: session.uid,
@@ -1028,26 +1043,26 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       // PROPOSE_COVERAGE's acceptance gate above.
       const periodSubstitutions = req.periodSubstitutions;
 
-      let lopDays = 0;
-      if (req.leaveTypeCode) {
-        const lt = LEAVE_TYPE_SEED.find((t) => t.code === req.leaveTypeCode);
-        if (lt && !lt.rules.unlimited) {
-          const split = await splitLeaveDays(db, session.collegeId, req.uid, lt, year, req.totalDays);
-          lopDays = split.lopDays;
-          if (split.withinBalance > 0) {
-            await commitApproval(db, session.collegeId, req.uid, req.leaveTypeCode, year, split.withinBalance);
-          }
-        }
-      }
-      await ref.update({
-        status: "APPROVED", hodAction: actionRecord, lopDays, updatedAt: now,
-        ...(periodSubstitutions ? { periodSubstitutions } : {}),
-        // An approved OD only stays PAID once the duty is evidenced: the
-        // requester uploads proof after the period ends and an approver
-        // verifies it (see lib/leave/odProof.ts). Stamping the obligation
-        // here, rather than testing leaveTypeCode at read time, is what
-        // keeps every OD approved before this shipped permanently exempt.
-        ...(req.leaveTypeCode === "OD" ? { odProofRequired: true } : {}),
+      // Status precondition + balance commit + APPROVED all land in one
+      // transaction (decisionTx.ts): two approvers, or a double-click, can no
+      // longer deduct twice, and a failed update can't strand a deduction.
+      const approvedType = req.leaveTypeCode ? LEAVE_TYPE_SEED.find((t) => t.code === req.leaveTypeCode) : undefined;
+      const { lopDays } = await transitionLeaveRequest({
+        db, collegeId: session.collegeId, id,
+        expected: { status: req.status, updatedAt: req.updatedAt },
+        balance: req.leaveTypeCode && approvedType && !approvedType.rules.unlimited
+          ? { kind: "COMMIT_SPLIT", uid: req.uid, code: req.leaveTypeCode, year, days: req.totalDays, leaveType: approvedType }
+          : undefined,
+        buildUpdate: (r) => ({
+          status: "APPROVED", hodAction: actionRecord, lopDays: r.lopDays, updatedAt: now,
+          ...(periodSubstitutions ? { periodSubstitutions } : {}),
+          // An approved OD only stays PAID once the duty is evidenced: the
+          // requester uploads proof after the period ends and an approver
+          // verifies it (see lib/leave/odProof.ts). Stamping the obligation
+          // here, rather than testing leaveTypeCode at read time, is what
+          // keeps every OD approved before this shipped permanently exempt.
+          ...(req.leaveTypeCode === "OD" ? { odProofRequired: true } : {}),
+        }),
       });
       await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
         collegeId: session.collegeId, action: "LEAVE_HOD_APPROVED", performedBy: session.uid,
@@ -1186,6 +1201,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    if (err instanceof LeaveStateConflictError) {
+      return NextResponse.json({ error: err.message }, { status: 409 });
     }
     console.error("[leave/applications/[id] PATCH]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });

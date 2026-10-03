@@ -4,18 +4,28 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb, getAdminAuth } from "@/lib/firebase/admin";
 import { provisionStudentLogin, StudentLoginError } from "@/lib/students/provisionLogin";
-import { DEFAULT_STUDENT_PASSWORD } from "@/lib/students/loginDefaults";
+import { studentPasswordError } from "@/lib/students/passwordPolicy";
 import type { StudentRecord } from "@/types";
 
-// Issues one student a real login (Roll Number + the shared default
-// password) - College Office only, per product decision. Safely re-runnable:
-// calling this again for an already-linked student is a no-op that returns
-// the existing loginEmail (never the password, which we no longer know once
-// created - use reset-login-password for that).
+// Issues one student a real login: Roll Number (username) + the password the
+// College Office types in the request. College Office only, per product decision.
+// The password goes to Firebase Auth and nowhere else - it is not stored, logged,
+// audited or returned. Safely re-runnable: calling this again for an already-linked
+// student is a no-op that returns the existing loginEmail (use reset-login-password
+// to set a new password).
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await requireCollegeMember("COLLEGE_OFFICE");
     const { id } = await params;
+
+    let body: { password?: unknown };
+    try {
+      body = (await request.json()) as { password?: unknown };
+    } catch {
+      return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+    }
+    const passwordProblem = studentPasswordError(body?.password);
+    if (passwordProblem) return NextResponse.json({ error: passwordProblem }, { status: 400 });
 
     const db = getAdminDb();
     const collegeRef = db.collection("colleges").doc(session.collegeId);
@@ -26,7 +36,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const student = studentSnap.data() as StudentRecord;
 
     const adminAuth = await getAdminAuth();
-    const result = await provisionStudentLogin(db, adminAuth, session.collegeId, id, student, session.uid);
+    const result = await provisionStudentLogin(db, adminAuth, session.collegeId, id, student, session.uid, body.password as string);
 
     if (!result.alreadyExisted) {
       await collegeRef.collection("auditLogs").add({
@@ -44,11 +54,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       uid: result.uid,
       loginEmail: result.loginEmail,
       alreadyExisted: result.alreadyExisted,
-      // Only shown once, on the call that actually creates the login - Office
-      // must hand this to the student now; it is never persisted anywhere or
-      // returned again on a later call (see resetStudentLoginPassword for
-      // "student forgot it").
-      password: result.alreadyExisted ? undefined : DEFAULT_STUDENT_PASSWORD,
     });
   } catch (err) {
     if (err instanceof StudentLoginError) {
@@ -58,9 +63,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     console.error("[college/students/[id]/create-login POST]", err);
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Internal error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 }

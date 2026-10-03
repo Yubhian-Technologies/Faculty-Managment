@@ -2,6 +2,9 @@ export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
+import { pinSlotWithChecks } from "@/lib/timetable/pinSlot";
+import { loadTimingLookup } from "@/lib/timetable/facultyOverlap";
+import { makeLiveSlotPredicate } from "@/lib/timetable/liveSlots";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
 import { getActiveSubstitutionsForDates, currentWeekDateKeys } from "@/lib/leave/periodCoverage";
@@ -221,74 +224,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: `${day} is not a working day.` }, { status: 400 });
     }
 
-    const dayCountSnap = await collegeRef.collection("timetableSlots")
-      .where("facultyId", "==", assignment.facultyId)
-      .where("day", "==", day)
-      .get();
-    let dayCount = 0;
-    for (const d of dayCountSnap.docs) {
-      const other = d.data() as TimetableSlot;
-      const otherSemester = await resolveSectionCurrentSemester(db, session.collegeId, other.courseId, other.year);
-      if (matchesCurrentSemester(other.semester, otherSemester) && matchesCurrentAcademicYear(other.academicYear, currentAcademicYear)) {
-        dayCount++;
-      }
-    }
-    if (dayCount + 1 > rules.maxPeriodsPerFacultyPerDay) {
-      return NextResponse.json(
-        { error: `${assignment.facultyName || "This faculty"} would exceed the ${rules.maxPeriodsPerFacultyPerDay} periods/day limit on ${day}.` },
-        { status: 409 },
-      );
-    }
-
-    const cellSlotsSnap = await collegeRef.collection("timetableSlots")
-      .where("sectionId", "==", assignment.sectionId)
-      .where("day", "==", day)
-      .where("periodNumber", "==", Number(periodNumber))
-      .get();
-    const cellSlotsNow = cellSlotsSnap.docs
-      .map((d) => d.data() as TimetableSlot)
-      .filter((data) => matchesCurrentSemester(data.semester, assignmentSemester) && matchesCurrentAcademicYear(data.academicYear, currentAcademicYear));
-    if (!body.allowSplit) {
-      if (cellSlotsNow.length > 0) {
-        return NextResponse.json(
-          { error: `Conflict: this section already has a subject scheduled on ${day} period ${periodNumber}` },
-          { status: 409 }
-        );
-      }
-    } else if (cellSlotsNow.length > 0) {
-      // A period may only ever be split between exactly two lab (PRACTICAL)
-      // subjects - never a third occupant, and never mixed with a theory/
-      // tutorial/project class (the check above already confirmed the
-      // INCOMING subject is PRACTICAL - this checks the EXISTING one(s)).
-      if (cellSlotsNow.length >= 2) {
-        return NextResponse.json(
-          { error: `Period ${periodNumber} on ${day} already has 2 subjects sharing it - a period can only be split between two labs.` },
-          { status: 409 }
-        );
-      }
-      const existingSubjectIds = Array.from(new Set(cellSlotsNow.map((s) => s.subjectId)));
-      const existingSubjectDocs = await Promise.all(
-        existingSubjectIds.map((id) => collegeRef.collection("subjects").doc(id).get())
-      );
-      const existingTypeById = new Map(existingSubjectDocs.map((d) => [d.id, (d.data() as { type?: string } | undefined)?.type]));
-      if (cellSlotsNow.some((s) => existingTypeById.get(s.subjectId) !== "PRACTICAL")) {
-        return NextResponse.json(
-          { error: `Period ${periodNumber} on ${day} already has a theory class scheduled - it can't be split with a lab.` },
-          { status: 409 }
-        );
-      }
-    }
-
-    // No faculty-clash check across sections: different years run their own
-    // period timings (e.g. P3 is 10:40-11:30 for Year 1 and 11:00-11:50 for
-    // Year 2), so the same faculty holding the same period number in two
-    // sections is allowed on purpose.
-
-    const now = new Date();
+    // The daily cap, the cell-taken / split-lab rules and the write are ONE transaction under the section's
+    // and the faculty member's guard documents (lib/timetable/pinSlot.ts), so
+    // two pins landing together can't both pass the checks.
     const deptIndex = await loadDepartmentIndex(db, session.collegeId);
-    const ref = await collegeRef.collection("timetableSlots").add(stampDepartmentIds({
+    const { lookup: timingLookup } = await loadTimingLookup(db, session.collegeId, [{ courseId: assignment.courseId, year: assignment.year }]);
+    const pinned = await pinSlotWithChecks({
+      db,
       collegeId: session.collegeId,
-      department: assignment.department,
       assignmentId,
       facultyId: assignment.facultyId,
       facultyName: assignment.facultyName,
@@ -297,23 +240,24 @@ export async function POST(request: Request) {
       sectionId: assignment.sectionId,
       subjectId: assignment.subjectId,
       subjectName: assignment.subjectName,
+      department: assignment.department,
       day,
       periodNumber: Number(periodNumber),
       classroom: body.classroom ?? null,
-      ...(body.labBatch ? { labBatch: body.labBatch } : {}),
-      // This route backs the per-faculty "Weekly Schedule" picker, so anything
-      // created here was placed deliberately by a human. Marking it MANUAL/pinned
-      // makes the generator schedule around it and stops publish from replacing
-      // it (the publish route only clears source === "GENERATED" slots).
-      source: "MANUAL",
-      isPinned: true,
+      labBatch: body.labBatch,
+      allowSplit: body.allowSplit,
       semester: assignmentSemester,
-      academicYear: currentAcademicYear,
-      createdAt: now,
-      updatedAt: now,
-    }, deptIndex));
+      currentAcademicYear,
+      maxPeriodsPerFacultyPerDay: rules.maxPeriodsPerFacultyPerDay,
+      isLiveSlot: makeLiveSlotPredicate(timingLookup, currentAcademicYear),
+      stamp: (data) => stampDepartmentIds(data, deptIndex),
+      writer: session.uid,
+    });
+    if (!pinned.ok) {
+      return NextResponse.json({ error: pinned.error }, { status: 409 });
+    }
 
-    return NextResponse.json({ id: ref.id }, { status: 201 });
+    return NextResponse.json({ id: pinned.id }, { status: 201 });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

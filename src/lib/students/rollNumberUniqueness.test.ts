@@ -46,18 +46,22 @@ describe("createRollRegistry (importers)", () => {
 });
 
 describe("findRollNumberConflict (single edits)", () => {
-  const fake = (rows: { id: string; rollNumber: string; name: string }[]) => ({
-    where(_f: string, _op: "==", value: string) {
+  type Row = { id: string; rollNumber: string; rollNumberUpper?: string; name: string };
+  const fake = (rows: Row[]) => ({
+    where(field: string, _op: "==", value: string) {
       return {
         async get() {
-          return { docs: rows.filter((r) => r.rollNumber === value).map((r) => ({ id: r.id, data: () => ({ name: r.name, rollNumber: r.rollNumber }) })) };
+          const hit = rows.filter((r) => (field === "rollNumberUpper" ? r.rollNumberUpper : r.rollNumber) === value);
+          return { docs: hit.map((r) => ({ id: r.id, data: () => ({ name: r.name, rollNumber: r.rollNumber }) })) };
         },
       };
     },
   });
-  const rows = [
-    { id: "a", rollNumber: "R1", name: "Alpha" },
-    { id: "b", rollNumber: "R2", name: "Beta" },
+  const rows: Row[] = [
+    { id: "a", rollNumber: "R1", rollNumberUpper: "R1", name: "Alpha" },
+    { id: "b", rollNumber: "R2", rollNumberUpper: "R2", name: "Beta" },
+    { id: "legacy", rollNumber: "24pa1a0501", name: "Legacy lower-case, no rollNumberUpper" },
+    { id: "stamped", rollNumber: "24Pa1A0777", rollNumberUpper: "24PA1A0777", name: "Mixed case but stamped" },
   ];
 
   it("returns the other holder", async () => {
@@ -71,6 +75,16 @@ describe("findRollNumberConflict (single edits)", () => {
   it("free roll and blank roll are conflict-free", async () => {
     expect(await findRollNumberConflict(fake(rows), "R9", "a")).toBeNull();
     expect(await findRollNumberConflict(fake(rows), "  ", "a")).toBeNull();
+  });
+
+  it("is case-insensitive: another casing of a taken roll is a conflict", async () => {
+    expect((await findRollNumberConflict(fake(rows), "r1", "b"))?.id).toBe("a");
+    expect((await findRollNumberConflict(fake(rows), "24PA1A0777", "x"))?.id).toBe("stamped");
+    expect((await findRollNumberConflict(fake(rows), "24pa1a0777", "x"))?.id).toBe("stamped");
+  });
+
+  it("catches a legacy document that has no rollNumberUpper yet when its spelling is upper/lower/as typed", async () => {
+    expect((await findRollNumberConflict(fake(rows), "24PA1A0501", "x"))?.id).toBe("legacy");
   });
 
   it("message names the holder", () => {

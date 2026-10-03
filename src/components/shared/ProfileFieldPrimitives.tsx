@@ -375,6 +375,11 @@ export function DegreeFields({
             onChange={(x) => onChange({ ...v, institutionName: x })}
           />
         )}
+        {/* Ph.D. only - the department the doctorate was pursued in; sits
+            directly before Place. */}
+        {isDoctoral && (
+          <TextInput label="Name of the Department" value={v.departmentName} onChange={(x) => onChange({ ...v, departmentName: x })} placeholder="e.g. Computer Science and Engineering" />
+        )}
         <TextInput label="Place" value={v.place} onChange={(x) => onChange({ ...v, place: x })} placeholder="e.g. Bhimavaram" />
         {!isDoctoral && (
           <TextInput label="Percentage / CGPA" value={v.percentageCgpa} onChange={(x) => onChange({ ...v, percentageCgpa: x })} />
@@ -790,7 +795,7 @@ const PHD_MODE_VIEW_LABELS: Record<PhdMode, string> = { FULL_TIME: "Full-Time", 
 // calendar year for the edit form's number input, which must never be read
 // back as "this entry has data").
 const DEGREE_DATA_KEYS = [
-  "course", "branch", "specialization", "institutionName", "place", "percentageCgpa",
+  "course", "branch", "specialization", "institutionName", "departmentName", "place", "percentageCgpa",
   "hallTicketNumber", "certificateUrl", "domain", "board", "institutionType",
   "affiliatedUniversity", "status", "mode", "nameOfTheGuideSupervisor", "yearOfRegistration",
   "yearOfAward", "yearOfPassing", "degreeType",
@@ -846,6 +851,7 @@ export function DegreeView({
       ) : (
         <OptionalField label="Institution Name" value={degree?.institutionName} />
       )}
+      {isDoctoral && <OptionalField label="Name of the Department" value={degree?.departmentName} />}
       <OptionalField label="Place" value={degree?.place} />
       {!isDoctoral && <OptionalField label="Percentage / CGPA" value={degree?.percentageCgpa} />}
       {isDoctoral && degree?.percentageCgpa && <OptionalField label="Percentage / CGPA (legacy)" value={degree.percentageCgpa} />}

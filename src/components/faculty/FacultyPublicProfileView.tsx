@@ -32,6 +32,7 @@ export interface DegreeSummary {
   branch: string;
   specialization?: string;
   institutionName: string;
+  departmentName?: string; // Ph.D. entries only - "Name of the Department"
   // Exactly one is set: yearOfAward for Doctoral/Post-Doctoral entries,
   // yearOfPassing for everything else (see publicDegree in the public API route).
   yearOfPassing?: number;
@@ -66,7 +67,7 @@ export interface FacultyPublicProfile {
   };
   // fromDate/toDate are the real dates the current forms write; fromYear/toYear
   // are the legacy year-only fallback (see publicProfileDates.ts).
-  academicExperience: { institutionName: string; designation?: string; fromDate?: string; toDate?: string; fromYear?: number; toYear?: number; isInternal?: boolean }[];
+  academicExperience: { institutionName: string; place?: string; designation?: string; fromDate?: string; toDate?: string; fromYear?: number; toYear?: number; isInternal?: boolean }[];
   research?: {
     publications: { title: string; coAuthors: string; journalOrConference: string; publicationYear: number; indexing?: string }[];
     totalPublications: number;
@@ -99,7 +100,7 @@ function degreeTitle(d?: DegreeSummary) {
 function degreeMeta(d?: DegreeSummary) {
   if (!d) return null;
   const year = d.yearOfAward ?? d.yearOfPassing;
-  return [d.institutionName, year].filter(Boolean).join(" · ");
+  return [d.departmentName, d.institutionName, year].filter(Boolean).join(" · ");
 }
 
 // How long a single prior posting lasted, counted from the very period the
@@ -416,7 +417,7 @@ export function FacultyPublicProfileView({ profile }: { profile: FacultyPublicPr
                       return (
                         <EntryCard
                           key={`${kind}_${i}`}
-                          title={inst.institutionName}
+                          title={[inst.institutionName, inst.place].filter(Boolean).join(", ")}
                           meta={[inst.designation, period, duration].filter(Boolean).join(" · ")}
                         />
                       );

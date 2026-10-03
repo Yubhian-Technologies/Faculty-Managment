@@ -143,6 +143,7 @@ export function ExperienceModule({
               {group.entries.map((inst, i) => (
                 <div key={i} className="rounded-md border bg-muted/20 shadow-sm p-2 grid grid-cols-2 sm:grid-cols-3 gap-2">
                   <OptionalField label="Institution Name" value={inst.institutionName} />
+                  <OptionalField label="Place of the University/College" value={inst.place} />
                   <OptionalField label="Designation" value={inst.designation} />
                   <OptionalField label="From Date" value={formatInstitutionDate(inst.fromDate, inst.fromYear)} />
                   <OptionalField label="To Date" value={formatInstitutionDate(inst.toDate, inst.toYear)} />

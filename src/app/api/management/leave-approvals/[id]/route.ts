@@ -11,6 +11,7 @@ import { requireManagement } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { REQUESTS_COL } from "@/lib/leave/balanceEngine";
 import { decideFinalStageLeave } from "@/lib/leave/decideFinalStage";
+import { LeaveStateConflictError } from "@/lib/leave/decisionTx";
 import { notifyODProofDecision } from "@/lib/leave/odProofNotify";
 import type { LeaveRequest } from "@/types/leave";
 
@@ -109,6 +110,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   } catch (err) {
     if (err instanceof Error && err.message === "UNAUTHORIZED") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    if (err instanceof LeaveStateConflictError) {
+      return NextResponse.json({ error: err.message }, { status: 409 });
     }
     console.error("[management/leave-approvals/[id] PATCH]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
