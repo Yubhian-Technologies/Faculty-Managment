@@ -8,6 +8,8 @@ import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { resolveCurrentSemester, matchesCurrentSemester } from "@/lib/college/semester";
 import { isFacultyAvailable, DEFAULT_TIMETABLE_RULES } from "@/types";
 import { defaultPeriodTimings } from "@/lib/timetable/buildGrid";
+import { REQUESTS_COL } from "@/lib/leave/balanceEngine";
+import { istDateKey } from "@/lib/attendance/istTime";
 import type { CourseYearTiming, DayOfWeek, PeriodTiming, TimetableDraft, TimetableRules, TimetableSlot } from "@/types";
 
 // "HH:MM" or nothing. Anything else is ignored rather than guessed at.
@@ -40,8 +42,8 @@ function dayOfWeekFromISODate(iso: string): DayOfWeek | null {
 // the faculty - see faculty-schedule), each checked against its own course-year's
 // current semester. Matching is by day + period NUMBER, the app-wide convention.
 //
-// Without day/period it just returns the pickers' options (working days and
-// widest period count).
+// Without day/period it just returns the pickers' options (working days,
+// widest period count and the configured semester numbers).
 export async function GET(request: Request) {
   try {
     const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "EXAM_CELL", "COLLEGE_ADMIN", "DIRECTOR", "SUPER_ADMIN");
@@ -73,6 +75,7 @@ export async function GET(request: Request) {
       : DEFAULT_TIMETABLE_RULES;
     const timingByCourseYear = new Map<string, CourseYearTiming>();
     let periodCount = 0;
+    const semesterNumbers = new Set<number>();
     // The widest course-year clock, sent to the client only so the Period
     // picker can show times and prefill the window. Busy-checking never uses
     // it - that resolves each slot against ITS OWN course-year (periodsFor
@@ -82,6 +85,7 @@ export async function GET(request: Request) {
     for (const d of timingsSnap.docs) {
       const t = d.data() as CourseYearTiming;
       timingByCourseYear.set(`${t.courseId}_${t.year}`, t);
+      for (const sem of t.semesters ?? []) semesterNumbers.add(sem.semester);
       const own = t.periods && t.periods.length > 0 ? t.periods : defaultPeriodTimings(t);
       if (own.length > periodCount) { periodCount = own.length; periods = own; }
     }
@@ -101,15 +105,17 @@ export async function GET(request: Request) {
       .filter(Boolean)
       .sort((a, b) => a.localeCompare(b));
 
+    const semesters = Array.from(semesterNumbers).sort((a, b) => a - b);
+
     // Options-only call: no usable date yet, or neither a period nor a window.
     if (!day || (!byWindow && (!Number.isInteger(period) || period < 1))) {
-      return NextResponse.json({ workingDays: rules.workingDays, periodCount, periods, departments: departmentNames });
+      return NextResponse.json({ workingDays: rules.workingDays, periodCount, periods, departments: departmentNames, semesters });
     }
     if (!rules.workingDays.includes(day)) {
       return NextResponse.json({ error: "That date is not a working day" }, { status: 400 });
     }
 
-    const [facultySnap, slotsSnap, draftsSnap] = await Promise.all([
+    const [facultySnap, slotsSnap, draftsSnap, leaveSnap] = await Promise.all([
       collegeRef.collection("facultyMembers").get(),
       // A window cannot be narrowed to one periodNumber up front - which
       // numbers fall inside it differs per course-year - so the whole day is
@@ -118,44 +124,137 @@ export async function GET(request: Request) {
         ? collegeRef.collection("timetableSlots").where("day", "==", day).get()
         : collegeRef.collection("timetableSlots").where("day", "==", day).where("periodNumber", "==", period).get(),
       collegeRef.collection("timetableDrafts").get(),
+      REQUESTS_COL(session.collegeId, db).where("status", "==", "APPROVED").get(),
     ]);
+
+    // Time ranges ("HH:MM") each person is NOT free in. With a clock window a
+    // person is listed when any part of the window is left over, together with
+    // that leftover (e.g. window 13:40-15:20, class 13:40-14:30 -> free
+    // 14:30-15:20). Period mode has no window, so any hit blocks outright.
+    type Range = [string, string];
+    const WHOLE_DAY: Range = ["00:00", "24:00"];
+    const addRange = (m: Map<string, Range[]>, key: string, r: Range) => m.set(key, [...(m.get(key) ?? []), r]);
+
+    // Approved leave covering the chosen date, by login uid. Leave dates are
+    // midnight-IST timestamps, so they are compared as IST calendar days. A
+    // half-day only blocks its own half (FN before 13:00, AN from 13:00); a
+    // full-day leave blocks everything.
+    const leaveByUid = new Map<string, Range[]>();
+    for (const doc of leaveSnap.docs) {
+      const r = doc.data() as { uid?: string; fromDate?: { toDate?: () => Date }; toDate?: { toDate?: () => Date }; isHalfDay?: boolean; halfDaySession?: "FN" | "AN" };
+      const f = r.fromDate?.toDate?.();
+      const t = r.toDate?.toDate?.();
+      if (!r.uid || !f || !t || !dateParam) continue;
+      if (istDateKey(f) > dateParam || istDateKey(t) < dateParam) continue;
+      addRange(leaveByUid, r.uid, r.isHalfDay && r.halfDaySession
+        ? (r.halfDaySession === "FN" ? ["00:00", "13:00"] : ["13:00", "24:00"])
+        : WHOLE_DAY);
+    }
 
     const inCurrentSemester = (courseId: string, year: number, semester: number | null | undefined) =>
       matchesCurrentSemester(semester ?? null, resolveCurrentSemester(timingByCourseYear.get(`${courseId}_${year}`) ?? null));
 
-    const busy = new Set<string>();
+    const periodRange = (courseId: string, year: number, periodNumber: number): Range | null => {
+      const pt = periodsFor(courseId, year).find((x) => x.period === periodNumber);
+      return pt ? [pt.startTime, pt.endTime] : null;
+    };
+    const busyByFaculty = new Map<string, Range[]>();
+    const markBusy = (facultyId: string, courseId: string, year: number, periodNumber: number) => {
+      if (!byWindow) return addRange(busyByFaculty, facultyId, WHOLE_DAY);
+      if (!overlapsWindow(courseId, year, periodNumber)) return;
+      const r = periodRange(courseId, year, periodNumber);
+      if (r) addRange(busyByFaculty, facultyId, r);
+    };
     for (const d of slotsSnap.docs) {
       const s = d.data() as TimetableSlot;
       if (!s.facultyId || !inCurrentSemester(s.courseId, s.year, s.semester)) continue;
-      if (byWindow && !overlapsWindow(s.courseId, s.year, s.periodNumber)) continue;
-      busy.add(s.facultyId);
+      markBusy(s.facultyId, s.courseId, s.year, s.periodNumber);
     }
     for (const d of draftsSnap.docs) {
       const draft = d.data() as TimetableDraft;
       if (draft.status !== "DRAFT" || !inCurrentSemester(draft.courseId, draft.year, draft.semester)) continue;
       for (const ds of draft.slots ?? []) {
         if (!ds.facultyId || ds.day !== day) continue;
-        const hit = byWindow
-          ? overlapsWindow(draft.courseId, draft.year, ds.periodNumber)
-          : ds.periodNumber === period;
-        if (hit) busy.add(ds.facultyId);
+        if (!byWindow && ds.periodNumber !== period) continue;
+        markBusy(ds.facultyId, draft.courseId, draft.year, ds.periodNumber);
       }
     }
+
+    // Gaps between consecutive periods (lunch / short breaks), from the widest
+    // course-year clock. They are never offered as free time - a break is not
+    // a slot anyone can be scheduled into.
+    const breakGaps: Range[] = [];
+    const orderedPeriods = [...periods].sort((a, b) => a.startTime.localeCompare(b.startTime));
+    for (let i = 1; i < orderedPeriods.length; i++) {
+      if (orderedPeriods[i].startTime > orderedPeriods[i - 1].endTime) {
+        breakGaps.push([orderedPeriods[i - 1].endTime, orderedPeriods[i].startTime]);
+      }
+    }
+
+    // The part of [from, to] not covered by any of `blocked` or a break.
+    const freeWithin = (blocked: Range[]): Range[] => {
+      if (!byWindow) return blocked.length ? [] : [[from ?? "", to ?? ""]];
+      const sorted = [...blocked, ...breakGaps].sort((a, b) => a[0].localeCompare(b[0]));
+      const out: Range[] = [];
+      let cursor = from!;
+      for (const [bs, be] of sorted) {
+        if (bs > cursor) out.push([cursor, bs < to! ? bs : to!]);
+        if (be > cursor) cursor = be;
+        if (cursor >= to!) break;
+      }
+      if (cursor < to!) out.push([cursor, to!]);
+      return out.filter(([a, b]) => a < b);
+    };
 
     // HOD: own department tree only (ownDepartmentNames, the narrowest scope).
     const hodDepartments = session.role === "HOD"
       ? new Set(ownDepartmentNames(await getHodDepartmentScope(db, session.collegeId, session.uid)))
       : null;
 
+    // A parent department also covers its sub-departments (BASIC SCIENCE
+    // includes BASIC SCIENCE ENGLISH / MATHS), matching how an HOD's own scope
+    // already works.
+    let departmentScope: Set<string> | null = null;
+    if (departmentFilter) {
+      departmentScope = new Set([departmentFilter]);
+      const rows = deptsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as { name?: string; parentDepartmentId?: string | null }) }));
+      const rootIds = new Set(rows.filter((r) => (r.name ?? "").trim() === departmentFilter).map((r) => r.id));
+      let grew = true;
+      while (grew) {
+        grew = false;
+        for (const r of rows) {
+          if (r.parentDepartmentId && rootIds.has(r.parentDepartmentId) && !rootIds.has(r.id)) {
+            rootIds.add(r.id);
+            departmentScope.add((r.name ?? "").trim());
+            grew = true;
+          }
+        }
+      }
+    }
+
+    // What "free for the whole range" looks like once breaks are carved out.
+    const fullRanges = JSON.stringify(freeWithin([]));
+
     const faculty = facultySnap.docs
-      .map((d) => ({ id: d.id, ...d.data() }) as { id: string; legalName?: string; status?: string; department?: string; employeeId?: string })
-      .filter((f) => isFacultyAvailable(f.status) && !busy.has(f.id)
+      .map((d) => ({ id: d.id, ...d.data() }) as { id: string; userUid?: string; legalName?: string; status?: string; department?: string; employeeId?: string })
+      // ON_LEAVE is a manual flag with no dates, so it no longer excludes on its
+      // own - real approved leave on the chosen date does (leaveByUid).
+      .filter((f) => (isFacultyAvailable(f.status) || f.status === "ON_LEAVE")
         && (!hodDepartments || hodDepartments.has(f.department ?? ""))
-        && (!departmentFilter || (f.department ?? "") === departmentFilter))
-      .map((f) => ({ id: f.id, employeeId: f.employeeId ?? "", name: facultyDisplayName(f), department: f.department ?? "" }))
+        && (!departmentScope || departmentScope.has(f.department ?? "")))
+      .map((f) => {
+        const blocked = [...(busyByFaculty.get(f.id) ?? []), ...(f.userUid ? leaveByUid.get(f.userUid) ?? [] : [])];
+        return { f, freeRanges: freeWithin(blocked) };
+      })
+      .filter(({ freeRanges }) => freeRanges.length > 0)
+      .map(({ f, freeRanges }) => ({
+        id: f.id, employeeId: f.employeeId ?? "", name: facultyDisplayName(f), department: f.department ?? "",
+        // Only sent when the person is free for just PART of the window.
+        freeRanges: byWindow && JSON.stringify(freeRanges) !== fullRanges ? freeRanges : undefined,
+      }))
       .sort((a, b) => a.department.localeCompare(b.department) || a.name.localeCompare(b.name));
 
-    return NextResponse.json({ workingDays: rules.workingDays, periodCount, periods, departments: departmentNames, faculty });
+    return NextResponse.json({ workingDays: rules.workingDays, periodCount, periods, departments: departmentNames, semesters, faculty });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

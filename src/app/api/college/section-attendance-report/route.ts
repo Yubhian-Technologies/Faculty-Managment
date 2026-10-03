@@ -5,8 +5,9 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
 import { fetchSectionStudents } from "@/lib/students/sectionRoster";
+import { getFacultyIdCandidates } from "@/lib/faculty/resolveFacultyMemberId";
 import { calcPercent } from "@/lib/studentAttendance/percentage";
-import { indexSessions, tallyStudentBySubject } from "@/lib/studentAttendance/counting";
+import { countFullyAbsentDays, indexSessions, tallyStudentBySubject } from "@/lib/studentAttendance/counting";
 import { isShortageByPercent } from "@/lib/studentAttendance/shortage";
 import { matchesCurrentSemester } from "@/lib/college/semester";
 import type { Section, StudentAttendanceMark, StudentAttendanceSession, TeachingAssignment } from "@/types";
@@ -96,7 +97,7 @@ async function currentSectionSubjects(
 // student missed).
 export async function GET(request: Request) {
   try {
-    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL");
+    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_OFFICE", "PANEL_MEMBER");
     const { searchParams } = new URL(request.url);
     const sectionId = searchParams.get("sectionId");
     const yearParam = searchParams.get("year");
@@ -173,6 +174,16 @@ export async function GET(request: Request) {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
       if (!canHodEditDepartment(scope, section.department)) {
         return NextResponse.json({ error: "This section isn't in your department" }, { status: 403 });
+      }
+    }
+
+    // A class incharge (a faculty login, PANEL_MEMBER) may report on the
+    // sections they are in charge of - and only those. Section.facultyInchargeUid
+    // holds their login uid or, on older records, their FacultyMember doc id.
+    if (session.role === "PANEL_MEMBER") {
+      const candidateIds = await getFacultyIdCandidates(db, session.collegeId, session.uid);
+      if (!section.facultyInchargeUid || !candidateIds.includes(section.facultyInchargeUid)) {
+        return NextResponse.json({ error: "You are not the class incharge of this section" }, { status: 403 });
       }
     }
 
@@ -352,6 +363,8 @@ export async function GET(request: Request) {
             studentId: stu.id,
             rollNumber: stu.rollNumber,
             name: stu.name,
+            labBatch: stu.labBatch ?? "",
+            absentDays: countFullyAbsentDays(indexedRange, stu.id),
             bySubject,
             overall: { held: overallHeld, attended: overallAttended, percentage: overallPercentage },
           };

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "@/hooks/useToast";
 import { downloadFreeFacultyPdf, downloadFreeFacultyXlsx } from "@/lib/timetable/freeFacultyExport";
-interface LeisureFaculty { id: string; employeeId: string; name: string; department: string }
+interface LeisureFaculty { id: string; employeeId: string; name: string; department: string; freeRanges?: [string, string][] }
 
 // College-wide "who is free at this time" (Principal, Vice Principal, Exam
 // Cell): pick a date and a clock window, and every faculty member with no
@@ -185,6 +185,7 @@ export function FacultyLeisureFilter({ scopeLabel = "in the college" }: { scopeL
                           <th className="w-16 px-3 py-2 font-medium">S.No</th>
                           <th className="px-3 py-2 font-medium">Employee ID</th>
                           <th className="px-3 py-2 font-medium">Name</th>
+                          <th className="px-3 py-2 font-medium">Free</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -193,6 +194,7 @@ export function FacultyLeisureFilter({ scopeLabel = "in the college" }: { scopeL
                             <td className="px-3 py-2">{i + 1}</td>
                             <td className="px-3 py-2">{f.employeeId || "-"}</td>
                             <td className="px-3 py-2">{f.name}</td>
+                            <td className="px-3 py-2 text-muted-foreground">{f.freeRanges ? f.freeRanges.map(([a, b]) => `${a}-${b}`).join(", ") : "Whole range"}</td>
                           </tr>
                         ))}
                       </tbody>
