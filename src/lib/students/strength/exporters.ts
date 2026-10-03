@@ -26,7 +26,7 @@ const branchName = (r: { code: string; label: string }) => r.code || r.label;
 /**
  * One "Strength" sheet laid out like the office's manual sheet (SL NO / BRANCH /
  * I-IV / TOTAL, one table per program, TOTAL rows, OVERALL STRENGTH) and a flat
- * "Section-wise" sheet (Program / Department / Year / Section / Students) that
+ * "Section-wise" sheet (Course / Department / Year / Section / Students) that
  * pivots well. Pass in the ExcelJS constructor so this works in the browser
  * (dynamic import) and in Node tests alike.
  */
@@ -117,7 +117,7 @@ export function buildStrengthWorkbook(Excel: typeof ExcelJS, report: StrengthRep
 
   const sec = wb.addWorksheet("Section-wise");
   sec.columns = [
-    { header: "Program", key: "program", width: 26 },
+    { header: "Course", key: "program", width: 26 },
     { header: "Department", key: "dept", width: 30 },
     { header: "Year", key: "year", width: 8 },
     { header: "Section", key: "section", width: 18 },
@@ -137,7 +137,7 @@ export function buildStrengthWorkbook(Excel: typeof ExcelJS, report: StrengthRep
 // ── CSV: flat section-wise list ────────────────────────────────────────────
 
 export function strengthCsvRows(report: StrengthReport): string[][] {
-  const rows: string[][] = [["Program", "Department", "Year", "Section", "Students"]];
+  const rows: string[][] = [["Course", "Department", "Year", "Section", "Students"]];
   for (const s of report.sections) {
     rows.push([s.programLabel, branchName({ code: s.branchCode, label: s.branchLabel }), yearHeading(s.year), s.sectionLabel, String(s.count)]);
   }
@@ -165,7 +165,7 @@ function matrixHtml(m: ProgramMatrix): string {
 export function buildPrintHtml(report: StrengthReport, ctx: ExportContext, opts: { includeSections?: boolean } = {}): string {
   const sections = opts.includeSections === false || report.sections.length === 0
     ? ""
-    : `<h3 class="pb">SECTION-WISE</h3><table><thead><tr><th>Program</th><th>Department</th><th>Year</th><th>Section</th><th>Students</th></tr></thead><tbody>${report.sections
+    : `<h3 class="pb">SECTION-WISE</h3><table><thead><tr><th>Course</th><th>Department</th><th>Year</th><th>Section</th><th>Students</th></tr></thead><tbody>${report.sections
         .map(
           (s) =>
             `<tr><td>${esc(s.programLabel)}</td><td>${esc(branchName({ code: s.branchCode, label: s.branchLabel }))}</td><td class="c">${esc(yearHeading(s.year))}</td><td>${esc(s.sectionLabel)}</td><td class="n">${s.count}</td></tr>`

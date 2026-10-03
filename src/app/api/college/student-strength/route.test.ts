@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { StrengthPayload } from "@/lib/students/strength/types";
-import { buildReport, totalFor } from "@/lib/students/strength/query";
+import { buildReport, courseYearSummary, totalFor } from "@/lib/students/strength/query";
 
 // Drives the real GET route + loader against an in-memory Firestore, and shows
 // the statistics follow the student records: add / delete / transfer / promote /
@@ -282,6 +282,38 @@ describe("HOD scope isolation", () => {
     expect(p.meta.branches).toEqual([]);
     expect(p.meta.programs).toEqual([]);
     expect(p.health.totalRecords).toBe(0);
+  });
+
+  // The answer card lists each course with its years; for an HOD that list must
+  // be built from their own students only.
+  const courseYears = (p: StrengthPayload) =>
+    courseYearSummary(buildReport(p.cells, p.meta, { status: "ENROLLED" }, { includeEmptyDepartments: true }), p.meta);
+
+  it("the answer card's course/year list for the shared-first-year sub-HOD counts only their first years", async () => {
+    seedSharedYear();
+    hodScope.current = scopeOf(["Basic Science"], ["DS"]);
+    asHod();
+    const cy = courseYears(await fetchPayload());
+    expect(cy.map((c) => [c.label, c.count])).toEqual([["B.Tech", 2]]);
+    expect(cy[0].years.filter((y) => y.count > 0).map((y) => [y.label, y.count])).toEqual([["I Year", 2]]);
+  });
+
+  it("the answer card's course/year list for DS's own HOD counts only DS's later years", async () => {
+    seedSharedYear();
+    hodScope.current = scopeOf(["DS"]);
+    asHod();
+    const cy = courseYears(await fetchPayload());
+    const total = cy.reduce((n, c) => n + c.count, 0);
+    expect(total).toBe(2); // the pre-registered fresher + their own second-year student - never IT's students
+    for (const c of cy) expect(c.years.reduce((n, y) => n + y.count, 0)).toBe(c.count);
+    expect(JSON.stringify(cy)).not.toMatch(/IT|Second-year IT/);
+  });
+
+  it("an HOD with no department gets no courses in the answer card", async () => {
+    seedSharedYear();
+    hodScope.current = scopeOf([]);
+    asHod();
+    expect(courseYears(await fetchPayload()).filter((c) => c.count > 0)).toEqual([]);
   });
 
   it("the same data through a Principal is unrestricted (control)", async () => {
