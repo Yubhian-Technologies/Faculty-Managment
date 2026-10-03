@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb, getAdminAuth } from "@/lib/firebase/admin";
 import { provisionStudentLogin, StudentLoginError } from "@/lib/students/provisionLogin";
+import { describeLoginFailure } from "@/lib/students/loginErrors";
 import { DEFAULT_STUDENT_PASSWORD } from "@/lib/students/loginDefaults";
 import type { StudentRecord } from "@/types";
 
@@ -58,9 +59,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     console.error("[college/students/[id]/create-login POST]", err);
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Internal error" },
-      { status: 500 }
-    );
+    const failure = describeLoginFailure(err);
+    return NextResponse.json({ error: failure.message, code: failure.code }, { status: failure.status });
   }
 }

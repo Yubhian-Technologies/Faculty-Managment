@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb, getAdminAuth } from "@/lib/firebase/admin";
 import { provisionStudentLogin, StudentLoginError } from "@/lib/students/provisionLogin";
+import { describeLoginFailure } from "@/lib/students/loginErrors";
 import { DEFAULT_STUDENT_PASSWORD } from "@/lib/students/loginDefaults";
 import type { StudentRecord } from "@/types";
 
@@ -40,13 +41,13 @@ export async function POST(request: Request) {
     const skipped: { id: string; reason: string }[] = [];
 
     for (const id of studentIds) {
-      const studentSnap = await collegeRef.collection("students").doc(id).get();
-      if (!studentSnap.exists) {
-        skipped.push({ id, reason: "Student not found" });
-        continue;
-      }
-      const student = studentSnap.data() as StudentRecord;
       try {
+        const studentSnap = await collegeRef.collection("students").doc(id).get();
+        if (!studentSnap.exists) {
+          skipped.push({ id, reason: "Student not found" });
+          continue;
+        }
+        const student = studentSnap.data() as StudentRecord;
         const result = await provisionStudentLogin(db, adminAuth, session.collegeId, id, student, session.uid);
         created.push({
           id,
@@ -55,7 +56,11 @@ export async function POST(request: Request) {
           password: result.alreadyExisted ? undefined : DEFAULT_STUDENT_PASSWORD,
         });
       } catch (err) {
-        skipped.push({ id, reason: err instanceof Error ? err.message : "Failed to create login" });
+        if (err instanceof StudentLoginError) skipped.push({ id, reason: err.message });
+        else {
+          console.error("[college/students/bulk-create-login POST] student", id, err);
+          skipped.push({ id, reason: describeLoginFailure(err).message });
+        }
       }
     }
 
@@ -75,6 +80,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     console.error("[college/students/bulk-create-login POST]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    const failure = describeLoginFailure(err);
+    return NextResponse.json({ error: failure.message, code: failure.code }, { status: failure.status });
   }
 }
