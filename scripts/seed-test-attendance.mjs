@@ -96,8 +96,8 @@ const HOLIDAYS = new Set(["2026-08-15", "2026-09-05", "2026-09-14"]); // Indepen
 async function findCollege() {
   const snap = await db.collection("colleges").get();
   const want = COLLEGE_NAME.trim().toLowerCase();
-  return snap.docs.find((d) => String(d.data().name ?? "").trim().toLowerCase() === want)
-    ?? snap.docs.find((d) => String(d.data().name ?? "").toLowerCase().includes(want));
+  // Exact (case-insensitive) match only - a substring fallback could land fake data in the wrong college.
+  return snap.docs.find((d) => String(d.data().name ?? "").trim().toLowerCase() === want);
 }
 
 // ── cleanup ──────────────────────────────────────────────────────────────────
@@ -216,12 +216,40 @@ async function main() {
     const persona = (i) => PERSONAS[i % PERSONAS.length];
     const rand = rng(1234 + secDoc.id.length);
 
-    const docs = [];
+    // Follow the section's real published timetable when it has one, so every seeded session
+    // lines up with a timetableSlot (the HOD faculty-completion view derives its period list
+    // from timetableSlots). Without slots, fall back to rotating subjects through the week.
+    const slotsSnap = await collegeRef.collection("timetableSlots").where("sectionId", "==", secDoc.id).get();
+    const slotsByDay = new Map();
+    for (const s of slotsSnap.docs.map((d) => d.data())) {
+      if (!slotsByDay.has(s.day)) slotsByDay.set(s.day, []);
+      slotsByDay.get(s.day).push(s);
+    }
+    const assignmentById = new Map(assignments.map((a) => [a.id, a]));
+    const DAY_CODES = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
+    const sessionPlan = [];
     for (const [di, date] of days.entries()) {
-      for (let p = 1; p <= PERIODS_PER_DAY; p++) {
-        // Rotate subjects through the week so each subject gets ~equal periods; leave a free period now and then.
-        const a = assignments[(di * PERIODS_PER_DAY + p - 1 + (new Date(`${date}T00:00:00Z`).getUTCDay())) % assignments.length];
-        if (rand() < 0.08) continue; // occasionally nothing scheduled in this slot
+      if (slotsByDay.size) {
+        const daySlots = (slotsByDay.get(DAY_CODES[new Date(`${date}T00:00:00Z`).getUTCDay()]) ?? [])
+          .slice().sort((x, y) => x.periodNumber - y.periodNumber);
+        for (const s of daySlots) {
+          const a = assignmentById.get(s.assignmentId);
+          if (a) sessionPlan.push({ date, p: s.periodNumber, a });
+        }
+      } else {
+        for (let p = 1; p <= PERIODS_PER_DAY; p++) {
+          // Rotate subjects through the week so each subject gets ~equal periods; leave a free period now and then.
+          const a = assignments[(di * PERIODS_PER_DAY + p - 1 + (new Date(`${date}T00:00:00Z`).getUTCDay())) % assignments.length];
+          if (rand() < 0.08) continue; // occasionally nothing scheduled in this slot
+          sessionPlan.push({ date, p, a });
+        }
+      }
+    }
+    console.log(`  schedule source: ${slotsByDay.size ? `${slotsSnap.size} published timetable slots` : "rotation (no timetable slots)"}`);
+
+    const docs = [];
+    for (const [si, { date, p, a }] of sessionPlan.entries()) {
+      {
         const roster = students.filter((s, i) => !(persona(i).joinedAfter && date < persona(i).joinedAfter));
         const entries = roster.map((s) => {
           const i = students.indexOf(s);
@@ -234,7 +262,7 @@ async function main() {
           return { studentId: s.id, rollNumber: s.rollNumber, name: s.name, status: present ? "PRESENT" : "ABSENT" };
         });
         // The last two sessions of the range are left as drafts to prove reports ignore unsubmitted data.
-        const isDraft = date >= days[days.length - 1] && p >= PERIODS_PER_DAY - 1;
+        const isDraft = si >= sessionPlan.length - 2;
         const submittedAt = Timestamp.fromDate(new Date(`${date}T${String(8 + p).padStart(2, "0")}:45:00+05:30`));
         docs.push({
           ref: collegeRef.collection("studentAttendance").doc(`${a.id}_${date}_${p}`),
@@ -252,13 +280,21 @@ async function main() {
       }
     }
     console.log(`  ${docs.length} attendance sessions to write (${docs.filter((d) => d.data.status === "DRAFT").length} drafts)`);
+    // Never overwrite a session that already exists (e.g. a real one posted by a faculty).
+    const existingIds = new Set();
+    for (let i = 0; i < docs.length; i += 300) {
+      const got = await db.getAll(...docs.slice(i, i + 300).map((d) => d.ref));
+      got.filter((g) => g.exists).forEach((g) => existingIds.add(g.id));
+    }
+    const fresh = docs.filter((d) => !existingIds.has(d.ref.id));
+    if (existingIds.size) console.log(`  skipping ${existingIds.size} session(s) that already exist: ${[...existingIds].join(", ")}`);
     if (flag("dry-run")) continue;
-    for (let i = 0; i < docs.length; i += 400) {
+    for (let i = 0; i < fresh.length; i += 400) {
       const batch = db.batch();
-      docs.slice(i, i + 400).forEach((d) => batch.set(d.ref, d.data));
+      fresh.slice(i, i + 400).forEach((d) => batch.set(d.ref, d.data));
       await batch.commit();
     }
-    written += docs.length;
+    written += fresh.length;
 
     // Expected figures, so the person checking the reports has ground truth.
     console.log("  expected overall % (till now, submitted sessions only):");

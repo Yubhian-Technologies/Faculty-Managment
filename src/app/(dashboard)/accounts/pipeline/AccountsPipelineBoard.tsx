@@ -342,7 +342,7 @@ export function AccountsPipelineBoard({ scope }: { scope: "active" | "closed" })
       window.removeEventListener("focus", onFocus);
       document.removeEventListener("visibilitychange", onFocus);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, []);
 
   function closedFor(e: PipelineEntry): boolean {

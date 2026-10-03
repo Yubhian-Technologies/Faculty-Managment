@@ -14,9 +14,8 @@ import {
   allocationNeedsOfficialCode,
   buildAllocationList,
   buildTimetableColumns,
-  ordinalYear,
+  timetableClassLine,
   resolveTimetableDays,
-  slotFacultyName,
   slotShortCode,
 } from "./gridModel";
 
@@ -79,12 +78,9 @@ export function buildSectionTimetablePdfHtml(opts: SectionTimetablePdfOptions): 
     phone = "",
     logoUrl,
     departmentName,
-    academicYear,
     semesterLabel,
-    regulation,
     section,
     courseName,
-    classroom,
     classInchargeName,
     periodTimings,
     slots,
@@ -144,20 +140,13 @@ export function buildSectionTimetablePdfHtml(opts: SectionTimetablePdfOptions): 
     : "";
 
   // One plain line naming the class this timetable belongs to.
-  const classLine = [
-    resolvedCourse,
-    resolvedDepartment,
-    section?.year != null ? ordinalYear(section.year) : "",
-    section?.name ? `Section ${section.name}` : "",
-    section?.batch,
-    regulation,
+  const classLine = escapeHtml(timetableClassLine({
+    courseName: resolvedCourse,
+    year: section?.year,
     semesterLabel,
-    academicYear,
-    classroom ? `Room ${classroom}` : "",
-]
-    .filter(Boolean)
-    .map((v) => escapeHtml(String(v)))
-    .join("  |  ");
+    sectionName: section?.name,
+    departmentName: resolvedDepartment,
+  }));
   const inchargeLine = resolvedIncharge ? `Class In-charge: ${escapeHtml(resolvedIncharge)}` : "";
 
   // Always a logo: the college's own, else the bundled Vishnu logo.
@@ -192,16 +181,22 @@ export function buildSectionTimetablePdfHtml(opts: SectionTimetablePdfOptions): 
   const headerCells = columns
     .map((col) =>
       col.kind === "break"
-        ? `<th class="cell break-head"><div class="fx"><div class="head-label">${escapeHtml(col.breakKind === "lunch" ? "Lunch" : "Break")}</div>${timeStack(col.startTime, col.endTime)}</div></th>`
+        ? `<th class="cell break-head"><div class="fx">${timeStack(col.startTime, col.endTime)}</div></th>`
         : `<th class="cell"><div class="fx"><div class="head-label">Period ${col.periodNumber}</div>${timeStack(col.startTime, col.endTime)}</div></th>`
     )
     .join("");
 
   const bodyRows = gridDays
-    .map((day) => {
+    .map((day, dayIndex) => {
       const cells = columns
         .map((col) => {
-          if (col.kind === "break") return `<td class="cell break-cell"><div class="fx">&nbsp;</div></td>`;
+          // One tall cell spanning every day row (no horizontal rules inside
+          // it), titled vertically - emitted on the first row only.
+          if (col.kind === "break") {
+            if (dayIndex > 0) return "";
+            const title = col.breakKind === "lunch" ? "LUNCH BREAK" : "SHORT BREAK";
+            return `<td class="cell break-cell" rowspan="${gridDays.length}"><div class="vtext">${title}</div></td>`;
+          }
           const cellSlots = slots.filter((s) => s.day === day && s.periodNumber === col.periodNumber);
           if (cellSlots.length === 0) return `<td class="cell"><div class="fx">&nbsp;</div></td>`;
           const inner = cellSlots
@@ -329,6 +324,11 @@ export function buildSectionTimetablePdfHtml(opts: SectionTimetablePdfOptions): 
     .head-label { font-size: 8.5pt; font-weight: 700; }
     .col-time { font-size: 7pt; font-weight: 400; white-space: nowrap; }
     .break-head .head-label { font-size: 7pt; }
+    /* Vertical title, rotated rather than writing-mode: html2canvas (the
+       in-app PDF path) does not implement writing-mode but does draw
+       transforms. Absolutely centred so the rotation never widens the cell. */
+    td.break-cell { position: relative; background: #f3f3f3; }
+    .vtext { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-90deg); white-space: nowrap; font-size: 8.5pt; font-weight: 700; letter-spacing: 0.2em; }
 
     .col-day { width: 19mm; }
     .col-break { width: 13mm; }

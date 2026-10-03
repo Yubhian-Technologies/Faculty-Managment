@@ -66,6 +66,17 @@ function ordinalYear(year: number) {
   return `${year}${suffix} Year`;
 }
 
+// Selection checkboxes on this list (header "select all" + every row) - same
+// treatment as hod/faculty/page.tsx's own SELECT_CHECKBOX_CLASS: a bit larger
+// than the shared Checkbox default, with a clear 2px black border and a white
+// fill so an unchecked box reads against the white table. Applied via
+// className here so the shared Checkbox - used across the app - keeps its
+// default look everywhere else.
+const SELECT_CHECKBOX_CLASS =
+  "h-5 w-5 border-2 border-black bg-white hover:border-primary [&_svg]:h-3.5 [&_svg]:w-3.5 " +
+  "data-[state=checked]:border-primary data-[state=indeterminate]:border-primary " +
+  "data-[state=indeterminate]:bg-primary data-[state=indeterminate]:text-primary-foreground";
+
 export default function OfficeStudentsPage() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<StudentTabKey>("roster");
@@ -732,6 +743,7 @@ export default function OfficeStudentsPage() {
                         checked={allPageSelected ? true : somePageSelected ? "indeterminate" : false}
                         onCheckedChange={toggleSelectAllOnPage}
                         aria-label="Select all on this page"
+                        className={SELECT_CHECKBOX_CLASS}
                       />
                     </th>
                     <th className="p-3 font-medium">S.No</th>
@@ -753,6 +765,7 @@ export default function OfficeStudentsPage() {
                           checked={!!selected[s.id]}
                           onCheckedChange={(checked) => toggleSelectOne(s.id, checked)}
                           aria-label={`Select ${s.name}`}
+                          className={SELECT_CHECKBOX_CLASS}
                         />
                       </td>
                       <td className="p-3 text-muted-foreground whitespace-nowrap">{(page - 1) * pageSize + i + 1}</td>

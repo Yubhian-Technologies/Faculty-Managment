@@ -69,7 +69,7 @@ export async function GET(request: Request) {
     }
 
     const snap = await query.get();
-    let assignments = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Record<string, any>));
+    let assignments = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Record<string, unknown>));
 
     if (academicYear) {
       assignments = assignments.filter((a) => !a.academicYear || a.academicYear === academicYear);

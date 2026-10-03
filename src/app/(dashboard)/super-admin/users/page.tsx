@@ -123,7 +123,7 @@ export default function UsersPage() {
     setUsers([]);
     // Auto-load for global/location scopes; college scope requires explicit Load
     if (!isCollegeScopedId(selectedCollegeId)) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+
       setIsLoading(true);
       usersAbortRef.current?.abort();
       const ctrl = new AbortController();

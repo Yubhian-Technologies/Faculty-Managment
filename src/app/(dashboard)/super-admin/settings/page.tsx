@@ -302,7 +302,7 @@ export default function SuperAdminSettingsPage() {
             <CardContent className="space-y-4">
               {positionNorms.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-4">
-                  No positions configured. Click "Add Position" to define position norms.
+                  No positions configured. Click &ldquo;Add Position&rdquo; to define position norms.
                 </p>
               ) : (
                 positionNorms.map((pos, i) => (

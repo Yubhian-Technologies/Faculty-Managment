@@ -20,32 +20,31 @@ function groupByDepartment(rows: FreeFacultyRow[]): [string, FreeFacultyRow[]][]
 export async function downloadFreeFacultyXlsx(rows: FreeFacultyRow[], slotLabel: string, filename: string): Promise<void> {
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet("Free Faculty");
-  // Four columns only: Department (count) | S.No | Employee ID | Name. The
-  // department cell is merged down its group instead of living in its own
-  // heading row, so there are no spacer rows or unused columns.
-  sheet.getColumn(1).width = 30;
-  sheet.getColumn(2).width = 8;
-  sheet.getColumn(3).width = 18;
-  sheet.getColumn(4).width = 36;
+  // Same layout as the on-screen list and the PDF: each department is ONE
+  // heading row spanning the table, then its S.No | Employee ID | Name table
+  // underneath, with a blank row between departments.
+  sheet.getColumn(1).width = 8;
+  sheet.getColumn(2).width = 18;
+  sheet.getColumn(3).width = 40;
   const title = sheet.addRow([`Free faculty - ${slotLabel}`]);
   title.font = { bold: true, size: 13 };
-  sheet.mergeCells(1, 1, 1, 4);
-  const header = sheet.addRow(["Department", "S.No", "Employee ID", "Name"]);
-  header.font = { bold: true };
+  sheet.mergeCells(1, 1, 1, 3);
   const thin = { style: "thin" as const };
   const border = { top: thin, left: thin, bottom: thin, right: thin };
-  header.eachCell((c) => { c.border = border; });
   for (const [dept, list] of groupByDepartment(rows)) {
-    const first = sheet.rowCount + 1;
+    sheet.addRow([]); // spacer
+    const deptRow = sheet.addRow([`${dept} (${list.length})`]);
+    sheet.mergeCells(deptRow.number, 1, deptRow.number, 3);
+    deptRow.font = { bold: true, size: 12 };
+    deptRow.getCell(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE8EEF7" } };
+    const header = sheet.addRow(["S.No", "Employee ID", "Name"]);
+    header.font = { bold: true };
+    header.eachCell((c) => { c.border = border; });
     list.forEach((f, i) => {
-      const row = sheet.addRow([i === 0 ? `${dept} (${list.length})` : "", i + 1, f.employeeId || "-", f.name]);
+      const row = sheet.addRow([i + 1, f.employeeId || "-", f.name]);
       row.eachCell({ includeEmpty: true }, (c) => { c.border = border; });
-      row.getCell(2).alignment = { horizontal: "left" };
+      row.getCell(1).alignment = { horizontal: "left" };
     });
-    if (list.length > 1) sheet.mergeCells(first, 1, first + list.length - 1, 1);
-    const deptCell = sheet.getCell(first, 1);
-    deptCell.font = { bold: true };
-    deptCell.alignment = { vertical: "top", wrapText: true };
   }
   const buffer = (await workbook.xlsx.writeBuffer()) as ArrayBuffer;
   const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });

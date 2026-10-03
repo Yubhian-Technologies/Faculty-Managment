@@ -9,13 +9,10 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { toast } from "@/hooks/useToast";
 import type { DayOfWeek, Department, PeriodTiming } from "@/types";
 import { DAY_LABELS } from "@/types";
+import { toRoman } from "@/lib/timetable/gridModel";
 
 const WORKING_DAYS: DayOfWeek[] = ["MON", "TUE", "WED", "THU", "FRI", "SAT"];
 
-function ordinalYear(year: number) {
-  const suffix = year === 1 ? "st" : year === 2 ? "nd" : year === 3 ? "rd" : "th";
-  return `${year}${suffix} Year`;
-}
 
 interface ScheduleSlot {
   day: DayOfWeek;
@@ -27,6 +24,9 @@ interface ScheduleSlot {
   sectionName: string;
   /** Built but not yet published - still occupies the faculty (see the API). */
   isDraft: boolean;
+  /** Marked busy by the lending department of an Assignment Request - no section/subject of its own. */
+  isDeclared?: boolean;
+  declaredFor?: string;
 }
 
 // Checks a faculty member's real schedule before sending/allocating a lend
@@ -190,14 +190,20 @@ export function FacultyTimetableLookup({ ownOnly = false, embedded = false }: { 
             )}
           </div>
           <div className="overflow-x-auto rounded-lg border">
-            <table className="w-full table-fixed text-sm border-collapse">
-              {/* No header row: a period number in the column head is the
-                  number in THAT column's position, which is not necessarily
-                  the period number of the class sitting in it - different
-                  years run different period structures. The number is carried
-                  on the booked cell itself instead, where it is the section's
-                  own, and the clock times went with it since they were only
-                  ever true for one year at a time. */}
+            <table className="w-full min-w-[640px] table-fixed text-sm border-collapse">
+              {/* Column heads are plain P1, P2, ... - booked cells carry only
+                  "III · CSE-A", so the period comes from the column. Clock
+                  times stay off: they differ per year. */}
+              <thead>
+                <tr className="border-b bg-muted/40">
+                  <th className="p-2 w-14 sticky left-0 z-[5] bg-muted/95" aria-label="Day" />
+                  {periodTimes.map((p) => (
+                    <th key={p.period} className="p-2 text-center text-[11px] font-bold text-foreground">
+                      P{p.period}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
               <tbody>
                 {WORKING_DAYS.map((d) => (
                   <tr key={d} className="border-b last:border-b-0">
@@ -221,19 +227,14 @@ export function FacultyTimetableLookup({ ownOnly = false, embedded = false }: { 
                               title={[slot.departmentName, slot.courseName, slot.subjectName].filter(Boolean).join(" · ")}
                             >
                               <X className="h-3.5 w-3.5 shrink-0 text-red-600 mt-[1px]" />
-                              <p className="min-w-0 text-[11px] font-medium text-red-800 leading-snug">
-                                {[
-                                  `Period ${slot.periodNumber}`,
-                                  ordinalYear(slot.year),
-                                  // The section's own name alone - "Section"
-                                  // in front of it just said nothing.
-                                  slot.sectionName || null,
-                                ].filter(Boolean).map((part, i) => (
-                                  <span key={part}>
-                                    {i > 0 && <span className="text-red-400"> · </span>}
-                                    <span className="whitespace-nowrap">{part}</span>
-                                  </span>
-                                ))}
+                              {/* Compact "III · CSE-A": roman year and the section
+                                  name, on one line. The period is the column
+                                  heading (P1, P2, ...), not repeated here.
+                                  Declared busy slots show their target department. */}
+                              <p className="min-w-0 text-[11px] font-semibold text-red-800 leading-snug">
+                                {slot.isDeclared
+                                  ? `Marked busy${slot.declaredFor ? ` for ${slot.declaredFor}` : ""}`
+                                  : [toRoman(slot.year), slot.sectionName || null].filter(Boolean).join(" · ")}
                               </p>
                             </div>
                           ) : (

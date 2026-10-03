@@ -27,7 +27,7 @@ export function useNavVisibility() {
   const [isIncharge, setIsIncharge] = useState<boolean | null>(canBeIncharge ? null : false);
 
   useEffect(() => {
-    if (!canBeIncharge) { setIsIncharge(false); return; }
+    if (!canBeIncharge) return;
     let cancelled = false;
     fetch("/api/college/timetable-incharges?mine=true", { cache: "no-store" })
       .then((r) => r.json() as Promise<{ incharges?: unknown[] }>)
@@ -38,7 +38,8 @@ export function useNavVisibility() {
   }, [canBeIncharge, user?.uid]);
 
   useEffect(() => {
-    if (!user?.collegeId) { setLoading(false); return; }
+    if (!user?.collegeId) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     fetch("/api/college/settings/nav-visibility", { cache: "no-store" })
       .then((r) => r.json() as Promise<{ hiddenModules?: PerRole; hiddenItems?: PerRole }>)
@@ -70,6 +71,15 @@ export function useNavVisibility() {
     return Array.from(hrefs);
   }, [raw, primary, seatRoles, isIncharge]);
 
-  // Modules are already folded into hiddenItems above.
-  return { hiddenModules: [] as string[], hiddenItems, loading: loading || isIncharge === null };
+  const hiddenModules = useMemo(() => {
+    if (!primary) return [];
+    const held = Array.from(new Set<UserRole>([primary, ...(seatRoles ?? [])]));
+    const mods = new Set<string>();
+    for (const role of held) {
+      raw.hiddenModules[role]?.forEach((m) => mods.add(m));
+    }
+    return Array.from(mods);
+  }, [raw, primary, seatRoles]);
+
+  return { hiddenModules, hiddenItems, loading: loading || isIncharge === null };
 }

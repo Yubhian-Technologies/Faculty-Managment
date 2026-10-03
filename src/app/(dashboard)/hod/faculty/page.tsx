@@ -18,54 +18,23 @@ import { toast } from "@/hooks/useToast";
 import { useMyDepartments } from "@/hooks/useMyDepartments";
 import { downloadFacultyResume } from "@/lib/faculty/downloadFacultyResume";
 import { ResumeSectionsDialog } from "@/components/faculty/ResumeSectionsDialog";
+import { FacultyDesignationCell, FacultyExperienceCell, FacultyStatusCell, JoiningLine } from "@/components/faculty/facultyListCells";
 import type { ResumeSectionKey } from "@/lib/pdf/resumeSections";
 import { hasSupportingStaffSplit } from "@/lib/designations/config";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
-import { allPreviousExperienceEntries, totalYearsOfExperience } from "@/lib/faculty/experienceCalc";
-import { DESIGNATION_LABELS, FACULTY_STATUS_LABELS } from "@/types";
-import type { FacultyMember, Designation, FacultyStatus, CollegeType, Department } from "@/types";
-
-function fmtDate(val: unknown): string {
-  if (!val) return "-";
-  try {
-    const ts = val as { toDate?: () => Date; seconds?: number; _seconds?: number } | null;
-    const d = typeof ts?.toDate === "function"
-      ? ts.toDate()
-      : ts?._seconds != null
-        ? new Date(ts._seconds * 1000)
-        : ts?.seconds != null
-          ? new Date(ts.seconds * 1000)
-          : null;
-    if (!d || isNaN(d.getTime())) return "-";
-    return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
-  } catch { return "-"; }
-}
-
-// INTERVIEW_DONE faculty haven't actually joined yet - their joiningDate is the
-// proposed date from the offer letter, so it reads as an expectation, not a fact.
-function joiningLabel(status: unknown): string {
-  return status === "INTERVIEW_DONE" ? "Expected to join" : "Joined";
-}
+import type { FacultyMember, CollegeType, Department } from "@/types";
 
 type FacultyRow = Record<string, unknown> & FacultyMember;
 
 // Selection checkboxes on this list (header "select all" + every row): a bit larger than
-// the shared Checkbox default, with a clear 2px slate border and a white fill so an
-// unchecked box reads against the white table. Applied via className here so the shared
-// Checkbox - used across the app - keeps its default look everywhere else.
+// the shared Checkbox default, with a clear 2px black border and a white fill so an
+// unchecked box reads against the white table - slate-500 still blended into the table's
+// light background, so this is black instead of just a darker gray. Applied via className
+// here so the shared Checkbox - used across the app - keeps its default look everywhere else.
 const SELECT_CHECKBOX_CLASS =
-  "h-5 w-5 border-2 border-slate-500 bg-white hover:border-primary [&_svg]:h-3.5 [&_svg]:w-3.5 " +
+  "h-5 w-5 border-2 border-black bg-white hover:border-primary [&_svg]:h-3.5 [&_svg]:w-3.5 " +
   "data-[state=checked]:border-primary data-[state=indeterminate]:border-primary " +
   "data-[state=indeterminate]:bg-primary data-[state=indeterminate]:text-primary-foreground";
-
-const STATUS_VARIANTS: Record<FacultyStatus, "default" | "secondary" | "outline" | "destructive"> = {
-  INTERVIEW_DONE: "outline",
-  ACTIVE: "default",
-  ON_LEAVE: "outline",
-  RESIGNED: "secondary",
-  RETIRED: "secondary",
-  RETAINERSHIP: "default",
-};
 
 export default function HODFacultyPage() {
   const router = useRouter();
@@ -338,7 +307,7 @@ export default function HODFacultyPage() {
             </div>
             <p className="text-xs text-muted-foreground">{(row.collegeEmail as string) || (row.email as string)}</p>
             <p className="text-xs text-muted-foreground">ID: {row.employeeId as string}</p>
-            <p className="text-xs text-muted-foreground">{joiningLabel(row.status)}: {fmtDate(row.joiningDate)}</p>
+            <JoiningLine row={row} />
           </div>
         </div>
       ),
@@ -346,66 +315,24 @@ export default function HODFacultyPage() {
     {
       key: "designation",
       header: "Designation",
-      render: (row) => (
-        <div className="space-y-0.5">
-          <p className="text-sm font-medium">{DESIGNATION_LABELS[row.designation as Designation] ?? (row.designation as string)}</p>
-          <p className="text-xs text-muted-foreground">{row.highestQualification as string}</p>
-          {(row.specialization as string) && (
-            <p className="text-xs text-muted-foreground italic">{row.specialization as string}</p>
-          )}
-          {row.academicProfile?.phdDetails?.status === "AWARDED" && (
-            <span className="inline-flex items-center rounded-full border border-violet-200 bg-violet-50 px-1.5 py-0.5 text-[10px] font-medium text-violet-700">Ph.D</span>
-          )}
-        </div>
-      ),
+      render: (row) => <FacultyDesignationCell row={row} />,
     },
     {
       key: "joiningDate",
       header: "Date of Joining",
       hideOnMobile: true,
-      render: (row) => (
-        <p className="text-xs text-muted-foreground">{joiningLabel(row.status)}: {fmtDate(row.joiningDate)}</p>
-      ),
+      render: (row) => <JoiningLine row={row} />,
     },
     {
       key: "totalYearsOfExperience",
       header: "Total Experience",
       hideOnMobile: true,
-      render: (row) => {
-        // Total/Internal/External Years of Experience - computed live from
-        // Date of Joining + the Academic/Industry/Research Experience
-        // entries, same canonical calc as the Faculty Details page
-        // (FacultyProfileHub), not read from the stored (and only
-        // periodically re-saved) totalYearsOfExperience field.
-        const previousExperienceEntries = allPreviousExperienceEntries(row.academicProfile);
-        const totalYears = totalYearsOfExperience(previousExperienceEntries, row.joiningDate).years;
-        const internalYears = totalYearsOfExperience(undefined, row.joiningDate).years;
-        const externalYears = totalYearsOfExperience(previousExperienceEntries, undefined).years;
-        return (
-          <div className="space-y-0.5">
-            <p className="text-sm font-medium">{totalYears} yrs</p>
-            {row.joiningDate != null && (
-              <p className="text-xs text-muted-foreground">Int: {internalYears} · Ext: {externalYears}</p>
-            )}
-          </div>
-        );
-      },
+      render: (row) => <FacultyExperienceCell row={row} />,
     },
     {
       key: "status",
       header: "Status",
-      render: (row) => (
-        <div className="space-y-1">
-          <Badge variant={STATUS_VARIANTS[row.status as FacultyStatus] ?? "secondary"}>
-            {FACULTY_STATUS_LABELS[row.status as FacultyStatus] ?? (row.status as string)}
-          </Badge>
-          {(row.ratificationStatus as string) && (
-            <p className={`text-[10px] font-medium ${row.ratificationStatus === "Ratified" ? "text-green-600" : "text-amber-600"}`}>
-              {row.ratificationStatus as string}
-            </p>
-          )}
-        </div>
-      ),
+      render: (row) => <FacultyStatusCell row={row} />,
     },
     {
       key: "actions",

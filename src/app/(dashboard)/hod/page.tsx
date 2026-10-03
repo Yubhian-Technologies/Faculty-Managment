@@ -8,13 +8,10 @@ import {
   ArrowRight,
   UsersRound,
   ClipboardCheck,
-  TrendingUp,
-  GraduationCap,
-  AlertCircle,
   ChevronRight,
   BookOpen,
-  Wallet,
-  FolderOpen,
+  CalendarClock,
+  UserCircle,
 } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -55,11 +52,8 @@ const HOD_MODULES = [
 const PERSONAL_MODULES = [
   { label: "My Attendance", description: "Attendance records", href: "/hod/attendance", icon: ClipboardCheck, color: "bg-violet-50 text-violet-600" },
   { label: "Teaching Load", description: "Subjects & timetable", href: "/hod/teaching", icon: BookOpen, color: "bg-orange-50 text-orange-600" },
-  { label: "My Payslips", description: "Salary & payslips", href: "/hod/payslips", icon: Wallet, color: "bg-green-50 text-green-600" },
-  { label: "My Appraisal", description: "Performance review", href: "/hod/appraisal", icon: TrendingUp, color: "bg-pink-50 text-pink-600" },
-  { label: "Training", description: "FDPs & workshops", href: "/hod/training", icon: GraduationCap, color: "bg-cyan-50 text-cyan-600" },
-  { label: "Grievance", description: "Raise grievance", href: "/hod/grievance", icon: AlertCircle, color: "bg-red-50 text-red-600" },
-  { label: "My Documents", description: "Certificates & letters", href: "/hod/documents", icon: FolderOpen, color: "bg-amber-50 text-amber-600" },
+  { label: "My Leave", description: "Leave requests & balance", href: "/hod/leave", icon: CalendarClock, color: "bg-pink-50 text-pink-600" },
+  { label: "My Profile", description: "Profile details", href: "/hod/profile", icon: UserCircle, color: "bg-slate-50 text-slate-600" },
 ];
 
 export default function HODDashboard() {

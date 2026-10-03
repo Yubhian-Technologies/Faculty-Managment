@@ -323,7 +323,7 @@ export function WeeklyTimetableMatrix({
                 </tr>
               </thead>
               <tbody>
-                {visibleDays.map((d) => {
+                {visibleDays.map((d, dayIndex) => {
                   const isToday = d === todayDay;
                   return (
                     <tr
@@ -352,15 +352,18 @@ export function WeeklyTimetableMatrix({
                       {/* Period Cells */}
                       {columns.map((col) => {
                         if (col.kind === "break") {
+                          // One tall cell across every day row, titled vertically.
+                          if (dayIndex > 0) return null;
                           return (
                             <td
                               key={col.id}
-                              className="border-r p-1 text-center bg-muted/15 text-[10px] text-muted-foreground/70 font-medium select-none"
-                              aria-hidden="true"
+                              rowSpan={visibleDays.length}
+                              className="border-r p-1 text-center align-middle bg-muted/15 w-12 select-none"
+                              aria-label={col.label}
                             >
-                              <div className="py-4 writing-vertical rotate-180 tracking-widest text-[9px] uppercase opacity-70">
-                                {col.label}
-                              </div>
+                              <span className="inline-block text-[11px] font-bold uppercase tracking-[0.2em] text-muted-foreground [writing-mode:vertical-rl] rotate-180">
+                                {col.breakKind === "lunch" ? "Lunch Break" : "Short Break"}
+                              </span>
                             </td>
                           );
                         }
