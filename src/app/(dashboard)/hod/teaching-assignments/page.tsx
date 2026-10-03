@@ -17,6 +17,7 @@ import { deriveHodScope, buildCourseGroups, managerEffectiveYears } from "@/lib/
 import { fedYears } from "@/lib/college/academicStructure";
 import { matchesCurrentSemester } from "@/lib/college/semester";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
+import { yearSemesterLabel } from "@/lib/academic/format";
 import type {
   Course, CourseYearTiming, Department, SectionListItem, Subject, SubjectSemesterAssignment,
   TeachingAssignment, FacultyMember, FacultyAssignmentRequest,
@@ -875,7 +876,7 @@ const effectiveSemester = semesterOptions.length === 0
                 <Select value={String(effectiveSemester ?? "")} onValueChange={(v) => { setApplied(null); setSelectedSemester(Number(v)); }}>
                   <SelectTrigger><SelectValue placeholder="Select semester" /></SelectTrigger>
                   <SelectContent>
-                    {semesterOptions.map((s) => <SelectItem key={s} value={String(s)}>Semester {s}</SelectItem>)}
+                    {semesterOptions.map((s) => <SelectItem key={s} value={String(s)}>{yearSemesterLabel(s)}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>

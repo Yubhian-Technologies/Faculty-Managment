@@ -15,6 +15,7 @@ import { buildFacultyTimetablePdfHtml, formatTime12h as format12h } from "@/lib/
 import { WeekNavigator } from "@/components/timetable/WeekNavigator";
 import type { TeachingAssignment, TimetableSlot, DayOfWeek, CourseYearTiming, PeriodTiming, Course, Department } from "@/types";
 import { DAY_LABELS } from "@/types";
+import { yearSemesterLabel } from "@/lib/academic/format";
 
 // Grid instead of a per-subject card list: an HOD who also personally
 // teaches thinks in terms of "what am I teaching on Monday period 3", not a
@@ -221,7 +222,7 @@ export default function HODTeachingPage() {
                >
                  <option value="">All semesters</option>
                  {semesterOptions.map((s) => (
-                   <option key={s} value={s}>Semester {s}</option>
+                   <option key={s} value={s}>{yearSemesterLabel(s)}</option>
                  ))}
                </select>
              )}

@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import type { SemesterDuration, SubjectSemesterAssignment } from "@/types";
+import { yearSemesterLabel } from "@/lib/academic/format";
 
 interface SemesterColumnCardProps {
   semester: number;
@@ -72,7 +73,7 @@ export function SemesterColumnCard({
           onClick();
         }
       }}
-      aria-label={`Semester ${semester}: ${count} subjects assigned. Click to view.`}
+      aria-label={`Semester ${yearSemesterLabel(semester)}: ${count} subjects assigned. Click to view.`}
       className={`group relative flex flex-col justify-between rounded-lg border p-4 transition-all outline-none ${
         disabled
           ? "opacity-60 cursor-not-allowed bg-muted/20 border-border"
@@ -84,7 +85,7 @@ export function SemesterColumnCard({
       <div className="space-y-1.5">
         <div className="flex items-center justify-between gap-2">
           <span className="font-bold text-sm text-foreground">
-            Semester {semester}
+            Sem {yearSemesterLabel(semester)}
           </span>
           <span
             className={`inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-0.5 rounded-md border ${
