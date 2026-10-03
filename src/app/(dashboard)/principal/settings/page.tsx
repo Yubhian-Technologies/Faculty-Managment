@@ -8,7 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/useToast";
 import { formatDate, stripLeadingZeros } from "@/lib/utils";
-import { Info } from "lucide-react";
+import Link from "next/link";
+import { ArrowRight, Info } from "lucide-react";
 import { HiringTermsSettingsCard } from "@/components/hiring/HiringTermsSettingsCard";
 import { AcademicYearSettingsCard } from "@/components/academics/AcademicYearSettingsCard";
 import { FinancialYearSettingsCard } from "@/components/academics/FinancialYearSettingsCard";
@@ -109,6 +110,18 @@ export default function PrincipalSettingsPage() {
           Last updated {formatDate(settings.updatedAt)} by {settings.updatedByName ?? "Principal"}
         </div>
       )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Student Permissions</CardTitle>
+          <CardDescription>Who approves which permission request, per department and type, and which HODs may configure their own department</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button asChild variant="outline">
+            <Link href="/principal/student-permissions">Open routing and requests <ArrowRight className="ml-1.5 h-4 w-4" /></Link>
+          </Button>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

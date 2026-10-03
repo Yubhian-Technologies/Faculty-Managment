@@ -270,6 +270,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Timetable View", href: "/hod/timetable-view", iconName: "CalendarSearch", roles: ["HOD"], module: "timetable-incharge" },
   { label: "Leave Approvals", href: "/hod/leave-approvals", iconName: "CalendarClock", roles: ["HOD"], section: "Approvals", module: "leave-approvals" },
   { label: "Leave History", href: "/hod/leave-history", iconName: "History", roles: ["HOD"], module: "leave-approvals" },
+  { label: "Student Permissions", href: "/hod/student-permissions", iconName: "ShieldCheck", roles: ["HOD"] },
   // Was 8 separate sidebar items (Attendance Reports, Attendance History,
   // Faculty Attendance, Attendance Completion, Absent Report, Shortage
   // Report, Faculty Not Posted, Import Attendance), all ungrouped and, on
@@ -412,6 +413,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Internal Exam", href: "/panel/internal-exam", iconName: "ClipboardList", roles: ["PANEL_MEMBER"] },
   { label: "Add Mid Bank", href: "/panel/mid-bank", iconName: "BookOpen", roles: ["PANEL_MEMBER"] },
   { label: "Student Attendance", href: "/panel/mark-attendance", iconName: "CalendarCheck", roles: ["PANEL_MEMBER"], module: "attendance" },
+  { label: "Student Permissions", href: "/panel/student-permissions", iconName: "ShieldCheck", roles: ["PANEL_MEMBER"] },
   { label: "Attendance Report", href: "/panel/monthly-records", iconName: "CalendarRange", roles: ["PANEL_MEMBER"], module: "attendance" },
   { label: "Students", href: "/panel/students", iconName: "GraduationCap", roles: ["PANEL_MEMBER"], module: "students" },
   // Dividing a section's own roster into lab sub-groups (StudentRecord.
