@@ -5,7 +5,9 @@ import { useAuthStore } from "@/store/authStore";
 import { collegeFetch } from "@/lib/api/collegeFetch";
 import type { AppNotification } from "@/types";
 
-const POLL_INTERVAL = 30_000; // 30 seconds
+// Polled only while the tab is visible, and caught up the moment it becomes visible again:
+// a hidden tab nobody is reading was most of the load, with no visible difference to anyone.
+const POLL_INTERVAL = 60_000; // 60 seconds
 
 export function useNotifications() {
   const user = useAuthStore((s) => s.user);
@@ -40,8 +42,10 @@ export function useNotifications() {
 
   useEffect(() => {
     void load();
-    const id = setInterval(() => { void load(); }, POLL_INTERVAL);
-    return () => clearInterval(id);
+    const id = setInterval(() => { if (document.visibilityState === "visible") void load(); }, POLL_INTERVAL);
+    const onVisible = () => { if (document.visibilityState === "visible") void load(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => { clearInterval(id); document.removeEventListener("visibilitychange", onVisible); };
   }, [load]);
 
   const markRead = async (notificationId: string) => {

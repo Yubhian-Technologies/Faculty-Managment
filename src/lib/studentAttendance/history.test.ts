@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { Firestore } from "firebase-admin/firestore";
-import { computeStudentAttendanceHistory, studentDepartmentsForHistory } from "./history";
+import { clearDepartmentTallyCache, computeStudentAttendanceHistory, studentDepartmentsForHistory } from "./history";
 
 // A tiny in-memory Firestore: just the calls history.ts makes (collection/doc
 // chaining, where with ==, in, >=, <=, get, getAll).
@@ -151,5 +151,54 @@ describe("computeStudentAttendanceHistory", () => {
   it("no sessions -> empty result", async () => {
     const r = await computeStudentAttendanceHistory(fakeDb({}), "c1", S, ["CSE"]);
     expect(r).toEqual({ subjects: [], total: { held: 0, attend: 0, percent: 0 } });
+  });
+});
+
+
+describe("computeStudentAttendanceHistory with a shared cache (student self views)", () => {
+  const store = (): Store => ({
+    "colleges/c1/studentAttendance": {
+      a: session({ entries: [{ studentId: S, status: "PRESENT" }, { studentId: "stu2", status: "ABSENT" }] }),
+      b: session({ date: "2026-10-06", entries: [{ studentId: S, status: "ABSENT" }, { studentId: "stu2", status: "PRESENT" }] }),
+      c: session({ date: "2026-10-07", subjectId: "sub-os", subjectName: "OS", subjectCode: "R2", entries: [{ studentId: S, status: "ON_DUTY" }, { studentId: "stu2", status: "PRESENT" }] }),
+      d: session({ date: "2026-10-08", status: "DRAFT", entries: [{ studentId: S, status: "PRESENT" }] }),
+    },
+  });
+
+  it("returns exactly what the uncached scan returns, for every student and range", async () => {
+    for (const range of [{}, { from: "2026-10-06", to: "2026-10-31" }, { year: "2026", month: "10" }]) {
+      for (const id of [S, "stu2", "nobody"]) {
+        clearDepartmentTallyCache();
+        const live = await computeStudentAttendanceHistory(fakeDb(store()), "c1", id, ["CSE"], range);
+        const cached = await computeStudentAttendanceHistory(fakeDb(store()), "c1", id, ["CSE"], range, { cacheMs: 60_000 });
+        expect(cached).toEqual(live);
+      }
+    }
+  });
+
+  it("scans the department once for many students within the window", async () => {
+    clearDepartmentTallyCache();
+    let scans = 0;
+    const db = fakeDb(store());
+    const counting = {
+      ...db,
+      collection: (name: string) => {
+        const c = (db as unknown as { collection: (n: string) => { doc: (id: string) => { collection: (s: string) => { get: () => Promise<unknown> } } } }).collection(name);
+        return { doc: (id: string) => { const d = c.doc(id); return { collection: (sub: string) => { const col = d.collection(sub) as unknown as { where: (...a: unknown[]) => unknown }; if (sub !== "studentAttendance") return col; return { ...col, where: (...a: unknown[]) => { scans += 1; return col.where(...a); } }; } }; } };
+      },
+    } as unknown as Firestore;
+    await computeStudentAttendanceHistory(counting, "c1", S, ["CSE"], {}, { cacheMs: 60_000 });
+    await computeStudentAttendanceHistory(counting, "c1", "stu2", ["CSE"], {}, { cacheMs: 60_000 });
+    await computeStudentAttendanceHistory(counting, "c1", S, ["CSE"], {}, { cacheMs: 60_000 });
+    expect(scans).toBe(1);
+  });
+
+  it("without cacheMs it always reads live", async () => {
+    clearDepartmentTallyCache();
+    const a = await computeStudentAttendanceHistory(fakeDb(store()), "c1", S, ["CSE"]);
+    const changed = store();
+    (changed["colleges/c1/studentAttendance"].a as { entries: unknown }).entries = [{ studentId: S, status: "ABSENT" }];
+    const b = await computeStudentAttendanceHistory(fakeDb(changed), "c1", S, ["CSE"]);
+    expect(b.total.attend).toBeLessThan(a.total.attend);
   });
 });

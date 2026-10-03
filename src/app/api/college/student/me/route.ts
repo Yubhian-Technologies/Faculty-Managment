@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { findCurrentSectionDoc } from "@/lib/students/findCurrentSectionDoc";
-import { computeStudentAttendanceHistory } from "@/lib/studentAttendance/history";
+import { computeStudentAttendanceHistory, STUDENT_SELF_VIEW_CACHE_MS } from "@/lib/studentAttendance/history";
 import type { StudentRecord, Section } from "@/types";
 
 const UNLINKED_MESSAGE =
@@ -33,7 +33,7 @@ export async function GET() {
     const sectionDoc = await findCurrentSectionDoc(db, session.collegeId, student);
     const section = sectionDoc ? ({ ...(sectionDoc.data() as Section), id: sectionDoc.id }) : null;
 
-    const attendance = await computeStudentAttendanceHistory(db, session.collegeId, student.id, student.department);
+    const attendance = await computeStudentAttendanceHistory(db, session.collegeId, student.id, student.department, {}, { cacheMs: STUDENT_SELF_VIEW_CACHE_MS });
 
     return NextResponse.json({ student, section, attendance });
   } catch (err) {
