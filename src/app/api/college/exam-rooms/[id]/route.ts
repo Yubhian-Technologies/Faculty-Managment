@@ -14,7 +14,7 @@ export async function PATCH(request: Request, { params }: Ctx) {
   try {
     const session = await requireCollegeMember("COLLEGE_OFFICE");
     const { id } = await params;
-    const body = (await request.json()) as { name?: string; block?: string; floor?: number; capacity?: number; isActive?: boolean };
+    const body = (await request.json()) as { name?: string; block?: string; floor?: number; benches?: number; studentsPerBench?: number; isActive?: boolean };
     const update: Record<string, unknown> = { updatedAt: new Date() };
     if (body.name !== undefined) {
       if (!body.name.trim()) return NextResponse.json({ error: "Name is required" }, { status: 400 });
@@ -28,16 +28,28 @@ export async function PATCH(request: Request, { params }: Ctx) {
       if (!Number.isFinite(Number(body.floor))) return NextResponse.json({ error: "Floor must be a number" }, { status: 400 });
       update.floor = Number(body.floor);
     }
-    if (body.capacity !== undefined) {
-      if (!Number.isInteger(Number(body.capacity)) || Number(body.capacity) < 1) {
-        return NextResponse.json({ error: "Capacity must be at least 1" }, { status: 400 });
+    if (body.benches !== undefined) {
+      if (!Number.isInteger(Number(body.benches)) || Number(body.benches) < 1) {
+        return NextResponse.json({ error: "Benches must be at least 1" }, { status: 400 });
       }
-      update.capacity = Number(body.capacity);
+      update.benches = Number(body.benches);
+    }
+    if (body.studentsPerBench !== undefined) {
+      const n = Number(body.studentsPerBench);
+      if (!Number.isInteger(n) || n < 1 || n > 3) {
+        return NextResponse.json({ error: "Students per bench must be 1, 2 or 3" }, { status: 400 });
+      }
+      update.studentsPerBench = n;
     }
     if (body.isActive !== undefined) update.isActive = !!body.isActive;
 
     const ref = getAdminDb().collection("colleges").doc(session.collegeId).collection("examRooms").doc(id);
-    if (!(await ref.get()).exists) return NextResponse.json({ error: "Room not found" }, { status: 404 });
+    const existing = await ref.get();
+    if (!existing.exists) return NextResponse.json({ error: "Room not found" }, { status: 404 });
+    if (update.benches !== undefined || update.studentsPerBench !== undefined) {
+      const cur = existing.data() as { benches?: number; studentsPerBench?: number; capacity?: number };
+      update.capacity = Number(update.benches ?? cur.benches ?? cur.capacity ?? 1) * Number(update.studentsPerBench ?? cur.studentsPerBench ?? 1);
+    }
     await ref.update(update);
     return NextResponse.json({ ok: true });
   } catch (err) {

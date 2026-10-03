@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { toast } from "@/hooks/useToast";
+import { roomBenches, roomPerBench } from "@/lib/exams/roomLayout";
 import type { ExamRoom, SeatingPlanStatus, SeatingSectionRef } from "@/types/examSeating";
 
 interface PlanRow {
@@ -35,6 +36,12 @@ export default function ExamSeatingPage() {
   const [roomIds, setRoomIds] = useState<string[]>([]);
   const [roomSections, setRoomSections] = useState<Record<string, string[]>>({});
   const [creating, setCreating] = useState(false);
+
+  // Bench-wise (layered) plan: just a name and the rooms - sections are
+  // allotted one at a time on the plan's own page.
+  const [layName, setLayName] = useState("");
+  const [layRoomIds, setLayRoomIds] = useState<string[]>([]);
+  const [layCreating, setLayCreating] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -59,7 +66,7 @@ export default function ExamSeatingPage() {
   );
   const totalStudents = selectedSections.reduce((n, s) => n + s.studentCount, 0);
   const selectedRooms = rooms.filter((r) => roomIds.includes(r.id));
-  const totalSeats = selectedRooms.reduce((n, r) => n + r.capacity, 0);
+  const totalSeats = selectedRooms.reduce((n, r) => n + roomBenches(r), 0); // quick fill: one per bench
 
   const toggle = (list: string[], id: string) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
 
@@ -84,6 +91,23 @@ export default function ExamSeatingPage() {
     }
   }
 
+  async function createLayered() {
+    setLayCreating(true);
+    try {
+      const res = await fetch("/api/college/exam-seating", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: layName, roomIds: layRoomIds, mode: "LAYERED" }),
+      });
+      const data = (await res.json()) as { id?: string; error?: string };
+      if (!res.ok || !data.id) throw new Error(data.error ?? "Failed to create the plan");
+      router.push(`/exam-cell/seating/${data.id}`);
+    } catch (err) {
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to create the plan" });
+    } finally {
+      setLayCreating(false);
+    }
+  }
+
   if (isLoading) return <div className="h-40 rounded-lg border bg-muted/30 animate-pulse" />;
 
   return (
@@ -91,7 +115,7 @@ export default function ExamSeatingPage() {
       <PageHeader title="Exam Seating" description="Build a room-wise seating plan for an exam, review it, then print it." />
 
       <Card>
-        <CardHeader><CardTitle className="text-base">New seating plan</CardTitle></CardHeader>
+        <CardHeader><CardTitle className="text-base">Quick auto-fill plan</CardTitle></CardHeader>
         <CardContent className="space-y-5">
           <div className="max-w-sm space-y-1.5">
             <Label>Exam name</Label>
@@ -132,7 +156,7 @@ export default function ExamSeatingPage() {
                       <label className="flex items-center gap-2 text-sm">
                         <Checkbox checked={on} onCheckedChange={() => setRoomIds((l) => toggle(l, r.id))} />
                         <span className="font-medium">{r.name}</span>
-                        <span className="text-xs text-muted-foreground">Block {r.block} · Floor {r.floor} · {r.capacity} seats</span>
+                        <span className="text-xs text-muted-foreground">Block {r.block} · Floor {r.floor} · {roomBenches(r)} benches × {roomPerBench(r)}</span>
                       </label>
                       {on && selectedSections.length > 1 && (
                         <div className="ml-6 flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -164,6 +188,35 @@ export default function ExamSeatingPage() {
               {totalStudents > totalSeats && <span className="text-destructive"> - {totalStudents - totalSeats} short, add rooms</span>}
             </p>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">New bench-wise plan</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            Pick the rooms, then allot one section at a time: its students are divided into groups by bench count and
+            each group is sent to a room. Rooms with 2 or 3 per bench take that many different branches.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="max-w-sm space-y-1.5">
+            <Label>Exam name</Label>
+            <Input value={layName} onChange={(e) => setLayName(e.target.value)} placeholder="e.g. Semester End Exams, Nov 2026" />
+          </div>
+          <div className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3 max-h-56 overflow-y-auto rounded-lg border p-3">
+            {rooms.map((r) => (
+              <label key={r.id} className="flex items-center gap-2 text-sm">
+                <Checkbox checked={layRoomIds.includes(r.id)} onCheckedChange={() => setLayRoomIds((l) => toggle(l, r.id))} />
+                <span className="font-medium">{r.name}</span>
+                <span className="text-xs text-muted-foreground">{roomBenches(r)} benches × {roomPerBench(r)}</span>
+              </label>
+            ))}
+            {rooms.length === 0 && <p className="text-sm text-muted-foreground">No rooms yet - College Office adds them under Exam Rooms.</p>}
+          </div>
+          <Button disabled={!layName.trim() || layRoomIds.length === 0} loading={layCreating} onClick={() => void createLayered()}>
+            <Armchair className="h-4 w-4 mr-1" /> Create and start allotting
+          </Button>
         </CardContent>
       </Card>
 

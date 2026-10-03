@@ -10,18 +10,21 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/useToast";
+import { roomBenches, roomPerBench } from "@/lib/exams/roomLayout";
 import type { ExamRoom } from "@/types/examSeating";
 
-interface RoomForm { name: string; block: string; floor: string; capacity: string }
-const EMPTY: RoomForm = { name: "", block: "", floor: "", capacity: "" };
+interface RoomForm { name: string; block: string; floor: string; benches: string; studentsPerBench: string }
+const EMPTY: RoomForm = { name: "", block: "", floor: "", benches: "", studentsPerBench: "1" };
 
 // Header names accepted in an uploaded sheet (case-insensitive).
 const COLUMN_ALIASES: Record<keyof RoomForm, string[]> = {
   name: ["room", "room no", "room number", "classroom", "name"],
   block: ["block", "building"],
   floor: ["floor"],
-  capacity: ["capacity", "seats", "seating capacity"],
+  benches: ["benches", "no of benches", "number of benches", "capacity", "seats"],
+  studentsPerBench: ["students per bench", "per bench", "students/bench", "seats per bench"],
 };
 
 function parseCsv(text: string): string[][] {
@@ -32,10 +35,12 @@ function rowsToRooms(rows: string[][]): RoomForm[] {
   if (rows.length < 2) return [];
   const header = rows[0].map((h) => h.trim().toLowerCase());
   const col = (key: keyof RoomForm) => header.findIndex((h) => COLUMN_ALIASES[key].includes(h));
-  const idx = { name: col("name"), block: col("block"), floor: col("floor"), capacity: col("capacity") };
-  if (Object.values(idx).some((i) => i < 0)) throw new Error("Sheet needs Room, Block, Floor and Capacity columns");
+  const idx = { name: col("name"), block: col("block"), floor: col("floor"), benches: col("benches"), perBench: col("studentsPerBench") };
+  // Students per bench is optional (older sheets: Capacity only = one per bench).
+  if ([idx.name, idx.block, idx.floor, idx.benches].some((i) => i < 0)) throw new Error("Sheet needs Room, Block, Floor and Benches columns");
   return rows.slice(1).filter((r) => r.some((c) => c.trim())).map((r) => ({
-    name: r[idx.name] ?? "", block: r[idx.block] ?? "", floor: r[idx.floor] ?? "", capacity: r[idx.capacity] ?? "",
+    name: r[idx.name] ?? "", block: r[idx.block] ?? "", floor: r[idx.floor] ?? "", benches: r[idx.benches] ?? "",
+    studentsPerBench: (idx.perBench >= 0 ? r[idx.perBench] : "") || "1",
   }));
 }
 
@@ -49,10 +54,11 @@ export default function ExamRoomsPage() {
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<ExamRoom | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   function load() {
-    fetch("/api/college/exam-rooms")
+    fetch("/api/college/exam-rooms", { cache: "no-store" })
       .then((r) => r.json() as Promise<{ rooms?: ExamRoom[] }>)
       .then((d) => setRooms(d.rooms ?? []))
       .catch(() => toast({ variant: "destructive", title: "Failed to load rooms" }))
@@ -66,7 +72,7 @@ export default function ExamRoomsPage() {
       const res = editingId
         ? await fetch(`/api/college/exam-rooms/${editingId}`, {
             method: "PATCH", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ name: form.name, block: form.block, floor: Number(form.floor), capacity: Number(form.capacity) }),
+            body: JSON.stringify({ name: form.name, block: form.block, floor: Number(form.floor), benches: Number(form.benches), studentsPerBench: Number(form.studentsPerBench) }),
           })
         : await fetch("/api/college/exam-rooms", {
             method: "POST", headers: { "Content-Type": "application/json" },
@@ -125,19 +131,32 @@ export default function ExamRoomsPage() {
 
   async function confirmDelete() {
     if (!deleteTarget) return;
-    await fetch(`/api/college/exam-rooms/${deleteTarget.id}`, { method: "DELETE" });
-    setDeleteTarget(null);
-    load();
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/college/exam-rooms/${encodeURIComponent(deleteTarget.id)}`, { method: "DELETE", cache: "no-store" });
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(data.error ?? `Delete failed (${res.status})`);
+      }
+      setRooms((list) => list.filter((r) => r.id !== deleteTarget.id));
+      toast({ variant: "success", title: `Room ${deleteTarget.name} removed` });
+      setDeleteTarget(null);
+    } catch (err) {
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to delete room" });
+    } finally {
+      setDeleting(false);
+    }
   }
 
   const set = (k: keyof RoomForm) => (e: React.ChangeEvent<HTMLInputElement>) => setForm((f) => ({ ...f, [k]: e.target.value }));
-  const canSave = form.name.trim() && form.block.trim() && form.floor !== "" && Number(form.capacity) >= 1;
+  const canSave = form.name.trim() && form.block.trim() && form.floor !== "" && Number(form.benches) >= 1;
+  const seats = Number(form.benches) * Number(form.studentsPerBench);
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Exam Rooms"
-        description="Classrooms used for exams - block, floor and seating capacity. Exam Cell seats students into these."
+        description="Classrooms used for exams - block, floor, benches and students per bench. Exam Cell seats students into these."
         actions={
           <>
             <input
@@ -153,11 +172,20 @@ export default function ExamRoomsPage() {
 
       <Card>
         <CardContent className="p-4 space-y-3">
-          <div className="grid gap-3 sm:grid-cols-4">
+          <div className="grid gap-3 sm:grid-cols-5">
             <div className="space-y-1.5"><Label>Room</Label><Input value={form.name} onChange={set("name")} placeholder="201" /></div>
             <div className="space-y-1.5"><Label>Block</Label><Input value={form.block} onChange={set("block")} placeholder="A" /></div>
             <div className="space-y-1.5"><Label>Floor</Label><Input type="number" value={form.floor} onChange={set("floor")} placeholder="2" /></div>
-            <div className="space-y-1.5"><Label>Capacity</Label><Input type="number" min={1} value={form.capacity} onChange={set("capacity")} placeholder="20" /></div>
+            <div className="space-y-1.5"><Label>Benches</Label><Input type="number" min={1} value={form.benches} onChange={set("benches")} placeholder="30" /></div>
+            <div className="space-y-1.5">
+              <Label>Students per bench</Label>
+              <Select value={form.studentsPerBench} onValueChange={(v) => setForm((f) => ({ ...f, studentsPerBench: v }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {["1", "2", "3"].map((n) => <SelectItem key={n} value={n}>{n}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
           <div className="flex items-center gap-2">
             <Button size="sm" disabled={!canSave} loading={saving} onClick={() => void save()}>
@@ -165,7 +193,7 @@ export default function ExamRoomsPage() {
             </Button>
             {editingId && <Button size="sm" variant="ghost" onClick={() => { setEditingId(null); setForm(EMPTY); }}>Cancel</Button>}
             <p className="text-xs text-muted-foreground ml-auto">
-              Upload columns: Room, Block, Floor, Capacity. Re-uploading updates existing rooms.
+              {seats > 0 ? `${seats} seats. ` : ""}Upload columns: Room, Block, Floor, Benches, Students per Bench. Re-uploading updates existing rooms.
             </p>
           </div>
         </CardContent>
@@ -180,7 +208,7 @@ export default function ExamRoomsPage() {
           <CardContent className="p-0 overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="text-left text-xs text-muted-foreground border-b">
-                <tr><th className="p-3">Room</th><th className="p-3">Block</th><th className="p-3">Floor</th><th className="p-3">Capacity</th><th className="p-3">Status</th><th className="p-3" /></tr>
+                <tr><th className="p-3">Room</th><th className="p-3">Block</th><th className="p-3">Floor</th><th className="p-3">Benches</th><th className="p-3">Per bench</th><th className="p-3">Seats</th><th className="p-3">Status</th><th className="p-3" /></tr>
               </thead>
               <tbody>
                 {rooms.map((r) => (
@@ -188,7 +216,7 @@ export default function ExamRoomsPage() {
                     <td className="p-3 font-medium">{r.name}</td>
                     <td className="p-3">{r.block}</td>
                     <td className="p-3">{r.floor}</td>
-                    <td className="p-3">{r.capacity}</td>
+                    <td className="p-3">{roomBenches(r)}</td><td className="p-3">{roomPerBench(r)}</td><td className="p-3">{r.capacity}</td>
                     <td className="p-3">
                       <button onClick={() => void toggleActive(r)}>
                         <Badge variant={r.isActive ? "approved" : "outline"}>{r.isActive ? "In use" : "Inactive"}</Badge>
@@ -197,7 +225,7 @@ export default function ExamRoomsPage() {
                     <td className="p-3 text-right whitespace-nowrap">
                       <Button size="icon" variant="ghost" aria-label="Edit" onClick={() => {
                         setEditingId(r.id);
-                        setForm({ name: r.name, block: r.block, floor: String(r.floor), capacity: String(r.capacity) });
+                        setForm({ name: r.name, block: r.block, floor: String(r.floor), benches: String(roomBenches(r)), studentsPerBench: String(roomPerBench(r)) });
                       }}><Pencil className="h-4 w-4" /></Button>
                       <Button size="icon" variant="ghost" aria-label="Delete" onClick={() => setDeleteTarget(r)}><Trash2 className="h-4 w-4" /></Button>
                     </td>
@@ -215,6 +243,8 @@ export default function ExamRoomsPage() {
         title="Delete room?"
         description={`Room ${deleteTarget?.name ?? ""} will be removed from the list. Seating plans already made keep it.`}
         confirmLabel="Delete"
+        loading={deleting}
+        variant="destructive"
         onConfirm={() => void confirmDelete()}
       />
     </div>

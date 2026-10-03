@@ -9,6 +9,11 @@ export interface ExamRoom {
   name: string; // "201"
   block: string;
   floor: number;
+  // Benches and students per bench (1-3). `capacity` = benches x studentsPerBench,
+  // kept stored for older readers. Rooms added before benches existed carry
+  // only `capacity` - see lib/exams/roomLayout.ts for the fallbacks.
+  benches?: number;
+  studentsPerBench?: number;
   capacity: number;
   isActive: boolean;
   createdAt?: unknown;
@@ -21,6 +26,9 @@ export interface SeatingStudent {
   name: string;
   sectionId: string;
   sectionLabel: string; // "CSE · 2nd Year · A"
+  // Layered plans only: which seat on the bench (1..studentsPerBench). All
+  // students of one layer in a room belong to one branch.
+  layer?: number;
 }
 
 export interface SeatingSectionRef {
@@ -38,11 +46,17 @@ export interface SeatingRoomAllocation {
   block: string;
   floor: number;
   capacity: number;
+  benches?: number;
+  perBench?: number;
   // Sections Exam Cell handpicked for this room. Empty/absent = any section
   // may fill it, in the order the sections were listed.
   allowedSectionIds?: string[];
   students: SeatingStudent[];
 }
+
+// QUICK: one-shot auto-fill, one student per bench. LAYERED: sections are
+// allotted one at a time, each into a bench layer of the rooms chosen for it.
+export type SeatingPlanMode = "QUICK" | "LAYERED";
 
 export type SeatingPlanStatus = "DRAFT" | "PUBLISHED";
 
@@ -52,6 +66,7 @@ export interface ExamSeatingPlan {
   collegeId: string;
   name: string; // the exam's name, chosen by Exam Cell
   status: SeatingPlanStatus;
+  mode?: SeatingPlanMode;
   sections: SeatingSectionRef[];
   rooms: SeatingRoomAllocation[];
   unplaced: SeatingStudent[];

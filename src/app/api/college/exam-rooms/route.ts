@@ -32,7 +32,7 @@ export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("COLLEGE_OFFICE");
     const body = (await request.json()) as {
-      rooms?: { name?: string; block?: string; floor?: number | string; capacity?: number | string }[];
+      rooms?: { name?: string; block?: string; floor?: number | string; benches?: number | string; studentsPerBench?: number | string; capacity?: number | string }[];
     };
     const input = body.rooms ?? [];
     if (input.length === 0) return NextResponse.json({ error: "No rooms provided" }, { status: 400 });
@@ -41,17 +41,23 @@ export async function POST(request: Request) {
     }
 
     const errors: string[] = [];
-    const clean = new Map<string, { name: string; block: string; floor: number; capacity: number }>();
+    const clean = new Map<string, { name: string; block: string; floor: number; benches: number; studentsPerBench: number; capacity: number }>();
     input.forEach((r, i) => {
       const name = String(r.name ?? "").trim();
       const block = String(r.block ?? "").trim();
       const floor = Number(r.floor);
-      const capacity = Number(r.capacity);
-      if (!name || !block || !Number.isFinite(floor) || !Number.isInteger(capacity) || capacity < 1) {
-        errors.push(`Row ${i + 1}: name, block, floor and a capacity of at least 1 are required`);
+      // A bare `capacity` (older sheets) means that many benches, one student each.
+      const benches = Number(r.benches ?? r.capacity);
+      const studentsPerBench = Number(r.studentsPerBench ?? 1);
+      if (
+        !name || !block || !Number.isFinite(floor) ||
+        !Number.isInteger(benches) || benches < 1 ||
+        !Number.isInteger(studentsPerBench) || studentsPerBench < 1 || studentsPerBench > 3
+      ) {
+        errors.push(`Row ${i + 1}: name, block, floor, benches (at least 1) and students per bench (1 to 3) are required`);
         return;
       }
-      clean.set(examRoomDocId(block, name), { name, block, floor, capacity });
+      clean.set(examRoomDocId(block, name), { name, block, floor, benches, studentsPerBench, capacity: benches * studentsPerBench });
     });
     if (errors.length > 0) return NextResponse.json({ error: errors.slice(0, 5).join("; ") }, { status: 400 });
 

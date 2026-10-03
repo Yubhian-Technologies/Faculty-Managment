@@ -12,6 +12,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
 import { moveStudent, rollRangeBySection } from "@/lib/exams/seatingAllocator";
+import { benchRows, moveStudentLayered } from "@/lib/exams/seatingLayers";
+import { AllotSectionPanel } from "@/components/exams/AllotSectionPanel";
 import type { ExamSeatingPlan } from "@/types/examSeating";
 
 // Review of an automatic allotment: every room with its roll-number ranges,
@@ -25,18 +27,28 @@ export default function SeatingPlanPage({ params }: { params: Promise<{ id: stri
   const [busy, setBusy] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
-  useEffect(() => {
+  function reload() {
     fetch(`/api/college/exam-seating/${id}`)
       .then((r) => r.json() as Promise<{ plan?: ExamSeatingPlan }>)
-      .then((d) => setPlan(d.plan ?? null))
+      .then((d) => { setPlan(d.plan ?? null); setDirty(false); })
       .catch(() => toast({ variant: "destructive", title: "Failed to load the plan" }));
-  }, [id]);
+  }
+  useEffect(reload, [id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!plan) return <div className="h-40 rounded-lg border bg-muted/30 animate-pulse" />;
 
   const published = plan.status === "PUBLISHED";
+  const layered = plan.mode === "LAYERED";
+  const deptBySection = new Map(plan.sections.map((s) => [s.id, s.department]));
 
   function move(studentId: string, target: string) {
+    if (layered) {
+      const res = moveStudentLayered(plan!.rooms, studentId, target, (sid) => deptBySection.get(sid) ?? "");
+      if ("error" in res) { toast({ variant: "destructive", title: res.error }); return; }
+      setPlan({ ...plan!, rooms: res.rooms });
+      setDirty(true);
+      return;
+    }
     const next = moveStudent(plan!, studentId, target);
     if (!next) { toast({ variant: "destructive", title: "That room is full" }); return; }
     setPlan({ ...plan!, ...next });
@@ -74,9 +86,15 @@ export default function SeatingPlanPage({ params }: { params: Promise<{ id: stri
   }
 
   function downloadCsv() {
-    const lines = [["Room", "Block", "Floor", "Seat", "Roll Number", "Name", "Section"]];
+    const lines = [["Room", "Block", "Floor", layered ? "Bench" : "Seat", "Roll Number", "Name", "Section"]];
     for (const r of plan!.rooms) {
-      r.students.forEach((s, i) => lines.push([r.name, r.block, String(r.floor), String(i + 1), s.rollNumber, s.name, s.sectionLabel]));
+      if (layered) {
+        benchRows(r).forEach((row, b) => row.forEach((s, l) => {
+          if (s) lines.push([r.name, r.block, String(r.floor), `${b + 1}${String.fromCharCode(65 + l)}`, s.rollNumber, s.name, s.sectionLabel]);
+        }));
+      } else {
+        r.students.forEach((s, i) => lines.push([r.name, r.block, String(r.floor), String(i + 1), s.rollNumber, s.name, s.sectionLabel]));
+      }
     }
     const csv = lines.map((l) => l.map((c) => `"${c.replace(/"/g, '""')}"`).join(",")).join("\n");
     const a = document.createElement("a");
@@ -106,7 +124,7 @@ export default function SeatingPlanPage({ params }: { params: Promise<{ id: stri
                 <Save className="h-4 w-4 mr-1" /> Save
               </Button>
               {!published && (
-                <Button size="sm" disabled={plan.unplaced.length > 0} loading={busy} onClick={() => void publish()}>
+                <Button size="sm" disabled={plan.unplaced.length > 0 || usedRooms.length === 0} loading={busy} onClick={() => void publish()}>
                   <Send className="h-4 w-4 mr-1" /> Publish
                 </Button>
               )}
@@ -114,6 +132,8 @@ export default function SeatingPlanPage({ params }: { params: Promise<{ id: stri
             </>
           }
         />
+
+        {layered && !published && <AllotSectionPanel plan={plan} onAllotted={reload} />}
 
         {plan.unplaced.length > 0 && (
           <Card className="border-destructive/50">
@@ -138,7 +158,9 @@ export default function SeatingPlanPage({ params }: { params: Promise<{ id: stri
                 <p className="text-lg font-semibold">Room {room.name}</p>
                 <p className="text-xs text-muted-foreground">Block {room.block} · Floor {room.floor} · {plan.name}</p>
               </div>
-              <p className="text-sm text-muted-foreground">{room.students.length} / {room.capacity} seats</p>
+              <p className="text-sm text-muted-foreground">
+                {room.students.length} / {room.capacity} seats{layered ? ` · ${room.benches ?? room.capacity} benches × ${room.perBench ?? 1}` : ""}
+              </p>
             </div>
             <div className="flex flex-wrap gap-2">
               {rollRangeBySection(room.students).map((g) => (
@@ -147,6 +169,36 @@ export default function SeatingPlanPage({ params }: { params: Promise<{ id: stri
                 </Badge>
               ))}
             </div>
+            {layered ? (
+              <table className="w-full text-sm">
+                <thead className="text-left text-xs text-muted-foreground border-b">
+                  <tr>
+                    <th className="py-1.5 w-14">Bench</th>
+                    {Array.from({ length: room.perBench ?? 1 }, (_, l) => <th key={l}>Seat {String.fromCharCode(65 + l)}</th>)}
+                  </tr>
+                </thead>
+                <tbody>
+                  {benchRows(room).map((row, b) => (
+                    <tr key={b} className="border-b last:border-0 align-top">
+                      <td className="py-1.5">{b + 1}</td>
+                      {row.map((s, l) => (
+                        <td key={l} className="py-1.5 pr-3">
+                          {s ? (
+                            <div className="flex items-center justify-between gap-2">
+                              <span>
+                                {s.rollNumber} · {s.name}
+                                <span className="block text-[11px] text-muted-foreground">{s.sectionLabel}</span>
+                              </span>
+                              {!published && <span className="print:hidden"><MoveSelect plan={plan} current={room.roomId} onMove={(t) => move(s.id, t)} /></span>}
+                            </div>
+                          ) : <span className="text-muted-foreground">-</span>}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
             <table className="w-full text-sm">
               <thead className="text-left text-xs text-muted-foreground border-b">
                 <tr><th className="py-1.5 w-12">Seat</th><th>Roll No.</th><th>Name</th><th>Section</th><th className="print:hidden text-right">Move to</th></tr>
@@ -163,6 +215,7 @@ export default function SeatingPlanPage({ params }: { params: Promise<{ id: stri
                 ))}
               </tbody>
             </table>
+            )}
           </CardContent>
         </Card>
       ))}
@@ -189,7 +242,7 @@ function MoveSelect({ plan, current, onMove }: { plan: ExamSeatingPlan; current:
             {r.name} ({r.students.length}/{r.capacity})
           </SelectItem>
         ))}
-        {current !== "UNPLACED" && <SelectItem value="UNPLACED">Unplaced</SelectItem>}
+        {current !== "UNPLACED" && plan.mode !== "LAYERED" && <SelectItem value="UNPLACED">Unplaced</SelectItem>}
       </SelectContent>
     </Select>
   );

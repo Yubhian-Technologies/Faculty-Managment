@@ -3,10 +3,12 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import { allocateSeating } from "@/lib/exams/seatingAllocator";
+import { allocateSeating, sortRoomsForSeating } from "@/lib/exams/seatingAllocator";
 import { sectionLabel } from "@/lib/exams/seatingSections";
-import type { Section, StudentRecord } from "@/types";
-import type { ExamRoom, ExamSeatingPlan, SeatingSectionRef, SeatingStudent } from "@/types/examSeating";
+import { loadSectionStudents } from "@/lib/exams/seatingStudents";
+import { roomBenches, roomPerBench } from "@/lib/exams/roomLayout";
+import type { Section } from "@/types";
+import type { ExamRoom, ExamSeatingPlan, SeatingRoomAllocation, SeatingSectionRef } from "@/types/examSeating";
 
 const ROLES = ["EXAM_CELL", "PRINCIPAL", "VICE_PRINCIPAL"];
 
@@ -50,48 +52,40 @@ export async function POST(request: Request) {
       sectionIds?: string[];
       roomIds?: string[];
       roomSections?: Record<string, string[]>;
+      // LAYERED starts empty (sections are allotted one by one afterwards).
+      mode?: "QUICK" | "LAYERED";
     };
     const name = body.name?.trim();
     if (!name) return NextResponse.json({ error: "Exam name is required" }, { status: 400 });
-    if (!body.sectionIds?.length) return NextResponse.json({ error: "Pick at least one section" }, { status: 400 });
+    const layered = body.mode === "LAYERED";
+    if (!layered && !body.sectionIds?.length) return NextResponse.json({ error: "Pick at least one section" }, { status: 400 });
     if (!body.roomIds?.length) return NextResponse.json({ error: "Pick at least one room" }, { status: 400 });
 
     const db = getAdminDb();
     const college = db.collection("colleges").doc(session.collegeId);
 
+    const sectionIds = body.sectionIds ?? [];
     const [sectionSnaps, roomSnaps] = await Promise.all([
-      Promise.all(body.sectionIds.map((id) => college.collection("sections").doc(id).get())),
+      Promise.all(sectionIds.map((id) => college.collection("sections").doc(id).get())),
       Promise.all(body.roomIds.map((id) => college.collection("examRooms").doc(id).get())),
     ]);
     const sections = sectionSnaps.filter((s) => s.exists).map((s) => ({ id: s.id, ...s.data() }) as Section);
     const rooms = roomSnaps.filter((r) => r.exists).map((r) => ({ id: r.id, ...r.data() }) as ExamRoom);
-    if (sections.length === 0 || rooms.length === 0) {
+    if (rooms.length === 0 || (!layered && sections.length === 0)) {
       return NextResponse.json({ error: "Selected sections or rooms no longer exist" }, { status: 400 });
     }
 
-    const studentsBySection = await Promise.all(
-      sections.map(async (s) => {
-        const snap = await college.collection("students")
-          .where("department", "==", s.department)
-          .where("section", "==", s.name)
-          .where("year", "==", s.year)
-          .get();
-        const label = sectionLabel(s);
-        return snap.docs
-          .map((d) => ({ id: d.id, ...d.data() }) as StudentRecord)
-          .filter((st) => st.status !== "GRADUATED" && st.rollNumber)
-          .map((st): SeatingStudent => ({ id: st.id, rollNumber: st.rollNumber, name: st.name, sectionId: s.id, sectionLabel: label }));
-      })
-    );
+    const studentsBySection = await Promise.all(sections.map((s) => loadSectionStudents(db, session.collegeId, s)));
 
     const validSectionIds = new Set(sections.map((s) => s.id));
     const allocation = allocateSeating(
       rooms.map((r) => ({
-        roomId: r.id, name: r.name, block: r.block, floor: r.floor, capacity: r.capacity,
+        // Quick fill seats one student per bench - a lone branch never sits two to a bench.
+        roomId: r.id, name: r.name, block: r.block, floor: r.floor, capacity: roomBenches(r),
         allowedSectionIds: (body.roomSections?.[r.id] ?? []).filter((id) => validSectionIds.has(id)),
       })),
       // Listed order = seating order, so use the order Exam Cell sent.
-      body.sectionIds
+      sectionIds
         .map((id) => sections.findIndex((s) => s.id === id))
         .filter((i) => i >= 0)
         .map((i) => ({ id: sections[i].id, students: studentsBySection[i] }))
@@ -113,7 +107,13 @@ export async function POST(request: Request) {
       name,
       status: "DRAFT",
       sections: sectionRefs,
-      rooms: allocation.rooms.map((r) => (r.allowedSectionIds?.length ? r : { ...r, allowedSectionIds: [] })),
+      mode: layered ? "LAYERED" : "QUICK",
+      rooms: layered
+        ? sortRoomsForSeating(rooms).map((r): SeatingRoomAllocation => ({
+            roomId: r.id, name: r.name, block: r.block, floor: r.floor,
+            capacity: roomBenches(r) * roomPerBench(r), benches: roomBenches(r), perBench: roomPerBench(r), students: [],
+          }))
+        : allocation.rooms.map((r) => (r.allowedSectionIds?.length ? r : { ...r, allowedSectionIds: [] })),
       unplaced: allocation.unplaced,
       createdBy: session.uid,
       createdByName: actorName,
