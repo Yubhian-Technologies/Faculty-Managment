@@ -13,6 +13,7 @@ import { Avatar } from "@/components/shared/Avatar";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
+import { DepartmentOfficeAccessCard } from "@/components/departments/DepartmentOfficeAccessCard";
 import { useAuthStore } from "@/store/authStore";
 import type { FMSUser } from "@/types";
 
@@ -279,6 +280,8 @@ export default function DepartmentOfficePage() {
         onConfirm={() => void handleRemove()}
         loading={isRemoving}
       />
+
+      {holder && <DepartmentOfficeAccessCard />}
     </div>
   );
 }
