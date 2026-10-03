@@ -19,6 +19,7 @@ import type { FacultyNorms, PositionNorm, RegulatoryBody, College, UserRole, Nav
 import { ROLE_LABELS } from "@/types";
 import { getNavItemsForRole, groupNavItemsByModule, getRolesWithNavModules, isPersonalNavItem } from "@/components/layout/navConfig";
 import { isSeatRole } from "@/lib/roles/seatRoles";
+import Link from "next/link";
 
 const REGULATORY_BODIES: { value: RegulatoryBody; label: string }[] = [
   { value: "UGC", label: "UGC - University Grants Commission" },
@@ -356,6 +357,18 @@ export default function SuperAdminSettingsPage() {
       )}
 
       <SuperAdminChangePasswordCard />
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Customise Dashboards</CardTitle>
+          <CardDescription>
+            Number and reorder the sidebar tabs for a college and role, and add your own tabs with custom pages.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button asChild><Link href="/super-admin/customize">Open dashboard customiser</Link></Button>
+        </CardContent>
+      </Card>
 
       <NavVisibilitySection />
     </div>
