@@ -2,7 +2,7 @@
 // Run: npm i --no-save @firebase/rules-unit-testing firebase && npx firebase emulators:exec --only firestore --project rules-test "node tests/rules/firestore.rules.test.mjs firestore.rules"
 import { initializeTestEnvironment, assertSucceeds, assertFails } from "@firebase/rules-unit-testing";
 import { readFileSync } from "node:fs";
-import { doc, getDoc, setDoc, updateDoc, deleteDoc, collection, getDocs } from "firebase/firestore";
+import { doc, getDoc, setDoc, updateDoc, deleteDoc, collection, getDocs, query, where, orderBy, limit } from "firebase/firestore";
 
 const rulesPath = process.argv[2];
 const env = await initializeTestEnvironment({
@@ -23,6 +23,7 @@ await env.withSecurityRulesDisabled(async (ctx) => {
   await setDoc(doc(db, "colleges/c1/sections/sec1"), { name: "A" });
   await setDoc(doc(db, "colleges/c1/teachingAssignments/ta1"), { x: 1 });
   await setDoc(doc(db, "colleges/c1/studentAttendance/sa1"), { facultyId: "fac1" });
+  await setDoc(doc(db, "colleges/c1/notifications/n1"), { toUid: "hod1", read: false, createdAt: new Date() });
   await setDoc(doc(db, "systemUsers/sa1"), { role: "SUPER_ADMIN" });
   await setDoc(doc(db, "platformConfig/facultyNorms"), { a: 1 });
 });
@@ -53,6 +54,10 @@ await t("staff still read departments", true, () => getDoc(doc(hod, "colleges/c1
 await t("staff still read the college doc", true, () => getDoc(doc(hod, "colleges/c1")));
 await t("owner reads own systemUsers doc", true, () => getDoc(doc(sa, "systemUsers/sa1")));
 await t("any signed-in user reads platformConfig", true, () => getDoc(doc(fac, "platformConfig/facultyNorms")));
+// live notification feed (onSnapshot on the signed-in user's own notifications)
+await t("user can listen to own notifications", true, () => getDocs(query(collection(hod, "colleges/c1/notifications"), where("toUid", "==", "hod1"), orderBy("createdAt", "desc"), limit(30))));
+await t("user cannot listen to someone else's notifications", false, () => getDocs(query(collection(fac, "colleges/c1/notifications"), where("toUid", "==", "hod1"))));
+await t("user cannot write notifications", false, () => updateDoc(doc(hod, "colleges/c1/notifications/n1"), { read: true }));
 // reads narrowed
 await t("PANEL_MEMBER cannot read another user's profile", false, () => getDoc(doc(fac, "colleges/c1/users/hod1")));
 await t("HOD cannot list the users collection", false, () => getDocs(collection(hod, "colleges/c1/users")));
