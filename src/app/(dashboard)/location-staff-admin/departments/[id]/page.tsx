@@ -1,5 +1,6 @@
 "use client";
 
+import { neutraliseFormula } from "@/lib/utils/csv";
 import { useEffect, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
@@ -390,7 +391,7 @@ export default function DepartmentDetailPage() {
     ];
 
     const rows = reportRows.map((r) => [
-      `"${r.staffName.replace(/"/g, '""')}"`,
+      `"${neutraliseFormula(r.staffName).replace(/"/g, '""')}"`,
       `"${r.role.replace(/"/g, '""')}"`,
       `"${(r.departmentName || deptName).replace(/"/g, '""')}"`,
       `"${(r.shiftName || "Unassigned").replace(/"/g, '""')}"`,
