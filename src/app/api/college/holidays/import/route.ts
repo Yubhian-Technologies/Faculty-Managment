@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { ChunkedBatch } from "@/lib/firestore/chunkedBatch";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
@@ -75,9 +76,10 @@ export async function POST(request: Request) {
     }
 
     const holidaysRef = db.collection("colleges").doc(collegeId).collection("holidays");
-    let created = 0;
+    // One batched write per ~450 holidays instead of one round trip per row.
+    const writer = new ChunkedBatch(db);
     for (const h of toCreate) {
-      await holidaysRef.add({
+      writer.set(holidaysRef.doc(), {
         collegeId,
         date: h.date,
         name: h.name,
@@ -86,8 +88,9 @@ export async function POST(request: Request) {
         academicYear: h.academicYear,
         createdAt: now,
       });
-      created++;
     }
+    await writer.commit();
+    const created = toCreate.length;
 
     if (created > 0) {
       await db.collection("colleges").doc(collegeId).collection("auditLogs").add({
