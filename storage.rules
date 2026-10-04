@@ -71,31 +71,31 @@ service firebase.storage {
     // Generated documents (offer letters, appointment letters)
     match /colleges/{collegeId}/documents/{filename} {
       allow read: if isStaff(collegeId);
-      allow write: if isStaff(collegeId);
+      allow write: if false; // uploads here are server-side (Admin SDK); no browser upload code exists
     }
 
     // Interview forms and other office uploads
     match /colleges/{collegeId}/forms/{filename} {
       allow read: if isStaff(collegeId);
-      allow write: if isStaff(collegeId);
+      allow write: if false; // uploads here are server-side (Admin SDK); no browser upload code exists
     }
 
     // Finance receipts - isolated to the Finance role
     match /colleges/{collegeId}/financeReceipts/{filename} {
       allow read: if isFinance(collegeId);
-      allow write: if isFinance(collegeId);
+      allow write: if false; // uploads here are server-side (Admin SDK); no browser upload code exists
     }
 
     // Purchase Dept receipts/bills for completed indents - Finance reviews these too
     match /colleges/{collegeId}/indentReceipts/{filename} {
       allow read: if isPurchaseDept(collegeId) || isFinance(collegeId);
-      allow write: if isPurchaseDept(collegeId);
+      allow write: if false; // uploads here are server-side (Admin SDK); no browser upload code exists
     }
 
     // HOD-uploaded GRNs confirming goods received for Purchase Finance Clearance
     match /colleges/{collegeId}/purchaseGrn/{filename} {
       allow read: if isHod(collegeId) || isFinance(collegeId);
-      allow write: if isHod(collegeId);
+      allow write: if false; // uploads here are server-side (Admin SDK); no browser upload code exists
     }
   }
 }
