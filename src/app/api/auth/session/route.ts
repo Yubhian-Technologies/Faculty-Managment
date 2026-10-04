@@ -9,6 +9,8 @@ import { signSession } from "@/lib/auth/sessionToken";
 import { orderHeldRoles } from "@/lib/roles/seatRoles";
 import { activeDelegatedRoles } from "@/lib/leave/roleDelegation";
 import { migrateUserDoc } from "@/lib/faculty/fieldRenames";
+import { isFacultyCapableRole, isReadOnlyFacultyCollege } from "@/lib/auth/readOnlyAccess";
+import { isFacultyExited } from "@/lib/auth/readOnlyFacultyLookup";
 
 export async function POST(request: Request) {
   try {
@@ -167,7 +169,22 @@ export async function POST(request: Request) {
     if (collegeId && profile) {
       try { delegatedRoles = (await activeDelegatedRoles(getAdminDb(), collegeId, decoded.uid)).roles; } catch { /* non-fatal */ }
     }
-    const roles = role === "UNKNOWN" ? [role] : orderHeldRoles(role, [...seatRoles, ...delegatedRoles]);
+    let roles = role === "UNKNOWN" ? [role] : orderHeldRoles(role, [...seatRoles, ...delegatedRoles]);
+
+    // A RESIGNED/RETIRED faculty member signs in normally but is READ-ONLY (see
+    // lib/auth/readOnlyAccess.ts): derived from facultyMembers.status, only for a
+    // college that has the switch on (zero extra reads otherwise). They hold no
+    // seat, so the roles carried in the cookie and sent to the client are just
+    // their own role - the seat menus/pages disappear. The API guards re-check the
+    // status live on every request regardless, so this only keeps the UI honest.
+    let readOnlyAccess = false;
+    if (collegeId && profile && role !== "UNKNOWN" && isReadOnlyFacultyCollege(collegeId) && isFacultyCapableRole(profile.role as string)) {
+      try { readOnlyAccess = await isFacultyExited(db, collegeId, decoded.uid); } catch { /* non-fatal - the guards enforce it anyway */ }
+    }
+    if (readOnlyAccess) {
+      roles = [role];
+      realRole = role;
+    }
 
     const sessionData = {
       uid: decoded.uid,
@@ -182,7 +199,7 @@ export async function POST(request: Request) {
 
     const sessionCookie = await signSession(sessionData);
 
-    const response = NextResponse.json({ ok: true, role, realRole, roles, collegeId, locationId, name, email, profile, refreshToken: !claimsWereSet });
+    const response = NextResponse.json({ ok: true, role, realRole, roles, collegeId, locationId, name, email, profile, refreshToken: !claimsWereSet, ...(readOnlyAccess ? { readOnlyAccess: true } : {}) });
     response.cookies.set("fms-session", sessionCookie, {
       httpOnly: true,
       // Not just a NODE_ENV check: a staging/preview deploy reachable over the

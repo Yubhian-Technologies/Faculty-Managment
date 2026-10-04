@@ -44,6 +44,17 @@ node scripts/create-admin.mjs
 
 Env vars: `FIREBASE_ADMIN_PROJECT_ID`, `FIREBASE_ADMIN_CLIENT_EMAIL`, `FIREBASE_ADMIN_PRIVATE_KEY` (server); `NEXT_PUBLIC_FIREBASE_*` (client); `SMTP_*`, `EMAIL_FROM` (email); `SESSION_SECRET` (optional cookie-signing secret, falls back to the admin private key); `CRON_SECRET` + `APP_URL` (functions).
 
+### Feature switch: read-only access for RESIGNED / RETIRED faculty
+
+`READ_ONLY_FACULTY_COLLEGES` = comma-separated college ids (e.g. `fffeab8b168a4b449dea`). **Empty/unset = OFF for everyone** (the default).
+
+- **What it does (listed colleges only):** a login linked to a faculty record whose `facultyMembers.status` is `RESIGNED`/`RETIRED` still signs in (account, role, `isActive`, Firebase Auth are never touched) but is **read-only**: it may only GET its own profile/history (the allow-list in `src/lib/auth/readOnlyAccess.ts`); every write and every other read is denied, and it holds no seat. State is **derived from `facultyMembers.status`** - nothing is stored on `users`; setting the status back to a non-exited value restores access (it never restores a vacated seat).
+- **How it works:** `src/proxy.ts` stamps `x-fms-method`/`x-fms-path` on every `/api` request (always overwriting the client's); `src/lib/auth/liveRoles.ts` applies the rule after its 20 s cache; `/api/auth/session` returns a derived `readOnlyAccess` flag for the UI (`ReadOnlyAccessGate`). No protected file is involved.
+- **Related behaviour, same switch:** saving a faculty member who is RESIGNED/RETIRED vacates the seats they hold (`src/lib/faculty/vacateSeatsOnExit.ts`, retried on every later save; outcome in `facultyMembers.seatVacateStatus`); `assignSeat` and the Department Office route refuse to give a seat to an exited person (`src/lib/roles/seatEligibility.ts`).
+- **Cost:** a college NOT listed pays **zero extra Firestore reads** and behaves exactly as before. A listed college pays one extra single-document query per faculty login per 20 s window (`facultyMembers.where("userUid","==",uid).limit(1)`), plus one at sign-in.
+- **Changing it:** it is read from the environment, so adding/removing a college id needs a restart/redeploy. To switch a college OFF instantly: remove its id and restart - access returns to normal; nothing in the database needs undoing.
+- **Safety net:** `src/app/api/routeGuards.inventory.test.ts` fails if a new mutating API route has no role guard (so it could never be denied to a read-only person) and proves every guarded mutating route denies a RESIGNED/RETIRED login.
+
 ## Architecture & Directory Map
 
 ```

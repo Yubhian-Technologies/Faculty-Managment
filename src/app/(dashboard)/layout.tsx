@@ -7,6 +7,7 @@ import { BottomNav, hasBottomNav } from "@/components/layout/BottomNav";
 import { MobileDrawer } from "@/components/layout/MobileDrawer";
 import { TopBar } from "@/components/layout/TopBar";
 import { SummerHolidayBanner } from "@/components/layout/SummerHolidayBanner";
+import { ReadOnlyAccessGate } from "@/components/layout/ReadOnlyAccessGate";
 import { isPathHidden } from "@/components/layout/navConfig";
 import { useAuthStore } from "@/store/authStore";
 import { useNavVisibility } from "@/hooks/useNavVisibility";
@@ -48,7 +49,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <TopBar hiddenItems={hiddenItems} />
         <SummerHolidayBanner />
         <main className={`flex-1 p-4 md:p-6 md:pb-6 max-w-7xl mx-auto w-full ${hasBottomNav(user.role, pathname) ? "pb-24" : "pb-6"}`}>
-          {children}
+          <ReadOnlyAccessGate>{children}</ReadOnlyAccessGate>
         </main>
         <footer className="hidden md:flex items-center justify-between px-6 py-3 border-t bg-background text-xs text-muted-foreground">
           <span>© 2026 Sri Vishnu Educational Society. All rights reserved.</span>

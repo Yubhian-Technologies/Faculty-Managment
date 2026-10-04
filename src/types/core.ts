@@ -400,6 +400,11 @@ export interface FMSUser {
   // each seat they hold (see types/roleSeats.ts). Set by /api/auth/session; the
   // sidebar and page access are the union of all of them.
   roles?: UserRole[];
+  // Set by /api/auth/session ONLY for a RESIGNED/RETIRED faculty member in a college
+  // that has read-only faculty access switched on (lib/auth/readOnlyAccess.ts):
+  // they sign in normally but may only view their own profile and history. Derived
+  // from facultyMembers.status on every session call - never stored on the user doc.
+  readOnlyAccess?: boolean;
   // Denormalized from the seats this person holds (maintained by
   // lib/roles/seats.ts) - `seatRoles` is what guards and role lookups read.
   seatIds?: string[];
