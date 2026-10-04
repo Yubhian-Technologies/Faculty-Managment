@@ -1,5 +1,6 @@
 "use client";
 
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { useEffect, useState, use } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -158,11 +159,10 @@ export default function LocationStaffAdminEditShiftPage({
     }
   };
 
-  const handleDelete = async () => {
-    if (!confirm(`Are you sure you want to delete shift "${name}"? Any assigned staff will be unassigned.`)) {
-      return;
-    }
-
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const handleDelete = () => setConfirmDeleteOpen(true);
+  const performDelete = async () => {
+    setConfirmDeleteOpen(false);
     setIsDeleting(true);
     try {
       const res = await fetch(`/api/location/shifts/${shiftId}`, {
@@ -392,6 +392,15 @@ export default function LocationStaffAdminEditShiftPage({
           </form>
         </CardContent>
       </Card>
+      <ConfirmDialog
+        open={confirmDeleteOpen}
+        onOpenChange={setConfirmDeleteOpen}
+        title={`Delete shift "${name}"?`}
+        description="Any assigned staff will be unassigned. This cannot be undone."
+        confirmLabel="Delete"
+        variant="destructive"
+        onConfirm={performDelete}
+      />
     </div>
   );
 }
