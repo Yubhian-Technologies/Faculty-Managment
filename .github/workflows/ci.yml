@@ -14,7 +14,6 @@ concurrency:
 jobs:
   lint:
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -22,7 +21,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      # Pre-existing lint errors (mostly one React Compiler rule) are reported but don't block the other jobs.
+      # Zero errors today; the fetch-on-mount advisory is a warning (see eslint.config.mjs).
       - run: npm run lint
 
   typecheck:

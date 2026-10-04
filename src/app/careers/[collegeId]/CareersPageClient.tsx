@@ -68,6 +68,7 @@ export function CareersPageClient({ collegeId }: Props) {
     }
 
     try {
+      // eslint-disable-next-line react-hooks/purity -- runs in the submit handler, never during render
       const resumeRef = ref(storage, `colleges/${collegeId}/resumes/${Date.now()}_${resume.name}`);
       await uploadBytes(resumeRef, resume);
       const resumeUrl = await getDownloadURL(resumeRef);
