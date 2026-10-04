@@ -26,10 +26,11 @@ import { noOwnSectionsChildren, expandDepartmentNameForRollup, type DepartmentWi
 import { yearOrdinalLabel } from "@/lib/college/academicYears";
 import { disambiguateSectionLabels, sectionFeedsTarget } from "@/lib/sections/sectionLabel";
 import { sectionsAcceptingAll } from "@/lib/students/sectionMove";
-import type { StudentListItem, Section, Department, Course, AcademicYear } from "@/types";
+import type { Department, Course, AcademicYear } from "@/types";
+import type { StudentRow, SectionRow } from "@/components/students/hod/types";
+import { EditStudentDialog } from "@/components/students/hod/EditStudentDialog";
+import { AssignStudentDialog } from "@/components/students/hod/AssignStudentDialog";
 
-type StudentRow = Record<string, unknown> & StudentListItem;
-type SectionRow = Section & { id: string; accessLevel?: "primary" | "secondary" };
 
 type BulkMode = "move" | "unassign";
 // Response of POST /api/college/students/bulk-move (a dry run returns the plan
@@ -1528,61 +1529,14 @@ export default function HodStudentsPage() {
         )}
       </div>
 
-      <Dialog open={!!editTarget} onOpenChange={(open) => { if (!open) setEditTarget(null); }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{editTarget?.name}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <p className="text-xs text-muted-foreground">
-              {editTarget?.department} · Year {editTarget?.year} · {editTarget?.section ? `Section ${editTarget.section}` : "Unassigned"}
-            </p>
-            <div className="space-y-2">
-              <Label htmlFor="edit-roll">Roll Number</Label>
-              <Input
-                id="edit-roll"
-                value={editRoll}
-                onChange={(e) => setEditRoll(e.target.value)}
-                placeholder="e.g. 21A91A0501"
-                autoComplete="off"
-              />
-              <p className="text-xs text-muted-foreground">The student&apos;s unique roll number - it can be corrected, but must not be used by any other student.</p>
-            </div>
-            <div className="space-y-2">
-              <Label>Status</Label>
-              <Select value={editStatus} onValueChange={setEditStatus}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="REGULAR">Regular</SelectItem>
-                  <SelectItem value="DETAINED">Detained</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-lab-batch">Lab Batch</Label>
-              <Input
-                id="edit-lab-batch"
-                list="edit-lab-batch-suggestions"
-                value={editLabBatch}
-                onChange={(e) => setEditLabBatch(e.target.value)}
-                placeholder="e.g. Batch 1"
-                autoComplete="off"
-              />
-              <datalist id="edit-lab-batch-suggestions">
-                {editLabBatchSuggestions.map((label) => <option key={label} value={label} />)}
-              </datalist>
-              <p className="text-xs text-muted-foreground">
-                Which split-lab sub-group this student sits in for a PRACTICAL subject - must match the batch
-                label on the Timetable exactly. Leave blank if this section&rsquo;s labs aren&rsquo;t split.
-              </p>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setEditTarget(null)}>Cancel</Button>
-            <Button onClick={() => void handleSaveEdit()} loading={isSavingEdit}>Save</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <EditStudentDialog
+        editTarget={editTarget} setEditTarget={setEditTarget}
+        editRoll={editRoll} setEditRoll={setEditRoll}
+        editStatus={editStatus} setEditStatus={setEditStatus}
+        editLabBatch={editLabBatch} setEditLabBatch={setEditLabBatch}
+        editLabBatchSuggestions={editLabBatchSuggestions}
+        isSavingEdit={isSavingEdit} handleSaveEdit={handleSaveEdit}
+      />
 
       <Dialog open={bulkMode !== null} onOpenChange={(open) => { if (!open && !isBulkApplying) closeBulk(); }}>
         <DialogContent className="max-w-xl">
@@ -1673,54 +1627,13 @@ export default function HodStudentsPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={!!assignTarget} onOpenChange={(open) => { if (!open) setAssignTarget(null); }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{assignTarget?.section ? "Move" : "Assign"} {assignTarget?.name}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <p className="text-xs text-muted-foreground">
-              {assignTarget?.secondaryDepartment
-                ? <>Pre-registered to <strong>{assignTarget.secondaryDepartment}</strong> · Year {assignTarget?.year}</>
-                : <>{assignTarget?.department} · Year {assignTarget?.year}</>}
-              {assignTarget?.section ? ` · currently Section ${assignTarget.section}` : " · currently Unassigned"}
-            </p>
-            <div className="space-y-2">
-              <Label>Section</Label>
-              <Select value={assignSectionId} onValueChange={setAssignSectionId}>
-                <SelectTrigger><SelectValue placeholder="Select section" /></SelectTrigger>
-                <SelectContent>
-                  {assignTargetSections.map((s) => (
-                    <SelectItem key={s.id} value={s.id}>{assignSectionLabels.get(s.id) ?? s.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {assignTargetSections.length === 0 && (
-                <p className="text-xs text-muted-foreground">
-                  No sections yet for {assignTarget?.secondaryDepartment || assignTarget?.department} Year {assignTarget?.year} - create one under Sections first.
-                </p>
-              )}
-            </div>
-          </div>
-          <DialogFooter>
-            {assignTarget?.section && (
-              <Button
-                type="button"
-                variant="outline"
-                className="mr-auto text-destructive hover:text-destructive"
-                onClick={() => void handleUnassign()}
-                loading={isUnassigning}
-              >
-                Unassign
-              </Button>
-            )}
-            <Button type="button" variant="outline" onClick={() => setAssignTarget(null)}>Cancel</Button>
-            <Button onClick={() => void handleAssign()} loading={isAssigning} disabled={!assignSectionId}>
-              {assignTarget?.section ? "Move" : "Assign"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <AssignStudentDialog
+        assignTarget={assignTarget} setAssignTarget={setAssignTarget}
+        assignSectionId={assignSectionId} setAssignSectionId={setAssignSectionId}
+        assignTargetSections={assignTargetSections} assignSectionLabels={assignSectionLabels}
+        isAssigning={isAssigning} isUnassigning={isUnassigning}
+        handleAssign={handleAssign} handleUnassign={handleUnassign}
+      />
     </div>
   );
 }
