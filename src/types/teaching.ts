@@ -463,6 +463,16 @@ export interface TimetableDraft {
   academicYear?: string;
   status: TimetableDraftStatus;
   slots: DraftSlot[];
+  /**
+   * Distinct facultyId of every slot in `slots`, kept in step with it by every
+   * writer (timetable/draft POST/PATCH). Exists only so another section's
+   * editor can find the drafts that involve a given faculty member without
+   * reading every draft in the college (lib/timetable/loadContext.ts) -
+   * `slots` is an array and can't be queried by faculty. Absent on drafts
+   * written before it existed; scripts/backfill-timetable-draft-faculty-ids.mjs
+   * stamps those, and only then does the reader start relying on it.
+   */
+  facultyIds?: string[];
   /** Human-readable notes from the solver - why it failed, or what it relaxed. */
   diagnostics: string[];
   generatedAt: Timestamp;

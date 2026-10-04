@@ -2,7 +2,11 @@ export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
-import { getAdminDb } from "@/lib/firebase/admin";
+import { getAdminDb, getAdminAuth } from "@/lib/firebase/admin";
+import { archiveFaculty } from "@/lib/faculty/archiveFaculty";
+import { actorOf } from "@/lib/audit/actorOf";
+import { writeAuditLog } from "@/lib/audit/writeAuditLog";
+import { employeeIdTaken, employeeIdTakenMessage } from "@/lib/firestore/employeeIds";
 import { getHodDepartmentScope, canHodManageFacultyDepartment } from "@/lib/departments/scope";
 import { syncTrainingEntryCoConductors } from "@/lib/faculty/syncTrainingEntryCoConductors";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
@@ -182,22 +186,17 @@ export async function PATCH(
 
     const updates: Record<string, unknown> = { updatedAt: new Date() };
 
-    // Employee ID must stay unique across every college, not just this one -
-    // checked separately from the other string fields since it needs a
-    // duplicate lookup (mirrors the check on creation in POST /api/college/faculty).
-    // Cross-college because the public faculty-profile link is keyed on
-    // employeeId alone (see /api/public/faculty-public).
+    // Employee ID must stay unique by the same rule creation uses - across every
+    // college among faculty (the public faculty-profile link is keyed on
+    // employeeId alone, see /api/public/faculty-public) and not shared with a
+    // supporting-staff member of this college (lib/firestore/employeeIds.ts).
     if (body.employeeId !== undefined && body.employeeId.trim()) {
       const newEmployeeId = body.employeeId.trim();
       const currentEmployeeId = (snap.data() as { employeeId?: string }).employeeId;
       if (newEmployeeId !== currentEmployeeId) {
-        const dupSnap = await db
-          .collectionGroup("facultyMembers")
-          .where("employeeId", "==", newEmployeeId)
-          .limit(1)
-          .get();
-        if (!dupSnap.empty) {
-          return NextResponse.json({ error: "Employee ID already exists" }, { status: 409 });
+        const idCheck = await employeeIdTaken(db, session.collegeId, newEmployeeId, { collection: "facultyMembers", id });
+        if (idCheck.taken) {
+          return NextResponse.json({ error: employeeIdTakenMessage(idCheck) }, { status: 409 });
         }
       }
       updates.employeeId = newEmployeeId;
@@ -467,64 +466,29 @@ export async function DELETE(
       }
     }
 
-    // Refuse to hard-delete a faculty member who still has live teaching
-    // assignments/timetable slots - deleting the doc out from under them would
-    // orphan those references (facultyId pointing at nothing). Use the
-    // RESIGNED/RETIRED status instead, which keeps the record (and every
-    // assignment that names it) intact.
-    const collegeRef = db.collection("colleges").doc(session.collegeId);
-    const [assignmentSnap, slotSnap] = await Promise.all([
-      collegeRef.collection("teachingAssignments").where("facultyId", "==", id).limit(1).get(),
-      collegeRef.collection("timetableSlots").where("facultyId", "==", id).limit(1).get(),
-    ]);
-    if (!assignmentSnap.empty || !slotSnap.empty) {
-      return NextResponse.json(
-        {
-          error:
-            "This faculty member still has active teaching assignments or timetable slots. Remove/reassign those first, or set their status to Resigned/Retired instead of deleting the record.",
-        },
-        { status: 409 }
-      );
+    // "Delete" archives (lib/faculty/archiveFaculty.ts): the record, its login
+    // profile and role mapping are copied to archivedFacultyMembers, the login is
+    // disabled (its email freed), and only then are the live documents removed -
+    // so leave / attendance / payroll history that points at this person still
+    // resolves, and an administrator can restore them. Refused (409) while they
+    // still have teaching assignments / timetable slots, hold a role seat, or are
+    // a section's or a timetable's in-charge.
+    const adminAuth = await getAdminAuth();
+    const actor = await actorOf(db, session.collegeId, session.uid, session.email);
+    const result = await archiveFaculty(db, adminAuth, session.collegeId, id, actor, "REMOVED_BY_USER");
+    if (!result.ok) {
+      return NextResponse.json({ error: result.reason }, { status: result.code === "NOT_FOUND" ? 404 : 409 });
     }
 
-    await ref.delete();
-
-    // Also remove the linked login account - otherwise it lingers in
-    // colleges/{id}/users forever and keeps showing up in panel-member
-    // pickers, staff lists, etc. even though the faculty record is gone.
-    const linkedUid = facultyData.userUid;
-    if (linkedUid) {
-      await db.collection("colleges").doc(session.collegeId).collection("users").doc(linkedUid).delete();
-      await db.collection("systemUsers").doc(linkedUid).delete();
-
-      // Best-effort: remove the Firebase Auth account too. If it fails, the
-      // Firestore records are still gone, which is what the UI reads from.
-      try {
-        const { getAdminAuth } = await import("@/lib/firebase/admin");
-        const auth = await getAdminAuth();
-        await auth.deleteUser(linkedUid);
-      } catch (authErr) {
-        console.warn("[college/faculty/[id] DELETE] Auth deletion failed (non-fatal):", authErr);
-      }
-    }
-
-    let actorName = "Unknown";
-    try {
-      const actorSnap = await db.collection("colleges").doc(session.collegeId).collection("users").doc(session.uid).get();
-      actorName = (actorSnap.data() as { name?: string } | undefined)?.name ?? "Unknown";
-    } catch { /* best-effort */ }
-
-    await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-      collegeId: session.collegeId,
+    await writeAuditLog(db, session.collegeId, {
       action: "FACULTY_DELETED",
       performedBy: session.uid,
-      performedByName: actorName,
+      performedByName: actor.name,
       targetId: id,
-      details: { name: facultyDisplayName(facultyData) },
-      timestamp: new Date(),
+      details: { name: facultyDisplayName(facultyData), archived: true },
     });
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, archived: true });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

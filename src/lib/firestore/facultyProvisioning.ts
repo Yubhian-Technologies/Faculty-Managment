@@ -1,5 +1,6 @@
 import { randomBytes } from "crypto";
-import { createFirebaseUser } from "@/lib/firebase/authRest";
+import { withAuthUser } from "@/lib/firebase/withAuthUser";
+import { nextEmployeeId } from "@/lib/firestore/employeeIds";
 import { normalizeHighestQualification } from "@/lib/faculty/highestQualification";
 import type { EmployeeCategory } from "@/types";
 
@@ -18,12 +19,6 @@ export type LinkExistingAccountResult =
 
 export function generatePassword(): string {
   return randomBytes(9).toString("base64url"); // 12 url-safe chars
-}
-
-async function generateEmployeeId(db: FirebaseFirestore.Firestore, collegeId: string): Promise<string> {
-  const snap = await db.collection("colleges").doc(collegeId).collection("facultyMembers").count().get();
-  const count = snap.data().count + 1;
-  return `EMP${String(count).padStart(4, "0")}`;
 }
 
 // Shared by the offer-letters POST route (HOD sends the offer, supplying the
@@ -98,13 +93,95 @@ export async function provisionFacultyFromOffer(
   }
 
   const generatedPassword = credentials?.password || generatePassword();
-  let uid: string;
+  const department = letter.department ?? candidate.department ?? "";
+  const collegeRef = db.collection("colleges").doc(collegeId);
+
+  // The login and every document that goes with it are created as one unit:
+  // the Firestore writes are a single batch, and if that fails (or anything
+  // after the Auth user exists does) the Auth user is removed again, so a failed
+  // run can never leave an orphan login blocking this email on the retry.
+  let created: { facultyId: string; employeeId: string };
   try {
-    uid = await createFirebaseUser(collegeEmail, generatedPassword, name);
+    created = await withAuthUser(
+      { email: collegeEmail, password: generatedPassword, displayName: name, db },
+      async (uid) => {
+        const employeeId = await nextEmployeeId(db, collegeId);
+        const facultyRef = collegeRef.collection("facultyMembers").doc();
+        const batch = db.batch();
+
+        batch.set(
+          collegeRef.collection("users").doc(uid),
+          {
+            uid,
+            collegeId,
+            name,
+            email: collegeEmail,
+            role: "PANEL_MEMBER",
+            department,
+            isActive: true,
+            createdAt: now,
+            updatedAt: now,
+          },
+          { merge: true }
+        );
+
+        batch.set(facultyRef, {
+          collegeId,
+          candidateId: letter.candidateId,
+          offerId,
+          employeeId,
+          // The candidate's name is the faculty member's identity/display name, NOT
+          // verified PAN data - it goes to legalName. nameAsPerPan is left unset (it
+          // is only ever filled from a real PAN entry); `name` is a retired key.
+          legalName: name,
+          collegeEmail,
+          ...(candidate.email ? { email: candidate.email } : {}),
+          mobileNo: candidate.phone ?? "",
+          department,
+          designation: letter.designation ?? "Assistant Professor",
+          highestQualification: normalizeHighestQualification(profileFields?.highestQualification),
+          specialization: profileFields?.specialization ?? "",
+          totalYearsOfExperience: 0,
+          joiningDate,
+          employeeCategory: profileFields?.employeeCategory ?? "REGULAR",
+          // Account creation is normally deferred until after the candidate accepts
+          // (see Request Credentials on college-office/offers, fulfilled via
+          // webmaster/credential-requests), so the accept-time flip in
+          // offer-letters/[id]/route.ts PATCH will already have run and found no
+          // faculty doc yet - go straight to ACTIVE here instead of relying on it.
+          // Falls back to INTERVIEW_DONE for the rarer case of provisioning before
+          // acceptance (e.g. a manual retry on a not-yet-accepted offer).
+          status: letter.status === "ACCEPTED" ? "ACTIVE" : "INTERVIEW_DONE",
+          userUid: uid,
+          ...(candidate.courseId && candidate.preferredSubjectIds?.length
+            ? {
+                pendingTeachingPreference: {
+                  courseId: candidate.courseId,
+                  courseName: candidate.courseName ?? "",
+                  year: candidate.year ?? 1,
+                  subjectIds: candidate.preferredSubjectIds,
+                  subjectNames: candidate.preferredSubjectNames ?? [],
+                },
+              }
+            : {}),
+          createdAt: now,
+          updatedAt: now,
+        });
+
+        batch.set(
+          db.collection("systemUsers").doc(uid),
+          { uid, role: "PANEL_MEMBER", collegeId, email: collegeEmail, name },
+          { merge: true }
+        );
+
+        await batch.commit();
+        return { facultyId: facultyRef.id, employeeId };
+      }
+    );
   } catch (err) {
     if (err && typeof err === "object" && "code" in err && err.code === "auth/email-already-exists") {
       // The existingFaculty check above already returned "already_exists" if a
-      // facultyMembers doc for this candidate exists — reaching here means no
+      // facultyMembers doc for this candidate exists - reaching here means no
       // such doc exists yet, so any systemUsers match on this email belongs to
       // a different person. Don't silently hijack their account; let the
       // caller fall back to an alternate email instead.
@@ -113,80 +190,7 @@ export async function provisionFacultyFromOffer(
     throw err;
   }
 
-  const employeeId = await generateEmployeeId(db, collegeId);
-  const department = letter.department ?? candidate.department ?? "";
-
-  const facultyRef = db.collection("colleges").doc(collegeId).collection("facultyMembers").doc();
-  const batch = db.batch();
-
-  batch.set(
-    db.collection("colleges").doc(collegeId).collection("users").doc(uid),
-    {
-      uid,
-      collegeId,
-      name,
-      email: collegeEmail,
-      role: "PANEL_MEMBER",
-      department,
-      isActive: true,
-      createdAt: now,
-      updatedAt: now,
-    },
-    { merge: true }
-  );
-
-  batch.set(facultyRef, {
-    collegeId,
-    candidateId: letter.candidateId,
-    offerId,
-    employeeId,
-    // The candidate's name is the faculty member's identity/display name, NOT
-    // verified PAN data - it goes to legalName. nameAsPerPan is left unset (it
-    // is only ever filled from a real PAN entry); `name` is a retired key.
-    legalName: name,
-    collegeEmail,
-    ...(candidate.email ? { email: candidate.email } : {}),
-    mobileNo: candidate.phone ?? "",
-    department,
-    designation: letter.designation ?? "Assistant Professor",
-    highestQualification: normalizeHighestQualification(profileFields?.highestQualification),
-    specialization: profileFields?.specialization ?? "",
-    totalYearsOfExperience: 0,
-    joiningDate,
-    employeeCategory: profileFields?.employeeCategory ?? "REGULAR",
-    // Account creation is normally deferred until after the candidate accepts
-    // (see Request Credentials on college-office/offers, fulfilled via
-    // webmaster/credential-requests), so the accept-time flip in
-    // offer-letters/[id]/route.ts PATCH will already have run and found no
-    // faculty doc yet — go straight to ACTIVE here instead of relying on it.
-    // Falls back to INTERVIEW_DONE for the rarer case of provisioning before
-    // acceptance (e.g. a manual retry on a not-yet-accepted offer).
-    status: letter.status === "ACCEPTED" ? "ACTIVE" : "INTERVIEW_DONE",
-    userUid: uid,
-    ...(candidate.courseId && candidate.preferredSubjectIds?.length
-      ? {
-          pendingTeachingPreference: {
-            courseId: candidate.courseId,
-            courseName: candidate.courseName ?? "",
-            year: candidate.year ?? 1,
-            subjectIds: candidate.preferredSubjectIds,
-            subjectNames: candidate.preferredSubjectNames ?? [],
-          },
-        }
-      : {}),
-    createdAt: now,
-    updatedAt: now,
-  });
-
-  batch.set(
-    db.collection("systemUsers").doc(uid),
-    { uid, role: "PANEL_MEMBER", collegeId, email: collegeEmail, name },
-    { merge: true }
-  );
-
-  await batch.commit();
-
-  return { status: "created", facultyId: facultyRef.id, employeeId, generatedPassword };
+  return { status: "created", facultyId: created.facultyId, employeeId: created.employeeId, generatedPassword };
 }
 
 // Lets the Webmaster attach a new offer to a person's already-existing login
@@ -260,7 +264,7 @@ export async function linkFacultyToExistingAccount(
     joiningDate = now;
   }
 
-  const employeeId = await generateEmployeeId(db, collegeId);
+  const employeeId = await nextEmployeeId(db, collegeId);
   const department = letter.department ?? candidate.department ?? "";
 
   const facultyRef = collegeRef.collection("facultyMembers").doc();

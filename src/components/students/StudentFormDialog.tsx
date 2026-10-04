@@ -5,6 +5,9 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { STUDENT_PASSWORD_MIN_LENGTH, studentPasswordError } from "@/lib/students/passwordPolicy";
 import { RosterFormFields } from "@/components/students/RosterFieldInputs";
 import { fetchRosterFormMetadata } from "@/lib/students/rosterFormMetadata";
 import { freshmanPickerDepartmentNames, type DepartmentWithId } from "@/lib/college/academicStructure";
@@ -38,6 +41,9 @@ export function StudentFormDialog({ open, onOpenChange, student, onSaved }: Stud
   const editTarget = student ?? null;
   const [form, setForm] = useState<RosterForm>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
+  // Add only. Optional: when typed, the student's login is created with exactly
+  // this password. It is sent once and never stored or shown again.
+  const [loginPassword, setLoginPassword] = useState("");
 
   const [departments, setDepartments] = useState<Department[]>([]);
   const [courseNames, setCourseNames] = useState<string[]>([]);
@@ -50,6 +56,7 @@ export function StudentFormDialog({ open, onOpenChange, student, onSaved }: Stud
   useEffect(() => {
     if (!open) return;
     void (async () => {
+      setLoginPassword("");
       setForm(
         editTarget
           ? (Object.fromEntries(EDITABLE_ROSTER_FIELDS.map((f) => [f.key, rosterFieldFormValue(f, editTarget)])) as RosterForm)
@@ -103,6 +110,11 @@ export function StudentFormDialog({ open, onOpenChange, student, onSaved }: Stud
       }
     }
 
+    if (!editTarget && loginPassword) {
+      const problem = studentPasswordError(loginPassword);
+      if (problem) { toast({ variant: "destructive", title: problem }); return; }
+    }
+
     setSaving(true);
     try {
       // On Edit, a blank field must overwrite (clear) whatever the student
@@ -120,14 +132,17 @@ export function StudentFormDialog({ open, onOpenChange, student, onSaved }: Stud
         : await fetch("/api/college/students", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
+            body: JSON.stringify(loginPassword ? { ...payload, loginPassword } : payload),
           });
-      const json = await res.json() as { id?: string; error?: string };
+      const json = await res.json() as { id?: string; error?: string; loginCreated?: boolean; loginError?: string };
       if (!res.ok) {
         toast({ variant: "destructive", title: json.error ?? (editTarget ? "Failed to save changes" : "Failed to add student") });
         return;
       }
-      toast({ variant: "success", title: `${form.name.trim()} ${editTarget ? "updated" : "added"}` });
+      toast({ variant: "success", title: `${form.name.trim()} ${editTarget ? "updated" : "added"}${json.loginCreated ? " - login created" : ""}` });
+      if (json.loginCreated === false) {
+        toast({ variant: "destructive", title: "The student was added, but the login was not created", description: json.loginError });
+      }
       onOpenChange(false);
       onSaved();
     } catch {
@@ -172,6 +187,23 @@ export function StudentFormDialog({ open, onOpenChange, student, onSaved }: Stud
             // click from happening at all.
             readOnlyKeys={editTarget ? ["rollNumber", "department", "year"] : []}
           />
+        )}
+
+        {!editTarget && !isLoadingMeta && (
+          <div className="space-y-1.5 rounded-lg border p-3">
+            <Label htmlFor="new-student-login-password">Login password (optional)</Label>
+            <Input
+              id="new-student-login-password"
+              type="password"
+              autoComplete="new-password"
+              value={loginPassword}
+              onChange={(e) => setLoginPassword(e.target.value)}
+              placeholder={`Leave blank to create the login later - at least ${STUDENT_PASSWORD_MIN_LENGTH} characters`}
+            />
+            <p className="text-xs text-muted-foreground">
+              When given, the student can sign in with their Roll Number and this password straight away. It is not saved anywhere readable, and they can change it after signing in.
+            </p>
+          </div>
         )}
 
         <DialogFooter>

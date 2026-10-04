@@ -5,9 +5,9 @@ import type {
 } from "@/types";
 import { DEFAULT_TIMETABLE_RULES } from "@/types";
 import { resolveCurrentSemester, matchesCurrentSemester } from "@/lib/college/semester";
-import { loadSlotsForSectionAndFaculty } from "@/lib/timetable/slotQueries";
 import { declaredBusyByFaculty } from "@/lib/timetable/declaredBusy";
 import { inheritedTimingCourseId } from "@/lib/timetable/sharedYearTiming";
+import { chunkValues, getInChunks } from "@/lib/firestore/inQuery";
 import type { Course, Department } from "@/types";
 
 // Everything the preflight and the solver need for one section, loaded once.
@@ -32,6 +32,10 @@ export interface TimetableContext {
    * publishes - the publish-time re-check (publish/route.ts) only catches it
    * once ONE of the two has already gone live, not while both are still
    * drafts.
+   *
+   * Only populated for the faculty who actually have an assignment on THIS
+   * section - the only ones a placement here can ever involve - rather than for
+   * every faculty member in the college.
    */
   busyFaculty: Map<string, Set<string>>;
   /**
@@ -50,6 +54,9 @@ export interface TimetableContext {
   // draft/publish routes to stamp onto what they write.
   currentSemester: number | null;
 }
+
+/** Doc that says every timetableDrafts doc carries `facultyIds` - set only by scripts/backfill-timetable-draft-faculty-ids.mjs --apply. */
+export const DRAFT_INDEX_MARKER = ["settings", "timetableDraftFacultyIndex"] as const;
 
 export async function loadTimetableContext(
   db: Firestore,
@@ -72,7 +79,7 @@ export async function loadTimetableContext(
   if (!sectionSnap.exists) return null;
   const section = { id: sectionSnap.id, ...sectionSnap.data() } as Section;
 
-  const [allTimingsSnap, rulesSnap, assignmentsSnap, subjectsSnap, allocatedRequestsSnap, allDraftsSnap] = await Promise.all([
+  const [allTimingsSnap, rulesSnap, assignmentsSnap, subjectsSnap, allocatedRequestsSnap, draftIndexSnap] = await Promise.all([
     // Every course-year's timing, not just this section's own course - a
     // slot from ANOTHER section can belong to an entirely different course-
     // year with its own independent semester calendar (see "per course +
@@ -90,13 +97,38 @@ export async function loadTimetableContext(
     // declared-busy cells would be invisible to busyFaculty below.
     collegeRef.collection("facultyAssignmentRequests")
       .where("sectionId", "==", sectionId).where("status", "==", "ALLOCATED").get(),
-    // Every OTHER section's in-progress draft, for the same reason as
-    // allSlotsSnap above - a faculty already placed into another section's
+    collegeRef.collection(DRAFT_INDEX_MARKER[0]).doc(DRAFT_INDEX_MARKER[1]).get(),
+  ]);
+
+  const assignments = assignmentsSnap.docs.map(
+    (d) => ({ id: d.id, ...d.data() }) as TeachingAssignment,
+  );
+
+  // Only these faculty can be placed in this section, so only their other
+  // commitments matter. The whole college's slots and drafts used to be read
+  // on EVERY edit (each drag/add/remove) to answer "is this one person free" -
+  // cost grew with the size of the college, not with the question.
+  const facultyIds = Array.from(new Set(assignments.map((a) => a.facultyId).filter((id): id is string => Boolean(id))));
+  const draftsIndexed = draftIndexSnap.exists && (draftIndexSnap.data() as { ready?: boolean }).ready === true;
+
+  const [ownSlotsSnap, facultySlotDocs, draftDocs] = await Promise.all([
+    // This section's own slots - the pinned ones the generator works around.
+    collegeRef.collection("timetableSlots").where("sectionId", "==", sectionId).get(),
+    // Every slot of those faculty, in any section.
+    getInChunks(facultyIds, (chunk) => collegeRef.collection("timetableSlots").where("facultyId", "in", chunk)),
+    // Every OTHER section's in-progress draft that includes one of them, for
+    // the same reason - a faculty already placed into another section's
     // still-unpublished draft is just as unavailable as one on a live
-    // timetable, but invisible there until someone publishes it. Small
-    // collection (one doc per section+semester in the college), same as
-    // allTimingsSnap.
-    collegeRef.collection("timetableDrafts").get(),
+    // timetable, but invisible there until someone publishes it. Drafts hold
+    // their slots in an array, so they can only be found by a denormalised
+    // `facultyIds` field; until every draft is known to carry it (the backfill
+    // script sets the marker doc), fall back to reading them all, exactly as
+    // before. Small collection (one doc per section+semester).
+    draftsIndexed
+      ? getInChunks(facultyIds, (chunk) => collegeRef.collection("timetableDrafts").where("facultyIds", "array-contains-any", chunk))
+      : facultyIds.length === 0
+        ? Promise.resolve([])
+        : collegeRef.collection("timetableDrafts").get().then((s) => s.docs),
   ]);
 
   const allTimings = allTimingsSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as unknown as CourseYearTiming);
@@ -148,10 +180,6 @@ export async function loadTimetableContext(
     ? { ...DEFAULT_TIMETABLE_RULES, ...(rulesSnap.data() as Partial<TimetableRules>) }
     : DEFAULT_TIMETABLE_RULES;
 
-  const assignments = assignmentsSnap.docs.map(
-    (d) => ({ id: d.id, ...d.data() }) as TeachingAssignment,
-  );
-
   const allCourseSubjects = subjectsSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as Subject);
   const courseYearSubjects = allCourseSubjects.filter(
     (s) => Number(s.year) === Number(section.year),
@@ -171,24 +199,18 @@ export async function loadTimetableContext(
     new Set(assignments.map((a) => a.subjectId).filter((id): id is string => Boolean(id) && !subjectsById.has(id))),
   );
   if (missingSubjectIds.length > 0) {
-    const chunks: string[][] = [];
-    for (let i = 0; i < missingSubjectIds.length; i += 30) chunks.push(missingSubjectIds.slice(i, i + 30));
     const extraSnaps = await Promise.all(
-      chunks.map((ids) => collegeRef.collection("subjects").where(FieldPath.documentId(), "in", ids).get()),
+      chunkValues(missingSubjectIds).map((ids) => collegeRef.collection("subjects").where(FieldPath.documentId(), "in", ids).get()),
     );
     for (const extraSnap of extraSnaps) {
       for (const d of extraSnap.docs) subjectsById.set(d.id, { id: d.id, ...d.data() } as Subject);
     }
   }
 
-  // This section's own slots plus those of the faculty on its assignments (the only ones
-  // busyFaculty is ever asked about) - not the college's whole slots collection.
-  const allSlotsSnapDocs = await loadSlotsForSectionAndFaculty(
-    collegeRef,
-    sectionId,
-    assignments.map((a) => a.facultyId),
-  );
-  const allSlotsRaw = allSlotsSnapDocs.map((d) => ({ id: d.id, ...d.data() }) as TimetableSlot);
+  const slotsById = new Map<string, TimetableSlot>();
+  for (const d of ownSlotsSnap.docs) slotsById.set(d.id, { id: d.id, ...d.data() } as TimetableSlot);
+  for (const d of facultySlotDocs) slotsById.set(d.id, { id: d.id, ...d.data() } as TimetableSlot);
+  const allSlotsRaw = Array.from(slotsById.values());
 
   // A slot from a DIFFERENT, prior semester of ITS OWN course-year (see
   // CourseYearTiming.semesters) is history, not something the current build
@@ -210,20 +232,19 @@ export async function loadTimetableContext(
   const pinnedSlots = allSlots.filter((s) => s.sectionId === sectionId && isPinned(s));
 
   const busyFaculty = new Map<string, Set<string>>();
+  const markBusy = (facultyId: string, p: { day: string; periodNumber: number }) => {
+    let cells = busyFaculty.get(facultyId);
+    if (!cells) { cells = new Set(); busyFaculty.set(facultyId, cells); }
+    cells.add(`${p.day}:${p.periodNumber}`);
+  };
   for (const s of allSlots) {
     if (s.sectionId === sectionId) continue;   // this section's own slots are being replaced
-    let cells = busyFaculty.get(s.facultyId);
-    if (!cells) { cells = new Set(); busyFaculty.set(s.facultyId, cells); }
-    cells.add(`${s.day}:${s.periodNumber}`);
+    markBusy(s.facultyId, s);
   }
   // A faculty is equally unavailable during this section's own pinned slots.
-  for (const s of pinnedSlots) {
-    let cells = busyFaculty.get(s.facultyId);
-    if (!cells) { cells = new Set(); busyFaculty.set(s.facultyId, cells); }
-    cells.add(`${s.day}:${s.periodNumber}`);
-  }
+  for (const s of pinnedSlots) markBusy(s.facultyId, s);
   // And during whatever ANOTHER section's own still-unpublished draft has
-  // already placed them into - see allDraftsSnap's own doc-comment above.
+  // already placed them into - see the draft query above.
   // Same current-semester narrowing as allSlots, but resolved from each
   // draft doc's own courseId/year (a draft can predate the section doc being
   // reloaded, so this doesn't reuse `section`'s course-year). Every status
@@ -232,15 +253,13 @@ export async function loadTimetableContext(
   // doc-comment), so its slots stay just as real a commitment either way;
   // double-counting a published one already covered by allSlots above is
   // harmless (busyFaculty cells are a Set).
-  for (const d of allDraftsSnap.docs) {
+  for (const d of draftDocs) {
     const otherDraft = d.data() as TimetableDraft;
     if (otherDraft.sectionId === sectionId) continue; // this section's own draft - handled via pinnedSlots/the caller's own `draft` argument
     const draftCurrentSemester = currentSemesterByCourseYear.get(`${otherDraft.courseId}_${otherDraft.year}`) ?? null;
     if (!matchesCurrentSemester(otherDraft.semester ?? null, draftCurrentSemester)) continue;
     for (const s of otherDraft.slots ?? []) {
-      let cells = busyFaculty.get(s.facultyId);
-      if (!cells) { cells = new Set(); busyFaculty.set(s.facultyId, cells); }
-      cells.add(`${s.day}:${s.periodNumber}`);
+      markBusy(s.facultyId, s);
     }
   }
   // What the lending department declared busy for an allocated faculty member

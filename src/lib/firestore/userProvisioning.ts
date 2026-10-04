@@ -7,7 +7,7 @@
 // exception (the College Admin bootstrap). Keep in lockstep with ROLE_SCOPE in
 // src/types/core.ts.
 
-import { createFirebaseUser } from "@/lib/firebase/authRest";
+import { withAuthUser } from "@/lib/firebase/withAuthUser";
 import { normalizeAcademicProfile } from "@/lib/faculty/academicProfileCompat";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
 import type { UserRole } from "@/types";
@@ -32,22 +32,26 @@ export async function provisionLocationUser(
   role: UserRole,
   input: NewUserInput
 ): Promise<string> {
-  const uid = await createFirebaseUser(input.email, input.password, input.name);
   const now = new Date();
 
-  await db.collection("locations").doc(locationId).collection("locationUsers").doc(uid).set({
-    uid, locationId, name: input.name, email: input.email, role,
-    phone: input.phone ?? "",
-    ...(input.academicProfile ? { academicProfile: normalizeAcademicProfile(input.academicProfile) } : {}),
-    ...(input.profilePhotoUrl ? { profilePhotoUrl: input.profilePhotoUrl } : {}),
-    isActive: true, createdAt: now, updatedAt: now,
+  // Login + profile + role mapping are one unit (withAuthUser): one batch, and a
+  // failure removes the Auth user again instead of orphaning it.
+  return withAuthUser({ email: input.email, password: input.password, displayName: input.name, db }, async (uid) => {
+    const batch = db.batch();
+    batch.set(db.collection("locations").doc(locationId).collection("locationUsers").doc(uid), {
+      uid, locationId, name: input.name, email: input.email, role,
+      phone: input.phone ?? "",
+      ...(input.academicProfile ? { academicProfile: normalizeAcademicProfile(input.academicProfile) } : {}),
+      ...(input.profilePhotoUrl ? { profilePhotoUrl: input.profilePhotoUrl } : {}),
+      isActive: true, createdAt: now, updatedAt: now,
+    });
+    batch.set(db.collection("systemUsers").doc(uid), {
+      uid, role, locationId, collegeId: "", email: input.email, name: input.name,
+      ...(input.profilePhotoUrl ? { profilePhotoUrl: input.profilePhotoUrl } : {}),
+    });
+    await batch.commit();
+    return uid;
   });
-  await db.collection("systemUsers").doc(uid).set({
-    uid, role, locationId, collegeId: "", email: input.email, name: input.name,
-    ...(input.profilePhotoUrl ? { profilePhotoUrl: input.profilePhotoUrl } : {}),
-  });
-
-  return uid;
 }
 
 // DIRECTOR (Super Admin-provisioned) - profile lives at colleges/{id}/users/{uid}.
@@ -58,28 +62,34 @@ export async function provisionCollegeUser(
   input: NewUserInput,
   options?: { locationId?: string; performedBy?: string; performedByRole?: string }
 ): Promise<string> {
-  const uid = await createFirebaseUser(input.email, input.password, input.name);
   const now = new Date();
   const locationId = options?.locationId ?? "";
 
-  await db.collection("colleges").doc(collegeId).collection("users").doc(uid).set({
-    uid, collegeId,
-    ...(locationId ? { locationId } : {}),
-    name: input.name, email: input.email, role,
-    ...(input.collegeEmail ? { collegeEmail: input.collegeEmail } : {}),
-    ...(input.employeeId ? { employeeId: input.employeeId } : {}),
-    department: input.department ?? "",
-    phone: input.phone ?? "",
-    ...(input.academicProfile ? { academicProfile: normalizeAcademicProfile(input.academicProfile) } : {}),
-    ...(input.profilePhotoUrl ? { profilePhotoUrl: input.profilePhotoUrl } : {}),
-    ...buildPersonalDetailsUpdate(input),
-    isActive: true, createdAt: now, updatedAt: now,
-  });
-  await db.collection("systemUsers").doc(uid).set({
-    uid, role, collegeId,
-    ...(locationId ? { locationId } : {}),
-    email: input.email, name: input.name,
-    ...(input.profilePhotoUrl ? { profilePhotoUrl: input.profilePhotoUrl } : {}),
+  // Same unit-of-work rule as provisionLocationUser: profile + role mapping in one
+  // batch, Auth user removed again on failure.
+  const uid = await withAuthUser({ email: input.email, password: input.password, displayName: input.name, db }, async (newUid) => {
+    const batch = db.batch();
+    batch.set(db.collection("colleges").doc(collegeId).collection("users").doc(newUid), {
+      uid: newUid, collegeId,
+      ...(locationId ? { locationId } : {}),
+      name: input.name, email: input.email, role,
+      ...(input.collegeEmail ? { collegeEmail: input.collegeEmail } : {}),
+      ...(input.employeeId ? { employeeId: input.employeeId } : {}),
+      department: input.department ?? "",
+      phone: input.phone ?? "",
+      ...(input.academicProfile ? { academicProfile: normalizeAcademicProfile(input.academicProfile) } : {}),
+      ...(input.profilePhotoUrl ? { profilePhotoUrl: input.profilePhotoUrl } : {}),
+      ...buildPersonalDetailsUpdate(input),
+      isActive: true, createdAt: now, updatedAt: now,
+    });
+    batch.set(db.collection("systemUsers").doc(newUid), {
+      uid: newUid, role, collegeId,
+      ...(locationId ? { locationId } : {}),
+      email: input.email, name: input.name,
+      ...(input.profilePhotoUrl ? { profilePhotoUrl: input.profilePhotoUrl } : {}),
+    });
+    await batch.commit();
+    return newUid;
   });
 
   if (options?.performedBy) {

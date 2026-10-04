@@ -151,27 +151,55 @@ export async function loadBalances(
   return snap.docs.map((d) => ({ id: d.id, ...d.data() } as LeaveBalance));
 }
 
-// reservePending/commitApproval/releasePending use set(..., {merge: true})
-// rather than update() - the balance doc isn't guaranteed to exist yet (e.g.
+// Every helper below is a read-modify-write of ONE balance doc, so each runs
+// in a transaction: the plain read-then-set these used to be loses an update
+// whenever two land together (two approvals on used=0 left used=1; a cancel
+// racing an approval on used=3 ended at 5 instead of 2 - audit probe
+// 2026-10-03). They keep set(..., {merge: true}) semantics rather than
+// update() - the balance doc isn't guaranteed to exist yet (e.g.
 // initBalancesForYear hasn't run for this employee/type/year), and update()
 // throws NOT_FOUND on a missing doc. set-merge upserts identity fields plus
-// the new pending/used value either way; readers already fall back to a
-// computed default when `entitled` is absent from a doc created this way.
+// the new value either way; readers already fall back to a computed default
+// when `entitled` is absent from a doc created this way.
+//
+// The arithmetic lives in the *Patch functions so a decision that must change
+// the balance AND the request status in one transaction (decisionTx.ts) applies
+// exactly the same numbers.
 
-export async function reservePending(
+export interface BalanceCounters { used?: number; pending?: number; entitled?: number }
+
+/** Approval: the committed days leave `pending` (floored at 0) and join `used`. */
+export function commitPatch(data: BalanceCounters, days: number): { pending: number; used: number } {
+  return { pending: Math.max(0, (data.pending ?? 0) - days), used: (data.used ?? 0) + days };
+}
+
+/** Rejection/cancel-while-pending: drop the reservation (floored at 0). */
+export function releasePendingPatch(data: BalanceCounters, days: number): { pending: number } {
+  return { pending: Math.max(0, (data.pending ?? 0) - days) };
+}
+
+/** Cancel-after-approval: give the committed days back (floored at 0). */
+export function releaseApprovalPatch(data: BalanceCounters, days: number): { used: number } {
+  return { used: Math.max(0, (data.used ?? 0) - days) };
+}
+
+export function balanceIdentity(collegeId: string, uid: string, leaveTypeCode: LeaveTypeCode, year: number) {
+  return { collegeId, uid, leaveTypeCode, year };
+}
+
+async function mutateBalance(
   db: Firestore,
   collegeId: string,
   uid: string,
   leaveTypeCode: LeaveTypeCode,
   year: number,
-  days: number
+  patch: (current: BalanceCounters) => Record<string, number>
 ): Promise<void> {
   const ref = BALANCES_COL(collegeId, db).doc(balanceDocId(uid, leaveTypeCode, year));
-  const data = (await ref.get()).data() ?? {};
-  await ref.set(
-    { collegeId, uid, leaveTypeCode, year, pending: (data.pending ?? 0) + days, updatedAt: new Date() },
-    { merge: true }
-  );
+  await db.runTransaction(async (tx) => {
+    const current = (await tx.get(ref)).data() ?? {};
+    tx.set(ref, { ...balanceIdentity(collegeId, uid, leaveTypeCode, year), ...patch(current), updatedAt: new Date() }, { merge: true });
+  });
 }
 
 export async function commitApproval(
@@ -182,19 +210,17 @@ export async function commitApproval(
   year: number,
   days: number
 ): Promise<void> {
-  const ref = BALANCES_COL(collegeId, db).doc(balanceDocId(uid, leaveTypeCode, year));
-  const data = (await ref.get()).data() ?? {};
-  await ref.set(
-    {
-      collegeId, uid, leaveTypeCode, year,
-      pending: Math.max(0, (data.pending ?? 0) - days),
-      used: (data.used ?? 0) + days,
-      updatedAt: new Date(),
-    },
-    { merge: true }
-  );
+  await mutateBalance(db, collegeId, uid, leaveTypeCode, year, (cur) => commitPatch(cur, days));
 }
 
+// Nothing reserves `pending` any more (balance is only committed at the final
+// approval - see applications/route.ts POST), so for current data this only
+// writes pending: 0. It is still called on reject/cancel because (a) a balance
+// doc written back when reservations existed can still hold pending > 0, and
+// (b) the set-merge upsert it performs is part of the existing behaviour
+// initBalancesForYear depends on (a doc that exists is never re-initialised).
+// Changing either would risk shifting a visible entitlement, so it is kept
+// as-is, just atomic.
 export async function releasePending(
   db: Firestore,
   collegeId: string,
@@ -203,12 +229,7 @@ export async function releasePending(
   year: number,
   days: number
 ): Promise<void> {
-  const ref = BALANCES_COL(collegeId, db).doc(balanceDocId(uid, leaveTypeCode, year));
-  const data = (await ref.get()).data() ?? {};
-  await ref.set(
-    { collegeId, uid, leaveTypeCode, year, pending: Math.max(0, (data.pending ?? 0) - days), updatedAt: new Date() },
-    { merge: true }
-  );
+  await mutateBalance(db, collegeId, uid, leaveTypeCode, year, (cur) => releasePendingPatch(cur, days));
 }
 
 // Inverse of commitApproval - the requester cancelling an already-APPROVED
@@ -224,12 +245,23 @@ export async function releaseApproval(
   year: number,
   days: number
 ): Promise<void> {
-  const ref = BALANCES_COL(collegeId, db).doc(balanceDocId(uid, leaveTypeCode, year));
-  const data = (await ref.get()).data() ?? {};
-  await ref.set(
-    { collegeId, uid, leaveTypeCode, year, used: Math.max(0, (data.used ?? 0) - days), updatedAt: new Date() },
-    { merge: true }
-  );
+  await mutateBalance(db, collegeId, uid, leaveTypeCode, year, (cur) => releaseApprovalPatch(cur, days));
+}
+
+// The entitlement to assume when no balance doc (or one without `entitled`)
+// exists yet - the profile's computed default, NOT zero.
+export async function computeFallbackEntitled(
+  db: Firestore,
+  collegeId: string,
+  uid: string,
+  lt: LeaveTypeFull
+): Promise<number> {
+  const [profileSnap, settings] = await Promise.all([
+    PROFILES_COL(collegeId, db).doc(uid).get(),
+    loadCollegeSettings(db, collegeId),
+  ]);
+  const profile = { id: profileSnap.id, ...profileSnap.data() } as EmployeeLeaveProfile;
+  return computeEntitlement(lt, computeEffectiveCategory(profile, settings.newJoiningYears));
 }
 
 // Balance is never reserved at submission (see applications/route.ts POST),
@@ -251,15 +283,7 @@ export async function splitLeaveDays(
 ): Promise<{ withinBalance: number; lopDays: number }> {
   const balances = await loadBalances(db, collegeId, uid, year);
   const bal = balances.find((b) => b.leaveTypeCode === lt.code);
-  let entitled = bal?.entitled;
-  if (entitled === undefined) {
-    const [profileSnap, settings] = await Promise.all([
-      PROFILES_COL(collegeId, db).doc(uid).get(),
-      loadCollegeSettings(db, collegeId),
-    ]);
-    const profile = { id: profileSnap.id, ...profileSnap.data() } as EmployeeLeaveProfile;
-    entitled = computeEntitlement(lt, computeEffectiveCategory(profile, settings.newJoiningYears));
-  }
+  const entitled = bal?.entitled ?? (await computeFallbackEntitled(db, collegeId, uid, lt));
   const remaining = Math.max(0, entitled - (bal?.used ?? 0));
   const withinBalance = Math.min(days, remaining);
   return { withinBalance, lopDays: days - withinBalance };

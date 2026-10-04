@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
+import { passwordChangeRequired, passwordChangeRequiredResponse } from "@/lib/students/passwordGate";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { loadEffectiveTiming } from "@/lib/college/semester";
@@ -48,6 +49,7 @@ export async function GET(request: Request) {
     }
     const studentDoc = studentSnap.docs[0];
     const student = { ...(studentDoc.data() as StudentRecord), id: studentDoc.id };
+    if (passwordChangeRequired(student)) return passwordChangeRequiredResponse();
 
     // Semesters this student has actually reached: every configured semester of
     // years 1..current whose start date has passed (see semesterOptionsForStudent).

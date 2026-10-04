@@ -10,6 +10,9 @@ import { loadCollegeSettings } from "@/lib/firestore/collegeSettings";
 import { resolveStaffGender } from "@/lib/leave/identity";
 import { computeEffectiveCategory } from "@/lib/leave/categoryEngine";
 import { REQUESTS_COL, splitLeaveDays, loadBalances, computeEntitlement, initBalancesForYear } from "@/lib/leave/balanceEngine";
+import {
+  DUPLICATE_SUBMISSION_MESSAGE, DuplicateLeaveSubmissionError, createLeaveRequestOnce, isPendingStatus,
+} from "@/lib/leave/submissionGuard";
 import { countWorkingDays, todayISODate, yearsOfService, isoDateKey } from "@/lib/leave/dayCounter";
 import { loadUnavailability } from "@/lib/leave/availability";
 import { getHolidayDateKeys } from "@/lib/leave/holidaysCount";
@@ -318,16 +321,9 @@ export async function POST(request: Request) {
     // another while an earlier one is still awaiting HOD/Principal decision
     // (the Apply button is also disabled client-side for this, but the
     // server is the actual guard - see LeaveProfileView.tsx).
-    const hasPendingRequest = existingSnap.docs.some((d) => {
-      const status = (d.data() as LeaveRequest).status;
-      return status === "PENDING_ACCEPTANCE" || status === "PENDING_HOD" ||
-        status === "PENDING_PRINCIPAL" || status === "PENDING_VICE_PRINCIPAL" || status === "PENDING_MANAGEMENT";
-    });
+    const hasPendingRequest = existingSnap.docs.some((d) => isPendingStatus((d.data() as LeaveRequest).status));
     if (hasPendingRequest) {
-      return NextResponse.json(
-        { error: "You already have a leave request pending approval. Please wait for it to be decided before applying again." },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: DUPLICATE_SUBMISSION_MESSAGE }, { status: 400 });
     }
 
     // "Extend Leave" (see LeaveProfileView.tsx / LeaveApplyForm.tsx) - this is
@@ -724,7 +720,11 @@ export async function POST(request: Request) {
       updatedAt: now as unknown as LeaveRequest["updatedAt"],
     };
 
-    const ref = await REQUESTS_COL(session.collegeId, db).add(newRequest);
+    // The pending-request check at the top of this handler is only an early,
+    // cheap rejection - this is the authoritative one, in the same transaction
+    // as the create, so two submissions landing together can't both pass it.
+    const createdId = await createLeaveRequestOnce(db, session.collegeId, session.uid, newRequest);
+    const ref = { id: createdId };
     if (adjustmentRequests.length > 0) {
       await notifyAdjustmentAssignees(db, session.collegeId, newRequest);
     } else {
@@ -761,6 +761,9 @@ export async function POST(request: Request) {
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    if (err instanceof DuplicateLeaveSubmissionError) {
+      return NextResponse.json({ error: err.message }, { status: 400 });
     }
     console.error("[leave/applications POST]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });

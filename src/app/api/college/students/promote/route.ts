@@ -3,11 +3,13 @@ export const dynamic = "force-dynamic";
 import { invalidateSectionCountCache } from "@/lib/students/sectionCounts";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
-import { getAdminDb } from "@/lib/firebase/admin";
+import { getAdminAuth, getAdminDb } from "@/lib/firebase/admin";
 import { departmentHistoryEntry } from "@/lib/students/departmentHistory";
 import { ChunkedBatch } from "@/lib/firestore/chunkedBatch";
 import type { Firestore } from "firebase-admin/firestore";
 import { sectionParityGap, describeSectionParityGap } from "@/lib/college/sectionParity";
+import { invalidPromotion, notInFinalYear, notInSourceSection } from "@/lib/students/promotionRules";
+import { setStudentLoginActive } from "@/lib/students/provisionLogin";
 import type { Section, StudentRecord } from "@/types";
 
 const MAX_STUDENTS_PER_CALL = 400;
@@ -116,23 +118,62 @@ export async function POST(request: Request) {
       studentIds.map((id) => collegeRef.collection("students").doc(id).get())
     );
 
+    // Programme (catalogId) and length (durationYears) of every course involved,
+    // for the PROMOTE programme check and the GRADUATE final-year check.
+    const courseIds = new Set<string>();
+    if (targetSection?.courseId) courseIds.add(targetSection.courseId);
+    if (promoteSource?.courseId) courseIds.add(promoteSource.courseId);
+    if (graduationSource?.courseId) courseIds.add(graduationSource.courseId);
+    for (const snap of studentSnaps) {
+      const cid = snap.exists ? (snap.data() as StudentRecord).courseId : undefined;
+      if (cid) courseIds.add(cid);
+    }
+    const courseInfo = new Map<string, { catalogId?: string; durationYears?: number }>();
+    await Promise.all(
+      Array.from(courseIds).map(async (cid) => {
+        const c = await collegeRef.collection("courses").doc(cid).get();
+        if (c.exists) courseInfo.set(cid, c.data() as { catalogId?: string; durationYears?: number });
+      })
+    );
+    const catalogOf = (cid: string | undefined) => (cid ? courseInfo.get(cid)?.catalogId : undefined);
+    // The section being graduated out of is the best authority on which course
+    // (and so how many years) this cohort is finishing; fall back to each student's own.
+    const finalYearFor = (student: StudentRecord) =>
+      courseInfo.get(graduationSource?.courseId ?? student.courseId ?? "")?.durationYears;
+
     const now = new Date();
     const batch = new ChunkedBatch(db);
     let updatedCount = 0;
     const skipped: string[] = [];
+    const skippedReasons: { id: string; name: string; reason: string }[] = [];
+    const graduatedUids: string[] = [];
+    const skip = (id: string, name: string, reason: string) => {
+      skipped.push(id);
+      skippedReasons.push({ id, name, reason });
+    };
 
     for (const snap of studentSnaps) {
       if (!snap.exists) {
-        skipped.push(snap.id);
+        skip(snap.id, "", "student not found");
         continue;
       }
       const student = snap.data() as StudentRecord;
       if (student.status !== "REGULAR") {
-        skipped.push(snap.id);
+        skip(snap.id, student.name, `status is ${student.status}`);
         continue;
       }
 
       if (body.action === "GRADUATE") {
+        const notFinal = notInFinalYear(student, finalYearFor(student));
+        if (notFinal) {
+          skip(snap.id, student.name, notFinal);
+          continue;
+        }
+        const notInSource = notInSourceSection(student, graduationSource);
+        if (notInSource) {
+          skip(snap.id, student.name, notInSource);
+          continue;
+        }
         batch.update(snap.ref, {
           status: "GRADUATED",
           updatedAt: now,
@@ -145,7 +186,18 @@ export async function POST(request: Request) {
               }
             : {}),
         });
+        if (student.uid) graduatedUids.push(student.uid);
       } else {
+        const notInSource = notInSourceSection(student, promoteSource);
+        if (notInSource) {
+          skip(snap.id, student.name, notInSource);
+          continue;
+        }
+        const invalid = invalidPromotion(student, targetSection!, catalogOf);
+        if (invalid) {
+          skip(snap.id, student.name, invalid);
+          continue;
+        }
         batch.update(snap.ref, {
           department: targetSection!.department,
           year: targetSection!.year,
@@ -169,6 +221,9 @@ export async function POST(request: Request) {
           // department-scope resolution (catalogIdForStudent).
           courseId: targetSection!.courseId,
           course: targetSection!.courseName ?? null,
+          // A lab batch belongs to the section it was set in - a promoted student
+          // starts the new year with none (the new section's faculty batches them).
+          labBatch: "",
           updatedAt: now,
         });
         const history = departmentHistoryEntry(
@@ -180,7 +235,16 @@ export async function POST(request: Request) {
     }
 
     if (updatedCount === 0) {
-      return NextResponse.json({ error: "No eligible (REGULAR) students to update" }, { status: 400 });
+      return NextResponse.json(
+        {
+          error: skippedReasons.length > 0
+            ? `No eligible students to update - ${skippedReasons[0].name ? `${skippedReasons[0].name}: ` : ""}${skippedReasons[0].reason}`
+            : "No eligible (REGULAR) students to update",
+          skipped,
+          skippedReasons,
+        },
+        { status: 400 }
+      );
     }
 
     // The cohort now occupies the target slot, so the slot's batch (and the
@@ -195,6 +259,23 @@ export async function POST(request: Request) {
 
     await batch.commit();
 
+    // A graduate no longer has portal access. Disabled, not deleted - undoing a
+    // graduation (students/[id] PATCH) turns it back on. A failure here must not
+    // undo the graduation; it is counted and logged so it can be retried.
+    let loginDeactivationFailures = 0;
+    if (graduatedUids.length > 0) {
+      const adminAuth = await getAdminAuth();
+      for (let i = 0; i < graduatedUids.length; i += 5) {
+        const results = await Promise.allSettled(
+          graduatedUids.slice(i, i + 5).map((uid) => setStudentLoginActive(db, adminAuth, session.collegeId, uid, false))
+        );
+        loginDeactivationFailures += results.filter((r) => r.status === "rejected").length;
+      }
+      if (loginDeactivationFailures > 0) {
+        console.error(`[college/students/promote] ${loginDeactivationFailures} graduate login(s) could not be disabled`);
+      }
+    }
+
     const performedByName = await getUserName(db, session.collegeId, session.uid);
     await collegeRef.collection("auditLogs").add({
       collegeId: session.collegeId,
@@ -204,12 +285,13 @@ export async function POST(request: Request) {
       details: {
         count: updatedCount,
         skipped: skipped.length,
+        ...(loginDeactivationFailures > 0 ? { loginDeactivationFailures } : {}),
         ...(targetSection ? { toSectionId: targetSection.id, toDepartment: targetSection.department, toYear: targetSection.year } : {}),
       },
       timestamp: now,
     });
 
-    return NextResponse.json({ ok: true, updatedCount, skipped });
+    return NextResponse.json({ ok: true, updatedCount, skipped, skippedReasons, loginDeactivationFailures });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

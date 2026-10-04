@@ -73,6 +73,11 @@ export async function loadDraft(
   return snap.exists ? ({ id: snap.id, ...snap.data() } as TimetableDraft) : null;
 }
 
+/** Distinct faculty on a slot list - the value of TimetableDraft.facultyIds. */
+export function draftFacultyIds(slots: Pick<DraftSlot, "facultyId">[]): string[] {
+  return Array.from(new Set(slots.map((s) => s.facultyId).filter(Boolean)));
+}
+
 export function draftRef(
   db: FirebaseFirestore.Firestore, collegeId: string, sectionId: string, semester: number | null,
 ): FirebaseFirestore.DocumentReference {
@@ -142,6 +147,7 @@ export async function buildSeededDraft(
     semester: ctx.currentSemester,
     status: "DRAFT" as const,
     slots: seededSlots,
+    facultyIds: draftFacultyIds(seededSlots),
     diagnostics: seededSlots.length > 0
       ? ["Started from the currently published timetable - edit and republish when ready."]
       : ["Started as a blank timetable - add subjects by clicking a period."],

@@ -58,7 +58,10 @@ function degreeCells(d: DegreeDetail): string[] {
 // entry's own Status/Mode (live on DegreeDetail.status/.mode - see
 // DegreeFields in ProfileFieldPrimitives.tsx) and Year of Registration/Name
 // of the Guide-Supervisor - shown instead of Year of Award while Pursuing.
-function doctoralDegreeCells(d: DegreeDetail): string[] {
+// `withDepartment` is true for Ph.D. entries only - they alone carry the Name of
+// the Department (placed just before Place, matching DOCTORAL_SUBFIELDS vs
+// POSTDOCTORAL_SUBFIELDS in csvColumns.ts).
+function doctoralDegreeCells(d: DegreeDetail, withDepartment: boolean): string[] {
   return [
     d.specialization || d.branch || "", d.institutionName ?? "",
     d.status ? (PHD_STATUS_LABELS[d.status] ?? d.status) : "",
@@ -66,6 +69,7 @@ function doctoralDegreeCells(d: DegreeDetail): string[] {
     d.yearOfRegistration ? String(d.yearOfRegistration) : "",
     d.nameOfTheGuideSupervisor ?? "",
     yearCell(d, true),
+    ...(withDepartment ? [d.departmentName ?? ""] : []),
     d.place ?? "", d.hallTicketNumber ?? "",
   ];
 }
@@ -96,7 +100,7 @@ function experienceCells(p: PreviousInstitution): string[] {
   const fromDate = p.fromDate ?? (p.fromYear ? String(p.fromYear) : "");
   const toDate = p.toDate ?? (p.toYear ? String(p.toYear) : "");
   return [
-    p.institutionName ?? "", p.designation ?? "", fromDate, toDate,
+    p.institutionName ?? "", p.place ?? "", p.designation ?? "", fromDate, toDate,
     p.joiningSalary !== undefined ? String(p.joiningSalary) : "",
     p.leavingSalary !== undefined ? String(p.leavingSalary) : "",
     p.rolesResponsibilities ?? "",
@@ -325,8 +329,8 @@ function buildRow(rawFaculty: FacultyMember, teachingSummary: string): Record<st
     intermediateDiplomaIti: combineGroup("intermediateDiplomaIti", p.intermediateDiplomaIti ? [schoolDegreeCells(p.intermediateDiplomaIti)] : []),
     ugDetailsGroup: combineGroup("ugDetailsGroup", degreeList(p.ugDetails, p.additionalUgDetails).map(degreeCells)),
     pgDetailsGroup: combineGroup("pgDetailsGroup", degreeList(p.pgDetails, p.additionalPgDetails).map(degreeCells)),
-    phdDetailsGroup: combineGroup("phdDetailsGroup", degreeList(p.phdDetails, p.additionalPhdDetails).map(doctoralDegreeCells)),
-    postdoctoralFellowshipDetailsGroup: combineGroup("postdoctoralFellowshipDetailsGroup", p.postdoctoralFellowshipDetails ? [doctoralDegreeCells(p.postdoctoralFellowshipDetails)] : []),
+    phdDetailsGroup: combineGroup("phdDetailsGroup", degreeList(p.phdDetails, p.additionalPhdDetails).map((d) => doctoralDegreeCells(d, true))),
+    postdoctoralFellowshipDetailsGroup: combineGroup("postdoctoralFellowshipDetailsGroup", p.postdoctoralFellowshipDetails ? [doctoralDegreeCells(p.postdoctoralFellowshipDetails, false)] : []),
     educationalQualifications: combineGroup("educationalQualifications", (p.educationalQualifications ?? []).map(staffQualificationCells)),
 
     // ─── Professional Experience ────────────────────────────────────────────

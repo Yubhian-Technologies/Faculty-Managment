@@ -3,7 +3,8 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import { createFirebaseUser } from "@/lib/firebase/authRest";
+import { withAuthUser } from "@/lib/firebase/withAuthUser";
+import { employeeIdTaken, employeeIdTakenMessage } from "@/lib/firestore/employeeIds";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
 import { getHodDepartmentScope, canHodManageFacultyDepartment } from "@/lib/departments/scope";
 import { SUPPORTING_STAFF_ROLE_CATEGORY, canRoleCreateSupportingStaff, supportingStaffCategoryLabel } from "@/lib/supportingStaff/roleCategory";
@@ -204,26 +205,21 @@ export async function POST(request: Request) {
       department = unitLabelForHeadRole("LIBRARY") ?? "Library";
     }
 
-    const existing = await db
-      .collection("colleges")
-      .doc(collegeId)
-      .collection("supportingStaff")
-      .where("employeeId", "==", employeeId)
-      .limit(1)
-      .get();
-    if (!existing.empty) {
-      return NextResponse.json({ error: "Employee ID already exists" }, { status: 409 });
+    // One employee-ID rule for faculty and staff (lib/firestore/employeeIds.ts):
+    // not held by another staff member of this college, nor by any faculty member.
+    const idCheck = await employeeIdTaken(db, collegeId, employeeId);
+    if (idCheck.taken) {
+      return NextResponse.json({ error: employeeIdTakenMessage(idCheck) }, { status: 409 });
     }
 
-    const uid = await createFirebaseUser(collegeEmail, password, finalName);
+    // The login and every document that goes with it are one unit (withAuthUser):
+    // the three writes below are a single batch, and a failure after the Auth user
+    // exists removes it again instead of leaving an orphan login.
+    const created = await withAuthUser({ email: collegeEmail, password, displayName: finalName, db }, async (uid) => {
     const now = new Date();
+    const batch = db.batch();
 
-    await db
-      .collection("colleges")
-      .doc(collegeId)
-      .collection("users")
-      .doc(uid)
-      .set({
+    batch.set(db.collection("colleges").doc(collegeId).collection("users").doc(uid), {
         uid,
         collegeId,
         name: finalName,
@@ -239,7 +235,7 @@ export async function POST(request: Request) {
 
     const docRef = db.collection("colleges").doc(collegeId).collection("supportingStaff").doc();
 
-    await docRef.set({
+    batch.set(docRef, {
       collegeId,
       ...(department ? { department } : {}),
       employeeId,
@@ -280,12 +276,16 @@ export async function POST(request: Request) {
       updatedAt: now,
     });
 
-    await db.collection("systemUsers").doc(uid).set({
+    batch.set(db.collection("systemUsers").doc(uid), {
       uid, role: "COLLEGE_STAFF", collegeId, email: collegeEmail, name: finalName,
       ...(profilePhotoUrl ? { profilePhotoUrl } : {}),
     });
 
-    return NextResponse.json({ id: docRef.id, uid }, { status: 201 });
+    await batch.commit();
+    return { id: docRef.id, uid };
+    });
+
+    return NextResponse.json(created, { status: 201 });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

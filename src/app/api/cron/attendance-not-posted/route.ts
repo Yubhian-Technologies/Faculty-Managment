@@ -1,13 +1,7 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebase/admin";
-import { getNotPostedSettings, markSweptToday } from "@/lib/attendance/notPostedSettings";
-import { istDateKey, istTimeHHMM } from "@/lib/attendance/istTime";
-import { DAY_BY_JS_DAY, getFacultyPeriodsForDate, type TimingCache } from "@/lib/timetable/currentPeriod";
-import { resolvePeriodCompletionStatus } from "@/lib/attendance/periodAttendanceStatus";
-import { getNoClassReason } from "@/lib/studentAttendance/classDay";
-import { emitWorkflowNotification } from "@/lib/notifications/workflowNotifications";
-import type { FacultyMember, StudentAttendanceSession } from "@/types";
+import { runNotPostedSweep } from "@/lib/attendance/notPostedSweep";
 
 // Not a user-facing route - hit on a schedule (see functions/src/index.ts,
 // or any external scheduler pointed at this URL) with a shared secret, the
@@ -26,116 +20,24 @@ function isAuthorized(request: Request): boolean {
   return diff === 0;
 }
 
-// For one college: whichever faculty have a published class today, whose
-// period has already ended with no SUBMITTED studentAttendance session, get
-// one notification each (deduped per faculty per day). Reuses the exact
-// same period-window and completion-status logic the "Not Posted Faculty"
-// report and Faculty Attendance Completion view already use, so this sweep
-// can never disagree with what a human reviewing those reports would see.
-const SWEEP_CONCURRENCY = 10;
-
-async function sweepCollege(db: FirebaseFirestore.Firestore, collegeId: string, now: Date): Promise<{ swept: boolean; notified: number }> {
-  const settings = await getNotPostedSettings(db, collegeId);
-  if (!settings.enabled) return { swept: false, notified: 0 };
-
-  const today = istDateKey(now);
-  if (settings.lastRunDate === today) return { swept: false, notified: 0 };
-  if (istTimeHHMM(now) < settings.cutoffTime) return { swept: false, notified: 0 };
-
-  // Nobody is expected to post attendance on a holiday / summer break / a day
-  // outside the college's working days - mark swept so it isn't rechecked.
-  if (await getNoClassReason(db, collegeId, today)) {
-    await markSweptToday(db, collegeId, today);
-    return { swept: true, notified: 0 };
-  }
-
-  const collegeRef = db.collection("colleges").doc(collegeId);
-  const timingCache: TimingCache = new Map();
-  const [y, m, d] = today.split("-").map(Number);
-  const jsDay = new Date(y, m - 1, d).getDay();
-  const dayName = DAY_BY_JS_DAY[jsDay];
-  if (!dayName) {
-    // Sunday - nothing scheduled college-wide. Still mark swept so this
-    // college doesn't get re-checked on every tick for the rest of the day.
-    await markSweptToday(db, collegeId, today);
-    return { swept: true, notified: 0 };
-  }
-
-  const todaySlotsSnap = await collegeRef.collection("timetableSlots").where("day", "==", dayName).get();
-  const facultyIds = [...new Set(todaySlotsSnap.docs.map((s) => (s.data() as { facultyId?: string }).facultyId).filter((v): v is string => !!v))];
-
-  // One faculty member's check: returns 1 when a reminder was sent.
-  const checkFaculty = async (facultyId: string): Promise<number> => {
-    const periods = await getFacultyPeriodsForDate(db, collegeId, facultyId, today, timingCache);
-    if (periods.length === 0) return 0;
-
-    const sessionSnaps = await Promise.all(
-      periods.map((p) => collegeRef.collection("studentAttendance").doc(`${p.slot.assignmentId}_${today}_${p.slot.periodNumber}`).get())
-    );
-    const missed = periods.filter((p, i) => {
-      const snap = sessionSnaps[i];
-      const session = snap.exists ? (snap.data() as StudentAttendanceSession) : null;
-      return resolvePeriodCompletionStatus({ dateISO: today, endTime: p.endTime, session, now }) === "NOT_MARKED";
-    });
-    if (missed.length === 0) return 0;
-
-    // StudentAttendanceSession.facultyId (what notify() needs) is the LOGIN
-    // uid, not the facultyMembers doc id timetableSlots.facultyId already is
-    // - same resolution office-correction/route.ts already does.
-    const facultySnap = await collegeRef.collection("facultyMembers").doc(facultyId).get();
-    if (!facultySnap.exists) return 0;
-    const faculty = facultySnap.data() as FacultyMember;
-    const toUid = faculty.userUid ?? facultyId;
-
-    const subjectNames = [...new Set(missed.map((p) => p.slot.subjectName).filter(Boolean))];
-    const title = missed.length === 1 ? "Attendance not posted" : `Attendance not posted (${missed.length} periods)`;
-    const message = `You haven't posted student attendance for ${subjectNames.join(", ") || "today's class"} - contact your Department Office if the window has closed.`;
-
-    await emitWorkflowNotification({
-      db,
-      collegeId,
-      toUid,
-      type: "ATTENDANCE_NOT_POSTED",
-      title,
-      message,
-      link: "/panel/mark-attendance",
-      entityType: "attendanceNotPosted",
-      entityId: `${facultyId}_${today}`,
-      dedupeKey: `attendance-not-posted:${collegeId}:${facultyId}:${today}`,
-      // A plain reminder, not a workflow item with an owner/approval step -
-      // no resolveWorkflowNotifications call anywhere clears it, so it must
-      // never surface as the persistent "must act" login popup actionable
-      // notifications default to.
-      actionable: false,
-    });
-    return 1;
-  };
-
-  // A bounded number at a time: the loop used to await each faculty member in turn,
-  // which at ~1,500 faculty outlasts a serverless function. The substitution lookup
-  // inside getFacultyPeriodsForDate is shared across these calls (see periodCoverage),
-  // so the parallelism doesn't multiply its reads.
-  let notified = 0;
-  for (let i = 0; i < facultyIds.length; i += SWEEP_CONCURRENCY) {
-    const results = await Promise.all(facultyIds.slice(i, i + SWEEP_CONCURRENCY).map(checkFaculty));
-    notified += results.reduce((n, r) => n + r, 0);
-  }
-
-
-  await markSweptToday(db, collegeId, today);
-  return { swept: true, notified };
-}
-
+// The sweep itself lives in lib/attendance/notPostedSweep.ts. A college that
+// fails no longer takes the others down with it, and ANY failure is answered
+// with a 500 (and the failed colleges named) instead of a 200 - the scheduler
+// treats that as a failed run, retries it (the sweep is idempotent per period)
+// and its log-based alerts can fire. A heartbeat is kept at
+// systemJobs/attendance-not-posted for a staleness check.
 export async function POST(request: Request) {
   if (!isAuthorized(request)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   try {
-    const db = getAdminDb();
-    const now = new Date();
-    const collegesSnap = await db.collection("colleges").get();
-    const results = await Promise.all(collegesSnap.docs.map((c) => sweepCollege(db, c.id, now)));
-    const swept = results.filter((r) => r.swept).length;
-    const notified = results.reduce((sum, r) => sum + r.notified, 0);
-    return NextResponse.json({ collegesChecked: results.length, collegesSwept: swept, facultyNotified: notified });
+    const result = await runNotPostedSweep(getAdminDb(), new Date());
+    const body = {
+      collegesChecked: result.collegesChecked,
+      collegesSwept: result.collegesSwept,
+      facultyNotified: result.facultyNotified,
+      periodsNotified: result.periodsNotified,
+      ...(result.failed.length > 0 ? { failed: result.failed } : {}),
+    };
+    return NextResponse.json(body, { status: result.failed.length > 0 ? 500 : 200 });
   } catch (err) {
     console.error("[cron/attendance-not-posted]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });

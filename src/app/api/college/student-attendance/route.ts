@@ -9,6 +9,8 @@ import { resolveSubstituteSlotsForDate } from "@/lib/leave/periodCoverage";
 import { getNoClassReason } from "@/lib/studentAttendance/classDay";
 import { applyOnDutyToEntries, loadOnDutyDay, presentCountOf } from "@/lib/studentAttendance/onDuty";
 import { fetchSectionStudents } from "@/lib/students/sectionRoster";
+import { sortStudentsForList } from "@/lib/students/listOrder";
+import { resolveCollegeAcademicYear } from "@/lib/college/collegeAcademicYear";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import type { FacultyMember, Section, StudentAttendanceEntry, StudentAttendanceSession, TeachingAssignment } from "@/types";
 
@@ -152,13 +154,22 @@ export async function POST(request: Request) {
     // branch (existing status === DRAFT) merges the incoming student list into
     // the stored entries, and the shape below also maps over it, so both have
     // to see it outside the transaction (tx.get cannot query).
-    const students = (await fetchSectionStudents(collegeRef, {
+    // sortStudentsForList, not rollNumber.localeCompare: a student imported
+    // without a roll number sorts last by name instead of throwing here and
+    // making the whole class impossible to take attendance for.
+    const students = sortStudentsForList(await fetchSectionStudents(collegeRef, {
       department,
       sectionName,
       year,
       courseId,
       labBatch,
-    })).sort((a, b) => a.rollNumber.localeCompare(b.rollNumber, undefined, { numeric: true }));
+    }));
+
+    // Which academic year this session belongs to - a Section is a year-slot a
+    // new cohort occupies each year, so reports select sessions by it (audit
+    // F-24). Sessions written before this existed carry none and are placed by
+    // their date when read.
+    const academicYear = await resolveCollegeAcademicYear(db, session.collegeId, now);
 
     // Students who are officially away for this period (an approved permission,
     // an event, ...) arrive already marked ON_DUTY: one document read for the
@@ -199,14 +210,17 @@ export async function POST(request: Request) {
         // Self-heals a draft created before `semester` started being stamped
         // (existing.semester == null) - never overwrites one already set.
         const semesterFix = existing.semester == null && semester != null ? { semester } : {};
+        // Same self-heal for the academic year (never overwrites one already set).
+        const academicYearFix = existing.academicYear == null ? { academicYear } : {};
         tx.update(ref, {
           entries,
           totalStudents: entries.length,
           presentCount,
           updatedAt: now,
           ...semesterFix,
+          ...academicYearFix,
         });
-        resultSession = { ...existing, id, entries, totalStudents: entries.length, presentCount, updatedAt: now as unknown as StudentAttendanceSession["updatedAt"], ...semesterFix } as unknown as StudentAttendanceSession & { id: string };
+        resultSession = { ...existing, id, entries, totalStudents: entries.length, presentCount, updatedAt: now as unknown as StudentAttendanceSession["updatedAt"], ...semesterFix, ...academicYearFix } as unknown as StudentAttendanceSession & { id: string };
         resultStatus = 200;
         return;
       }
@@ -229,6 +243,7 @@ export async function POST(request: Request) {
         sectionName,
         ...(year != null ? { year } : {}),
         ...(semester != null ? { semester } : {}),
+        academicYear,
         subjectId: assignment.subjectId,
         subjectName: assignment.subjectName,
         subjectCode: assignment.subjectCode,

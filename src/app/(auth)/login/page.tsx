@@ -166,7 +166,7 @@ function loginFailureMessage(err: unknown): string {
 // The identifier field auto-routes purely on its own shape: containing "@"
 // signs in directly as a staff email; anything else is resolved server-side
 // (across every college - see resolve-student-login/route.ts) to a student's
-// real (synthetic) sign-in email + the shared default password (see
+// real (synthetic) sign-in email(s) and tried with the password typed (see
 // lib/students/loginDefaults.ts).
 function LoginForm() {
   const router = useRouter();
@@ -197,28 +197,47 @@ function LoginForm() {
         credential = await signInWithEmailAndPassword(auth, identifier.trim(), password);
       } else {
         // Student Roll Number sign-in:
-        // 1. Try direct deterministic Auth email: <rollNumber>@students.internal (0 database reads!)
+        // 1. Try the deterministic Auth email: <rollNumber>@students.internal
+        //    (no database read) - the identity for any plain roll (letters/digits).
         const directEmail = studentLoginEmail(identifier.trim());
         try {
           credential = await signInWithEmailAndPassword(auth, directEmail, password);
         } catch (directErr: unknown) {
-          // 2. Fallback: resolve legacy accounts through backend resolver
+          // 2. Otherwise ask the backend which email(s) this roll belongs to
+          //    (rolls with punctuation or different formatting, changed rolls) and
+          //    try each with the password typed. Roll numbers are globally unique,
+          //    so this is at most the roll's normalised and legacy emails.
           const errCode = (directErr as { code?: string })?.code;
-          if (errCode === "auth/user-not-found" || errCode === "auth/invalid-credential") {
-            const resolveRes = await fetch("/api/auth/resolve-student-login", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ rollNumber: identifier.trim() }),
-            });
-            const resolveBody = (await resolveRes.json()) as { loginEmail?: string; error?: string };
-            if (resolveRes.ok && resolveBody.loginEmail) {
-              credential = await signInWithEmailAndPassword(auth, resolveBody.loginEmail, password);
-            } else {
-              throw directErr;
-            }
-          } else {
-            throw directErr;
+          if (errCode !== "auth/user-not-found" && errCode !== "auth/invalid-credential") throw directErr;
+
+          const resolveRes = await fetch("/api/auth/resolve-student-login", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ rollNumber: identifier.trim() }),
+          });
+          if (resolveRes.status === 429) {
+            throw Object.assign(new Error("Too many attempts. Please wait a minute and try again."), { code: "auth/too-many-requests" });
           }
+          const resolveBody = (await resolveRes.json().catch(() => ({}))) as { loginEmail?: string; loginEmails?: string[] };
+          const candidates = (resolveBody.loginEmails ?? (resolveBody.loginEmail ? [resolveBody.loginEmail] : []))
+            .filter((email) => email && email !== directEmail);
+          if (!resolveRes.ok || candidates.length === 0) throw directErr;
+
+          let signedIn: UserCredential | null = null;
+          let lastErr: unknown = directErr;
+          for (const email of candidates) {
+            try {
+              signedIn = await signInWithEmailAndPassword(auth, email, password);
+              break;
+            } catch (candidateErr) {
+              lastErr = candidateErr;
+              // A rate-limit or disabled account is not "wrong candidate" - stop and say so.
+              const code = (candidateErr as { code?: string })?.code;
+              if (code === "auth/too-many-requests" || code === "auth/user-disabled") throw candidateErr;
+            }
+          }
+          if (!signedIn) throw lastErr;
+          credential = signedIn;
         }
       }
 

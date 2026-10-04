@@ -61,6 +61,12 @@ export interface StudentAttendanceSession {
   // all - null-tolerant everywhere it's filtered on (matchesCurrentSemester),
   // same convention as TimetableSlot.semester/TeachingAssignment.timetableSemester.
   semester?: number;
+  // The college's academic year ("2026-27") this session was created in. A
+  // Section is a year-slot a new cohort occupies each year, so without this a
+  // report on the section after a promotion mixed the previous cohort's sessions
+  // in (audit F-24). Absent on a session created before it existed - readers
+  // then place it by its `date` (lib/studentAttendance/academicYearWindow.ts).
+  academicYear?: string;
   subjectId: string;
   subjectName: string;
   subjectCode: string;
