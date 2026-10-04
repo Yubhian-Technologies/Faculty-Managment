@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -26,6 +27,8 @@ export async function GET(request: Request) {
 
     return NextResponse.json({ academicYears });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -45,7 +48,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("PRINCIPAL", "SUPER_ADMIN");
-    const body = (await request.json()) as {
+    const body = (await readJsonBody(request)) as {
       departmentId: string;
       courseId: string;
       year: number;
@@ -179,6 +182,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ id: docId, advanced: isAdvance && !correction, corrected: isAdvance && !!correction, facultyUpdated }, { status: 201 });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

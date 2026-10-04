@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb, getAdminStorage } from "@/lib/firebase/admin";
@@ -21,7 +22,7 @@ export async function PATCH(
   try {
     const session = await requireCollegeMember("EXAM_CELL", "SUPER_ADMIN");
     const { id } = await params;
-    const body = (await request.json()) as {
+    const body = (await readJsonBody(request)) as {
       title?: string;
       courseId?: string; courseName?: string; semester?: number; totalSemesters?: number;
       noticeDate?: string; subject?: string; body?: string;
@@ -55,6 +56,8 @@ export async function PATCH(
     await ref.update(updates);
     return NextResponse.json({ circular: { id, ...existing, ...updates } });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -84,12 +87,16 @@ export async function DELETE(
       try {
         await getAdminStorage().bucket().file(path).delete();
       } catch (err) {
+        const badBody = badBodyResponse(err);
+        if (badBody) return badBody;
         console.error("[college/exam-circulars/[id] DELETE] storage cleanup failed", err);
       }
     }
 
     return NextResponse.json({ success: true });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

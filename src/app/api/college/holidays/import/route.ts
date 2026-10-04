@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -31,7 +32,7 @@ for (const code of Object.keys(HOLIDAY_TYPE_LABELS) as HolidayType[]) {
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_OFFICE");
-    const body = (await request.json()) as { records?: ImportRow[] };
+    const body = (await readJsonBody(request)) as { records?: ImportRow[] };
     const records = body.records;
 
     if (!records || !Array.isArray(records) || records.length === 0) {
@@ -100,6 +101,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ created, failed }, { status: 201 });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

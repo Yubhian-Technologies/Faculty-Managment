@@ -6,6 +6,7 @@ export const dynamic = "force-dynamic";
 // leave request has no one else within the college to decide it, so Management
 // is the one workflow step this role must perform here too.
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireManagement } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -19,7 +20,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   try {
     const session = await requireManagement();
     const { id } = await params;
-    const body = (await request.json()) as {
+    const body = (await readJsonBody(request)) as {
       collegeId?: string;
       action?: "APPROVE" | "REJECT" | "VERIFY_OD_PROOF" | "REJECT_OD_PROOF";
       remarks?: string;
@@ -108,6 +109,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
     return NextResponse.json({ ok: true });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && err.message === "UNAUTHORIZED") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

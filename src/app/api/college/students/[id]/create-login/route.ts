@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb, getAdminAuth } from "@/lib/firebase/admin";
@@ -20,7 +21,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     let body: { password?: unknown };
     try {
-      body = (await request.json()) as { password?: unknown };
+      body = (await readJsonBody(request)) as { password?: unknown };
     } catch {
       return NextResponse.json({ error: "Invalid request" }, { status: 400 });
     }
@@ -56,6 +57,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       alreadyExisted: result.alreadyExisted,
     });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof StudentLoginError) {
       return NextResponse.json({ error: err.message }, { status: err.status });
     }

@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { claimSectionKey, isSectionKeyTaken } from "@/lib/sections/sectionKeys";
 import { getSectionStudentCounts } from "@/lib/students/sectionCounts";
 import { NextResponse } from "next/server";
@@ -335,6 +336,8 @@ export async function GET(request: Request) {
 
     return NextResponse.json({ sections });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -349,7 +352,7 @@ export async function POST(request: Request) {
     // any managed branch) creates them; Super Admin retains an override. Reads
     // (GET above) stay open to Principal/VP/Office/Panel.
     const session = await requireCollegeMember("HOD", "SUPER_ADMIN");
-    const body = (await request.json()) as {
+    const body = (await readJsonBody(request)) as {
       courseId: string;
       name: string;
       year: number;
@@ -725,6 +728,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ id: ref.id }, { status: 201 });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

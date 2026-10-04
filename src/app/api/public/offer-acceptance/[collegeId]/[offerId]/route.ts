@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { clientIp, rateLimit } from "@/lib/security/rateLimit";
 import { findUsersSnapshot } from "@/lib/roles/findUsersByRoles";
 import { NextResponse } from "next/server";
@@ -41,6 +42,8 @@ export async function GET(
       },
     });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     console.error("[public/offer-acceptance GET]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
@@ -57,7 +60,7 @@ export async function POST(
   }
   try {
     const { collegeId, offerId } = await params;
-    const body = (await request.json()) as {
+    const body = (await readJsonBody(request)) as {
       termsAccepted?: boolean;
       decision?: "ACCEPTED" | "REJECTED";
       confirmedDateOfJoining?: string;
@@ -121,6 +124,8 @@ export async function POST(
 
     return NextResponse.json({ ok: true });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     console.error("[public/offer-acceptance POST]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }

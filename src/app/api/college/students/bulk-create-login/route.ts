@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb, getAdminAuth } from "@/lib/firebase/admin";
@@ -26,7 +27,7 @@ export async function POST(request: Request) {
     const session = await requireCollegeMember("COLLEGE_OFFICE");
     let body: { studentIds?: unknown; password?: unknown; logins?: unknown };
     try {
-      body = (await request.json()) as typeof body;
+      body = (await readJsonBody(request)) as typeof body;
     } catch {
       return NextResponse.json({ error: "Invalid request" }, { status: 400 });
     }
@@ -78,6 +79,8 @@ export async function POST(request: Request) {
           created.push({ id, name: student.name, rollNumber: student.rollNumber, loginEmail: result.loginEmail });
         }
       } catch (err) {
+        const badBody = badBodyResponse(err);
+        if (badBody) return badBody;
         // Only the deliberate, user-facing reasons (missing roll, duplicate roll,
         // weak password...) are shown; anything else is logged and reported generically.
         if (err instanceof StudentLoginError) {
@@ -101,6 +104,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ ok: true, created, skipped });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

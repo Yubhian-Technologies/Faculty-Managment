@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -32,6 +33,8 @@ export async function GET(request: Request) {
     const settings = await loadCollegeSettings(db, collegeId);
     return NextResponse.json({ settings });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && err.message === "UNAUTHORIZED") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -43,7 +46,7 @@ export async function GET(request: Request) {
 export async function PUT(request: Request) {
   try {
     const session = await requireRole("SUPER_ADMIN", "PRINCIPAL", "VICE_PRINCIPAL");
-    const body = (await request.json()) as Partial<FacultyNorms> & { collegeId?: string };
+    const body = (await readJsonBody(request)) as Partial<FacultyNorms> & { collegeId?: string };
 
     const collegeId = session.role === "SUPER_ADMIN" ? body.collegeId : session.collegeId;
     if (!collegeId) {
@@ -258,6 +261,8 @@ export async function PUT(request: Request) {
 
     return NextResponse.json({ success: true });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && err.message === "UNAUTHORIZED") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

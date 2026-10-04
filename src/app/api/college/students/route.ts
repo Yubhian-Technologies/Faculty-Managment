@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { invalidateSectionCountCache } from "@/lib/students/sectionCounts";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
@@ -354,6 +355,8 @@ export async function GET(request: Request) {
     // Lists carry only what the caller's role needs (see lib/students/listProjection.ts).
     return NextResponse.json({ students: projectStudentsForRole(session.role, students) });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -376,7 +379,7 @@ export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "COLLEGE_OFFICE");
     invalidateSectionCountCache(session.collegeId); // student counts on the Sections list change with this write
-    const body = (await request.json()) as {
+    const body = (await readJsonBody(request)) as {
       name: string;
       section?: string;
       year: number;
@@ -782,6 +785,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ id: studentRef.id }, { status: 201 });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

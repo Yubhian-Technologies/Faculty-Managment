@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { convertLegacyAccounts } from "@/lib/roles/seats";
 import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth/verifySession";
@@ -143,6 +144,8 @@ export async function GET(request: Request) {
     filteredUsers.sort((a, b) => ((a as { name?: string }).name ?? "").localeCompare((b as { name?: string }).name ?? ""));
     return NextResponse.json({ users: filteredUsers });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && err.message === "UNAUTHORIZED") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -169,7 +172,7 @@ export async function POST(request: Request) {
     const session = await requireRole("SUPER_ADMIN", "MANAGEMENT");
     const creatableRoles = session.role === "MANAGEMENT" ? MANAGEMENT_CREATABLE : SUPER_ADMIN_CREATABLE;
 
-    const body = (await request.json()) as {
+    const body = (await readJsonBody(request)) as {
       name: string;
       email: string;
       password: string;
@@ -270,6 +273,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ uid }, { status: 201 });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && err.message === "UNAUTHORIZED") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

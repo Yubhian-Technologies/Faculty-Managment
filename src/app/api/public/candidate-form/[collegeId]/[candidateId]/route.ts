@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { clientIp, rateLimit } from "@/lib/security/rateLimit";
 import { NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -52,6 +53,8 @@ export async function GET(
       requiredDocuments,
     });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     console.error("[public/candidate-form GET]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
@@ -73,7 +76,7 @@ export async function PATCH(
     if (!applicationId) {
       return NextResponse.json({ error: "applicationId required" }, { status: 400 });
     }
-    const body = (await request.json()) as {
+    const body = (await readJsonBody(request)) as {
       bioData?: CandidateBioData;
       certificates?: Array<{ name: string; url: string }>;
     };
@@ -121,6 +124,8 @@ export async function PATCH(
 
     return NextResponse.json({ ok: true });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     console.error("[public/candidate-form PATCH]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }

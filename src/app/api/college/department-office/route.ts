@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { requireCollegeMember, isDepartmentOffice } from "@/lib/auth/verifySession";
@@ -114,7 +115,7 @@ export async function POST(request: Request) {
     if ("error" in ctx) return NextResponse.json({ error: ctx.error }, { status: ctx.status });
     const { session, db, scope, department } = ctx;
 
-    const { uid } = (await request.json()) as { uid?: string };
+    const { uid } = (await readJsonBody(request)) as { uid?: string };
     if (!uid) return NextResponse.json({ error: "Pick a faculty member" }, { status: 400 });
 
     const users = db.collection("colleges").doc(session.collegeId).collection("users");
@@ -161,6 +162,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ ok: true });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -175,7 +178,7 @@ export async function DELETE(request: Request) {
     if ("error" in ctx) return NextResponse.json({ error: ctx.error }, { status: ctx.status });
     const { session, db, department } = ctx;
 
-    const { uid } = (await request.json()) as { uid?: string };
+    const { uid } = (await readJsonBody(request)) as { uid?: string };
     if (!uid) return NextResponse.json({ error: "Nobody to remove" }, { status: 400 });
 
     const users = db.collection("colleges").doc(session.collegeId).collection("users");
@@ -209,6 +212,8 @@ export async function DELETE(request: Request) {
 
     return NextResponse.json({ ok: true });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireLocationMember } from "@/lib/auth/verifySession";
 import { getAdminAuth, getAdminDb } from "@/lib/firebase/admin";
@@ -43,7 +44,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ ui
   try {
     const session = await requireLocationMember("ADMINISTRATION");
     const { uid } = await params;
-    const body = (await request.json()) as { collegeId?: string; name?: string; phone?: string; collegeEmail?: string; newPassword?: string };
+    const body = (await readJsonBody(request)) as { collegeId?: string; name?: string; phone?: string; collegeEmail?: string; newPassword?: string };
     const t = await loadTarget(body.collegeId ?? null, uid, session.locationId);
     if ("error" in t) return NextResponse.json({ error: t.error }, { status: t.status });
 
@@ -81,6 +82,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ ui
     });
     return NextResponse.json({ ok: true });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     return handleError(err, "PATCH");
   }
 }
@@ -130,6 +133,8 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ u
     });
     return NextResponse.json({ ok: true, mode: onRoster ? "deactivated" : "deleted" });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     return handleError(err, "DELETE");
   }
 }

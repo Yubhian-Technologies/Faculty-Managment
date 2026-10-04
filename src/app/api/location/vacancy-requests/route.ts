@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { verifySession } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -58,6 +59,8 @@ export async function GET(request: Request) {
 
     return NextResponse.json({ vacancyRequests: requests });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     console.error("[location/vacancy-requests GET]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
@@ -73,7 +76,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "No location context" }, { status: 400 });
     }
 
-    const body = (await request.json()) as {
+    const body = (await readJsonBody(request)) as {
       department: string;
       qualification?: string;
       requiredCount: number;
@@ -167,6 +170,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ id: ref.id }, { status: 201 });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     console.error("[location/vacancy-requests POST]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }

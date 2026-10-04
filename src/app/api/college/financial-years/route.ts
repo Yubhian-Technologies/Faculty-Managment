@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeContext } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -28,6 +29,8 @@ export async function GET(request: Request) {
       .sort((a, b) => String((b as { startDate?: string }).startDate).localeCompare(String((a as { startDate?: string }).startDate)));
     return NextResponse.json({ financialYears });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (isAuthError(err)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     console.error("[college/financial-years GET]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
@@ -37,7 +40,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeContext(request, ...WRITE_ROLES);
-    const body = (await request.json()) as { startDate?: string; endDate?: string };
+    const body = (await readJsonBody(request)) as { startDate?: string; endDate?: string };
     const startDate = body.startDate?.trim() ?? "";
     const endDate = body.endDate?.trim() ?? "";
 
@@ -72,6 +75,8 @@ export async function POST(request: Request) {
     });
     return NextResponse.json({ id: ref.id }, { status: 201 });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (isAuthError(err)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     console.error("[college/financial-years POST]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
@@ -98,6 +103,8 @@ export async function DELETE(request: Request) {
     await ref.delete();
     return NextResponse.json({ ok: true });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (isAuthError(err)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     console.error("[college/financial-years DELETE]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });

@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -24,6 +25,8 @@ export async function GET(request: Request) {
     const snap = await query.orderBy("queuedAt", "asc").get();
     return NextResponse.json({ reservations: snap.docs.map((d) => ({ id: d.id, ...d.data() }) as BookReservation) });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -35,7 +38,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("LIBRARY", "PRINCIPAL", "VICE_PRINCIPAL");
-    const body = (await request.json()) as { studentId?: string; bookId?: string };
+    const body = (await readJsonBody(request)) as { studentId?: string; bookId?: string };
     const studentId = body.studentId?.trim();
     const bookId = body.bookId?.trim();
     if (!studentId || !bookId) {
@@ -85,6 +88,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ ok: true, id: ref.id });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

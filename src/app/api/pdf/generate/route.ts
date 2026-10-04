@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { verifyFirebaseToken } from "@/lib/auth/verifyFirebaseToken";
 import { assertTokenActive } from "@/lib/auth/assertTokenActive";
@@ -40,7 +41,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const body = (await request.json()) as {
+    const body = (await readJsonBody(request)) as {
       type: "OFFER_LETTER" | "APPOINTMENT_LETTER" | "FINANCE_REPORT" | "FINANCE_RECEIPT" | "RESUME" | "DOCUMENT_ACKNOWLEDGEMENT" | "CANDIDATE_PROFILE";
       data: Record<string, unknown>;
     };
@@ -83,6 +84,8 @@ export async function POST(request: Request) {
       },
     });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     console.error("[pdf/generate]", err);
     return NextResponse.json({ error: "Document generation failed" }, { status: 500 });
   }

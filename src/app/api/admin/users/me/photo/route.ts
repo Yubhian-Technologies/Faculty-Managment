@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -12,7 +13,7 @@ export async function PATCH(request: Request) {
     // never from the request body, so a user can only ever update their own photo.
     const session = await requireRole(...GLOBAL_ROLES);
 
-    const body = (await request.json()) as { photoUrl?: string };
+    const body = (await readJsonBody(request)) as { photoUrl?: string };
     const photoUrl = body.photoUrl;
 
     if (photoUrl === undefined) {
@@ -38,6 +39,8 @@ export async function PATCH(request: Request) {
 
     return NextResponse.json({ ok: true, photoUrl });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && err.message === "UNAUTHORIZED") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

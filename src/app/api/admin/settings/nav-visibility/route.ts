@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireSuperAdmin } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -30,6 +31,8 @@ export async function GET(request: Request) {
 
     return NextResponse.json({ settings });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && err.message === "UNAUTHORIZED") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -42,7 +45,7 @@ export async function PUT(request: Request) {
   try {
     const session = await requireSuperAdmin();
 
-    const body = (await request.json()) as {
+    const body = (await readJsonBody(request)) as {
       collegeId?: string;
       role?: UserRole;
       hiddenModules?: string[];
@@ -81,6 +84,8 @@ export async function PUT(request: Request) {
 
     return NextResponse.json({ success: true });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && err.message === "UNAUTHORIZED") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

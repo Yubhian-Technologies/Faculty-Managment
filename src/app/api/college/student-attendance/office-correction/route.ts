@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { sortStudentsForList } from "@/lib/students/listOrder";
 import { resolveCollegeAcademicYear } from "@/lib/college/collegeAcademicYear";
@@ -33,7 +34,7 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL");
-    const body = (await request.json()) as {
+    const body = (await readJsonBody(request)) as {
       facultyId?: string;
       assignmentId?: string;
       date?: string;
@@ -227,6 +228,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ session: { id, ...attendanceSession } }, { status: 201 });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -34,7 +35,7 @@ export async function POST(
     const session = await requireCollegeMember("COLLEGE_OFFICE", "HOD", "LIBRARY");
     const { id } = await params;
 
-    const body = (await request.json()) as { email?: string; password?: string };
+    const body = (await readJsonBody(request)) as { email?: string; password?: string };
     const { email, password } = body;
 
     if (!email || !password || password.length < 8) {
@@ -127,6 +128,8 @@ export async function POST(
 
     return NextResponse.json({ uid }, { status: 201 });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

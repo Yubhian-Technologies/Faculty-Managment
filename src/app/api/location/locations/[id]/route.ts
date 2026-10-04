@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -24,6 +25,8 @@ export async function GET(
     if (!docSnap.exists) return NextResponse.json({ error: "Location not found" }, { status: 404 });
     return NextResponse.json({ location: { id: docSnap.id, ...docSnap.data() } as LocationConfig });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && err.message === "UNAUTHORIZED") return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     console.error("[location/locations/[id] GET]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
@@ -37,7 +40,7 @@ export async function PATCH(
   try {
     const session = await requireRole("LOCATION_STAFF_ADMIN", "ADMINISTRATION", "SUPER_ADMIN");
     const { id } = await params;
-    const body = (await request.json()) as { name?: string; address?: string; city?: string; state?: string; isActive?: boolean };
+    const body = (await readJsonBody(request)) as { name?: string; address?: string; city?: string; state?: string; isActive?: boolean };
     const { searchParams } = new URL(request.url);
     const locationId = searchParams.get("locationId") || session.locationId;
     if (!locationId) return NextResponse.json({ error: "locationId required" }, { status: 400 });
@@ -55,6 +58,8 @@ export async function PATCH(
     await docRef.set(updates, { merge: true });
     return NextResponse.json({ ok: true });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && err.message === "UNAUTHORIZED") return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     console.error("[location/locations/[id] PATCH]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
@@ -77,6 +82,8 @@ export async function DELETE(
     await docRef.delete();
     return NextResponse.json({ ok: true });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && err.message === "UNAUTHORIZED") return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     console.error("[location/locations/[id] DELETE]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });

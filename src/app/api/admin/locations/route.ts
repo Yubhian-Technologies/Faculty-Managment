@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -42,6 +43,8 @@ export async function GET(request?: Request) {
     const locations = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     return NextResponse.json({ locations });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && err.message === "UNAUTHORIZED") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -53,7 +56,7 @@ export async function GET(request?: Request) {
 export async function POST(request: Request) {
   try {
     const session = await requireRole("SUPER_ADMIN", "MANAGEMENT");
-    const body = (await request.json()) as {
+    const body = (await readJsonBody(request)) as {
       name: string;
       city: string;
       state?: string;
@@ -119,6 +122,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ id: ref.id, provisioned }, { status: 201 });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && err.message === "UNAUTHORIZED") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

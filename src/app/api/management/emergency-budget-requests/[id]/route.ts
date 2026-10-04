@@ -5,6 +5,7 @@ export const dynamic = "force-dynamic";
 // copy this pattern elsewhere without the same justification: Management approving
 // an emergency budget request is the one workflow step that role must perform.
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireManagement } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -17,7 +18,7 @@ export async function PATCH(
   try {
     const session = await requireManagement();
     const { id } = await params;
-    const body = (await request.json()) as {
+    const body = (await readJsonBody(request)) as {
       collegeId?: string;
       action?: ManagementDecisionAction;
       remarks?: string;
@@ -38,6 +39,8 @@ export async function PATCH(
 
     return NextResponse.json({ ok: true });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && err.message === "UNAUTHORIZED") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { cascadeDeleteSection, findSectionHistory, sectionHistoryMessage } from "@/lib/sections/sectionDeletion";
 import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
@@ -74,7 +75,7 @@ export async function PATCH(
     // override. Ownership within the HOD's tree is enforced further below.
     const session = await requireCollegeMember("HOD", "SUPER_ADMIN");
     const { id } = await params;
-    const body = (await request.json()) as {
+    const body = (await readJsonBody(request)) as {
       courseId?: string;
       name?: string;
       year?: number;
@@ -533,6 +534,8 @@ export async function PATCH(
     });
     return NextResponse.json({ success: true });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -654,6 +657,8 @@ export async function DELETE(
 
     return NextResponse.json({ success: true });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

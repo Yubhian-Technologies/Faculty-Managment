@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
@@ -69,6 +70,8 @@ export async function GET() {
     const items = results.flat().sort((a, b) => ms(b.record.createdAt) - ms(a.record.createdAt));
     return NextResponse.json({ departments, items });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     const res = unauthorized(err);
     if (res) return res;
     console.error("[college/research-review GET]", err);
@@ -88,7 +91,7 @@ interface ReviewBody {
 export async function PATCH(request: Request) {
   try {
     const session = await requireCollegeMember("RND_COORDINATOR");
-    const body = (await request.json()) as ReviewBody;
+    const body = (await readJsonBody(request)) as ReviewBody;
     const cfg = body.module ? REVIEWABLE_MODULES[body.module] : undefined;
     if (!cfg || !body.id || !body.action) {
       return NextResponse.json({ error: "module, id and action are required" }, { status: 400 });
@@ -193,6 +196,8 @@ export async function PATCH(request: Request) {
 
     return NextResponse.json({ ok: true, edited: editedFields });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     const res = unauthorized(err);
     if (res) return res;
     console.error("[college/research-review PATCH]", err);

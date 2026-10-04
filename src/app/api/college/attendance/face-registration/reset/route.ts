@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
@@ -35,7 +36,7 @@ export async function POST(request: Request) {
       // Unit head - resets a COLLEGE_STAFF member belonging to their own
       // unit (same department-string link as manual/route.ts and
       // attendance/route.ts).
-      const body = (await request.json()) as { uid?: string };
+      const body = (await readJsonBody(request)) as { uid?: string };
       const uid = body.uid;
       if (!uid) {
         return NextResponse.json({ error: "Staff member is required" }, { status: 400 });
@@ -56,7 +57,7 @@ export async function POST(request: Request) {
     }
 
     if (session.role !== "HOD") {
-      const body = (await request.json()) as { uid?: string };
+      const body = (await readJsonBody(request)) as { uid?: string };
       const uid = body.uid;
       if (!uid) {
         return NextResponse.json({ error: "Staff member is required" }, { status: 400 });
@@ -90,7 +91,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true });
     }
 
-    const body = (await request.json()) as { facultyId?: string };
+    const body = (await readJsonBody(request)) as { facultyId?: string };
     const facultyId = body.facultyId;
     if (!facultyId) {
       return NextResponse.json({ error: "Faculty is required" }, { status: 400 });
@@ -120,6 +121,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ ok: true });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

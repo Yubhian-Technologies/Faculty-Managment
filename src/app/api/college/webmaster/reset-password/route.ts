@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb, getAdminAuth } from "@/lib/firebase/admin";
@@ -17,7 +18,7 @@ const MIN_PASSWORD_LENGTH = 6; // Firebase Auth's own minimum
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("WEBMASTER", "SUPER_ADMIN");
-    const body = (await request.json()) as { uid?: string; password?: string };
+    const body = (await readJsonBody(request)) as { uid?: string; password?: string };
     if (!body.uid) {
       return NextResponse.json({ error: "uid is required" }, { status: 400 });
     }
@@ -57,6 +58,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ ok: true, newPassword });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

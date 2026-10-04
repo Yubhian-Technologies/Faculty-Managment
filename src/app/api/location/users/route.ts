@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { verifySession } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -34,6 +35,8 @@ export async function GET(request: Request) {
       .filter((u) => !(session.role === "ADMINISTRATION" && (u as { uid?: string }).uid === session.uid));
     return NextResponse.json({ users });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     console.error("[location/users GET]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
@@ -47,7 +50,7 @@ export async function POST(request: Request) {
     const isAdmin = session.role === "SUPER_ADMIN" || session.role === "ADMINISTRATION";
     if (!isAdmin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const body = (await request.json()) as {
+    const body = (await readJsonBody(request)) as {
       name: string;
       mobile: string;
       password: string;
@@ -162,6 +165,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ uid }, { status: 201 });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (
       err && typeof err === "object" && "code" in err &&
       (err as { code: string }).code === "auth/email-already-exists"

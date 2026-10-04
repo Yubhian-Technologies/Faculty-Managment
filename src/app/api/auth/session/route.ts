@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { verifyFirebaseToken } from "@/lib/auth/verifyFirebaseToken";
 import { getAdminDb, getAdminAuth } from "@/lib/firebase/admin";
@@ -11,7 +12,7 @@ import { migrateUserDoc } from "@/lib/faculty/fieldRenames";
 
 export async function POST(request: Request) {
   try {
-    const body = (await request.json()) as { token?: string };
+    const body = (await readJsonBody(request)) as { token?: string };
     const { token } = body;
 
     if (!token) {
@@ -196,6 +197,8 @@ export async function POST(request: Request) {
 
     return response;
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     const message = err instanceof Error ? err.message : String(err);
     console.error("[auth/session] token verification failed:", message);
     // Never echo verifier internals (e.g. which key ids are known, why a

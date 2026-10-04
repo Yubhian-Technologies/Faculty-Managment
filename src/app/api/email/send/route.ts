@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { verifyFirebaseToken } from "@/lib/auth/verifyFirebaseToken";
 import { interviewInvitationEmail, offerLetterEmail, appointmentLetterEmail } from "@/lib/email/templates";
@@ -42,7 +43,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const body = (await request.json()) as {
+    const body = (await readJsonBody(request)) as {
       type: "INTERVIEW_INVITATION" | "OFFER_LETTER" | "APPOINTMENT_LETTER" | "GENERAL";
       to: string;
       cc?: string[];
@@ -98,6 +99,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ ok: true });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     console.error("[email/send]", err);
     return NextResponse.json({ error: "Failed to send email" }, { status: 500 });
   }

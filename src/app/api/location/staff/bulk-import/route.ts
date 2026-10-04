@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { scopedLocationId } from "@/lib/location/scope";
 import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth/verifySession";
@@ -135,7 +136,7 @@ export async function POST(request: Request) {
       "SUPER_ADMIN"
     );
 
-    const body = (await request.json()) as {
+    const body = (await readJsonBody(request)) as {
       staff?: ImportStaffRow[];
       locationId?: string;
     };
@@ -443,6 +444,8 @@ export async function POST(request: Request) {
       newDepartmentsCreated: newlyCreatedDeptNames,
     });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && err.message === "UNAUTHORIZED") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

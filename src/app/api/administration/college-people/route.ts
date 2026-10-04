@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireLocationMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -25,7 +26,7 @@ import { assignSeat, createSeat, listSeats, SeatError } from "@/lib/roles/seats"
 export async function POST(request: Request) {
   try {
     const session = await requireLocationMember("ADMINISTRATION");
-    const body = (await request.json()) as {
+    const body = (await readJsonBody(request)) as {
       collegeId?: string;
       name?: string;
       collegeEmail?: string;
@@ -112,6 +113,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ uid, ...(seatError ? { seatError } : {}) }, { status: 201 });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_LOCATION_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

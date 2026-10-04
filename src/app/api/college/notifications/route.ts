@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeContext } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -45,6 +46,8 @@ export async function GET(request: Request) {
       });
     return NextResponse.json({ notifications });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ notifications: [] });
     }
@@ -56,7 +59,7 @@ export async function GET(request: Request) {
 export async function PATCH(request: Request) {
   try {
     const session = await requireCollegeContext(request, ...NOTIFICATION_ROLES);
-    const body = (await request.json()) as { id?: string; markAll?: boolean };
+    const body = (await readJsonBody(request)) as { id?: string; markAll?: boolean };
 
     const db = getAdminDb();
     const col = db
@@ -83,6 +86,8 @@ export async function PATCH(request: Request) {
 
     return NextResponse.json({ ok: true });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
