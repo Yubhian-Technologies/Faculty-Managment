@@ -41,7 +41,12 @@ export function useNotifications() {
   );
   const unreadCount = useMemo(() => notifications.filter((n) => !n.read).length, [notifications]);
 
+  // A read-only person (RESIGNED/RETIRED faculty) can see their notifications but cannot change anything -
+  // marking one read is a write the server refuses, so do not pretend it worked (and do not send it).
+  const readOnly = user?.readOnlyAccess === true;
+
   const markRead = async (notificationId: string) => {
+    if (readOnly) return;
     setRead((prev) => new Set(prev).add(notificationId));
     await collegeFetch("/api/college/notifications", {
       method: "PATCH",
@@ -51,6 +56,7 @@ export function useNotifications() {
   };
 
   const markAllRead = async () => {
+    if (readOnly) return;
     setRead(new Set(feed.map((n) => n.id)));
     await collegeFetch("/api/college/notifications", {
       method: "PATCH",

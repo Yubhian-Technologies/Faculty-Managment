@@ -9,6 +9,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
 import { normalizeAcademicProfile } from "@/lib/faculty/academicProfileCompat";
 import { migrateUserDoc, migrateFacultyDoc, migrateSupportingStaffDoc } from "@/lib/faculty/fieldRenames";
+import { isSingleSourceCollege, mergeFacultyWithLogin } from "@/lib/faculty/singleSource";
 import { withLegacyPersonalKeysDeleted } from "@/lib/faculty/legacyKeyDeletes";
 import { FieldValue } from "firebase-admin/firestore";
 import type { UserRole } from "@/types";
@@ -58,8 +59,10 @@ export async function GET(
         .where("userUid", "==", uid).limit(1).get();
       if (!linkedSnap.empty) {
         const linkedData = linkedSnap.docs[0].data();
-        const linkedLifted = linkedCollection === "facultyMembers" ? migrateFacultyDoc(linkedData) : migrateSupportingStaffDoc(linkedData);
-        return NextResponse.json({ user: { ...linkedLifted, ...user, recordId: linkedSnap.docs[0].id } });
+        if (linkedCollection === "facultyMembers") {
+          return NextResponse.json({ user: { ...mergeFacultyWithLogin(migrateFacultyDoc(linkedData), user, isSingleSourceCollege(collegeId)), recordId: linkedSnap.docs[0].id } });
+        }
+        return NextResponse.json({ user: { ...migrateSupportingStaffDoc(linkedData), ...user, recordId: linkedSnap.docs[0].id } });
       }
     }
 

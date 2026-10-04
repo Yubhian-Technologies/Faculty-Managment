@@ -22,7 +22,7 @@ import { useAuthStore } from "@/store/authStore";
 import { LEVEL_LABELS, ROLE_LABELS, ROLE_LEVEL, type UserRole } from "@/types/core";
 import type { OutgoingHolderAction, RoleSeat, RoleSeatHistoryEntry } from "@/types/roleSeats";
 
-interface Person { uid: string; name: string; email: string; role: string; storedRole?: string; department: string }
+interface Person { uid: string; name: string; email: string; role: string; storedRole?: string; department: string; facultyExited?: boolean }
 interface Dept { id: string; name: string }
 
 // Role Assignments: who sits in each seat (Principal, a department's HOD, Vice
@@ -301,6 +301,7 @@ function AssignDialog({
     const q = search.trim().toLowerCase();
     return people
       .filter((p) => p.uid !== seat?.holderUid)
+      .filter((p) => !p.facultyExited) // RESIGNED/RETIRED: read-only access, can't be given a role (the server refuses too)
       .filter((p) => !seat || canHoldSeat(p.role, seat.role))
       .filter((p) => !q || p.name.toLowerCase().includes(q) || p.email.toLowerCase().includes(q))
       .slice(0, 100);

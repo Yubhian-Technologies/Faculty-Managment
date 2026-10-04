@@ -11,6 +11,7 @@ import { degreeTypeError } from "@/lib/faculty/degreeType";
 import { withLegacyPersonalKeysDeleted } from "@/lib/faculty/legacyKeyDeletes";
 import { FieldValue } from "firebase-admin/firestore";
 import { setLinkedFacultyPhoto } from "@/lib/faculty/syncFacultyPhoto";
+import { hasLinkedFacultyRecord, isSingleSourceCollege, singleSourceBlockFor } from "@/lib/faculty/singleSource";
 
 // Fields a Principal/VP must never set about themselves via self-service edit -
 // salary/CTC belongs to the Accounts/Finance payroll domain, not a self-editable profile.
@@ -54,6 +55,19 @@ export async function PATCH(request: Request) {
     const userSnap = await userRef.get();
     if (!userSnap.exists) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
+    // Single source of truth (switch-gated, no-op elsewhere): a person who has a Faculty record keeps their
+    // profile there. Principal/VP are excluded - their own profile pages read and write this login doc, so
+    // there is no second copy to disagree with.
+    if (
+      isSingleSourceCollege(session.collegeId) && session.role !== "PRINCIPAL" && session.role !== "VICE_PRINCIPAL" &&
+      session.roles?.includes("PANEL_MEMBER")
+    ) {
+      const block = singleSourceBlockFor(body, userSnap.data() ?? {});
+      if (block && (await hasLinkedFacultyRecord(db, session.collegeId, session.uid))) {
+        return NextResponse.json({ error: block.message, code: "FACULTY_RECORD_IS_SOURCE", fields: block.fields }, { status: block.status });
+      }
     }
 
     const now = new Date();

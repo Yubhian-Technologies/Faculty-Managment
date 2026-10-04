@@ -6,6 +6,7 @@ import { convertLegacyAccounts } from "@/lib/roles/seats";
 import { NextResponse } from "next/server";
 import { requireCollegeMember, isDepartmentOffice } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { exitedFacultyUidsOrNone } from "@/lib/auth/readOnlyFacultyLookup";
 import { withAuthUser } from "@/lib/firebase/withAuthUser";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
 import { syncDepartmentHod, getHodDepartmentScope, canHodEditDepartment, facultyManageableDepartmentNames } from "@/lib/departments/scope";
@@ -115,6 +116,11 @@ export async function GET(request: Request) {
         users = [];
       }
     }
+
+    // Additive, read-only-access colleges only (zero reads elsewhere): flags people whose faculty record is
+    // RESIGNED/RETIRED so the Department Office and Sub-HOD pickers can leave them out. Nothing is removed here.
+    const exited = await exitedFacultyUidsOrNone(db, session.collegeId);
+    if (exited.size > 0) users = users.map((u) => (exited.has(u.uid) ? { ...u, facultyExited: true } : u));
 
     return NextResponse.json({ users });
   } catch (err) {

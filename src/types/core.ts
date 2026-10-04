@@ -405,6 +405,9 @@ export interface FMSUser {
   // they sign in normally but may only view their own profile and history. Derived
   // from facultyMembers.status on every session call - never stored on the user doc.
   readOnlyAccess?: boolean;
+  // Added by GET /api/college/users ONLY in a college with read-only faculty access switched on, for a person
+  // whose faculty record is RESIGNED/RETIRED - the Department Office / Sub-HOD pickers leave them out.
+  facultyExited?: boolean;
   // Denormalized from the seats this person holds (maintained by
   // lib/roles/seats.ts) - `seatRoles` is what guards and role lookups read.
   seatIds?: string[];

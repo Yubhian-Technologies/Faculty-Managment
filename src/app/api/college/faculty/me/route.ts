@@ -20,6 +20,7 @@ import { mobileNoFromBody } from "@/lib/faculty/mobileNo";
 import { FieldValue } from "firebase-admin/firestore";
 import { normalizeHighestQualification } from "@/lib/faculty/highestQualification";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
+import { isSingleSourceCollege } from "@/lib/faculty/singleSource";
 import type { TrainingEntry } from "@/types";
 
 const PROMOTION_KEYS = [PROMOTION_HISTORY_KEY]; // College Office-owned - see PATCH .../promotion-salary
@@ -69,9 +70,14 @@ export async function GET() {
         .where("facultyId", "==", facultyDoc.id)
         .get();
 
+      // Additive, switched-on colleges only: `editViaFacultyRecord` tells the shared My Profile edit page it may
+      // save through PATCH /api/college/faculty/me (needs the Faculty role this caller already holds) instead of
+      // the login-side users/me, so the edit lands on the record being shown. Absent everywhere else.
+      const editViaFacultyRecord = isSingleSourceCollege(session.collegeId) && (session.roles ?? []).includes("PANEL_MEMBER");
       return NextResponse.json({
         faculty: { id: facultyDoc.id, ...migrateFacultyDoc(facultyDoc.data()) },
         teachingAssignments: assignmentsSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
+        ...(editViaFacultyRecord ? { editViaFacultyRecord: true } : {}),
       });
     }
 

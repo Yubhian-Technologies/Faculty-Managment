@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { exitedFacultyUidsOrNone } from "@/lib/auth/readOnlyFacultyLookup";
 import { loadUnavailability } from "@/lib/leave/availability";
 import { handoverableRoles } from "@/lib/leave/roleDelegation";
 import { listDepartmentPeople } from "@/lib/leave/roleHandoverPool";
@@ -38,6 +39,9 @@ export async function GET(request: Request) {
     }
 
     let people = await listDepartmentPeople(db, session.collegeId, department, session.uid);
+    // Picker only: a RESIGNED/RETIRED person can no longer take over a role. No-op unless the switch is on.
+    const exited = await exitedFacultyUidsOrNone(db, session.collegeId);
+    if (exited.size > 0) people = people.filter((p) => !exited.has(p.uid));
     const fromISO = url.searchParams.get("fromDate");
     const toISO = url.searchParams.get("toDate");
     if (fromISO && toISO && toISO >= fromISO && people.length > 0) {

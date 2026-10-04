@@ -11,6 +11,7 @@ import { type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
 import { provisionCollegeUser, provisionLocationUser } from "@/lib/firestore/userProvisioning";
 import { normalizeAcademicProfile } from "@/lib/faculty/academicProfileCompat";
 import { migrateUserDoc, migrateFacultyDoc, migrateSupportingStaffDoc } from "@/lib/faculty/fieldRenames";
+import { isSingleSourceCollege, mergeFacultyWithLogin } from "@/lib/faculty/singleSource";
 import { PHONE_REGEX, EMAIL_REGEX } from "@/lib/validations";
 import type { UserRole } from "@/types";
 import { ROLE_SCOPE } from "@/types";
@@ -70,6 +71,7 @@ export async function GET(request: Request) {
     const staffUids = usersRaw.filter((u) => u.role === "COLLEGE_STAFF").map((u) => u.uid);
 
     let users: (Record<string, unknown> & { uid: string; role?: string })[];
+    const facultyWins = isSingleSourceCollege(collegeId);
 
     try {
       const panelMap = new Map<string, { data: Record<string, unknown>; id: string }>();
@@ -107,8 +109,8 @@ export async function GET(request: Request) {
         if (u.role === "PANEL_MEMBER") hit = panelMap.get(u.uid);
         else if (u.role === "COLLEGE_STAFF") hit = staffMap.get(u.uid);
         if (!hit) return u;
-        const lifted = u.role === "PANEL_MEMBER" ? migrateFacultyDoc(hit.data) : migrateSupportingStaffDoc(hit.data);
-        return { ...lifted, ...u, recordId: hit.id };
+        if (u.role === "PANEL_MEMBER") return { ...mergeFacultyWithLogin(migrateFacultyDoc(hit.data), u, facultyWins), recordId: hit.id };
+        return { ...migrateSupportingStaffDoc(hit.data), ...u, recordId: hit.id };
       });
     } catch (e) {
       console.warn("[admin/users GET] batched fetch failed, falling back to N+1:", e);
@@ -128,9 +130,8 @@ export async function GET(request: Request) {
             .get();
           if (linkedSnap.empty) return u;
           const linkedData = linkedSnap.docs[0].data();
-          const linkedLifted =
-            linkedCollection === "facultyMembers" ? migrateFacultyDoc(linkedData) : migrateSupportingStaffDoc(linkedData);
-          return { ...linkedLifted, ...u, recordId: linkedSnap.docs[0].id };
+          if (linkedCollection === "facultyMembers") return { ...mergeFacultyWithLogin(migrateFacultyDoc(linkedData), u, facultyWins), recordId: linkedSnap.docs[0].id };
+          return { ...migrateSupportingStaffDoc(linkedData), ...u, recordId: linkedSnap.docs[0].id };
         }),
       );
     }
