@@ -375,10 +375,13 @@ export function DegreeFields({
             onChange={(x) => onChange({ ...v, institutionName: x })}
           />
         )}
-        {/* Ph.D. only - the department the doctorate was pursued in; sits
-            directly before Place. */}
+        {/* Ph.D. only - the department the doctorate was pursued in, then the
+            thesis title; both sit directly before Place. */}
         {isDoctoral && (
-          <TextInput label="Name of the Department" value={v.departmentName} onChange={(x) => onChange({ ...v, departmentName: x })} placeholder="e.g. Computer Science and Engineering" />
+          <>
+            <TextInput label="Name of the Department" value={v.departmentName} onChange={(x) => onChange({ ...v, departmentName: x })} placeholder="e.g. Computer Science and Engineering" />
+            <TextInput label="Title of the Ph.D Thesis" value={v.thesisTitle} onChange={(x) => onChange({ ...v, thesisTitle: x })} placeholder="e.g. Deep Learning Approaches for Image Segmentation" />
+          </>
         )}
         <TextInput label="Place" value={v.place} onChange={(x) => onChange({ ...v, place: x })} placeholder="e.g. Bhimavaram" />
         {!isDoctoral && (
@@ -795,7 +798,7 @@ const PHD_MODE_VIEW_LABELS: Record<PhdMode, string> = { FULL_TIME: "Full-Time", 
 // calendar year for the edit form's number input, which must never be read
 // back as "this entry has data").
 const DEGREE_DATA_KEYS = [
-  "course", "branch", "specialization", "institutionName", "departmentName", "place", "percentageCgpa",
+  "course", "branch", "specialization", "institutionName", "departmentName", "thesisTitle", "place", "percentageCgpa",
   "hallTicketNumber", "certificateUrl", "domain", "board", "institutionType",
   "affiliatedUniversity", "status", "mode", "nameOfTheGuideSupervisor", "yearOfRegistration",
   "yearOfAward", "yearOfPassing", "degreeType",
@@ -852,6 +855,7 @@ export function DegreeView({
         <OptionalField label="Institution Name" value={degree?.institutionName} />
       )}
       {isDoctoral && <OptionalField label="Name of the Department" value={degree?.departmentName} />}
+      {isDoctoral && <OptionalField label="Title of the Ph.D Thesis" value={degree?.thesisTitle} />}
       <OptionalField label="Place" value={degree?.place} />
       {!isDoctoral && <OptionalField label="Percentage / CGPA" value={degree?.percentageCgpa} />}
       {isDoctoral && degree?.percentageCgpa && <OptionalField label="Percentage / CGPA (legacy)" value={degree.percentageCgpa} />}

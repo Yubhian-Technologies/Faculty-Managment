@@ -59,8 +59,8 @@ function degreeCells(d: DegreeDetail): string[] {
 // DegreeFields in ProfileFieldPrimitives.tsx) and Year of Registration/Name
 // of the Guide-Supervisor - shown instead of Year of Award while Pursuing.
 // `withDepartment` is true for Ph.D. entries only - they alone carry the Name of
-// the Department (placed just before Place, matching DOCTORAL_SUBFIELDS vs
-// POSTDOCTORAL_SUBFIELDS in csvColumns.ts).
+// the Department and the Title of the Ph.D Thesis (placed just before Place,
+// matching DOCTORAL_SUBFIELDS vs POSTDOCTORAL_SUBFIELDS in csvColumns.ts).
 function doctoralDegreeCells(d: DegreeDetail, withDepartment: boolean): string[] {
   return [
     d.specialization || d.branch || "", d.institutionName ?? "",
@@ -69,7 +69,7 @@ function doctoralDegreeCells(d: DegreeDetail, withDepartment: boolean): string[]
     d.yearOfRegistration ? String(d.yearOfRegistration) : "",
     d.nameOfTheGuideSupervisor ?? "",
     yearCell(d, true),
-    ...(withDepartment ? [d.departmentName ?? ""] : []),
+    ...(withDepartment ? [d.departmentName ?? "", d.thesisTitle ?? ""] : []),
     d.place ?? "", d.hallTicketNumber ?? "",
   ];
 }

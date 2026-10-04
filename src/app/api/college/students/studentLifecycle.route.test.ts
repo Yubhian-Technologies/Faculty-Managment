@@ -64,40 +64,115 @@ beforeEach(() => {
 
 const audits = () => [...h.db.docs.entries()].filter(([p]) => p.startsWith(`${C}/auditLogs/`)).map(([, d]) => d);
 
-describe("DELETE /students/[id] - archive, never erase (S5)", () => {
-  it("archives the student: gone from the roster, kept in archivedStudents, login disabled, audit written", async () => {
+describe("DELETE /students/[id] - permanent, complete, no archive", () => {
+  it("deletes the student completely: record, history, login (Auth + profiles) and roll registry entry - and keeps NO copy", async () => {
     const res = await deleteStudent(req(), params("s1"));
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ ok: true, archived: true });
+    expect(await res.json()).toEqual({ ok: true });
+
     expect(h.db.get(`${C}/students/s1`)).toBeUndefined();
-    expect(h.db.get(`${C}/archivedStudents/s1`)).toMatchObject({ name: "Anil", archiveReason: "REMOVED_BY_USER" });
-    expect(h.auth.users.get("u1")?.disabled).toBe(true);
-    expect(h.auth.calls.some((c) => c.fn === "deleteUser")).toBe(false);
-    expect(audits().some((a) => a.action === "STUDENT_ARCHIVED")).toBe(true);
+    expect([...h.db.docs.keys()].filter((k) => k.startsWith(`${C}/students/s1/`))).toEqual([]); // departmentHistory
+    expect(h.auth.users.has("u1")).toBe(false); // the Firebase Auth login is gone, not disabled
+    expect(h.db.get(`${C}/users/u1`)).toBeUndefined();
+    expect(h.db.get("systemUsers/u1")).toBeUndefined();
+    expect(h.db.get("studentUsernames/R1")).toBeUndefined(); // the roll is free again
+
+    // Nothing archived, anywhere.
+    expect([...h.db.docs.keys()].filter((k) => /archived/i.test(k))).toEqual([]);
+    // ...and no leftover document holds the student's personal data.
+    const everything = JSON.stringify([...h.db.docs.entries()]);
+    expect(everything).not.toContain("r1@students.internal");
+    expect(everything).not.toContain('"name":"Anil"');
   });
 
-  it("a student with an unreturned book answers 409 and nothing changes", async () => {
-    h.db.docs.set(`${C}/bookLoans/l1`, { studentId: "s1", status: "ACTIVE" });
+  it("the other students and everyone else's records are untouched", async () => {
+    await deleteStudent(req(), params("s1"));
+    expect(h.db.get(`${C}/students/s2`)).toBeDefined();
+    expect(h.db.get(`${C}/students/s4`)).toBeDefined();
+    expect(h.db.get(`${C}/users/u4`)).toBeDefined();
+    expect(h.db.get("studentUsernames/R4")).toBeDefined();
+    expect(h.auth.users.has("u4")).toBe(true);
+  });
+
+  it("a student with no login is deleted too (no Auth call), and a library book out no longer blocks it", async () => {
+    h.db.docs.set(`${C}/bookLoans/l1`, { studentId: "s2", status: "ACTIVE" });
+    h.db.docs.set("studentUsernames/R2", { collegeId: "c1", studentDocId: "s2", active: true, createdAt: new Date() });
+    const res = await deleteStudent(req(), params("s2"));
+    expect(res.status).toBe(200);
+    expect(h.db.get(`${C}/students/s2`)).toBeUndefined();
+    expect(h.db.get("studentUsernames/R2")).toBeUndefined();
+    expect(h.auth.calls.filter((c) => c.fn === "deleteUser")).toHaveLength(0);
+  });
+
+  it("records OTHER modules keep (attendance, library history) are not rewritten by this delete", async () => {
+    h.db.docs.set(`${C}/studentAttendance/a1`, { entries: [{ studentId: "s1", status: "PRESENT" }] });
+    h.db.docs.set(`${C}/bookLoans/l9`, { studentId: "s1", status: "RETURNED" });
+    await deleteStudent(req(), params("s1"));
+    expect(h.db.get(`${C}/studentAttendance/a1`)).toEqual({ entries: [{ studentId: "s1", status: "PRESENT" }] });
+    expect(h.db.get(`${C}/bookLoans/l9`)).toBeDefined();
+  });
+
+  it("never takes a STAFF profile with it, even if a uid were shared", async () => {
+    h.db.docs.set(`${C}/users/u1`, { uid: "u1", role: "HOD" });
+    h.db.docs.set("systemUsers/u1", { uid: "u1", role: "HOD" });
+    await deleteStudent(req(), params("s1"));
+    expect(h.db.get(`${C}/users/u1`)).toBeDefined();
+    expect(h.db.get("systemUsers/u1")).toBeDefined();
+    expect(h.db.get(`${C}/students/s1`)).toBeUndefined();
+  });
+
+  it("another student's registry entry for the same roll is never removed", async () => {
+    h.db.docs.set("studentUsernames/R1", { collegeId: "c2", studentDocId: "other", name: "Not Mine", active: true, createdAt: new Date() });
+    await deleteStudent(req(), params("s1"));
+    expect(h.db.get("studentUsernames/R1")).toMatchObject({ studentDocId: "other" });
+  });
+
+  it("if the login cannot be deleted NOTHING is deleted (500), and a retry then completes", async () => {
+    h.auth.failNext.deleteUser = new Error("auth hiccup");
     const res = await deleteStudent(req(), params("s1"));
-    expect(res.status).toBe(409);
-    expect((await res.json()).error).toMatch(/Anil/);
+    expect(res.status).toBe(500);
     expect(h.db.get(`${C}/students/s1`)).toBeDefined();
-    expect(h.db.get(`${C}/archivedStudents/s1`)).toBeUndefined();
+    expect(h.db.get("studentUsernames/R1")).toBeDefined();
+    expect(h.auth.users.has("u1")).toBe(true);
+
+    expect((await deleteStudent(req(), params("s1"))).status).toBe(200);
+    expect(h.db.get(`${C}/students/s1`)).toBeUndefined();
+    expect(h.auth.users.has("u1")).toBe(false);
+  });
+
+  it("an Auth user that is already gone does not stop the delete", async () => {
+    h.auth.users.delete("u1");
+    expect((await deleteStudent(req(), params("s1"))).status).toBe(200);
+    expect(h.db.get(`${C}/students/s1`)).toBeUndefined();
   });
 
   it("404 for an unknown student", async () => {
     expect((await deleteStudent(req(), params("nope"))).status).toBe(404);
   });
 
-  it("a faculty member in charge of the section can NOT remove a student any more (401/forbidden)", async () => {
-    h.session = { collegeId: "c1", uid: "f1", role: "PANEL_MEMBER" };
-    expect((await deleteStudent(req(), params("s1"))).status).toBe(401);
+  it("the faculty member IN CHARGE of the student's section can delete (as before); another faculty member cannot", async () => {
+    h.db.docs.set(`${C}/sections/y2A`, { ...h.db.get(`${C}/sections/y2A`)!, facultyInchargeUid: "t1" });
+    h.session = { collegeId: "c1", uid: "t2", role: "PANEL_MEMBER" };
+    expect((await deleteStudent(req(), params("s1"))).status).toBe(403);
     expect(h.db.get(`${C}/students/s1`)).toBeDefined();
+
+    h.session = { collegeId: "c1", uid: "t1", role: "PANEL_MEMBER" };
+    expect((await deleteStudent(req(), params("s1"))).status).toBe(200);
+    expect(h.db.get(`${C}/students/s1`)).toBeUndefined();
   });
 
-  it("unauthenticated -> 401", async () => {
+  it("an HOD, the Principal and the College Office can delete; other roles and no session cannot", async () => {
+    h.session = { collegeId: "c1", uid: "hod1", role: "HOD" };
+    expect((await deleteStudent(req(), params("s1"))).status).toBe(200);
+    h.session = { collegeId: "c1", uid: "p1", role: "PRINCIPAL" };
+    expect((await deleteStudent(req(), params("s2"))).status).toBe(200);
+    h.session = { collegeId: "c1", uid: "o1", role: "COLLEGE_OFFICE" };
+    expect((await deleteStudent(req(), params("s4"))).status).toBe(200);
+
+    h.session = { collegeId: "c1", uid: "lib1", role: "LIBRARY" };
+    expect((await deleteStudent(req(), params("s4"))).status).toBe(401);
     h.session = null;
-    expect((await deleteStudent(req(), params("s1"))).status).toBe(401);
+    expect((await deleteStudent(req(), params("s4"))).status).toBe(401);
   });
 });
 

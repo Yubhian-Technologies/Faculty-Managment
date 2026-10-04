@@ -1270,6 +1270,10 @@ export interface DegreeDetail {
   // of the university/institute the doctorate was pursued in. Optional, so
   // every record saved before this existed stays valid (it simply shows nothing).
   departmentName?: string;
+  // Doctoral (Ph.D.) only - UI label "Title of the Ph.D Thesis", shown between
+  // the department and Place. Optional for the same reason as departmentName:
+  // every record saved before this existed stays valid (it simply shows nothing).
+  thesisTitle?: string;
   place?: string; // city/town where the institute is located
   percentageCgpa: string;
   // "Year of Passing" everywhere except Doctoral/Post-Doctoral, which use

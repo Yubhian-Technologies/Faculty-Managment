@@ -28,10 +28,10 @@ function degreeCells(d: DegreeDetail | undefined): [string, string, string, stri
 
 // PhD entries take Specialization instead of Course/Branch/Percentage-CGPA (see
 // DegreeFields in ProfileFieldPrimitives.tsx) and use Year of Award.
-function phdDegreeCells(d: DegreeDetail | undefined): [string, string, string, string] {
-  if (!d) return ["", "", "", ""];
+function phdDegreeCells(d: DegreeDetail | undefined): [string, string, string, string, string] {
+  if (!d) return ["", "", "", "", ""];
   const year = degreeYear(d, true);
-  return [d.specialization ?? "", d.institutionName ?? "", year ? String(year) : "", d.departmentName ?? ""];
+  return [d.specialization ?? "", d.institutionName ?? "", year ? String(year) : "", d.departmentName ?? "", d.thesisTitle ?? ""];
 }
 
 function courseCells(courses: CourseAssignment[] | undefined, i: number): [string, string, string] {
@@ -77,7 +77,7 @@ function buildRow(rawUser: FMSUser): Record<string, string> {
   const p: Partial<FacultyProfileFields> = normalizeAcademicProfile(user.academicProfile) ?? {};
   const [ugDegree, ugUniv, ugPct, ugYear] = degreeCells(p.ugDetails);
   const [pgDegree, pgUniv, pgPct, pgYear] = degreeCells(p.pgDetails);
-  const [phdSpecialization, phdUniv, phdYear, phdDepartment] = phdDegreeCells(p.phdDetails);
+  const [phdSpecialization, phdUniv, phdYear, phdDepartment, phdThesisTitle] = phdDegreeCells(p.phdDetails);
 
   const row: Record<string, string> = {
     role: ROLE_LABELS[user.role] ?? s(user.role),
@@ -123,7 +123,7 @@ function buildRow(rawUser: FMSUser): Record<string, string> {
     highestQualification: s(p.highestQualification),
     ug_degreeAndBranch: ugDegree, ug_university: ugUniv, ug_percentage: ugPct, ug_year: ugYear,
     pg_degreeAndBranch: pgDegree, pg_university: pgUniv, pg_percentage: pgPct, pg_year: pgYear,
-    phd_specialization: phdSpecialization, phd_university: phdUniv, phd_department: phdDepartment, phd_year: phdYear,
+    phd_specialization: phdSpecialization, phd_university: phdUniv, phd_department: phdDepartment, phd_thesisTitle: phdThesisTitle, phd_year: phdYear,
     netSletSetGateOthers: s(p.netSletSetGateOthers === "YES" ? "Yes" : p.netSletSetGateOthers === "NO" ? "No" : undefined),
     qualifiedExam: s(p.qualifiedExam),
     examScore: s(p.examScore),

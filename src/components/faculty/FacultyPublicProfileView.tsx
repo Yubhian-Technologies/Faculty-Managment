@@ -33,6 +33,7 @@ export interface DegreeSummary {
   specialization?: string;
   institutionName: string;
   departmentName?: string; // Ph.D. entries only - "Name of the Department"
+  thesisTitle?: string; // Ph.D. entries only - "Title of the Ph.D Thesis"
   // Exactly one is set: yearOfAward for Doctoral/Post-Doctoral entries,
   // yearOfPassing for everything else (see publicDegree in the public API route).
   yearOfPassing?: number;
@@ -100,7 +101,7 @@ function degreeTitle(d?: DegreeSummary) {
 function degreeMeta(d?: DegreeSummary) {
   if (!d) return null;
   const year = d.yearOfAward ?? d.yearOfPassing;
-  return [d.departmentName, d.institutionName, year].filter(Boolean).join(" · ");
+  return [d.departmentName, d.institutionName, year, d.thesisTitle ? `Thesis: ${d.thesisTitle}` : ""].filter(Boolean).join(" · ");
 }
 
 // How long a single prior posting lasted, counted from the very period the

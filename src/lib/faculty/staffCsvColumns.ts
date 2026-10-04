@@ -63,6 +63,7 @@ export const STAFF_COLUMNS: StaffCsvColumn[] = [
   { key: "phd_specialization",     label: "PhD Specialization" },
   { key: "phd_university",         label: "PhD Institution Name" },
   { key: "phd_department",         label: "PhD Name of the Department" },
+  { key: "phd_thesisTitle",        label: "PhD Title of the Ph.D Thesis" },
   { key: "phd_year",               label: "PhD Year of Award" },
   { key: "netSletSetGateOthers",   label: "NET/SLET/SET/GATE/Others" },
   { key: "qualifiedExam",          label: "Qualified Exam" },

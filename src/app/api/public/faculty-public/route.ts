@@ -39,8 +39,9 @@ function publicDegree(d: DegreeDetail | undefined, doctoral: boolean) {
     branch: d.branch,
     specialization: d.specialization,
     institutionName: d.institutionName,
-    // Doctoral entries only (Ph.D. - the department it was pursued in).
-    ...(doctoral ? { departmentName: d.departmentName, yearOfAward: d.yearOfAward } : { yearOfPassing: d.yearOfPassing }),
+    // Doctoral entries only (Ph.D. - the department it was pursued in and the
+    // thesis title).
+    ...(doctoral ? { departmentName: d.departmentName, thesisTitle: d.thesisTitle, yearOfAward: d.yearOfAward } : { yearOfPassing: d.yearOfPassing }),
   };
 }
 

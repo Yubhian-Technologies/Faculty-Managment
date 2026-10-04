@@ -86,9 +86,9 @@ const SCHOOL_DEGREE_SUBFIELDS = ["Course", "Board", "Institution Name", "Percent
 // ProfileFieldPrimitives.tsx) and Year of Registration/Name of the
 // Guide-Supervisor (shown while Pursuing, instead of Year of Award).
 const POSTDOCTORAL_SUBFIELDS = ["Specialization", "Institution Name", "Status", "Mode", "Year of Registration", "Name of the Guide / Supervisor", "Year of Award", "Place", "Hall Ticket Number"];
-// Ph.D. entries additionally carry the Name of the Department, just before Place
-// (Postdoctoral entries have no such field).
-const DOCTORAL_SUBFIELDS = [...POSTDOCTORAL_SUBFIELDS.slice(0, 7), "Name of the Department", ...POSTDOCTORAL_SUBFIELDS.slice(7)];
+// Ph.D. entries additionally carry the Name of the Department and the Title of
+// the Ph.D Thesis, just before Place (Postdoctoral entries have neither).
+const DOCTORAL_SUBFIELDS = [...POSTDOCTORAL_SUBFIELDS.slice(0, 7), "Name of the Department", "Title of the Ph.D Thesis", ...POSTDOCTORAL_SUBFIELDS.slice(7)];
 // Roles/Responsibilities is a per-entry field, labelled per experience type.
 const experienceSubfields = (kind: "Academic" | "Industry" | "Research") =>
   ["Institution Name", "Place of the University/College", "Designation", "From Date", "To Date", "Joining Salary", "Leaving Salary", `${kind} Roles/Responsibilities`, "Reason for Leaving", "NOC Obtained"];

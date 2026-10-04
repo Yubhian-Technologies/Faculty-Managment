@@ -147,34 +147,71 @@ describe("POST /students/[id]/reset-login-password", () => {
   });
 });
 
-describe("POST /students/bulk-delete (archive)", () => {
-  it("archives the whole selection, reports blocked/skipped/failed separately, erases nothing", async () => {
-    h.db.docs.set(`${C}/bookLoans/l1`, { studentId: "s2", status: "ACTIVE" });
+describe("POST /students/bulk-delete - permanent, complete, no archive", () => {
+  const withLogin = (docId: string, uid: string, roll: string, name: string) => {
+    h.auth.users.set(uid, { uid, email: `${roll.toLowerCase()}@students.internal`, password: "pw", disabled: false, customClaims: { role: "STUDENT" } });
+    h.db.docs.set(`${C}/students/${docId}`, { name, rollNumber: roll, status: "REGULAR", uid, loginEmail: `${roll.toLowerCase()}@students.internal` });
+    h.db.docs.set(`${C}/students/${docId}/departmentHistory/h1`, { department: "CSE" });
+    h.db.docs.set(`${C}/users/${uid}`, { uid, role: "STUDENT" });
+    h.db.docs.set(`systemUsers/${uid}`, { uid, role: "STUDENT" });
+    h.db.docs.set(`studentUsernames/${roll}`, { uid, collegeId: "c1", studentDocId: docId, loginEmail: `${roll.toLowerCase()}@students.internal`, active: true });
+  };
+
+  it("deletes the whole selection completely - records, history, logins, profiles, registry - keeping no copy", async () => {
+    withLogin("s1", "u1", "R1", "Anil");
+    withLogin("s2", "u2", "R2", "Bala");
     const res = await bulkDelete(req({ studentIds: ["s1", "s2", "ghost", "s1"] }));
     expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body).toMatchObject({ ok: true, deletedCount: 1, archivedCount: 1, skipped: ["ghost"], failed: [] });
-    expect(body.blocked).toHaveLength(1);
-    expect(body.blocked[0].id).toBe("s2");
+    expect(await res.json()).toEqual({ ok: true, deletedCount: 2, skipped: ["ghost"], failed: [] });
 
-    expect(h.db.get(`${C}/students/s1`)).toBeUndefined();
-    expect(h.db.get(`${C}/archivedStudents/s1`)).toMatchObject({ archiveReason: "BULK_REMOVED_BY_USER" });
-    expect(h.db.get(`${C}/students/s2`)).toBeDefined(); // blocked -> untouched
+    for (const [id, uid, roll] of [["s1", "u1", "R1"], ["s2", "u2", "R2"]]) {
+      expect(h.db.get(`${C}/students/${id}`)).toBeUndefined();
+      expect(h.db.get(`${C}/students/${id}/departmentHistory/h1`)).toBeUndefined();
+      expect(h.db.get(`${C}/users/${uid}`)).toBeUndefined();
+      expect(h.db.get(`systemUsers/${uid}`)).toBeUndefined();
+      expect(h.db.get(`studentUsernames/${roll}`)).toBeUndefined();
+      expect(h.auth.users.has(uid)).toBe(false);
+    }
+    expect([...h.db.docs.keys()].filter((k) => /archived/i.test(k))).toEqual([]);
+    expect(JSON.stringify([...h.db.docs.entries()])).not.toMatch(/Anil|Bala/);
   });
 
-  it("one student failing does not stop the others, and is reported for a retry", async () => {
-    h.auth.users.set("u1", { uid: "u1", email: "a@students.internal", password: "p", disabled: false, customClaims: {} });
-    h.db.docs.set(`${C}/students/s1`, { ...h.db.get(`${C}/students/s1`)!, uid: "u1", loginEmail: "a@students.internal" });
-    h.auth.failNext.updateUser = new Error("auth hiccup");
-    const res = await bulkDelete(req({ studentIds: ["s1", "s2"] }));
-    const body = await res.json();
-    expect(body.failed).toHaveLength(1);
-    expect(body.archivedCount).toBe(1);
-    // The failed one is still live and can simply be removed again.
+  it("students outside the selection are untouched", async () => {
+    withLogin("s1", "u1", "R1", "Anil");
+    const res = await bulkDelete(req({ studentIds: ["s1"] }));
+    expect((await res.json()).deletedCount).toBe(1);
+    expect(h.db.get(`${C}/students/s2`)).toBeDefined();
+    expect(h.db.get(`${C}/students/noroll`)).toBeDefined();
+  });
+
+  it("a library book out does not block it any more", async () => {
+    h.db.docs.set(`${C}/bookLoans/l1`, { studentId: "s2", status: "ACTIVE" });
+    const body = await (await bulkDelete(req({ studentIds: ["s2"] }))).json();
+    expect(body.deletedCount).toBe(1);
+    expect(h.db.get(`${C}/students/s2`)).toBeUndefined();
+  });
+
+  it("a student whose login cannot be deleted is left fully intact and reported; the others are still deleted; a retry completes", async () => {
+    withLogin("s1", "u1", "R1", "Anil");
+    h.auth.failNext.deleteUser = new Error("auth hiccup");
+    const body = await (await bulkDelete(req({ studentIds: ["s1", "s2"] }))).json();
+    expect(body).toMatchObject({ deletedCount: 1, failed: ["s1"] });
     expect(h.db.get(`${C}/students/s1`)).toBeDefined();
+    expect(h.db.get("studentUsernames/R1")).toBeDefined();
+    expect(h.auth.users.has("u1")).toBe(true);
+    expect(h.db.get(`${C}/students/s2`)).toBeUndefined();
+
     const retry = await (await bulkDelete(req({ studentIds: ["s1"] }))).json();
-    expect(retry.archivedCount).toBe(1);
+    expect(retry).toMatchObject({ deletedCount: 1, failed: [] });
     expect(h.db.get(`${C}/students/s1`)).toBeUndefined();
+    expect(h.auth.users.has("u1")).toBe(false);
+  });
+
+  it("writes one audit entry with the counts (and no student data)", async () => {
+    await bulkDelete(req({ studentIds: ["s1", "s2", "ghost"] }));
+    const audits = [...h.db.docs.entries()].filter(([p, d]) => p.startsWith(`${C}/auditLogs/`) && d.action === "STUDENTS_BULK_DELETED");
+    expect(audits).toHaveLength(1);
+    expect(audits[0][1].details).toEqual({ count: 2, skipped: 1 });
   });
 
   it("validates input and role", async () => {
