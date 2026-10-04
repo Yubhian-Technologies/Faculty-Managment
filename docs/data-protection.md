@@ -16,11 +16,7 @@ All of it is stored in plain form in Firestore. Encryption at rest is Google's d
 - **API routes:** each route self-guards through `src/lib/auth/verifySession.ts` and scopes by department with `src/lib/departments/scope.ts`. Role projections for lists are in `src/lib/students/listProjection.ts`.
 - **Face descriptors:** returned only by the attendance routes that need them for matching; never send them to a list view.
 
-## Masking
-`src/lib/privacy/mask.ts` provides `maskTail`, `maskAadhaar` and `maskSensitiveIds`. Use them in any list, summary or export for a role that doesn't need the full number. The stored value is never changed.
-
 ## To do next (not yet done)
-1. Run `maskSensitiveIds` in list/export routes for roles other than HR/Principal, one route at a time, with a test each.
-2. Decide a retention period for face descriptors of people who have left, and a deletion job.
-3. Consider field-level encryption for Aadhaar and bank numbers.
-4. Log reads of full Aadhaar/PAN/bank values to the audit log.
+1. Decide a retention period for face descriptors of people who have left, and a deletion job.
+2. Consider field-level encryption for Aadhaar and bank numbers.
+3. Log reads of full Aadhaar/PAN/bank values to the audit log.
