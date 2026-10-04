@@ -38,6 +38,7 @@ export async function syncApprovedLeaveToAttendance(
       facultyName: req.employeeName,
       department: req.department ?? "",
       date: day,
+      dateKey: isoDateKey(day),
       status: "ON_LEAVE",
       source: "SYSTEM",
       leaveApplicationId,

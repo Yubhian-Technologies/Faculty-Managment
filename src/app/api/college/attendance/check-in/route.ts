@@ -102,6 +102,7 @@ export async function POST(request: Request) {
           facultyName: user?.name ?? "",
           department: user?.department ?? "",
           date,
+          dateKey: docSuffix,
           status: "PRESENT",
           checkIn,
           source: "BIOMETRIC",

@@ -188,6 +188,7 @@ export async function POST(request: Request) {
         facultyName: target.name ?? "",
         department: target.department ?? "",
         date: docDate,
+        dateKey: docSuffix,
         createdAt: now,
         ...update,
       });

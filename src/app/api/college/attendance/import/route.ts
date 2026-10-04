@@ -210,7 +210,7 @@ export async function POST(request: Request) {
       }
       batch.set(collegeRef.collection("attendanceRecords").doc(`${vr.uid}_${vr.docSuffix}`), {
         collegeId, facultyId: vr.uid, facultyName: vr.name, department: vr.department,
-        date: vr.date, status: vr.status,
+        date: vr.date, dateKey: vr.docSuffix, status: vr.status,
         ...(vr.checkIn ? { checkIn: vr.checkIn } : {}),
         ...(vr.checkOut ? { checkOut: vr.checkOut } : {}),
         source: "IMPORTED", markedBy: session.uid,
