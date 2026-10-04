@@ -2,11 +2,13 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import { ArrowLeft, CalendarClock, RefreshCw, CheckCircle2, XCircle } from "lucide-react";
+import { ArrowLeft, CalendarClock, CheckCircle2, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/shared/DataTable";
 import { toast } from "@/hooks/useToast";
+import { useAppliedFilters } from "@/hooks/useAppliedFilters";
+import { LoadButton } from "@/components/shared/LoadButton";
 import type { LeaveRequest as LocationLeaveRequest } from "@/types/locationStaff";
 
 const LEAVE_TYPE_LABELS: Record<string, string> = { CL: "Casual", EL: "Earned", SL: "Sick", PL: "Privileged", OTHER: "Other" };
@@ -16,11 +18,13 @@ export default function LeavePage() {
   const [leaveRequests, setLeaveRequests] = useState<LocationLeaveRequest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState("PENDING");
+  // Status chips edit a draft; the list is fetched when Load is clicked.
+  const { applied, dirty, load } = useAppliedFilters({ filterStatus });
 
   const loadLeave = useCallback(async () => {
     setIsLoading(true);
     try {
-      const params = new URLSearchParams({ status: filterStatus });
+      const params = new URLSearchParams({ status: applied.filterStatus });
       const res = await fetch(`/api/location/leave?${params.toString()}`);
       if (res.ok) {
         const d = await res.json() as { leaveRequests: LocationLeaveRequest[] };
@@ -31,7 +35,7 @@ export default function LeavePage() {
     } finally {
       setIsLoading(false);
     }
-  }, [filterStatus]);
+  }, [applied]);
 
   useEffect(() => { loadLeave(); }, [loadLeave]);
 
@@ -73,7 +77,7 @@ export default function LeavePage() {
             {s === "ALL" ? "All" : s}
           </Button>
         ))}
-        <Button variant="outline" size="sm" className="h-8 text-xs rounded-full px-3" onClick={loadLeave}><RefreshCw className="h-3 w-3 mr-1" /> Refresh</Button>
+        <LoadButton dirty={dirty} onClick={load} loading={isLoading} className="h-8 text-xs rounded-full px-3" />
       </div>
 
       {isLoading ? (

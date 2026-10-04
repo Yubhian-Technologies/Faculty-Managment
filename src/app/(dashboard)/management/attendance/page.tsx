@@ -1,5 +1,7 @@
 "use client";
 
+import { useAppliedFilters } from "@/hooks/useAppliedFilters";
+import { LoadButton } from "@/components/shared/LoadButton";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ShieldCheck, CalendarDays, Download } from "lucide-react";
@@ -159,6 +161,9 @@ function RosterTable({ rows, monthlyViewHref, monthlyViewBasePath }: { rows: Row
 // attendance mechanism.
 export default function ManagementAttendancePage() {
   const [date, setDate] = useState(todayISO());
+  // The date edits a draft; the Principal / Vice Principal / department rows for it load on Load.
+  const { applied, dirty, load: applyDate } = useAppliedFilters({ date });
+  const appliedDate = applied.date;
 
   const [locations, setLocations] = useState<Location[]>([]);
   const [selectedLocationId, setSelectedLocationId] = useState("");
@@ -296,14 +301,14 @@ export default function ManagementAttendancePage() {
     let cancelled = false;
     void (async () => {
       if (!selectedCollegeId || !selectedPrincipalUid || !principal) { setPrincipalRow(null); return; }
-      const [y, m] = date.split("-").map(Number);
+      const [y, m] = appliedDate.split("-").map(Number);
       fetch(`/api/management/colleges/${selectedCollegeId}/principal-attendance?year=${y}&month=${m}`)
         .then((r) => r.json() as Promise<{ records: (AttendanceRecord & { id: string })[]; registered?: boolean }>)
         .then((d) => {
           if (cancelled) return;
           const rec = (d.records ?? []).find((r) => {
             const rd = toDate(r.date);
-            return rd ? dateKey(rd) === date : false;
+            return rd ? dateKey(rd) === appliedDate : false;
           });
           setPrincipalRow({
             uid: principal.uid,
@@ -320,21 +325,21 @@ export default function ManagementAttendancePage() {
         .catch(() => { if (!cancelled) setPrincipalRow(null); });
     })();
     return () => { cancelled = true; };
-  }, [selectedCollegeId, selectedPrincipalUid, principal, date]);
+  }, [selectedCollegeId, selectedPrincipalUid, principal, appliedDate, applied]);
 
   // Vice Principal's own attendance for the selected date. Same race guard.
   useEffect(() => {
     let cancelled = false;
     void (async () => {
       if (!selectedCollegeId || !vicePrincipal) { setVicePrincipalRow(null); return; }
-      const [y, m] = date.split("-").map(Number);
+      const [y, m] = appliedDate.split("-").map(Number);
       fetch(`/api/management/colleges/${selectedCollegeId}/vice-principal-attendance?year=${y}&month=${m}`)
         .then((r) => r.json() as Promise<{ records: (AttendanceRecord & { id: string })[]; registered?: boolean }>)
         .then((d) => {
           if (cancelled) return;
           const rec = (d.records ?? []).find((r) => {
             const rd = toDate(r.date);
-            return rd ? dateKey(rd) === date : false;
+            return rd ? dateKey(rd) === appliedDate : false;
           });
           setVicePrincipalRow({
             uid: vicePrincipal.uid,
@@ -351,7 +356,7 @@ export default function ManagementAttendancePage() {
         .catch(() => { if (!cancelled) setVicePrincipalRow(null); });
     })();
     return () => { cancelled = true; };
-  }, [selectedCollegeId, vicePrincipal, date]);
+  }, [selectedCollegeId, vicePrincipal, appliedDate, applied]);
 
   const selectedDepartment = departments.find((d) => d.id === selectedDepartmentId) ?? null;
   const selectedDepartmentName = selectedDepartment?.name ?? "";
@@ -411,14 +416,14 @@ export default function ManagementAttendancePage() {
     void (async () => {
       if (!selectedCollegeId || !selectedDepartmentName) { setDeptRoster([]); return; }
       setIsLoadingDeptRoster(true);
-      fetch(`/api/management/colleges/${selectedCollegeId}/department-attendance?department=${encodeURIComponent(selectedDepartmentName)}&date=${date}`)
+      fetch(`/api/management/colleges/${selectedCollegeId}/department-attendance?department=${encodeURIComponent(selectedDepartmentName)}&date=${appliedDate}`)
         .then((r) => r.json() as Promise<{ roster: DeptRosterEntry[] }>)
         .then((d) => { if (!cancelled) setDeptRoster(d.roster ?? []); })
         .catch(() => { if (!cancelled) setDeptRoster([]); })
         .finally(() => { if (!cancelled) setIsLoadingDeptRoster(false); });
     })();
     return () => { cancelled = true; };
-  }, [selectedCollegeId, selectedDepartmentName, date]);
+  }, [selectedCollegeId, selectedDepartmentName, appliedDate, applied]);
 
   const selectedCourse = courses.find((c) => c.id === selectedCourseId) ?? null;
   const hodRow = deptRoster.find((r) => r.role === "HOD") ?? null;
@@ -436,6 +441,7 @@ export default function ManagementAttendancePage() {
             <div className="space-y-2">
               <Label htmlFor="mgmt-date">Date</Label>
               <Input id="mgmt-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-44" />
+              <LoadButton dirty={dirty} onClick={applyDate} className="mt-2" />
             </div>
 
             <div className="space-y-2">

@@ -1,5 +1,7 @@
 "use client";
 
+import { useAppliedFilters } from "@/hooks/useAppliedFilters";
+import { LoadButton } from "@/components/shared/LoadButton";
 import { useEffect, useState, useCallback } from "react";
 import { CalendarDays, Info, LogIn, LogOut, ScanFace } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -44,6 +46,8 @@ export default function PrincipalAttendancePage() {
   const now = new Date();
   const [month, setMonth] = useState<number>(now.getMonth() + 1);
   const [year, setYear] = useState<number>(now.getFullYear());
+  // Month and year edit a draft; the records are fetched when Load is clicked.
+  const { applied, dirty, load: applyFilters } = useAppliedFilters({ year, month });
   const [summary, setSummary] = useState<AttendanceSummary | null>(null);
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -87,8 +91,8 @@ export default function PrincipalAttendancePage() {
   }, []);
 
   useEffect(() => {
-    void (async () => { await load(year, month); })();
-  }, [load, year, month]);
+    void (async () => { await load(applied.year, applied.month); })();
+  }, [load, applied]);
 
   useEffect(() => {
     void (async () => { await loadFaceRegistration(); })();
@@ -98,7 +102,7 @@ export default function PrincipalAttendancePage() {
     void (async () => { await loadTodayStatus(); })();
   }, [loadTodayStatus]);
 
-  const isCurrentMonth = year === now.getFullYear() && month === now.getMonth() + 1;
+  const isCurrentMonth = applied.year === now.getFullYear() && applied.month === now.getMonth() + 1;
   const todayRecord = isCurrentMonth
     ? records.find((rec) => toDate(rec.date)?.toDateString() === now.toDateString())
     : undefined;
@@ -192,14 +196,7 @@ export default function PrincipalAttendancePage() {
           </SelectContent>
         </Select>
 
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => void load(year, month)}
-          disabled={isLoading}
-        >
-          {isLoading ? "Loading…" : "Refresh"}
-        </Button>
+        <LoadButton dirty={dirty} onClick={applyFilters} loading={isLoading} />
       </div>
 
       {noData && (
@@ -311,7 +308,7 @@ export default function PrincipalAttendancePage() {
             if (dialogMode === "register") {
               void loadFaceRegistration();
             } else {
-              void load(year, month);
+              void load(applied.year, applied.month);
             }
           }}
         />

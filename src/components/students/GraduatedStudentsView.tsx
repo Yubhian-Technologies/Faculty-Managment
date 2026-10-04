@@ -1,5 +1,7 @@
 "use client";
 
+import { useAppliedFilters } from "@/hooks/useAppliedFilters";
+import { LoadButton } from "@/components/shared/LoadButton";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { GraduationCap, Search, Users } from "lucide-react";
@@ -50,10 +52,10 @@ export function GraduatedStudentsView({ showHeader = true, studentDetailHref }: 
   const [isLoading, setIsLoading] = useState(true);
   const [isFetching, setIsFetching] = useState(false);
   const [search, setSearch] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
-  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [courseFilter, setCourseFilter] = useState("all");
   const [batchFilter, setBatchFilter] = useState("all");
+  // Search and filters edit a draft; the list is fetched when Load is clicked (or Enter in search).
+  const { applied, dirty, load } = useAppliedFilters({ search, courseFilter, batchFilter });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
 
@@ -70,9 +72,10 @@ export function GraduatedStudentsView({ showHeader = true, studentDetailHref }: 
     setIsFetching(true);
     try {
       const params = new URLSearchParams({ graduates: "1", page: "1", pageSize: String(pageSizeRef.current) });
-      if (debouncedSearch) params.set("search", debouncedSearch);
-      if (courseFilter !== "all") params.set("course", courseFilter);
-      if (batchFilter !== "all") params.set("batch", batchFilter);
+      const appliedSearch = applied.search.trim().toLowerCase();
+      if (appliedSearch) params.set("search", appliedSearch);
+      if (applied.courseFilter !== "all") params.set("course", applied.courseFilter);
+      if (applied.batchFilter !== "all") params.set("batch", applied.batchFilter);
       const res = await fetch(`/api/college/students?${params.toString()}`);
       const json = await res.json() as GraduatesResponse;
       if (seq !== requestSeq.current) return; // a newer search/filter superseded this one
@@ -96,7 +99,7 @@ export function GraduatedStudentsView({ showHeader = true, studentDetailHref }: 
         setIsLoading(false);
       }
     }
-  }, [debouncedSearch, courseFilter, batchFilter]);
+  }, [applied]);
 
   // Wrapped so the loader's setState calls aren't reachable synchronously from
   // the effect body (react-hooks/set-state-in-effect).
@@ -130,12 +133,6 @@ export function GraduatedStudentsView({ showHeader = true, studentDetailHref }: 
     setStudents(ids.map((id) => rowCache.current.get(id)).filter((r): r is StudentListItem => !!r));
     setPage(nextPage);
     setPageSize(nextSize);
-  }
-
-  function onSearchChange(value: string) {
-    setSearch(value);
-    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
-    searchDebounceRef.current = setTimeout(() => setDebouncedSearch(value.trim().toLowerCase()), 350);
   }
 
   // Course → Batch → students, both levels sorted for a stable, scannable
@@ -183,7 +180,8 @@ export function GraduatedStudentsView({ showHeader = true, studentDetailHref }: 
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             value={search}
-            onChange={(e) => onSearchChange(e.target.value)}
+            onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") load(); }}
             placeholder="Search by name, roll number or department"
             className="pl-9"
           />
@@ -202,6 +200,7 @@ export function GraduatedStudentsView({ showHeader = true, studentDetailHref }: 
             {facets.batches.map((b) => <SelectItem key={b} value={b}>{b}</SelectItem>)}
           </SelectContent>
         </Select>
+        <LoadButton dirty={dirty} onClick={load} loading={isFetching} />
       </div>
 
       {isLoading ? (
