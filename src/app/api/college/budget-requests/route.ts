@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { findUsersSnapshot } from "@/lib/roles/findUsersByRoles";
 import { NextResponse } from "next/server";
@@ -151,15 +152,7 @@ export async function POST(request: Request) {
           updatedAt: now,
         });
 
-      await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-        collegeId: session.collegeId,
-        action: "BUDGET_REQUEST_SUBMITTED",
-        performedBy: session.uid,
-        performedByName: requesterName,
-        targetId: ref.id,
-        details: { title, department, isEmergency: true, emergencyType },
-        timestamp: now,
-      });
+      await writeAuditLogSafe(db, session.collegeId, { action: "BUDGET_REQUEST_SUBMITTED", performedBy: session.uid, performedByName: requesterName, targetId: ref.id, details: { title, department, isEmergency: true, emergencyType } });
 
       // Nothing to notify - Management works pull-style (visits the page to see
       // what's pending), since notifications are gated on collegeId and MANAGEMENT
@@ -200,15 +193,7 @@ export async function POST(request: Request) {
         updatedAt: now,
       });
 
-    await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-      collegeId: session.collegeId,
-      action: "BUDGET_REQUEST_SUBMITTED",
-      performedBy: session.uid,
-      performedByName: hodName,
-      targetId: ref.id,
-      details: { title, department },
-      timestamp: now,
-    });
+    await writeAuditLogSafe(db, session.collegeId, { action: "BUDGET_REQUEST_SUBMITTED", performedBy: session.uid, performedByName: hodName, targetId: ref.id, details: { title, department } });
 
     const principalsSnap = await findUsersSnapshot(db, session.collegeId, ["PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_ADMIN"]);
 

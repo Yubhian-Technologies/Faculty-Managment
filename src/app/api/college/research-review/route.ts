@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
@@ -164,15 +165,7 @@ export async function PATCH(request: Request) {
 
     await ref.update(updates);
 
-    await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-      collegeId: session.collegeId,
-      action: "RD_COORDINATOR_REVIEWED",
-      performedBy: session.uid,
-      performedByName: coordinatorName,
-      targetId: body.id,
-      details: { module: body.module, title, action: body.action, ...(editedFields.length ? { edited: editedFields } : {}) },
-      timestamp: now,
-    });
+    await writeAuditLogSafe(db, session.collegeId, { action: "RD_COORDINATOR_REVIEWED", performedBy: session.uid, performedByName: coordinatorName, targetId: body.id, details: { module: body.module, title, action: body.action, ...(editedFields.length ? { edited: editedFields } : {}) } });
 
     if (body.action === "FORWARD") {
       await notifyRole(

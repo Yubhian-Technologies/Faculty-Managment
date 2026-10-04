@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { findUsersSnapshot } from "@/lib/roles/findUsersByRoles";
 import { NextResponse } from "next/server";
@@ -193,15 +194,7 @@ export async function POST(request: Request) {
     }
     await notifBatch.commit();
 
-    await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-      collegeId: session.collegeId,
-      action: "HIRING_BATCH_CREATED",
-      performedBy: session.uid,
-      performedByName: hodName,
-      targetId: ref.id,
-      details: { position, department, candidateCount: applicationIds.length },
-      timestamp: now,
-    });
+    await writeAuditLogSafe(db, session.collegeId, { action: "HIRING_BATCH_CREATED", performedBy: session.uid, performedByName: hodName, targetId: ref.id, details: { position, department, candidateCount: applicationIds.length } });
 
     return NextResponse.json({ id: ref.id }, { status: 201 });
   } catch (err) {

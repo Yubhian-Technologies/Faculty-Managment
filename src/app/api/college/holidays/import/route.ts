@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { ChunkedBatch } from "@/lib/firestore/chunkedBatch";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
@@ -93,13 +94,7 @@ export async function POST(request: Request) {
     const created = toCreate.length;
 
     if (created > 0) {
-      await db.collection("colleges").doc(collegeId).collection("auditLogs").add({
-        collegeId,
-        action: "HOLIDAYS_IMPORTED",
-        performedBy: session.uid,
-        details: { created, failed: failed.length },
-        timestamp: now,
-      });
+      await writeAuditLogSafe(db, collegeId, { action: "HOLIDAYS_IMPORTED", performedBy: session.uid, details: { created, failed: failed.length } });
     }
 
     return NextResponse.json({ created, failed }, { status: 201 });

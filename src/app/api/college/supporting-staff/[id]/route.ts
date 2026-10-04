@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { isEmployeeIdReserved, reserveEmployeeId } from "@/lib/firestore/employeeIdKeys";
 import { NextResponse } from "next/server";
@@ -395,15 +396,7 @@ export async function DELETE(
       actorName = (actorSnap.data() as { name?: string } | undefined)?.name ?? "Unknown";
     } catch { /* best-effort */ }
 
-    await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-      collegeId: session.collegeId,
-      action: "SUPPORTING_STAFF_DELETED",
-      performedBy: session.uid,
-      performedByName: actorName,
-      targetId: id,
-      details: { name: supportingStaffDisplayName(staffData) },
-      timestamp: new Date(),
-    });
+    await writeAuditLogSafe(db, session.collegeId, { action: "SUPPORTING_STAFF_DELETED", performedBy: session.uid, performedByName: actorName, targetId: id, details: { name: supportingStaffDisplayName(staffData) } });
 
     return NextResponse.json({ success: true });
   } catch (err) {

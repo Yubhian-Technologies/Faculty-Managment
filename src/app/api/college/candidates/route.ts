@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
@@ -137,15 +138,7 @@ export async function POST(request: Request) {
         updatedAt: now,
       });
 
-    await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-      collegeId: session.collegeId,
-      action: "CANDIDATE_ADDED",
-      performedBy: session.uid,
-      performedByName: addedByName,
-      targetId: ref.id,
-      details: { name, email },
-      timestamp: now,
-    });
+    await writeAuditLogSafe(db, session.collegeId, { action: "CANDIDATE_ADDED", performedBy: session.uid, performedByName: addedByName, targetId: ref.id, details: { name, email } });
 
     return NextResponse.json({ id: ref.id }, { status: 201 });
   } catch (err) {

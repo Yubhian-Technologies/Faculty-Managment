@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
@@ -93,15 +94,7 @@ export async function POST(request: Request) {
 
     await docRef.set(letter);
 
-    await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-      collegeId: session.collegeId,
-      action: "APPOINTMENT_LETTER_GENERATED",
-      performedBy: session.uid,
-      performedByName: actorName,
-      targetId: candidateId,
-      details: { candidateName, designation, department, batchId },
-      timestamp: now,
-    });
+    await writeAuditLogSafe(db, session.collegeId, { action: "APPOINTMENT_LETTER_GENERATED", performedBy: session.uid, performedByName: actorName, targetId: candidateId, details: { candidateName, designation, department, batchId } });
 
     return NextResponse.json({ id: docRef.id, ok: true, ccEmails });
   } catch (err) {

@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
@@ -750,15 +751,7 @@ export async function POST(request: Request) {
     // Balance is only committed on final approval (see [id]/route.ts) - a
     // pending/unapproved request never reduces the visible remaining count.
 
-    await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-      collegeId: session.collegeId,
-      action: "LEAVE_APPLIED",
-      performedBy: session.uid,
-      performedByName: identity.name,
-      targetId: ref.id,
-      details: { leaveTypeCode: body.leaveTypeCode ?? "OTHER", totalDays },
-      timestamp: now,
-    });
+    await writeAuditLogSafe(db, session.collegeId, { action: "LEAVE_APPLIED", performedBy: session.uid, performedByName: identity.name, targetId: ref.id, details: { leaveTypeCode: body.leaveTypeCode ?? "OTHER", totalDays } });
 
     return NextResponse.json({ id: ref.id }, { status: 201 });
   } catch (err) {

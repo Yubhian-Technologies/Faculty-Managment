@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
@@ -130,15 +131,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: duplicateError }, { status: 409 });
     }
 
-    await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-      collegeId: session.collegeId,
-      action: "COURSE_CATALOG_CREATED" as string,
-      performedBy: session.uid,
-      performedByName: actorName,
-      targetId: ref.id,
-      details: { name, code, durationYears },
-      timestamp: now,
-    });
+    await writeAuditLogSafe(db, session.collegeId, { action: "COURSE_CATALOG_CREATED" as string, performedBy: session.uid, performedByName: actorName, targetId: ref.id, details: { name, code, durationYears } });
 
     return NextResponse.json({ id: ref.id }, { status: 201 });
   } catch (err) {

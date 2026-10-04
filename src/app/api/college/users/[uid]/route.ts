@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
@@ -359,15 +360,7 @@ export async function PATCH(
       actorName = (actorSnap.data() as { name?: string } | undefined)?.name ?? "Unknown";
     } catch { /* best-effort */ }
 
-    await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-      collegeId: session.collegeId,
-      action,
-      performedBy: session.uid,
-      performedByName: actorName,
-      targetId: uid,
-      details: roleChanged ? { fromRole: target.role, toRole: body.role } : { role: target.role },
-      timestamp: now,
-    });
+    await writeAuditLogSafe(db, session.collegeId, { action: action, performedBy: session.uid, performedByName: actorName, targetId: uid, details: roleChanged ? { fromRole: target.role, toRole: body.role } : { role: target.role } });
 
     return NextResponse.json({ ok: true });
   } catch (err) {

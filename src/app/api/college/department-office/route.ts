@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
@@ -95,15 +96,7 @@ async function writeAudit(
     let actorName = "Unknown";
     const actorSnap = await db.collection("colleges").doc(collegeId).collection("users").doc(actorUid).get();
     actorName = (actorSnap.data() as { name?: string } | undefined)?.name ?? "Unknown";
-    await db.collection("colleges").doc(collegeId).collection("auditLogs").add({
-      collegeId,
-      action,
-      performedBy: actorUid,
-      performedByName: actorName,
-      targetId,
-      details,
-      timestamp: new Date(),
-    });
+    await writeAuditLogSafe(db, collegeId, { action: action, performedBy: actorUid, performedByName: actorName, targetId: targetId, details: details });
   } catch (auditErr) {
     console.error("[college/department-office] audit log write failed", auditErr);
   }

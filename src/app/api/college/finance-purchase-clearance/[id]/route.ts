@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeContext } from "@/lib/auth/verifySession";
@@ -91,15 +92,7 @@ export async function PATCH(
           updatedAt: now,
         });
 
-        await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-          collegeId: session.collegeId,
-          action: "PURCHASE_CLEARANCE_RESUBMITTED",
-          performedBy: session.uid,
-          performedByName: hodName,
-          targetId: id,
-          details: { department: existing.department, items: body.items },
-          timestamp: now,
-        });
+        await writeAuditLogSafe(db, session.collegeId, { action: "PURCHASE_CLEARANCE_RESUBMITTED", performedBy: session.uid, performedByName: hodName, targetId: id, details: { department: existing.department, items: body.items } });
 
         await notifyRole(
           db, session.collegeId, "PURCHASE_DEPT",
@@ -151,15 +144,7 @@ export async function PATCH(
           timestamp: now,
         });
 
-        await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-          collegeId: session.collegeId,
-          action: "PURCHASE_CLEARANCE_GRN_UPLOADED",
-          performedBy: session.uid,
-          performedByName: hodName,
-          targetId: id,
-          details: { department: existing.department, items: existing.items, grnNumber: body.grnNumber },
-          timestamp: now,
-        });
+        await writeAuditLogSafe(db, session.collegeId, { action: "PURCHASE_CLEARANCE_GRN_UPLOADED", performedBy: session.uid, performedByName: hodName, targetId: id, details: { department: existing.department, items: existing.items, grnNumber: body.grnNumber } });
 
         const notifMessage = `${hodName} confirmed goods received for "${existing.items}" (${existing.department}). GRN #${body.grnNumber}.`;
         await notifyRole(db, session.collegeId, "FINANCE", "PURCHASE_CLEARANCE_GRN_UPLOADED", "GRN Uploaded", notifMessage, "/finance/purchase-clearance");
@@ -198,15 +183,7 @@ export async function PATCH(
           updatedAt: now,
         });
 
-        await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-          collegeId: session.collegeId,
-          action: nextStatus === "REJECTED_BY_PURCHASE" ? "PURCHASE_CLEARANCE_REJECTED_BY_PURCHASE" : "PURCHASE_CLEARANCE_RETURNED_TO_HOD",
-          performedBy: session.uid,
-          performedByName: purchaseName,
-          targetId: id,
-          details: { department: existing.department, items: existing.items },
-          timestamp: now,
-        });
+        await writeAuditLogSafe(db, session.collegeId, { action: nextStatus === "REJECTED_BY_PURCHASE" ? "PURCHASE_CLEARANCE_REJECTED_BY_PURCHASE" : "PURCHASE_CLEARANCE_RETURNED_TO_HOD", performedBy: session.uid, performedByName: purchaseName, targetId: id, details: { department: existing.department, items: existing.items } });
 
         await notify(
           db, session.collegeId, existing.hodUid,
@@ -253,15 +230,7 @@ export async function PATCH(
           updatedAt: now,
         });
 
-        await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-          collegeId: session.collegeId,
-          action: "PURCHASE_CLEARANCE_SENT_TO_FINANCE",
-          performedBy: session.uid,
-          performedByName: purchaseName,
-          targetId: id,
-          details: { department: existing.department, items: existing.items },
-          timestamp: now,
-        });
+        await writeAuditLogSafe(db, session.collegeId, { action: "PURCHASE_CLEARANCE_SENT_TO_FINANCE", performedBy: session.uid, performedByName: purchaseName, targetId: id, details: { department: existing.department, items: existing.items } });
 
         await notifyRole(
           db, session.collegeId, "FINANCE",
@@ -347,17 +316,9 @@ export async function PATCH(
       updatedAt: now,
     });
 
-    await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-      collegeId: session.collegeId,
-      action: nextStatus === "APPROVED" ? "PURCHASE_CLEARANCE_FINANCE_APPROVED"
+    await writeAuditLogSafe(db, session.collegeId, { action: nextStatus === "APPROVED" ? "PURCHASE_CLEARANCE_FINANCE_APPROVED"
         : nextStatus === "REJECTED" ? "PURCHASE_CLEARANCE_FINANCE_REJECTED"
-        : "PURCHASE_CLEARANCE_RETURNED_TO_PURCHASE",
-      performedBy: session.uid,
-      performedByName: financeName,
-      targetId: id,
-      details: { department: existing.department, items: existing.items },
-      timestamp: now,
-    });
+        : "PURCHASE_CLEARANCE_RETURNED_TO_PURCHASE", performedBy: session.uid, performedByName: financeName, targetId: id, details: { department: existing.department, items: existing.items } });
 
     const notifType = nextStatus === "APPROVED" ? "PURCHASE_CLEARANCE_FINANCE_APPROVED" : nextStatus === "REJECTED" ? "PURCHASE_CLEARANCE_FINANCE_REJECTED" : "PURCHASE_CLEARANCE_RETURNED_TO_PURCHASE";
     const notifTitle = nextStatus === "APPROVED" ? "Purchase Clearance Approved" : nextStatus === "REJECTED" ? "Purchase Clearance Rejected" : "Purchase Clearance Returned";

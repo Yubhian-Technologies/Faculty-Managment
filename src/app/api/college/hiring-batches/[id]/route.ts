@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { findUsersSnapshot } from "@/lib/roles/findUsersByRoles";
 import { NextResponse } from "next/server";
@@ -507,15 +508,7 @@ export async function PATCH(
         ? "INTERVIEW_PLAN_REJECTED"
         : "INTERVIEW_PLAN_MODIFIED";
 
-      await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-        collegeId: session.collegeId,
-        action,
-        performedBy: session.uid,
-        performedByName: actorName,
-        targetId: id,
-        details: { status: body.status, notes: body.principalNotes },
-        timestamp: now,
-      });
+      await writeAuditLogSafe(db, session.collegeId, { action: action, performedBy: session.uid, performedByName: actorName, targetId: id, details: { status: body.status, notes: body.principalNotes } });
     }
 
     return NextResponse.json({ ok: true });

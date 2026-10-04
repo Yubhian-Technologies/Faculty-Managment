@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
@@ -233,15 +234,7 @@ export async function POST(request: Request) {
       return feedbackDocRef.id;
     });
 
-    await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-      collegeId: session.collegeId,
-      action: "FEEDBACK_SUBMITTED",
-      performedBy: session.uid,
-      performedByName: panelName,
-      targetId: docId,
-      details: { batchId, candidateId, module: hasPanel ? "PANEL_EVALUATION" : hasDemo ? "DEMO" : "PANEL_INTERVIEW", ...(recommendation ? { recommendation } : {}) },
-      timestamp: now,
-    });
+    await writeAuditLogSafe(db, session.collegeId, { action: "FEEDBACK_SUBMITTED", performedBy: session.uid, performedByName: panelName, targetId: docId, details: { batchId, candidateId, module: hasPanel ? "PANEL_EVALUATION" : hasDemo ? "DEMO" : "PANEL_INTERVIEW", ...(recommendation ? { recommendation } : {}) } });
 
     return NextResponse.json({ id: docId }, { status: 201 });
   } catch (err) {

@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { findUsersSnapshot } from "@/lib/roles/findUsersByRoles";
 import { NextResponse } from "next/server";
@@ -265,17 +266,9 @@ export async function PATCH(
         updatedAt: now,
       });
 
-      await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-        collegeId: session.collegeId,
-        action: nextStatus === "L1_FROZEN" ? "BUDGET_REQUEST_VERIFIED"
+      await writeAuditLogSafe(db, session.collegeId, { action: nextStatus === "L1_FROZEN" ? "BUDGET_REQUEST_VERIFIED"
           : nextStatus === "PRINCIPAL_REJECTED" ? "BUDGET_REQUEST_REJECTED"
-          : "BUDGET_REQUEST_RETURNED",
-        performedBy: session.uid,
-        performedByName: principalName,
-        targetId: id,
-        details: { title: req.title, department: req.department },
-        timestamp: now,
-      });
+          : "BUDGET_REQUEST_RETURNED", performedBy: session.uid, performedByName: principalName, targetId: id, details: { title: req.title, department: req.department } });
 
       // The Principal/VP has now acted - clears their own "awaiting your
       // review" popup regardless of which of the three outcomes this was.
@@ -344,15 +337,7 @@ export async function PATCH(
         updatedAt: now,
       });
 
-      await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-        collegeId: session.collegeId,
-        action: "BUDGET_REQUEST_REPORT_UPLOADED",
-        performedBy: session.uid,
-        performedByName: financeName,
-        targetId: id,
-        details: { title: req.title, department: req.department },
-        timestamp: now,
-      });
+      await writeAuditLogSafe(db, session.collegeId, { action: "BUDGET_REQUEST_REPORT_UPLOADED", performedBy: session.uid, performedByName: financeName, targetId: id, details: { title: req.title, department: req.department } });
 
       await notify(
         db, session.collegeId, req.hodUid,

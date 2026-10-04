@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
@@ -154,15 +155,7 @@ export async function POST(request: Request) {
       updatedAt: now,
     });
 
-    await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-      collegeId: session.collegeId,
-      action: "RD_PHD_SUPERVISION_CREATED",
-      performedBy: session.uid,
-      performedByName: addedByName,
-      targetId: docRef.id,
-      details: { scholarName, uid },
-      timestamp: now,
-    });
+    await writeAuditLogSafe(db, session.collegeId, { action: "RD_PHD_SUPERVISION_CREATED", performedBy: session.uid, performedByName: addedByName, targetId: docRef.id, details: { scholarName, uid } });
 
     await notifyReviewer(db, session.collegeId, route, {
         type: "PHD_SUPERVISION_PENDING_VERIFICATION", title: "New Ph.D. supervision record submitted for verification",

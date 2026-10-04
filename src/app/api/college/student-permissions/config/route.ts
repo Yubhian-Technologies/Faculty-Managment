@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { actingUser, authenticate, failure, readJson } from "@/lib/studentPermissions/http";
@@ -40,10 +41,7 @@ export async function PUT(request: Request) {
     const proposed = (await readJson(request)) as { config?: PermissionConfig };
     if (!proposed?.config || typeof proposed.config !== "object") return NextResponse.json({ error: "config is required" }, { status: 400 });
     const saved = await writeConfig(db, user, proposed.config);
-    await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-      collegeId: session.collegeId, action: "STUDENT_PERMISSION_CONFIG_UPDATED", performedBy: session.uid, performedByName: user.name,
-      details: { byRole: user.roles.includes("PRINCIPAL") ? "PRINCIPAL" : "HOD" }, timestamp: new Date(),
-    });
+    await writeAuditLogSafe(db, session.collegeId, { action: "STUDENT_PERMISSION_CONFIG_UPDATED", performedBy: session.uid, performedByName: user.name, details: { byRole: user.roles.includes("PRINCIPAL") ? "PRINCIPAL" : "HOD" } });
     return NextResponse.json({ config: saved });
   } catch (err) {
     return failure(err, "college/student-permissions/config PUT");

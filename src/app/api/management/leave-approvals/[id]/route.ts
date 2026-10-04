@@ -6,6 +6,7 @@ export const dynamic = "force-dynamic";
 // leave request has no one else within the college to decide it, so Management
 // is the one workflow step this role must perform here too.
 
+import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireManagement } from "@/lib/auth/verifySession";
@@ -68,12 +69,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         odProofRejectionReason: verified ? "" : (body.reason ?? "").trim(),
         updatedAt: now,
       });
-      await db.collection("colleges").doc(body.collegeId).collection("auditLogs").add({
-        collegeId: body.collegeId,
-        action: verified ? "LEAVE_OD_PROOF_VERIFIED" : "LEAVE_OD_PROOF_REJECTED",
-        performedBy: session.uid, performedByName: session.email || "Management", targetId: id,
-        details: { reason: body.reason ?? null }, timestamp: now,
-      });
+      await writeAuditLogSafe(db, body.collegeId, { action: verified ? "LEAVE_OD_PROOF_VERIFIED" : "LEAVE_OD_PROOF_REJECTED", performedBy: session.uid, performedByName: session.email || "Management", targetId: id, details: { reason: body.reason ?? null } });
       await notifyODProofDecision(db, body.collegeId, { ...req, id }, verified, body.reason);
       return NextResponse.json({ ok: true });
     }

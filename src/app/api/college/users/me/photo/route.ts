@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
@@ -57,14 +58,7 @@ export async function PATCH(request: Request) {
     await db.collection("systemUsers").doc(session.uid).set({ profilePhotoUrl: photoUrl }, { merge: true });
 
     const actorName = (userSnap.data() as { name?: string } | undefined)?.name ?? "Unknown";
-    await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-      collegeId: session.collegeId,
-      action: "PROFILE_PHOTO_UPDATED",
-      performedBy: session.uid,
-      performedByName: actorName,
-      targetId: session.uid,
-      timestamp: now,
-    });
+    await writeAuditLogSafe(db, session.collegeId, { action: "PROFILE_PHOTO_UPDATED", performedBy: session.uid, performedByName: actorName, targetId: session.uid });
 
     return NextResponse.json({ ok: true, photoUrl });
   } catch (err) {

@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireSuperAdmin } from "@/lib/auth/verifySession";
@@ -124,15 +125,7 @@ export async function PATCH(
       const auth = await getAdminAuth();
       await auth.updateUser(uid, { password: newPassword });
 
-      await db.collection("colleges").doc(collegeId).collection("auditLogs").add({
-        collegeId,
-        action: "USER_PASSWORD_RESET",
-        performedBy: "SUPER_ADMIN",
-        performedByName: "Super Admin",
-        targetId: uid,
-        details: {},
-        timestamp: new Date(),
-      });
+      await writeAuditLogSafe(db, collegeId, { action: "USER_PASSWORD_RESET", performedBy: "SUPER_ADMIN", performedByName: "Super Admin", targetId: uid, details: {} });
     }
     const updates: Record<string, unknown> = { updatedAt: new Date(), ...buildPersonalDetailsUpdate(body) };
 
@@ -182,20 +175,12 @@ export async function PATCH(
     const action =
       isActive === false ? "USER_DEACTIVATED" : isActive === true ? "USER_REACTIVATED" : "USER_UPDATED";
 
-    await db.collection("colleges").doc(collegeId).collection("auditLogs").add({
-      collegeId,
-      action,
-      performedBy: "SUPER_ADMIN",
-      performedByName: "Super Admin",
-      targetId: uid,
-      details: {
+    await writeAuditLogSafe(db, collegeId, { action: action, performedBy: "SUPER_ADMIN", performedByName: "Super Admin", targetId: uid, details: {
         ...(role !== undefined && { role }),
         ...(isActive !== undefined && { isActive }),
         ...(department !== undefined && { department }),
         ...(name !== undefined && { name }),
-      },
-      timestamp: new Date(),
-    });
+      } });
 
     return NextResponse.json({ ok: true });
   } catch (err) {
@@ -259,15 +244,7 @@ export async function DELETE(
     }
 
     if (collegeId) {
-      await db.collection("colleges").doc(collegeId).collection("auditLogs").add({
-        collegeId,
-        action: "USER_DELETED",
-        performedBy: "SUPER_ADMIN",
-        performedByName: "Super Admin",
-        targetId: uid,
-        details: { email: userEmail },
-        timestamp: new Date(),
-      });
+      await writeAuditLogSafe(db, collegeId, { action: "USER_DELETED", performedBy: "SUPER_ADMIN", performedByName: "Super Admin", targetId: uid, details: { email: userEmail } });
     }
 
     return NextResponse.json({ ok: true });

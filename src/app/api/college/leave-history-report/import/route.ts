@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
@@ -218,14 +219,7 @@ export async function POST(request: Request) {
     }
 
     if (created > 0) {
-      await db.collection("colleges").doc(collegeId).collection("auditLogs").add({
-        collegeId,
-        action: "LEAVE_HISTORY_IMPORTED",
-        performedBy: session.uid,
-        performedByName: addedByName,
-        details: { created, failed: failed.length },
-        timestamp: now,
-      });
+      await writeAuditLogSafe(db, collegeId, { action: "LEAVE_HISTORY_IMPORTED", performedBy: session.uid, performedByName: addedByName, details: { created, failed: failed.length } });
     }
 
     return NextResponse.json({ created, failed }, { status: 201 });

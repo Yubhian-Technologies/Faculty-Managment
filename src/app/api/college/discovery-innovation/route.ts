@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
@@ -168,15 +169,7 @@ export async function POST(request: Request) {
       updatedAt: now,
     });
 
-    await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-      collegeId: session.collegeId,
-      action: "RD_DISCOVERY_INNOVATION_CREATED",
-      performedBy: session.uid,
-      performedByName: addedByName,
-      targetId: docRef.id,
-      details: { title, uid },
-      timestamp: now,
-    });
+    await writeAuditLogSafe(db, session.collegeId, { action: "RD_DISCOVERY_INNOVATION_CREATED", performedBy: session.uid, performedByName: addedByName, targetId: docRef.id, details: { title, uid } });
 
     await notifyReviewer(db, session.collegeId, route, {
         type: "DISCOVERY_INNOVATION_PENDING_VERIFICATION", title: "New IPR record submitted for verification",

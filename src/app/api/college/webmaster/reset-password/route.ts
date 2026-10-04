@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
@@ -46,15 +47,7 @@ export async function POST(request: Request) {
     const actorSnap = await db.collection("colleges").doc(session.collegeId).collection("users").doc(session.uid).get();
     const actorName = (actorSnap.data() as { name?: string } | undefined)?.name ?? "Unknown";
 
-    await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-      collegeId: session.collegeId,
-      action: "USER_PASSWORD_RESET",
-      performedBy: session.uid,
-      performedByName: actorName,
-      targetId: body.uid,
-      details: { targetRole: target.role, targetName: target.name },
-      timestamp: new Date(),
-    });
+    await writeAuditLogSafe(db, session.collegeId, { action: "USER_PASSWORD_RESET", performedBy: session.uid, performedByName: actorName, targetId: body.uid, details: { targetRole: target.role, targetName: target.name } });
 
     return NextResponse.json({ ok: true, newPassword });
   } catch (err) {

@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
@@ -127,15 +128,7 @@ export async function PATCH(
         ...(body.decision === "REJECTED" ? { rejectionReason: body.rejectionReason ?? "" } : { rejectionReason: FieldValue.delete() }),
       });
 
-      await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-        collegeId: session.collegeId,
-        action: "RD_PHD_SUPERVISION_UPDATED",
-        performedBy: session.uid,
-        performedByName: reviewedByName,
-        targetId: id,
-        details: { scholarName: record.scholarName, decision: body.decision },
-        timestamp: now,
-      });
+      await writeAuditLogSafe(db, session.collegeId, { action: "RD_PHD_SUPERVISION_UPDATED", performedBy: session.uid, performedByName: reviewedByName, targetId: id, details: { scholarName: record.scholarName, decision: body.decision } });
 
       await notify(
         db, session.collegeId, record.uid,
@@ -174,15 +167,7 @@ export async function PATCH(
         editorName = (editorSnap.data() as { name?: string } | undefined)?.name ?? "Unknown";
       } catch { /* best-effort */ }
       await ref.update(updates);
-      await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-        collegeId: session.collegeId,
-        action: "RD_PHD_SUPERVISION_UPDATED",
-        performedBy: session.uid,
-        performedByName: editorName,
-        targetId: id,
-        details: { scholarName: body.scholarName ?? record.scholarName },
-        timestamp: now,
-      });
+      await writeAuditLogSafe(db, session.collegeId, { action: "RD_PHD_SUPERVISION_UPDATED", performedBy: session.uid, performedByName: editorName, targetId: id, details: { scholarName: body.scholarName ?? record.scholarName } });
       await notifyReviewer(db, session.collegeId, route, {
         type: "PHD_SUPERVISION_PENDING_VERIFICATION", title: "Ph.D. supervision record resubmitted for verification",
         message: `A previously rejected supervision record ("${body.scholarName ?? record.scholarName}") was corrected and resubmitted`,
@@ -197,15 +182,7 @@ export async function PATCH(
       const actorSnap = await db.collection("colleges").doc(session.collegeId).collection("users").doc(session.uid).get();
       actorName = (actorSnap.data() as { name?: string } | undefined)?.name ?? "Unknown";
     } catch { /* best-effort */ }
-    await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-      collegeId: session.collegeId,
-      action: "RD_PHD_SUPERVISION_UPDATED",
-      performedBy: session.uid,
-      performedByName: actorName,
-      targetId: id,
-      details: { scholarName: record.scholarName },
-      timestamp: new Date(),
-    });
+    await writeAuditLogSafe(db, session.collegeId, { action: "RD_PHD_SUPERVISION_UPDATED", performedBy: session.uid, performedByName: actorName, targetId: id, details: { scholarName: record.scholarName } });
     return NextResponse.json({ ok: true });
   } catch (err) {
     const badBody = badBodyResponse(err);
@@ -240,15 +217,7 @@ export async function DELETE(
       const actorSnap = await db.collection("colleges").doc(session.collegeId).collection("users").doc(session.uid).get();
       actorName = (actorSnap.data() as { name?: string } | undefined)?.name ?? "Unknown";
     } catch { /* best-effort */ }
-    await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-      collegeId: session.collegeId,
-      action: "RD_PHD_SUPERVISION_DELETED",
-      performedBy: session.uid,
-      performedByName: actorName,
-      targetId: id,
-      details: { scholarName: record.scholarName, uid: record.uid },
-      timestamp: new Date(),
-    });
+    await writeAuditLogSafe(db, session.collegeId, { action: "RD_PHD_SUPERVISION_DELETED", performedBy: session.uid, performedByName: actorName, targetId: id, details: { scholarName: record.scholarName, uid: record.uid } });
     return NextResponse.json({ ok: true });
   } catch (err) {
     const badBody = badBodyResponse(err);

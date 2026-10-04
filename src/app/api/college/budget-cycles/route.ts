@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { findUsersSnapshot } from "@/lib/roles/findUsersByRoles";
 import { NextResponse } from "next/server";
@@ -115,15 +116,7 @@ export async function POST(request: Request) {
       updatedAt: now,
     });
 
-    await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-      collegeId: session.collegeId,
-      action: "BUDGET_CYCLE_RELEASED",
-      performedBy: session.uid,
-      performedByName: createdByName,
-      targetId: ref.id,
-      details: { title, financialYear, budgetType },
-      timestamp: now,
-    });
+    await writeAuditLogSafe(db, session.collegeId, { action: "BUDGET_CYCLE_RELEASED", performedBy: session.uid, performedByName: createdByName, targetId: ref.id, details: { title, financialYear, budgetType } });
 
     // Actionable (login-popup) notification - the Principal/VP is the next
     // responsible party until they approve/reject/return it (resolved in

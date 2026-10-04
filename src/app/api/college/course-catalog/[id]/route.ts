@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
@@ -101,18 +102,10 @@ export async function PATCH(
     await ref.update(updates);
 
     const actorSnap = await db.collection("colleges").doc(session.collegeId).collection("users").doc(session.uid).get();
-    await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-      collegeId: session.collegeId,
-      action: "COURSE_CATALOG_UPDATED" as string,
-      performedBy: session.uid,
-      performedByName: (actorSnap.data() as { name?: string } | undefined)?.name ?? session.email ?? "Unknown",
-      targetId: id,
-      details: {
+    await writeAuditLogSafe(db, session.collegeId, { action: "COURSE_CATALOG_UPDATED" as string, performedBy: session.uid, performedByName: (actorSnap.data() as { name?: string } | undefined)?.name ?? session.email ?? "Unknown", targetId: id, details: {
         name: (snap.data() as { name?: string }).name ?? "",
         changed: Object.keys(updates).filter((k) => k !== "updatedAt"),
-      },
-      timestamp: new Date(),
-    });
+      } });
 
     return NextResponse.json({ success: true });
   } catch (err) {
@@ -158,15 +151,7 @@ export async function DELETE(
     await ref.delete();
 
     const actorSnap = await db.collection("colleges").doc(session.collegeId).collection("users").doc(session.uid).get();
-    await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-      collegeId: session.collegeId,
-      action: "COURSE_CATALOG_DELETED" as string,
-      performedBy: session.uid,
-      performedByName: (actorSnap.data() as { name?: string } | undefined)?.name ?? session.email ?? "Unknown",
-      targetId: id,
-      details: { name: (snap.data() as { name?: string }).name ?? "" },
-      timestamp: new Date(),
-    });
+    await writeAuditLogSafe(db, session.collegeId, { action: "COURSE_CATALOG_DELETED" as string, performedBy: session.uid, performedByName: (actorSnap.data() as { name?: string } | undefined)?.name ?? session.email ?? "Unknown", targetId: id, details: { name: (snap.data() as { name?: string }).name ?? "" } });
 
     return NextResponse.json({ success: true });
   } catch (err) {

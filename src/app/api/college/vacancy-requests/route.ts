@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { findUsersSnapshot } from "@/lib/roles/findUsersByRoles";
 import { NextResponse } from "next/server";
@@ -115,15 +116,7 @@ export async function POST(request: Request) {
         updatedAt: now,
       });
 
-    await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-      collegeId: session.collegeId,
-      action: "VACANCY_REQUEST_CREATED",
-      performedBy: session.uid,
-      performedByName: hodName,
-      targetId: ref.id,
-      details: { position, department },
-      timestamp: now,
-    });
+    await writeAuditLogSafe(db, session.collegeId, { action: "VACANCY_REQUEST_CREATED", performedBy: session.uid, performedByName: hodName, targetId: ref.id, details: { position, department } });
 
     // Notify all Principals and Vice Principals (who both decide vacancy
     // requests) plus College Admins, who mirror Principal's authority - see

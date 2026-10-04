@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
@@ -182,15 +183,7 @@ export async function POST(request: Request) {
       updatedAt: now,
     });
 
-    await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-      collegeId: session.collegeId,
-      action: "RD_RESEARCH_SERVICE_CREATED",
-      performedBy: session.uid,
-      performedByName: addedByName,
-      targetId: docRef.id,
-      details: { serviceType, uid },
-      timestamp: now,
-    });
+    await writeAuditLogSafe(db, session.collegeId, { action: "RD_RESEARCH_SERVICE_CREATED", performedBy: session.uid, performedByName: addedByName, targetId: docRef.id, details: { serviceType, uid } });
 
     await notifyReviewer(db, session.collegeId, route, {
         type: "RESEARCH_SERVICE_PENDING_VERIFICATION", title: "New research service record submitted for verification",

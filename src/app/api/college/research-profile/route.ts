@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
@@ -91,15 +92,7 @@ export async function POST(request: Request) {
       updatedAt: now,
     });
 
-    await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-      collegeId: session.collegeId,
-      action: existing.exists ? "RD_RESEARCH_PROFILE_UPDATED" : "RD_RESEARCH_PROFILE_CREATED",
-      performedBy: session.uid,
-      performedByName: owner?.name ?? "Unknown",
-      targetId: session.uid,
-      details: { uid: session.uid, orcidId: fields.orcidId },
-      timestamp: now,
-    });
+    await writeAuditLogSafe(db, session.collegeId, { action: existing.exists ? "RD_RESEARCH_PROFILE_UPDATED" : "RD_RESEARCH_PROFILE_CREATED", performedBy: session.uid, performedByName: owner?.name ?? "Unknown", targetId: session.uid, details: { uid: session.uid, orcidId: fields.orcidId } });
 
     if (isRnD) {
       await applyResearchProfileFields(db, session.collegeId, session.uid, fields);

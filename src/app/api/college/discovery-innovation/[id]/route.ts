@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
@@ -132,15 +133,7 @@ export async function PATCH(
         ...(body.decision === "REJECTED" ? { rejectionReason: body.rejectionReason ?? "" } : { rejectionReason: FieldValue.delete() }),
       });
 
-      await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-        collegeId: session.collegeId,
-        action: "RD_DISCOVERY_INNOVATION_UPDATED",
-        performedBy: session.uid,
-        performedByName: reviewedByName,
-        targetId: id,
-        details: { title: record.title, decision: body.decision },
-        timestamp: now,
-      });
+      await writeAuditLogSafe(db, session.collegeId, { action: "RD_DISCOVERY_INNOVATION_UPDATED", performedBy: session.uid, performedByName: reviewedByName, targetId: id, details: { title: record.title, decision: body.decision } });
 
       await notify(
         db, session.collegeId, record.uid,
@@ -190,15 +183,7 @@ export async function PATCH(
         editorName = (editorSnap.data() as { name?: string } | undefined)?.name ?? "Unknown";
       } catch { /* best-effort */ }
       await ref.update(updates);
-      await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-        collegeId: session.collegeId,
-        action: "RD_DISCOVERY_INNOVATION_UPDATED",
-        performedBy: session.uid,
-        performedByName: editorName,
-        targetId: id,
-        details: { title: body.title ?? record.title },
-        timestamp: now,
-      });
+      await writeAuditLogSafe(db, session.collegeId, { action: "RD_DISCOVERY_INNOVATION_UPDATED", performedBy: session.uid, performedByName: editorName, targetId: id, details: { title: body.title ?? record.title } });
       await notifyReviewer(db, session.collegeId, route, {
         type: "DISCOVERY_INNOVATION_PENDING_VERIFICATION", title: "IPR record resubmitted for verification",
         message: `A previously rejected IPR record ("${body.title ?? record.title}") was corrected and resubmitted`,
@@ -213,15 +198,7 @@ export async function PATCH(
       const actorSnap = await db.collection("colleges").doc(session.collegeId).collection("users").doc(session.uid).get();
       actorName = (actorSnap.data() as { name?: string } | undefined)?.name ?? "Unknown";
     } catch { /* best-effort */ }
-    await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-      collegeId: session.collegeId,
-      action: "RD_DISCOVERY_INNOVATION_UPDATED",
-      performedBy: session.uid,
-      performedByName: actorName,
-      targetId: id,
-      details: { title: record.title },
-      timestamp: new Date(),
-    });
+    await writeAuditLogSafe(db, session.collegeId, { action: "RD_DISCOVERY_INNOVATION_UPDATED", performedBy: session.uid, performedByName: actorName, targetId: id, details: { title: record.title } });
     return NextResponse.json({ ok: true });
   } catch (err) {
     const badBody = badBodyResponse(err);
@@ -256,15 +233,7 @@ export async function DELETE(
       const actorSnap = await db.collection("colleges").doc(session.collegeId).collection("users").doc(session.uid).get();
       actorName = (actorSnap.data() as { name?: string } | undefined)?.name ?? "Unknown";
     } catch { /* best-effort */ }
-    await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-      collegeId: session.collegeId,
-      action: "RD_DISCOVERY_INNOVATION_DELETED",
-      performedBy: session.uid,
-      performedByName: actorName,
-      targetId: id,
-      details: { title: record.title, uid: record.uid },
-      timestamp: new Date(),
-    });
+    await writeAuditLogSafe(db, session.collegeId, { action: "RD_DISCOVERY_INNOVATION_DELETED", performedBy: session.uid, performedByName: actorName, targetId: id, details: { title: record.title, uid: record.uid } });
     return NextResponse.json({ ok: true });
   } catch (err) {
     const badBody = badBodyResponse(err);
