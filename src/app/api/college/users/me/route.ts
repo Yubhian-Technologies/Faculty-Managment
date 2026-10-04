@@ -10,6 +10,7 @@ import { normalizeAcademicProfile } from "@/lib/faculty/academicProfileCompat";
 import { degreeTypeError } from "@/lib/faculty/degreeType";
 import { withLegacyPersonalKeysDeleted } from "@/lib/faculty/legacyKeyDeletes";
 import { FieldValue } from "firebase-admin/firestore";
+import { setLinkedFacultyPhoto } from "@/lib/faculty/syncFacultyPhoto";
 
 // Fields a Principal/VP must never set about themselves via self-service edit -
 // salary/CTC belongs to the Accounts/Finance payroll domain, not a self-editable profile.
@@ -75,6 +76,9 @@ export async function PATCH(request: Request) {
       updates.academicProfile = academicProfile;
     }
     if (body.profilePhotoUrl !== undefined) updates.profilePhotoUrl = body.profilePhotoUrl;
+
+    // The photo belongs to the faculty record (source of truth) - written first, then the mirror below.
+    if (body.profilePhotoUrl !== undefined) await setLinkedFacultyPhoto(db, session.collegeId, session.uid, body.profilePhotoUrl);
 
     // Drop the old-named twin of any personal key written above on a not-yet-migrated doc.
     await userRef.update(withLegacyPersonalKeysDeleted(updates, FieldValue.delete()));

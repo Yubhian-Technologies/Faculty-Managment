@@ -15,6 +15,7 @@ import { degreeTypeError } from "@/lib/faculty/degreeType";
 import { migrateUserDoc, migrateFacultyDoc, migrateSupportingStaffDoc } from "@/lib/faculty/fieldRenames";
 import { withLegacyPersonalKeysDeleted } from "@/lib/faculty/legacyKeyDeletes";
 import { assignSeat } from "@/lib/roles/seats";
+import { setLinkedFacultyPhoto } from "@/lib/faculty/syncFacultyPhoto";
 import type { UserRole } from "@/types";
 
 async function loadTargetInScope(
@@ -271,6 +272,9 @@ export async function PATCH(
     }
     if (body.academicProfile !== undefined) updates.academicProfile = normalizeAcademicProfile(body.academicProfile);
     if (body.profilePhotoUrl !== undefined) updates.profilePhotoUrl = body.profilePhotoUrl;
+
+    // The photo belongs to the person's faculty record (source of truth) - written first, then the mirror below.
+    if (body.profilePhotoUrl !== undefined) await setLinkedFacultyPhoto(db, session.collegeId, uid, body.profilePhotoUrl);
 
     await db
       .collection("colleges")

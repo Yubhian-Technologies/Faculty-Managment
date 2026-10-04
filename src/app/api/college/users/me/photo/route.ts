@@ -5,6 +5,7 @@ import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { setLinkedFacultyPhoto } from "@/lib/faculty/syncFacultyPhoto";
 
 export async function PATCH(request: Request) {
   try {
@@ -54,6 +55,10 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
+    // A faculty/HOD login's photo belongs to their faculty record (the source of truth every faculty
+    // list reads); write that FIRST, then the users/systemUsers mirror below. No linked faculty record
+    // (Principal, office staff, ...) => nothing to do here, same as before.
+    await setLinkedFacultyPhoto(db, session.collegeId, session.uid, photoUrl);
     await userRef.update({ profilePhotoUrl: photoUrl, updatedAt: now });
     await db.collection("systemUsers").doc(session.uid).set({ profilePhotoUrl: photoUrl }, { merge: true });
 
