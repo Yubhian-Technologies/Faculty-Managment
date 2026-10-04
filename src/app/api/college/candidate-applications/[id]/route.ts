@@ -18,37 +18,6 @@ async function getUserName(db: Firestore, collegeId: string, uid: string): Promi
   }
 }
 
-export async function GET(
-  _request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  try {
-    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "HOD", "SUPER_ADMIN", "COLLEGE_OFFICE", "PANEL_MEMBER", "ACCOUNTS");
-    const { id } = await params;
-    const db = getAdminDb();
-    const snap = await db
-      .collection("colleges")
-      .doc(session.collegeId)
-      .collection("candidateApplications")
-      .doc(id)
-      .get();
-
-    if (!snap.exists) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
-    }
-
-    return NextResponse.json({ application: { id: snap.id, ...snap.data() } });
-  } catch (err) {
-    const badBody = badBodyResponse(err);
-    if (badBody) return badBody;
-    if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    console.error("[candidate-applications/[id] GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
-  }
-}
-
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
