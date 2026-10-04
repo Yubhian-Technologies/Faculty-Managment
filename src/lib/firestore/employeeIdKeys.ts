@@ -64,4 +64,29 @@ export async function reserveEmployeeId(
   });
 }
 
+/**
+ * Gives the reservation back when the create that needed it failed, so the
+ * retry isn't refused for the grace period. Best effort, and only deletes locks
+ * this owner holds.
+ */
+export async function releaseEmployeeId(
+  db: Firestore,
+  collegeId: string,
+  employeeId: string,
+  owner: EmployeeIdOwner,
+): Promise<void> {
+  const id = employeeId.trim();
+  if (!id) return;
+  const refs = [db.collection("colleges").doc(collegeId).collection("employeeIdKeys").doc(hash(id))];
+  if (owner.collection === "facultyMembers") refs.unshift(db.collection("employeeIdKeys").doc(`f_${hash(id)}`));
+  try {
+    for (const ref of refs) {
+      const snap = await ref.get();
+      if (snap.exists && snap.get("ownerId") === owner.id && snap.get("ownerCollection") === owner.collection) await ref.delete();
+    }
+  } catch {
+    // Not fatal: the lock goes stale on its own after PENDING_MS.
+  }
+}
+
 export const isEmployeeIdReserved = (e: unknown): e is EmployeeIdReservedError => e instanceof EmployeeIdReservedError;

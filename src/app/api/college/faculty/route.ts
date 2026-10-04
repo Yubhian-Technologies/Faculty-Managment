@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 
-import { isEmployeeIdReserved, reserveEmployeeId } from "@/lib/firestore/employeeIdKeys";
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
+import { isEmployeeIdReserved, releaseEmployeeId, reserveEmployeeId } from "@/lib/firestore/employeeIdKeys";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -253,6 +254,8 @@ export async function GET(request: Request) {
     );
     return NextResponse.json({ faculty: teachingOnly });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (isEmployeeIdReserved(err)) {
       return NextResponse.json({ error: employeeIdTakenMessage({ taken: true, heldBy: err.heldBy }) }, { status: 409 });
     }
@@ -268,7 +271,7 @@ export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL");
 
-    const body = (await request.json()) as {
+    const body = (await readJsonBody(request)) as {
       employeeId: string;
       apaarFacultyId?: string;
       email?: string;
@@ -509,12 +512,19 @@ export async function POST(request: Request) {
     // concurrent requests, the lock doc cannot (lib/firestore/employeeIdKeys.ts).
     // A failure here unwinds the Auth user via withAuthUser.
     await reserveEmployeeId(db, collegeId, employeeId, { collection: "facultyMembers", id: docRef.id });
-    await batch.commit();
+    try {
+      await batch.commit();
+    } catch (commitErr) {
+      await releaseEmployeeId(db, collegeId, employeeId, { collection: "facultyMembers", id: docRef.id });
+      throw commitErr;
+    }
     return { id: docRef.id, uid };
     });
 
     return NextResponse.json(created, { status: 201 });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

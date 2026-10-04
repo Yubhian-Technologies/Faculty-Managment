@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { FakeFirestore, asFirestore } from "@/test-support/fakeFirestore";
-import { isEmployeeIdReserved, reserveEmployeeId } from "./employeeIdKeys";
+import { isEmployeeIdReserved, releaseEmployeeId, reserveEmployeeId } from "./employeeIdKeys";
 
 describe("reserveEmployeeId", () => {
   it("only one of N concurrent faculty creates with the same ID (case-insensitive) wins", async () => {
@@ -39,6 +39,17 @@ describe("reserveEmployeeId", () => {
     for (const key of [...fake.docs.keys()].filter((k) => k.includes("employeeIdKeys/"))) {
       fake.docs.get(key)!.data.reservedAt = new Date(Date.now() - 10 * 60 * 1000);
     }
+    await expect(reserveEmployeeId(db, "c1", "E1", { collection: "facultyMembers", id: "f2" })).resolves.toBeUndefined();
+  });
+
+  it("releasing a failed create lets the retry through at once, and never frees someone else's lock", async () => {
+    const fake = new FakeFirestore();
+    const db = asFirestore(fake);
+    const mine = { collection: "facultyMembers" as const, id: "f1" };
+    await reserveEmployeeId(db, "c1", "E1", mine);
+    await releaseEmployeeId(db, "c1", "E1", { collection: "facultyMembers", id: "someone-else" });
+    await expect(reserveEmployeeId(db, "c1", "E1", { collection: "facultyMembers", id: "f2" })).rejects.toSatisfy(isEmployeeIdReserved);
+    await releaseEmployeeId(db, "c1", "E1", mine);
     await expect(reserveEmployeeId(db, "c1", "E1", { collection: "facultyMembers", id: "f2" })).resolves.toBeUndefined();
   });
 });
