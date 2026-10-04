@@ -255,7 +255,10 @@ export async function buildPeriodCoverage(
     // colleagues were all teaching that period. `department` still matters -
     // it orders the list below, own department first.
     collegeRef.collection("facultyMembers").get(),
-    collegeRef.collection("timetableSlots").get(),
+    // Only slots on the weekdays being covered can make anyone "busy" (the busy
+    // map below is keyed day:period), so fetch just those days - a single-field
+    // `in`, no composite index - instead of every slot of every day.
+    collegeRef.collection("timetableSlots").where("day", "in", Array.from(new Set(required.map((r) => r.day)))).get(),
     // Everyone on (or awaiting a decision on) leave, the subject of another
     // adjustment, or already named to cover a period - not just APPROVED leave
     // as before, which let people with a pending leave or an existing cover
