@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { firebaseAuthErrorResponse } from "@/lib/http/firebaseErrors";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { convertLegacyAccounts } from "@/lib/roles/seats";
 import { NextResponse } from "next/server";
@@ -122,6 +123,8 @@ export async function GET(request: Request) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const authErr = firebaseAuthErrorResponse(err);
+    if (authErr) return authErr;
     console.error("[college/users GET]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
@@ -433,6 +436,8 @@ export async function POST(request: Request) {
         { status: 409 }
       );
     }
+    const authErr = firebaseAuthErrorResponse(err);
+    if (authErr) return authErr;
     console.error("[college/users POST]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }

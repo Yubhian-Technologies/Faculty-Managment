@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { firebaseAuthErrorResponse } from "@/lib/http/firebaseErrors";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth/verifySession";
@@ -111,6 +112,8 @@ export async function PATCH(
     if (err instanceof Error && err.message === "UNAUTHORIZED") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const authErr = firebaseAuthErrorResponse(err);
+    if (authErr) return authErr;
     console.error("[location/users/[uid] PATCH]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
@@ -169,6 +172,8 @@ export async function DELETE(
     if (err instanceof Error && err.message === "UNAUTHORIZED") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const authErr = firebaseAuthErrorResponse(err);
+    if (authErr) return authErr;
     console.error("[location/users/[uid] DELETE]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }

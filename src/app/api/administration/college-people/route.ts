@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { firebaseAuthErrorResponse } from "@/lib/http/firebaseErrors";
 import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
@@ -119,6 +120,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "An account with this email already exists" }, { status: 409 });
     }
     const msg = err instanceof Error ? err.message : String(err);
+    const authErr = firebaseAuthErrorResponse(err);
+    if (authErr) return authErr;
     console.error("[administration/college-people POST]", msg);
     return NextResponse.json({ error: msg || "Internal error" }, { status: 500 });
   }

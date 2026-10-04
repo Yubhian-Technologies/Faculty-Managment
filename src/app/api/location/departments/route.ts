@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { firebaseAuthErrorResponse } from "@/lib/http/firebaseErrors";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { verifySession } from "@/lib/auth/verifySession";
@@ -53,6 +54,8 @@ export async function GET(request: Request) {
         } catch (err) {
           const badBody = badBodyResponse(err);
           if (badBody) return badBody;
+          const authErr = firebaseAuthErrorResponse(err);
+          if (authErr) return authErr;
           console.error("[location/departments GET] staff count failed for", d.id, err);
         }
         return {
@@ -67,6 +70,8 @@ export async function GET(request: Request) {
   } catch (err) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
+    const authErr = firebaseAuthErrorResponse(err);
+    if (authErr) return authErr;
     console.error("[location/departments GET]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }

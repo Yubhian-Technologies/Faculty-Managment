@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { firebaseAuthErrorResponse } from "@/lib/http/firebaseErrors";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { convertLegacyAccounts } from "@/lib/roles/seats";
 import { NextResponse } from "next/server";
@@ -149,6 +150,8 @@ export async function GET(request: Request) {
     if (err instanceof Error && err.message === "UNAUTHORIZED") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const authErr = firebaseAuthErrorResponse(err);
+    if (authErr) return authErr;
     console.error("[admin/users GET]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
@@ -285,6 +288,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "An account with this email already exists" }, { status: 409 });
     }
     const msg = err instanceof Error ? err.message : String(err);
+    const authErr = firebaseAuthErrorResponse(err);
+    if (authErr) return authErr;
     console.error("[admin/users POST]", msg);
     return NextResponse.json({ error: msg || "Internal error" }, { status: 500 });
   }

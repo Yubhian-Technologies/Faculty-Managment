@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { firebaseAuthErrorResponse } from "@/lib/http/firebaseErrors";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { verifySession } from "@/lib/auth/verifySession";
@@ -37,6 +38,8 @@ export async function GET(request: Request) {
   } catch (err) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
+    const authErr = firebaseAuthErrorResponse(err);
+    if (authErr) return authErr;
     console.error("[location/users GET]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
@@ -173,6 +176,8 @@ export async function POST(request: Request) {
     ) {
       return NextResponse.json({ error: "An account with this mobile number already exists" }, { status: 409 });
     }
+    const authErr = firebaseAuthErrorResponse(err);
+    if (authErr) return authErr;
     console.error("[location/users POST]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }

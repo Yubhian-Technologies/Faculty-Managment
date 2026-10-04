@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { firebaseAuthErrorResponse } from "@/lib/http/firebaseErrors";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { verifySession } from "@/lib/auth/verifySession";
@@ -93,6 +94,8 @@ export async function GET(
   } catch (err) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
+    const authErr = firebaseAuthErrorResponse(err);
+    if (authErr) return authErr;
     console.error("[location/departments/[id] GET]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
@@ -342,6 +345,8 @@ export async function DELETE(
   } catch (err) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
+    const authErr = firebaseAuthErrorResponse(err);
+    if (authErr) return authErr;
     console.error("[location/departments/[id] DELETE]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
