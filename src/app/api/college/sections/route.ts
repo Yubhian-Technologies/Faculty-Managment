@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { claimSectionKey, isSectionKeyTaken } from "@/lib/sections/sectionKeys";
 import { getSectionStudentCounts } from "@/lib/students/sectionCounts";
 import { NextResponse } from "next/server";
 import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
@@ -679,7 +680,7 @@ export async function POST(request: Request) {
     const ref = db.collection("colleges").doc(session.collegeId).collection("sections").doc();
 
     const deptIndex = await loadDepartmentIndex(db, session.collegeId);
-    await ref.set(stampDepartmentIds({
+    const sectionDoc = stampDepartmentIds({
       collegeId: session.collegeId,
       department: dept,
       ...(secondaryDepartments.length > 0 ? { secondaryDepartments } : {}),
@@ -694,7 +695,25 @@ export async function POST(request: Request) {
       studentCount: body.studentCount != null ? Math.max(0, Number(body.studentCount)) : 0,
       createdAt: now,
       updatedAt: now,
-    }, deptIndex));
+    }, deptIndex);
+    // The sibling query above is the fast, friendly check; this lock doc closes
+    // the race where two requests both pass it (see lib/sections/sectionKeys.ts).
+    try {
+      await db.runTransaction(async (tx) => {
+        await claimSectionKey(tx, db, session.collegeId, {
+          department: dept, courseId: body.courseId, year: Number(body.year), name: sectionName, secondaryDepartment: secondaryDepartments[0] ?? "",
+        }, ref);
+        tx.set(ref, sectionDoc);
+      });
+    } catch (e) {
+      if (isSectionKeyTaken(e)) {
+        return NextResponse.json(
+          { error: `Section ${sectionName} already exists for ${dept} Year ${body.year}${secondaryDepartments[0] ? ` (feeding ${secondaryDepartments[0]})` : ""}.` },
+          { status: 409 },
+        );
+      }
+      throw e;
+    }
 
     await writeAuditLogSafe(db, session.collegeId, {
       action: "SECTION_CREATED",

@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { claimSubjectKey, isSubjectKeyTaken } from "@/lib/subjects/subjectKeys";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -251,11 +252,8 @@ export async function POST(request: Request) {
         );
       }
 
-      const ref = await db
-        .collection("colleges")
-        .doc(session.collegeId)
-        .collection("subjects")
-        .add({
+      const ref = db.collection("colleges").doc(session.collegeId).collection("subjects").doc();
+      const subjectDoc = {
           collegeId: session.collegeId,
           courseId,
           courseName: course.name,
@@ -277,7 +275,20 @@ export async function POST(request: Request) {
           isActive: true,
           createdAt: now,
           updatedAt: now,
+        };
+      // The query above is the friendly check; this lock closes the race where two
+      // requests both pass it (lib/subjects/subjectKeys.ts).
+      try {
+        await db.runTransaction(async (tx) => {
+          await claimSubjectKey(tx, db, session.collegeId, { scope: course.catalogId || courseId, regulation: regKey, code }, ref);
+          tx.set(ref, subjectDoc);
         });
+      } catch (e) {
+        if (isSubjectKeyTaken(e)) {
+          return NextResponse.json({ error: `A subject with code "${code}" already exists for this course and regulation.` }, { status: 409 });
+        }
+        throw e;
+      }
 
       return NextResponse.json({ id: ref.id }, { status: 201 });
     }

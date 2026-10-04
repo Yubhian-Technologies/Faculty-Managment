@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { isEmployeeIdReserved, reserveEmployeeId } from "@/lib/firestore/employeeIdKeys";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -252,6 +253,9 @@ export async function GET(request: Request) {
     );
     return NextResponse.json({ faculty: teachingOnly });
   } catch (err) {
+    if (isEmployeeIdReserved(err)) {
+      return NextResponse.json({ error: employeeIdTakenMessage({ taken: true, heldBy: err.heldBy }) }, { status: 409 });
+    }
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -501,6 +505,10 @@ export async function POST(request: Request) {
       ...(profilePhotoUrl ? { profilePhotoUrl } : {}),
     });
 
+    // Race-proof the employee-ID rule: the pre-check above can pass for two
+    // concurrent requests, the lock doc cannot (lib/firestore/employeeIdKeys.ts).
+    // A failure here unwinds the Auth user via withAuthUser.
+    await reserveEmployeeId(db, collegeId, employeeId, { collection: "facultyMembers", id: docRef.id });
     await batch.commit();
     return { id: docRef.id, uid };
     });

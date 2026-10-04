@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { isEmployeeIdReserved, reserveEmployeeId } from "@/lib/firestore/employeeIdKeys";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -191,6 +192,12 @@ export async function PATCH(
         const idCheck = await employeeIdTaken(db, session.collegeId, newEmployeeId, { collection: "supportingStaff", id });
         if (idCheck.taken) {
           return NextResponse.json({ error: employeeIdTakenMessage(idCheck) }, { status: 409 });
+        }
+        try {
+          await reserveEmployeeId(db, session.collegeId, newEmployeeId, { collection: "supportingStaff", id });
+        } catch (e) {
+          if (isEmployeeIdReserved(e)) return NextResponse.json({ error: employeeIdTakenMessage({ taken: true, heldBy: e.heldBy }) }, { status: 409 });
+          throw e;
         }
       }
       updates.employeeId = newEmployeeId;
