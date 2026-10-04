@@ -404,36 +404,3 @@ export async function PATCH(
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 }
-
-export async function DELETE(
-  _request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  try {
-    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");
-    const { id } = await params;
-    const db = getAdminDb();
-    const collegeRef = db.collection("colleges").doc(session.collegeId);
-
-    const applicationSnap = await collegeRef.collection("candidateApplications").doc(id).get();
-    if (!applicationSnap.exists) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
-    }
-    const { batchId } = applicationSnap.data() as { batchId?: string };
-    if (batchId) {
-      return NextResponse.json({ error: "Cannot withdraw an application already assigned to an interview batch" }, { status: 400 });
-    }
-
-    await collegeRef.collection("candidateApplications").doc(id).delete();
-
-    return NextResponse.json({ ok: true });
-  } catch (err) {
-    const badBody = badBodyResponse(err);
-    if (badBody) return badBody;
-    if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    console.error("[candidate-applications/[id] DELETE]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
-  }
-}
