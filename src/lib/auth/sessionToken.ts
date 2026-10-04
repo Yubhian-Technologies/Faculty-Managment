@@ -18,6 +18,9 @@ function secret(): string {
   const fallback = process.env.FIREBASE_ADMIN_PRIVATE_KEY;
   if (!fallback) throw new Error("SESSION_SECRET (or FIREBASE_ADMIN_PRIVATE_KEY) is not set");
   if (process.env.NODE_ENV === "production") {
+    // Opt-in hard stop: set SESSION_SECRET_REQUIRED=true once SESSION_SECRET is configured,
+    // so a missing secret can never silently fall back to the admin private key again.
+    if (process.env.SESSION_SECRET_REQUIRED === "true") throw new Error("SESSION_SECRET must be set in production");
     console.warn("[sessionToken] WARNING: SESSION_SECRET is not set in production; falling back to FIREBASE_ADMIN_PRIVATE_KEY. Set SESSION_SECRET in production environment variables.");
   }
   return fallback;
