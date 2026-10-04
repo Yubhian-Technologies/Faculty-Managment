@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { indexSessions, tallyStudent, tallyStudentBySubject } from "./counting";
 
-const session = (subjectId: string, marks: Record<string, "PRESENT" | "ABSENT">) => ({
+const session = (subjectId: string, marks: Record<string, "PRESENT" | "ABSENT" | "ON_DUTY">) => ({
   subjectId,
   entries: Object.entries(marks).map(([studentId, status]) => ({ studentId, status })),
 });
@@ -39,5 +39,25 @@ describe("student attendance counting", () => {
 
   it("a student on no session has zero held (no data), not zero percent", () => {
     expect(tallyStudent(indexSessions([session("M1", { a: "PRESENT" })]), "z")).toEqual({ held: 0, attended: 0 });
+  });
+
+  it("leaves an ON_DUTY period out of both held and attended", () => {
+    const s = indexSessions([
+      session("M1", { a: "PRESENT" }),
+      session("M1", { a: "ON_DUTY" }),
+      session("M1", { a: "ABSENT" }),
+      session("M2", { a: "ON_DUTY" }),
+    ]);
+    // 3 real periods + 1 on duty: the on-duty one is simply not there.
+    expect(tallyStudent(s, "a")).toEqual({ held: 2, attended: 1 });
+    // A subject with only on-duty periods doesn't appear at all (no 0/0 row).
+    expect(Array.from(tallyStudentBySubject(s, "a").keys())).toEqual(["M1"]);
+    expect(tallyStudentBySubject(s, "a").get("M1")).toEqual({ held: 2, attended: 1 });
+  });
+
+  it("never lets on-duty periods move a percentage either way", () => {
+    const withOd = indexSessions([session("M1", { a: "PRESENT" }), session("M1", { a: "ON_DUTY" }), session("M1", { a: "ON_DUTY" })]);
+    const without = indexSessions([session("M1", { a: "PRESENT" })]);
+    expect(tallyStudent(withOd, "a")).toEqual(tallyStudent(without, "a"));
   });
 });

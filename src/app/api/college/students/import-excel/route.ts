@@ -1,5 +1,7 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
+import { invalidateSectionCountCache } from "@/lib/students/sectionCounts";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb, getAdminAuth } from "@/lib/firebase/admin";
@@ -111,7 +113,8 @@ export async function POST(request: Request) {
     // Principal, Vice Principal or Panel role may bulk-import. (Super Admin keeps
     // access as the platform-wide override, consistent with every other route.)
     const session = await requireCollegeMember("COLLEGE_OFFICE", "SUPER_ADMIN");
-    const body = (await request.json()) as { records: BulkImportRow[] };
+    invalidateSectionCountCache(session.collegeId); // student counts on the Sections list change with this write
+    const body = (await readJsonBody(request)) as { records: BulkImportRow[] };
 
     if (!body.records || !Array.isArray(body.records) || body.records.length === 0) {
       return NextResponse.json({ error: "No records provided" }, { status: 400 });
@@ -887,6 +890,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ created: created.length, failed, loginsCreated, loginFailed }, { status: 201 });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

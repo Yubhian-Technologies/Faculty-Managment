@@ -1,5 +1,7 @@
 export const dynamic = "force-dynamic";
 
+import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { requireCollegeMember, isDepartmentOffice } from "@/lib/auth/verifySession";
@@ -94,15 +96,7 @@ async function writeAudit(
     let actorName = "Unknown";
     const actorSnap = await db.collection("colleges").doc(collegeId).collection("users").doc(actorUid).get();
     actorName = (actorSnap.data() as { name?: string } | undefined)?.name ?? "Unknown";
-    await db.collection("colleges").doc(collegeId).collection("auditLogs").add({
-      collegeId,
-      action,
-      performedBy: actorUid,
-      performedByName: actorName,
-      targetId,
-      details,
-      timestamp: new Date(),
-    });
+    await writeAuditLogSafe(db, collegeId, { action: action, performedBy: actorUid, performedByName: actorName, targetId: targetId, details: details });
   } catch (auditErr) {
     console.error("[college/department-office] audit log write failed", auditErr);
   }
@@ -114,7 +108,7 @@ export async function POST(request: Request) {
     if ("error" in ctx) return NextResponse.json({ error: ctx.error }, { status: ctx.status });
     const { session, db, scope, department } = ctx;
 
-    const { uid } = (await request.json()) as { uid?: string };
+    const { uid } = (await readJsonBody(request)) as { uid?: string };
     if (!uid) return NextResponse.json({ error: "Pick a faculty member" }, { status: 400 });
 
     const users = db.collection("colleges").doc(session.collegeId).collection("users");
@@ -161,6 +155,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ ok: true });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -175,7 +171,7 @@ export async function DELETE(request: Request) {
     if ("error" in ctx) return NextResponse.json({ error: ctx.error }, { status: ctx.status });
     const { session, db, department } = ctx;
 
-    const { uid } = (await request.json()) as { uid?: string };
+    const { uid } = (await readJsonBody(request)) as { uid?: string };
     if (!uid) return NextResponse.json({ error: "Nobody to remove" }, { status: 400 });
 
     const users = db.collection("colleges").doc(session.collegeId).collection("users");
@@ -209,6 +205,8 @@ export async function DELETE(request: Request) {
 
     return NextResponse.json({ ok: true });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

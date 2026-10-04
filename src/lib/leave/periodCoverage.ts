@@ -255,7 +255,10 @@ export async function buildPeriodCoverage(
     // colleagues were all teaching that period. `department` still matters -
     // it orders the list below, own department first.
     collegeRef.collection("facultyMembers").get(),
-    collegeRef.collection("timetableSlots").get(),
+    // Only slots on the weekdays being covered can make anyone "busy" (the busy
+    // map below is keyed day:period), so fetch just those days - a single-field
+    // `in`, no composite index - instead of every slot of every day.
+    collegeRef.collection("timetableSlots").where("day", "in", Array.from(new Set(required.map((r) => r.day)))).get(),
     // Everyone on (or awaiting a decision on) leave, the subject of another
     // adjustment, or already named to cover a period - not just APPROVED leave
     // as before, which let people with a pending leave or an existing cover
@@ -436,7 +439,72 @@ function chunk<T>(items: T[], size: number): T[][] {
 // exact placement genuinely no longer exists (the class itself was moved or
 // dropped) - which the caller's Map lookup then simply won't match, same as
 // before this fix.
+// What this costs, and why it is cached: the lookup used to read EVERY approved
+// leave the college has ever had, so one call cost as many reads as there are
+// leaves on file - and it sits behind the Mark Attendance poll, the nightly
+// not-posted sweep (once per faculty) and every student/class-leader timetable
+// view. Two changes keep it cheap without altering what it returns:
+//   1. The leave query is bounded by date (only leaves that END on or after the
+//      earliest requested date can cover it), so it reads the leaves around "now",
+//      not the whole history. Needs the (status, toDate) index; if that index is
+//      not deployed yet it falls back to the old full read rather than failing.
+//   2. Identical lookups within a few seconds share one result (and one in-flight
+//      read), so a burst of polls or a sweep over 1,500 faculty reads once.
+// A caller that must see a change immediately (the attendance WRITE gate) passes
+// `fresh: true`.
+const SUBSTITUTION_CACHE_TTL_MS = 15_000;
+const SUBSTITUTION_CACHE_MAX = 200;
+const substitutionCache = new Map<string, { at: number; value: Promise<DateSubstitution[]> }>();
+
+export function invalidateSubstitutionCache(collegeId?: string): void {
+  if (!collegeId) { substitutionCache.clear(); return; }
+  for (const key of substitutionCache.keys()) if (key.startsWith(`${collegeId}|`)) substitutionCache.delete(key);
+}
+
 export async function getActiveSubstitutionsForDates(
+  db: Firestore,
+  collegeId: string,
+  dateISOs: string[],
+  opts: { fresh?: boolean } = {}
+): Promise<DateSubstitution[]> {
+  const key = `${collegeId}|${[...dateISOs].sort().join(",")}`;
+  const now = Date.now();
+  if (!opts.fresh) {
+    const hit = substitutionCache.get(key);
+    if (hit && now - hit.at < SUBSTITUTION_CACHE_TTL_MS) return hit.value;
+  }
+  const value = loadActiveSubstitutions(db, collegeId, dateISOs);
+  if (substitutionCache.size >= SUBSTITUTION_CACHE_MAX) {
+    for (const [k, v] of substitutionCache) if (now - v.at >= SUBSTITUTION_CACHE_TTL_MS) substitutionCache.delete(k);
+    if (substitutionCache.size >= SUBSTITUTION_CACHE_MAX) substitutionCache.clear();
+  }
+  substitutionCache.set(key, { at: now, value });
+  // A failed read must not be served again for the next 15 seconds.
+  value.catch(() => { if (substitutionCache.get(key)?.value === value) substitutionCache.delete(key); });
+  return value;
+}
+
+async function loadApprovedLeaves(collegeRef: FirebaseFirestore.DocumentReference, dateISOs: string[]) {
+  const leaves = collegeRef.collection("leaveRequests").where("status", "==", "APPROVED");
+  if (dateISOs.length === 0) return leaves.get();
+  const earliest = [...dateISOs].sort()[0];
+  // One day of slack either side: leave dates are stored as instants whose IST/UTC
+  // midnight can fall a day off the calendar date being asked about.
+  const floor = new Date(`${earliest}T00:00:00Z`);
+  floor.setUTCDate(floor.getUTCDate() - 1);
+  try {
+    return await leaves.where("toDate", ">=", floor).get();
+  } catch (err) {
+    // 9 = FAILED_PRECONDITION: the (status, toDate) index isn't deployed yet.
+    if ((err as { code?: number }).code === 9) {
+      console.warn("[periodCoverage] leaveRequests (status,toDate) index missing - falling back to a full read");
+      return leaves.get();
+    }
+    throw err;
+  }
+}
+
+async function loadActiveSubstitutions(
   db: Firestore,
   collegeId: string,
   dateISOs: string[]
@@ -444,7 +512,7 @@ export async function getActiveSubstitutionsForDates(
   const dateSet = new Set(dateISOs);
   const collegeRef = db.collection("colleges").doc(collegeId);
   const [snap, adjustmentsSnap] = await Promise.all([
-    collegeRef.collection("leaveRequests").where("status", "==", "APPROVED").get(),
+    loadApprovedLeaves(collegeRef, dateISOs),
     collegeRef.collection("staffAdjustments").where("status", "==", "ACTIVE").get(),
   ]);
 
@@ -527,8 +595,9 @@ export async function resolveSubstituteSlotsForDate(
   collegeId: string,
   substituteFacultyId: string,
   dateISO: string,
+  opts: { fresh?: boolean } = {},
 ): Promise<Map<string, { originalFacultyId: string; originalFacultyName: string }>> {
-  const subs = await getActiveSubstitutionsForDates(db, collegeId, [dateISO]);
+  const subs = await getActiveSubstitutionsForDates(db, collegeId, [dateISO], opts);
   const map = new Map<string, { originalFacultyId: string; originalFacultyName: string }>();
   for (const s of subs) {
     if (s.substituteFacultyId !== substituteFacultyId) continue;

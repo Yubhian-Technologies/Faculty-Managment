@@ -20,7 +20,8 @@ function stripUndefined(value: unknown): unknown {
 }
 
 export interface AuditEntryInput {
-  action: AuditAction;
+  // Known actions autocomplete; routes that log an action not yet in the AuditAction union still compile.
+  action: AuditAction | (string & {});
   performedBy: string;
   performedByName?: string;
   targetId?: string;

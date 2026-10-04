@@ -1,5 +1,6 @@
 "use client";
 
+import { neutraliseFormula } from "@/lib/utils/csv";
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Download, Printer, Save, Send, Trash2 } from "lucide-react";
@@ -96,7 +97,7 @@ export default function SeatingPlanPage({ params }: { params: Promise<{ id: stri
         r.students.forEach((s, i) => lines.push([r.name, r.block, String(r.floor), String(i + 1), s.rollNumber, s.name, s.sectionLabel]));
       }
     }
-    const csv = lines.map((l) => l.map((c) => `"${c.replace(/"/g, '""')}"`).join(",")).join("\n");
+    const csv = lines.map((l) => l.map((c) => `"${neutraliseFormula(c).replace(/"/g, '""')}"`).join(",")).join("\n");
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
     a.download = `${plan!.name.replace(/[^a-z0-9]+/gi, "-")}-seating.csv`;

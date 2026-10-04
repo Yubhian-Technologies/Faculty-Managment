@@ -1,5 +1,7 @@
 export const dynamic = "force-dynamic";
 
+import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -92,7 +94,7 @@ interface ImportTask {
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("COLLEGE_OFFICE", "PRINCIPAL", "VICE_PRINCIPAL");
-    const body = (await request.json()) as { records: ImportRow[] };
+    const body = (await readJsonBody(request)) as { records: ImportRow[] };
 
     if (!body.records || !Array.isArray(body.records) || body.records.length === 0) {
       return NextResponse.json({ error: "No records provided" }, { status: 400 });
@@ -217,18 +219,13 @@ export async function POST(request: Request) {
     }
 
     if (created > 0) {
-      await db.collection("colleges").doc(collegeId).collection("auditLogs").add({
-        collegeId,
-        action: "LEAVE_HISTORY_IMPORTED",
-        performedBy: session.uid,
-        performedByName: addedByName,
-        details: { created, failed: failed.length },
-        timestamp: now,
-      });
+      await writeAuditLogSafe(db, collegeId, { action: "LEAVE_HISTORY_IMPORTED", performedBy: session.uid, performedByName: addedByName, details: { created, failed: failed.length } });
     }
 
     return NextResponse.json({ created, failed }, { status: 201 });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

@@ -1,5 +1,7 @@
 export const dynamic = "force-dynamic";
 
+import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { findUsersSnapshot } from "@/lib/roles/findUsersByRoles";
 import { NextResponse } from "next/server";
 import { isCollegeAdmin, requireCollegeContext } from "@/lib/auth/verifySession";
@@ -41,6 +43,8 @@ export async function GET(
 
     return NextResponse.json({ request: req });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -56,7 +60,7 @@ export async function PATCH(
   try {
     const session = await requireCollegeContext(request, "HOD", "PRINCIPAL", "VICE_PRINCIPAL", "FINANCE", "SUPER_ADMIN");
     const { id } = await params;
-    const body = (await request.json()) as {
+    const body = (await readJsonBody(request)) as {
       action?: "VERIFY" | "REJECT" | "RETURN" | "APPROVE";
       remarks?: string;
       fiscalYear?: string;
@@ -262,17 +266,9 @@ export async function PATCH(
         updatedAt: now,
       });
 
-      await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-        collegeId: session.collegeId,
-        action: nextStatus === "L1_FROZEN" ? "BUDGET_REQUEST_VERIFIED"
+      await writeAuditLogSafe(db, session.collegeId, { action: nextStatus === "L1_FROZEN" ? "BUDGET_REQUEST_VERIFIED"
           : nextStatus === "PRINCIPAL_REJECTED" ? "BUDGET_REQUEST_REJECTED"
-          : "BUDGET_REQUEST_RETURNED",
-        performedBy: session.uid,
-        performedByName: principalName,
-        targetId: id,
-        details: { title: req.title, department: req.department },
-        timestamp: now,
-      });
+          : "BUDGET_REQUEST_RETURNED", performedBy: session.uid, performedByName: principalName, targetId: id, details: { title: req.title, department: req.department } });
 
       // The Principal/VP has now acted - clears their own "awaiting your
       // review" popup regardless of which of the three outcomes this was.
@@ -341,15 +337,7 @@ export async function PATCH(
         updatedAt: now,
       });
 
-      await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-        collegeId: session.collegeId,
-        action: "BUDGET_REQUEST_REPORT_UPLOADED",
-        performedBy: session.uid,
-        performedByName: financeName,
-        targetId: id,
-        details: { title: req.title, department: req.department },
-        timestamp: now,
-      });
+      await writeAuditLogSafe(db, session.collegeId, { action: "BUDGET_REQUEST_REPORT_UPLOADED", performedBy: session.uid, performedByName: financeName, targetId: id, details: { title: req.title, department: req.department } });
 
       await notify(
         db, session.collegeId, req.hodUid,
@@ -555,6 +543,8 @@ export async function PATCH(
 
     return NextResponse.json({ error: "Action not permitted in current state." }, { status: 409 });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

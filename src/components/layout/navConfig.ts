@@ -17,6 +17,10 @@ export interface NavItem {
   // assignment list are shown (personal items always visible). Leave
   // unset for items that are always visible regardless of assignments.
   module?: string;
+  // The Super Admin Nav Visibility setting stores hidden modules BY NAME. When an item
+  // moves to a differently-named section, its previous module name goes here so a
+  // college's saved hidden-module list keeps hiding it (see migrateHiddenModules).
+  legacyModule?: string;
   // Hides this item for a login whose real, un-normalized role (FMSUser.realRole)
   // is one of these - even though `roles` above still matches its normalized
   // `role`. Exists for COLLEGE_ADMIN, which reads as "PRINCIPAL" in `role`
@@ -189,20 +193,21 @@ export const NAV_ITEMS: NavItem[] = [
   // visible per college via the Nav Visibility settings (filterVisibleNavItems).
   // Grouped by functional domain (see PRINCIPAL_DASHBOARD.md), not by data location.
   { label: "Dashboard", href: "/principal", iconName: "LayoutDashboard", roles: ["PRINCIPAL"] },
-  { label: "Courses", href: "/principal/courses", iconName: "GraduationCap", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Academic Management" },
+  { label: "Courses", href: "/principal/courses", iconName: "GraduationCap", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Academics", legacyModule: "Academic Management" },
   // Promotion and Graduated Students live as sub-tabs (top-right pills) inside
   // the Students page itself now, rather than as separate sidebar entries -
   // see PrincipalStudentsPage. /principal/promotions and /principal/graduates
   // still work as direct routes for any existing bookmarks/links.
-  { label: "Students", href: "/principal/students", iconName: "GraduationCap", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
-  { label: "Timetable View", href: "/principal/timetable", iconName: "CalendarDays", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
-  { label: "Internal Marks", href: "/principal/internal-marks", iconName: "ClipboardCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
-  { label: "Faculty", href: "/principal/faculty", iconName: "UsersRound", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Staff & HR Management" },
-  { label: "Staff", href: "/principal/staff", iconName: "UsersRound", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
+  { label: "Students", href: "/principal/students", iconName: "GraduationCap", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Academic Management" },
+  { label: "Timetable View", href: "/principal/timetable", iconName: "CalendarDays", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Academic Management" },
+  { label: "Internal Marks", href: "/principal/internal-marks", iconName: "ClipboardCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Academic Management" },
+  { label: "Faculty", href: "/principal/faculty", iconName: "UsersRound", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Staff & HR", legacyModule: "Staff & HR Management" },
+  { label: "Staff", href: "/principal/staff", iconName: "UsersRound", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Staff & HR Management" },
+  { label: "Circulars", href: "/principal/circulars", iconName: "Megaphone", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Staff & HR Management" },
   // Deciding a leave request is Principal/VP authority, not College Admin's -
   // see the matching guard in api/leave/applications/[id]/route.ts.
-  { label: "Leave Approvals", href: "/principal/leave-approvals", iconName: "CalendarClock", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], hideForRealRoles: ["COLLEGE_ADMIN"] },
-  { label: "Leave History", href: "/principal/leave-history", iconName: "History", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
+  { label: "Leave Approvals", href: "/principal/leave-approvals", iconName: "CalendarClock", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Leave & Attendance", hideForRealRoles: ["COLLEGE_ADMIN"], legacyModule: "Staff & HR Management" },
+  { label: "Leave History", href: "/principal/leave-history", iconName: "History", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Staff & HR Management" },
   // Was 7 separate sidebar items (Student Attendance History, Attendance
   // Report, Attendance Completion, Absent Report, Shortage Report, Faculty
   // Not Posted, Import Attendance), all ungrouped. Now split into two:
@@ -215,9 +220,8 @@ export const NAV_ITEMS: NavItem[] = [
   // 403s them) regardless of how the tab is reached - see that component's
   // own guard. The old routes still work standalone (unlinked, not deleted)
   // for any existing notification links/bookmarks.
-  { label: "Attendance", href: "/principal/attendance-report", iconName: "ClipboardCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
-  { label: "Attendance Reports", href: "/principal/attendance-reports", iconName: "CalendarRange", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
-  { label: "Circulars", href: "/principal/circulars", iconName: "Megaphone", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
+  { label: "Attendance", href: "/principal/attendance-report", iconName: "ClipboardCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Staff & HR Management" },
+  { label: "Attendance Reports", href: "/principal/attendance-reports", iconName: "CalendarRange", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Staff & HR Management" },
   // Panel Scoring and Appointment Letters are no longer separate tabs - both
   // are folded into the Hiring Requests pipeline's own status badges/actions
   // (see PrincipalPipelineBoard.tsx) since they're just later stages of the
@@ -231,12 +235,12 @@ export const NAV_ITEMS: NavItem[] = [
   // Budget-cycle and budget-request approval is Principal/VP decision
   // authority, not College Admin's - see the matching guards in
   // api/college/budget-cycles/[id] and api/college/budget-requests/[id].
-  { label: "Budget", href: "/principal/budget", iconName: "PiggyBank", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Payroll & Budget", hideForRealRoles: ["COLLEGE_ADMIN"] },
-  { label: "Budget Report", href: "/principal/budget/report", iconName: "FileText", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
+  { label: "Budget", href: "/principal/budget", iconName: "PiggyBank", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Budget & Purchase", hideForRealRoles: ["COLLEGE_ADMIN"], legacyModule: "Payroll & Budget" },
+  { label: "Budget Report", href: "/principal/budget/report", iconName: "FileText", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Payroll & Budget" },
   // Only ever shows the Principal/VP's OWN emergency purchase requests - not
   // something College Admin should be raising on the college's behalf either.
-  { label: "Purchase Clearance", href: "/principal/purchase-clearance", iconName: "Receipt", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], hideForRealRoles: ["COLLEGE_ADMIN"] },
-  { label: "Budget History", href: "/principal/indents", iconName: "ClipboardList", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
+  { label: "Purchase Clearance", href: "/principal/purchase-clearance", iconName: "Receipt", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], hideForRealRoles: ["COLLEGE_ADMIN"], legacyModule: "Payroll & Budget" },
+  { label: "Budget History", href: "/principal/indents", iconName: "ClipboardList", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Payroll & Budget" },
   // College Admin is a role-login, not one continuous employee (see
   // administration/college-people): no personal HR profile, attendance, or
   // leave to track, unlike every other seat here (a real Principal/VP is
@@ -271,18 +275,18 @@ export const NAV_ITEMS: NavItem[] = [
   // stays with the actual HOD. The API enforces that too - this only keeps a
   // dead link out of their sidebar. See NavItem.hideForRealRoles.
   { label: "Department Office", href: "/hod/settings/department-office", iconName: "UserCog", roles: ["HOD"], hideForRealRoles: ["DEPARTMENT_OFFICE"] },
-  { label: "Subjects", href: "/hod/subjects", iconName: "Library", roles: ["HOD"] },
-  { label: "Teaching Assignments", href: "/hod/teaching-assignments", iconName: "BookOpen", roles: ["HOD"], module: "timetable-incharge" },
-  // No separate "Assignment Requests" item: it is a button on the Teaching
-  // Assignments page, and SUB_PAGE_PARENT keeps Teaching Assignments highlighted there.
-  { label: "Internal Exam", href: "/hod/internal-exam", iconName: "ClipboardCheck", roles: ["HOD"] },
-  { label: "Mid Paper Setter", href: "/hod/mid-paper-setter", iconName: "UserCog", roles: ["HOD"] },
+  { label: "Subjects", href: "/hod/subjects", iconName: "Library", roles: ["HOD"], section: "Academics", legacyModule: "Department" },
+  { label: "Teaching Assignments", href: "/hod/teaching-assignments", iconName: "BookOpen", roles: ["HOD"], module: "timetable-incharge", legacyModule: "Department" },
+  // No separate "Assignment Requests" item: it is a button on the Teaching Assignments page.
   // Sits directly below Teaching Assignments: subjects are assigned there first,
   // then scheduled here.
-  { label: "Timetable", href: "/hod/timetable", iconName: "CalendarDays", roles: ["HOD"], module: "timetable-incharge" },
-  { label: "Timetable View", href: "/hod/timetable-view", iconName: "CalendarSearch", roles: ["HOD"], module: "timetable-incharge" },
+  { label: "Timetable", href: "/hod/timetable", iconName: "CalendarDays", roles: ["HOD"], module: "timetable-incharge", legacyModule: "Department" },
+  { label: "Timetable View", href: "/hod/timetable-view", iconName: "CalendarSearch", roles: ["HOD"], module: "timetable-incharge", legacyModule: "Department" },
+  { label: "Internal Exam", href: "/hod/internal-exam", iconName: "ClipboardCheck", roles: ["HOD"], legacyModule: "Department" },
+  { label: "Mid Paper Setter", href: "/hod/mid-paper-setter", iconName: "UserCog", roles: ["HOD"], legacyModule: "Department" },
   { label: "Leave Approvals", href: "/hod/leave-approvals", iconName: "CalendarClock", roles: ["HOD"], section: "Approvals", module: "leave-approvals" },
   { label: "Leave History", href: "/hod/leave-history", iconName: "History", roles: ["HOD"], module: "leave-approvals" },
+  { label: "Student Permissions", href: "/hod/student-permissions", iconName: "ShieldCheck", roles: ["HOD"] },
   // Was 8 separate sidebar items (Attendance Reports, Attendance History,
   // Faculty Attendance, Attendance Completion, Absent Report, Shortage
   // Report, Faculty Not Posted, Import Attendance), all ungrouped and, on
@@ -292,9 +296,9 @@ export const NAV_ITEMS: NavItem[] = [
   // every report/history/completion view (see
   // hod/attendance-reports/page.tsx). The old routes still work standalone
   // (unlinked, not deleted) for any existing notification links/bookmarks.
-  { label: "Attendance", href: "/hod/faculty-attendance", iconName: "ClipboardCheck", roles: ["HOD"], module: "attendance" },
-  { label: "Attendance Reports", href: "/hod/attendance-reports", iconName: "CalendarRange", roles: ["HOD"], module: "attendance" },
-  { label: "Leave Profiles", href: "/hod/leave/profiles", iconName: "ClipboardList", roles: ["HOD"] },
+  { label: "Attendance", href: "/hod/faculty-attendance", iconName: "ClipboardCheck", roles: ["HOD"], section: "Attendance & Leave", module: "attendance", legacyModule: "Approvals" },
+  { label: "Attendance Reports", href: "/hod/attendance-reports", iconName: "CalendarRange", roles: ["HOD"], module: "attendance", legacyModule: "Approvals" },
+  { label: "Leave Profiles", href: "/hod/leave/profiles", iconName: "ClipboardList", roles: ["HOD"], legacyModule: "Approvals" },
   { label: "Budget", href: "/hod/budget", iconName: "PiggyBank", roles: ["HOD"], section: "Budget & Purchase" },
   { label: "Indents", href: "/hod/indents", iconName: "ShoppingCart", roles: ["HOD"] },
   { label: "Purchase Clearance", href: "/hod/purchase-clearance", iconName: "Receipt", roles: ["HOD"] },
@@ -414,30 +418,31 @@ export const NAV_ITEMS: NavItem[] = [
   // visible per college via the Nav Visibility settings (filterVisibleNavItems).
   { label: "Dashboard", href: "/panel", iconName: "LayoutDashboard", roles: ["PANEL_MEMBER"] },
   { label: "Teaching Load", href: "/panel/teaching", iconName: "BookOpen", roles: ["PANEL_MEMBER"], section: "My Work", module: "teaching-load" },
-  // Shown to every PANEL_MEMBER regardless of whether an HOD has actually
-  // delegated anything to them yet - the page itself shows an empty state
-  // when it's empty, same convention as Leave/Attendance always showing
-  // before someone has any requests/records (see TimetableIncharge in
-  // src/types/core.ts).
-  { label: "Timetable Incharge", href: "/panel/timetable-incharge", iconName: "UserCog", roles: ["PANEL_MEMBER"], module: "timetable-incharge" },
-  // Only meaningful once this uid is Timetable Incharge for at least one
-  // department (see isTimetableInchargeForDepartment) - shown unconditionally
-  // like the entry above, same empty-state convention.
-  { label: "Assignment Requests", href: "/panel/assignment-requests", iconName: "Send", roles: ["PANEL_MEMBER"], module: "assignment-requests" },
   { label: "Faculty Timetable", href: "/panel/faculty-timetable", iconName: "CalendarSearch", roles: ["PANEL_MEMBER"], module: "assignment-requests" },
   { label: "Internal Exam", href: "/panel/internal-exam", iconName: "ClipboardList", roles: ["PANEL_MEMBER"] },
   { label: "Add Mid Bank", href: "/panel/mid-bank", iconName: "BookOpen", roles: ["PANEL_MEMBER"] },
-  { label: "Student Attendance", href: "/panel/mark-attendance", iconName: "CalendarCheck", roles: ["PANEL_MEMBER"], module: "attendance" },
-  { label: "Attendance Report", href: "/panel/monthly-records", iconName: "CalendarRange", roles: ["PANEL_MEMBER"], module: "attendance" },
-  { label: "Students", href: "/panel/students", iconName: "GraduationCap", roles: ["PANEL_MEMBER"], module: "students" },
+  { label: "My Feedback", href: "/panel/feedback", iconName: "MessageSquare", roles: ["PANEL_MEMBER"] },
+  { label: "Student Attendance", href: "/panel/mark-attendance", iconName: "CalendarCheck", roles: ["PANEL_MEMBER"], section: "Students & Attendance", module: "attendance", legacyModule: "My Work" },
+  { label: "Attendance Report", href: "/panel/monthly-records", iconName: "CalendarRange", roles: ["PANEL_MEMBER"], module: "attendance", legacyModule: "My Work" },
+  { label: "Student Permissions", href: "/panel/student-permissions", iconName: "ShieldCheck", roles: ["PANEL_MEMBER"], legacyModule: "My Work" },
+  { label: "Students", href: "/panel/students", iconName: "GraduationCap", roles: ["PANEL_MEMBER"], module: "students", legacyModule: "My Work" },
   // Dividing a section's own roster into lab sub-groups (StudentRecord.
   // labBatch) - only meaningful once this login is Faculty Incharge of at
   // least one section (see Section.facultyInchargeUid); the page itself shows
   // an empty state otherwise, same convention as the entries above. HOD-only
   // by design elsewhere (hod/students' per-student Edit dialog) - this is the
   // Faculty Incharge's own equivalent, not offered to HOD here.
-  { label: "Lab Batches", href: "/panel/students/batches", iconName: "Layers", roles: ["PANEL_MEMBER"], module: "lab-batches" },
-  { label: "My Feedback", href: "/panel/feedback", iconName: "MessageSquare", roles: ["PANEL_MEMBER"] },
+  { label: "Lab Batches", href: "/panel/students/batches", iconName: "Layers", roles: ["PANEL_MEMBER"], module: "lab-batches", legacyModule: "My Work" },
+  // Shown to every PANEL_MEMBER regardless of whether an HOD has actually
+  // delegated anything to them yet - the page itself shows an empty state
+  // when it's empty, same convention as Leave/Attendance always showing
+  // before someone has any requests/records (see TimetableIncharge in
+  // src/types/core.ts).
+  { label: "Timetable Incharge", href: "/panel/timetable-incharge", iconName: "UserCog", roles: ["PANEL_MEMBER"], section: "Incharge Duties", module: "timetable-incharge", legacyModule: "My Work" },
+  // Only meaningful once this uid is Timetable Incharge for at least one
+  // department (see isTimetableInchargeForDepartment) - shown unconditionally
+  // like the entry above, same empty-state convention.
+  { label: "Assignment Requests", href: "/panel/assignment-requests", iconName: "Send", roles: ["PANEL_MEMBER"], module: "assignment-requests", legacyModule: "My Work" },
   { label: "Leave", href: "/panel/leave", iconName: "CalendarClock", roles: ["PANEL_MEMBER"], section: "Leave & Attendance" },
   { label: "Adjustment Requests", href: "/leave/adjustments", iconName: "UserCheck", roles: ["PANEL_MEMBER"] },
   { label: "My Attendance", href: "/panel/attendance", iconName: "ClipboardCheck", roles: ["PANEL_MEMBER"], module: "attendance" },
@@ -478,11 +483,11 @@ export const NAV_ITEMS: NavItem[] = [
 
   // Student
   { label: "Dashboard", href: "/student", iconName: "LayoutDashboard", roles: ["STUDENT"] },
-  { label: "Timetable", href: "/student/timetable", iconName: "CalendarDays", roles: ["STUDENT"] },
+  { label: "Timetable", href: "/student/timetable", iconName: "CalendarDays", roles: ["STUDENT"], section: "Academics" },
   { label: "Attendance", href: "/student/attendance", iconName: "TrendingUp", roles: ["STUDENT"] },
-  { label: "Library", href: "/student/library", iconName: "BookOpen", roles: ["STUDENT"] },
-  { label: "Documents", href: "/student/documents", iconName: "FileText", roles: ["STUDENT"] },
   { label: "Permissions", href: "/student/permissions", iconName: "ShieldCheck", roles: ["STUDENT"] },
+  { label: "Library", href: "/student/library", iconName: "BookOpen", roles: ["STUDENT"], section: "Resources" },
+  { label: "Documents", href: "/student/documents", iconName: "FileText", roles: ["STUDENT"] },
   // Reached from the avatar in the top bar (see getProfileHref), not the sidebar.
   { label: "My Profile", href: "/student/profile", iconName: "UserCircle", roles: ["STUDENT"] },
 
@@ -683,6 +688,21 @@ export function computeItemModule(items: NavItem[], index: number): string {
     if (items[i].section) return items[i].section!;
   }
   return "General";
+}
+
+// Carries a stored hidden-module list across a section rename/split: for every item
+// that moved, if its previous module name was hidden, its current module is hidden
+// too. Only ever adds names, so nothing that was hidden becomes visible - and
+// since each old module is split only into groups it already contained, nothing
+// new gets hidden either. Old names are left in the list (they match nothing).
+export function migrateHiddenModules(role: UserRole, hidden: readonly string[]): string[] {
+  if (hidden.length === 0) return [];
+  const out = new Set(hidden);
+  const items = getNavItemsForRole(role);
+  items.forEach((item, i) => {
+    if (item.legacyModule && hidden.includes(item.legacyModule)) out.add(computeItemModule(items, i));
+  });
+  return Array.from(out);
 }
 
 export interface NavModuleGroup {

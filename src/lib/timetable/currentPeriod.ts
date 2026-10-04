@@ -293,7 +293,8 @@ export async function checkFacultyPeriodWindow(
   // above finds nothing, so the ordinary (non-substitute) path never pays
   // this extra cost. See resolveSubstituteSlotsForDate's own doc-comment.
   if (todaySlots.length === 0) {
-    const substituted = await resolveSubstituteSlotsForDate(db, collegeId, facultyMemberId, dateISO);
+    // fresh: this is the write gate - a just-approved substitute must not be refused for a cache's sake.
+    const substituted = await resolveSubstituteSlotsForDate(db, collegeId, facultyMemberId, dateISO, { fresh: true });
     if (substituted.size > 0) {
       const assignmentSlotsSnap = await collegeRef.collection("timetableSlots")
         .where("assignmentId", "==", assignmentId)

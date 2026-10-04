@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -69,7 +70,7 @@ function parseCitation(citation: string): { title: string; coAuthors: string } {
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("R_AND_D");
-    const body = (await request.json()) as { records: ImportRow[] };
+    const body = (await readJsonBody(request)) as { records: ImportRow[] };
 
     if (!body.records || !Array.isArray(body.records) || body.records.length === 0) {
       return NextResponse.json({ error: "No records provided" }, { status: 400 });
@@ -165,6 +166,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ created: created.length, failed, warnings: [] }, { status: 201 });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

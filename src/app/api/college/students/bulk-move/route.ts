@@ -1,5 +1,7 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
+import { invalidateSectionCountCache } from "@/lib/students/sectionCounts";
 import { NextResponse } from "next/server";
 import { actorOf } from "@/lib/audit/actorOf";
 import { writeAuditLog } from "@/lib/audit/writeAuditLog";
@@ -42,7 +44,8 @@ interface SkipRow { id: string; name: string; reason: string }
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");
-    const body = (await request.json()) as {
+    invalidateSectionCountCache(session.collegeId); // student counts on the Sections list change with this write
+    const body = (await readJsonBody(request)) as {
       studentIds?: unknown;
       targetSectionId?: unknown;
       unassign?: unknown;
@@ -179,6 +182,8 @@ export async function POST(request: Request) {
       moved: dryRun ? 0 : moves.length,
     });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

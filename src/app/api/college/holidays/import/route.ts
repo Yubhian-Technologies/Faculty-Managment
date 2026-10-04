@@ -1,5 +1,8 @@
 export const dynamic = "force-dynamic";
 
+import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
+import { ChunkedBatch } from "@/lib/firestore/chunkedBatch";
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -31,7 +34,7 @@ for (const code of Object.keys(HOLIDAY_TYPE_LABELS) as HolidayType[]) {
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_OFFICE");
-    const body = (await request.json()) as { records?: ImportRow[] };
+    const body = (await readJsonBody(request)) as { records?: ImportRow[] };
     const records = body.records;
 
     if (!records || !Array.isArray(records) || records.length === 0) {
@@ -74,9 +77,10 @@ export async function POST(request: Request) {
     }
 
     const holidaysRef = db.collection("colleges").doc(collegeId).collection("holidays");
-    let created = 0;
+    // One batched write per ~450 holidays instead of one round trip per row.
+    const writer = new ChunkedBatch(db);
     for (const h of toCreate) {
-      await holidaysRef.add({
+      writer.set(holidaysRef.doc(), {
         collegeId,
         date: h.date,
         name: h.name,
@@ -85,21 +89,18 @@ export async function POST(request: Request) {
         academicYear: h.academicYear,
         createdAt: now,
       });
-      created++;
     }
+    await writer.commit();
+    const created = toCreate.length;
 
     if (created > 0) {
-      await db.collection("colleges").doc(collegeId).collection("auditLogs").add({
-        collegeId,
-        action: "HOLIDAYS_IMPORTED",
-        performedBy: session.uid,
-        details: { created, failed: failed.length },
-        timestamp: now,
-      });
+      await writeAuditLogSafe(db, collegeId, { action: "HOLIDAYS_IMPORTED", performedBy: session.uid, details: { created, failed: failed.length } });
     }
 
     return NextResponse.json({ created, failed }, { status: 201 });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

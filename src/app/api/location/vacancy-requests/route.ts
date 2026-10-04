@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { verifySession } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -15,7 +16,10 @@ export async function GET(request: Request) {
     }
 
     const { searchParams } = new URL(request.url);
-    const locationId = searchParams.get("locationId") ?? session.locationId;
+    // Only a Super Admin may look at another location; everyone else is held to their own.
+    const locationId = session.role === "SUPER_ADMIN"
+      ? (searchParams.get("locationId") ?? session.locationId)
+      : session.locationId;
     if (!locationId) return NextResponse.json({ error: "locationId required" }, { status: 400 });
     const collegeIdFilter = searchParams.get("collegeId");
 
@@ -55,6 +59,8 @@ export async function GET(request: Request) {
 
     return NextResponse.json({ vacancyRequests: requests });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     console.error("[location/vacancy-requests GET]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
@@ -70,7 +76,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "No location context" }, { status: 400 });
     }
 
-    const body = (await request.json()) as {
+    const body = (await readJsonBody(request)) as {
       department: string;
       qualification?: string;
       requiredCount: number;
@@ -164,6 +170,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ id: ref.id }, { status: 201 });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     console.error("[location/vacancy-requests POST]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }

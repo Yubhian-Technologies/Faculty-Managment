@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { pinSlotWithChecks } from "@/lib/timetable/pinSlot";
@@ -111,6 +112,8 @@ export async function GET(request: Request) {
 
     return NextResponse.json({ slots, subjects: subjectDocs, workingDays: rules.workingDays });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -127,7 +130,7 @@ export async function POST(request: Request) {
     // narrower version of the same "build this section's timetable" action
     // those routes allow.
     const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "PANEL_MEMBER", "COLLEGE_STAFF");
-    const body = (await request.json()) as {
+    const body = (await readJsonBody(request)) as {
       assignmentId: string;
       day: DayOfWeek;
       periodNumber: number;
@@ -259,10 +262,12 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ id: pinned.id }, { status: 201 });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     console.error("[college/timetable-slots POST]", err);
-    return NextResponse.json({ error: err instanceof Error ? err.message : "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 }

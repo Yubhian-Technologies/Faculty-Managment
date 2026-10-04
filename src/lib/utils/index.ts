@@ -1,6 +1,7 @@
 import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
 import type { Timestamp } from "firebase/firestore";
+import { neutraliseFormula } from "./csv";
 import { type WorkflowStatus, type CandidateStatus, type MonthlySummaryRow } from "@/types";
 
 export function cn(...inputs: ClassValue[]) {
@@ -136,22 +137,30 @@ export function getWorkflowStatusColor(status: WorkflowStatus | CandidateStatus)
   return colorMap[status] ?? "bg-gray-100 text-gray-800 border-gray-200";
 }
 
-export function exportToCSV<T extends Record<string, unknown>>(
+/** The CSV text exportToCSV downloads - cells that would run as a spreadsheet formula are neutralised. */
+export function buildCsvText<T extends Record<string, unknown>>(
   data: T[],
-  filename: string,
   columns: { key: string; header: string }[]
-): void {
+): string {
   const headers = columns.map((c) => c.header).join(",");
   const rows = data.map((row) =>
     columns
       .map((c) => {
         const val = row[c.key];
-        const str = val === null || val === undefined ? "" : String(val);
+        const str = neutraliseFormula(val === null || val === undefined ? "" : String(val));
         return `"${str.replace(/"/g, '""')}"`;
       })
       .join(",")
   );
-  const csv = [headers, ...rows].join("\n");
+  return [headers, ...rows].join("\n");
+}
+
+export function exportToCSV<T extends Record<string, unknown>>(
+  data: T[],
+  filename: string,
+  columns: { key: string; header: string }[]
+): void {
+  const csv = buildCsvText(data, columns);
   // Leading UTF-8 BOM - without it, Excel on Windows opens a local CSV using
   // the system ANSI codepage regardless of the Blob's declared charset, so
   // any non-ASCII character (e.g. the "—" placeholder for a null percentage)

@@ -1,5 +1,8 @@
 export const dynamic = "force-dynamic";
 
+import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
+import { isEmployeeIdReserved, reserveEmployeeId } from "@/lib/firestore/employeeIdKeys";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb, getAdminAuth } from "@/lib/firebase/admin";
@@ -66,6 +69,8 @@ export async function GET(
 
     return NextResponse.json({ faculty: { id: snap.id, ...migrateFacultyDoc(snap.data() ?? {}) } });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -82,7 +87,7 @@ export async function PATCH(
     const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL");
     const { id } = await params;
 
-    const body = (await request.json()) as Partial<{
+    const body = (await readJsonBody(request)) as Partial<{
       employeeId: string;
       apaarFacultyId: string;
       email: string;
@@ -197,6 +202,12 @@ export async function PATCH(
         const idCheck = await employeeIdTaken(db, session.collegeId, newEmployeeId, { collection: "facultyMembers", id });
         if (idCheck.taken) {
           return NextResponse.json({ error: employeeIdTakenMessage(idCheck) }, { status: 409 });
+        }
+        try {
+          await reserveEmployeeId(db, session.collegeId, newEmployeeId, { collection: "facultyMembers", id });
+        } catch (e) {
+          if (isEmployeeIdReserved(e)) return NextResponse.json({ error: employeeIdTakenMessage({ taken: true, heldBy: e.heldBy }) }, { status: 409 });
+          throw e;
         }
       }
       updates.employeeId = newEmployeeId;
@@ -418,18 +429,12 @@ export async function PATCH(
       actorName = (actorSnap.data() as { name?: string } | undefined)?.name ?? "Unknown";
     } catch { /* best-effort */ }
 
-    await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-      collegeId: session.collegeId,
-      action: "FACULTY_UPDATED",
-      performedBy: session.uid,
-      performedByName: actorName,
-      targetId: id,
-      details: { name: newDisplayName || oldDisplayName, fields: Object.keys(updates).filter((k) => k !== "updatedAt") },
-      timestamp: new Date(),
-    });
+    await writeAuditLogSafe(db, session.collegeId, { action: "FACULTY_UPDATED", performedBy: session.uid, performedByName: actorName, targetId: id, details: { name: newDisplayName || oldDisplayName, fields: Object.keys(updates).filter((k) => k !== "updatedAt") } });
 
     return NextResponse.json({ success: true });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -490,6 +495,8 @@ export async function DELETE(
 
     return NextResponse.json({ success: true, archived: true });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

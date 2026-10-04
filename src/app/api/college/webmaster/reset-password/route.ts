@@ -1,5 +1,8 @@
 export const dynamic = "force-dynamic";
 
+import { firebaseAuthErrorResponse } from "@/lib/http/firebaseErrors";
+import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb, getAdminAuth } from "@/lib/firebase/admin";
@@ -17,7 +20,7 @@ const MIN_PASSWORD_LENGTH = 6; // Firebase Auth's own minimum
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("WEBMASTER", "SUPER_ADMIN");
-    const body = (await request.json()) as { uid?: string; password?: string };
+    const body = (await readJsonBody(request)) as { uid?: string; password?: string };
     if (!body.uid) {
       return NextResponse.json({ error: "uid is required" }, { status: 400 });
     }
@@ -45,21 +48,17 @@ export async function POST(request: Request) {
     const actorSnap = await db.collection("colleges").doc(session.collegeId).collection("users").doc(session.uid).get();
     const actorName = (actorSnap.data() as { name?: string } | undefined)?.name ?? "Unknown";
 
-    await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-      collegeId: session.collegeId,
-      action: "USER_PASSWORD_RESET",
-      performedBy: session.uid,
-      performedByName: actorName,
-      targetId: body.uid,
-      details: { targetRole: target.role, targetName: target.name },
-      timestamp: new Date(),
-    });
+    await writeAuditLogSafe(db, session.collegeId, { action: "USER_PASSWORD_RESET", performedBy: session.uid, performedByName: actorName, targetId: body.uid, details: { targetRole: target.role, targetName: target.name } });
 
     return NextResponse.json({ ok: true, newPassword });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const authErr = firebaseAuthErrorResponse(err);
+    if (authErr) return authErr;
     console.error("[webmaster/reset-password POST]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }

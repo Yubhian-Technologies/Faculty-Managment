@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { findUsersSnapshot } from "@/lib/roles/findUsersByRoles";
 import { NextResponse } from "next/server";
 import { isCollegeAdmin, requireCollegeMember } from "@/lib/auth/verifySession";
@@ -17,35 +18,6 @@ async function getUserName(db: Firestore, collegeId: string, uid: string): Promi
   }
 }
 
-export async function GET(
-  _request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  try {
-    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "HOD", "SUPER_ADMIN", "COLLEGE_OFFICE", "PANEL_MEMBER", "ACCOUNTS");
-    const { id } = await params;
-    const db = getAdminDb();
-    const snap = await db
-      .collection("colleges")
-      .doc(session.collegeId)
-      .collection("candidateApplications")
-      .doc(id)
-      .get();
-
-    if (!snap.exists) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
-    }
-
-    return NextResponse.json({ application: { id: snap.id, ...snap.data() } });
-  } catch (err) {
-    if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    console.error("[candidate-applications/[id] GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
-  }
-}
-
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -53,7 +25,7 @@ export async function PATCH(
   try {
     const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "PANEL_MEMBER", "COLLEGE_OFFICE", "ACCOUNTS");
     const { id } = await params;
-    const body = (await request.json()) as {
+    const body = (await readJsonBody(request)) as {
       isShortlisted?: boolean;
       hasArrived?: boolean;
       status?: string;
@@ -392,41 +364,12 @@ export async function PATCH(
 
     return NextResponse.json({ ok: true });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     console.error("[candidate-applications/[id] PATCH]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
-  }
-}
-
-export async function DELETE(
-  _request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  try {
-    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");
-    const { id } = await params;
-    const db = getAdminDb();
-    const collegeRef = db.collection("colleges").doc(session.collegeId);
-
-    const applicationSnap = await collegeRef.collection("candidateApplications").doc(id).get();
-    if (!applicationSnap.exists) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
-    }
-    const { batchId } = applicationSnap.data() as { batchId?: string };
-    if (batchId) {
-      return NextResponse.json({ error: "Cannot withdraw an application already assigned to an interview batch" }, { status: 400 });
-    }
-
-    await collegeRef.collection("candidateApplications").doc(id).delete();
-
-    return NextResponse.json({ ok: true });
-  } catch (err) {
-    if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    console.error("[candidate-applications/[id] DELETE]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 }

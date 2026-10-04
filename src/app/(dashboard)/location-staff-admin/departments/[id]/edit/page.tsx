@@ -302,7 +302,7 @@ export default function EditDepartmentPage() {
       {/* ── Top Header ── */}
       <div className="flex items-center gap-3.5 bg-card/90 backdrop-blur-sm p-5 rounded-3xl border border-border/60 shadow-xs">
         <Button asChild variant="outline" size="icon" className="h-10 w-10 rounded-full border-border/60 shrink-0 hover:bg-muted/60">
-          <Link href="/location-staff-admin/departments">
+          <Link aria-label="Back" href="/location-staff-admin/departments">
             <ArrowLeft className="h-5 w-5" />
           </Link>
         </Button>

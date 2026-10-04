@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -47,7 +48,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "You're on approved leave today — attendance cannot be marked." }, { status: 403 });
     }
 
-    const body = (await request.json()) as AttendanceProofBody & {
+    const body = (await readJsonBody(request)) as AttendanceProofBody & {
       latitude?: number;
       longitude?: number;
       lateReason?: string;
@@ -102,6 +103,7 @@ export async function POST(request: Request) {
           facultyName: user?.name ?? "",
           department: user?.department ?? "",
           date,
+          dateKey: docSuffix,
           status: "PRESENT",
           checkIn,
           source: "BIOMETRIC",
@@ -130,6 +132,8 @@ export async function POST(request: Request) {
       try {
         await recordLateCheckIn(db, session.collegeId, session.uid, user?.name ?? "", user?.department ?? "", date);
       } catch (err) {
+        const badBody = badBodyResponse(err);
+        if (badBody) return badBody;
         // Never fails the check-in itself over a penalty-bookkeeping error -
         // the person is still correctly marked PRESENT either way.
         console.error("[college/attendance/check-in] late-penalty recording failed", err);
@@ -138,6 +142,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ ok: true, checkIn });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

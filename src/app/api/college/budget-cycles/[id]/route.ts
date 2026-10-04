@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { isCollegeAdmin, requireCollegeContext } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -26,6 +27,8 @@ export async function GET(
 
     return NextResponse.json({ cycle: { id: snap.id, ...snap.data() } as BudgetCycle });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -47,7 +50,7 @@ export async function PATCH(
       return NextResponse.json({ error: "Only the Principal or Vice Principal can decide a budget cycle" }, { status: 403 });
     }
     const { id } = await params;
-    const body = (await request.json()) as { action?: "APPROVE" | "REJECT" | "RETURN"; remarks?: string };
+    const body = (await readJsonBody(request)) as { action?: "APPROVE" | "REJECT" | "RETURN"; remarks?: string };
 
     if (!body.action || !["APPROVE", "REJECT", "RETURN"].includes(body.action)) {
       return NextResponse.json({ error: "action must be APPROVE, REJECT, or RETURN" }, { status: 400 });
@@ -174,6 +177,8 @@ export async function PATCH(
 
     return NextResponse.json({ ok: true, departmentsSeeded: seededDepartments.length });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

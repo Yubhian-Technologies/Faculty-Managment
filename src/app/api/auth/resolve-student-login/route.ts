@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { checkRateLimit, clientIp } from "@/lib/security/rateLimit";
@@ -39,7 +40,7 @@ export async function POST(request: Request) {
 
     let body: { rollNumber?: unknown };
     try {
-      body = (await request.json()) as { rollNumber?: unknown };
+      body = (await readJsonBody(request)) as { rollNumber?: unknown };
     } catch {
       return NextResponse.json({ error: "Invalid request" }, { status: 400 });
     }
@@ -59,6 +60,8 @@ export async function POST(request: Request) {
     const loginEmails = emails.length > 0 ? emails : [placeholderLoginEmail(rollNumber)];
     return NextResponse.json({ loginEmail: loginEmails[0], loginEmails });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     console.error("[auth/resolve-student-login POST]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }

@@ -1,5 +1,7 @@
 export const dynamic = "force-dynamic";
 
+import { firebaseAuthErrorResponse } from "@/lib/http/firebaseErrors";
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { convertLegacyAccounts } from "@/lib/roles/seats";
 import { NextResponse } from "next/server";
 import { requireCollegeMember, isDepartmentOffice } from "@/lib/auth/verifySession";
@@ -116,9 +118,13 @@ export async function GET(request: Request) {
 
     return NextResponse.json({ users });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const authErr = firebaseAuthErrorResponse(err);
+    if (authErr) return authErr;
     console.error("[college/users GET]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
@@ -128,7 +134,7 @@ export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "HOD", "COLLEGE_OFFICE");
 
-    const body = (await request.json()) as {
+    const body = (await readJsonBody(request)) as {
       name?: string; // not required for CLASS_LEADER - auto-generated below (role rotates by college rules)
       email?: string; // required for CLASS_LEADER; optional personal contact for everyone else
       collegeEmail?: string;
@@ -414,6 +420,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ uid }, { status: 201 });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -428,6 +436,8 @@ export async function POST(request: Request) {
         { status: 409 }
       );
     }
+    const authErr = firebaseAuthErrorResponse(err);
+    if (authErr) return authErr;
     console.error("[college/users POST]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }

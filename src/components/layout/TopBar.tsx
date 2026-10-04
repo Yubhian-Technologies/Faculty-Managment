@@ -47,6 +47,7 @@ export function TopBar({ title, hiddenItems }: TopBarProps) {
               variant="ghost"
               size="icon"
               className="md:hidden"
+              aria-label="Toggle sidebar"
               onClick={toggleSidebar}
             >
               <Menu className="h-5 w-5" />

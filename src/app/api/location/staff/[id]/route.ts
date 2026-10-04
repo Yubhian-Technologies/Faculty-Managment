@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -38,6 +39,8 @@ export async function GET(
     const staff = { id: docSnap.id, ...docSnap.data() } as LocationStaffMember;
     return NextResponse.json({ staff });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && err.message === "UNAUTHORIZED") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -59,7 +62,7 @@ export async function PATCH(
     );
 
     const { id } = await params;
-    const body = (await request.json()) as Partial<LocationStaffMember> & { locationId?: string };
+    const body = (await readJsonBody(request)) as Partial<LocationStaffMember> & { locationId?: string };
     const locationId = body.locationId || session.locationId;
     if (!locationId) {
       return NextResponse.json({ error: "locationId required" }, { status: 400 });
@@ -166,6 +169,8 @@ export async function PATCH(
 
     return NextResponse.json({ ok: true });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && err.message === "UNAUTHORIZED") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -221,6 +226,8 @@ export async function DELETE(
 
     return NextResponse.json({ ok: true });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && err.message === "UNAUTHORIZED") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

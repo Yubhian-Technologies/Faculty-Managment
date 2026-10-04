@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { canonicalDepartmentCode, canonicalDepartmentName, findDepartmentConflict } from "@/lib/departments/resolve";
 import { departmentKeyDocId } from "@/lib/departments/departmentKeys";
 import { NextResponse } from "next/server";
@@ -13,7 +14,7 @@ type ImportRow = { name: string; code: string; hodEmail?: string };
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");
-    const body = (await request.json()) as { records: ImportRow[]; courses?: DepartmentCourseSelection[] };
+    const body = (await readJsonBody(request)) as { records: ImportRow[]; courses?: DepartmentCourseSelection[] };
 
     if (!body.records || !Array.isArray(body.records) || body.records.length === 0) {
       return NextResponse.json({ error: "No records provided" }, { status: 400 });
@@ -176,6 +177,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ created: created.length, failed, warnings }, { status: 201 });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

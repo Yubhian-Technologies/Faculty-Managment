@@ -6,6 +6,7 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { findCurrentSectionDoc } from "@/lib/students/findCurrentSectionDoc";
 import { getActiveSubstitutionsForDates, currentWeekDateKeys } from "@/lib/leave/periodCoverage";
+import { getSectionTimetableData } from "@/lib/students/sectionTimetableData";
 import { resolveCurrentSemester, matchesCurrentSemester } from "@/lib/college/semester";
 import { DEFAULT_TIMETABLE_RULES } from "@/types";
 import type {
@@ -64,29 +65,9 @@ export async function GET(request: Request) {
     }
     const section = { id: sectionDoc.id, ...sectionDoc.data() } as Section;
 
-    const [courseSnap, timingsSnap, slotsSnap, assignmentsSnap, deptsSnap, rulesSnap] = await Promise.all([
-      collegeRef.collection("courses").doc(section.courseId).get(),
-      collegeRef
-        .collection("courseYearTimings")
-        .where("courseId", "==", section.courseId)
-        .where("year", "==", section.year)
-        .limit(1)
-        .get(),
-      collegeRef.collection("timetableSlots").where("sectionId", "==", section.id).get(),
-      collegeRef.collection("teachingAssignments").where("sectionId", "==", section.id).get(),
-      collegeRef.collection("departments").get(),
-      collegeRef.collection("settings").doc("timetableRules").get(),
-    ]);
-
-    const timetableRules: TimetableRules = rulesSnap.exists
-      ? { ...DEFAULT_TIMETABLE_RULES, ...(rulesSnap.data() as Partial<TimetableRules>) }
-      : DEFAULT_TIMETABLE_RULES;
-
-    const course = courseSnap.exists ? ({ id: courseSnap.id, ...courseSnap.data() } as Course) : null;
-    const timing = timingsSnap.empty
-      ? null
-      : ({ id: timingsSnap.docs[0].id, ...timingsSnap.docs[0].data() } as CourseYearTiming);
-    const departments = deptsSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as Department);
+    // Section-level data (not per student) - shared across the section's students, see sectionTimetableData.ts.
+    const { course, timing, departments, timetableRules, slots: sectionSlots, assignments: sectionAssignments, subjects } =
+      await getSectionTimetableData(db, session.collegeId, section);
 
     const configuredSemesters = (timing?.semesters ?? []).map((s) => s.semester);
     const validRequestedSemester =
@@ -96,21 +77,16 @@ export async function GET(request: Request) {
         : null;
     const currentSemester = validRequestedSemester != null ? validRequestedSemester : resolveCurrentSemester(timing);
 
-    const subjectsSnap = await collegeRef.collection("subjects").where("courseId", "==", section.courseId).get();
-    const subjectMap = new Map<string, Subject>(
-      subjectsSnap.docs.map((d) => [d.id, { id: d.id, ...d.data() } as Subject])
-    );
+    const subjectMap = new Map<string, Subject>(subjects.map((sub) => [sub.id, sub]));
 
-    const rawSlots = slotsSnap.docs
-      .map((d) => ({ id: d.id, ...d.data() } as TimetableSlot & { id: string }))
+    const rawSlots = sectionSlots
       .filter((s) => matchesCurrentSemester(s.semester, currentSemester))
       .map((s) => {
         const sub = s.subjectId ? subjectMap.get(s.subjectId) : undefined;
         return { ...s, subjectCode: sub?.code, shortCode: sub?.shortCode, subjectType: sub?.type };
       });
 
-    const assignments = assignmentsSnap.docs
-      .map((d) => ({ id: d.id, ...d.data() } as TeachingAssignment & { id: string }))
+    const assignments = sectionAssignments
       .filter((a) => {
         if (a.isPast) return false;
         const sem = a.timetableSemester ?? a.semester;

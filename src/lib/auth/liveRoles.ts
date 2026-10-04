@@ -23,6 +23,19 @@ interface SessionLike {
   locationId?: string;
 }
 
+// When the live lookup itself fails (Firestore error/outage) we no longer trust
+// the 24h-old cookie snapshot - that let a deactivated account keep acting during
+// an outage. A recent cached answer for this login (up to STALE_OK_MS) still
+// serves; with none, the login holds no roles, so guards answer 401 until the
+// lookup works again.
+const STALE_OK_MS = 5 * 60_000;
+function failClosed(key: string, err: unknown): CacheEntry {
+  console.error("[liveRoles] live role lookup failed", err);
+  const stale = cache.get(key);
+  if (stale && Date.now() - stale.at < STALE_OK_MS) return stale;
+  return { at: 0, held: [], realRole: "" };
+}
+
 // Fetches (or returns the cached) live role info in one place, so
 // resolveHeldRoles and resolveRealRole below never issue two separate reads
 // for the same login within the cache window.
@@ -58,8 +71,8 @@ async function resolveLiveRoleInfo(session: SessionLike): Promise<CacheEntry> {
       const entry: CacheEntry = { at: Date.now(), held, realRole };
       cache.set(key, entry);
       return entry;
-    } catch {
-      return fallback;
+    } catch (err) {
+      return failClosed(key, err);
     }
   }
 
@@ -86,8 +99,8 @@ async function resolveLiveRoleInfo(session: SessionLike): Promise<CacheEntry> {
     const entry: CacheEntry = { at: Date.now(), held, realRole: rawRole };
     cache.set(key, entry);
     return entry;
-  } catch {
-    return fallback;
+  } catch (err) {
+    return failClosed(key, err);
   }
 }
 

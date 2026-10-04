@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -18,6 +19,8 @@ export async function GET() {
     const settings: ExamMidSettings = snap.exists ? (snap.data() as ExamMidSettings) : { midCount: 0 };
     return NextResponse.json({ settings });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -29,7 +32,7 @@ export async function GET() {
 export async function PUT(request: Request) {
   try {
     const session = await requireCollegeMember("EXAM_CELL", "SUPER_ADMIN");
-    const body = (await request.json()) as { midCount?: number };
+    const body = (await readJsonBody(request)) as { midCount?: number };
     const midCount = Number(body.midCount);
 
     if (!Number.isInteger(midCount) || midCount < 1 || midCount > 10) {
@@ -51,6 +54,8 @@ export async function PUT(request: Request) {
 
     return NextResponse.json({ settings });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

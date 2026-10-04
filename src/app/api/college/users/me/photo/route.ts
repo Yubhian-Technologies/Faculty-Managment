@@ -1,5 +1,7 @@
 export const dynamic = "force-dynamic";
 
+import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -26,7 +28,7 @@ export async function PATCH(request: Request) {
       "COLLEGE_ACCOUNTS"
     );
 
-    const body = (await request.json()) as { photoUrl?: string };
+    const body = (await readJsonBody(request)) as { photoUrl?: string };
     const photoUrl = body.photoUrl;
 
     if (photoUrl === undefined) {
@@ -56,17 +58,12 @@ export async function PATCH(request: Request) {
     await db.collection("systemUsers").doc(session.uid).set({ profilePhotoUrl: photoUrl }, { merge: true });
 
     const actorName = (userSnap.data() as { name?: string } | undefined)?.name ?? "Unknown";
-    await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-      collegeId: session.collegeId,
-      action: "PROFILE_PHOTO_UPDATED",
-      performedBy: session.uid,
-      performedByName: actorName,
-      targetId: session.uid,
-      timestamp: now,
-    });
+    await writeAuditLogSafe(db, session.collegeId, { action: "PROFILE_PHOTO_UPDATED", performedBy: session.uid, performedByName: actorName, targetId: session.uid });
 
     return NextResponse.json({ ok: true, photoUrl });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

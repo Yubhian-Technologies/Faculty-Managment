@@ -1,5 +1,7 @@
 "use client";
 
+import { useAppliedFilters } from "@/hooks/useAppliedFilters";
+import { LoadButton } from "@/components/shared/LoadButton";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, CalendarDays, Download, Pencil } from "lucide-react";
@@ -63,6 +65,10 @@ export function PersonMonthlyAttendanceView({ facultyId, backHref }: PersonMonth
   const now = new Date();
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year, setYear] = useState(now.getFullYear());
+  // Month and year edit a draft; the records are fetched when Load is clicked. Everything shown
+  // (title, calendar days, edit window, export name) follows the month actually loaded.
+  const { applied, dirty, load: applyFilters } = useAppliedFilters({ year, month });
+  const { year: loadedYear, month: loadedMonth } = applied;
   const [personName, setPersonName] = useState<string | null>(null);
   const [registered, setRegistered] = useState(true);
   const [records, setRecords] = useState<(AttendanceRecord & { id: string })[]>([]);
@@ -77,7 +83,7 @@ export function PersonMonthlyAttendanceView({ facultyId, backHref }: PersonMonth
   const load = useCallback(async () => {
     setIsLoading(true);
     try {
-      const res = await fetch(`/api/college/attendance?year=${year}&month=${month}&facultyId=${facultyId}`);
+      const res = await fetch(`/api/college/attendance?year=${loadedYear}&month=${loadedMonth}&facultyId=${facultyId}`);
       const json = await res.json() as { personName?: string | null; registered?: boolean; records?: (AttendanceRecord & { id: string })[]; error?: string };
       if (!res.ok) {
         toast({ variant: "destructive", title: json.error ?? "Failed to load attendance" });
@@ -91,7 +97,7 @@ export function PersonMonthlyAttendanceView({ facultyId, backHref }: PersonMonth
     } finally {
       setIsLoading(false);
     }
-  }, [year, month, facultyId]);
+  }, [loadedYear, loadedMonth, applied, facultyId]);
 
   useEffect(() => {
     void (async () => { await load(); })();
@@ -145,10 +151,10 @@ export function PersonMonthlyAttendanceView({ facultyId, backHref }: PersonMonth
   // The month's real calendar days, not just days with a record, so "no
   // record yet" days are still reachable to mark - same rationale as the
   // roster report's NOT_MARKED synthesis.
-  const daysInMonth = new Date(year, month, 0).getDate();
+  const daysInMonth = new Date(loadedYear, loadedMonth, 0).getDate();
   const todayKey = dateKey(now);
   const days = Array.from({ length: daysInMonth }, (_, i) => {
-    const d = new Date(year, month - 1, i + 1);
+    const d = new Date(loadedYear, loadedMonth - 1, i + 1);
     const key = dateKey(d);
     return { date: d, key, record: recordByDate.get(key) };
   }).filter((d) => d.key <= todayKey || d.record); // hide pure future days with nothing to show
@@ -157,7 +163,7 @@ export function PersonMonthlyAttendanceView({ facultyId, backHref }: PersonMonth
   // Editing is only open for the current month, up to the 25th (see
   // isManualEditWindowOpen) - viewing a past/locked month stays fully
   // readable, just without the "Mark" action on any of its days.
-  const canEditThisMonth = isManualEditWindowOpen(new Date(year, month - 1, 1));
+  const canEditThisMonth = isManualEditWindowOpen(new Date(loadedYear, loadedMonth - 1, 1));
 
   function handleExport() {
     const rows = days.map(({ date, key, record }) => ({
@@ -175,7 +181,7 @@ export function PersonMonthlyAttendanceView({ facultyId, backHref }: PersonMonth
       checkOut: record?.checkOut ?? "",
       reason: [record?.remarks, record?.lateReason ? `Late: ${record.lateReason}` : null].filter(Boolean).join(" | "),
     }));
-    exportToCSV(rows, `attendance-${personName ?? "person"}-${MONTH_NAMES[month - 1]}-${year}`, [
+    exportToCSV(rows, `attendance-${personName ?? "person"}-${MONTH_NAMES[loadedMonth - 1]}-${loadedYear}`, [
       { key: "date", header: "Date" },
       { key: "day", header: "Day" },
       { key: "status", header: "Status" },
@@ -224,6 +230,8 @@ export function PersonMonthlyAttendanceView({ facultyId, backHref }: PersonMonth
             ))}
           </SelectContent>
         </Select>
+
+        <LoadButton dirty={dirty} onClick={applyFilters} loading={isLoading} />
       </div>
 
       {!canEditThisMonth && (
@@ -237,7 +245,7 @@ export function PersonMonthlyAttendanceView({ facultyId, backHref }: PersonMonth
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-base">
               <CalendarDays className="h-4 w-4 text-muted-foreground" />
-              Daily Records — {MONTH_NAMES[month - 1]} {year}
+              Daily Records — {MONTH_NAMES[loadedMonth - 1]} {loadedYear}
             </CardTitle>
           </CardHeader>
           <CardContent className="p-0">

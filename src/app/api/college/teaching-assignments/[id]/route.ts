@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -43,7 +44,7 @@ export async function PATCH(
   try {
     const session = await requireCollegeMember("HOD", "PRINCIPAL", "SUPER_ADMIN");
     const { id } = await params;
-    const body = (await request.json()) as {
+    const body = (await readJsonBody(request)) as {
       hoursPerWeek?: number;
       assignmentAcademicYear?: string;
       assignmentSemester?: string;
@@ -82,6 +83,8 @@ export async function PATCH(
     });
     return NextResponse.json({ success: true });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -128,6 +131,8 @@ export async function DELETE(
 
     return NextResponse.json({ success: true });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

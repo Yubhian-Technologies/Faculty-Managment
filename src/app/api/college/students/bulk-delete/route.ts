@@ -1,5 +1,7 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
+import { invalidateSectionCountCache } from "@/lib/students/sectionCounts";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminAuth, getAdminDb } from "@/lib/firebase/admin";
@@ -29,7 +31,8 @@ const CONCURRENCY = 5;
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("COLLEGE_OFFICE", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");
-    const body = (await request.json()) as { studentIds: string[] };
+    invalidateSectionCountCache(session.collegeId); // student counts on the Sections list change with this write
+    const body = (await readJsonBody(request)) as { studentIds: string[] };
 
     const studentIds = Array.isArray(body.studentIds)
       ? Array.from(new Set(body.studentIds.filter((id): id is string => typeof id === "string" && id.trim() !== "")))
@@ -87,6 +90,8 @@ export async function POST(request: Request) {
     // `deletedCount` keeps the field name the roster page already reads.
     return NextResponse.json({ ok: true, deletedCount: archivedCount, archivedCount, skipped, blocked, failed });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

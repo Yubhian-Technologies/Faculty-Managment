@@ -1,5 +1,7 @@
 export const dynamic = "force-dynamic";
 
+import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -42,6 +44,8 @@ export async function GET(request: Request) {
 
     return NextResponse.json({ projects });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -97,7 +101,7 @@ export async function POST(request: Request) {
     const session = await requireCollegeMember(...COLLEGE_STAFF_ROLES);
     const isRnD = session.role === "R_AND_D";
 
-    const body = (await request.json()) as SponsoredProjectBody;
+    const body = (await readJsonBody(request)) as SponsoredProjectBody;
     const uid = isRnD ? body.uid : session.uid;
     const { agencyName, schemeName, applicationNumber, title, projectType, objectives, piName, projectStatus } = body;
 
@@ -185,15 +189,7 @@ export async function POST(request: Request) {
       updatedAt: now,
     });
 
-    await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-      collegeId: session.collegeId,
-      action: "RD_SPONSORED_PROJECT_CREATED",
-      performedBy: session.uid,
-      performedByName: addedByName,
-      targetId: docRef.id,
-      details: { title, agencyName, uid },
-      timestamp: now,
-    });
+    await writeAuditLogSafe(db, session.collegeId, { action: "RD_SPONSORED_PROJECT_CREATED", performedBy: session.uid, performedByName: addedByName, targetId: docRef.id, details: { title, agencyName, uid } });
 
     await notifyReviewer(db, session.collegeId, route, {
         type: "SPONSORED_PROJECT_PENDING_VERIFICATION", title: "New sponsored research project submitted for verification",
@@ -203,6 +199,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ id: docRef.id }, { status: 201 });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

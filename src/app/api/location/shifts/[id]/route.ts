@@ -1,5 +1,7 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
+import { scopedLocationId } from "@/lib/location/scope";
 import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -18,7 +20,7 @@ export async function PATCH(
     );
 
     const { id } = await params;
-    const body = (await request.json()) as Partial<LocationShift> & {
+    const body = (await readJsonBody(request)) as Partial<LocationShift> & {
       locationId?: string;
       assignedStaffIds?: string[];
       unassignedStaffIds?: string[];
@@ -26,7 +28,7 @@ export async function PATCH(
       unlinkDepartmentId?: string;
     };
 
-    const locationId = body.locationId || session.locationId;
+    const locationId = scopedLocationId(session, body.locationId);
     if (!locationId) {
       return NextResponse.json({ error: "locationId required" }, { status: 400 });
     }
@@ -155,6 +157,8 @@ export async function PATCH(
 
     return NextResponse.json({ ok: true });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && err.message === "UNAUTHORIZED") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -176,7 +180,7 @@ export async function DELETE(
 
     const { id } = await params;
     const { searchParams } = new URL(request.url);
-    const locationId = searchParams.get("locationId") || session.locationId;
+    const locationId = scopedLocationId(session, searchParams.get("locationId"));
     if (!locationId) {
       return NextResponse.json({ error: "locationId required" }, { status: 400 });
     }
@@ -207,6 +211,8 @@ export async function DELETE(
     await shiftRef.delete();
     return NextResponse.json({ ok: true });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && err.message === "UNAUTHORIZED") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

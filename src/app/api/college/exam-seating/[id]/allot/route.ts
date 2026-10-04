@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -19,7 +20,7 @@ export async function POST(request: Request, { params }: Ctx) {
   try {
     const session = await requireCollegeMember("EXAM_CELL");
     const { id } = await params;
-    const body = (await request.json()) as { sectionId?: string; groups?: { roomId: string; studentIds: string[] }[] };
+    const body = (await readJsonBody(request)) as { sectionId?: string; groups?: { roomId: string; studentIds: string[] }[] };
     if (!body.sectionId || !body.groups?.length) {
       return NextResponse.json({ error: "Pick a section and at least one group" }, { status: 400 });
     }
@@ -66,6 +67,8 @@ export async function POST(request: Request, { params }: Ctx) {
     await planRef.update({ rooms, sections, updatedAt: new Date() });
     return NextResponse.json({ ok: true, seated: usedNow.size });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

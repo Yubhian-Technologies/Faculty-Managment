@@ -504,7 +504,7 @@ ${institution}`;
                   onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addDoc(); } }}
                   placeholder="Add another document"
                 />
-                <Button type="button" variant="outline" size="sm" onClick={addDoc}>
+                <Button type="button" variant="outline" size="sm" aria-label="Add document" onClick={addDoc}>
                   <Plus className="h-4 w-4" />
                 </Button>
               </div>

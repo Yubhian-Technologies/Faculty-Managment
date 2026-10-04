@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -90,6 +91,8 @@ export async function GET() {
       teachingAssignments: [],
     });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -106,7 +109,7 @@ export async function PATCH(request: Request) {
   try {
     const session = await requireCollegeMember("PANEL_MEMBER");
 
-    const body = (await request.json()) as Partial<{
+    const body = (await readJsonBody(request)) as Partial<{
       email: string;
       mobileNo: string;
       phone: string; // legacy alias of mobileNo, accepted for one release (see mobileNoFromBody)
@@ -307,6 +310,8 @@ export async function PATCH(request: Request) {
 
     return NextResponse.json({ ok: true });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

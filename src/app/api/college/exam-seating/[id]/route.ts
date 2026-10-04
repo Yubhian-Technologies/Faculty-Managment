@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -23,6 +24,8 @@ export async function GET(_request: Request, { params }: Ctx) {
     if (!snap.exists) return NextResponse.json({ error: "Plan not found" }, { status: 404 });
     return NextResponse.json({ plan: { id: snap.id, ...snap.data() } });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (isAuthError(err)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     console.error("[exam-seating/[id] GET]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
@@ -36,7 +39,7 @@ export async function PATCH(request: Request, { params }: Ctx) {
   try {
     const session = await requireCollegeMember("EXAM_CELL");
     const { id } = await params;
-    const body = (await request.json()) as {
+    const body = (await readJsonBody(request)) as {
       name?: string;
       status?: "DRAFT" | "PUBLISHED";
       rooms?: SeatingRoomAllocation[];
@@ -87,6 +90,8 @@ export async function PATCH(request: Request, { params }: Ctx) {
     await ref.update(update);
     return NextResponse.json({ ok: true });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (isAuthError(err)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     console.error("[exam-seating/[id] PATCH]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
@@ -100,6 +105,8 @@ export async function DELETE(_request: Request, { params }: Ctx) {
     await planRef(session.collegeId, id).delete();
     return NextResponse.json({ ok: true });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (isAuthError(err)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     console.error("[exam-seating/[id] DELETE]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });

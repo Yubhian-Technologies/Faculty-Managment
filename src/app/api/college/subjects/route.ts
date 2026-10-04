@@ -1,5 +1,7 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
+import { claimSubjectKey, isSubjectKeyTaken } from "@/lib/subjects/subjectKeys";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -114,6 +116,8 @@ export async function GET(request: Request) {
 
     return NextResponse.json({ subjects, academicYears });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -130,7 +134,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "ACADEMICS");
-    const body = (await request.json()) as {
+    const body = (await readJsonBody(request)) as {
       courseId?: string;
       semester?: number;
       name: string;
@@ -251,11 +255,8 @@ export async function POST(request: Request) {
         );
       }
 
-      const ref = await db
-        .collection("colleges")
-        .doc(session.collegeId)
-        .collection("subjects")
-        .add({
+      const ref = db.collection("colleges").doc(session.collegeId).collection("subjects").doc();
+      const subjectDoc = {
           collegeId: session.collegeId,
           courseId,
           courseName: course.name,
@@ -277,7 +278,20 @@ export async function POST(request: Request) {
           isActive: true,
           createdAt: now,
           updatedAt: now,
+        };
+      // The query above is the friendly check; this lock closes the race where two
+      // requests both pass it (lib/subjects/subjectKeys.ts).
+      try {
+        await db.runTransaction(async (tx) => {
+          await claimSubjectKey(tx, db, session.collegeId, { scope: course.catalogId || courseId, regulation: regKey, code }, ref);
+          tx.set(ref, subjectDoc);
         });
+      } catch (e) {
+        if (isSubjectKeyTaken(e)) {
+          return NextResponse.json({ error: `A subject with code "${code}" already exists for this course and regulation.` }, { status: 409 });
+        }
+        throw e;
+      }
 
       return NextResponse.json({ id: ref.id }, { status: 201 });
     }
@@ -326,6 +340,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ id: ref.id }, { status: 201 });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

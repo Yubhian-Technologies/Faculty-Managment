@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { requireCollegeMember, isDepartmentOffice } from "@/lib/auth/verifySession";
@@ -82,6 +83,8 @@ export async function GET() {
 
     return NextResponse.json({ departments });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -94,7 +97,7 @@ export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "HOD");
 
-    const body = (await request.json()) as {
+    const body = (await readJsonBody(request)) as {
       name: string;
       code: string;
       hodUid?: string;
@@ -388,6 +391,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ deptId: ref.id }, { status: 201 });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -579,6 +584,8 @@ export async function DELETE(request: Request) {
 
     return NextResponse.json({ ok: true });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -591,7 +598,7 @@ export async function PATCH(request: Request) {
   try {
     const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "HOD");
 
-    const body = (await request.json()) as {
+    const body = (await readJsonBody(request)) as {
       deptId: string;
       hodUid?: string;
       hodName?: string;
@@ -1142,6 +1149,8 @@ export async function PATCH(request: Request) {
 
     return NextResponse.json({ ok: true, ...(cascade ? { cascade } : {}) });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

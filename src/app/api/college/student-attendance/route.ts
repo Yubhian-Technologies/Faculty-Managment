@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -7,6 +8,7 @@ import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 import { checkFacultyPeriodWindow, periodWindowMessage } from "@/lib/timetable/currentPeriod";
 import { resolveSubstituteSlotsForDate } from "@/lib/leave/periodCoverage";
 import { getNoClassReason } from "@/lib/studentAttendance/classDay";
+import { applyOnDutyToEntries, loadOnDutyDay, presentCountOf } from "@/lib/studentAttendance/onDuty";
 import { fetchSectionStudents } from "@/lib/students/sectionRoster";
 import { sortStudentsForList } from "@/lib/students/listOrder";
 import { resolveCollegeAcademicYear } from "@/lib/college/collegeAcademicYear";
@@ -18,7 +20,7 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("PANEL_MEMBER");
-    const body = (await request.json()) as { assignmentId?: string; date?: string };
+    const body = (await readJsonBody(request)) as { assignmentId?: string; date?: string };
     const assignmentId = body.assignmentId?.trim();
     const date = body.date?.trim();
 
@@ -56,7 +58,7 @@ export async function POST(request: Request) {
     // it has to be resolved fresh here).
     let substituteFor: { originalFacultyId: string; originalFacultyName: string } | null = null;
     if (assignment.facultyId !== facultyMemberId) {
-      const substituted = await resolveSubstituteSlotsForDate(db, session.collegeId, facultyMemberId, date);
+      const substituted = await resolveSubstituteSlotsForDate(db, session.collegeId, facultyMemberId, date, { fresh: true });
       if (substituted.size > 0) {
         const assignmentSlotsSnap = await collegeRef.collection("timetableSlots")
           .where("assignmentId", "==", assignmentId).get();
@@ -170,6 +172,12 @@ export async function POST(request: Request) {
     // their date when read.
     const academicYear = await resolveCollegeAcademicYear(db, session.collegeId, now);
 
+    // Students who are officially away for this period (an approved permission,
+    // an event, ...) arrive already marked ON_DUTY: one document read for the
+    // whole college-day, however many students are away. Resolved here, outside
+    // the transaction, like the roster itself.
+    const onDutyDay = await loadOnDutyDay(db, session.collegeId, date);
+
     // Wrap the whole DRAFT-create in a transaction so a concurrent
     // submission can't silently discard an in-flight roster merge. The
     // roster itself is fetched outside the transaction (two collection
@@ -188,13 +196,18 @@ export async function POST(request: Request) {
         }
         // DRAFT reconcile — preserve marks for still-present students
         const existingByStudent = new Map(existing.entries.map((e) => [e.studentId, e]));
-        const entries: StudentAttendanceEntry[] = students.map((s) => ({
-          studentId: s.id,
-          rollNumber: s.rollNumber,
-          name: s.name,
-          status: existingByStudent.get(s.id)?.status ?? null,
-        }));
-        const presentCount = entries.filter((e) => e.status === "PRESENT").length;
+        const entries: StudentAttendanceEntry[] = applyOnDutyToEntries(students.map((s) => {
+          const prior = existingByStudent.get(s.id);
+          return {
+            studentId: s.id,
+            rollNumber: s.rollNumber,
+            name: s.name,
+            status: prior?.status ?? null,
+            // Keep what an ON_DUTY entry remembered, so a withdrawal can restore it.
+            ...(prior?.previousStatus !== undefined ? { previousStatus: prior.previousStatus } : {}),
+          };
+        }), onDutyDay, periodNumber);
+        const presentCount = presentCountOf(entries);
         // Self-heals a draft created before `semester` started being stamped
         // (existing.semester == null) - never overwrites one already set.
         const semesterFix = existing.semester == null && semester != null ? { semester } : {};
@@ -213,12 +226,11 @@ export async function POST(request: Request) {
         return;
       }
 
-      const entries: StudentAttendanceEntry[] = students.map((s) => ({
-        studentId: s.id,
-        rollNumber: s.rollNumber,
-        name: s.name,
-        status: null,
-      }));
+      const entries: StudentAttendanceEntry[] = applyOnDutyToEntries(
+        students.map((s) => ({ studentId: s.id, rollNumber: s.rollNumber, name: s.name, status: null })),
+        onDutyDay,
+        periodNumber
+      );
       let facultyNameToStore = assignment.facultyName ?? "";
       if (substituteFor) {
         const subFacSnap = await collegeRef.collection("facultyMembers").doc(facultyMemberId).get();
@@ -259,6 +271,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ session: resultSession! }, { status: resultStatus as unknown as number });
 
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

@@ -11,11 +11,18 @@ import type { Timestamp } from "firebase/firestore";
 // sessions - each is its own fresh roster/marks/submission, never carried
 // forward from the other (see /api/college/student-attendance).
 
-export type StudentAttendanceMark = "PRESENT" | "ABSENT";
+// ON_DUTY is never chosen by a faculty member: it is applied by the system for a
+// student who is officially away (an approved permission) for that period, and
+// is locked against editing. It counts as neither held nor attended - the period
+// is simply left out of that student's percentage (see lib/studentAttendance/
+// counting.ts). Everything that accepts a mark FROM A CLIENT still allows only
+// PRESENT / ABSENT.
+export type StudentAttendanceMark = "PRESENT" | "ABSENT" | "ON_DUTY";
 
 export const STUDENT_ATTENDANCE_MARK_LABELS: Record<StudentAttendanceMark, string> = {
   PRESENT: "Present",
   ABSENT: "Absent",
+  ON_DUTY: "On Duty",
 };
 
 export type StudentAttendanceSessionStatus = "DRAFT" | "SUBMITTED";
@@ -25,6 +32,12 @@ export interface StudentAttendanceEntry {
   rollNumber: string;
   name: string;
   status: StudentAttendanceMark | null; // null until marked
+  /**
+   * Set only while status is ON_DUTY: what the entry held before the system
+   * overlaid it, so revoking the permission can put it back. `null` = it hadn't
+   * been marked yet.
+   */
+  previousStatus?: "PRESENT" | "ABSENT" | null;
 }
 
 export interface StudentAttendanceSession {

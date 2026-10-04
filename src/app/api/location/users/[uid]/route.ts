@@ -1,5 +1,7 @@
 export const dynamic = "force-dynamic";
 
+import { firebaseAuthErrorResponse } from "@/lib/http/firebaseErrors";
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -18,7 +20,7 @@ export async function PATCH(
     const session = await requireRole("SUPER_ADMIN", "MANAGEMENT", "ADMINISTRATION");
 
     const { uid } = await params;
-    const body = (await request.json()) as {
+    const body = (await readJsonBody(request)) as {
       locationId?: string;
       isActive?: boolean;
       name?: string;
@@ -105,9 +107,13 @@ export async function PATCH(
 
     return NextResponse.json({ ok: true });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && err.message === "UNAUTHORIZED") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const authErr = firebaseAuthErrorResponse(err);
+    if (authErr) return authErr;
     console.error("[location/users/[uid] PATCH]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
@@ -161,9 +167,13 @@ export async function DELETE(
 
     return NextResponse.json({ ok: true });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && err.message === "UNAUTHORIZED") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const authErr = firebaseAuthErrorResponse(err);
+    if (authErr) return authErr;
     console.error("[location/users/[uid] DELETE]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }

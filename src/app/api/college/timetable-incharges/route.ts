@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -66,6 +67,8 @@ export async function GET(request: Request) {
     const incharges = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as TimetableIncharge);
     return NextResponse.json({ incharges });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -93,7 +96,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");
-    const body = (await request.json()) as {
+    const body = (await readJsonBody(request)) as {
       courseId?: string; courseIds?: string[]; year?: number; personId?: string; personType?: "FACULTY" | "SUPPORTING_STAFF";
     };
     const courseIds = (body.courseIds?.length ? body.courseIds : body.courseId ? [body.courseId] : [])
@@ -224,6 +227,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json(isBatch ? { ids } : { id: ids[0] });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -270,6 +275,8 @@ export async function DELETE(request: Request) {
     await Promise.all(refs.map((r) => r.delete()));
     return NextResponse.json({ ok: true });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

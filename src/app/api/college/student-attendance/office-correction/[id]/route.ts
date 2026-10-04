@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -9,6 +10,7 @@ import { getFacultyPeriodsForDate } from "@/lib/timetable/currentPeriod";
 import { resolvePeriodCompletionStatus } from "@/lib/attendance/periodAttendanceStatus";
 import { istDateFromParts } from "@/lib/attendance/istTime";
 import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
+import { mergeMarkUpdates } from "@/lib/studentAttendance/onDuty";
 import type { StudentAttendanceEntry, StudentAttendanceMark, StudentAttendanceSession } from "@/types";
 
 const VALID_MARKS: StudentAttendanceMark[] = ["PRESENT", "ABSENT"];
@@ -34,7 +36,7 @@ export async function PATCH(
   try {
     const { id } = await params;
     const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL");
-    const body = (await request.json()) as {
+    const body = (await readJsonBody(request)) as {
       entries?: { studentId: string; status: StudentAttendanceMark | null }[];
       classNotes?: string;
       reason?: string;
@@ -95,7 +97,9 @@ export async function PATCH(
           return NextResponse.json({ error: "Attendance status must be PRESENT or ABSENT" }, { status: 400 });
         }
       }
-      entries = existing.entries.map((e) => (updates.has(e.studentId) ? { ...e, status: updates.get(e.studentId) ?? null } : e));
+      // ON_DUTY is locked here too: the Office can correct a mark, but not
+      // override an approved permission.
+      entries = mergeMarkUpdates(existing.entries, updates as Map<string, "PRESENT" | "ABSENT" | null>);
     }
     const presentCount = entries.filter((e) => e.status === "PRESENT").length;
     const markedCount = entries.filter((e) => e.status != null).length;
@@ -140,6 +144,8 @@ export async function PATCH(
     await ref.update(update);
     return NextResponse.json({ session: { ...existing, ...update, id } });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

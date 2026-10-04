@@ -56,3 +56,9 @@ export function clientIp(request: Request): string {
 export function resetRateLimits(): void {
   buckets.clear();
 }
+
+/** Same limiter with the shape other routes here use: `{ ok, retryAfterSeconds }`. */
+export function rateLimit(key: string, limit: number, windowMs: number, now = Date.now()): { ok: boolean; retryAfterSeconds: number } {
+  const r = checkRateLimit(key, limit, windowMs, now);
+  return { ok: r.allowed, retryAfterSeconds: r.retryAfterSeconds };
+}

@@ -7,6 +7,7 @@ import { getHodDepartmentScope, canHodManageFacultyDepartment } from "@/lib/depa
 import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 import { DAY_BY_JS_DAY } from "@/lib/timetable/currentPeriod";
 import { fetchSectionStudents } from "@/lib/students/sectionRoster";
+import { isOnDutyMark } from "@/lib/studentAttendance/counting";
 import type { CourseYearTiming, Section, StudentAttendanceMark, StudentAttendanceSession, TimetableSlot } from "@/types";
 
 function toDateStr(v: unknown): string {
@@ -207,8 +208,10 @@ export async function GET(request: Request) {
             let held = 0;
             let attend = 0;
             for (const r of sessionsByAssignment.get(sub.assignmentId) ?? []) {
+              const mark = r.entries.find((e) => e.studentId === stu.id)?.status;
+              if (isOnDutyMark(mark)) continue; // away on approved duty: left out of the percentage
               held += 1;
-              if (r.entries.find((e) => e.studentId === stu.id)?.status === "PRESENT") attend += 1;
+              if (mark === "PRESENT") attend += 1;
             }
             bySubject[sub.assignmentId] = { held, attend, percent: held > 0 ? Math.round((attend / held) * 10000) / 100 : null };
           }

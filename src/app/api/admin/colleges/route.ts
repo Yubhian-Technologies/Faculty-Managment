@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { requireSuperAdmin } from "@/lib/auth/verifySession";
@@ -41,7 +42,11 @@ export async function GET(request: Request) {
     }
 
     const { searchParams } = new URL(request.url);
-    const filterLocationId = searchParams.get("locationId") ?? (session.role !== "SUPER_ADMIN" ? session.locationId : "");
+    // A location-scoped login is held to its own location; only Super Admin and the global
+    // roles (no location of their own, e.g. Finance) may choose one.
+    const filterLocationId = session.role !== "SUPER_ADMIN" && session.locationId
+      ? session.locationId
+      : (searchParams.get("locationId") ?? "");
     // Optional pagination/projection — additive, defaults to existing behavior (return all, full docs)
     const limitParam = searchParams.get("limit");
     const limitNum = limitParam ? Math.min(Math.max(parseInt(limitParam, 10) || 0, 1), 100) : 0;
@@ -62,6 +67,8 @@ export async function GET(request: Request) {
 
     return NextResponse.json({ colleges });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && err.message === "UNAUTHORIZED") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -78,7 +85,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const body = (await request.json()) as Partial<Omit<College, "type">> & { locationId?: string; type?: CollegeType | "" };
+    const body = (await readJsonBody(request)) as Partial<Omit<College, "type">> & { locationId?: string; type?: CollegeType | "" };
     const { name, type, address, contactEmail, contactPhone } = body;
 
     if (!name || String(name).trim().length < 2) {
@@ -119,6 +126,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ collegeId }, { status: 201 });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && err.message === "UNAUTHORIZED") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -151,6 +160,8 @@ export async function DELETE(request: Request) {
 
     return NextResponse.json({ ok: true });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && err.message === "UNAUTHORIZED") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -167,7 +178,7 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const body = (await request.json()) as {
+    const body = (await readJsonBody(request)) as {
       collegeId: string;
       isActive?: boolean;
       name?: string;
@@ -228,6 +239,8 @@ export async function PATCH(request: Request) {
 
     return NextResponse.json({ ok: true });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && err.message === "UNAUTHORIZED") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

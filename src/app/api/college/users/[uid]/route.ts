@@ -1,5 +1,8 @@
 export const dynamic = "force-dynamic";
 
+import { firebaseAuthErrorResponse } from "@/lib/http/firebaseErrors";
+import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { requireCollegeMember, isDepartmentOffice } from "@/lib/auth/verifySession";
@@ -127,9 +130,13 @@ export async function GET(
 
     return NextResponse.json({ user });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const authErr = firebaseAuthErrorResponse(err);
+    if (authErr) return authErr;
     console.error("[college/users/[uid] GET]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
@@ -142,7 +149,7 @@ export async function PATCH(
   try {
     const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "HOD", "COLLEGE_OFFICE");
     const { uid } = await params;
-    const body = (await request.json()) as Partial<{
+    const body = (await readJsonBody(request)) as Partial<{
       isActive: boolean;
       name: string;
       email: string;
@@ -356,21 +363,17 @@ export async function PATCH(
       actorName = (actorSnap.data() as { name?: string } | undefined)?.name ?? "Unknown";
     } catch { /* best-effort */ }
 
-    await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-      collegeId: session.collegeId,
-      action,
-      performedBy: session.uid,
-      performedByName: actorName,
-      targetId: uid,
-      details: roleChanged ? { fromRole: target.role, toRole: body.role } : { role: target.role },
-      timestamp: now,
-    });
+    await writeAuditLogSafe(db, session.collegeId, { action: action, performedBy: session.uid, performedByName: actorName, targetId: uid, details: roleChanged ? { fromRole: target.role, toRole: body.role } : { role: target.role } });
 
     return NextResponse.json({ ok: true });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const authErr = firebaseAuthErrorResponse(err);
+    if (authErr) return authErr;
     console.error("[college/users/[uid] PATCH]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
@@ -472,9 +475,13 @@ export async function DELETE(
 
     return NextResponse.json({ ok: true });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const authErr = firebaseAuthErrorResponse(err);
+    if (authErr) return authErr;
     console.error("[college/users/[uid] DELETE]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }

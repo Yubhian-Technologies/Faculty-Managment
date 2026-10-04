@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { verifySession } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -21,7 +22,7 @@ export async function PATCH(
     if (!session.locationId) return NextResponse.json({ error: "No location context" }, { status: 400 });
 
     const { id } = await params;
-    const body = (await request.json()) as { action?: string; status?: string; reason?: string };
+    const body = (await readJsonBody(request)) as { action?: string; status?: string; reason?: string };
 
     const db = getAdminDb();
     const docRef = db
@@ -221,6 +222,8 @@ export async function PATCH(
 
     return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     console.error("[location/vacancy-requests/[id] PATCH]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }

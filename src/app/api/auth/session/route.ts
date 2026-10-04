@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { verifyFirebaseToken } from "@/lib/auth/verifyFirebaseToken";
 import { getAdminDb, getAdminAuth } from "@/lib/firebase/admin";
@@ -11,7 +12,7 @@ import { migrateUserDoc } from "@/lib/faculty/fieldRenames";
 
 export async function POST(request: Request) {
   try {
-    const body = (await request.json()) as { token?: string };
+    const body = (await readJsonBody(request)) as { token?: string };
     const { token } = body;
 
     if (!token) {
@@ -144,6 +145,12 @@ export async function POST(request: Request) {
     // seat it holds (see types/roleSeats.ts). The sidebar and page access are
     // built from this list; API guards re-check it live, so a seat handed to
     // someone else takes effect immediately, not when this cookie expires.
+    // A deactivated account is also disabled in Firebase Auth; this stops a session being issued
+    // from an ID token that was minted just before that happened.
+    if (profile && profile.isActive === false) {
+      return NextResponse.json({ error: "This account has been deactivated" }, { status: 403 });
+    }
+
     const seatRoles = Array.isArray(profile?.seatRoles) ? (profile.seatRoles as string[]) : [];
     // Holding the College Admin seat makes someone a College Admin for the few
     // things that tell it apart from a Principal (see SessionPayload.realRole),
@@ -190,6 +197,8 @@ export async function POST(request: Request) {
 
     return response;
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     const message = err instanceof Error ? err.message : String(err);
     console.error("[auth/session] token verification failed:", message);
     // Never echo verifier internals (e.g. which key ids are known, why a

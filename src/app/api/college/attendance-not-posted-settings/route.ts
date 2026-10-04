@@ -1,4 +1,5 @@
 export const dynamic = "force-dynamic";
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -16,6 +17,8 @@ export async function GET() {
     const settings = await getNotPostedSettings(db, session.collegeId);
     return NextResponse.json({ settings });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
@@ -24,7 +27,7 @@ export async function GET() {
 export async function PATCH(request: Request) {
   try {
     const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL");
-    const body = (await request.json()) as { enabled?: boolean; cutoffTime?: string };
+    const body = (await readJsonBody(request)) as { enabled?: boolean; cutoffTime?: string };
     if (!body.cutoffTime || !/^\d{2}:\d{2}$/.test(body.cutoffTime)) {
       return NextResponse.json({ error: "cutoffTime must be a valid HH:MM time" }, { status: 400 });
     }
@@ -37,6 +40,8 @@ export async function PATCH(request: Request) {
     );
     return NextResponse.json({ settings });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     if (err instanceof Error && err.message.includes("HH:MM")) return NextResponse.json({ error: err.message }, { status: 400 });
     console.error("[attendance-not-posted-settings PATCH]", err);

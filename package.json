@@ -48,8 +48,8 @@
     "leaflet": "^1.9.4",
     "lucide-react": "^1.18.0",
     "mammoth": "^1.12.3",
-    "next": "16.2.9",
-    "nodemailer": "^9.0.0",
+    "next": "16.3.8",
+    "nodemailer": "^9.1.1",
     "pdf-parse": "^2.4.5",
     "react": "19.2.4",
     "react-day-picker": "^10.0.1",
@@ -70,9 +70,12 @@
     "@types/react-dom": "^19",
     "dotenv": "^17.4.2",
     "eslint": "^9",
-    "eslint-config-next": "16.2.9",
+    "eslint-config-next": "16.3.8",
     "tailwindcss": "^4",
     "typescript": "5.9.3",
     "vitest": "^4.1.11"
+  },
+  "overrides": {
+    "jwks-rsa": "3.2.2"
   }
 }

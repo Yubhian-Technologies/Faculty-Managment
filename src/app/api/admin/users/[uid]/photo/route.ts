@@ -1,5 +1,7 @@
 export const dynamic = "force-dynamic";
 
+import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireSuperAdmin } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -25,7 +27,7 @@ export async function PATCH(
     await requireSuperAdmin();
     const { uid } = await params;
 
-    const body = (await request.json()) as {
+    const body = (await readJsonBody(request)) as {
       photoUrl?: string;
       otherInformation?: string;
       role?: UserRole;
@@ -65,14 +67,7 @@ export async function PATCH(
         .set(tenantUpdate, { merge: true });
 
       if (photoUrl !== undefined) {
-        await db.collection("colleges").doc(collegeId).collection("auditLogs").add({
-          collegeId,
-          action: "PROFILE_PHOTO_UPDATED",
-          performedBy: "SUPER_ADMIN",
-          performedByName: "Super Admin",
-          targetId: uid,
-          timestamp: now,
-        });
+        await writeAuditLogSafe(db, collegeId, { action: "PROFILE_PHOTO_UPDATED", performedBy: "SUPER_ADMIN", performedByName: "Super Admin", targetId: uid });
       }
     } else if (scope === "LOCATION") {
       if (!locationId) return NextResponse.json({ error: "locationId required for this role" }, { status: 400 });
@@ -91,6 +86,8 @@ export async function PATCH(
 
     return NextResponse.json({ ok: true, photoUrl, otherInformation });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && err.message === "UNAUTHORIZED") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

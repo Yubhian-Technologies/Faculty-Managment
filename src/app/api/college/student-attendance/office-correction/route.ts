@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { sortStudentsForList } from "@/lib/students/listOrder";
 import { resolveCollegeAcademicYear } from "@/lib/college/collegeAcademicYear";
@@ -10,6 +11,7 @@ import { isManualEditWindowOpen, MANUAL_EDIT_WINDOW_CLOSED_MESSAGE } from "@/lib
 import { getFacultyPeriodsForDate } from "@/lib/timetable/currentPeriod";
 import { resolvePeriodCompletionStatus } from "@/lib/attendance/periodAttendanceStatus";
 import { istDateFromParts, istMidnightUTC } from "@/lib/attendance/istTime";
+import { applyOnDutyToEntries, loadOnDutyDay, presentCountOf } from "@/lib/studentAttendance/onDuty";
 import { fetchSectionStudents } from "@/lib/students/sectionRoster";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import type { FacultyMember, Section, StudentAttendanceSession, TeachingAssignment } from "@/types";
@@ -32,7 +34,7 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL");
-    const body = (await request.json()) as {
+    const body = (await readJsonBody(request)) as {
       facultyId?: string;
       assignmentId?: string;
       date?: string;
@@ -163,6 +165,12 @@ export async function POST(request: Request) {
     const markerSnap = await collegeRef.collection("users").doc(session.uid).get();
     const markerName = (markerSnap.data() as { name?: string } | undefined)?.name ?? "";
     const now = new Date();
+    // Same overlay the faculty's own session gets: students officially away arrive ON_DUTY.
+    const roster = applyOnDutyToEntries(
+      students.map((s) => ({ studentId: s.id, rollNumber: s.rollNumber, name: s.name, status: null as null })),
+      await loadOnDutyDay(db, session.collegeId, date),
+      periodNumber
+    );
     // The academic year this session belongs to - see student-attendance/route.ts.
     const academicYear = await resolveCollegeAcademicYear(db, session.collegeId, now);
 
@@ -189,9 +197,9 @@ export async function POST(request: Request) {
       periodNumber,
       ...(labBatch ? { labBatch } : {}),
       status: "DRAFT" as const,
-      entries: students.map((s) => ({ studentId: s.id, rollNumber: s.rollNumber, name: s.name, status: null })),
+      entries: roster,
       totalStudents: students.length,
-      presentCount: 0,
+      presentCount: presentCountOf(roster),
       classNotes: "",
       submittedAt: null,
       postedBy: "OFFICE" as const,
@@ -220,6 +228,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ session: { id, ...attendanceSession } }, { status: 201 });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

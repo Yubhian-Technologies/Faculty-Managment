@@ -1,5 +1,7 @@
 export const dynamic = "force-dynamic";
 
+import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
@@ -29,6 +31,8 @@ export async function GET(
 
     return NextResponse.json({ record: { id: snap.id, ...snap.data() } });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -123,7 +127,7 @@ export async function PATCH(
     const session = await requireCollegeMember(...PUBLICATION_ELIGIBLE_ROLES);
     const { id } = await params;
 
-    const body = (await request.json()) as ResearchServicePatchBody;
+    const body = (await readJsonBody(request)) as ResearchServicePatchBody;
 
     const db = getAdminDb();
     const ref = db.collection("colleges").doc(session.collegeId).collection("researchServices").doc(id);
@@ -159,15 +163,7 @@ export async function PATCH(
         ...(body.decision === "REJECTED" ? { rejectionReason: body.rejectionReason ?? "" } : { rejectionReason: FieldValue.delete() }),
       });
 
-      await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-        collegeId: session.collegeId,
-        action: "RD_RESEARCH_SERVICE_UPDATED",
-        performedBy: session.uid,
-        performedByName: reviewedByName,
-        targetId: id,
-        details: { title: label, decision: body.decision },
-        timestamp: now,
-      });
+      await writeAuditLogSafe(db, session.collegeId, { action: "RD_RESEARCH_SERVICE_UPDATED", performedBy: session.uid, performedByName: reviewedByName, targetId: id, details: { title: label, decision: body.decision } });
 
       await notify(
         db, session.collegeId, record.uid,
@@ -206,15 +202,7 @@ export async function PATCH(
         editorName = (editorSnap.data() as { name?: string } | undefined)?.name ?? "Unknown";
       } catch { /* best-effort */ }
       await ref.update(updates);
-      await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-        collegeId: session.collegeId,
-        action: "RD_RESEARCH_SERVICE_UPDATED",
-        performedBy: session.uid,
-        performedByName: editorName,
-        targetId: id,
-        details: { title: body.title ?? label },
-        timestamp: now,
-      });
+      await writeAuditLogSafe(db, session.collegeId, { action: "RD_RESEARCH_SERVICE_UPDATED", performedBy: session.uid, performedByName: editorName, targetId: id, details: { title: body.title ?? label } });
       await notifyReviewer(db, session.collegeId, route, {
         type: "RESEARCH_SERVICE_PENDING_VERIFICATION", title: "Research service record resubmitted for verification",
         message: `A previously rejected record ("${body.title ?? label}") was corrected and resubmitted`,
@@ -229,17 +217,11 @@ export async function PATCH(
       const actorSnap = await db.collection("colleges").doc(session.collegeId).collection("users").doc(session.uid).get();
       actorName = (actorSnap.data() as { name?: string } | undefined)?.name ?? "Unknown";
     } catch { /* best-effort */ }
-    await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-      collegeId: session.collegeId,
-      action: "RD_RESEARCH_SERVICE_UPDATED",
-      performedBy: session.uid,
-      performedByName: actorName,
-      targetId: id,
-      details: { title: label },
-      timestamp: new Date(),
-    });
+    await writeAuditLogSafe(db, session.collegeId, { action: "RD_RESEARCH_SERVICE_UPDATED", performedBy: session.uid, performedByName: actorName, targetId: id, details: { title: label } });
     return NextResponse.json({ ok: true });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -270,17 +252,11 @@ export async function DELETE(
       const actorSnap = await db.collection("colleges").doc(session.collegeId).collection("users").doc(session.uid).get();
       actorName = (actorSnap.data() as { name?: string } | undefined)?.name ?? "Unknown";
     } catch { /* best-effort */ }
-    await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-      collegeId: session.collegeId,
-      action: "RD_RESEARCH_SERVICE_DELETED",
-      performedBy: session.uid,
-      performedByName: actorName,
-      targetId: id,
-      details: { title: record.title ?? record.serviceType, uid: record.uid },
-      timestamp: new Date(),
-    });
+    await writeAuditLogSafe(db, session.collegeId, { action: "RD_RESEARCH_SERVICE_DELETED", performedBy: session.uid, performedByName: actorName, targetId: id, details: { title: record.title ?? record.serviceType, uid: record.uid } });
     return NextResponse.json({ ok: true });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

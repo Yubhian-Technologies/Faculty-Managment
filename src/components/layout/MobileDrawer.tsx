@@ -13,7 +13,6 @@ import { useAssignedCoordinator } from "@/hooks/useAssignedCoordinator";
 import { useIsSubDepartmentHod } from "@/hooks/useIsSubDepartmentHod";
 import { usePrincipalPendingHiring } from "@/hooks/usePrincipalPendingHiring";
 import { isNavItemActive, filterVisibleNavItems, isPathHidden, ROLES_WITH_EMBEDDED_PANEL_ACCESS, type NavItem } from "./navConfig";
-import { useIsTimetableIncharge } from "@/hooks/useIsTimetableIncharge";
 import { NavIcon } from "./NavIcon";
 import { useCustomNav } from "@/hooks/useCustomNav";
 import { WorkContextSwitcher } from "./WorkContextSwitcher";
@@ -47,7 +46,6 @@ export function MobileDrawer({ hiddenModules, hiddenItems }: MobileDrawerProps) 
   const { pendingCount: pendingHiringCount } = usePrincipalPendingHiring();
   const { items: contextItems } = useWorkContext();
   const { apply: applyCustomNav } = useCustomNav();
-  const { isIncharge } = useIsTimetableIncharge();
 
   useEffect(() => {
     setSidebarOpen(false);
@@ -71,15 +69,7 @@ export function MobileDrawer({ hiddenModules, hiddenItems }: MobileDrawerProps) 
   if (!user || user.role === "CLASS_LEADER" || pathname?.startsWith("/class-leader")) return null;
 
   const baseNavItems = filterVisibleNavItems(contextItems, hiddenModules, hiddenItems, user.realRole, true)
-    .filter((item) => !hideSubDepartmentsLink || item.href !== "/hod/settings/sub-departments")
-    .filter((item) => {
-      const isInchargeNav = item.href === "/panel/timetable-incharge" || item.href === "/college-staff/timetable-incharge";
-      if (isInchargeNav) {
-        if (isIncharge === null) return true;
-        return isIncharge === true;
-      }
-      return true;
-    });
+    .filter((item) => !hideSubDepartmentsLink || item.href !== "/hod/settings/sub-departments");
   let navItems = baseNavItems;
   {
     const injected: NavItem[] = [];
