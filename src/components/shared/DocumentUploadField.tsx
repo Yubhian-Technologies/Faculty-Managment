@@ -90,6 +90,7 @@ export function DocumentUploadField({
             <span className="text-muted-foreground/40">|</span>
             <button
               type="button"
+              aria-label="Remove file"
               onClick={onRemoved}
               disabled={uploading}
               className="text-xs text-destructive hover:underline disabled:opacity-60"

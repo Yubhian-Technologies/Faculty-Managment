@@ -41,7 +41,7 @@ export default function NewDeptStaffMemberPage() {
       {/* ── Header ── */}
       <div className="flex items-center gap-3 bg-card p-4 rounded-xl border shadow-xs">
         <Button asChild variant="ghost" size="icon" className="h-9 w-9 shrink-0">
-          <Link href="/location-dept-head/staff">
+          <Link aria-label="Back" href="/location-dept-head/staff">
             <ArrowLeft className="h-5 w-5" />
           </Link>
         </Button>

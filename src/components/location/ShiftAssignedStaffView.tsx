@@ -140,7 +140,7 @@ export function ShiftAssignedStaffView({
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-card p-4 rounded-xl border shadow-xs">
         <div className="flex items-center gap-3">
           <Button asChild variant="ghost" size="icon" className="h-9 w-9 shrink-0">
-            <Link href={backHref}>
+            <Link aria-label="Back" href={backHref}>
               <ArrowLeft className="h-5 w-5" />
             </Link>
           </Button>

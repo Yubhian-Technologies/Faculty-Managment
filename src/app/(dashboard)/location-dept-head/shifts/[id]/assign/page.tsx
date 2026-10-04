@@ -88,7 +88,7 @@ export default function AssignShiftStaffPage() {
       {/* ── Header ── */}
       <div className="flex items-center gap-3 bg-card p-3 sm:p-4 rounded-xl border">
         <Button asChild variant="ghost" size="icon" className="h-9 w-9 shrink-0">
-          <Link href="/location-dept-head/shifts">
+          <Link aria-label="Back" href="/location-dept-head/shifts">
             <ArrowLeft className="h-5 w-5" />
           </Link>
         </Button>

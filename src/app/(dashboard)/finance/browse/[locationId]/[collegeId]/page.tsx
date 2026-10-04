@@ -79,7 +79,7 @@ export default function FinanceBrowseDepartmentsPage() {
     <div className="space-y-6">
       <div className="flex items-center gap-2">
         <Button variant="ghost" size="icon" asChild>
-          <Link href={`/finance/browse/${params.locationId}`}><ArrowLeft className="h-4 w-4" /></Link>
+          <Link aria-label="Back" href={`/finance/browse/${params.locationId}`}><ArrowLeft className="h-4 w-4" /></Link>
         </Button>
         <PageHeader title={college?.name ?? "College Activity"} description="Budget, indent, and purchase clearance activity for this college" />
       </div>

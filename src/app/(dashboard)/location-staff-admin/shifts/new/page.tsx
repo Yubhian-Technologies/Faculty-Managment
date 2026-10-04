@@ -128,7 +128,7 @@ export default function LocationStaffAdminNewShiftPage() {
       {/* ── Header ── */}
       <div className="flex items-center gap-3 bg-card p-3 sm:p-4 rounded-xl border">
         <Button asChild variant="ghost" size="icon" className="h-9 w-9 shrink-0">
-          <Link href={fallbackHref}>
+          <Link aria-label="Back" href={fallbackHref}>
             <ArrowLeft className="h-5 w-5" />
           </Link>
         </Button>
