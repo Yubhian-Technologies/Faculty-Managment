@@ -1,5 +1,7 @@
 "use client";
 
+import { FailedRowsDownload } from "@/components/shared/FailedRowsDownload";
+import { importInChunks } from "@/lib/import/chunkedImport";
 import { useRef, useState } from "react";
 import Link from "next/link";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -39,6 +41,7 @@ export function AttendanceImportPage({ title, description, backHref, backLabel }
   const [ignoredHeaders, setIgnoredHeaders] = useState<string[]>([]);
   const [parseError, setParseError] = useState("");
   const [isImporting, setIsImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState<{ done: number; total: number } | null>(null);
   const [result, setResult] = useState<ImportResult | null>(null);
 
   function downloadTemplate() {
@@ -107,15 +110,18 @@ export function AttendanceImportPage({ title, description, backHref, backLabel }
     setIsImporting(true);
     setResult(null);
     try {
-      const res = await fetch("/api/college/attendance/import", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ records: rows }),
+      // Sent in chunks of 500 (the server's cap) with results merged and row numbers shifted back to
+      // the file; a failing chunk stops the run, earlier chunks stay saved.
+      const { merged, stoppedAt, error } = await importInChunks<ImportResult>("/api/college/attendance/import", rows, {
+        onProgress: (done, total) => setImportProgress({ done, total }),
       });
-      const json = await res.json() as ImportResult & { error?: string };
-      if (!res.ok) { toast({ variant: "destructive", title: json.error ?? "Import failed" }); return; }
+      if (stoppedAt === 0) { toast({ variant: "destructive", title: error ?? "Import failed" }); return; }
+      const json = { ...merged, created: merged.created ?? 0, failed: merged.failed ?? [] } as ImportResult;
       setResult(json);
-      if (json.created > 0) {
+      if (stoppedAt !== null) {
+        toast({ variant: "destructive", title: `Stopped after ${stoppedAt} of ${rows.length} rows`, description: `${json.created} imported. ${error ?? ""} Fix the problem and import again.` });
+      }
+      if (json.created > 0 && stoppedAt === null) {
         toast({ variant: "success", title: `${json.created} attendance record${json.created !== 1 ? "s" : ""} imported successfully` });
         setRows([]);
       }
@@ -123,6 +129,7 @@ export function AttendanceImportPage({ title, description, backHref, backLabel }
       toast({ variant: "destructive", title: "Network error - import failed" });
     } finally {
       setIsImporting(false);
+      setImportProgress(null);
     }
   }
 
@@ -260,6 +267,7 @@ export function AttendanceImportPage({ title, description, backHref, backLabel }
               </div>
             )}
             <div className="flex gap-3">
+              {importProgress && <span className="text-sm text-muted-foreground self-center">Importing {importProgress.done} of {importProgress.total}…</span>}
               <Button onClick={() => void handleImport()} loading={isImporting} disabled={isImporting}>
                 <Upload className="h-4 w-4 mr-2" />
                 Import {rows.length} Record{rows.length !== 1 ? "s" : ""}
@@ -294,7 +302,10 @@ export function AttendanceImportPage({ title, description, backHref, backLabel }
             </div>
             {result.failed.length > 0 && (
               <div className="space-y-1">
+                <div className="flex items-center justify-between gap-2">
                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Failed rows</p>
+                <FailedRowsDownload failed={result.failed} />
+                </div>
                 <div className="rounded-lg border divide-y max-h-48 overflow-y-auto">
                   {result.failed.map((f, i) => (
                     <div key={i} className="flex items-center justify-between px-3 py-2 text-sm gap-3">

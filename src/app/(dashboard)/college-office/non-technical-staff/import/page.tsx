@@ -1,5 +1,6 @@
 "use client";
 
+import { importInChunks } from "@/lib/import/chunkedImport";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -52,6 +53,7 @@ export default function CollegeOfficeNonTechnicalStaffImportPage() {
   const [rows, setRows] = useState<ParsedRow[]>([]);
   const [parseError, setParseError] = useState("");
   const [isImporting, setIsImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState<{ done: number; total: number } | null>(null);
   const [result, setResult] = useState<ImportResult | null>(null);
   const [failedRows, setFailedRows] = useState<FailedRow[]>([]);
   const [isBuildingTemplate, setIsBuildingTemplate] = useState(false);
@@ -174,19 +176,23 @@ export default function CollegeOfficeNonTechnicalStaffImportPage() {
     setResult(null);
     setFailedRows([]);
     try {
-      const res = await fetch("/api/college/supporting-staff/import", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ records: rows }),
+      // Sent in chunks of 500 (the server's cap) with the results merged; row numbers are shifted back
+      // to the row's place in the file. A failing chunk stops the run - earlier chunks are saved, and
+      // re-importing is safe because existing employee IDs are rejected as duplicates.
+      const { merged, stoppedAt, error } = await importInChunks<ImportResult>("/api/college/supporting-staff/import", rows, {
+        onProgress: (done, total) => setImportProgress({ done, total }),
       });
-      const json = await res.json() as ImportResult & { error?: string };
-      if (!res.ok) { toast({ variant: "destructive", title: json.error ?? "Import failed" }); return; }
+      if (stoppedAt === 0) { toast({ variant: "destructive", title: error ?? "Import failed" }); return; }
+      const json: ImportResult = { created: merged.created ?? 0, failed: merged.failed ?? [], warnings: merged.warnings ?? [] };
       setResult(json);
+      if (stoppedAt !== null) {
+        toast({ variant: "destructive", title: `Stopped after ${stoppedAt} of ${rows.length} rows`, description: `${json.created} imported. ${error ?? ""} Fix the problem and import again - rows already saved are skipped as duplicates.` });
+      }
       // Snapshot each failed row's own original values before `rows` is
       // cleared below (on any partial success) - the "fix and retry" dialog
       // needs them, and this is the only place they still exist.
       setFailedRows(json.failed.map((f) => ({ ...f, data: rows[f.row - 2] ?? {}, status: "failed" as const })));
-      if (json.created > 0) {
+      if (json.created > 0 && stoppedAt === null) {
         toast({ variant: "success", title: `${json.created} staff member${json.created !== 1 ? "s" : ""} imported successfully` });
         setRows([]);
       }
@@ -194,6 +200,7 @@ export default function CollegeOfficeNonTechnicalStaffImportPage() {
       toast({ variant: "destructive", title: "Network error - import failed" });
     } finally {
       setIsImporting(false);
+      setImportProgress(null);
     }
   }
 
@@ -377,7 +384,7 @@ export default function CollegeOfficeNonTechnicalStaffImportPage() {
             <div className="flex gap-3">
               <Button onClick={() => void handleImport()} loading={isImporting} disabled={isImporting}>
                 <Upload className="h-4 w-4 mr-2" />
-                Import {rows.length} Record{rows.length !== 1 ? "s" : ""}
+                {importProgress ? `Importing ${importProgress.done} of ${importProgress.total}…` : `Import ${rows.length} Record${rows.length !== 1 ? "s" : ""}`}
               </Button>
               <Button variant="outline" onClick={() => { setRows([]); setResult(null); }}>
                 Clear
