@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { scopedLocationId } from "@/lib/location/scope";
 import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -141,8 +142,9 @@ export async function POST(request: Request) {
 
     const db = getAdminDb();
 
-    let locationId = body.locationId || session.locationId;
-    if (!locationId) {
+    let locationId = scopedLocationId(session, body.locationId);
+    // Only a Super Admin without a location of their own falls back to the first location.
+    if (!locationId && session.role === "SUPER_ADMIN") {
       const firstLoc = await db.collection("locations").limit(1).get();
       if (!firstLoc.empty) {
         locationId = firstLoc.docs[0].id;

@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { scopedLocationId } from "@/lib/location/scope";
 import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -21,7 +22,7 @@ export async function POST(request: Request) {
       targetShiftId: string; // shift ID, or "" / "__unassigned__" to remove from shift
     };
 
-    const locationId = body.locationId || session.locationId;
+    const locationId = scopedLocationId(session, body.locationId);
     if (!locationId) {
       return NextResponse.json({ error: "locationId required" }, { status: 400 });
     }

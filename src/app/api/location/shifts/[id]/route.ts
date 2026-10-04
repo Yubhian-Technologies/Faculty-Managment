@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { scopedLocationId } from "@/lib/location/scope";
 import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -26,7 +27,7 @@ export async function PATCH(
       unlinkDepartmentId?: string;
     };
 
-    const locationId = body.locationId || session.locationId;
+    const locationId = scopedLocationId(session, body.locationId);
     if (!locationId) {
       return NextResponse.json({ error: "locationId required" }, { status: 400 });
     }
@@ -176,7 +177,7 @@ export async function DELETE(
 
     const { id } = await params;
     const { searchParams } = new URL(request.url);
-    const locationId = searchParams.get("locationId") || session.locationId;
+    const locationId = scopedLocationId(session, searchParams.get("locationId"));
     if (!locationId) {
       return NextResponse.json({ error: "locationId required" }, { status: 400 });
     }
