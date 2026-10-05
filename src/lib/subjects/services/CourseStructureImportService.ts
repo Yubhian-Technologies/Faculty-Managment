@@ -3,6 +3,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { departmentRunsOwnSections } from "@/lib/college/academicStructure";
 import { currentAcademicStartYear, regulationsForCourseYearByBatch } from "@/lib/college/academicSession";
 import { teachableYearsForDepartment } from "@/lib/subjects/teachableYears";
+import { findBranchManager, managerTeachingYears } from "@/lib/departments/managedBranches";
 import {
   subjectIdentityKey,
   validateCourseStructureRows,
@@ -432,11 +433,15 @@ export class CourseStructureImportService {
       }
     }
 
+    // Calculate writes including fan-out to managed branches.
+    // Manager's own assignments + copies for each managed branch.
+    const managedBranches = ctx.allDepartments.find((d) => d.id === ctx.department.id)?.managedDepartments ?? [];
+    const branchWriteMultiplier = 1 + managedBranches.length;
     plan.writes = plan.newMasterCodes.size
-      + plan.planRows.filter((p) => p.instance !== "unchanged").length
+      + (plan.planRows.filter((p) => p.instance !== "unchanged").length * branchWriteMultiplier)
       + plan.legacyToDelete.size;
     if (plan.writes > MAX_WRITES_PER_COMMIT) {
-      errors.push({ row: 0, message: `This file needs ${plan.writes} writes, more than one atomic import allows (${MAX_WRITES_PER_COMMIT}). Split it by year.` });
+      errors.push({ row: 0, message: `This file needs ${plan.writes} writes (${plan.planRows.length} rows × ${branchWriteMultiplier} branches), more than one atomic import allows (${MAX_WRITES_PER_COMMIT}). Split it by year or reduce branches.` });
     }
     errors.sort((a, b) => a.row - b.row);
     return plan;
@@ -581,6 +586,37 @@ export class CourseStructureImportService {
           now,
         }));
       }
+
+      // Fan-out to managed branches: write copies under each branch's own
+      // departmentId for the years this manager teaches (not the branch's years).
+      // Each branch sees the same subjects in the same semesters, with its own
+      // department context - but only for the shared years the manager owns.
+      const managedBranches = fresh.allDepartments.find((d) => d.id === ctx.department.id)?.managedDepartments ?? [];
+      if (managedBranches.length > 0) {
+        for (const branchName of managedBranches) {
+          const branchDept = fresh.allDepartments.find((d) => d.name === branchName);
+          if (!branchDept) continue;
+          const branchYears = managerTeachingYears(fresh.allDepartments, fresh.allDepartments.find((d) => d.id === ctx.department.id)!, ctx.course.catalogId);
+          for (const p of toWrite) {
+            // Only fan-out years the manager teaches (don't override branch's own years).
+            if (!branchYears.includes(p.year)) continue;
+            const subjectId = plan.masterIdByCode.get(p.key)!;
+            const branchInstanceId = `${subjectId}_${branchDept.id}_${p.semester}`;
+            tx.set(instances.doc(branchInstanceId), buildSubjectInstancePayload(masters.get(subjectId)!, {
+              collegeId: req.collegeId,
+              subjectId,
+              courseId: ctx.course.id,
+              departmentId: branchDept.id,
+              departmentName: branchDept.name,
+              year: p.year,
+              semester: p.semester,
+              createdAt: now,
+              now,
+            }));
+          }
+        }
+      }
+
       for (const ref of legacyRefs) tx.delete(ref);
     });
   }
@@ -593,15 +629,36 @@ export class CourseStructureImportService {
     const college = this.collegeRef(req.collegeId);
     const problems: string[] = [];
     if (plan.planRows.length === 0) return { checked: 0, problems };
-    const instanceRefs = plan.planRows.map((p) => college.collection("subjectSemesterAssignments").doc(`${plan.masterIdByCode.get(p.key)}_${ctx.department.id}_${p.semester}`));
+
+    // Verify manager's assignments and managed branches' copies.
+    const managerInstanceRefs = plan.planRows.map((p) => college.collection("subjectSemesterAssignments").doc(`${plan.masterIdByCode.get(p.key)}_${ctx.department.id}_${p.semester}`));
+    const managedBranches = ctx.allDepartments.find((d) => d.id === ctx.department.id)?.managedDepartments ?? [];
+    const branchInstanceRefs: FirebaseFirestore.DocumentReference[] = [];
+    if (managedBranches.length > 0) {
+      const managerYears = managerTeachingYears(ctx.allDepartments, ctx.allDepartments.find((d) => d.id === ctx.department.id)!, ctx.course.catalogId);
+      for (const branchName of managedBranches) {
+        const branchDept = ctx.allDepartments.find((d) => d.name === branchName);
+        if (!branchDept) continue;
+        for (const p of plan.planRows) {
+          if (managerYears.includes(p.year)) {
+            const subjectId = plan.masterIdByCode.get(p.key)!;
+            branchInstanceRefs.push(college.collection("subjectSemesterAssignments").doc(`${subjectId}_${branchDept.id}_${p.semester}`));
+          }
+        }
+      }
+    }
+
     const masterIds = Array.from(new Set(plan.masterIdByCode.values()));
-    const [instanceSnaps, masterSnaps] = await Promise.all([
-      this.db.getAll(...instanceRefs),
+    const [managerSnaps, branchSnaps, masterSnaps] = await Promise.all([
+      this.db.getAll(...managerInstanceRefs),
+      branchInstanceRefs.length > 0 ? this.db.getAll(...branchInstanceRefs) : Promise.resolve([]),
       this.db.getAll(...masterIds.map((id) => college.collection("subjects").doc(id))),
     ]);
+    const allInstanceSnaps = [...managerSnaps, ...(branchSnaps as FirebaseFirestore.DocumentSnapshot[])];
     const masters = new Map(masterSnaps.map((s) => [s.id, s.exists ? (s.data() as Subject) : null]));
+    // Verify manager's instances
     plan.planRows.forEach((p, idx) => {
-      const snap = instanceSnaps[idx];
+      const snap = managerSnaps[idx];
       const label = `Row ${p.row} (${p.code})`;
       if (!snap.exists) { problems.push(`${label}: semester assignment is missing.`); return; }
       const a = snap.data() as SubjectSemesterAssignment;
@@ -614,7 +671,27 @@ export class CourseStructureImportService {
       if (a.year !== p.year || a.semester !== p.semester) problems.push(`${label}: assignment is Year ${a.year} Semester ${a.semester}, expected Year ${p.year} Semester ${p.semester}.`);
       if (a.isActive === false) problems.push(`${label}: assignment is inactive.`);
     });
+
+    // Verify branch instances (same checks as manager)
+    let branchIdx = 0;
+    if (managedBranches.length > 0) {
+      const managerYears = managerTeachingYears(ctx.allDepartments, ctx.allDepartments.find((d) => d.id === ctx.department.id)!, ctx.course.catalogId);
+      for (const branchName of managedBranches) {
+        const branchDept = ctx.allDepartments.find((d) => d.name === branchName);
+        if (!branchDept) continue;
+        for (const p of plan.planRows) {
+          if (!managerYears.includes(p.year)) continue;
+          const snap = branchSnaps[branchIdx++];
+          const label = `Branch ${branchDept.name}, Row ${p.row} (${p.code})`;
+          if (!snap.exists) { problems.push(`${label}: semester assignment is missing.`); continue; }
+          const a = snap.data() as SubjectSemesterAssignment;
+          if (a.departmentId !== branchDept.id) problems.push(`${label}: assignment points to wrong department.`);
+          if (a.isActive === false) problems.push(`${label}: assignment is inactive.`);
+        }
+      }
+    }
+
     if (problems.length > 0) console.error("[CourseStructureImportService.verify]", problems);
-    return { checked: plan.planRows.length, problems };
+    return { checked: plan.planRows.length + branchInstanceRefs.length, problems };
   }
 }
