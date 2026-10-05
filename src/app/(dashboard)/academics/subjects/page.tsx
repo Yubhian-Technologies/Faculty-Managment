@@ -16,7 +16,7 @@ import type { Subject } from "@/types";
 // Academics > Subjects. View and manage subjects assigned to departments
 // by year and semester. Filter all at once, CRUD on cards.
 
-type CourseOption = { id: string; name: string };
+type CourseOption = { id: string; name: string; isActive?: boolean };
 type DepartmentOption = { id: string; name: string };
 type AssignmentWithMaster = { assignment: any; master: Subject };
 type EditForm = {
@@ -71,7 +71,7 @@ export default function SubjectsPage() {
     setLoadError("");
     try {
       const res = await fetch(
-        `/api/college/subject-semester-assignments?departmentId=${encodeURIComponent(deptId)}&year=${year}&semester=${semester}`
+        `/api/college/subject-semester-assignments?courseId=${encodeURIComponent(courseId)}&departmentId=${encodeURIComponent(deptId)}&year=${year}&semester=${semester}`
       );
       const json = await res.json() as { assignments?: any[]; error?: string };
       if (!res.ok) throw new Error(json.error ?? "Failed to load");
@@ -126,7 +126,7 @@ export default function SubjectsPage() {
       if (!res.ok) { const json = await res.json() as { error?: string }; setEditError(json.error ?? "Failed to save."); return; }
       toast({ variant: "success", title: "Subject updated" });
       setEditForm(null);
-      await load();
+      await handleLoad();
     } catch {
       setEditError("Network error. Nothing was saved.");
     } finally {
@@ -144,7 +144,7 @@ export default function SubjectsPage() {
       );
       if (!res.ok) { const json = await res.json() as { error?: string }; toast({ variant: "destructive", title: json.error ?? "Couldn't delete" }); return; }
       toast({ variant: "success", title: "Subject removed" });
-      await load();
+      await handleLoad();
     } catch {
       toast({ variant: "destructive", title: "Network error." });
     } finally {

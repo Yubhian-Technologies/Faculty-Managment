@@ -633,7 +633,7 @@ export class CourseStructureImportService {
     // Verify manager's assignments and managed branches' copies.
     const managerInstanceRefs = plan.planRows.map((p) => college.collection("subjectSemesterAssignments").doc(`${plan.masterIdByCode.get(p.key)}_${ctx.department.id}_${p.semester}`));
     const managedBranches = ctx.allDepartments.find((d) => d.id === ctx.department.id)?.managedDepartments ?? [];
-    const branchInstanceRefs: ReturnType<typeof college.collection>["doc"][] = [];
+    const branchInstanceRefs: FirebaseFirestore.DocumentReference[] = [];
     if (managedBranches.length > 0) {
       const managerYears = managerTeachingYears(ctx.allDepartments, ctx.allDepartments.find((d) => d.id === ctx.department.id)!, ctx.course.catalogId);
       for (const branchName of managedBranches) {
@@ -654,7 +654,7 @@ export class CourseStructureImportService {
       branchInstanceRefs.length > 0 ? this.db.getAll(...branchInstanceRefs) : Promise.resolve([]),
       this.db.getAll(...masterIds.map((id) => college.collection("subjects").doc(id))),
     ]);
-    const allInstanceSnaps = [...managerSnaps, ...(branchSnaps as ReturnType<typeof masterSnaps>)];
+    const allInstanceSnaps = [...managerSnaps, ...(branchSnaps as FirebaseFirestore.DocumentSnapshot[])];
     const masters = new Map(masterSnaps.map((s) => [s.id, s.exists ? (s.data() as Subject) : null]));
     // Verify manager's instances
     plan.planRows.forEach((p, idx) => {
