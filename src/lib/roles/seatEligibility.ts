@@ -1,5 +1,4 @@
 import type { Firestore } from "firebase-admin/firestore";
-import { isReadOnlyFacultyCollege } from "@/lib/auth/readOnlyAccess";
 import { isFacultyExited } from "@/lib/auth/readOnlyFacultyLookup";
 
 /**
@@ -9,8 +8,7 @@ import { isFacultyExited } from "@/lib/auth/readOnlyFacultyLookup";
  *
  * Returns null when the appointment may go ahead, or the reason it may not.
  *
- *  - Switch-gated by READ_ONLY_FACULTY_COLLEGES: for any college not listed this returns null without a
- *    single Firestore read, so every other college is exactly as before.
+ *  - Applies to every college (no switch).
  *  - It only ever guards a NEW appointment. It is never called when a seat is vacated or when an existing
  *    holder is left in place - an existing seat, holder or history entry is never touched by this check.
  *  - FAILS CLOSED: if the status lookup fails the appointment is refused (try again), never waved through.
@@ -22,7 +20,6 @@ export async function seatBlockReason(
   uid: string,
   name?: string
 ): Promise<{ message: string; status: number } | null> {
-  if (!isReadOnlyFacultyCollege(collegeId)) return null;
   try {
     if (await isFacultyExited(db, collegeId, uid)) {
       return {

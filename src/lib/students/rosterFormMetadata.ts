@@ -1,4 +1,5 @@
 import type { AcademicYear, Course, Department } from "@/types";
+import { selectableYears } from "@/lib/college/courseYears";
 
 export interface RosterFormMetadata {
   departments: Department[];
@@ -31,15 +32,13 @@ export async function fetchRosterFormMetadata(): Promise<RosterFormMetadata> {
   const courseNames = Array.from(
     new Set(courses.map((c) => c.name?.trim()).filter(Boolean) as string[])
   ).sort((a, b) => a.localeCompare(b));
-  // Prefer the college's configured academic years; a sensible 1-4 default so
-  // the dropdowns are never empty for a freshly set-up college. The
+  // Prefer the college's configured academic years; failing that the years of the longest
+  // course the college runs (selectableYears) - never an invented 1-4. The
   // college-wide Academic Years list (Principal-managed) has no idea which
   // years any real course actually reaches, so it's capped at the longest
   // real course duration - the same cap the Principal's own Years Taught
   // editor already enforces.
   const configured = (yearsRes.academicYears ?? []).map((y) => y.yearNumber).filter(Boolean);
-  const maxCourseDuration = courses.reduce((max, c) => Math.max(max, Number(c.durationYears) || 0), 0);
-  const capped = maxCourseDuration > 0 ? configured.filter((y) => y <= maxCourseDuration) : configured;
-  const years = capped.length > 0 ? capped : [1, 2, 3, 4];
+  const years = selectableYears(configured, courses);
   return { departments, courseNames, courses, years };
 }

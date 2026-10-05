@@ -29,7 +29,7 @@ import { normalizeHighestQualification } from "@/lib/faculty/highestQualificatio
 import { FieldValue } from "firebase-admin/firestore";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { actorOf } from "@/lib/audit/actorOf";
-import { isReadOnlyFacultyCollege, isReadOnlyFacultyStatus } from "@/lib/auth/readOnlyAccess";
+import { isReadOnlyFacultyStatus } from "@/lib/auth/readOnlyAccess";
 import { vacateSeatsOnExit, type VacateSeatsResult } from "@/lib/faculty/vacateSeatsOnExit";
 import type { Designation, EmployeeCategory, FacultyStatus, TrainingEntry } from "@/types";
 import {
@@ -476,8 +476,7 @@ export async function PATCH(
     // RESIGNED/RETIRED = a read-only login (lib/auth/readOnlyAccess.ts - derived
     // from this very status, nothing else is stored). Being read-only also means
     // holding no seat, so every seat they hold is vacated through the normal seat
-    // flow (lib/faculty/vacateSeatsOnExit.ts). Only when the college has the switch
-    // on, and on ANY save of a person whose status IS RESIGNED/RETIRED - not only
+    // flow (lib/faculty/vacateSeatsOnExit.ts). In every college, and on ANY save of a person whose status IS RESIGNED/RETIRED - not only
     // the save that changes it - so a vacate that failed, or was skipped for an admin
     // to resolve, is retried by simply saving the record again (it is idempotent: a
     // person holding no seat costs one read and changes nothing). The reverse (back
@@ -490,7 +489,7 @@ export async function PATCH(
     const previousFacultyData = snap.data() as { status?: string; seatVacateStatus?: string };
     const resultingStatus = body.status ?? previousFacultyData.status;
     const enteredExit = body.status !== undefined && body.status !== previousFacultyData.status && isReadOnlyFacultyStatus(body.status);
-    if (isReadOnlyFacultyStatus(resultingStatus) && isReadOnlyFacultyCollege(session.collegeId) && before.userUid) {
+    if (isReadOnlyFacultyStatus(resultingStatus) && before.userUid) {
       try {
         const seatActor = await actorOf(db, session.collegeId, session.uid, session.email);
         const outcome = await vacateSeatsOnExit(

@@ -9,6 +9,7 @@ import { toast } from "@/hooks/useToast";
 import { buildCourseGroups, sectionMatchesDepartmentFilter } from "@/lib/departments/hodScope";
 import { SectionRoster } from "@/components/academics/SectionRoster";
 import type { Course, Department, Section } from "@/types";
+import { courseYearNumbers } from "@/lib/college/courseYears";
 
 // Same palettes, ratio and grouping the HOD's own Sections page uses, so a
 // section reads identically whichever dashboard it is seen from.
@@ -167,8 +168,9 @@ export function SectionsPanel() {
     if (sections.length > 0) {
       return Array.from(new Set(byDept.map((s) => s.year))).sort((a, b) => a - b);
     }
-    return [1, 2, 3, 4];
-  }, [sections, byDept]);
+    // No sections yet: the years of the longest course the college runs, not an assumed 1-4.
+    return courseYearNumbers(courses.reduce((max, c) => Math.max(max, Number(c.durationYears) || 0), 0));
+  }, [sections, byDept, courses]);
 
   const visible = useMemo(
     () => (yearFilter === ALL ? byDept : byDept.filter((s) => s.year === yearFilter)),

@@ -117,9 +117,9 @@ export default function PrincipalInternalMarksPage() {
   // yet at this point in the flow (Course -> Year -> Branch), so a single
   // department's own scope can't be intersected here the way other pages do;
   // instead a year only appears at all if SOME department offering this
-  // course actually teaches it. Falls back to the full span only when no
-  // department has any explicit assignment, so an unconfigured college isn't
-  // locked out.
+  // course actually teaches it. No department with Years Taught means no
+  // years - empty is "not configured", never "every year"
+  // (lib/college/taughtYears.ts).
   const yearOptions = useMemo(() => {
     const relevant = courses.filter((c) => c.name === courseName);
     const assigned = new Set<number>();
@@ -128,9 +128,7 @@ export default function PrincipalInternalMarksPage() {
       if (!dept) continue;
       for (const y of resolveDepartmentCourseScope(dept, c.catalogId).assignedYears) assigned.add(y);
     }
-    if (assigned.size > 0) return Array.from(assigned).sort((a, b) => a - b);
-    const duration = Math.max(0, ...relevant.map((c) => c.durationYears));
-    return Array.from({ length: duration }, (_, i) => i + 1);
+    return Array.from(assigned).sort((a, b) => a - b);
   }, [courses, courseName, departmentById]);
 
   const branchOptions = useMemo(() => {

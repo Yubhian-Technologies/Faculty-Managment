@@ -6,6 +6,7 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { examConfigId, subjectTypeToExamType } from "@/lib/exams/internalExamMarks";
 import { resolveDepartmentCourseScope } from "@/lib/college/academicStructure";
+import { notConfiguredMessage } from "@/lib/college/taughtYears";
 import type { DepartmentCourseScope, ExamConfigComponent, ExamType, Subject } from "@/types";
 
 const EXAM_TYPES: ExamType[] = ["THEORY", "LAB"];
@@ -139,8 +140,16 @@ export async function POST(request: Request) {
       if (deptSnap.exists) {
         const deptDoc = deptSnap.data() as { assignedYears?: number[]; secondaryDepartments?: string[]; courseScopes?: Record<string, DepartmentCourseScope> };
         const assignedYears = resolveDepartmentCourseScope(deptDoc, course.catalogId).assignedYears;
-        if (assignedYears.length > 0 && !assignedYears.includes(Number(year))) {
-          return NextResponse.json({ error: `"${department}" is not assigned to teach Year ${year}` }, { status: 400 });
+        // Empty = not configured, NOT unrestricted (lib/college/taughtYears.ts).
+        if (!assignedYears.includes(Number(year))) {
+          return NextResponse.json(
+            {
+              error: assignedYears.length === 0
+                ? notConfiguredMessage(department, year, courseName)
+                : `"${department}" is not assigned to teach Year ${year}`,
+            },
+            { status: 400 }
+          );
         }
       }
     }

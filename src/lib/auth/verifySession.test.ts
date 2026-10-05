@@ -22,9 +22,10 @@ function fakeDocRef(path: string) {
   };
 }
 function fakeCollectionRef(path: string) {
-  // where().where().get() - the role-delegation lookup (leaveRequests); no
-  // delegations exist in these tests, so it always resolves empty.
-  const query = { where: () => query, get: async () => ({ docs: [] }) };
+  // where().where().get() - the role-delegation lookup (leaveRequests) - and
+  // where().limit(1).get() - the faculty-status lookup (facultyMembers); neither has
+  // any rows in these tests, so both resolve empty.
+  const query = { where: () => query, limit: () => query, get: async () => ({ docs: [], empty: true }) };
   return { doc: (id: string) => fakeDocRef(`${path}/${id}`), where: query.where };
 }
 vi.mock("@/lib/firebase/admin", () => ({

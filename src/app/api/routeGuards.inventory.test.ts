@@ -8,7 +8,7 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 //      (requireRole / requireCollegeMember / ... or one of the wrappers that call them), OR be in the
 //      reviewed exemption list below. A NEW route that forgets its guard fails this test - which is
 //      exactly the route that would silently let a read-only person write.
-//  (b) With the read-only switch ON, a RESIGNED/RETIRED login is denied every one of those handlers
+//  (b) A RESIGNED/RETIRED login is denied every one of those handlers
 //      through the REAL guard code (liveRoles + pickEffectiveRole), while an ACTIVE login is not -
 //      so the denial is proven to come from the rule, not from the route's own role list.
 
@@ -44,8 +44,8 @@ import { pickEffectiveRole } from "@/lib/roles/seatRoles";
 // callers are not college faculty), and the two bearer-token routes. Adding to this list is a review decision.
 const EXEMPT = new Set([
   "POST admin/colleges", "PATCH admin/colleges",
-  "POST auth/resolve-student-login", "POST auth/session", "DELETE auth/session",
-  "POST cron/attendance-not-posted", "POST cron/od-proof-reminders",
+  "POST auth/resolve-student-login", "POST auth/employee-login", "POST auth/session", "DELETE auth/session",
+  "POST cron/attendance-not-posted", "POST cron/attendance-tally", "POST cron/od-proof-reminders",
   "POST email/send", "POST pdf/generate",
   "POST location/candidates", "PATCH location/candidates/[id]",
   "POST location/departments", "PATCH location/departments/[id]", "DELETE location/departments/[id]",
@@ -171,7 +171,7 @@ describe("(b) read-only faculty are denied every guarded mutating handler (real 
     return pickEffectiveRole(held, h.roles);
   };
 
-  beforeAll(() => { process.env.READ_ONLY_FACULTY_COLLEGES = "c1"; vi.spyOn(console, "error").mockImplementation(() => {}); });
+  beforeAll(() => { vi.spyOn(console, "error").mockImplementation(() => {}); });
 
   it("a RESIGNED and a RETIRED login get NO role for any guarded mutating route", async () => {
     const guarded = mutating().filter((h) => h.guarded && h.roles.length > 0);

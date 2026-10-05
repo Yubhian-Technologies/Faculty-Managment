@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { MarkAttendanceDialog } from "@/components/attendance/MarkAttendanceDialog";
 import { toast } from "@/hooks/useToast";
+import { useReadOnlyAccess } from "@/hooks/useReadOnlyAccess";
 import { formatDate, toDate } from "@/lib/utils";
 import { isLateCheckIn } from "@/lib/attendance/lateStatus";
 import { SUNDAY_HOLIDAY_MESSAGE } from "@/lib/attendance/attendanceWindow";
@@ -43,6 +44,8 @@ interface SummaryCard {
 }
 
 export default function FacultyAttendancePage() {
+  // RESIGNED/RETIRED: history only - no check-in / check-out / face registration.
+  const readOnly = useReadOnlyAccess();
   const now = new Date();
   const [month, setMonth] = useState<number>(now.getMonth() + 1);
   const [year, setYear] = useState<number>(now.getFullYear());
@@ -127,7 +130,7 @@ export default function FacultyAttendancePage() {
         description="Your monthly attendance record"
       />
 
-      {isCurrentMonth && (
+      {isCurrentMonth && !readOnly && (
         <Card>
           <CardContent className="p-4 flex flex-wrap items-center justify-between gap-3">
             {todayStatus?.isSunday ? (

@@ -27,7 +27,19 @@ export async function setLinkedFacultyPhoto(
     .where("userUid", "==", uid)
     .limit(1)
     .get();
-  if (snap.empty) return false;
-  await snap.docs[0].ref.update({ profilePhotoUrl: photoUrl, updatedAt: new Date() });
+  if (!snap.empty) {
+    await snap.docs[0].ref.update({ profilePhotoUrl: photoUrl, updatedAt: new Date() });
+    return true;
+  }
+  // A Supporting Staff login (COLLEGE_STAFF) is the same: its photo lives on its supportingStaff record, which is
+  // written here too - before the caller touches the users/systemUsers mirror.
+  const staffSnap = await db
+    .collection("colleges").doc(collegeId)
+    .collection("supportingStaff")
+    .where("userUid", "==", uid)
+    .limit(1)
+    .get();
+  if (staffSnap.empty) return false;
+  await staffSnap.docs[0].ref.update({ profilePhotoUrl: photoUrl, updatedAt: new Date() });
   return true;
 }

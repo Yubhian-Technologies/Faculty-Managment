@@ -61,6 +61,9 @@ async function completeLogin(
     email?: string;
     profile?: FMSUser;
     refreshToken?: boolean;
+    roles?: string[];
+    // Set by the server for a RESIGNED/RETIRED faculty member: they sign in, but read-only.
+    readOnlyAccess?: boolean;
   };
 
   // Server just backfilled custom claims - force a token refresh so the new
@@ -146,7 +149,8 @@ async function completeLogin(
         createdAt: {} as never,
       };
     }
-    setUser(profile);
+    // A RESIGNED/RETIRED faculty member must not lose their read-only state at the very first screen.
+    setUser(sessionData.readOnlyAccess ? { ...profile, readOnlyAccess: true, roles: sessionData.roles as UserRole[] | undefined } : profile);
     const dashboardPath = ROLE_DASHBOARD_PATHS[profile.role] ?? "/hod";
     router.push(redirect ?? dashboardPath);
   } else {

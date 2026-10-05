@@ -30,6 +30,7 @@ import type { Department, Course, AcademicYear } from "@/types";
 import type { StudentRow, SectionRow } from "@/components/students/hod/types";
 import { EditStudentDialog } from "@/components/students/hod/EditStudentDialog";
 import { AssignStudentDialog } from "@/components/students/hod/AssignStudentDialog";
+import { selectableYears } from "@/lib/college/courseYears";
 
 
 type BulkMode = "move" | "unassign";
@@ -554,7 +555,7 @@ export default function HodStudentsPage() {
   // Fallback years for when neither Department nor Course narrows things
   // down yet - same fallback chain as the Office Students page: prefer what
   // the college has configured, fall back to whatever years already appear
-  // on students, then to 1-4 so the filter is never empty.
+  // on students, then to the years of the longest course this HOD runs.
   const fallbackYears = useMemo(() => {
     const configured = academicYears.map((y) => y.yearNumber).filter(Boolean);
     const fromStudents = Array.from(new Set(students.map((s) => s.year).filter(Boolean)));
@@ -568,9 +569,7 @@ export default function HodStudentsPage() {
     // own departments (see /api/college/courses's HOD handling), so its
     // longest `durationYears` is the real ceiling here - the same cap the
     // Principal's own Years Taught editor already enforces at the source.
-    const maxCourseDuration = courses.reduce((max, c) => Math.max(max, Number(c.durationYears) || 0), 0);
-    const capped = maxCourseDuration > 0 ? merged.filter((y) => y <= maxCourseDuration) : merged;
-    return capped.length > 0 ? capped : [1, 2, 3, 4];
+    return selectableYears(merged, courses);
   }, [academicYears, students, courses]);
 
   // Department -> Year cascade, same one the Office Students page's own

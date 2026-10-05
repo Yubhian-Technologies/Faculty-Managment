@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TeachingAssignmentsEditor } from "@/components/timetable/TeachingAssignmentsEditor";
 import { useRegulationCourseDepartmentPicker } from "@/lib/subjects/hooks/useRegulationCourseDepartmentPicker";
-import { regulationsForCourseYearByBatch, fedYears } from "@/lib/college/academicStructure";
+import { regulationsForCourseYearByBatch } from "@/lib/college/academicStructure";
 import { currentAcademicStartYear } from "@/lib/college/academicSession";
 import { managerTeachingYears } from "@/lib/departments/managedBranches";
 import { ArrowLeft, AlertTriangle } from "lucide-react";
@@ -43,9 +43,8 @@ export default function AcademicsTeachingAssignmentsPage() {
     const courseYears = Array.from({ length: Number(picker.selectedCatalogItem.durationYears) || 0 }, (_, i) => i + 1);
     const catalogId = picker.selectedCatalogItem.id;
     const assigned = managerTeachingYears(picker.allDepartments, picker.selectedDepartment, catalogId);
-    const teachableYears = assigned.length > 0
-      ? courseYears.filter((y) => assigned.includes(y))
-      : courseYears.filter((y) => !new Set(fedYears(picker.selectedDepartment!, picker.allDepartments, catalogId)).has(y));
+    // Unconfigured (no Years Taught) = no years, never "every year" - lib/college/taughtYears.ts.
+    const teachableYears = courseYears.filter((y) => assigned.includes(y));
     if (!picker.selectedCatalogItem) return teachableYears;
     return teachableYears.filter((y) =>
       regulationsForCourseYearByBatch(

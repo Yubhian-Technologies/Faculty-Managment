@@ -27,6 +27,7 @@ import type {
   TeachingAssignment, FacultyAssignmentRequest, PeriodTiming, Subject,
 } from "@/types";
 import { DAY_LABELS, DEFAULT_TIMETABLE_RULES } from "@/types";
+import { courseYearNumbers } from "@/lib/college/courseYears";
 
 /** What the grid is currently showing. */
 type Mode = "published" | "draft";
@@ -672,7 +673,7 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
                 </tr>
               </thead>
               <tbody>
-                {Array.from({ length: course?.durationYears ?? 4 }, (_, i) => i + 1).map((y) => {
+                {courseYearNumbers(course?.durationYears ?? Math.max(0, ...allTimings.map((t) => Number(t.year) || 0))).map((y) => {
                   const t = allTimings.find((at) => Number(at.year) === y);
                   const isCurrentYear = y === Number(year);
                   const isExpanded = expandedTimingYears.has(y);
