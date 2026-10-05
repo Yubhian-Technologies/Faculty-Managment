@@ -23,7 +23,7 @@ import { buildRows, defaultPeriodTimings } from "@/lib/timetable/buildGrid";
 import { ordinalYear, resolveTimetableDays } from "@/lib/timetable/gridModel";
 import { InstitutionalTimetableTable } from "@/components/timetable/InstitutionalTimetableTable";
 import type {
-  Course, Section, CourseYearTiming, TimetableSlot, DayOfWeek, DraftSlot, TimetableDraft,
+  Course, SectionListItem, CourseYearTiming, TimetableSlot, DayOfWeek, DraftSlot, TimetableDraft,
   TeachingAssignment, FacultyAssignmentRequest, PeriodTiming, Subject,
 } from "@/types";
 import { DAY_LABELS, DEFAULT_TIMETABLE_RULES } from "@/types";
@@ -86,7 +86,7 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
   const fulfillingAssignmentId = searchParams.get("assignmentId") || null;
 
   const [course, setCourse] = useState<Course | null>(null);
-  const [section, setSection] = useState<Section | null>(null);
+  const [section, setSection] = useState<SectionListItem | null>(null);
   const [timing, setTiming] = useState<CourseYearTiming | null>(null);
   // Every year's own CourseYearTiming for this course (not just the one
   // being viewed) - powers the "Period Timings" summary at the top of the
@@ -169,7 +169,7 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
       const [coursesData, sectionsData, timingsData, slotsData, draftData, assignData, facultyData, requestsData] = await Promise.all([
         fetch("/api/college/courses").then((r) => r.json() as Promise<{ courses: Course[] }>),
         fetch(`/api/college/sections?courseId=${encodeURIComponent(courseId)}&year=${encodeURIComponent(year)}`)
-          .then((r) => r.json() as Promise<{ sections: Section[] }>),
+          .then((r) => r.json() as Promise<{ sections: SectionListItem[] }>),
         fetch(`/api/college/course-year-timings?courseId=${encodeURIComponent(courseId)}`)
           .then((r) => r.json() as Promise<{ timings: CourseYearTiming[] }>),
         fetch(`/api/college/timetable-slots?sectionId=${encodeURIComponent(sectionId)}${semesterQuery}`)
@@ -230,7 +230,13 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
   // construction (see the Incharge-assignment POST's own department-match
   // check) - so this naturally reads false for them too, same as an HOD
   // working within their own department.
-  const isCrossDepartment = !isLoading && (!section || (myDepartments.length > 0 && !myDepartments.includes(section.department)));
+  //
+  // A section the sections API marks "primary" is one this HOD owns for this
+  // year - including a managed branch's shared-year section (e.g. a Basic
+  // Science sub-HOD running Mechanical's 1st year) - so it is theirs to publish,
+  // exactly as the publish route already allows (canHodEditDepartment).
+  const ownsSectionYear = section?.accessLevel === "primary";
+  const isCrossDepartment = !isLoading && (!section || (!ownsSectionYear && myDepartments.length > 0 && !myDepartments.includes(section.department)));
   // A cross-department contributor never publishes this section themselves
   // (see handleNotify/handlePublish below and the server-side guard in
   // /api/college/timetable/publish) - so there's nothing for them to "view

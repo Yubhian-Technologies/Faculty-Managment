@@ -376,11 +376,11 @@ export interface TimetableSlot {
 
 export interface TimetableRules {
   workingDays: DayOfWeek[];
-  /** Hard cap on periods a single faculty may teach in one day. */
+  /** No longer enforced - a faculty member may teach any number of periods in a day. Kept so stored rules docs still type-check. */
   maxPeriodsPerFacultyPerDay: number;
-  /** Hard cap on back-to-back periods for one faculty, across all sections. */
+  /** No longer enforced - a faculty member may teach any number of back-to-back periods. Kept so stored rules docs still type-check. */
   maxConsecutivePeriodsPerFaculty: number;
-  /** Hard cap on how often one subject may repeat in a day for a section. */
+  /** No longer enforced - a subject may repeat any number of times in a day. Kept so stored rules docs still type-check. */
   maxPeriodsPerSubjectPerDay: number;
   /** Contiguous periods a PRACTICAL subject occupies (e.g. a 3-hour lab). */
   labBlockSize: number;

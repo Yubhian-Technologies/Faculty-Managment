@@ -25,7 +25,7 @@ function base(fake: FakeFirestore, over: Partial<PinSlotInput> = {}): PinSlotInp
   return {
     db: asFirestore(fake), collegeId: "c1", assignmentId, facultyId: "f1", facultyName: "Dr F", courseId: "co1", year: 1,
     sectionId: "s1", subjectId: "sub1", subjectName: "Maths", department: "CSE", day: "MON", periodNumber: 1,
-    semester: null, currentAcademicYear: "2026-27", maxPeriodsPerFacultyPerDay: 6,
+    semester: null, currentAcademicYear: "2026-27",
     isLiveSlot: makeLiveSlotPredicate(lookup, "2026-27"), writer: "hod1",
     ...over,
   };
@@ -49,14 +49,12 @@ describe("pinSlotWithChecks", () => {
     expect(slots(fake)[0].departmentId).toBe("d1");
   });
 
-  it("refuses beyond the per-faculty daily cap, counting every section but only live slots", async () => {
+  it("has no per-faculty daily cap: a faculty member may take any number of periods in a day", async () => {
     const fake = new FakeFirestore();
-    fake.seed(`${C}/timetableSlots/x1`, { facultyId: "f1", sectionId: "s2", courseId: "co1", year: 1, day: "MON", periodNumber: 1, academicYear: "2026-27" });
-    fake.seed(`${C}/timetableSlots/x2`, { facultyId: "f1", sectionId: "s3", courseId: "co1", year: 1, day: "MON", periodNumber: 3, academicYear: "2026-27" });
-    fake.seed(`${C}/timetableSlots/hist`, { facultyId: "f1", sectionId: "s3", courseId: "co1", year: 1, day: "MON", periodNumber: 2, academicYear: "2025-26" });
-    const r = await pinSlotWithChecks(base(fake, { periodNumber: 2, maxPeriodsPerFacultyPerDay: 2 }));
-    expect(r).toMatchObject({ ok: false, error: expect.stringMatching(/would exceed the 2 periods\/day limit on MON/) });
-    expect((await pinSlotWithChecks(base(fake, { periodNumber: 2, maxPeriodsPerFacultyPerDay: 3 }))).ok).toBe(true); // history didn't count
+    for (let p = 1; p <= 6; p++) {
+      fake.seed(`${C}/timetableSlots/x${p}`, { facultyId: "f1", sectionId: `o${p}`, courseId: "co1", year: 1, day: "MON", periodNumber: p, academicYear: "2026-27" });
+    }
+    expect((await pinSlotWithChecks(base(fake, { periodNumber: 7 }))).ok).toBe(true);
   });
 
   it("refuses a taken cell, and allows an explicit two-lab split but not a third occupant or a theory mix", async () => {
@@ -118,17 +116,6 @@ describe("pinSlotWithChecks - concurrency", () => {
         pinSlotWithChecks(base(fake, { assignmentId: "a2", sectionId: "s2", year: 2, periodNumber: 2 })),
       ]);
       expect([a.ok, b.ok], `seed ${seed}`).toEqual([true, true]);
-    }
-  });
-
-  it("the per-faculty daily cap holds when pins race (cap 1, two non-overlapping pins)", async () => {
-    for (let seed = 1; seed <= 15; seed++) {
-      const fake = new FakeFirestore({ latencyMs: 4, seed });
-      const [a, b] = await Promise.all([
-        pinSlotWithChecks(base(fake, { assignmentId: "a1", sectionId: "s1", year: 1, periodNumber: 1, maxPeriodsPerFacultyPerDay: 1 })),
-        pinSlotWithChecks(base(fake, { assignmentId: "a2", sectionId: "s2", year: 1, periodNumber: 2, maxPeriodsPerFacultyPerDay: 1 })),
-      ]);
-      expect([a.ok, b.ok].filter(Boolean), `seed ${seed}`).toHaveLength(1);
     }
   });
 

@@ -33,7 +33,6 @@ export interface PinSlotInput {
   allowSplit?: boolean;
   semester: number | null;
   currentAcademicYear: string;
-  maxPeriodsPerFacultyPerDay: number;
   isLiveSlot: (slot: SlotIdentity) => boolean;
   /** Extra fields stamped onto the slot document (e.g. department ids). */
   stamp?: (data: Record<string, unknown>) => Record<string, unknown>;
@@ -71,12 +70,6 @@ export async function pinSlotWithChecks(input: PinSlotInput): Promise<PinSlotOut
     const facultyLive = facultySnap.docs
       .map((d) => ({ id: d.id, ...(d.data() as object) }) as StoredSlot & { id: string })
       .filter((s) => input.isLiveSlot(s));
-
-    // Per-faculty daily cap, across every section they teach.
-    const dayCount = facultyLive.filter((s) => s.day === day).length;
-    if (dayCount + 1 > input.maxPeriodsPerFacultyPerDay) {
-      return { ok: false, error: `${input.facultyName || "This faculty"} would exceed the ${input.maxPeriodsPerFacultyPerDay} periods/day limit on ${day}.` };
-    }
 
     // Same-semester / same-session occupants of this exact cell.
     const cellSlotsNow = cellSnap.docs

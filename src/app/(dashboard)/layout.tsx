@@ -14,6 +14,14 @@ import { useAuthStore } from "@/store/authStore";
 import { useNavVisibility } from "@/hooks/useNavVisibility";
 import { DashboardSkeleton } from "@/components/shared/SkeletonLoader";
 
+// Pages reached only from a button on another page have no nav item, so Nav
+// Visibility has no checkbox for them and a stale saved entry can never be
+// cleared. They follow their parent page's visibility instead (same pairing as
+// SUB_PAGE_PARENT in navConfig.ts, used there for the active highlight).
+const SUB_PAGE_VISIBILITY_PARENT: Record<string, string> = {
+  "/hod/assignment-requests": "/hod/teaching-assignments",
+};
+
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useAuthStore();
   const router = useRouter();
@@ -38,7 +46,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   if (!user) return null;
 
-  if (isPathHidden(pathname, user.role, hiddenModules, hiddenItems)) {
+  if (isPathHidden(SUB_PAGE_VISIBILITY_PARENT[pathname] ?? pathname, user.role, hiddenModules, hiddenItems)) {
     notFound();
   }
 
