@@ -210,11 +210,18 @@ describe("Course Structure import - end to end", () => {
     expect(docs("subjectSemesterAssignments").map((a) => [a.departmentId, a.courseId]).sort()).toEqual([["ai", "c-ai"], ["cse", "c-cse"]]);
   });
 
-  it("rejects a code that already exists for this regulation as a different subject", async () => {
+  it("allows the same code for a different subject (separate master, no error)", async () => {
     await service.run(request([row()], { courseId: "c-ai", departmentId: "ai" }), "commit");
     const res = await service.run(request([row({ name: "Discrete Maths" })]), "commit");
-    expect(res.ok).toBe(false);
-    expect(res.errors[0].message).toMatch(/already exists for R23/);
+    expect(res.ok).toBe(true);
+    expect(res.counts).toMatchObject({ mastersCreated: 1, mastersReused: 0 });
+    expect(docs("subjects")).toHaveLength(2);
+  });
+
+  it("allows one code on two different subjects in the same file", async () => {
+    const res = await service.run(request([row(), row({ name: "Discrete Maths" })]), "commit");
+    expect(res.ok).toBe(true);
+    expect(docs("subjects")).toHaveLength(2);
   });
 
   it("keeps regulations apart: the same code under R20 is a separate subject", async () => {

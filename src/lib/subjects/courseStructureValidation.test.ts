@@ -104,11 +104,10 @@ describe("validateCourseStructureRows", () => {
     expect(r.errors.map((e) => e.field)).toEqual(["lectureHours", "tutorialHours", "credits", "totalMarks", "customCategory", "type"]);
   });
 
-  it("detects derived-code collisions and exact duplicates", () => {
+  it("allows a shared code on different subjects but flags exact duplicates", () => {
     const r = run(base, { ...base, name: "Data Structures Lab", practicalHours: "2" }, { ...base });
-    expect(r.errors).toHaveLength(2);
-    expect(r.errors[0].message).toMatch(/both produce the code DATASTRUCT/);
-    expect(r.errors[1].message).toMatch(/Duplicate of row 2/);
+    expect(r.errors).toHaveLength(1);
+    expect(r.errors[0].message).toMatch(/Duplicate of row 2/);
   });
 
   it("allows one subject across two semesters", () => {
