@@ -186,6 +186,55 @@ export async function POST(request: Request) {
   }
 }
 
+// Edits one instance's hours/credits (a department-level override of the master).
+export async function PATCH(request: Request) {
+  try {
+    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "ACADEMICS");
+    const body = (await readJsonBody(request)) as {
+      id?: string;
+      lectureHours?: number;
+      tutorialHours?: number;
+      practicalHours?: number;
+      credits?: number;
+    };
+    if (!body.id) return NextResponse.json({ error: "id is required" }, { status: 400 });
+
+    const nums = { lectureHours: body.lectureHours, tutorialHours: body.tutorialHours, practicalHours: body.practicalHours, credits: body.credits };
+    for (const [k, v] of Object.entries(nums)) {
+      if (v !== undefined && (!Number.isFinite(Number(v)) || Number(v) < 0)) {
+        return NextResponse.json({ error: `${k} must be a non-negative number` }, { status: 400 });
+      }
+    }
+
+    const ref = getAdminDb().collection("colleges").doc(session.collegeId).collection("subjectSemesterAssignments").doc(body.id);
+    const snap = await ref.get();
+    if (!snap.exists) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    const cur = snap.data() as { lectureHours?: number; tutorialHours?: number; practicalHours?: number };
+
+    const lectureHours = body.lectureHours !== undefined ? Number(body.lectureHours) : cur.lectureHours ?? 0;
+    const tutorialHours = body.tutorialHours !== undefined ? Number(body.tutorialHours) : cur.tutorialHours ?? 0;
+    const practicalHours = body.practicalHours !== undefined ? Number(body.practicalHours) : cur.practicalHours ?? 0;
+    await ref.update({
+      lectureHours,
+      tutorialHours,
+      practicalHours,
+      hoursPerWeek: lectureHours + tutorialHours + practicalHours,
+      ...(body.credits !== undefined ? { credits: Number(body.credits) } : {}),
+      isCustomized: true,
+      updatedAt: new Date(),
+    });
+    return NextResponse.json({ success: true });
+  } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
+    if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    console.error("[subject-semester-assignments PATCH]", err);
+    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+  }
+}
+
 // Unassign - removes one subject instance from one department's semester mapping.
 export async function DELETE(request: Request) {
   try {
@@ -211,6 +260,9 @@ export async function DELETE(request: Request) {
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    if (err instanceof Error && err.message.includes("active faculty teaching assignments")) {
+      return NextResponse.json({ error: err.message }, { status: 409 });
     }
     console.error("[subject-semester-assignments DELETE]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
