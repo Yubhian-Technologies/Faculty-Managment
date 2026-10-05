@@ -1,5 +1,6 @@
 import type { DepartmentCourseScope } from "@/types";
 import { narrowToActiveHodDepartment } from "@/lib/roles/activeHodDepartment";
+import { activeDelegatedRoles } from "@/lib/leave/roleDelegation";
 import { resolveDepartmentCourseScope } from "@/lib/college/academicStructure";
 import { canHodEditDepartmentYear, type DepartmentYearRow } from "@/lib/departments/managedBranches";
 
@@ -188,12 +189,17 @@ export async function getHodDepartmentScope(
   const { activeOnly = true } = options;
   const userSnap = await db.collection("colleges").doc(collegeId).collection("users").doc(uid).get();
   const userData = userSnap.data() as { department?: string; departments?: string[] } | undefined;
+  // Departments whose HOD seat was handed to this person for the holder's
+  // leave, live only while that leave is in progress (see
+  // lib/leave/roleDelegation.ts).
+  const delegation = await activeDelegatedRoles(db, collegeId, uid).catch(() => ({ roles: [] as string[], departments: [] as string[] }));
+  const delegatedDepartments = delegation.roles.includes("HOD") ? delegation.departments : [];
   // `departments` is the source of truth once present; a doc that predates it
   // (or was only ever touched by the old single-field write path) falls back
   // to its one `department` string.
   const allOwnDepartmentNames = Array.from(
     new Set(
-      (userData?.departments && userData.departments.length > 0 ? userData.departments : [userData?.department ?? ""])
+      [...(userData?.departments && userData.departments.length > 0 ? userData.departments : [userData?.department ?? ""]), ...delegatedDepartments]
         .map((n) => n.trim())
         .filter(Boolean)
     )

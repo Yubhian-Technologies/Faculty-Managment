@@ -166,8 +166,17 @@ export async function POST(request: Request) {
     if (seatRoles.includes("DEPARTMENT_OFFICE")) realRole = "DEPARTMENT_OFFICE";
     // Plus any seats handed to this person for someone's leave, live today.
     let delegatedRoles: string[] = [];
+    // Departments of a delegated HOD seat. Sent separately (not folded into
+    // `profile`) because the client's fast path reads its profile straight from
+    // Firestore; useAuth merges these into `departments` itself, mirroring what
+    // getHodDepartmentScope does server-side.
+    let delegatedDepartments: string[] = [];
     if (collegeId && profile) {
-      try { delegatedRoles = (await activeDelegatedRoles(getAdminDb(), collegeId, decoded.uid)).roles; } catch { /* non-fatal */ }
+      try {
+        const delegation = await activeDelegatedRoles(getAdminDb(), collegeId, decoded.uid);
+        delegatedRoles = delegation.roles;
+        if (delegatedRoles.includes("HOD")) delegatedDepartments = delegation.departments;
+      } catch { /* non-fatal */ }
     }
     let roles = role === "UNKNOWN" ? [role] : orderHeldRoles(role, [...seatRoles, ...delegatedRoles]);
 
@@ -199,7 +208,7 @@ export async function POST(request: Request) {
 
     const sessionCookie = await signSession(sessionData);
 
-    const response = NextResponse.json({ ok: true, role, realRole, roles, collegeId, locationId, name, email, profile, refreshToken: !claimsWereSet, ...(readOnlyAccess ? { readOnlyAccess: true } : {}) });
+    const response = NextResponse.json({ ok: true, role, realRole, roles, delegatedDepartments, collegeId, locationId, name, email, profile, refreshToken: !claimsWereSet, ...(readOnlyAccess ? { readOnlyAccess: true } : {}) });
     response.cookies.set("fms-session", sessionCookie, {
       httpOnly: true,
       // Not just a NODE_ENV check: a staging/preview deploy reachable over the

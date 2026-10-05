@@ -3,6 +3,7 @@ import type { UserRole } from "@/types";
 import { ROLE_SCOPE } from "@/types";
 import { findUsersByRoles } from "@/lib/roles/findUsersByRoles";
 import { orderHeldRoles } from "@/lib/roles/seatRoles";
+import { findActiveDelegates } from "@/lib/leave/roleDelegation";
 
 // Shared notification helpers for the budget/indent/purchase-clearance
 // flows (college/budget-requests, college/indent-requests,
@@ -84,6 +85,12 @@ export async function getDepartmentHeadUids(
     for (const u of heads) {
       if ((u.data() as { department?: string }).department === department) uids.add(u.id);
     }
+    // And whoever is acting as this department's HOD during the holder's leave.
+    try {
+      for (const d of await findActiveDelegates(db, collegeId, ["HOD"])) {
+        if (d.departments.includes(department)) uids.add(d.uid);
+      }
+    } catch { /* non-fatal */ }
   }
   return [...uids];
 }
@@ -119,7 +126,15 @@ export async function notifyRole(
   const docs = isGlobal
     ? (await db.collection("systemUsers").where("role", "==", role).get()).docs
     : await findUsersByRoles(db, collegeId, [role]);
-  for (const u of docs) {
-    await notify(db, collegeId, u.id, type, title, message, link);
+  const recipients = new Set(docs.map((u) => u.id));
+  // Plus whoever is acting in this seat for a holder on leave (see
+  // lib/leave/roleDelegation.ts) - the holder's own copy still goes out above.
+  if (!isGlobal) {
+    try {
+      for (const d of await findActiveDelegates(db, collegeId, [role])) recipients.add(d.uid);
+    } catch { /* non-fatal - holders were still notified */ }
+  }
+  for (const uid of recipients) {
+    await notify(db, collegeId, uid, type, title, message, link);
   }
 }
