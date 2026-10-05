@@ -81,6 +81,12 @@ export default function PrincipalDepartmentFacultyPage() {
   });
   const department = departments.find((d) => d.id === deptId);
 
+  useEffect(() => {
+    if (deptId === "all") {
+      router.replace("/principal/faculty");
+    }
+  }, [deptId, router]);
+
   // A department split into sub-departments (e.g. Basic Science ->
   // BSC/BSM/BSP/BSE) is shown here as a picker into its children, since
   // faculty are actually filed under the sub-department, not the parent
@@ -312,42 +318,56 @@ export default function PrincipalDepartmentFacultyPage() {
     {
       key: "actions",
       header: "",
-      // May wrap onto a second line of buttons when the table is tight, so
-      // every action stays visible without a sideways scroll.
-      className: "whitespace-normal min-w-[16rem]",
+      className: "whitespace-nowrap w-[130px]",
       render: (row) => (
-        <div className="flex flex-wrap items-center gap-1">
+        <div className="flex items-center gap-1">
           {!row.userUid && (
             <Button
               variant="ghost"
               size="sm"
-              className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+              className="h-8 w-8 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
               title="Create login account"
               onClick={(e) => { e.stopPropagation(); router.push(`/principal/faculty/${deptId}/${row.id}/credentials`); }}
             >
-              <LogIn className="h-3.5 w-3.5" /><span className="ml-1 hidden sm:inline">Set Login</span>
+              <LogIn className="h-4 w-4" /><span className="sr-only">Set Login</span>
             </Button>
           )}
-          <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); router.push(`/principal/faculty/${deptId}/${row.id}`); }}>
-            <Eye className="h-3.5 w-3.5" /><span className="ml-1 hidden sm:inline">View</span>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 w-8 p-0"
+            title="View profile"
+            onClick={(e) => { e.stopPropagation(); router.push(`/principal/faculty/${deptId}/${row.id}`); }}
+          >
+            <Eye className="h-4 w-4" /><span className="sr-only">View</span>
           </Button>
           <Button
             variant="ghost"
             size="sm"
+            className="h-8 w-8 p-0"
             title="Download resume PDF"
             loading={downloadingResumeId === (row.id as string)}
             onClick={(e) => { e.stopPropagation(); setResumeTarget(row); }}
           >
-            <FileDown className="h-3.5 w-3.5" /><span className="ml-1 hidden sm:inline">Download</span>
+            <FileDown className="h-4 w-4" /><span className="sr-only">Download</span>
           </Button>
-          <Button variant="ghost" size="sm" title="Edit faculty details"
-            onClick={(e) => { e.stopPropagation(); router.push(`/principal/faculty/${deptId}/${row.id}/edit`); }}>
-            <Pencil className="h-3.5 w-3.5" /><span className="ml-1 hidden sm:inline">Edit</span>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 w-8 p-0"
+            title="Edit faculty details"
+            onClick={(e) => { e.stopPropagation(); router.push(`/principal/faculty/${deptId}/${row.id}/edit`); }}
+          >
+            <Pencil className="h-4 w-4" /><span className="sr-only">Edit</span>
           </Button>
-          <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive hover:bg-destructive/10"
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
             title="Delete faculty record"
-            onClick={(e) => { e.stopPropagation(); setDeleteTarget(row); }}>
-            <Trash2 className="h-3.5 w-3.5" />
+            onClick={(e) => { e.stopPropagation(); setDeleteTarget(row); }}
+          >
+            <Trash2 className="h-4 w-4" /><span className="sr-only">Delete</span>
           </Button>
         </div>
       ),

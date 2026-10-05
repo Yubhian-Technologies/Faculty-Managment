@@ -131,19 +131,30 @@ export default function HODSupportingStaffPage() {
             <Button
               variant="ghost"
               size="sm"
-              className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+              className="h-8 w-8 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
               title="Create login account"
               onClick={(e) => { e.stopPropagation(); router.push(`/hod/supporting-staff/${row.id}/credentials`); }}
             >
-              <LogIn className="h-3.5 w-3.5" /><span className="ml-1 hidden sm:inline">Set Login</span>
+              <LogIn className="h-4 w-4" /><span className="sr-only">Set Login</span>
             </Button>
           )}
-          <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); router.push(`/hod/supporting-staff/${row.id}`); }}>
-            <Eye className="h-3.5 w-3.5" /><span className="ml-1 hidden sm:inline">View</span>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 w-8 p-0"
+            title="View profile"
+            onClick={(e) => { e.stopPropagation(); router.push(`/hod/supporting-staff/${row.id}`); }}
+          >
+            <Eye className="h-4 w-4" /><span className="sr-only">View</span>
           </Button>
-          <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive hover:bg-destructive/10"
-            onClick={(e) => { e.stopPropagation(); setDeleteTarget(row); }}>
-            <Trash2 className="h-3.5 w-3.5" />
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+            title="Delete staff record"
+            onClick={(e) => { e.stopPropagation(); setDeleteTarget(row); }}
+          >
+            <Trash2 className="h-4 w-4" /><span className="sr-only">Delete</span>
           </Button>
         </div>
       ),

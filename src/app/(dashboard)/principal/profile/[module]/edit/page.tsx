@@ -11,6 +11,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useAuthStore } from "@/store/authStore";
 import { getUserById } from "@/lib/firestore/users";
 import { migrateUserDoc } from "@/lib/faculty/fieldRenames";
+import { toDateInputValue } from "@/lib/utils";
 import { FacultyProfileModuleEditor, type FacultyEditRecord } from "@/components/faculty/FacultyProfileModuleEditor";
 import { PROFILE_MODULES, SELF_EDIT_DISABLED_MODULES, type ProfileModuleKey } from "@/lib/faculty/profileModules";
 import { useCollegeType } from "@/hooks/useCollegeType";
@@ -36,7 +37,7 @@ export default function PrincipalProfileModuleEditPage() {
     const u = migrateUserDoc(user as unknown as Record<string, unknown>) as unknown as NonNullable<typeof user>;
     setRecord({
       gender: u.gender ?? "",
-      dateOfBirth: u.dateOfBirth as never,
+      dateOfBirth: toDateInputValue(u.dateOfBirth as never) || undefined,
       legalName: u.legalName ?? "",
       fatherName: u.fatherName ?? "",
       motherName: u.motherName ?? "",
@@ -56,7 +57,7 @@ export default function PrincipalProfileModuleEditPage() {
       emergencyContactMobileNo: u.emergencyContactMobileNo ?? "",
       ratificationStatus: u.ratificationStatus ?? "",
       ratificationProceedingsNumber: u.ratificationProceedingsNumber ?? "",
-      ratificationDate: u.ratificationDate as never,
+      ratificationDate: toDateInputValue(u.ratificationDate as never) || undefined,
       maritalStatus: u.maritalStatus ?? "",
       spouseName: u.spouseName ?? "",
       numberOfChildren: u.numberOfChildren,

@@ -61,15 +61,14 @@ export function formatDuration(d: DateDuration): string {
   return parts.length > 0 ? parts.join(" ") : "Less than a day";
 }
 
-interface PreviousInstitutionLike {
+export interface PreviousInstitutionLike {
   fromDate?: string;
   toDate?: string;
   fromYear?: number;
   toYear?: number;
-  // Not read for any date math below - carried through purely so
-  // findOverlappingExperience's callers can describe which entry a warning
-  // is about without a separate lookup.
   institutionName?: string;
+  designation?: string;
+  place?: string;
 }
 
 // Academic, Industry, and Research Experience are 3 separate tabs (same row

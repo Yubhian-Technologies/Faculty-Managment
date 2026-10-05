@@ -14,6 +14,7 @@ import { supportingStaffDisplayName } from "@/lib/supportingStaff/supportingStaf
 import { useCollegeType } from "@/hooks/useCollegeType";
 import { toast } from "@/hooks/useToast";
 import { migrateSupportingStaffDoc } from "@/lib/faculty/fieldRenames";
+import { toDateInputValue } from "@/lib/utils";
 
 interface Props {
   // Where this staff category's own list/detail pages live - the only thing
@@ -53,7 +54,7 @@ export function SupportingStaffModuleEditPage({ basePath }: Props) {
         const m = migrateSupportingStaffDoc(data.staff);
         setRecord({
           gender: (m.gender as string) ?? "",
-          dateOfBirth: (m.dateOfBirth as string) ?? undefined,
+          dateOfBirth: toDateInputValue(m.dateOfBirth as never) || undefined,
           legalName: (m.legalName as string) ?? "",
           nameAsPerAadhar: (m.nameAsPerAadhar as string) ?? "",
           nameAsPerPan: (m.nameAsPerPan as string) ?? "",

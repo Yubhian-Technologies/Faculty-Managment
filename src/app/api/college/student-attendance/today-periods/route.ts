@@ -42,7 +42,7 @@ function collegeNowMinutes(): number {
 }
 
 // Returns ALL periods for today for this faculty, with isOpen gate computed server-side.
-// isOpen = now in [start,end) IST and date is today. Session is fetched if exists (DRAFT/SUBMITTED) for display.
+// isOpen = now in [start,closeTime) IST (closeTime = the year's college end time) and date is today. Session is fetched if exists (DRAFT/SUBMITTED) for display.
 // This is a READ path — does NOT enforce window for reads (closed rows are shown read-only + "Contact Dept Office").
 export async function GET() {
   try {
@@ -80,8 +80,8 @@ export async function GET() {
     }
 
     const periods = await Promise.all(
-      slots.map(async ({ slot, startTime, endTime }) => {
-        const isOpen = nowMinutes >= toMinutes(startTime) && nowMinutes < toMinutes(endTime);
+      slots.map(async ({ slot, startTime, endTime, closeTime }) => {
+        const isOpen = nowMinutes >= toMinutes(startTime) && nowMinutes < toMinutes(closeTime);
         // Where "now" sits against the period: not started yet, running, or over.
         const phase: "UPCOMING" | "OPEN" | "ENDED" = isOpen ? "OPEN" : nowMinutes < toMinutes(startTime) ? "UPCOMING" : "ENDED";
         const id = `${slot.assignmentId}_${today}_${slot.periodNumber}`;

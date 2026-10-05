@@ -8,6 +8,7 @@ import { loadEffectiveTiming } from "@/lib/college/semester";
 import { formatShortCourseName } from "@/lib/academic/format";
 import { istDateKey } from "@/lib/attendance/istTime";
 import { computeStudentAttendanceHistory, studentDepartmentsForHistory, STUDENT_SELF_VIEW_CACHE_MS } from "@/lib/studentAttendance/history";
+import { loadAcademicYearConfig, windowForAcademicYear } from "@/lib/studentAttendance/academicYearWindow";
 import { calcPercent } from "@/lib/studentAttendance/percentage";
 import {
   batchStartYear,
@@ -100,12 +101,29 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: range.error }, { status: 400 });
     }
 
+    // "Till now" is the CURRENT SEMESTER so far (the report students open by
+    // default); with no semester configured it falls back to the current academic
+    // year. Never unbounded - an open range would scan every year ever stored.
+    let { from, to, label } = range;
+    if (view === "tillnow") {
+      const current = currentSemesterOf(semesters, istDateKey(new Date()));
+      if (current) {
+        from = current.startDate;
+        to = current.endDate;
+        label = `Semester ${current.semester} (till now)`;
+      } else {
+        const cfg = await loadAcademicYearConfig(db, session.collegeId);
+        const win = windowForAcademicYear(cfg.currentLabel, cfg);
+        if (win) { from = win.from; to = win.to; label = `${win.label} (till now)`; }
+      }
+    }
+
     const departments = await studentDepartmentsForHistory(db, session.collegeId, student);
     // Cached for a few minutes and shared by the department's other students (see
     // computeStudentAttendanceHistory): a student's own view need not be to-the-second live.
     const { subjects } = await computeStudentAttendanceHistory(db, session.collegeId, student.id, departments, {
-      from: range.from,
-      to: range.to,
+      from,
+      to,
     }, { cacheMs: STUDENT_SELF_VIEW_CACHE_MS });
 
     // Short codes only on the report: the subject's short code, the course's
@@ -146,7 +164,7 @@ export async function GET(request: Request) {
         phone: college?.contactPhone ?? "",
         logoUrl: college?.logoUrl ?? "",
       },
-      scope: { view, label: range.label, from: range.from, to: range.to },
+      scope: { view, label, from, to },
       student: {
         rollNumber: student.rollNumber,
         name: student.name,

@@ -6,6 +6,7 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { findCurrentSectionDoc } from "@/lib/students/findCurrentSectionDoc";
 import { computeStudentAttendanceHistory, STUDENT_SELF_VIEW_CACHE_MS } from "@/lib/studentAttendance/history";
+import { loadAcademicYearConfig, windowForAcademicYear } from "@/lib/studentAttendance/academicYearWindow";
 import type { StudentRecord, Section } from "@/types";
 
 const UNLINKED_MESSAGE =
@@ -35,7 +36,12 @@ export async function GET() {
     const sectionDoc = await findCurrentSectionDoc(db, session.collegeId, student);
     const section = sectionDoc ? ({ ...(sectionDoc.data() as Section), id: sectionDoc.id }) : null;
 
-    const attendance = await computeStudentAttendanceHistory(db, session.collegeId, student.id, student.department, {}, { cacheMs: STUDENT_SELF_VIEW_CACHE_MS });
+    // Bounded to the current academic year - an open range would scan every year stored.
+    const cfg = await loadAcademicYearConfig(db, session.collegeId);
+    const win = windowForAcademicYear(cfg.currentLabel, cfg);
+    const attendance = await computeStudentAttendanceHistory(
+      db, session.collegeId, student.id, student.department, win ? { from: win.from, to: win.to } : {}, { cacheMs: STUDENT_SELF_VIEW_CACHE_MS }
+    );
 
     return NextResponse.json({ student, section, attendance });
   } catch (err) {
