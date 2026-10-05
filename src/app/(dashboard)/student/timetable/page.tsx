@@ -16,6 +16,7 @@ import { StudentDayTimetable } from "@/components/timetable/StudentDayTimetable"
 import { ALL_DAYS, ordinalYear } from "@/lib/timetable/gridModel";
 import { toRoman, formatAcademicShortNotation } from "@/lib/academic/format";
 import type { Course, Department, Section, CourseYearTiming, TimetableSlot, SubjectType, Subject, TeachingAssignment, DayOfWeek } from "@/types";
+import { yearSemesterLabelIn } from "@/lib/academic/format";
 
 type TimetableSlotRow = TimetableSlot & { id: string; subjectType?: SubjectType };
 
@@ -205,7 +206,9 @@ export default function StudentTimetablePage() {
                     <SelectTrigger className="h-9"><SelectValue placeholder="Semester" /></SelectTrigger>
                     <SelectContent>
                       {availableSemesters.map((s) => (
-                        <SelectItem key={s.semester} value={String(s.semester)}>{toRoman(s.semester)} Sem</SelectItem>
+                        <SelectItem key={s.semester} value={String(s.semester)}>
+                          {yearSemesterLabelIn(Number(section.year), availableSemesters.map((x) => x.semester), s.semester)}
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>

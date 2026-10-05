@@ -10,7 +10,7 @@ import { exportToCSV } from "@/lib/utils";
 import { calcPercent, formatPercent } from "@/lib/studentAttendance/percentage";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { SectionFilterBar } from "@/components/shared/SectionFilterBar";
-import { yearSemesterLabel } from "@/lib/academic/format";
+import { yearSemesterLabelIn } from "@/lib/academic/format";
 
 type RangeMode = "daily" | "monthly" | "period" | "tillNow";
 type ViewMode = "subject" | "consolidated";
@@ -367,7 +367,7 @@ export function SectionReportsView({ sectionId, title }: { sectionId?: string; t
                 <SelectTrigger><SelectValue placeholder="All semesters" /></SelectTrigger>
                 <SelectContent>
                   {semesterOptions.map((s) => (
-                    <SelectItem key={s} value={String(s)}>{yearSemesterLabel(s)}</SelectItem>
+                    <SelectItem key={s} value={String(s)}>{yearSemesterLabelIn(Number(sectionCourseYear?.year ?? year), semesterOptions, s)}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
