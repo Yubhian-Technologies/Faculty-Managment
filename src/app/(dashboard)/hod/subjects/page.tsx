@@ -64,7 +64,8 @@ export default function HODSubjectsPage() {
   // Explicit picks only - "" means "no override yet, use the default below".
   // Keeping these separate from the effective values actually shown avoids
   // needing an effect to sync state just to pick a default.
-  const [pickedCourseId, setPickedCourseId] = useState("");
+  const [pickedCourseKey, setPickedCourseKey] = useState("");
+  const [pickedDeptId, setPickedDeptId] = useState("");
   const [pickedYear, setPickedYear] = useState("");
   const [pickedSemester, setPickedSemester] = useState<number | null>(null);
   // "" means "All regulations" - lets an HOD tell apart subjects filed under
@@ -76,7 +77,7 @@ export default function HODSubjectsPage() {
   // Semester and Regulation are filters over the loaded course-year (their
   // options come from the timings/assignments it returns), so they only
   // appear once something is loaded and never trigger a fetch themselves.
-  const [applied, setApplied] = useState<{ courseId: string; year: string } | null>(null);
+  const [applied, setApplied] = useState<{ courseId: string; year: string; deptId: string } | null>(null);
   // Which course-year the loaded `timings` belong to - so "no semesters
   // configured" is only claimed once that lookup has actually finished.
   const [timingsFor, setTimingsFor] = useState("");
@@ -121,31 +122,26 @@ export default function HODSubjectsPage() {
       .catch(() => { /* non-critical - falls back to the date-based session */ });
   }, []);
 
-  // Each department owns its own course row for the same catalog programme
-  // (e.g. Basic Science's and CIVIL's own "Bachelor of Technology"), and each
-  // carries its own distinct subject list - so, unlike Sections, these can't
-  // be merged into one choice. Append the owning department's name whenever
-  // more than one course shares a display name, so they read as distinct
-  // options instead of confusing duplicates.
-  const courseNameCounts = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const c of courses) counts.set(c.name, (counts.get(c.name) ?? 0) + 1);
-    return counts;
+  // Each department owns its own course row for the same catalog programme,
+  // but the Course picker lists each programme once; which department's
+  // subjects are shown is chosen separately in the Department picker (what is
+  // assigned to a semester is stored against the department it was imported
+  // to, not against whichever department owns the course row being browsed).
+  const courseKey = (c: Course) => c.catalogId ?? `name:${c.name}`;
+  const courseGroups = useMemo(() => {
+    const groups = new Map<string, Course[]>();
+    for (const c of courses) {
+      const k = courseKey(c);
+      groups.set(k, [...(groups.get(k) ?? []), c]);
+    }
+    return Array.from(groups.entries()).map(([key, rows]) => ({ key, name: rows[0].name, rows }));
   }, [courses]);
-  const deptNameById = useMemo(() => new Map(departments.map((d) => [d.id, d.name])), [departments]);
-  const courseLabel = useCallback(
-    (c: Course) => (courseNameCounts.get(c.name) ?? 0) > 1
-      ? `${c.name} — ${deptNameById.get(c.departmentId) ?? "?"}`
-      : c.name,
-    [courseNameCounts, deptNameById]
-  );
 
   // Default straight to the first course/year - Course/Year stay switchable
   // via the pickers below for departments with more than one, but the HOD
   // shouldn't have to click through both just to see subjects that are
   // almost always already there.
-  const selectedCourseId = pickedCourseId || courses[0]?.id || "";
-  const selectedCourse = useMemo(() => courses.find((c) => c.id === selectedCourseId) ?? null, [courses, selectedCourseId]);
+  const selectedGroup = courseGroups.find((g) => g.key === pickedCourseKey) ?? courseGroups[0] ?? null;
   // The course dropdown includes courses from OTHER departments this HOD only
   // reaches by managing their shared first year (e.g. Basic Science browsing
   // IT's own "Bachelor of Technology" doc - see api/college/courses' HOD
@@ -164,6 +160,26 @@ export default function HODSubjectsPage() {
     }
     return Array.from(seen.values());
   }, [departments, myDepartments]);
+  // Departments whose subjects this HOD may view: own department plus its
+  // sub-departments; falls back to the owners of the listed courses.
+  const deptOptions = useMemo(() => {
+    if (ownScopeDepartments.length > 0) return ownScopeDepartments;
+    const seen = new Map<string, Department>();
+    for (const c of courses) {
+      const d = departments.find((x) => x.id === c.departmentId);
+      if (d) seen.set(d.id, d);
+    }
+    return Array.from(seen.values());
+  }, [ownScopeDepartments, courses, departments]);
+  const selectedDeptId = deptOptions.some((d) => d.id === pickedDeptId) ? pickedDeptId : (deptOptions[0]?.id ?? "");
+  // The course row used for timings/years: the selected department's own row
+  // when it has one, otherwise the programme's first row.
+  const selectedCourse = useMemo(
+    () => selectedGroup ? (selectedGroup.rows.find((c) => c.departmentId === selectedDeptId) ?? selectedGroup.rows[0]) : null,
+    [selectedGroup, selectedDeptId]
+  );
+  const selectedCourseId = selectedCourse?.id ?? "";
+  const selectedDeptName = deptOptions.find((d) => d.id === selectedDeptId)?.name ?? "";
   // Never the raw 1..durationYears span - only the years the Principal
   // actually assigned this HOD's own scope for this course (per-course
   // override included, via managerEffectiveYears). A year some OTHER
@@ -267,20 +283,24 @@ export default function HODSubjectsPage() {
   // load Assign to Semester itself does, so S.No./category/etc join
   // correctly and Semester options resolve from real timing data instead of
   // a param the API silently ignored (the bug this page used to have).
-  const loadAssignments = useCallback(async (course: Course, year: string) => {
+  const loadAssignments = useCallback(async (course: Course, siblings: Course[], year: string, deptId: string) => {
     setIsLoadingAssignments(true);
     try {
       const catalogId = course.catalogId ?? "";
-      const [subjectsRes, assignmentsRes] = await Promise.all([
+      const [subjectsRes, ...assignmentsResList] = await Promise.all([
         fetch(catalogId
           ? `/api/college/subjects?catalogId=${encodeURIComponent(catalogId)}`
           : `/api/college/subjects?courseId=${encodeURIComponent(course.id)}`),
-        fetch(`/api/college/subject-semester-assignments?courseId=${encodeURIComponent(course.id)}&departmentId=${encodeURIComponent(course.departmentId)}&year=${encodeURIComponent(year)}`),
+        ...siblings.map((c) => fetch(`/api/college/subject-semester-assignments?courseId=${encodeURIComponent(c.id)}&departmentId=${encodeURIComponent(deptId)}&year=${encodeURIComponent(year)}`)),
       ]);
       const subjectsData = await subjectsRes.json() as { subjects?: Subject[] };
-      const assignmentsData = await assignmentsRes.json() as { assignments?: SubjectSemesterAssignment[] };
+      const merged = new Map<string, SubjectSemesterAssignment>();
+      for (const r of assignmentsResList) {
+        const data = await r.json() as { assignments?: SubjectSemesterAssignment[] };
+        for (const a of data.assignments ?? []) merged.set(a.id, a);
+      }
       setSubjects(subjectsData.subjects ?? []);
-      setAssignments(assignmentsData.assignments ?? []);
+      setAssignments(Array.from(merged.values()));
     } catch {
       toast({ variant: "destructive", title: "Failed to load subjects" });
     } finally {
@@ -312,7 +332,7 @@ export default function HODSubjectsPage() {
   useEffect(() => {
     if (!applied) return;
     const course = courses.find((c) => c.id === applied.courseId);
-    if (course) void loadAssignments(course, applied.year);
+    if (course) void loadAssignments(course, courses.filter((c) => courseKey(c) === courseKey(course)), applied.year, applied.deptId);
   }, [applied, courses, loadAssignments]);
 
   // A changed Course/Year invalidates what's on screen - cleared here, in the
@@ -325,9 +345,17 @@ export default function HODSubjectsPage() {
   }
   // Changing Semester or Regulation also invalidates the loaded view.
 
-  function selectCourse(courseId: string) {
+  function selectDept(deptId: string) {
     clearLoaded();
-    setPickedCourseId(courseId);
+    setPickedDeptId(deptId);
+    setPickedYear("");
+    setPickedSemester(null);
+    setPickedRegulation("");
+  }
+
+  function selectCourse(key: string) {
+    clearLoaded();
+    setPickedCourseKey(key);
     setPickedYear(""); // fall back to the new course's own first year
     setPickedSemester(null);
     setPickedRegulation("");
@@ -359,10 +387,19 @@ export default function HODSubjectsPage() {
             <CardContent className="p-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <div className="space-y-1.5">
                 <Label>Course</Label>
-                <Select value={selectedCourseId} onValueChange={selectCourse}>
+                <Select value={selectedGroup?.key ?? ""} onValueChange={selectCourse}>
                   <SelectTrigger><SelectValue placeholder="Select course" /></SelectTrigger>
                   <SelectContent>
-                    {courses.map((c) => <SelectItem key={c.id} value={c.id}>{courseLabel(c)}</SelectItem>)}
+                    {courseGroups.map((g) => <SelectItem key={g.key} value={g.key}>{g.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Department</Label>
+                <Select value={selectedDeptId} onValueChange={selectDept} disabled={deptOptions.length === 0}>
+                  <SelectTrigger><SelectValue placeholder="Select department" /></SelectTrigger>
+                  <SelectContent>
+                    {deptOptions.map((d) => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
@@ -414,8 +451,8 @@ export default function HODSubjectsPage() {
               <div className="space-y-1.5 flex flex-col justify-end sm:col-span-2 lg:col-span-4">
                 <div>
                   <Button
-                    onClick={() => selectedCourseId && selectedYear && effectiveSemester != null && setApplied({ courseId: selectedCourseId, year: selectedYear })}
-                    disabled={!selectedCourseId || !selectedYear || effectiveSemester == null || isLoadingAssignments}
+                    onClick={() => selectedCourseId && selectedYear && effectiveSemester != null && setApplied({ courseId: selectedCourseId, year: selectedYear, deptId: selectedDeptId })}
+                    disabled={!selectedCourseId || !selectedDeptId || !selectedYear || effectiveSemester == null || isLoadingAssignments}
                   >
                     <Search className="h-4 w-4 mr-2" />{applied ? "Reload Subjects" : "Load Subjects"}
                   </Button>
@@ -441,7 +478,7 @@ export default function HODSubjectsPage() {
               <CardContent className="p-4 space-y-4">
                 <h2 className="font-semibold text-sm flex items-center gap-2">
                   <BookOpen className="h-4 w-4" />
-                  {selectedCourse ? courseLabel(selectedCourse) : ""} · {ordinalYear(Number(selectedYear))} · Sem {yearSemesterLabelIn(Number(selectedYear), semesterOptions, Number(effectiveSemester))}
+                  {selectedCourse?.name ?? ""} · {selectedDeptName} · {ordinalYear(Number(selectedYear))} · Sem {yearSemesterLabelIn(Number(selectedYear), semesterOptions, Number(effectiveSemester))}
                 </h2>
 
                 {isLoadingAssignments ? (

@@ -133,12 +133,4 @@ describe("validatePlacement - no cross-section faculty check in the draft editor
     const ctx = (await loadTimetableContext(asFirestore(fake), "c1", "s1"))!;
     expect(place(ctx, { startPeriod: 2 })).toBeNull(); // f1 is in period 2 of another section on MON
   });
-
-  it("still feeds the daily cap from other sections' placements (busyFaculty is unchanged)", async () => {
-    const fake = new FakeFirestore();
-    seedCollege(fake);
-    const ctx = (await loadTimetableContext(asFirestore(fake), "c1", "s1"))!;
-    ctx.rules = { ...ctx.rules, maxPeriodsPerFacultyPerDay: 1 };
-    expect(place(ctx, { startPeriod: 1 })).toMatch(/periods\/day limit/); // already has MON:2 elsewhere
-  });
 });

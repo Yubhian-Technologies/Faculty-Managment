@@ -153,10 +153,6 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "You are not the Timetable Incharge for this course & year" }, { status: 403 });
       }
     }
-    if (targetDept.name === section.department) {
-      return NextResponse.json({ error: "Pick a different department - this one already owns the section" }, { status: 400 });
-    }
-
     const existingSnap = await collegeRef.collection("teachingAssignments")
       .where("sectionId", "==", sectionId).where("subjectId", "==", subjectId).get();
     if (existingSnap.docs.some((d) => !(d.data() as { isPast?: boolean }).isPast)) {
