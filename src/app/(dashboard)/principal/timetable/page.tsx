@@ -14,7 +14,7 @@ import { resolveDepartmentCourseScope } from "@/lib/college/academicStructure";
 import { InstitutionalTimetableTable } from "@/components/timetable/InstitutionalTimetableTable";
 import { ordinalYear } from "@/lib/timetable/gridModel";
 import type { Course, Department, Section, CourseYearTiming, TimetableSlot, Subject, DayOfWeek } from "@/types";
-import { yearSemesterLabel } from "@/lib/academic/format";
+import { yearSemesterLabelIn } from "@/lib/academic/format";
 
 // Read-only view of PUBLISHED timetables for the Principal and Vice Principal.
 // Reads `timetableSlots`, which only ever contains published slots - drafts live
@@ -279,7 +279,7 @@ export default function PrincipalTimetablePage() {
            >
              <option value="">Select semester</option>
              {semesterOptions.map((s) => (
-               <option key={s} value={s}>{yearSemesterLabel(s)}</option>
+               <option key={s} value={s}>{yearSemesterLabelIn(Number(year), semesterOptions, s)}</option>
              ))}
            </select>
          </div>
@@ -344,7 +344,7 @@ export default function PrincipalTimetablePage() {
           courseName={courseName}
           departmentName={departments.find((d) => d.id === departmentId)?.name}
           academicYear={slots[0]?.academicYear}
-          semesterLabel={semester ? `Sem ${yearSemesterLabel(Number(semester))}` : undefined}
+          semesterLabel={semester ? `Sem ${yearSemesterLabelIn(Number(year), semesterOptions, Number(semester))}` : undefined}
           workingDays={workingDays}
           weekStart={weekStart}
           onWeekChange={setWeekStart}
