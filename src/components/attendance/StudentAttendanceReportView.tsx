@@ -381,12 +381,9 @@ export function StudentAttendanceReportView({ title = "Student Attendance", scop
   function handleExport() {
     if (!reports) return;
     const rows: Record<string, string>[] = [];
-    const subjectColumns = new Map<string, string>();
     for (const r of shownReports) {
-      for (const sub of r.columns) subjectColumns.set(sub.subjectCode, sub.subjectName);
       for (const s of groupByBatch(r.rows, applied.filters.batches).flatMap((g) => g.rows)) {
-        const row: Record<string, string> = { section: r.section.name, batch: s.labBatch || "Not assigned", rollNumber: s.rollNumber, name: s.name, absentDays: String(s.absentDays ?? 0) };
-        for (const sub of r.columns) row[sub.subjectCode] = formatPercent(s.bySubject[sub.subjectId]?.percentage ?? null);
+        const row: Record<string, string> = { section: r.section.name, batch: s.labBatch || "Not assigned", rollNumber: s.rollNumber, name: s.name };
         row.percent = formatPercent(s.shown.percentage);
         rows.push(row);
       }
@@ -397,8 +394,6 @@ export function StudentAttendanceReportView({ title = "Student Attendance", scop
       ...(applied.filters.batches ? [{ key: "batch", header: "Batch" }] : []),
       { key: "rollNumber", header: "Registration No." },
       { key: "name", header: "Name" },
-      ...Array.from(subjectColumns.entries()).map(([key, header]) => ({ key, header })),
-      { key: "absentDays", header: "Days absent" },
       { key: "percent", header: "Overall %" },
     ]);
   }
@@ -617,7 +612,9 @@ export function StudentAttendanceReportView({ title = "Student Attendance", scop
         </>
       )}
 
-      {shownReports.map((r) => (
+      {shownReports.map((r) => {
+        let serial = 0;
+        return (
         <Card key={r.section.id} className="overflow-hidden">
           <CardHeader className="flex-row items-center justify-between gap-2 space-y-0 border-b bg-muted/30 py-3">
             <CardTitle className="text-base">Section {r.section.name}{r.section.batch ? <span className="ml-2 font-normal text-muted-foreground">{r.section.batch}</span> : null}</CardTitle>
@@ -630,10 +627,9 @@ export function StudentAttendanceReportView({ title = "Student Attendance", scop
               <table className="w-full text-sm">
                 <thead className="sticky top-0 z-10 bg-muted text-left text-xs uppercase tracking-wide text-muted-foreground">
                   <tr>
+                    <th className="px-4 py-2.5 font-medium">S.No</th>
                     <th className="px-4 py-2.5 font-medium">Reg. No.</th>
                     <th className="px-4 py-2.5 font-medium">Name</th>
-                    {r.columns.map((s) => <th key={s.subjectId} className="whitespace-nowrap px-4 py-2.5 text-center font-medium">{s.subjectName}</th>)}
-                    <th className="whitespace-nowrap px-4 py-2.5 text-center font-medium">Days absent</th>
                     <th className="whitespace-nowrap px-4 py-2.5 text-center font-medium">Overall</th>
                   </tr>
                 </thead>
@@ -642,7 +638,7 @@ export function StudentAttendanceReportView({ title = "Student Attendance", scop
                     <Fragment key={g.batch ?? "all"}>
                       {g.batch != null && (
                         <tr className="bg-primary/5">
-                          <th colSpan={r.columns.length + 4} scope="colgroup" className="px-4 py-2 text-left text-sm font-semibold">
+                          <th colSpan={4} scope="colgroup" className="px-4 py-2 text-left text-sm font-semibold">
                             {g.batch || "Not assigned"}
                             <span className="ml-2 text-xs font-normal text-muted-foreground">{g.rows.length} student{g.rows.length === 1 ? "" : "s"}</span>
                           </th>
@@ -650,12 +646,9 @@ export function StudentAttendanceReportView({ title = "Student Attendance", scop
                       )}
                       {g.rows.map((s) => (
                         <tr key={s.studentId} className="odd:bg-background even:bg-muted/20 hover:bg-muted/40">
+                          <td className="px-4 py-2.5 tabular-nums">{++serial}</td>
                           <td className="whitespace-nowrap px-4 py-2.5 tabular-nums">{s.rollNumber}</td>
                           <td className="px-4 py-2.5 font-medium">{s.name}</td>
-                          {r.columns.map((sub) => (
-                            <td key={sub.subjectId} className="px-4 py-2.5 text-center">{pctBadge(s.bySubject[sub.subjectId]?.percentage ?? null)}</td>
-                          ))}
-                          <td className="px-4 py-2.5 text-center tabular-nums">{s.absentDays ?? 0}</td>
                           <td className="px-4 py-2.5 text-center">{pctBadge(s.shown.percentage, true)}</td>
                         </tr>
                       ))}
@@ -666,7 +659,8 @@ export function StudentAttendanceReportView({ title = "Student Attendance", scop
             )}
           </CardContent>
         </Card>
-      ))}
+        );
+      })}
     </div>
   );
 }
