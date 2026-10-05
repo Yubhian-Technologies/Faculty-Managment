@@ -5,7 +5,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/useToast";
 import { ordinalYear } from "@/lib/timetable/gridModel";
-import type { SectionListItem } from "@/types";
+import { offeredYears } from "@/lib/college/departmentYears";
+import type { Course, Department, SectionListItem } from "@/types";
 
 // Department -> Course -> Year -> Section as four cascading filters on ONE
 // page, replacing the multi-page drill-downs (pick a department, open a page,
@@ -31,6 +32,8 @@ export function SectionFilterBar({
   // falls back to the only option when a level has exactly one, so a
   // one-department HOD isn't asked to pick the only department they have
   // (derived during render - no effect, no extra state).
+  const [departmentDocs, setDepartmentDocs] = useState<Department[]>([]);
+  const [courseDocs, setCourseDocs] = useState<Course[]>([]);
   const [pickedDepartment, setDepartment] = useState("");
   const [pickedCourse, setCourse] = useState("");
   const [pickedYear, setYear] = useState("");
@@ -43,6 +46,17 @@ export function SectionFilterBar({
         if (!res.ok) throw new Error("Failed to load sections");
         const json = (await res.json()) as { sections?: SectionListItem[] };
         setSections((json.sections ?? []).filter((s) => !!s.id));
+        // Departments and courses carry the assigned years and the catalogue
+        // they are assigned per - best effort, since the Year list falls back
+        // to the sections' own years without them.
+        try {
+          const [d, c] = await Promise.all([
+            fetch("/api/college/departments").then((r) => r.json() as Promise<{ departments?: Department[] }>),
+            fetch("/api/college/courses").then((r) => r.json() as Promise<{ courses?: Course[] }>),
+          ]);
+          setDepartmentDocs(d.departments ?? []);
+          setCourseDocs(c.courses ?? []);
+        } catch { /* falls back to the sections' own years */ }
       } catch {
         toast({ variant: "destructive", title: "Failed to load sections" });
       } finally {
@@ -66,10 +80,18 @@ export function SectionFilterBar({
   );
   const course = department ? only(courses, pickedCourse) : "";
   const inCourse = useMemo(() => inDepartment.filter((s) => courseKey(s) === course), [inDepartment, course]);
-  const years = useMemo(
-    () => Array.from(new Set(inCourse.map((s) => Number(s.year)))).filter((y) => Number.isFinite(y)).sort((a, b) => a - b),
-    [inCourse]
-  );
+  // The years the picked department is ASSIGNED, not the years its sections
+  // happen to sit in - a department given years 2-4 should not offer year 1
+  // just because one shared first-year section is filed under it. Falls back
+  // to the sections' years for a department nobody has configured yet.
+  const years = useMemo(() => {
+    const sectionYears = inCourse.map((s) => Number(s.year));
+    const catalogId = courseDocs.find((c) => inCourse.some(
+      (s) => c.id === s.courseId || c.mergedCourseIds?.includes(s.courseId)
+        || (!!s.courseName && c.name.toLowerCase() === s.courseName.toLowerCase())
+    ))?.catalogId;
+    return offeredYears(departmentDocs.find((d) => d.name === department), departmentDocs, catalogId, sectionYears);
+  }, [inCourse, departmentDocs, courseDocs, department]);
   const year = course ? only(years.map(String), pickedYear) : "";
   const inYear = useMemo(() => inCourse.filter((s) => String(s.year) === year), [inCourse, year]);
   const sectionOptions = useMemo(() => [...inYear].sort((a, b) => a.name.localeCompare(b.name)), [inYear]);
