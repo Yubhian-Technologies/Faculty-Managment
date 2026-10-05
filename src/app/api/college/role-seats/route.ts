@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { exitedFacultyUidsOrNone } from "@/lib/auth/readOnlyFacultyLookup";
 import { convertLegacyAccounts, createSeat, listRetiredSeats, listSeats, SeatError } from "@/lib/roles/seats";
 import { assertCanAssign, requireSeatManager } from "@/lib/roles/seatContext";
 import { SEAT_ROLES, normalizeStoredRole } from "@/lib/roles/seatRoles";
@@ -50,7 +51,13 @@ export async function GET(request: Request) {
       .map((d) => ({ id: d.id, name: (d.data() as { name?: string }).name ?? "" }))
       .sort((a, b) => a.name.localeCompare(b.name));
 
-    return NextResponse.json({ seats, retiredSeats, people, departments });
+    // Additive, read-only-access colleges only: lets the Assign picker leave out RESIGNED/RETIRED people
+    // (the server refuses them anyway - see lib/roles/seatEligibility.ts). The list itself is unchanged, so
+    // an exited current holder can still be found when their seat is vacated.
+    const exited = await exitedFacultyUidsOrNone(db, ctx.collegeId);
+    const flagged = exited.size > 0 ? people.map((p) => (exited.has(p.uid) ? { ...p, facultyExited: true } : p)) : people;
+
+    return NextResponse.json({ seats, retiredSeats, people: flagged, departments });
   } catch (err) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;

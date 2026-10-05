@@ -44,6 +44,28 @@ node scripts/create-admin.mjs
 
 Env vars: `FIREBASE_ADMIN_PROJECT_ID`, `FIREBASE_ADMIN_CLIENT_EMAIL`, `FIREBASE_ADMIN_PRIVATE_KEY` (server); `NEXT_PUBLIC_FIREBASE_*` (client); `SMTP_*`, `EMAIL_FROM` (email); `SESSION_SECRET` (optional cookie-signing secret, falls back to the admin private key); `CRON_SECRET` + `APP_URL` (functions).
 
+### Feature switch: read-only access for RESIGNED / RETIRED faculty
+
+`READ_ONLY_FACULTY_COLLEGES` = comma-separated college ids (e.g. `fffeab8b168a4b449dea`). **Empty/unset = OFF for everyone** (the default).
+
+- **What it does (listed colleges only):** a login linked to a faculty record whose `facultyMembers.status` is `RESIGNED`/`RETIRED` still signs in (account, role, `isActive`, Firebase Auth are never touched) but is **read-only**: it may only GET its own profile/history (the allow-list in `src/lib/auth/readOnlyAccess.ts`); every write and every other read is denied, and it holds no seat. State is **derived from `facultyMembers.status`** - nothing is stored on `users`; setting the status back to a non-exited value restores access (it never restores a vacated seat).
+- **How it works:** `src/proxy.ts` stamps `x-fms-method`/`x-fms-path` on every `/api` request (always overwriting the client's); `src/lib/auth/liveRoles.ts` applies the rule after its 20 s cache; `/api/auth/session` returns a derived `readOnlyAccess` flag for the UI (`ReadOnlyAccessGate`). No protected file is involved.
+- **Related behaviour, same switch:** saving a faculty member who is RESIGNED/RETIRED vacates the seats they hold (`src/lib/faculty/vacateSeatsOnExit.ts`, retried on every later save; outcome in `facultyMembers.seatVacateStatus`); `assignSeat` and the Department Office route refuse to give a seat to an exited person (`src/lib/roles/seatEligibility.ts`).
+- **Cost:** a college NOT listed pays **zero extra Firestore reads** and behaves exactly as before. A listed college pays one extra single-document query per faculty login per 20 s window (`facultyMembers.where("userUid","==",uid).limit(1)`), plus one at sign-in.
+- **Changing it:** it is read from the environment, so adding/removing a college id needs a restart/redeploy. To switch a college OFF instantly: remove its id and restart - access returns to normal; nothing in the database needs undoing.
+- **Safety net:** `src/app/api/routeGuards.inventory.test.ts` fails if a new mutating API route has no role guard (so it could never be denied to a read-only person) and proves every guarded mutating route denies a RESIGNED/RETIRED login.
+- **Pickers (same switch):** the Department Office, Sub-HOD, Role Assignments (Assign) and Leave Handover pickers leave out RESIGNED/RETIRED people (`exitedFacultyUids` in `src/lib/auth/readOnlyFacultyLookup.ts`; `users` / `role-seats` GET add an additive `facultyExited` flag, the two leave pickers filter server-side). Stored records, historical handovers and the other pickers are untouched.
+
+### Feature switch: faculty single source of truth
+
+`FACULTY_SINGLE_SOURCE_COLLEGES` = comma-separated college ids. **Empty/unset = OFF for everyone** (the default; the other colleges stay byte-identical).
+
+- **Model:** a faculty member's details live on the `facultyMembers` record; the login (`users`) is identity/access plus a derived mirror (`name`, `profilePhotoUrl`, ...). Never add a faculty-owned field to `users`.
+- **What it does (listed colleges only):** (1) the Super-Admin user list/detail (`api/admin/users`, `[uid]`) and the college `users/[uid]` GET show the faculty record's value where it is non-empty (`mergeFacultyWithLogin` in `src/lib/faculty/singleSource.ts`; identity/access fields stay the login's; nothing is hidden when the faculty value is blank); (2) `users/me` PATCH (callers who hold the Faculty role, not Principal/VP) and `users/[uid]` PATCH refuse **409 `FACULTY_RECORD_IS_SOURCE`**, before any write, when the body carries profile content (personal details, `academicProfile`) or a *changed* name/employee id/mobile for a faculty-linked person - nothing is changed; (3) `faculty/me` GET adds `editViaFacultyRecord` and the shared My Profile edit page (`MyProfileModuleEditPage`) and Principal's staff module edit page then save to the faculty record (`faculty/me` / `faculty/[id]` PATCH, section-scoped) instead. **No new permission is granted** - the same callers use routes they already could.
+- **Keep in step:** `FACULTY_PERSONAL_KEYS` must list every key `buildPersonalDetailsUpdate` can write (a unit test enforces it).
+- **Cost:** unlisted colleges: zero extra reads. Listed: one `facultyMembers` lookup only on a guarded login-side write.
+- **Switching OFF:** remove the id and restart; nothing stored needs undoing (the guard never deleted or rewrote anything; a login's own copy of a profile, if one ever existed, is still stored).
+
 ## Architecture & Directory Map
 
 ```

@@ -10,7 +10,7 @@ import {
   EDITABLE_ROSTER_FIELDS, PRIMARY_ROSTER_FIELDS, DETAIL_ROSTER_FIELDS, ROSTER_DETAIL_GROUPS,
   type RosterField,
 } from "@/lib/students/rosterFields";
-import { resolveDepartmentCourseScope, resolveCatalogId, freshmanPickerDepartmentNames } from "@/lib/college/academicStructure";
+import { resolveDepartmentCourseScope, resolveCatalogId, freshmanPickerDepartmentNames, getFreshmanDepartmentIds } from "@/lib/college/academicStructure";
 import { managerEffectiveYears } from "@/lib/departments/hodScope";
 import { CASTE_LABELS, SUB_CASTES_BY_CASTE } from "@/types";
 import type { Department, Course, Caste } from "@/types";
@@ -185,6 +185,12 @@ export function isSecondaryDepartmentRequired(departments: Department[], departm
  * sub-department that owns no Course docs of its own, its parent) actually
  * has a catalog entry for, so its real configured years show up regardless of
  * which course ends up chosen.
+ *
+ * When the resolution above comes back EMPTY (see unresolvedYearOptions), the
+ * list is no longer simply `fallbackYears` - that offered every year of every
+ * course in the college, including years the course doesn't even run and
+ * years a shared-first-year department can never teach. A department with
+ * ANY years resolved is returned exactly as before.
  */
 export function yearOptionsForDepartment(
   departments: Department[],
@@ -199,7 +205,7 @@ export function yearOptionsForDepartment(
   if (courseName) {
     const catalogId = resolveCatalogId(courses, dept.id, courseName);
     const assigned = managerEffectiveYears(dept, departments, catalogId);
-    return assigned.length > 0 ? [...assigned].sort((a, b) => a - b) : fallbackYears;
+    return assigned.length > 0 ? [...assigned].sort((a, b) => a - b) : unresolvedYearOptions(departments, courses, dept, courseName, fallbackYears);
   }
 
   const effectiveId = dept.parentDepartmentId ?? dept.id;
@@ -216,7 +222,71 @@ export function yearOptionsForDepartment(
   for (const catalogId of catalogIds) {
     for (const y of managerEffectiveYears(dept, departments, catalogId)) union.add(y);
   }
-  return union.size > 0 ? Array.from(union).sort((a, b) => a - b) : fallbackYears;
+  if (union.size > 0) return Array.from(union).sort((a, b) => a - b);
+  // Nothing resolved for any of this department's courses - resolve each one
+  // the way the single-course path above does and union the answers.
+  const courseNames = Array.from(new Set(
+    courses.filter((c) => c.departmentId === effectiveId && !!c.catalogId).map((c) => c.name)
+  ));
+  const unresolved = new Set<number>();
+  for (const name of courseNames) {
+    for (const y of unresolvedYearOptions(departments, courses, dept, name, fallbackYears)) unresolved.add(y);
+  }
+  return unresolved.size > 0 ? Array.from(unresolved).sort((a, b) => a - b) : fallbackYears;
+}
+
+/** The longest duration among the Course docs named `courseName` that `dept`
+ *  (or, for a sub-department that owns none, its parent) runs - else among all
+ *  docs of that name. 0 when there is none. */
+function courseDurationFor(courses: Course[], dept: Department, courseName: string): number {
+  const named = courses.filter((c) => c.name === courseName);
+  const mine = named.filter((c) => c.departmentId === dept.id || (dept.parentDepartmentId != null && c.departmentId === dept.parentDepartmentId));
+  return Math.max(0, ...(mine.length > 0 ? mine : named).map((c) => Number(c.durationYears) || 0));
+}
+
+/**
+ * What the Year picker offers for a department whose Years Taught resolved to
+ * NOTHING for the chosen course. That happens in two situations the old
+ * "offer every college year" answer got wrong:
+ *  - the department (and its parent) never had years configured, or
+ *  - its years ARE configured but every one of them is claimed by another
+ *    department that cross-lists it (fedYears) - e.g. a Basic Science
+ *    sub-department listed as a Core Department by a stray feeder.
+ * Resolution itself (managerEffectiveYears / fedYears) is untouched; this only
+ * decides what to SHOW, derived entirely from the data:
+ *  1. only years the chosen course actually runs (Course.durationYears);
+ *  2. for a shared-first-year department (or a child of one): the years not
+ *     taught by the branches it feeds (their own resolved Years Taught), which
+ *     leaves its shared year(s); with no branch information, or nothing left,
+ *     just the first year - the shared year is by definition the first;
+ *  3. anything else: every year the course runs, as before.
+ * If the course's length can't be determined, `fallbackYears` is returned as-is.
+ */
+function unresolvedYearOptions(
+  departments: Department[],
+  courses: Course[],
+  dept: Department,
+  courseName: string,
+  fallbackYears: number[]
+): number[] {
+  const duration = courseDurationFor(courses, dept, courseName);
+  if (duration <= 0) return fallbackYears;
+  const capped = fallbackYears.filter((y) => y <= duration);
+  if (capped.length === 0) return fallbackYears;
+
+  const freshmanIds = getFreshmanDepartmentIds(departments);
+  const isFreshman = freshmanIds.has(dept.id) || (dept.parentDepartmentId != null && freshmanIds.has(dept.parentDepartmentId));
+  if (!isFreshman) return capped;
+
+  const catalogId = resolveCatalogId(courses, dept.id, courseName);
+  const taughtByBranches = new Set<number>();
+  for (const branchName of secondaryDepartmentOptions(departments, courses, dept.name, courseName)) {
+    const branch = departments.find((d) => d.name === branchName);
+    if (!branch) continue;
+    for (const y of managerEffectiveYears(branch, departments, catalogId)) taughtByBranches.add(y);
+  }
+  const remaining = taughtByBranches.size > 0 ? capped.filter((y) => !taughtByBranches.has(y)) : [];
+  return remaining.length > 0 ? remaining : [Math.min(...capped)];
 }
 
 /**

@@ -51,17 +51,48 @@ export interface StudentListQuery {
   year: number | null;
   /** Exact studentType ("Regular"/"Lateral"). "" means no filter. */
   studentType: string;
+  /**
+   * Inclusive roll-number range, compared upper-cased as strings (the same rule
+   * as the HOD page's range - hodPagedList.fetchHodStudentsMatching). Either end
+   * may be left blank for an open-ended range; both given in the wrong order are
+   * swapped. A student with no roll number never matches an active range.
+   * Applied in memory over the candidate set like the other non-structural
+   * filters: roll numbers are stored in mixed case ("24pa1a1222" next to
+   * "24PA1A1241"), so a Firestore range query on `rollNumber` would miss rows.
+   */
+  rollFrom?: string;
+  rollTo?: string;
 }
 
 type Doc = FirebaseFirestore.QueryDocumentSnapshot;
 
+type RollRange = Pick<StudentListQuery, "rollFrom" | "rollTo">;
+
+function hasRollRange(range: RollRange): boolean {
+  return !!(range.rollFrom?.trim() || range.rollTo?.trim());
+}
+
+/** Whether `roll` lies inside the (possibly open-ended) inclusive range. */
+export function rollInRange(roll: unknown, range: RollRange): boolean {
+  let lo = (range.rollFrom ?? "").trim().toUpperCase();
+  let hi = (range.rollTo ?? "").trim().toUpperCase();
+  if (!lo && !hi) return true;
+  const value = typeof roll === "string" ? roll.trim().toUpperCase() : "";
+  if (!value) return false;
+  if (lo && hi && lo > hi) [lo, hi] = [hi, lo];
+  if (lo && value < lo) return false;
+  if (hi && value > hi) return false;
+  return true;
+}
+
 function matchesRemaining(
   data: FirebaseFirestore.DocumentData,
-  opts: Pick<StudentListQuery, "search" | "course" | "year" | "studentType">
+  opts: Pick<StudentListQuery, "search" | "course" | "year" | "studentType" | "rollFrom" | "rollTo">
 ): boolean {
   if (opts.year !== null && Number(data.year) !== opts.year) return false;
   if (opts.course && data.course !== opts.course) return false;
   if (opts.studentType && data.studentType !== opts.studentType) return false;
+  if (!rollInRange(data.rollNumber, opts)) return false;
   if (opts.search) {
     const name = String(data.name ?? "").toLowerCase();
     const roll = String(data.rollNumber ?? "").toLowerCase();
@@ -128,7 +159,7 @@ export async function fetchStudentsPage(
   studentsColl: FirebaseFirestore.CollectionReference,
   params: StudentListQuery
 ): Promise<{ students: StudentListItem[]; total: number }> {
-  const hasFilter = params.departments.length > 0 || params.year !== null || !!params.course || !!params.search || !!params.studentType;
+  const hasFilter = params.departments.length > 0 || params.year !== null || !!params.course || !!params.search || !!params.studentType || hasRollRange(params);
 
   if (!hasFilter) {
     const [countSnap, pageSnap] = await Promise.all([
@@ -153,7 +184,7 @@ export async function fetchStudentsPage(
  */
 export async function fetchMatchingStudentIds(
   studentsColl: FirebaseFirestore.CollectionReference,
-  params: Pick<StudentListQuery, "departments" | "year" | "course" | "search" | "studentType">
+  params: Pick<StudentListQuery, "departments" | "year" | "course" | "search" | "studentType" | "rollFrom" | "rollTo">
 ): Promise<string[]> {
   const candidates = await resolveCandidates(studentsColl, params);
   return candidates.filter((d) => matchesRemaining(d.data(), params)).map((d) => d.id);

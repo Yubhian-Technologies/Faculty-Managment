@@ -43,6 +43,9 @@ export function useAuth() {
         // FMSUser.roles. Always comes from /api/auth/session so a seat handed
         // over since the last visit shows up on the next page load.
         let serverRoles: UserRole[] | undefined;
+        // True only for a RESIGNED/RETIRED faculty member whose college has read-only
+        // faculty access on (see FMSUser.readOnlyAccess) - from /api/auth/session.
+        let serverReadOnly = false;
 
         // Users created via REST API have no JWT custom claims.
         // Call session API (uses Admin SDK, bypasses Firestore rules) to resolve role.
@@ -56,7 +59,7 @@ export function useAuth() {
             if (res.ok) {
               const data = await res.json() as {
                 role?: string; realRole?: string; roles?: string[]; collegeId?: string; locationId?: string;
-                name?: string; email?: string; profile?: FMSUser;
+                name?: string; email?: string; profile?: FMSUser; readOnlyAccess?: boolean;
               };
               role = data.role && data.role !== "UNKNOWN" ? data.role : undefined;
               collegeId = data.collegeId;
@@ -66,6 +69,7 @@ export function useAuth() {
               serverProfile = data.profile ?? null;
               serverRealRole = data.realRole;
               serverRoles = data.roles as UserRole[] | undefined;
+              serverReadOnly = data.readOnlyAccess === true;
             }
           } catch { /* non-fatal */ }
         } else {
@@ -84,9 +88,10 @@ export function useAuth() {
               body: JSON.stringify({ token }),
             });
             if (res.ok) {
-              const data = await res.json() as { roles?: string[]; realRole?: string };
+              const data = await res.json() as { roles?: string[]; realRole?: string; readOnlyAccess?: boolean };
               serverRoles = data.roles as UserRole[] | undefined;
               serverRealRole = data.realRole;
+              serverReadOnly = data.readOnlyAccess === true;
             }
           } catch { /* non-fatal - falls back to the primary role only */ }
         }
@@ -177,6 +182,7 @@ export function useAuth() {
                   email: serverEmail ?? profile.email,
                   realRole: (realRole as UserRole | undefined) ?? profile.role,
                   roles: serverRoles,
+                  ...(serverReadOnly ? { readOnlyAccess: true } : {}),
                 }
               : {
                   uid: firebaseUser.uid,
@@ -186,6 +192,7 @@ export function useAuth() {
                   role: role as UserRole,
                   realRole: (realRole as UserRole | undefined) ?? (role as UserRole),
                   roles: serverRoles,
+                  ...(serverReadOnly ? { readOnlyAccess: true } : {}),
                   isActive: true,
                   createdAt: {} as never,
                 }

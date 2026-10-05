@@ -25,6 +25,7 @@ const DEMO_PROFILE: FacultyPublicProfile = {
       specialization: "Distributed Machine Learning",
       institutionName: "IIT Madras",
       departmentName: "Department of Computer Science and Engineering",
+      thesisTitle: "Scalable Distributed Learning for Large-Scale Image Recognition",
       yearOfAward: 2012,
     },
     additionalPhdDetails: [],

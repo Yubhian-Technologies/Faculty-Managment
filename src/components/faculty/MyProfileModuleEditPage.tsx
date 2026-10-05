@@ -77,10 +77,14 @@ export function MyProfileModuleEditPage({ basePath, patchEndpoint, sectionScoped
   const [recordId, setRecordId] = useState("");
   // Set when the server says this login has no faculty record to edit.
   const [unlinkedMessage, setUnlinkedMessage] = useState<string | null>(null);
+  // Set when the server says this person's profile lives on their Faculty record and they may save to it
+  // (switched-on colleges only - see GET /api/college/faculty/me). Then every save goes to
+  // PATCH /api/college/faculty/me, section-scoped, instead of the login-side patchEndpoint.
+  const [viaFacultyRecord, setViaFacultyRecord] = useState(false);
 
   useEffect(() => {
     fetch("/api/college/faculty/me")
-      .then((r) => r.json() as Promise<{ faculty?: Record<string, unknown> | null; message?: string }>)
+      .then((r) => r.json() as Promise<{ faculty?: Record<string, unknown> | null; message?: string; editViaFacultyRecord?: boolean }>)
       .then((d) => {
         if (!d.faculty) {
           setUnlinkedMessage(d.message ?? "No profile record was found for your login.");
@@ -88,9 +92,12 @@ export function MyProfileModuleEditPage({ basePath, patchEndpoint, sectionScoped
         }
         const m = migrateFacultyDoc(d.faculty as Record<string, unknown>);
         const academicProfile = (m.academicProfile as FacultyEditRecord["academicProfile"]) ?? {};
+        const viaFaculty = d.editViaFacultyRecord === true;
+        setViaFacultyRecord(viaFaculty);
         setRecordId(typeof d.faculty.id === "string" ? d.faculty.id : "");
         setOriginalAcademicProfile(academicProfile);
-        setRecord({ ...personalRecordFromDoc(m, { ratificationHistory }), academicProfile });
+        // A real facultyMembers record carries the multi-entry Ratification history, like the Panel page.
+        setRecord({ ...personalRecordFromDoc(m, { ratificationHistory: ratificationHistory || viaFaculty }), academicProfile });
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load profile" }))
       .finally(() => setLoading(false));
@@ -119,8 +126,8 @@ export function MyProfileModuleEditPage({ basePath, patchEndpoint, sectionScoped
     try {
       let body: Record<string, unknown>;
       if (moduleKey === "personal") {
-        body = personalPatchBody(record, { ratificationHistory });
-      } else if (sectionScopedProfileSave) {
+        body = personalPatchBody(record, { ratificationHistory: ratificationHistory || viaFacultyRecord });
+      } else if (sectionScopedProfileSave || viaFacultyRecord) {
         const academicProfileChanges = diffAcademicProfile(originalAcademicProfile, record.academicProfile);
         if (isEmptyChanges(academicProfileChanges)) {
           toast({ variant: "success", title: "No changes to save" });
@@ -132,7 +139,7 @@ export function MyProfileModuleEditPage({ basePath, patchEndpoint, sectionScoped
         body = { academicProfile: record.academicProfile };
       }
 
-      const res = await fetch(patchEndpoint, {
+      const res = await fetch(viaFacultyRecord ? "/api/college/faculty/me" : patchEndpoint, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -205,7 +212,7 @@ export function MyProfileModuleEditPage({ basePath, patchEndpoint, sectionScoped
               collegeType={collegeType}
               requiredPersonalFields={requiredPersonalFields}
               hideLegalName={hideLegalName}
-              ratificationHistory={ratificationHistory}
+              ratificationHistory={ratificationHistory || viaFacultyRecord}
             />
             <div className="flex justify-end gap-3 pt-4 border-t">
               <Button variant="outline" onClick={() => router.push(`${basePath}/${moduleKey}`)}>Cancel</Button>

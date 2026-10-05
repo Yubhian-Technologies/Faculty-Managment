@@ -10,6 +10,8 @@ import { normalizeAcademicProfile } from "@/lib/faculty/academicProfileCompat";
 import { degreeTypeError } from "@/lib/faculty/degreeType";
 import { withLegacyPersonalKeysDeleted } from "@/lib/faculty/legacyKeyDeletes";
 import { FieldValue } from "firebase-admin/firestore";
+import { setLinkedFacultyPhoto } from "@/lib/faculty/syncFacultyPhoto";
+import { hasLinkedFacultyRecord, isSingleSourceCollege, singleSourceBlockFor } from "@/lib/faculty/singleSource";
 
 // Fields a Principal/VP must never set about themselves via self-service edit -
 // salary/CTC belongs to the Accounts/Finance payroll domain, not a self-editable profile.
@@ -55,6 +57,19 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
+    // Single source of truth (switch-gated, no-op elsewhere): a person who has a Faculty record keeps their
+    // profile there. Principal/VP are excluded - their own profile pages read and write this login doc, so
+    // there is no second copy to disagree with.
+    if (
+      isSingleSourceCollege(session.collegeId) && session.role !== "PRINCIPAL" && session.role !== "VICE_PRINCIPAL" &&
+      session.roles?.includes("PANEL_MEMBER")
+    ) {
+      const block = singleSourceBlockFor(body, userSnap.data() ?? {});
+      if (block && (await hasLinkedFacultyRecord(db, session.collegeId, session.uid))) {
+        return NextResponse.json({ error: block.message, code: "FACULTY_RECORD_IS_SOURCE", fields: block.fields }, { status: block.status });
+      }
+    }
+
     const now = new Date();
     const updates: Record<string, unknown> = { updatedAt: now, ...buildPersonalDetailsUpdate(body) };
 
@@ -75,6 +90,9 @@ export async function PATCH(request: Request) {
       updates.academicProfile = academicProfile;
     }
     if (body.profilePhotoUrl !== undefined) updates.profilePhotoUrl = body.profilePhotoUrl;
+
+    // The photo belongs to the faculty record (source of truth) - written first, then the mirror below.
+    if (body.profilePhotoUrl !== undefined) await setLinkedFacultyPhoto(db, session.collegeId, session.uid, body.profilePhotoUrl);
 
     // Drop the old-named twin of any personal key written above on a not-yet-migrated doc.
     await userRef.update(withLegacyPersonalKeysDeleted(updates, FieldValue.delete()));

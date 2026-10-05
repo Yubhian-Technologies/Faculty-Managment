@@ -45,7 +45,30 @@ import type { StudentListItem, Department, AcademicYear, Course } from "@/types"
 // Student profile page's own Edit button both use.
 
 const DEFAULT_PAGE_SIZE = 20;
-const SEARCH_DEBOUNCE_MS = 350;
+
+// What a list request is filtered by - the values behind the filter bar, frozen
+// at the moment Load was pressed. Empty string / "all" mean "no filter".
+interface StudentListFilters {
+  search: string;
+  department: string;
+  course: string;
+  year: string;
+  studentType: string;
+  rollFrom: string;
+  rollTo: string;
+}
+
+function filtersToParams(f: StudentListFilters): URLSearchParams {
+  const params = new URLSearchParams();
+  if (f.search) params.set("search", f.search);
+  if (f.department !== "all") params.set("department", f.department);
+  if (f.course !== "all") params.set("course", f.course);
+  if (f.year !== "all") params.set("year", f.year);
+  if (f.studentType !== "all") params.set("studentType", f.studentType);
+  if (f.rollFrom) params.set("rollFrom", f.rollFrom);
+  if (f.rollTo) params.set("rollTo", f.rollTo);
+  return params;
+}
 
 // Graduated Students used to be its own sidebar entry (/college-office/graduates);
 // it now lives here as a sub-tab (top-right pill), matching the pattern
@@ -88,24 +111,24 @@ export default function OfficeStudentsPage() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [courseNames, setCourseNames] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  // The list stays empty until the user presses Load; after that, filter/page
-  // changes refetch automatically as before.
-  const [loadRequested, setLoadRequested] = useState(false);
   const [isFetching, setIsFetching] = useState(false);
 
-  // `search` is the input's live value; `debouncedSearch` is what actually
-  // drives the server request - typing shouldn't fire a database query per
-  // keystroke. Page reset happens alongside the debounced value (see
-  // onSearchChange) so a search doesn't cause two requests (one for the stale
-  // text at page 1, one for the debounced text).
+  // The filter controls below (search, course, department, year, type, roll
+  // range) only EDIT a draft - nothing is read from the database while they
+  // change. `appliedFilters` is the snapshot of that draft taken when the user
+  // presses Load (or Enter in a text box), and is the only thing the list
+  // request is built from. It stays null until the first Load, so the page
+  // reads no students on open. Paging and the page size re-read with the
+  // applied snapshot - never with a half-edited draft.
   const [search, setSearch] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
-  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
   const [deptFilter, setDeptFilter] = useState("all");
   const [yearFilter, setYearFilter] = useState<string>("all");
   const [courseFilter, setCourseFilter] = useState<string>("all");
   const [studentTypeFilter, setStudentTypeFilter] = useState<string>("all");
+  const [rollFrom, setRollFrom] = useState("");
+  const [rollTo, setRollTo] = useState("");
+  const [appliedFilters, setAppliedFilters] = useState<StudentListFilters | null>(null);
+  const loadSeq = useRef(0);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
 
@@ -177,19 +200,17 @@ export default function OfficeStudentsPage() {
   }, []);
 
   const loadStudents = useCallback(async () => {
+    if (!appliedFilters) return;
+    const seq = ++loadSeq.current;
     setIsFetching(true);
     try {
-      const params = new URLSearchParams();
+      const params = filtersToParams(appliedFilters);
       params.set("page", String(page));
       params.set("pageSize", String(pageSize));
-      if (debouncedSearch) params.set("search", debouncedSearch);
-      if (deptFilter !== "all") params.set("department", deptFilter);
-      if (courseFilter !== "all") params.set("course", courseFilter);
-      if (yearFilter !== "all") params.set("year", yearFilter);
-      if (studentTypeFilter !== "all") params.set("studentType", studentTypeFilter);
 
       const res = await fetch(`/api/college/students?${params.toString()}`);
       const json = await res.json() as { students?: StudentListItem[]; total?: number; error?: string };
+      if (seq !== loadSeq.current) return; // a newer Load / page change superseded this one
       if (!res.ok) {
         toast({ variant: "destructive", title: json.error ?? "Failed to load students" });
         return;
@@ -207,12 +228,14 @@ export default function OfficeStudentsPage() {
       setStudents(data);
       setTotal(grandTotal);
     } catch {
-      toast({ variant: "destructive", title: "Failed to load students" });
+      if (seq === loadSeq.current) toast({ variant: "destructive", title: "Failed to load students" });
     } finally {
-      setIsFetching(false);
-      setIsLoading(false);
+      if (seq === loadSeq.current) {
+        setIsFetching(false);
+        setIsLoading(false);
+      }
     }
-  }, [page, pageSize, debouncedSearch, deptFilter, courseFilter, yearFilter, studentTypeFilter]);
+  }, [page, pageSize, appliedFilters]);
 
   // Wrapped so the loaders' setState calls aren't reachable synchronously from
   // the effect body (react-hooks/set-state-in-effect).
@@ -220,10 +243,13 @@ export default function OfficeStudentsPage() {
     void (async () => { await loadMetadata(); })();
   }, [loadMetadata]);
 
+  // Reads students only once Load has produced an applied snapshot, and again
+  // when that snapshot, the page or the page size changes - never because a
+  // draft filter did.
   useEffect(() => {
-    if (!loadRequested) return;
+    if (!appliedFilters) return;
     void (async () => { await loadStudents(); })();
-  }, [loadStudents, loadRequested]);
+  }, [loadStudents, appliedFilters]);
 
   const activeDepartments = useMemo(
     () => departments.filter((d) => d.isActive).sort((a, b) => a.name.localeCompare(b.name)),
@@ -306,13 +332,31 @@ export default function OfficeStudentsPage() {
     [exportYears, exportYearOptions]
   );
 
-  function onSearchChange(value: string) {
-    setSearch(value);
-    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
-    searchDebounceRef.current = setTimeout(() => {
-      setDebouncedSearch(value.trim().toLowerCase());
-      setPage(1);
-    }, SEARCH_DEBOUNCE_MS);
+  // The draft as the exact filter set a request would carry.
+  const draftFilters = useMemo<StudentListFilters>(() => ({
+    search: search.trim().toLowerCase(),
+    department: deptFilter,
+    course: courseFilter,
+    year: yearFilter,
+    studentType: studentTypeFilter,
+    rollFrom: rollFrom.trim(),
+    rollTo: rollTo.trim(),
+  }), [search, deptFilter, courseFilter, yearFilter, studentTypeFilter, rollFrom, rollTo]);
+
+  // True once a list is on screen and the filter bar has been edited since -
+  // the table still shows the previous Load's results until Load is pressed.
+  const filtersDirty = appliedFilters !== null
+    && (Object.keys(draftFilters) as (keyof StudentListFilters)[]).some((k) => draftFilters[k] !== appliedFilters[k]);
+
+  // Whether the list on screen was narrowed by any filter at all.
+  const appliedIsFiltered = appliedFilters !== null && filtersToParams(appliedFilters).size > 0;
+
+  // The only thing that reads the student list from the filter bar: freezes the
+  // draft into the applied snapshot and goes back to page 1. A fresh object
+  // every press, so pressing Load again with unchanged filters is a Refresh.
+  function handleLoad() {
+    setAppliedFilters({ ...draftFilters });
+    setPage(1);
   }
 
   function onCourseFilterChange(value: string) {
@@ -327,7 +371,6 @@ export default function OfficeStudentsPage() {
       : yearOptionsForDepartment(departments, courses, nextDept, value === "all" ? "" : value, years);
     if (yearFilter !== "all" && !nextYearOptions.includes(Number(yearFilter))) setYearFilter("all");
     setCourseFilter(value);
-    setPage(1);
   }
 
   function onDeptFilterChange(value: string) {
@@ -336,17 +379,14 @@ export default function OfficeStudentsPage() {
       : yearOptionsForDepartment(departments, courses, value, courseFilter === "all" ? "" : courseFilter, years);
     if (yearFilter !== "all" && !nextYearOptions.includes(Number(yearFilter))) setYearFilter("all");
     setDeptFilter(value);
-    setPage(1);
   }
 
   function onYearFilterChange(value: string) {
     setYearFilter(value);
-    setPage(1);
   }
 
   function onStudentTypeFilterChange(value: string) {
     setStudentTypeFilter(value);
-    setPage(1);
   }
 
   function onPageSizeChange(value: number) {
@@ -386,15 +426,13 @@ export default function OfficeStudentsPage() {
   }
 
   async function selectAllMatching() {
+    // "Matching" means matching the list on screen - the applied snapshot, not
+    // whatever has since been typed into the filter bar.
+    if (!appliedFilters) return;
     setIsSelectingAll(true);
     try {
-      const params = new URLSearchParams();
+      const params = filtersToParams(appliedFilters);
       params.set("idsOnly", "1");
-      if (debouncedSearch) params.set("search", debouncedSearch);
-      if (deptFilter !== "all") params.set("department", deptFilter);
-      if (courseFilter !== "all") params.set("course", courseFilter);
-      if (yearFilter !== "all") params.set("year", yearFilter);
-      if (studentTypeFilter !== "all") params.set("studentType", studentTypeFilter);
       const res = await fetch(`/api/college/students?${params.toString()}`);
       const json = await res.json() as { ids?: string[]; error?: string };
       if (!res.ok) { toast({ variant: "destructive", title: json.error ?? "Failed to select all matching students" }); return; }
@@ -493,7 +531,7 @@ export default function OfficeStudentsPage() {
     setBulkProgress({ done: 0, total: selectedIds.length });
     let deletedTotal = 0;
     let skippedTotal = 0;
-    const notRemoved: { id: string; reason: string }[] = [];
+    let failedTotal = 0;
     try {
       for (let i = 0; i < selectedIds.length; i += BULK_DELETE_CHUNK_SIZE) {
         const chunk = selectedIds.slice(i, i + BULK_DELETE_CHUNK_SIZE);
@@ -502,20 +540,14 @@ export default function OfficeStudentsPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ studentIds: chunk }),
         });
-        const json = await res.json() as {
-          deletedCount?: number;
-          skipped?: string[];
-          blocked?: { id: string; reason: string }[];
-          failed?: { id: string; reason: string }[];
-          error?: string;
-        };
+        const json = await res.json() as { deletedCount?: number; skipped?: string[]; failed?: string[]; error?: string };
         if (!res.ok) {
           toast({ variant: "destructive", title: json.error ?? "Failed to remove some students" });
           break;
         }
         deletedTotal += json.deletedCount ?? 0;
         skippedTotal += json.skipped?.length ?? 0;
-        notRemoved.push(...(json.blocked ?? []), ...(json.failed ?? []));
+        failedTotal += json.failed?.length ?? 0;
         setBulkProgress({ done: Math.min(i + chunk.length, selectedIds.length), total: selectedIds.length });
       }
       if (deletedTotal > 0) {
@@ -524,15 +556,8 @@ export default function OfficeStudentsPage() {
           title: `${deletedTotal} student${deletedTotal === 1 ? "" : "s"} removed${skippedTotal ? ` (${skippedTotal} already gone)` : ""}`,
         });
       }
-      if (notRemoved.length > 0) {
-        // e.g. a student who still holds a library book - say who and why, so
-        // Office can fix it and remove them again.
-        const nameById = new Map(students.map((st) => [st.id, st.name]));
-        toast({
-          variant: "destructive",
-          title: `${notRemoved.length} student${notRemoved.length === 1 ? " was" : "s were"} not removed`,
-          description: notRemoved.slice(0, 3).map((n) => `${nameById.get(n.id) ?? n.id}: ${n.reason}`).join(" · ") + (notRemoved.length > 3 ? " …" : ""),
-        });
+      if (failedTotal > 0) {
+        toast({ variant: "destructive", title: `${failedTotal} student${failedTotal === 1 ? "" : "s"} could not be removed - please try again` });
       }
       setBulkDeleteOpen(false);
       setSelected({});
@@ -665,18 +690,21 @@ export default function OfficeStudentsPage() {
       ) : (
         <>
       {/* Summary */}
-      <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-        <Users className="h-4 w-4" />
-        <span><strong className="text-foreground">{total}</strong> students total</span>
-      </div>
+      {appliedFilters && (
+        <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+          <Users className="h-4 w-4" />
+          <span><strong className="text-foreground">{total}</strong> students {appliedIsFiltered ? "match" : "total"}</span>
+        </div>
+      )}
 
-      {/* Filters */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        <div className="relative flex-1">
+      {/* Filters - editing any of these reads nothing; Load applies them. */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+        <div className="relative flex-1 sm:min-w-64">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             value={search}
-            onChange={(e) => onSearchChange(e.target.value)}
+            onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") handleLoad(); }}
             placeholder="Search by name, roll number or email"
             className="pl-9"
           />
@@ -710,6 +738,39 @@ export default function OfficeStudentsPage() {
             <SelectItem value="Lateral">Lateral</SelectItem>
           </SelectContent>
         </Select>
+        <Button onClick={handleLoad} loading={isFetching}>
+          <Search className="h-4 w-4 mr-2" />{appliedFilters ? "Reload" : "Load"}
+        </Button>
+      </div>
+
+      {/* Roll number range - one more filter, applied by Load like the rest.
+          Inclusive, compared upper-cased; leave one end blank for "from here
+          on" / "up to here". */}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs text-muted-foreground shrink-0">Roll no. range:</span>
+        <Input
+          placeholder="From roll no."
+          value={rollFrom}
+          onChange={(e) => setRollFrom(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") handleLoad(); }}
+          className="h-9 w-40"
+          autoComplete="off"
+        />
+        <span className="text-xs text-muted-foreground">to</span>
+        <Input
+          placeholder="To roll no."
+          value={rollTo}
+          onChange={(e) => setRollTo(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") handleLoad(); }}
+          className="h-9 w-40"
+          autoComplete="off"
+        />
+        {(rollFrom || rollTo) && (
+          <Button variant="ghost" size="sm" onClick={() => { setRollFrom(""); setRollTo(""); }}>Clear range</Button>
+        )}
+        {filtersDirty && (
+          <span className="text-xs text-amber-600 sm:ml-auto">Filters changed - press Reload to apply.</span>
+        )}
       </div>
 
       {/* Bulk actions - appears once at least one row is selected. Selecting
@@ -742,11 +803,11 @@ export default function OfficeStudentsPage() {
       )}
 
       {/* List */}
-      {!loadRequested ? (
+      {!appliedFilters ? (
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <Users className="h-10 w-10 text-muted-foreground mb-3" />
-          <p className="text-sm text-muted-foreground mb-4">Set any filters, then load the student list.</p>
-          <Button onClick={() => setLoadRequested(true)}>Load Students</Button>
+          <p className="text-sm text-muted-foreground mb-4">Set any filters (or none, for everyone), then load the student list.</p>
+          <Button onClick={handleLoad}>Load Students</Button>
         </div>
       ) : isLoading || (isFetching && students.length === 0 && total === 0) ? (
         <div className="space-y-2">
@@ -755,11 +816,11 @@ export default function OfficeStudentsPage() {
       ) : students.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <Users className="h-10 w-10 text-muted-foreground mb-3" />
-          <p className="font-medium">{total === 0 ? "No students yet" : "No students match your filters"}</p>
+          <p className="font-medium">{appliedIsFiltered ? "No students match your filters" : "No students yet"}</p>
           <p className="text-sm text-muted-foreground mt-1 mb-4">
-            {total === 0 ? "Add a student manually or import a roster to get started." : "Try clearing the search or filters."}
+            {appliedIsFiltered ? "Try clearing the search or filters, then press Reload." : "Add a student manually or import a roster to get started."}
           </p>
-          {total === 0 && <Button onClick={openAdd}><Plus className="h-4 w-4 mr-2" />Add Student</Button>}
+          {!appliedIsFiltered && <Button onClick={openAdd}><Plus className="h-4 w-4 mr-2" />Add Student</Button>}
         </div>
       ) : (
         <Card>
@@ -929,7 +990,7 @@ export default function OfficeStudentsPage() {
       <StudentFormDialog
         open={addOpen}
         onOpenChange={(o) => { setAddOpen(o); if (!o) setEditTarget(null); }}
-        student={editTarget}
+        student={editTarget} rollEditable
         onSaved={() => { setAddOpen(false); setEditTarget(null); void loadStudents(); }}
       />
 
@@ -938,7 +999,7 @@ export default function OfficeStudentsPage() {
         open={!!deleteTarget}
         onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}
         title={`Remove ${deleteTarget?.name ?? ""}?`}
-        description={`This removes ${deleteTarget?.name ?? "this student"}${deleteTarget?.department ? ` (${deleteTarget.department}, ${ordinalYear(deleteTarget.year)})` : ""} from the roster and disables their login. The record is archived, not erased - an administrator can restore it. A student with unreturned library books can't be removed.`}
+        description={`This will permanently remove ${deleteTarget?.name ?? "this student"}${deleteTarget?.department ? ` (${deleteTarget.department}, ${ordinalYear(deleteTarget.year)})` : ""}. This cannot be undone.`}
         confirmLabel="Remove"
         variant="destructive"
         onConfirm={() => void handleDelete()}
@@ -972,7 +1033,7 @@ export default function OfficeStudentsPage() {
         onOpenChange={(open) => { if (!open && !isBulkDeleting) setBulkDeleteOpen(false); }}
         title={`Remove ${selectedCount} student${selectedCount === 1 ? "" : "s"}?`}
         description={
-          `This removes ${selectedCount} student${selectedCount === 1 ? "" : "s"} from the roster and disables their logins. Records are archived, not erased - an administrator can restore them. Anyone with unreturned library books is skipped.`
+          `This will permanently remove ${selectedCount} student${selectedCount === 1 ? "" : "s"}. This cannot be undone.`
           + (bulkProgress ? ` Removing ${bulkProgress.done} of ${bulkProgress.total}…` : "")
         }
         confirmLabel="Remove All"

@@ -400,6 +400,14 @@ export interface FMSUser {
   // each seat they hold (see types/roleSeats.ts). Set by /api/auth/session; the
   // sidebar and page access are the union of all of them.
   roles?: UserRole[];
+  // Set by /api/auth/session ONLY for a RESIGNED/RETIRED faculty member in a college
+  // that has read-only faculty access switched on (lib/auth/readOnlyAccess.ts):
+  // they sign in normally but may only view their own profile and history. Derived
+  // from facultyMembers.status on every session call - never stored on the user doc.
+  readOnlyAccess?: boolean;
+  // Added by GET /api/college/users ONLY in a college with read-only faculty access switched on, for a person
+  // whose faculty record is RESIGNED/RETIRED - the Department Office / Sub-HOD pickers leave them out.
+  facultyExited?: boolean;
   // Denormalized from the seats this person holds (maintained by
   // lib/roles/seats.ts) - `seatRoles` is what guards and role lookups read.
   seatIds?: string[];
@@ -1270,6 +1278,10 @@ export interface DegreeDetail {
   // of the university/institute the doctorate was pursued in. Optional, so
   // every record saved before this existed stays valid (it simply shows nothing).
   departmentName?: string;
+  // Doctoral (Ph.D.) only - UI label "Title of the Ph.D Thesis", shown between
+  // the department and Place. Optional for the same reason as departmentName:
+  // every record saved before this existed stays valid (it simply shows nothing).
+  thesisTitle?: string;
   place?: string; // city/town where the institute is located
   percentageCgpa: string;
   // "Year of Passing" everywhere except Doctoral/Post-Doctoral, which use

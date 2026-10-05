@@ -3,6 +3,10 @@ import { orderHeldRoles } from "@/lib/roles/seatRoles";
 import { activeDelegatedRoles } from "@/lib/leave/roleDelegation";
 import { ROLE_SCOPE } from "@/types/core";
 import type { UserRole } from "@/types/core";
+import {
+  isAllowedReadOnlyRequest, isFacultyCapableRole, isReadMethod, isReadOnlyFacultyCollege, METHOD_HEADER, PATH_HEADER,
+} from "@/lib/auth/readOnlyAccess";
+import { isFacultyExited } from "@/lib/auth/readOnlyFacultyLookup";
 
 // The roles a login can act as RIGHT NOW: its primary role plus the role of
 // every seat it holds (see types/roleSeats.ts). The session cookie carries a
@@ -11,7 +15,13 @@ import type { UserRole } from "@/types/core";
 // person is assigned"), so guards re-read the person's own record - briefly
 // cached, so a burst of requests costs one read, not one per request.
 const TTL_MS = 20_000;
-interface CacheEntry { at: number; held: string[]; realRole: string }
+// `readOnly` is set only for a college that has the read-only-faculty switch ON
+// (readOnlyAccess.ts) and a login linked to a RESIGNED/RETIRED faculty record:
+//   "YES"     - their facultyMembers.status says so (the only source of truth);
+//   "UNKNOWN" - the status lookup failed and there is no recent answer to reuse,
+//               so WRITES are denied (fail closed) while reads carry on as before.
+// It is absent for everyone else, so every other login/college is untouched.
+interface CacheEntry { at: number; held: string[]; realRole: string; readOnly?: "YES" | "UNKNOWN" }
 const cache = new Map<string, CacheEntry>();
 
 interface SessionLike {
@@ -69,6 +79,18 @@ async function resolveLiveRoleInfo(session: SessionLike): Promise<CacheEntry> {
       let realRole = rawRole === "COLLEGE_ADMIN" || rawRole === "DEPARTMENT_OFFICE" ? rawRole : session.role;
       if ((u.seatRoles ?? []).includes("COLLEGE_ADMIN")) realRole = "COLLEGE_ADMIN";
       const entry: CacheEntry = { at: Date.now(), held, realRole };
+      // Read-only faculty: only when the college has the switch on, the account
+      // is active and can be a faculty login. Any other login/college skips this
+      // entirely - no extra read.
+      if (held.length > 0 && isReadOnlyFacultyCollege(session.collegeId) && isFacultyCapableRole(rawRole)) {
+        try {
+          if (await isFacultyExited(getAdminDb(), session.collegeId, session.uid)) entry.readOnly = "YES";
+        } catch (statusErr) {
+          console.error("[liveRoles] faculty status lookup failed", statusErr);
+          // Reuse a recent answer through a short outage; with none, deny writes only.
+          entry.readOnly = hit && Date.now() - hit.at < STALE_OK_MS ? hit.readOnly : "UNKNOWN";
+        }
+      }
       cache.set(key, entry);
       return entry;
     } catch (err) {
@@ -104,8 +126,44 @@ async function resolveLiveRoleInfo(session: SessionLike): Promise<CacheEntry> {
   }
 }
 
+// The HTTP method + path of the request being guarded, as stamped by proxy.ts on
+// every /api request (always overwriting whatever the client sent). null when
+// there is no request context (a script, a cron, a unit test) or the headers are
+// missing - callers treat that as "not an allowed read", i.e. fail closed.
+async function currentRequest(): Promise<{ method: string; path: string } | null> {
+  try {
+    const { headers } = await import("next/headers");
+    const h = await headers();
+    const method = h.get(METHOD_HEADER);
+    const path = h.get(PATH_HEADER);
+    return method && path ? { method, path } : null;
+  } catch {
+    return null;
+  }
+}
+
+// Applies the read-only rule AFTER the cache, per request, so one cached entry
+// serves reads and writes correctly. For everyone without `readOnly` this returns
+// the entry untouched.
+//  - YES: the person keeps NO seat/administrative authority at all. They are
+//    treated as a plain PANEL_MEMBER (so every existing own-data scoping branch in
+//    the allowed GETs behaves exactly as it does for any faculty member) ONLY for
+//    an allowed own-data read; for every other request they hold no roles, so
+//    every guard answers 401.
+//  - UNKNOWN: the lookup failed - deny writes, leave reads as they were.
+async function applyReadOnly(entry: CacheEntry): Promise<CacheEntry> {
+  if (!entry.readOnly) return entry;
+  const req = await currentRequest();
+  if (entry.readOnly === "YES") {
+    return req && isAllowedReadOnlyRequest(req.method, req.path)
+      ? { ...entry, held: ["PANEL_MEMBER"], realRole: "PANEL_MEMBER" }
+      : { ...entry, held: [], realRole: "PANEL_MEMBER" };
+  }
+  return req && isReadMethod(req.method) ? entry : { ...entry, held: [] };
+}
+
 export async function resolveHeldRoles(session: SessionLike): Promise<string[]> {
-  return (await resolveLiveRoleInfo(session)).held;
+  return (await applyReadOnly(await resolveLiveRoleInfo(session))).held;
 }
 
 // Live counterpart to SessionPayload.realRole (see verifySession.ts's
@@ -113,7 +171,7 @@ export async function resolveHeldRoles(session: SessionLike): Promise<string[]> 
 // short TTL as resolveHeldRoles, so a role change takes effect within the
 // cache window instead of only once the session cookie naturally expires.
 export async function resolveRealRole(session: SessionLike): Promise<string> {
-  return (await resolveLiveRoleInfo(session)).realRole;
+  return (await applyReadOnly(await resolveLiveRoleInfo(session))).realRole;
 }
 
 // Called right after a seat changes so the affected people don't wait out the

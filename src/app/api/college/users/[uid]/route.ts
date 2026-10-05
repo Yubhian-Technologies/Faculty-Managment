@@ -15,6 +15,8 @@ import { degreeTypeError } from "@/lib/faculty/degreeType";
 import { migrateUserDoc, migrateFacultyDoc, migrateSupportingStaffDoc } from "@/lib/faculty/fieldRenames";
 import { withLegacyPersonalKeysDeleted } from "@/lib/faculty/legacyKeyDeletes";
 import { assignSeat } from "@/lib/roles/seats";
+import { setLinkedFacultyPhoto } from "@/lib/faculty/syncFacultyPhoto";
+import { hasLinkedFacultyRecord, isSingleSourceCollege, mergeFacultyWithLogin, singleSourceBlockFor } from "@/lib/faculty/singleSource";
 import type { UserRole } from "@/types";
 
 async function loadTargetInScope(
@@ -123,8 +125,15 @@ export async function GET(
         .where("userUid", "==", uid).limit(1).get();
       if (!linkedSnap.empty) {
         const linkedData = linkedSnap.docs[0].data();
-        const linkedLifted = linkedCollection === "facultyMembers" ? migrateFacultyDoc(linkedData) : migrateSupportingStaffDoc(linkedData);
-        return NextResponse.json({ user: { ...linkedLifted, ...user, recordId: linkedSnap.docs[0].id } });
+        if (linkedCollection === "facultyMembers") {
+          const singleSource = isSingleSourceCollege(session.collegeId);
+          // Additive: tells the staff edit pages (switched-on colleges only) that this person's profile
+          // content lives on the Faculty record, so they save there. Absent everywhere else.
+          return NextResponse.json({
+            user: { ...mergeFacultyWithLogin(migrateFacultyDoc(linkedData), user, singleSource), recordId: linkedSnap.docs[0].id, ...(singleSource ? { facultyRecordSource: true } : {}) },
+          });
+        }
+        return NextResponse.json({ user: { ...migrateSupportingStaffDoc(linkedData), ...user, recordId: linkedSnap.docs[0].id } });
       }
     }
 
@@ -176,6 +185,16 @@ export async function PATCH(
     const { targetSnap, error, status } = await loadTargetInScope(db, session, uid);
     if (!targetSnap) return NextResponse.json({ error }, { status });
     const target = targetSnap.data() as { role: string; sectionId?: string; name?: string; department?: string; departments?: string[]; email?: string; collegeEmail?: string };
+
+    // Single source of truth (switch-gated, no-op elsewhere): a faculty-linked person's profile content and
+    // mirrored identity fields are edited on the Faculty record, never copied onto the login. Refused BEFORE
+    // any write (password / Auth email / Firestore) so a refusal changes nothing.
+    if (isSingleSourceCollege(session.collegeId) && (target.role === "HOD" || target.role === "PANEL_MEMBER" || target.role === "DEPARTMENT_OFFICE")) {
+      const block = singleSourceBlockFor(body, targetSnap.data() ?? {});
+      if (block && (await hasLinkedFacultyRecord(db, session.collegeId, uid))) {
+        return NextResponse.json({ error: block.message, code: "FACULTY_RECORD_IS_SOURCE", fields: block.fields }, { status: block.status });
+      }
+    }
 
     const roleChanged = body.role !== undefined && body.role !== target.role;
     if (roleChanged) {
@@ -271,6 +290,9 @@ export async function PATCH(
     }
     if (body.academicProfile !== undefined) updates.academicProfile = normalizeAcademicProfile(body.academicProfile);
     if (body.profilePhotoUrl !== undefined) updates.profilePhotoUrl = body.profilePhotoUrl;
+
+    // The photo belongs to the person's faculty record (source of truth) - written first, then the mirror below.
+    if (body.profilePhotoUrl !== undefined) await setLinkedFacultyPhoto(db, session.collegeId, uid, body.profilePhotoUrl);
 
     await db
       .collection("colleges")

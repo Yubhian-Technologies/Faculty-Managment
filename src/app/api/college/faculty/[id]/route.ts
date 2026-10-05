@@ -6,9 +6,6 @@ import { isEmployeeIdReserved, reserveEmployeeId } from "@/lib/firestore/employe
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb, getAdminAuth } from "@/lib/firebase/admin";
-import { archiveFaculty } from "@/lib/faculty/archiveFaculty";
-import { actorOf } from "@/lib/audit/actorOf";
-import { writeAuditLog } from "@/lib/audit/writeAuditLog";
 import { employeeIdTaken, employeeIdTakenMessage } from "@/lib/firestore/employeeIds";
 import { getHodDepartmentScope, canHodManageFacultyDepartment } from "@/lib/departments/scope";
 import { syncTrainingEntryCoConductors } from "@/lib/faculty/syncTrainingEntryCoConductors";
@@ -30,6 +27,9 @@ import { mobileNoFromBody } from "@/lib/faculty/mobileNo";
 import { normalizeHighestQualification } from "@/lib/faculty/highestQualification";
 import { FieldValue } from "firebase-admin/firestore";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
+import { actorOf } from "@/lib/audit/actorOf";
+import { isReadOnlyFacultyCollege, isReadOnlyFacultyStatus } from "@/lib/auth/readOnlyAccess";
+import { vacateSeatsOnExit, type VacateSeatsResult } from "@/lib/faculty/vacateSeatsOnExit";
 import type { Designation, EmployeeCategory, FacultyStatus, TrainingEntry } from "@/types";
 import {
   EMPLOYEE_CATEGORY_VALUES, EMPLOYEE_CATEGORY_ERROR_MESSAGE, SELECTABLE_FACULTY_STATUS_VALUES, FACULTY_STATUS_ERROR_MESSAGE,
@@ -423,6 +423,49 @@ export async function PATCH(
       }
     }
 
+    // RESIGNED/RETIRED = a read-only login (lib/auth/readOnlyAccess.ts - derived
+    // from this very status, nothing else is stored). Being read-only also means
+    // holding no seat, so every seat they hold is vacated through the normal seat
+    // flow (lib/faculty/vacateSeatsOnExit.ts). Only when the college has the switch
+    // on, and on ANY save of a person whose status IS RESIGNED/RETIRED - not only
+    // the save that changes it - so a vacate that failed, or was skipped for an admin
+    // to resolve, is retried by simply saving the record again (it is idempotent: a
+    // person holding no seat costs one read and changes nothing). The reverse (back
+    // to ACTIVE) restores access by itself but deliberately restores NO seat - an
+    // admin assigns it again - and does not run this at all. The status save above is
+    // already final: access is derived from it, so even if a seat can't be vacated
+    // here no authority lingers; the outcome is recorded on this record
+    // (seatVacateStatus) and returned so it is visible.
+    let seatVacate: VacateSeatsResult | undefined;
+    const previousFacultyData = snap.data() as { status?: string; seatVacateStatus?: string };
+    const resultingStatus = body.status ?? previousFacultyData.status;
+    const enteredExit = body.status !== undefined && body.status !== previousFacultyData.status && isReadOnlyFacultyStatus(body.status);
+    if (isReadOnlyFacultyStatus(resultingStatus) && isReadOnlyFacultyCollege(session.collegeId) && before.userUid) {
+      try {
+        const seatActor = await actorOf(db, session.collegeId, session.uid, session.email);
+        const outcome = await vacateSeatsOnExit(
+          db, session.collegeId, before.userUid, { name: newDisplayName || oldDisplayName || "This person", status: String(resultingStatus) }, seatActor
+        );
+        const detail = [
+          ...outcome.failed.map((f) => `${f.seat}: ${f.error}`),
+          ...outcome.skipped.map((x) => `${x.seat}: ${x.reason}`),
+        ];
+        // Only report (and write) when there is something to say: the save that moved them into
+        // an exited status always reports; a later re-save only when it vacated/flagged something
+        // or cleared an earlier flag.
+        const hadFlag = !!previousFacultyData.seatVacateStatus;
+        if (enteredExit || outcome.vacated.length > 0 || detail.length > 0 || hadFlag) seatVacate = outcome;
+        if (detail.length > 0) {
+          await ref.update({ seatVacateStatus: outcome.failed.length > 0 ? "FAILED" : "NEEDS_ATTENTION", seatVacateDetail: detail, updatedAt: new Date() });
+        } else if (hadFlag) {
+          await ref.update({ seatVacateStatus: FieldValue.delete(), seatVacateDetail: FieldValue.delete() });
+        }
+      } catch (seatErr) {
+        console.error("[college/faculty/[id] PATCH] seat vacate failed:", seatErr);
+        await ref.update({ seatVacateStatus: "FAILED", seatVacateDetail: [String(seatErr instanceof Error ? seatErr.message : seatErr)], updatedAt: new Date() }).catch(() => {});
+      }
+    }
+
     let actorName = "Unknown";
     try {
       const actorSnap = await db.collection("colleges").doc(session.collegeId).collection("users").doc(session.uid).get();
@@ -431,7 +474,7 @@ export async function PATCH(
 
     await writeAuditLogSafe(db, session.collegeId, { action: "FACULTY_UPDATED", performedBy: session.uid, performedByName: actorName, targetId: id, details: { name: newDisplayName || oldDisplayName, fields: Object.keys(updates).filter((k) => k !== "updatedAt") } });
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, ...(seatVacate ? { seatVacate } : {}) });
   } catch (err) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
@@ -471,29 +514,63 @@ export async function DELETE(
       }
     }
 
-    // "Delete" archives (lib/faculty/archiveFaculty.ts): the record, its login
-    // profile and role mapping are copied to archivedFacultyMembers, the login is
-    // disabled (its email freed), and only then are the live documents removed -
-    // so leave / attendance / payroll history that points at this person still
-    // resolves, and an administrator can restore them. Refused (409) while they
-    // still have teaching assignments / timetable slots, hold a role seat, or are
-    // a section's or a timetable's in-charge.
-    const adminAuth = await getAdminAuth();
-    const actor = await actorOf(db, session.collegeId, session.uid, session.email);
-    const result = await archiveFaculty(db, adminAuth, session.collegeId, id, actor, "REMOVED_BY_USER");
-    if (!result.ok) {
-      return NextResponse.json({ error: result.reason }, { status: result.code === "NOT_FOUND" ? 404 : 409 });
+    // Refuse to hard-delete a faculty member who still has live teaching
+    // assignments/timetable slots - deleting the doc out from under them would
+    // orphan those references (facultyId pointing at nothing). Use the
+    // RESIGNED/RETIRED status instead, which keeps the record (and every
+    // assignment that names it) intact.
+    const collegeRef = db.collection("colleges").doc(session.collegeId);
+    const [assignmentSnap, slotSnap] = await Promise.all([
+      collegeRef.collection("teachingAssignments").where("facultyId", "==", id).limit(1).get(),
+      collegeRef.collection("timetableSlots").where("facultyId", "==", id).limit(1).get(),
+    ]);
+    if (!assignmentSnap.empty || !slotSnap.empty) {
+      return NextResponse.json(
+        {
+          error:
+            "This faculty member still has active teaching assignments or timetable slots. Remove/reassign those first, or set their status to Resigned/Retired instead of deleting the record.",
+        },
+        { status: 409 }
+      );
     }
 
-    await writeAuditLog(db, session.collegeId, {
+    await ref.delete();
+
+    // Also remove the linked login account - otherwise it lingers in
+    // colleges/{id}/users forever and keeps showing up in panel-member
+    // pickers, staff lists, etc. even though the faculty record is gone.
+    const linkedUid = facultyData.userUid;
+    if (linkedUid) {
+      await db.collection("colleges").doc(session.collegeId).collection("users").doc(linkedUid).delete();
+      await db.collection("systemUsers").doc(linkedUid).delete();
+
+      // Best-effort: remove the Firebase Auth account too. If it fails, the
+      // Firestore records are still gone, which is what the UI reads from.
+      try {
+        const auth = await getAdminAuth();
+        await auth.deleteUser(linkedUid);
+      } catch (authErr) {
+        console.warn("[college/faculty/[id] DELETE] Auth deletion failed (non-fatal):", authErr);
+      }
+    }
+
+    let actorName = "Unknown";
+    try {
+      const actorSnap = await db.collection("colleges").doc(session.collegeId).collection("users").doc(session.uid).get();
+      actorName = (actorSnap.data() as { name?: string } | undefined)?.name ?? "Unknown";
+    } catch { /* best-effort */ }
+
+    await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
+      collegeId: session.collegeId,
       action: "FACULTY_DELETED",
       performedBy: session.uid,
-      performedByName: actor.name,
+      performedByName: actorName,
       targetId: id,
-      details: { name: facultyDisplayName(facultyData), archived: true },
+      details: { name: facultyDisplayName(facultyData) },
+      timestamp: new Date(),
     });
 
-    return NextResponse.json({ success: true, archived: true });
+    return NextResponse.json({ success: true });
   } catch (err) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;

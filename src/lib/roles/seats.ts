@@ -7,6 +7,7 @@ import type { OutgoingHolderAction, RoleSeat, RoleSeatHistoryEntry } from "@/typ
 import {
   PRIMARY_ROLE_CHOICES, SEAT_ROLES, canHoldSeat, isSeatRole, isSingletonSeatRole, normalizeStoredRole, roleMatchesSeat, seatNeedsDepartment,
 } from "@/lib/roles/seatRoles";
+import { seatBlockReason } from "@/lib/roles/seatEligibility";
 
 // Server-side seat management - see types/roleSeats.ts for the model. The one
 // invariant everything here protects: a seat has at most one holder, every
@@ -219,6 +220,10 @@ export async function assignSeat(
     if (!canHoldSeat(u.role ?? "", seat.role)) {
       throw new SeatError(`${ROLE_LABELS[seat.role]} seats can only be held by teaching faculty`);
     }
+    // A RESIGNED/RETIRED faculty member is read-only and can't be given a new seat (switch-gated; only ever
+    // guards a NEW appointment - vacating, or leaving an existing holder in place, never reaches here).
+    const block = await seatBlockReason(db, collegeId, input.uid, u.name);
+    if (block) throw new SeatError(block.message, block.status);
     newHolder = { uid: input.uid, name: u.name ?? "Unknown" };
   }
 

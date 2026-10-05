@@ -19,12 +19,28 @@ type RosterForm = Record<string, string>;
 
 const EMPTY_FORM: RosterForm = Object.fromEntries(EDITABLE_ROSTER_FIELDS.map((f) => [f.key, ""]));
 
+/**
+ * The fields shown read-only (disabled) in the form. Add: none. Edit: Department and
+ * Year always (moving a student is the sectioning/promotion flow's job), and the
+ * Roll No unless this is the College Office's form (`rollEditable`).
+ */
+export function lockedFieldKeys(isEdit: boolean, rollEditable: boolean): string[] {
+  if (!isEdit) return [];
+  return rollEditable ? ["department", "year"] : ["rollNumber", "department", "year"];
+}
+
 interface StudentFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** The student being edited - omit/null to add a new one. */
   student?: StudentListItem | StudentRecord | null;
   onSaved: () => void;
+  /**
+   * Edit only: let the Roll No be changed (instead of the read-only box every other
+   * role sees). Passed by the College Office pages alone - the server applies the
+   * same rule by role, so this only decides whether the field is unlocked.
+   */
+  rollEditable?: boolean;
 }
 
 /**
@@ -37,7 +53,7 @@ interface StudentFormDialogProps {
  * have it loaded, the same "self-contained, works from any page" shape as
  * StudentDetailsPage itself.
  */
-export function StudentFormDialog({ open, onOpenChange, student, onSaved }: StudentFormDialogProps) {
+export function StudentFormDialog({ open, onOpenChange, student, onSaved, rollEditable = false }: StudentFormDialogProps) {
   const editTarget = student ?? null;
   const [form, setForm] = useState<RosterForm>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
@@ -89,6 +105,12 @@ export function StudentFormDialog({ open, onOpenChange, student, onSaved }: Stud
     // Roll No is the student's unique identity - required on Add. (On Edit it
     // is shown read-only, so a legacy roll-less student can still be edited.)
     if (!editTarget && !form.rollNumber?.trim()) { toast({ variant: "destructive", title: "Roll No is required" }); return; }
+    // Edit with an editable Roll No: an existing roll can be corrected, never emptied
+    // (the server refuses it too). A legacy roll-less student may still be saved blank.
+    if (editTarget && rollEditable && !form.rollNumber?.trim() && editTarget.rollNumber?.trim()) {
+      toast({ variant: "destructive", title: "A student's Roll No can't be removed - change it to the correct number instead" });
+      return;
+    }
     if (!form.name?.trim()) { toast({ variant: "destructive", title: "Name is required" }); return; }
     if (!form.course) { toast({ variant: "destructive", title: "Course is required" }); return; }
     if (!form.department) { toast({ variant: "destructive", title: "Department is required" }); return; }
@@ -185,7 +207,7 @@ export function StudentFormDialog({ open, onOpenChange, student, onSaved }: Stud
             // Secondary Department (and Course when it no longer matches) was
             // NOT discarded - a confusing partial save. Locking them stops that
             // click from happening at all.
-            readOnlyKeys={editTarget ? ["rollNumber", "department", "year"] : []}
+            readOnlyKeys={lockedFieldKeys(!!editTarget, rollEditable)}
           />
         )}
 

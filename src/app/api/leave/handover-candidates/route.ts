@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { exitedFacultyUidsOrNone } from "@/lib/auth/readOnlyFacultyLookup";
 import { resolveEmployeeIdentity } from "@/lib/leave/identity";
 import { listHandoverCandidates } from "@/lib/leave/handoverPool";
 
@@ -33,7 +34,10 @@ export async function GET(request: Request) {
       fromISO && toISO && toISO >= fromISO ? { fromISO, toISO } : undefined
     );
 
-    return NextResponse.json({ candidates: candidates.map((c) => ({ uid: c.uid, name: c.name, department: c.department })) });
+    // Picker only (the shared pool also validates saved applications, which must not change): a
+    // RESIGNED/RETIRED person can no longer cover anyone. No-op, zero reads, unless the switch is on.
+    const exited = await exitedFacultyUidsOrNone(db, session.collegeId);
+    return NextResponse.json({ candidates: candidates.filter((c) => !exited.has(c.uid)).map((c) => ({ uid: c.uid, name: c.name, department: c.department })) });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

@@ -8,6 +8,7 @@ import { requireCollegeMember, isDepartmentOffice } from "@/lib/auth/verifySessi
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
 import { forgetHeldRoles } from "@/lib/auth/liveRoles";
+import { seatBlockReason } from "@/lib/roles/seatEligibility";
 
 /**
  * Appointing one of the department's OWN faculty as its office head, and
@@ -136,6 +137,11 @@ export async function POST(request: Request) {
     if ((target.seatRoles ?? []).includes(SEAT)) {
       return NextResponse.json({ error: `${target.name ?? "They"} already holds this post` }, { status: 409 });
     }
+
+    // A RESIGNED/RETIRED faculty member is read-only and can't be appointed (switch-gated; this route grants
+    // the seat directly rather than through assignSeat, so it needs its own check).
+    const block = await seatBlockReason(db, session.collegeId, uid, target.name);
+    if (block) return NextResponse.json({ error: block.message }, { status: block.status });
 
     const holder = await currentHolder(db, session.collegeId, department);
     if (holder) {

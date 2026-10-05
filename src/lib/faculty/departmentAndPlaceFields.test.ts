@@ -54,14 +54,16 @@ function cellOf(header: string): string {
 }
 
 describe("export column definitions", () => {
-  it("Ph.D. Details has Name of the Department directly BEFORE Place; Postdoctoral does not have it", () => {
+  it("Ph.D. Details has Name of the Department then Title of the Ph.D Thesis directly BEFORE Place; Postdoctoral has neither", () => {
     const labels = group("phdDetailsGroup").subFieldLabels;
     const i = labels.indexOf("Name of the Department");
     expect(i).toBeGreaterThan(-1);
-    expect(labels[i + 1]).toBe("Place");
+    expect(labels[i + 1]).toBe("Title of the Ph.D Thesis");
+    expect(labels[i + 2]).toBe("Place");
     expect(group("postdoctoralFellowshipDetailsGroup").subFieldLabels).not.toContain("Name of the Department");
+    expect(group("postdoctoralFellowshipDetailsGroup").subFieldLabels).not.toContain("Title of the Ph.D Thesis");
     // The two lists otherwise match, entry for entry.
-    expect(labels.filter((l) => l !== "Name of the Department")).toEqual(group("postdoctoralFellowshipDetailsGroup").subFieldLabels);
+    expect(labels.filter((l) => l !== "Name of the Department" && l !== "Title of the Ph.D Thesis")).toEqual(group("postdoctoralFellowshipDetailsGroup").subFieldLabels);
   });
 
   it("all three experience groups carry Place of the University/College right after Institution Name", () => {
@@ -79,8 +81,8 @@ describe("faculty full export (CSV) carries the new values in the right slot", (
   it("Ph.D. entries (first and additional) export their department just before Place", () => {
     run();
     const cell = cellOf("Ph.D. Details");
-    expect(cell).toContain("Year of Award: 2012 | Name of the Department: Department of Computer Science | Place: Chennai");
-    expect(cell).toContain("Name of the Department: Department of Physics | Place: Bengaluru");
+    expect(cell).toContain("Year of Award: 2012 | Name of the Department: Department of Computer Science | Title of the Ph.D Thesis:  | Place: Chennai");
+    expect(cell).toContain("Name of the Department: Department of Physics | Title of the Ph.D Thesis:  | Place: Bengaluru");
   });
 
   it("Postdoctoral keeps its own layout (no department column), Place still exported", () => {
@@ -103,7 +105,7 @@ describe("faculty full export (CSV) carries the new values in the right slot", (
       academicExperience: [{ institutionName: "BITS", designation: "Lecturer", fromDate: "2014-01-01", toDate: "2016-01-01", rolesResponsibilities: "Taught" }],
     };
     exportFacultyCsv([faculty(old)], {}, ["phdDetailsGroup", "academicExperienceGroup"]);
-    expect(cellOf("Ph.D. Details")).toContain("Name of the Department:  | Place: Chennai");
+    expect(cellOf("Ph.D. Details")).toContain("Name of the Department:  | Title of the Ph.D Thesis:  | Place: Chennai");
     const exp = cellOf("Academic Experience");
     expect(exp).toContain("Place of the University/College:  | Designation: Lecturer | From Date: 2014-01-01");
     expect(exp).toContain("Academic Roles/Responsibilities: Taught");
