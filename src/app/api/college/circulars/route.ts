@@ -13,7 +13,7 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status")?.trim() || undefined;
     const db = getAdminDb();
-    const docs = await listCirculars(db, session.collegeId, { status });
+    const docs = await listCirculars(db, session.collegeId, { status, limit: 50 });
     // Hide drafts not owned by caller unless principal
     const isPrincipal = session.role === "PRINCIPAL" || session.role === "VICE_PRINCIPAL";
     const filtered = docs.filter((d) => d.status !== "DRAFT" || isPrincipal || d.createdBy === session.uid);

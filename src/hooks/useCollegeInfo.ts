@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useAuthStore } from "@/store/authStore";
 import type { CollegeType } from "@/types";
 
@@ -14,35 +14,22 @@ export interface CollegeInfo {
 }
 
 export function useCollegeInfo() {
-  const [collegeInfo, setCollegeInfo] = useState<CollegeInfo | null>(null);
-  const [failed, setFailed] = useState(false);
   const collegeId = useAuthStore((s) => s.user?.collegeId);
-  const [loading, setLoading] = useState(Boolean(collegeId));
 
-  useEffect(() => {
-    if (!collegeId) return;
-    let cancelled = false;
-    fetch("/api/college/info")
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then((d: CollegeInfo) => {
-        if (cancelled) return;
-        if (d && typeof d === "object" && !("error" in d)) {
-          setCollegeInfo(d);
-          setFailed(false);
-        } else {
-          setFailed(true);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) setFailed(true);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [collegeId]);
+  // College info rarely changes - the global query client's default
+  // staleTime (2 min, see lib/queryClient.ts) means re-navigating between
+  // pages within that window reuses this instead of re-fetching.
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ["college-info", collegeId],
+    queryFn: async () => {
+      const r = await fetch("/api/college/info");
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const d = (await r.json()) as CollegeInfo & { error?: string };
+      if (!d || typeof d !== "object" || "error" in d) throw new Error("invalid college info");
+      return d;
+    },
+    enabled: Boolean(collegeId),
+  });
 
-  return { collegeInfo, loading, failed };
+  return { collegeInfo: data ?? null, loading: Boolean(collegeId) && isLoading, failed: isError };
 }

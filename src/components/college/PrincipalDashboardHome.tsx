@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import {
   ClipboardList,
@@ -28,32 +28,31 @@ export function PrincipalDashboardHome({ fallbackName }: { fallbackName: string 
   const user = useAuthStore((s) => s.user);
   const { hiddenModules, hiddenItems } = useNavVisibility();
   const isHidden = (href: string) => !!user?.role && isPathHidden(href, user.role, hiddenModules, hiddenItems);
-  const [pendingVacancies, setPendingVacancies] = useState<VacancyRequest[]>([]);
-  const [pendingBatches, setPendingBatches] = useState<HiringBatch[]>([]);
-  const [departments, setDepartments] = useState<Department[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    setIsLoading(true);
-    Promise.all([
+  // Each cached independently via the shared query client (lib/queryClient.ts,
+  // 2min staleTime) instead of re-fetched as a bundle on every mount of this
+  // page - re-navigating back to /principal within that window costs nothing.
+  const { data: pendingVacancies = [], isLoading: loadingVacancies } = useQuery({
+    queryKey: ["principal-home-pending-vacancies"],
+    queryFn: () =>
       fetch("/api/college/vacancy-requests?status=PENDING")
         .then((r) => r.json() as Promise<{ vacancyRequests: VacancyRequest[] }>)
         .then((d) => d.vacancyRequests ?? []),
+  });
+  const { data: pendingBatches = [], isLoading: loadingBatches } = useQuery({
+    queryKey: ["principal-home-pending-hiring-batches"],
+    queryFn: () =>
       fetch("/api/college/hiring-batches?status=PENDING")
         .then((r) => r.json() as Promise<{ batches: HiringBatch[] }>)
         .then((d) => d.batches ?? []),
+  });
+  const { data: departments = [], isLoading: loadingDepartments } = useQuery({
+    queryKey: ["principal-home-departments"],
+    queryFn: () =>
       fetch("/api/college/departments")
         .then((r) => r.json() as Promise<{ departments: Department[] }>)
         .then((d) => d.departments ?? []),
-    ])
-      .then(([v, b, dept]) => {
-        setPendingVacancies(v);
-        setPendingBatches(b);
-        setDepartments(dept);
-      })
-      .catch(() => {})
-      .finally(() => setIsLoading(false));
-  }, []);
+  });
+  const isLoading = loadingVacancies || loadingBatches || loadingDepartments;
 
   // Matches the Departments page's own count - a sub-department (e.g.
   // BS-Chemistry under Basic Science) isn't a peer of its parent, so it's not
