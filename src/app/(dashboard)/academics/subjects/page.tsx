@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
@@ -10,125 +10,137 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
-import { ArrowLeft, Edit2, Trash2 } from "lucide-react";
-import type { Subject } from "@/types";
+import { builtInCategories, type CategoryDefinition } from "@/lib/subjects/categoryDefinitions";
+import { SUBJECT_TYPE_LABELS, type Subject, type SubjectType } from "@/types";
+import { ArrowLeft, Plus } from "lucide-react";
 
-// Academics > Subjects. View and manage subjects assigned to departments
-// by year and semester. Filter all at once, CRUD on cards.
+// Academics > Subjects. View and manage the master subjects (course +
+// regulation scoped) that Course Structure imports create. Uses the existing
+// /api/college/subjects routes - nothing new server-side. The API refuses
+// to hard-delete a subject that is still assigned or staffed (409 shown here).
 
 type CourseOption = { id: string; name: string; isActive?: boolean };
-type DepartmentOption = { id: string; name: string };
-type AssignmentWithMaster = { assignment: any; master: Subject };
-type EditForm = {
-  assignmentId?: string;
+type Form = {
+  id?: string;
+  courseId: string;
+  regulation: string;
+  serialNumber: string;
+  category: string;
+  name: string;
+  code: string;
+  shortCode: string;
   lectureHours: string;
   tutorialHours: string;
   practicalHours: string;
   credits: string;
+  type: SubjectType;
 };
 
 const SELECT_CLASS = "h-9 w-full rounded-md border bg-background px-2 text-sm";
+const emptyForm = (courseId: string, regulation: string): Form => ({
+  courseId, regulation, serialNumber: "", category: "", name: "", code: "", shortCode: "",
+  lectureHours: "0", tutorialHours: "0", practicalHours: "0", credits: "", type: "THEORY",
+});
 
 export default function SubjectsPage() {
   const [courses, setCourses] = useState<CourseOption[]>([]);
-  const [departments, setDepartments] = useState<DepartmentOption[]>([]);
+  const [categories, setCategories] = useState<CategoryDefinition[]>(builtInCategories());
   const [courseId, setCourseId] = useState("");
-  const [deptId, setDeptId] = useState("");
-  const [year, setYear] = useState("1");
-  const [semester, setSemester] = useState("1");
-  const [assignments, setAssignments] = useState<AssignmentWithMaster[]>([]);
+  const [regulation, setRegulation] = useState("");
+  const [search, setSearch] = useState("");
+  const [subjects, setSubjects] = useState<Subject[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState("");
 
-  const [editForm, setEditForm] = useState<EditForm | null>(null);
-  const [editError, setEditError] = useState("");
+  const [form, setForm] = useState<Form | null>(null);
+  const [formError, setFormError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
-  const [deleting, setDeleting] = useState<any>(null);
+  const [deleting, setDeleting] = useState<Subject | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     void (async () => {
       try {
-        const [c, d] = await Promise.all([
+        const [c, k] = await Promise.all([
           fetch("/api/college/courses").then((r) => r.json() as Promise<{ courses?: CourseOption[] }>),
-          fetch("/api/college/departments").then((r) => r.json() as Promise<{ departments?: DepartmentOption[] }>),
+          fetch("/api/college/subject-categories").then((r) => r.json() as Promise<{ categories?: CategoryDefinition[] }>),
         ]);
-        const courses = (c.courses ?? []).filter((x) => x.isActive !== false);
-        const depts = (d.departments ?? []).filter((x: any) => !x.parentDepartmentId);
-        setCourses(courses);
-        setDepartments(depts);
-        if (courses[0]) setCourseId(courses[0].id);
-        if (depts[0]) setDeptId(depts[0].id);
+        const active = (c.courses ?? []).filter((x) => x.isActive !== false);
+        setCourses(active);
+        if (active[0]) setCourseId(active[0].id);
+        setCategories([...builtInCategories(), ...(k.categories ?? [])]);
       } catch {
-        setLoadError("Couldn't load courses or departments.");
+        setLoadError("Couldn't load courses.");
       }
     })();
   }, []);
 
-  async function handleLoad() {
-    if (!courseId || !deptId) { setLoadError("Please select course and department."); return; }
+  async function load(id = courseId) {
+    if (!id) return;
     setIsLoading(true);
-    setLoadError("");
     try {
-      const res = await fetch(
-        `/api/college/subject-semester-assignments?courseId=${encodeURIComponent(courseId)}&departmentId=${encodeURIComponent(deptId)}&year=${year}&semester=${semester}`
-      );
-      const json = await res.json() as { assignments?: any[]; error?: string };
+      const res = await fetch(`/api/college/subjects?courseId=${encodeURIComponent(id)}`);
+      const json = await res.json() as { subjects?: Subject[]; error?: string };
       if (!res.ok) throw new Error(json.error ?? "Failed to load");
-
-      const subjectIds = new Set((json.assignments ?? []).map((a) => a.subjectId));
-      const masters = new Map<string, Subject>();
-
-      if (subjectIds.size > 0) {
-        const masterRes = await fetch(`/api/college/subjects?${Array.from(subjectIds).map(id => `subjectIds=${id}`).join("&")}`);
-        const masterJson = await masterRes.json() as { subjects?: Subject[] };
-        (masterJson.subjects ?? []).forEach(s => masters.set(s.id, s));
-      }
-
-      setAssignments((json.assignments ?? []).map((a) => ({
-        assignment: a,
-        master: masters.get(a.subjectId) || { id: a.subjectId, code: a.subjectCode, name: a.subjectName } as Subject,
-      })));
+      setSubjects(json.subjects ?? []);
+      setLoadError("");
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : "Failed to load subjects.");
     } finally {
       setIsLoading(false);
     }
   }
+  useEffect(() => {
+    void load(courseId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [courseId]);
 
-  function openEdit(item: AssignmentWithMaster) {
-    setEditError("");
-    setEditForm({
-      assignmentId: item.assignment.id,
-      lectureHours: String(item.assignment.lectureHours ?? item.master.lectureHours ?? 0),
-      tutorialHours: String(item.assignment.tutorialHours ?? item.master.tutorialHours ?? 0),
-      practicalHours: String(item.assignment.practicalHours ?? item.master.practicalHours ?? 0),
-      credits: String(item.assignment.credits ?? item.master.credits ?? 0),
+  const regulations = useMemo(() => Array.from(new Set(subjects.map((s) => s.regulation).filter((r): r is string => !!r))).sort(), [subjects]);
+  const rows = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return subjects
+      .filter((s) => !regulation || s.regulation === regulation)
+      .filter((s) => !q || `${s.name} ${s.code} ${s.shortCode ?? ""}`.toLowerCase().includes(q))
+      .sort((a, b) => (a.regulation ?? "").localeCompare(b.regulation ?? "") || (a.serialNumber ?? 1e9) - (b.serialNumber ?? 1e9) || a.name.localeCompare(b.name));
+  }, [subjects, regulation, search]);
+
+  function openEdit(s: Subject) {
+    setFormError("");
+    setForm({
+      id: s.id, courseId: s.courseId ?? courseId, regulation: s.regulation ?? "",
+      serialNumber: String(s.serialNumber ?? ""), category: String(s.category ?? ""), name: s.name, code: s.code,
+      shortCode: s.shortCode ?? "", lectureHours: String(s.lectureHours ?? 0), tutorialHours: String(s.tutorialHours ?? 0),
+      practicalHours: String(s.practicalHours ?? 0), credits: String(s.credits ?? ""), type: s.type ?? "THEORY",
     });
   }
 
   async function handleSave() {
-    if (!editForm?.assignmentId) return;
+    if (!form) return;
+    const f = form;
+    if (!f.name.trim() || !f.code.trim() || !f.category) { setFormError("Name, code and category are required."); return; }
+    const body = {
+      name: f.name, code: f.code, shortCode: f.shortCode, category: f.category, type: f.type,
+      serialNumber: Number(f.serialNumber) || 0,
+      lectureHours: Number(f.lectureHours) || 0, tutorialHours: Number(f.tutorialHours) || 0, practicalHours: Number(f.practicalHours) || 0,
+      credits: f.credits === "" ? 0 : Number(f.credits),
+      hoursPerWeek: (Number(f.lectureHours) || 0) + (Number(f.tutorialHours) || 0) + (Number(f.practicalHours) || 0),
+      ...(f.id ? {} : { courseId: f.courseId, regulation: f.regulation.trim() || undefined }),
+    };
     setIsSaving(true);
-    setEditError("");
+    setFormError("");
     try {
-      const res = await fetch(`/api/college/subject-semester-assignments`, {
-        method: "PATCH",
+      const res = await fetch(f.id ? `/api/college/subjects/${f.id}` : "/api/college/subjects", {
+        method: f.id ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: editForm.assignmentId,
-          lectureHours: Number(editForm.lectureHours) || 0,
-          tutorialHours: Number(editForm.tutorialHours) || 0,
-          practicalHours: Number(editForm.practicalHours) || 0,
-          credits: Number(editForm.credits) || 0,
-        }),
+        body: JSON.stringify(body),
       });
-      if (!res.ok) { const json = await res.json() as { error?: string }; setEditError(json.error ?? "Failed to save."); return; }
-      toast({ variant: "success", title: "Subject updated" });
-      setEditForm(null);
-      await handleLoad();
+      const json = await res.json() as { error?: string };
+      if (!res.ok) { setFormError(json.error ?? "Couldn't save."); return; }
+      toast({ variant: "success", title: f.id ? "Subject updated" : "Subject added" });
+      setForm(null);
+      await load();
     } catch {
-      setEditError("Network error. Nothing was saved.");
+      setFormError("Network error. Nothing was saved.");
     } finally {
       setIsSaving(false);
     }
@@ -138,181 +150,156 @@ export default function SubjectsPage() {
     if (!deleting) return;
     setIsDeleting(true);
     try {
-      const res = await fetch(
-        `/api/college/subject-semester-assignments?subjectId=${encodeURIComponent(deleting.subjectId)}&departmentId=${encodeURIComponent(deptId)}&semester=${deleting.semester}`,
-        { method: "DELETE" }
-      );
-      if (!res.ok) { const json = await res.json() as { error?: string }; toast({ variant: "destructive", title: json.error ?? "Couldn't delete" }); return; }
-      toast({ variant: "success", title: "Subject removed" });
-      await handleLoad();
+      const res = await fetch(`/api/college/subjects/${deleting.id}`, { method: "DELETE" });
+      const json = await res.json() as { error?: string };
+      if (!res.ok) { toast({ variant: "destructive", title: json.error ?? "Couldn't delete the subject" }); return; }
+      toast({ variant: "success", title: `${deleting.code} deleted` });
+      await load();
     } catch {
-      toast({ variant: "destructive", title: "Network error." });
+      toast({ variant: "destructive", title: "Network error. Nothing was deleted." });
     } finally {
       setIsDeleting(false);
       setDeleting(null);
     }
   }
 
+  async function toggleActive(s: Subject) {
+    const res = await fetch(`/api/college/subjects/${s.id}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ isActive: s.isActive === false }),
+    });
+    if (!res.ok) { toast({ variant: "destructive", title: "Couldn't update the subject" }); return; }
+    await load();
+  }
+
+  const set = (k: keyof Form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
+    setForm((f) => (f ? { ...f, [k]: e.target.value } : f));
+
   return (
     <div className="space-y-6">
       <PageHeader
         title="Subjects"
-        description="View and manage subjects by department, year and semester"
+        description="View and manage the master subjects for each course and regulation."
         actions={
-          <Button variant="outline" asChild>
-            <Link href="/academics"><ArrowLeft className="h-4 w-4 mr-1" />Back</Link>
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" asChild>
+              <Link href="/academics"><ArrowLeft className="h-4 w-4 mr-1" />Back to Academics</Link>
+            </Button>
+            <Button disabled={!courseId} onClick={() => { setFormError(""); setForm(emptyForm(courseId, regulation)); }}>
+              <Plus className="h-4 w-4 mr-1" />Add subject
+            </Button>
+          </div>
         }
       />
 
-      {/* Filters */}
       <Card>
-        <CardContent className="grid gap-3 pt-6 sm:grid-cols-5">
+        <CardContent className="grid gap-3 pt-6 sm:grid-cols-3">
           <div className="space-y-1.5">
-            <Label htmlFor="course">Course</Label>
-            <select id="course" className={SELECT_CLASS} value={courseId} onChange={(e) => setCourseId(e.target.value)}>
-              <option value="">Select…</option>
+            <Label htmlFor="subj-course">Course</Label>
+            <select id="subj-course" className={SELECT_CLASS} value={courseId} onChange={(e) => { setCourseId(e.target.value); setRegulation(""); }}>
               {courses.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="dept">Department</Label>
-            <select id="dept" className={SELECT_CLASS} value={deptId} onChange={(e) => setDeptId(e.target.value)}>
-              <option value="">Select…</option>
-              {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+            <Label htmlFor="subj-reg">Regulation</Label>
+            <select id="subj-reg" className={SELECT_CLASS} value={regulation} onChange={(e) => setRegulation(e.target.value)}>
+              <option value="">All</option>
+              {regulations.map((r) => <option key={r} value={r}>{r}</option>)}
             </select>
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="yr">Year</Label>
-            <select id="yr" className={SELECT_CLASS} value={year} onChange={(e) => setYear(e.target.value)}>
-              {[1, 2, 3, 4].map((y) => <option key={y} value={String(y)}>Year {y}</option>)}
-            </select>
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="sem">Semester</Label>
-            <select id="sem" className={SELECT_CLASS} value={semester} onChange={(e) => setSemester(e.target.value)}>
-              {[1, 2, 3, 4, 5, 6, 7, 8].map((s) => <option key={s} value={String(s)}>Sem {s}</option>)}
-            </select>
-          </div>
-          <div className="flex items-end">
-            <Button onClick={() => void handleLoad()} className="w-full" disabled={!courseId || !deptId}>
-              Load
-            </Button>
+            <Label htmlFor="subj-search">Search</Label>
+            <Input id="subj-search" placeholder="Name or code" value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
         </CardContent>
       </Card>
 
-      {/* Subjects Grid */}
-      {loadError && <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-600">{loadError}</div>}
+      <Card>
+        <CardContent className="p-0">
+          {loadError && <p className="px-6 py-3 text-sm text-red-600">{loadError}</p>}
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b bg-muted/40 text-left text-xs text-muted-foreground">
+                  <th className="px-4 py-2 font-medium">S.No</th>
+                  <th className="px-3 py-2 font-medium">Code</th>
+                  <th className="px-3 py-2 font-medium">Name</th>
+                  <th className="px-3 py-2 font-medium">Reg.</th>
+                  <th className="px-3 py-2 font-medium">Category</th>
+                  <th className="px-3 py-2 font-medium">L-T-P</th>
+                  <th className="px-3 py-2 font-medium">Credits</th>
+                  <th className="px-4 py-2 font-medium text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((s) => (
+                  <tr key={s.id} className={`border-b ${s.isActive === false ? "text-muted-foreground" : ""}`}>
+                    <td className="px-4 py-2">{s.serialNumber ?? "-"}</td>
+                    <td className="px-3 py-2 font-mono">{s.code}</td>
+                    <td className="px-3 py-2">{s.name}{s.isActive === false && <span className="ml-2 text-xs">(inactive)</span>}</td>
+                    <td className="px-3 py-2">{s.regulation ?? "-"}</td>
+                    <td className="px-3 py-2">{s.category ?? "-"}</td>
+                    <td className="px-3 py-2">{s.lectureHours ?? 0}-{s.tutorialHours ?? 0}-{s.practicalHours ?? 0}</td>
+                    <td className="px-3 py-2">{s.credits ?? 0}</td>
+                    <td className="px-4 py-2 text-right whitespace-nowrap">
+                      <Button size="sm" variant="ghost" onClick={() => openEdit(s)}>Edit</Button>
+                      <Button size="sm" variant="ghost" onClick={() => void toggleActive(s)}>{s.isActive === false ? "Activate" : "Deactivate"}</Button>
+                      <Button size="sm" variant="ghost" className="text-red-600" onClick={() => setDeleting(s)}>Delete</Button>
+                    </td>
+                  </tr>
+                ))}
+                {!isLoading && rows.length === 0 && !loadError && (
+                  <tr><td colSpan={8} className="px-6 py-4 text-muted-foreground">No subjects found for this selection.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
 
-      {isLoading ? (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="h-48 rounded-lg border bg-muted/30 animate-pulse" />
-          ))}
-        </div>
-      ) : assignments.length === 0 ? (
-        <Card>
-          <CardContent className="py-12 text-center text-sm text-muted-foreground">
-            Select filters and click Load to view subjects.
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {assignments.map((item) => (
-            <Card key={item.assignment.id} className="flex flex-col">
-              <CardContent className="flex flex-col flex-1 p-4 space-y-3">
-                {/* Header */}
-                <div>
-                  <div className="inline-flex items-center justify-center h-6 min-w-[1.5rem] px-1.5 rounded bg-muted text-xs font-mono font-semibold text-muted-foreground mb-1">
-                    {item.master.code}
-                  </div>
-                  <p className="font-semibold text-sm">{item.master.name}</p>
-                  {item.master.shortCode && <p className="text-xs text-muted-foreground">{item.master.shortCode}</p>}
-                </div>
-
-                {/* L-T-P */}
-                <div className="grid grid-cols-3 gap-2 text-xs">
-                  <div className="space-y-0.5">
-                    <p className="text-muted-foreground">Lecture</p>
-                    <p className="font-semibold">{item.assignment.lectureHours ?? item.master.lectureHours ?? 0}</p>
-                  </div>
-                  <div className="space-y-0.5">
-                    <p className="text-muted-foreground">Tutorial</p>
-                    <p className="font-semibold">{item.assignment.tutorialHours ?? item.master.tutorialHours ?? 0}</p>
-                  </div>
-                  <div className="space-y-0.5">
-                    <p className="text-muted-foreground">Practical</p>
-                    <p className="font-semibold">{item.assignment.practicalHours ?? item.master.practicalHours ?? 0}</p>
-                  </div>
-                </div>
-
-                {/* Credits & Category */}
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div>
-                    <p className="text-muted-foreground">Credits</p>
-                    <p className="font-semibold">{item.assignment.credits ?? item.master.credits ?? 0}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Category</p>
-                    <p className="font-semibold">{item.master.category ?? "—"}</p>
-                  </div>
-                </div>
-
-                {/* Actions */}
-                <div className="flex gap-2 pt-2">
-                  <Button size="sm" variant="outline" className="flex-1" onClick={() => openEdit(item)}>
-                    <Edit2 className="h-3.5 w-3.5 mr-1" />Edit
-                  </Button>
-                  <Button size="sm" variant="ghost" className="text-red-600" onClick={() => setDeleting(item.assignment)}>
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
-
-      {/* Edit Dialog */}
-      <Dialog open={!!editForm} onOpenChange={(open) => !open && setEditForm(null)}>
-        <DialogContent className="max-w-md">
-          <DialogHeader><DialogTitle>Edit Subject Hours</DialogTitle></DialogHeader>
-          {editForm && (
-            <div className="grid gap-3">
+      <Dialog open={!!form} onOpenChange={(open) => !open && setForm(null)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader><DialogTitle>{form?.id ? "Edit subject" : "Add subject"}</DialogTitle></DialogHeader>
+          {form && (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5"><Label>Code</Label><Input value={form.code} onChange={set("code")} /></div>
+              <div className="space-y-1.5"><Label>Short code</Label><Input value={form.shortCode} onChange={set("shortCode")} /></div>
+              <div className="space-y-1.5 sm:col-span-2"><Label>Name</Label><Input value={form.name} onChange={set("name")} /></div>
               <div className="space-y-1.5">
-                <Label>Lecture Hours</Label>
-                <Input type="number" min={0} value={editForm.lectureHours} onChange={(e) => setEditForm({ ...editForm, lectureHours: e.target.value })} />
+                <Label>Category</Label>
+                <select className={SELECT_CLASS} value={form.category} onChange={set("category")}>
+                  <option value="">Select…</option>
+                  {categories.map((c) => <option key={c.code} value={c.code}>{c.code} - {c.fullForm}</option>)}
+                  {form.category && !categories.some((c) => c.code === form.category) && <option value={form.category}>{form.category}</option>}
+                </select>
               </div>
               <div className="space-y-1.5">
-                <Label>Tutorial Hours</Label>
-                <Input type="number" min={0} value={editForm.tutorialHours} onChange={(e) => setEditForm({ ...editForm, tutorialHours: e.target.value })} />
+                <Label>Type</Label>
+                <select className={SELECT_CLASS} value={form.type} onChange={set("type")}>
+                  {(Object.keys(SUBJECT_TYPE_LABELS) as SubjectType[]).map((t) => <option key={t} value={t}>{SUBJECT_TYPE_LABELS[t]}</option>)}
+                </select>
               </div>
-              <div className="space-y-1.5">
-                <Label>Practical Hours</Label>
-                <Input type="number" min={0} value={editForm.practicalHours} onChange={(e) => setEditForm({ ...editForm, practicalHours: e.target.value })} />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Credits</Label>
-                <Input type="number" min={0} step="0.5" value={editForm.credits} onChange={(e) => setEditForm({ ...editForm, credits: e.target.value })} />
-              </div>
+              <div className="space-y-1.5"><Label>Regulation{form.id ? " (fixed)" : ""}</Label><Input value={form.regulation} onChange={set("regulation")} disabled={!!form.id} placeholder="e.g. R23" /></div>
+              <div className="space-y-1.5"><Label>S.No</Label><Input type="number" value={form.serialNumber} onChange={set("serialNumber")} /></div>
+              <div className="space-y-1.5"><Label>L</Label><Input type="number" min={0} value={form.lectureHours} onChange={set("lectureHours")} /></div>
+              <div className="space-y-1.5"><Label>T</Label><Input type="number" min={0} value={form.tutorialHours} onChange={set("tutorialHours")} /></div>
+              <div className="space-y-1.5"><Label>P</Label><Input type="number" min={0} value={form.practicalHours} onChange={set("practicalHours")} /></div>
+              <div className="space-y-1.5"><Label>Credits</Label><Input type="number" min={0} step="0.5" value={form.credits} onChange={set("credits")} /></div>
             </div>
           )}
-          {editError && <p className="text-sm text-red-600">{editError}</p>}
+          {formError && <p className="text-sm text-red-600">{formError}</p>}
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setEditForm(null)}>Cancel</Button>
+            <Button variant="ghost" onClick={() => setForm(null)}>Cancel</Button>
             <Button onClick={() => void handleSave()} loading={isSaving}>Save</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Delete Dialog */}
       <ConfirmDialog
         open={!!deleting}
         onOpenChange={(open) => !open && setDeleting(null)}
-        title={`Remove ${deleting?.subjectCode}?`}
-        description="This will remove it from the department's curriculum for this semester."
-        confirmLabel="Remove"
+        title={`Delete ${deleting?.code}?`}
+        description={`${deleting?.name}. A subject that is still assigned to a semester or staffed can't be deleted - deactivate it instead.`}
+        confirmLabel="Delete"
         variant="destructive"
         loading={isDeleting}
         onConfirm={() => void handleDelete()}
