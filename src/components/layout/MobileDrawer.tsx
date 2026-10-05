@@ -16,6 +16,7 @@ import { isNavItemActive, filterVisibleNavItems, isPathHidden, ROLES_WITH_EMBEDD
 import { NavIcon } from "./NavIcon";
 import { useCustomNav } from "@/hooks/useCustomNav";
 import { WorkContextSwitcher } from "./WorkContextSwitcher";
+import { readOnlyNavItems } from "./readOnlyNav";
 import { LocationDeptSwitcher } from "./LocationDeptSwitcher";
 import { useWorkContext } from "@/hooks/useWorkContext";
 import { ROLE_LABELS } from "@/types";
@@ -99,6 +100,8 @@ export function MobileDrawer({ hiddenModules, hiddenItems }: MobileDrawerProps) 
 
   // Super-Admin-built tabs and tab order for this college (no-op when none).
   navItems = applyCustomNav(navItems, hiddenItems);
+  // RESIGNED/RETIRED: a fixed, view-only menu (see readOnlyNavItems) instead of the normal one.
+  if (user.readOnlyAccess) navItems = readOnlyNavItems();
 
   return (
     <>

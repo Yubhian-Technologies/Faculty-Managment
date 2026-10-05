@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { firstSemesterOfYear } from "@/lib/college/courseYears";
 import { Plus, X, Clock, CalendarRange, Coffee, CheckCircle2, AlertCircle, GraduationCap } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -67,14 +68,15 @@ const EMPTY_TIMING_FORM: TimingForm = {
 // duplicated or out of sequence. Existing rows keep whatever dates they
 // already had (by position); growing the count appends blank new rows,
 // shrinking it drops from the end.
-function resizeSemesters(current: SemesterRangeForm[], count: number, year: number = 1): SemesterRangeForm[] {
+// `firstSemester` is the number this year's first semester gets by default (firstSemesterOfYear - from the
+// earlier years' own semester setup, not an assumed two per year).
+function resizeSemesters(current: SemesterRangeForm[], count: number, firstSemester: number = 1): SemesterRangeForm[] {
   const next = current.slice(0, count).map((s, i) => ({
     ...s,
-    semester: s.semester || (year > 1 ? (year - 1) * 2 + (i + 1) : i + 1),
+    semester: s.semester || firstSemester + i,
   }));
   for (let i = next.length; i < count; i++) {
-    const defaultSem = year > 1 ? (year - 1) * 2 + (i + 1) : i + 1;
-    next.push({ semester: defaultSem, startDate: "", endDate: "" });
+    next.push({ semester: firstSemester + i, startDate: "", endDate: "" });
   }
   return next;
 }
@@ -106,6 +108,8 @@ interface CourseYearTimingFormProps {
 // not part of this form - see hod/timetable's own editor for that.
 export function CourseYearTimingForm({ departmentId, courseId, year, courseName, onSaved, onCancel }: CourseYearTimingFormProps) {
   const [timingForm, setTimingForm] = useState<TimingForm>(EMPTY_TIMING_FORM);
+  // Default number of this year's first semester - from the course's earlier years' own semester setup.
+  const [firstSemester, setFirstSemester] = useState(() => firstSemesterOfYear(year));
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   // The current academic session's own dates, when the Principal has set
@@ -132,6 +136,7 @@ export function CourseYearTimingForm({ departmentId, courseId, year, courseName,
       try {
         const res = await fetch(`/api/college/course-year-timings?courseId=${encodeURIComponent(courseId)}`);
         const data = await res.json() as { timings: CourseYearTiming[] };
+        setFirstSemester(firstSemesterOfYear(year, (data.timings ?? []).map((t) => ({ year: Number(t.year), semesters: t.semesters }))));
         const existing = (data.timings ?? []).find((t) => t.year === year);
         setTimingForm(
           existing
@@ -179,7 +184,7 @@ export function CourseYearTimingForm({ departmentId, courseId, year, courseName,
 
   function setNumberOfSemesters(value: string) {
     const count = Math.max(0, Number(value) || 0);
-    setTimingForm((f) => ({ ...f, numberOfSemesters: String(count), semesters: resizeSemesters(f.semesters, count, year) }));
+    setTimingForm((f) => ({ ...f, numberOfSemesters: String(count), semesters: resizeSemesters(f.semesters, count, firstSemester) }));
   }
   function updateSemester(idx: number, patch: Partial<SemesterRangeForm>) {
     setTimingForm((f) => {

@@ -6,6 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/useToast";
+import { useReadOnlyAccess } from "@/hooks/useReadOnlyAccess";
 import { formatDate, toDate } from "@/lib/utils";
 import { Plus, ChevronRight, History, CalendarPlus } from "lucide-react";
 import { evaluateODProof } from "@/lib/leave/odProof";
@@ -476,9 +477,11 @@ export function LeaveHistoryRow({
   // cancelling, and the server only accepts SUBMIT_OD_PROOF from the requester.
   isOwnHistory?: boolean;
 }) {
-  const canCancel = !!onCancel && isCancellable(request);
-  const canEdit = !!applyHref && isLeaveRequestEditable(request);
-  const canAdjustCoverage = !!onAdjustCoverage && request.status === "APPROVED";
+  // RESIGNED/RETIRED: history is view-only - nothing that changes a request is offered.
+  const readOnly = useReadOnlyAccess();
+  const canCancel = !readOnly && !!onCancel && isCancellable(request);
+  const canEdit = !readOnly && !!applyHref && isLeaveRequestEditable(request);
+  const canAdjustCoverage = !readOnly && !!onAdjustCoverage && request.status === "APPROVED";
   // On Duty proof (see lib/leave/odProof.ts). Returns NOT_APPLICABLE for every
   // other type and for any OD approved before the feature existed, so the whole
   // block below simply doesn't render for them.
@@ -585,7 +588,7 @@ export function LeaveHistoryRow({
         {odProof.state === "VERIFIED" && <Badge variant="approved">Proof verified</Badge>}
         {odProof.state === "REJECTED_REUPLOAD" && <Badge variant="rejected">Proof rejected</Badge>}
         {odProof.state === "OVERDUE" && <Badge variant="rejected">Proof overdue — Loss of Pay</Badge>}
-        {isOwnHistory && odProof.canUpload && (
+        {!readOnly && isOwnHistory && odProof.canUpload && (
           <Button size="sm" variant="outline" className="h-7 px-2 text-xs" asChild>
             <Link href={`/leave/od-proof/${request.id}`}>
               {request.odProofStatus === "REJECTED" ? "Re-upload proof" : "Upload proof"}
@@ -599,7 +602,7 @@ export function LeaveHistoryRow({
         {certificate.state === "PENDING_VERIFICATION" && <Badge variant="pending">Certificate awaiting verification</Badge>}
         {certificate.state === "VERIFIED" && <Badge variant="approved">Certificate verified</Badge>}
         {certificate.state === "REJECTED_REUPLOAD" && <Badge variant="rejected">Certificate rejected</Badge>}
-        {isOwnHistory && certificate.canUpload && (
+        {!readOnly && isOwnHistory && certificate.canUpload && (
           <Button size="sm" variant="outline" className="h-7 px-2 text-xs" asChild>
             <Link href={`/leave/certificate/${request.id}`}>
               {request.certificateStatus === "REJECTED" ? "Re-upload certificate" : "Add certificate"}
@@ -636,7 +639,7 @@ export function LeaveHistoryRow({
             View certificate
           </a>
         )}
-        {!!onCancel && request.status === "PENDING_ACCEPTANCE" && request.adjustmentRequests?.some((a) => a.status === "DECLINED") && (
+        {!readOnly && !!onCancel && request.status === "PENDING_ACCEPTANCE" && request.adjustmentRequests?.some((a) => a.status === "DECLINED") && (
           <Button size="sm" variant="outline" className="h-7 px-2 text-xs" asChild>
             <Link href={`/leave/revise/${request.id}`}>Pick someone else</Link>
           </Button>

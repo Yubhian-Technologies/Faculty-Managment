@@ -7,9 +7,12 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 import { resolveCurrentSemester, matchesCurrentSemester } from "@/lib/college/semester";
+import { isTimetableInchargeAnywhere } from "@/lib/departments/timetableIncharge";
 import { isFacultyAvailable } from "@/types";
 import { defaultPeriodTimings } from "@/lib/timetable/buildGrid";
 import type { CourseYearTiming, FacultyAssignmentRequest, PeriodTiming, Section, TimetableDraft, TimetableSlot } from "@/types";
+
+const LOOKUP_ROLES_OTHER_THAN_STAFF = ["HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "PANEL_MEMBER"];
 
 // A deliberately narrow, read-only cross-department lookup: unlike
 // /api/college/faculty and /api/college/courses (which reject a department
@@ -25,6 +28,18 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const departmentId = searchParams.get("departmentId");
     const db = getAdminDb();
+
+    // Supporting staff may use this lookup only while they hold a Timetable
+    // Incharge delegation (it exists to check a faculty's week before an
+    // Assignment Request / busy-period declaration, which is the Incharge's
+    // job). The gate bites only when COLLEGE_STAFF is the caller's sole
+    // qualifying role: anyone who also holds HOD, Principal, VP, Super Admin
+    // or Faculty keeps exactly the access that role already gave them.
+    const heldRoles = session.roles ?? [session.role];
+    const onlyStaff = session.role === "COLLEGE_STAFF" && !heldRoles.some((r) => LOOKUP_ROLES_OTHER_THAN_STAFF.includes(r));
+    if (onlyStaff && !(await isTimetableInchargeAnywhere(db, session.collegeId, session.uid))) {
+      return NextResponse.json({ error: "The Faculty Timetable is available to a Timetable Incharge only" }, { status: 403 });
+    }
     const collegeRef = db.collection("colleges").doc(session.collegeId);
     // `me=1`: the caller's own schedule - resolved server-side from the
     // session, so a faculty never has to (or can) pick anyone.

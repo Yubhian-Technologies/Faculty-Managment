@@ -18,21 +18,14 @@ function fakeDb(opts: { status?: string; none?: boolean; fail?: boolean }) {
 afterEach(() => { delete process.env.READ_ONLY_FACULTY_COLLEGES; vi.restoreAllMocks(); });
 
 describe("seatBlockReason", () => {
-  it("switch OFF (default): allowed, with ZERO reads - even for a RESIGNED person", async () => {
-    const { db, reads } = fakeDb({ status: "RESIGNED" });
-    expect(await seatBlockReason(db, "c1", "u1", "Dr X")).toBeNull();
-    expect(reads.n).toBe(0);
-  });
-
-  it("another college's switch: this college still allowed, ZERO reads", async () => {
+  it("applies to EVERY college: the old env switch is ignored and a RESIGNED person is refused anywhere", async () => {
     process.env.READ_ONLY_FACULTY_COLLEGES = "other";
-    const { db, reads } = fakeDb({ status: "RETIRED" });
-    expect(await seatBlockReason(db, "c1", "u1")).toBeNull();
-    expect(reads.n).toBe(0);
+    const { db, reads } = fakeDb({ status: "RESIGNED" });
+    expect((await seatBlockReason(db, "any-college", "u1", "Dr X"))?.status).toBe(409);
+    expect(reads.n).toBe(1);
   });
 
-  it("switch ON: a RESIGNED or RETIRED person is refused with a clear message (409)", async () => {
-    process.env.READ_ONLY_FACULTY_COLLEGES = "c1";
+  it("a RESIGNED or RETIRED person is refused with a clear message (409)", async () => {
     for (const status of ["RESIGNED", "RETIRED"]) {
       const { db } = fakeDb({ status });
       const r = await seatBlockReason(db, "c1", "u1", "Dr X");
@@ -42,14 +35,12 @@ describe("seatBlockReason", () => {
     }
   });
 
-  it("switch ON: ACTIVE / ON_LEAVE / RETAINERSHIP / INTERVIEW_DONE and a login with no faculty record are allowed", async () => {
-    process.env.READ_ONLY_FACULTY_COLLEGES = "c1";
+  it("ACTIVE / ON_LEAVE / RETAINERSHIP / INTERVIEW_DONE and a login with no faculty record are allowed", async () => {
     for (const status of ["ACTIVE", "ON_LEAVE", "RETAINERSHIP", "INTERVIEW_DONE"]) expect(await seatBlockReason(fakeDb({ status }).db, "c1", "u1")).toBeNull();
     expect(await seatBlockReason(fakeDb({ none: true }).db, "c1", "principal")).toBeNull();
   });
 
   it("FAILS CLOSED: if the status lookup fails the appointment is refused (503, try again), never waved through", async () => {
-    process.env.READ_ONLY_FACULTY_COLLEGES = "c1";
     vi.spyOn(console, "error").mockImplementation(() => {});
     const r = await seatBlockReason(fakeDb({ fail: true }).db, "c1", "u1", "Dr X");
     expect(r?.status).toBe(503);

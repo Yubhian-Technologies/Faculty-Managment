@@ -6,6 +6,9 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { findOverlappingRegulationBatches } from "@/lib/college/academicSession";
+import { cascadeCourseRename, courseSyncPatches, findShrinkBlocker, type CatalogValues } from "@/lib/college/catalogSync";
+import { MAX_COURSE_DURATION_YEARS } from "@/lib/college/courseYears";
+import { FieldValue } from "firebase-admin/firestore";
 
 export async function PATCH(
   request: Request,
@@ -59,8 +62,8 @@ export async function PATCH(
     if (nextName != null) updates.name = nextName;
     if (nextCode != null) updates.code = nextCode;
     if (body.durationYears != null) {
-      if (body.durationYears < 1 || body.durationYears > 10) {
-        return NextResponse.json({ error: "durationYears must be between 1 and 10" }, { status: 400 });
+      if (body.durationYears < 1 || body.durationYears > MAX_COURSE_DURATION_YEARS) {
+        return NextResponse.json({ error: `durationYears must be between 1 and ${MAX_COURSE_DURATION_YEARS}` }, { status: 400 });
       }
       updates.durationYears = Number(body.durationYears);
     }
@@ -99,7 +102,65 @@ export async function PATCH(
       }
     }
 
-    await ref.update(updates);
+    // Every department's Course doc stores a COPY of this entry's name / code / length (see catalogSync.ts).
+    // When any of them is being saved, bring those copies in step in the SAME atomic batch as the catalog
+    // write - and refuse first if shortening the course would strand data. Saving values that are already
+    // right is harmless, and also repairs a copy that drifted earlier.
+    const prev = snap.data() as Partial<CatalogValues> & { cascadeStatus?: string; cascadeOldName?: string };
+    const touchesCopies = nextName != null || nextCode != null || body.durationYears != null;
+    let syncedCourses = 0;
+    let renameFrom: string | null = null;
+    let renamedCourseIds: string[] = [];
+    if (touchesCopies) {
+      const courseSnap = await db.collection("colleges").doc(session.collegeId).collection("courses").where("catalogId", "==", id).get();
+      const courseDocs = courseSnap.docs.map((d) => ({ id: d.id, ...(d.data() as { departmentId?: string; name?: string; code?: string; durationYears?: number }) }));
+      renamedCourseIds = courseDocs.map((c) => c.id);
+
+      const nextDuration = body.durationYears != null ? Number(body.durationYears) : undefined;
+      if (nextDuration !== undefined) {
+        const longest = Math.max(Number(prev.durationYears) || 0, ...courseDocs.map((c) => Number(c.durationYears) || 0));
+        const blocker = await findShrinkBlocker(db, session.collegeId, id, courseDocs, longest, nextDuration);
+        if (blocker) return NextResponse.json({ error: blocker, code: "COURSE_YEARS_IN_USE" }, { status: 409 });
+      }
+
+      const patches = courseSyncPatches(courseDocs, { name: nextName, code: nextCode, durationYears: nextDuration });
+      syncedCourses = patches.length;
+      if (nextName != null && nextName !== prev.name && prev.name) renameFrom = prev.name;
+      // A rename that failed part-way earlier is retried by saving the same name again.
+      if (!renameFrom && nextName != null && prev.cascadeStatus === "FAILED" && prev.cascadeOldName && prev.cascadeOldName !== nextName) {
+        renameFrom = prev.cascadeOldName;
+      }
+
+      const col = db.collection("colleges").doc(session.collegeId).collection("courses");
+      if (patches.length + 1 <= 450) {
+        const batch = db.batch();
+        batch.update(ref, updates);
+        for (const p of patches) batch.update(col.doc(p.id), { ...p.patch, updatedAt: new Date() });
+        await batch.commit();
+      } else {
+        await ref.update(updates);
+        for (let i = 0; i < patches.length; i += 400) {
+          const batch = db.batch();
+          for (const p of patches.slice(i, i + 400)) batch.update(col.doc(p.id), { ...p.patch, updatedAt: new Date() });
+          await batch.commit();
+        }
+      }
+    } else {
+      await ref.update(updates);
+    }
+
+    // Live copies of the name (student lists filter on it) - see cascadeCourseRename.
+    let cascade: { status: "DONE" | "FAILED"; failedStep?: string; error?: string } | undefined;
+    if (renameFrom && nextName) {
+      const result = await cascadeCourseRename(db, session.collegeId, renamedCourseIds, renameFrom, nextName);
+      cascade = result.failedStep ? { status: "FAILED", failedStep: result.failedStep, error: result.error } : { status: "DONE" };
+      await ref.update(
+        cascade.status === "FAILED"
+          ? { cascadeStatus: "FAILED", cascadeOldName: renameFrom, cascadeError: `${cascade.failedStep}: ${cascade.error}`, cascadeUpdatedAt: new Date() }
+          : { cascadeStatus: "DONE", cascadeOldName: FieldValue.delete(), cascadeError: FieldValue.delete(), cascadeUpdatedAt: new Date() }
+      ).catch((e) => console.error("[course-catalog/[id] PATCH] couldn't record cascade status:", e));
+      if (cascade.status === "FAILED") console.error(`[course-catalog/[id] PATCH] name cascade for ${id} stopped at ${cascade.failedStep}: ${cascade.error}`);
+    }
 
     const actorSnap = await db.collection("colleges").doc(session.collegeId).collection("users").doc(session.uid).get();
     await writeAuditLogSafe(db, session.collegeId, { action: "COURSE_CATALOG_UPDATED" as string, performedBy: session.uid, performedByName: (actorSnap.data() as { name?: string } | undefined)?.name ?? session.email ?? "Unknown", targetId: id, details: {
@@ -107,7 +168,7 @@ export async function PATCH(
         changed: Object.keys(updates).filter((k) => k !== "updatedAt"),
       } });
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, coursesUpdated: syncedCourses, ...(cascade ? { cascade } : {}) });
   } catch (err) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;

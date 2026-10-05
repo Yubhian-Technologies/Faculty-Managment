@@ -29,6 +29,7 @@ import { StudentPromotionsPanel } from "@/components/students/StudentPromotionsP
 import { StudentStrengthDashboard } from "@/components/students/StudentStrengthDashboard";
 import { StudentsViewTabs } from "@/components/students/StudentsViewTabs";
 import type { StudentListItem, Department, AcademicYear, Course } from "@/types";
+import { selectableYears } from "@/lib/college/courseYears";
 
 // The Add and Edit forms collect every field the roster import collects, in the
 // template's order - see src/lib/students/rosterFields.ts, the one definition
@@ -182,8 +183,8 @@ export default function OfficeStudentsPage() {
         Array.from(new Set(loadedCourses.map((c) => c.name?.trim()).filter(Boolean) as string[]))
           .sort((a, b) => a.localeCompare(b))
       );
-      // Prefer the college's configured academic years; a sensible 1-4 default
-      // so the dropdowns are never empty for a freshly set-up college.
+      // Prefer the college's configured academic years; failing that the years of the longest
+      // course the college runs (selectableYears) - never an invented 1-4.
       const configured = (yearsRes.academicYears ?? []).map((y) => y.yearNumber).filter(Boolean);
       // The college-wide Academic Years list (Principal-managed, sequential
       // add/remove) has no idea which years any real course actually reaches
@@ -191,9 +192,7 @@ export default function OfficeStudentsPage() {
       // which would otherwise sit in the Year filter as a dead option no
       // student can ever have. Cap at the longest real course duration - the
       // same cap the Principal's own Years Taught editor already enforces.
-      const maxCourseDuration = loadedCourses.reduce((max, c) => Math.max(max, Number(c.durationYears) || 0), 0);
-      const capped = maxCourseDuration > 0 ? configured.filter((y) => y <= maxCourseDuration) : configured;
-      setYears(capped.length > 0 ? capped : [1, 2, 3, 4]);
+      setYears(selectableYears(configured, loadedCourses));
     } catch {
       toast({ variant: "destructive", title: "Failed to load filter options" });
     }

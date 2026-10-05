@@ -114,9 +114,8 @@ export default function CollegeOfficeTimingsPage() {
           {courses.map((c) => {
             const allYears = Array.from({ length: c.durationYears }, (_, i) => i + 1);
             const scope = resolveDepartmentCourseScope(selectedDepartment, c.catalogId);
-            const years = scope.assignedYears.length > 0
-              ? allYears.filter((y) => scope.assignedYears.includes(y))
-              : allYears;
+            // No Years Taught = no years (the card below says so) - never every year of the course.
+            const years = allYears.filter((y) => scope.assignedYears.includes(y));
             return (
               <div key={c.id} className="rounded-lg border p-3 space-y-3">
                 <div>

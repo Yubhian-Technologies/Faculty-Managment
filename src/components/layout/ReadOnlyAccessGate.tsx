@@ -1,10 +1,10 @@
 "use client";
 
-import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Eye } from "lucide-react";
 import { useAuthStore } from "@/store/authStore";
 import { isAllowedReadOnlyPage } from "@/lib/auth/readOnlyAccess";
+import { ReadOnlyHome } from "@/components/layout/ReadOnlyHome";
 
 /**
  * Wraps the dashboard content. For everyone except a RESIGNED/RETIRED faculty
@@ -35,18 +35,7 @@ export function ReadOnlyAccessGate({ children }: { children: React.ReactNode }) 
     return (<>{banner}{children}</>);
   }
 
-  return (
-    <div>
-      {banner}
-      <div className="rounded-lg border bg-background p-6 text-sm">
-        <p className="font-medium">This page isn&apos;t available with read-only access.</p>
-        <p className="mt-1 text-muted-foreground">You can still view:</p>
-        <ul className="mt-2 list-disc space-y-1 pl-5">
-          <li><Link href="/panel/profile" className="text-primary hover:underline">My profile</Link></li>
-          <li><Link href="/panel/attendance" className="text-primary hover:underline">My attendance history</Link></li>
-          <li><Link href="/panel/leave" className="text-primary hover:underline">My leave history</Link></li>
-        </ul>
-      </div>
-    </div>
-  );
+  // Anything else - including their own dashboard, where they land after signing in - becomes a short
+  // welcome that says why access is limited and links to the three places they can still open.
+  return <ReadOnlyHome blockedPath={pathname} />;
 }

@@ -18,6 +18,7 @@ import { RosterFormFields, FieldInput, secondaryDepartmentOptions, isSecondaryDe
 import { resolveDepartmentByNameOrCode, resolveCourseByNameOrCode } from "@/lib/departments/codeOrNameResolver";
 import { freshmanPickerDepartmentNames, type DepartmentWithId } from "@/lib/college/academicStructure";
 import type { Department, Course, AcademicYear } from "@/types";
+import { selectableYears } from "@/lib/college/courseYears";
 
 // When arriving from a section card's "Add Students" button, Department and
 // Academic Year are already known via the URL - those 2 are fixed for the
@@ -177,7 +178,8 @@ export default function OfficeStudentImportPage() {
   const [departments, setDepartments] = useState<Department[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
   const [courseNames, setCourseNames] = useState<string[]>([]);
-  const [years, setYears] = useState<number[]>([1, 2, 3, 4]);
+  // Filled from the college's own courses once they load (fetchRosterFormMetadata) - no fixed 1-4.
+  const [years, setYears] = useState<number[]>([]);
 
   // Core Department is only REQUIRED (not just offered) once the picked
   // Department actually feeds branches AND is a 1st-year landing under one -
@@ -218,9 +220,7 @@ export default function OfficeStudentImportPage() {
       // (e.g. a stray "5th Year" with no 5-year course behind it), which
       // would otherwise offer a Year no student in this fix dialog can ever
       // really have. Same cap as the Students page's own Year filter/form.
-      const maxCourseDuration = loadedCourses.reduce((max, c) => Math.max(max, Number(c.durationYears) || 0), 0);
-      const capped = maxCourseDuration > 0 ? configured.filter((y) => y <= maxCourseDuration) : configured;
-      if (capped.length > 0) setYears(capped);
+      setYears(selectableYears(configured, loadedCourses));
     }).catch(() => { /* non-critical - the fix dialog just falls back to fewer/no options */ });
   }, []);
 

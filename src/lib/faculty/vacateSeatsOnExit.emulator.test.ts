@@ -67,9 +67,9 @@ describe.skipIf(!EMULATOR)("RESIGNED/RETIRED => seats vacated, account untouched
     // u4: no seats at all (the live VIT0631 shape)
     await mkUser("u4", "PANEL_MEMBER");
     await mkFaculty("f4", "u4", "NO SEAT PERSON");
-    // u5: another college-ish person, used for the switch-OFF case
+    // u5: another person, used for the any-college case
     await mkUser("u5", "PANEL_MEMBER", { seatRoles: ["HOD"], seatIds: ["sHod5"], departments: ["EEE"] });
-    await mkFaculty("f5", "u5", "SWITCH OFF PERSON");
+    await mkFaculty("f5", "u5", "ANY COLLEGE PERSON");
 
     const dept = (id: string, name: string, hodUid: string) => col("departments").doc(id).set({ collegeId: C, name, code: name, isActive: true, hodUid, hodName: hodUid, createdAt: t });
     await dept("d1", "Mech", "u1"); await dept("d2", "IT", "u1"); await dept("d3", "Civil", "u2"); await dept("d5", "EEE", "u5");
@@ -87,11 +87,10 @@ describe.skipIf(!EMULATOR)("RESIGNED/RETIRED => seats vacated, account untouched
   }
 
   beforeAll(() => { process.env.SESSION_SECRET = "t"; });
-  beforeEach(async () => { await seed(); authCalls.n = 0; delete process.env.READ_ONLY_FACULTY_COLLEGES; vi.spyOn(console, "error").mockImplementation(() => {}); });
-  afterAll(() => { delete process.env.READ_ONLY_FACULTY_COLLEGES; });
+  beforeEach(async () => { await seed(); authCalls.n = 0; vi.spyOn(console, "error").mockImplementation(() => {}); });
+  afterAll(() => { });
 
   it("RESIGNED multi-seat holder: every seat vacated, history closed, hodUid cleared, account untouched, Auth never called", async () => {
-    process.env.READ_ONLY_FACULTY_COLLEGES = C;
     const before = await user("u1");
     const r = await patch("f1", { status: "RESIGNED", resignedDate: "2026-10-01" });
     expect(r.status).toBe(200);
@@ -121,7 +120,6 @@ describe.skipIf(!EMULATOR)("RESIGNED/RETIRED => seats vacated, account untouched
   });
 
   it("reinstating (RESIGNED -> ACTIVE) restores NO seat: it stays vacant until an admin assigns it again", async () => {
-    process.env.READ_ONLY_FACULTY_COLLEGES = C;
     await patch("f1", { status: "RESIGNED", resignedDate: "2026-10-01" });
     const r = await patch("f1", { status: "ACTIVE" });
     expect(r.status).toBe(200);
@@ -133,7 +131,6 @@ describe.skipIf(!EMULATOR)("RESIGNED/RETIRED => seats vacated, account untouched
   });
 
   it("RESIGNED -> RETIRED later is harmless (nothing left to vacate)", async () => {
-    process.env.READ_ONLY_FACULTY_COLLEGES = C;
     await patch("f1", { status: "RESIGNED", resignedDate: "2026-10-01" });
     const r = await patch("f1", { status: "RETIRED", retiredDate: "2026-10-02" });
     expect(r.status).toBe(200);
@@ -142,7 +139,6 @@ describe.skipIf(!EMULATOR)("RESIGNED/RETIRED => seats vacated, account untouched
   });
 
   it("OLD ROLE-ACCOUNT holder (stored role = HOD): seat left alone, flagged for an admin; account never disabled or rewritten", async () => {
-    process.env.READ_ONLY_FACULTY_COLLEGES = C;
     const before = await user("u2");
     const r = await patch("f2", { status: "RESIGNED", resignedDate: "2026-10-01" });
     expect(r.status).toBe(200);
@@ -155,7 +151,6 @@ describe.skipIf(!EMULATOR)("RESIGNED/RETIRED => seats vacated, account untouched
   });
 
   it("Library seat can't be vacated: reported, flagged, nothing else breaks", async () => {
-    process.env.READ_ONLY_FACULTY_COLLEGES = C;
     const r = await patch("f3", { status: "RETIRED", retiredDate: "2026-10-01" });
     expect(r.status).toBe(200);
     expect(r.json.seatVacate!.skipped[0].seat).toBe("Library");
@@ -165,7 +160,6 @@ describe.skipIf(!EMULATOR)("RESIGNED/RETIRED => seats vacated, account untouched
   });
 
   it("a resigned person with NO seat (the live VIT shape): status saved, nothing vacated, no alert, no flag", async () => {
-    process.env.READ_ONLY_FACULTY_COLLEGES = C;
     const r = await patch("f4", { status: "RESIGNED", resignedDate: "2026-10-01" });
     expect(r.status).toBe(200);
     expect(r.json.seatVacate!.vacated).toEqual([]);
@@ -174,22 +168,16 @@ describe.skipIf(!EMULATOR)("RESIGNED/RETIRED => seats vacated, account untouched
     expect(await user("u4")).toMatchObject({ isActive: true, role: "PANEL_MEMBER" });
   });
 
-  it("switch OFF (any other college / default): RESIGNED changes the status ONLY - no seat touched, no seatVacate in the response", async () => {
+  it("works in ANY college: a stale env variable naming another college changes nothing - RESIGNED vacates the seat", async () => {
+    process.env.READ_ONLY_FACULTY_COLLEGES = "some-other-college";
     const r = await patch("f5", { status: "RESIGNED", resignedDate: "2026-10-01" });
     expect(r.status).toBe(200);
-    expect(r.json.seatVacate).toBeUndefined();
-    expect((await seat("sHod5")).holderUid).toBe("u5");
-    expect((await user("u5")).seatRoles).toEqual(["HOD"]);
+    expect(r.json.seatVacate).toBeDefined();
+    expect((await seat("sHod5")).holderUid).toBeNull();
     expect((await fac("f5")).status).toBe("RESIGNED");
-    process.env.READ_ONLY_FACULTY_COLLEGES = "some-other-college";
-    await patch("f5", { status: "ACTIVE" });
-    const r2 = await patch("f5", { status: "RETIRED", retiredDate: "2026-10-03" });
-    expect(r2.json.seatVacate).toBeUndefined();
-    expect((await seat("sHod5")).holderUid).toBe("u5");
   });
 
   it("a normal edit that does not change status never vacates anything", async () => {
-    process.env.READ_ONLY_FACULTY_COLLEGES = C;
     const r = await patch("f1", { specialization: "VLSI" });
     expect(r.status).toBe(200);
     expect(r.json.seatVacate).toBeUndefined();
@@ -198,7 +186,6 @@ describe.skipIf(!EMULATOR)("RESIGNED/RETIRED => seats vacated, account untouched
 
   // ── R5: a failed or skipped vacate is retried by simply saving the exited person again ──
   it("a vacate that FAILED is flagged, and saving the record again (no status change) retries it and clears the flag", async () => {
-    process.env.READ_ONLY_FACULTY_COLLEGES = C;
     // Break one seat for real: its open-history pointer references a document that does not exist,
     // so closing the history fails inside assignSeat (a hard error, not a "can't vacate" refusal).
     await col("roleSeats").doc("sHod2").update({ openHistoryId: "no-such-history-doc" });
@@ -227,7 +214,6 @@ describe.skipIf(!EMULATOR)("RESIGNED/RETIRED => seats vacated, account untouched
   });
 
   it("re-saving an exited person who holds nothing is a no-op: no report, no flag, no extra writes", async () => {
-    process.env.READ_ONLY_FACULTY_COLLEGES = C;
     await patch("f4", { status: "RESIGNED", resignedDate: "2026-10-01" });
     const before = JSON.stringify(await fac("f4"));
     const again = await patch("f4", { specialization: "X" });
@@ -240,7 +226,6 @@ describe.skipIf(!EMULATOR)("RESIGNED/RETIRED => seats vacated, account untouched
   });
 
   it("a SKIPPED seat (Library) stays flagged on re-save - reported again, never forced, nothing disabled", async () => {
-    process.env.READ_ONLY_FACULTY_COLLEGES = C;
     await patch("f3", { status: "RETIRED", retiredDate: "2026-10-01" });
     const again = await patch("f3", { specialization: "Y" });
     expect(again.json.seatVacate!.skipped[0].seat).toBe("Library");
@@ -250,7 +235,6 @@ describe.skipIf(!EMULATOR)("RESIGNED/RETIRED => seats vacated, account untouched
   });
 
   it("an ACTIVE person's saves never touch seats, even if a stale flag exists", async () => {
-    process.env.READ_ONLY_FACULTY_COLLEGES = C;
     const r = await patch("f1", { specialization: "Z" });
     expect(r.json.seatVacate).toBeUndefined();
     expect((await seat("sHod1")).holderUid).toBe("u1");

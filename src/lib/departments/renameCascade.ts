@@ -13,6 +13,15 @@
 // had drifted - is still refreshed), and (3) stamps the id on any doc it finds
 // by old name. Failure is cosmetic, never corrupting, and a retry is idempotent.
 //
+// NEVER TOUCHES ANOTHER DEPARTMENT'S ROWS. Two hazards the earlier version had:
+//  - the BY-ID pass rewrote the name of every doc whose id field pointed at the renamed department. Some
+//    docs legitimately pair a name from one department with the id of ANOTHER: a teaching assignment stores
+//    `department` = its SECTION's department but `departmentId` = its COURSE's owner, and a promoted/moved
+//    student can keep a stale id. Relabelling those with the renamed department's name corrupted them. The id
+//    pass now skips any doc whose stored name is the CURRENT name of a different department.
+//  - the BY-NAME pass stamped the renamed department's id over whatever id was already there. It now stamps
+//    only a MISSING id; an existing id (even a different one) is left exactly as it is.
+//
 // This project has no cron/scheduled-job infrastructure (see
 // src/lib/attendance/closeMissedCheckouts.ts's own doc-comment for the same
 // finding) - so, like every other "keep denormalized data in sync" fix in
@@ -55,24 +64,32 @@ async function refreshScalar(
   ref: DepartmentRefField,
   oldName: string,
   newName: string,
-  departmentId?: string
+  departmentId?: string,
+  otherDepartmentNames: ReadonlySet<string> = new Set()
 ): Promise<void> {
   const now = new Date();
   const updates = new Map<string, PendingUpdate>();
   const byName = await coll.where(ref.field, "==", oldName).get();
   for (const d of byName.docs) {
+    const existingId = (d.data() as Record<string, unknown>)[ref.idField];
+    const hasId = typeof existingId === "string" && existingId !== "";
     updates.set(d.id, {
       ref: d.ref,
-      patch: { [ref.field]: newName, ...(departmentId ? { [ref.idField]: departmentId } : {}), updatedAt: now },
+      // Stamp the id only when there is none: an id that is already there (even another department's - a
+      // teaching assignment's departmentId is its course's owner) is never overwritten.
+      patch: { [ref.field]: newName, ...(departmentId && !hasId ? { [ref.idField]: departmentId } : {}), updatedAt: now },
     });
   }
   if (departmentId) {
     const byId = await coll.where(ref.idField, "==", departmentId).get();
     for (const d of byId.docs) {
       if (updates.has(d.id)) continue;
-      if ((d.data() as Record<string, unknown>)[ref.field] !== newName) {
-        updates.set(d.id, { ref: d.ref, patch: { [ref.field]: newName, updatedAt: now } });
-      }
+      const stored = (d.data() as Record<string, unknown>)[ref.field];
+      if (stored === newName) continue;
+      // The stored name is another department's CURRENT name: this doc belongs to that department and only
+      // carries our id by pairing/staleness - leave it alone.
+      if (typeof stored === "string" && stored !== "" && otherDepartmentNames.has(stored)) continue;
+      updates.set(d.id, { ref: d.ref, patch: { [ref.field]: newName, updatedAt: now } });
     }
   }
   await commitInChunks(db, [...updates.values()]);
@@ -86,7 +103,8 @@ async function refreshArray(
   ref: DepartmentRefField,
   oldName: string,
   newName: string,
-  departmentId?: string
+  departmentId?: string,
+  otherDepartmentNames: ReadonlySet<string> = new Set()
 ): Promise<void> {
   const now = new Date();
   const updates = new Map<string, PendingUpdate>();
@@ -104,7 +122,7 @@ async function refreshArray(
       const ids = (data[ref.idField] as string[] | undefined) ?? [];
       let changed = false;
       ids.forEach((id, i) => {
-        if (id === departmentId && names[i] !== undefined && names[i] !== newName) {
+        if (id === departmentId && names[i] !== undefined && names[i] !== newName && !otherDepartmentNames.has(names[i])) {
           names[i] = newName;
           changed = true;
         }
@@ -124,6 +142,21 @@ export async function cascadeDepartmentRename(
 ): Promise<DepartmentRenameCascadeResult> {
   const collegeRef = db.collection("colleges").doc(collegeId);
 
+  // The CURRENT names of every OTHER department. The rename has already committed, so the renamed
+  // department is excluded by id; a stored name found in this set belongs to a different department.
+  let otherDepartmentNames: ReadonlySet<string>;
+  try {
+    const all = await collegeRef.collection("departments").get();
+    otherDepartmentNames = new Set(
+      all.docs
+        .filter((d) => d.id !== departmentId)
+        .map((d) => (d.data() as { name?: string }).name ?? "")
+        .filter((n) => n !== "")
+    );
+  } catch (err) {
+    return { completedSteps: [], failedStep: "departments.read", error: err instanceof Error ? err.message : String(err) };
+  }
+
   // Other departments' own arrays + courseScopes[*] (a nested map, not directly
   // queryable): fetched and patched in code (a handful to a few dozen docs per
   // college). Matches by old name and, when known, by id.
@@ -142,7 +175,7 @@ export async function cascadeDepartmentRename(
         if (!Array.isArray(names)) return null;
         let changed = false;
         const out = names.map((v, i) => {
-          const hit = v === oldName || (departmentId !== undefined && ids?.[i] === departmentId);
+          const hit = v === oldName || (departmentId !== undefined && ids?.[i] === departmentId && !otherDepartmentNames.has(v));
           if (hit && v !== newName) {
             changed = true;
             return newName;
@@ -172,8 +205,8 @@ export async function cascadeDepartmentRename(
       label: `${r.collection}.${r.field}`,
       run: () =>
         r.kind === "array"
-          ? refreshArray(db, collegeRef.collection(r.collection), r, oldName, newName, departmentId)
-          : refreshScalar(db, collegeRef.collection(r.collection), r, oldName, newName, departmentId),
+          ? refreshArray(db, collegeRef.collection(r.collection), r, oldName, newName, departmentId, otherDepartmentNames)
+          : refreshScalar(db, collegeRef.collection(r.collection), r, oldName, newName, departmentId, otherDepartmentNames),
     })),
   ];
 

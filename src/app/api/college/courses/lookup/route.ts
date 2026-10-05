@@ -36,7 +36,8 @@ export async function GET() {
           name: data.name ?? "",
           departmentId: data.departmentId ?? "",
           department: deptNameById.get(data.departmentId ?? "") ?? "",
-          durationYears: data.durationYears ?? 4,
+          // The course's own length; 0 (no years) when it has none recorded - never an invented 4.
+          durationYears: Number(data.durationYears) || 0,
         };
       })
       .filter((c) => c.name && c.department)

@@ -13,6 +13,8 @@ import { unitLabelForHeadRole } from "@/lib/attendance/collegeStaffUnits";
 import { resolveDesignation } from "@/lib/designations/validate";
 import { designationLabel } from "@/lib/designations/config";
 import { syncLinkedLoginName } from "@/lib/roles/loginSync";
+import { supportingStaffPersonalUpdate } from "@/lib/supportingStaff/personalUpdate";
+import type { PersonalDetailsInput } from "@/lib/firestore/personalDetails";
 import { supportingStaffDisplayName } from "@/lib/supportingStaff/supportingStaffDisplayName";
 import { normalizeSupportingStaffProfile } from "@/lib/faculty/academicProfileCompat";
 import { migrateSupportingStaffDoc } from "@/lib/faculty/fieldRenames";
@@ -135,7 +137,7 @@ export async function PATCH(
       profilePhotoUrl: string;
       joiningLetterUrl: string;
       appointmentLetterUrl: string;
-    }>;
+    } & Pick<PersonalDetailsInput, "motherTongue" | "languagesKnown" | "height" | "weightKg" | "pfNumber" | "uanNumber" | "esiNumber">>;
 
     const db = getAdminDb();
     const ref = db.collection("colleges").doc(session.collegeId).collection("supportingStaff").doc(id);
@@ -260,6 +262,15 @@ export async function PATCH(
 
     if (body.panNo !== undefined) updates.panNo = body.panNo.toUpperCase();
     if (body.ifscCode !== undefined) updates.ifscCode = body.ifscCode.toUpperCase();
+
+    // Mother Tongue, Languages Known, Height, Weight, PF / UAN / ESI Number: shown in the Personal Details editor and
+    // stored by Add, but this route never listed them, so an edit silently dropped them. Same builder as Add.
+    {
+      const personal = supportingStaffPersonalUpdate(body as PersonalDetailsInput);
+      for (const key of ["motherTongue", "languagesKnown", "height", "weightKg", "pfNumber", "uanNumber", "esiNumber"]) {
+        if (key in personal) updates[key] = personal[key];
+      }
+    }
 
     if (body.numberOfChildren !== undefined) updates.numberOfChildren = Number(body.numberOfChildren);
     if (body.permanentAddressSameAsTemporary !== undefined) updates.permanentAddressSameAsTemporary = body.permanentAddressSameAsTemporary;

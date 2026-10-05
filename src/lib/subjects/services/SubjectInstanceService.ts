@@ -1,5 +1,7 @@
 import { getAdminDb } from "@/lib/firebase/admin";
 import { inheritedAssignmentDepartmentId } from "@/lib/timetable/sharedYearTiming";
+import { notConfiguredMessage } from "@/lib/college/taughtYears";
+import { MAX_COURSE_DURATION_YEARS } from "@/lib/college/courseYears";
 import type { Course, Department, Subject, SubjectSemesterAssignment, TeachingAssignment } from "@/types";
 
 export interface SubjectInstanceAssignOptions {
@@ -143,7 +145,10 @@ export class SubjectInstanceService {
   constructor(private db = getAdminDb()) {}
 
   /**
-   * Resolves the ordinal Year (1..6) configured for the given course and semester.
+   * Resolves the ordinal Year configured for the given course and semester - scanning the course's
+   * OWN years (1..its durationYears), not a fixed span. `durationYears` is passed by callers that
+   * already hold the Course doc; otherwise it is read here, and only if the course can't be read is
+   * the catalog's own ceiling (MAX_COURSE_DURATION_YEARS) used.
    * When `yearHint` is provided, checks that year first to support relative semester numbering
    * (e.g. Semesters 1 & 2 in Year 1 as well as Semesters 1 & 2 in Year 2).
    */
@@ -151,12 +156,19 @@ export class SubjectInstanceService {
     collegeId: string,
     courseId: string,
     semester: number,
-    yearHint?: number
+    yearHint?: number,
+    durationYears?: number
   ): Promise<number | null> {
     const collegeRef = this.db.collection("colleges").doc(collegeId);
+    let lastYear = Number(durationYears);
+    if (!Number.isInteger(lastYear) || lastYear < 1) {
+      const courseSnap = await collegeRef.collection("courses").doc(courseId).get();
+      const stored = Number((courseSnap.data() as { durationYears?: number } | undefined)?.durationYears);
+      lastYear = Number.isInteger(stored) && stored >= 1 ? stored : MAX_COURSE_DURATION_YEARS;
+    }
 
     // 1. If a yearHint is given, check that year's timing doc first
-    if (yearHint != null && yearHint >= 1 && yearHint <= 6) {
+    if (yearHint != null && yearHint >= 1 && yearHint <= lastYear) {
       const snap = await collegeRef.collection("courseYearTimings").doc(`${courseId}_year${yearHint}`).get();
       if (snap.exists) {
         const sems = (snap.data() as { semesters?: { semester: number }[] })?.semesters ?? [];
@@ -166,8 +178,8 @@ export class SubjectInstanceService {
       }
     }
 
-    // 2. Scan remaining years 1..6
-    for (let y = 1; y <= 6; y++) {
+    // 2. Scan the course's remaining years
+    for (let y = 1; y <= lastYear; y++) {
       if (y === yearHint) continue;
       const snap = await collegeRef.collection("courseYearTimings").doc(`${courseId}_year${y}`).get();
       if (snap.exists) {
@@ -254,7 +266,10 @@ export class SubjectInstanceService {
     if (yearCache?.has(yearCacheKey)) {
       foundYear = yearCache.get(yearCacheKey)!;
     } else {
-      foundYear = await this.resolveYearForSemester(collegeId, courseId, semester, options.year);
+      foundYear = await this.resolveYearForSemester(
+        collegeId, courseId, semester, options.year,
+        (courseDoc.data() as { durationYears?: number } | undefined)?.durationYears
+      );
       yearCache?.set(yearCacheKey, foundYear);
     }
 
@@ -268,7 +283,8 @@ export class SubjectInstanceService {
       resolvedYear = foundYear;
     } else {
       // If timing docs have not been created yet or define no semesters, but options.year was explicitly provided
-      if (options.year != null && options.year >= 1 && options.year <= 6) {
+      const courseLastYear = Number((courseDoc.data() as { durationYears?: number } | undefined)?.durationYears);
+      if (options.year != null && options.year >= 1 && options.year <= (courseLastYear >= 1 ? courseLastYear : MAX_COURSE_DURATION_YEARS)) {
         resolvedYear = options.year;
       } else {
         throw new Error(
@@ -289,7 +305,11 @@ export class SubjectInstanceService {
         scopedYears = (catalogId ? parentData.courseScopes?.[catalogId]?.assignedYears : undefined) ?? parentData.assignedYears;
       }
     }
-    if (scopedYears && scopedYears.length > 0 && !scopedYears.includes(resolvedYear)) {
+    // An EMPTY list is "not configured", never "teaches everything" (lib/college/taughtYears.ts).
+    if (!scopedYears || scopedYears.length === 0) {
+      throw new Error(notConfiguredMessage(resolvedDeptName ?? departmentId, resolvedYear, master.courseName || undefined));
+    }
+    if (!scopedYears.includes(resolvedYear)) {
       throw new Error(
         `"${resolvedDeptName ?? departmentId}" isn't scoped to teach this course in Year ${resolvedYear} - check its Years Taught / Academic Structure.`
       );
