@@ -72,7 +72,7 @@ import {
   FACULTY_STATUS_DATE_FIELD,
   FACULTY_STATUS_DATE_LABELS,
 } from "@/types";
-import type { DesignationCatalogItem, EmployeeCategory, FacultyStatus } from "@/types";
+import type { DesignationCatalogItem, EmployeeCategory, FacultyStatus, HonorificCatalogItem } from "@/types";
 import { useCollegeType } from "@/hooks/useCollegeType";
 import { designationLabel } from "@/lib/designations/config";
 import { useAuthStore } from "@/store/authStore";
@@ -82,6 +82,7 @@ import { facultyDepartmentOptions, isFacultyDestination, type FacultyDepartmentL
 import type { FacultyProfileFields } from "@/types";
 
 const OTHER_QUALIFICATION = "__OTHER__";
+const NO_HONORIFIC = "__none__"; // sentinel - Radix Select rejects "" as a value
 
 const schema = z.object({
   employeeId: z.string().min(1, "Employee ID is required"),
@@ -132,6 +133,19 @@ export default function NewFacultyPage() {
   const user = useAuthStore((s) => s.user);
 
   const [designationOptions, setDesignationOptions] = useState<string[]>([]);
+  const [honorificOptions, setHonorificOptions] = useState<string[]>([]);
+  const [honorific, setHonorific] = useState("");
+  useEffect(() => {
+    void (async () => {
+      try {
+        const res = await fetch("/api/college/honorifics");
+        const data = (await res.json()) as { items?: HonorificCatalogItem[] };
+        setHonorificOptions((data.items ?? []).filter((h) => h.isActive).map((h) => h.name));
+      } catch {
+        // Non-fatal
+      }
+    })();
+  }, []);
   useEffect(() => {
     void (async () => {
       try {
@@ -463,6 +477,7 @@ export default function NewFacultyPage() {
             ? { department }
             : {}),
           academicProfile,
+          ...(honorific ? { honorific } : {}),
           ...personalDetails,
           ...(photoUrl ? { profilePhotoUrl: photoUrl } : {}),
         }),
@@ -661,18 +676,37 @@ export default function NewFacultyPage() {
                       </div>
 
                       <div className="space-y-1.5 sm:col-span-2">
-                        <Label htmlFor="legalName" className="text-xs font-semibold">
-                          Full Name (as per SSC) <span className="text-destructive">*</span>
-                        </Label>
-                        <Input
-                          id="legalName"
-                          value={personalDetails.legalName ?? ""}
-                          onChange={(e) =>
-                            setPersonalDetails((p) => ({ ...p, legalName: e.target.value.toUpperCase() }))
-                          }
-                          placeholder="FULL NAME AS IN SSC CERTIFICATE"
-                          className="uppercase font-medium"
-                        />
+                        <div className="flex gap-3">
+                          <div className="space-y-1.5 w-28 shrink-0">
+                            <Label htmlFor="honorific" className="text-xs font-semibold">
+                              Honorific
+                            </Label>
+                            <Select
+                              value={honorific || NO_HONORIFIC}
+                              onValueChange={(v) => setHonorific(v === NO_HONORIFIC ? "" : v)}
+                            >
+                              <SelectTrigger id="honorific"><SelectValue placeholder="-" /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value={NO_HONORIFIC}>None</SelectItem>
+                                {honorificOptions.map((h) => <SelectItem key={h} value={h}>{h}</SelectItem>)}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="space-y-1.5 flex-1">
+                            <Label htmlFor="legalName" className="text-xs font-semibold">
+                              Full Name (as per SSC) <span className="text-destructive">*</span>
+                            </Label>
+                            <Input
+                              id="legalName"
+                              value={personalDetails.legalName ?? ""}
+                              onChange={(e) =>
+                                setPersonalDetails((p) => ({ ...p, legalName: e.target.value.toUpperCase() }))
+                              }
+                              placeholder="FULL NAME AS IN SSC CERTIFICATE"
+                              className="uppercase font-medium"
+                            />
+                          </div>
+                        </div>
                         <p className="text-[11px] text-muted-foreground">
                           Enter exact legal name as printed on 10th/SSC certificate. Used on official documents, registers, and resumes.
                         </p>

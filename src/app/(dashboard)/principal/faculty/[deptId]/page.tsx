@@ -401,10 +401,16 @@ export default function PrincipalDepartmentFacultyPage() {
           {hod ? (
             <>
               <div className="flex items-center gap-3">
-                <Avatar name={hod.name} photoUrl={hod.profilePhotoUrl} size="sm" />
+                {/* Prefers the linked faculty record's own honorific-prefixed
+                    name (facultyDisplayName) over the plain users.name this
+                    login was created with, which never carries the honorific
+                    set afterward on the faculty record - falls back to
+                    hod.name only while hodFaculty hasn't resolved yet, or for
+                    an HOD login with no faculty record at all. */}
+                <Avatar name={facultyDisplayName(hodFaculty) || hod.name} photoUrl={hod.profilePhotoUrl} size="sm" />
                 <div>
                   <div className="flex items-center gap-2">
-                    <p className="text-sm font-medium leading-tight">{hod.name}</p>
+                    <p className="text-sm font-medium leading-tight">{facultyDisplayName(hodFaculty) || hod.name}</p>
                     <Badge variant="secondary">Head of Department</Badge>
                   </div>
                   <p className="text-xs text-muted-foreground">{hod.email}{hod.phone ? ` · ${hod.phone}` : ""}</p>

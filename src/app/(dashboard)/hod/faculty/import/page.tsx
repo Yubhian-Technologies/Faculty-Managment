@@ -14,7 +14,7 @@ import { ImportFixField } from "@/components/import/ImportFixField";
 import { toast } from "@/hooks/useToast";
 import { useAuthStore } from "@/store/authStore";
 import { parseCSV, matchHeaders, getUnmatchedHeaders, parseExcelFile, readFileAsText } from "@/lib/utils/csv";
-import type { DesignationCatalogItem } from "@/types";
+import type { DesignationCatalogItem, HonorificCatalogItem } from "@/types";
 import { EMPLOYEE_CATEGORY_LABELS } from "@/types";
 import { matchOption } from "@/lib/import/fieldConstraints";
 import { getFacultyImportColumns, getFacultyImportHints, getFacultyImportSampleRows } from "@/lib/faculty/csvColumns";
@@ -51,9 +51,21 @@ export default function FacultyImportPage() {
       }
     })();
   }, []);
-  const COLUMNS = useMemo(() => getFacultyImportColumns(designationOptions), [designationOptions]);
-  const HINTS = useMemo(() => getFacultyImportHints(designationOptions), [designationOptions]);
-  const IMPORT_SAMPLE_ROWS = useMemo(() => getFacultyImportSampleRows(designationOptions), [designationOptions]);
+  const [honorificOptions, setHonorificOptions] = useState<string[]>([]);
+  useEffect(() => {
+    void (async () => {
+      try {
+        const res = await fetch("/api/college/honorifics");
+        const data = await res.json() as { items?: HonorificCatalogItem[] };
+        setHonorificOptions((data.items ?? []).filter((h) => h.isActive).map((h) => h.name));
+      } catch {
+        // Non-fatal - the Fix dialog's Honorific field just stays empty.
+      }
+    })();
+  }, []);
+  const COLUMNS = useMemo(() => getFacultyImportColumns(designationOptions, honorificOptions), [designationOptions, honorificOptions]);
+  const HINTS = useMemo(() => getFacultyImportHints(designationOptions, honorificOptions), [designationOptions, honorificOptions]);
+  const IMPORT_SAMPLE_ROWS = useMemo(() => getFacultyImportSampleRows(designationOptions, honorificOptions), [designationOptions, honorificOptions]);
   const [rows, setRows] = useState<ParsedRow[]>([]);
   const [parseError, setParseError] = useState("");
   const [isImporting, setIsImporting] = useState(false);
@@ -557,6 +569,7 @@ export default function FacultyImportPage() {
                   placeholder={c.sample || undefined}
                   onChange={(v) => setFixField(c.key, v)}
                   designationOptions={designationOptions}
+                  honorificOptions={honorificOptions}
                   departmentCodeOptions={departmentCodeOptions}
                 />
               ))}

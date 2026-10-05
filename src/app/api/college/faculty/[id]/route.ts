@@ -20,6 +20,7 @@ import {
 import { PROMOTION_HISTORY_KEY, DESIGNATION_MANAGED_BY_HISTORY_MESSAGE } from "@/lib/faculty/promotionHistory";
 import { designationKey } from "@/lib/designations/config";
 import { resolveDesignation } from "@/lib/designations/validate";
+import { resolveHonorific } from "@/lib/honorifics/validate";
 import { syncLinkedLoginName } from "@/lib/roles/loginSync";
 import { migrateFacultyDoc } from "@/lib/faculty/fieldRenames";
 import { withLegacyFacultyKeysDeleted } from "@/lib/faculty/legacyKeyDeletes";
@@ -95,6 +96,7 @@ export async function PATCH(
       phone: string; // legacy alias of mobileNo, accepted for one release (see mobileNoFromBody)
       additionalPhoneNumbers: { label?: string; number: string }[];
       collegeEmail: string;
+      honorific: string;
       designation: Designation;
       highestQualification: string;
       specialization: string;
@@ -260,6 +262,23 @@ export async function PATCH(
       updates.highestQualification = normalizeHighestQualification(updates.highestQualification);
     }
 
+    // Honorific is optional and clearable (unlike Designation, blanking it
+    // out is allowed - it just means "no honorific recorded"). A non-blank
+    // value is still held to this college's own catalog (colleges/{id}/
+    // honorifics), same as the create route (POST /api/college/faculty).
+    if (body.honorific !== undefined) {
+      const rawHonorific = body.honorific.trim();
+      if (!rawHonorific) {
+        updates.honorific = "";
+      } else {
+        const honorificResult = await resolveHonorific(db, session.collegeId, rawHonorific);
+        if ("error" in honorificResult) {
+          return NextResponse.json({ error: honorificResult.error }, { status: 400 });
+        }
+        updates.honorific = honorificResult.name;
+      }
+    }
+
     // Extra contact numbers beyond the primary Mobile No - cleaned/filtered
     // the same way the create route does. Writing [] (not omitting the key)
     // is how a caller clears every extra number back out.
@@ -340,14 +359,24 @@ export async function PATCH(
     // the doc never carries both.
     await ref.update(withLegacyFacultyKeysDeleted(updates, FieldValue.delete()));
 
-    // The record's display name is legalName only (facultyDisplayName()) -
-    // Name (as per PAN) never feeds it. Recomputed from the POST-update value
-    // (this PATCH's legalName, falling back to what was already on the doc) so
-    // a rename is detected and propagated correctly.
-    const before = snap.data() as { legalName?: string; userUid?: string };
-    const newDisplayName = facultyDisplayName({ legalName: body.legalName !== undefined ? body.legalName : before.legalName });
+    // The record's display name is legalName, honorific-prefixed
+    // (facultyDisplayName()) - Name (as per PAN) never feeds it. Recomputed
+    // from the POST-update values (this PATCH's legalName/honorific, each
+    // falling back to what was already on the doc) so a rename OR an
+    // honorific-only change is detected and propagated correctly - a prior
+    // version only ever looked at legalName, so adding/changing just the
+    // Honorific here never reached the linked login (and everything
+    // downstream of it: roleSeats.holderName, departments.hodName, every
+    // "HOD: ..." card) even though facultyDisplayName() itself already
+    // supported it.
+    const before = snap.data() as { legalName?: string; honorific?: string; userUid?: string };
+    const newHonorific = updates.honorific !== undefined ? (updates.honorific as string) : before.honorific;
+    const newDisplayName = facultyDisplayName({
+      legalName: body.legalName !== undefined ? body.legalName : before.legalName,
+      honorific: newHonorific,
+    });
     const oldDisplayName = facultyDisplayName(before);
-    const displayNameChanged = body.legalName !== undefined && newDisplayName !== oldDisplayName;
+    const displayNameChanged = newDisplayName !== oldDisplayName;
 
     // Best-effort: if this faculty record has a linked system login, keep their
     // name/photo in sync there too - the login doc (colleges/{id}/users) is what

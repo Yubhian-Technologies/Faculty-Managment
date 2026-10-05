@@ -292,9 +292,16 @@ export interface FacultyCsvColumn {
   aliases?: string[];
 }
 
-export function getFacultyImportColumns(designationOptions: string[]): FacultyCsvColumn[] {
+export function getFacultyImportColumns(designationOptions: string[], honorificOptions: string[] = []): FacultyCsvColumn[] {
   return [
   { key: "employeeId",   label: "Employee ID",   required: true,  sample: "Required; any text; unique", aliases: ["Emp ID", "Employee Code", "Employee No", "Staff ID"] },
+  // Optional - this college's own admin-curated Honorific Catalog (see
+  // HonorificsCatalogCard, api/college/honorifics). Left blank, a faculty
+  // member simply has no honorific recorded - never defaulted or guessed
+  // from the name.
+  { key: "honorific", label: "Honorific", required: false, sample: honorificOptions.length
+      ? `Optional: ${honorificOptions.join(" / ")}`
+      : "Optional - add honorifics under Principal Settings to offer them here" },
   // Per-row department, matched by the department's short CODE (never its
   // full name) against whatever departments the importer may add faculty
   // into - own department(s) + true sub-departments for an HOD, any
@@ -362,12 +369,13 @@ export function getFacultyImportColumns(designationOptions: string[]): FacultyCs
 // column is mandatory (every row creates a real login on import) - each one
 // MUST be changed to something unique before real use; see the Login
 // Password hint below. Never reuse these literal strings for a real account.
-export function getFacultyImportSampleRows(designationOptions: string[]): Record<string, string>[] {
+export function getFacultyImportSampleRows(designationOptions: string[], honorificOptions: string[] = []): Record<string, string>[] {
   const designation = (i: number) => designationOptions[i % designationOptions.length] ?? "";
   const category = (i: number) => Object.values(EMPLOYEE_CATEGORY_LABELS)[i % Object.values(EMPLOYEE_CATEGORY_LABELS).length];
+  const honorific = (i: number) => (honorificOptions.length ? honorificOptions[i % honorificOptions.length] : "");
   return [
   {
-    employeeId: "FAC001", departmentCode: "CSE", legalName: "ANITHA REDDY", nameAsPerPan: "Dr. Anitha Reddy",
+    employeeId: "FAC001", honorific: honorific(0), departmentCode: "CSE", legalName: "ANITHA REDDY", nameAsPerPan: "Dr. Anitha Reddy",
     collegeEmail: "anitha.reddy@college.edu", password: "ChangeMe#101", mobileNo: "9876543210",
     designation: designation(0), highestQualification: "Ph.D",
     employeeCategory: category(0),
@@ -378,7 +386,7 @@ export function getFacultyImportSampleRows(designationOptions: string[]): Record
     ratificationStatus: "Ratified",
   },
   {
-    employeeId: "FAC002", departmentCode: "CSE", legalName: "SURESH KUMAR", nameAsPerPan: "Mr. Suresh Kumar",
+    employeeId: "FAC002", honorific: honorific(1), departmentCode: "CSE", legalName: "SURESH KUMAR", nameAsPerPan: "Mr. Suresh Kumar",
     collegeEmail: "suresh.kumar@college.edu", password: "ChangeMe#102", mobileNo: "9876543211",
     designation: designation(1), highestQualification: "M.Tech",
     employeeCategory: category(1),
@@ -389,7 +397,7 @@ export function getFacultyImportSampleRows(designationOptions: string[]): Record
     ratificationStatus: "Ratified",
   },
   {
-    employeeId: "FAC003", departmentCode: "ECE", legalName: "DIVYA NAIR", nameAsPerPan: "Ms. Divya Nair",
+    employeeId: "FAC003", honorific: honorific(2), departmentCode: "ECE", legalName: "DIVYA NAIR", nameAsPerPan: "Ms. Divya Nair",
     collegeEmail: "divya.nair@college.edu", password: "ChangeMe#103", mobileNo: "9876543212",
     designation: designation(2), highestQualification: "M.Tech",
     employeeCategory: category(2),
@@ -400,7 +408,7 @@ export function getFacultyImportSampleRows(designationOptions: string[]): Record
     ratificationStatus: "Not Ratified",
   },
   {
-    employeeId: "FAC004", departmentCode: "ECE", legalName: "IMRAN SHAIK", nameAsPerPan: "Dr. Imran Shaik",
+    employeeId: "FAC004", honorific: honorific(3), departmentCode: "ECE", legalName: "IMRAN SHAIK", nameAsPerPan: "Dr. Imran Shaik",
     collegeEmail: "imran.shaik@college.edu", password: "ChangeMe#104", mobileNo: "9876543213",
     designation: designation(3), highestQualification: "Ph.D",
     employeeCategory: category(3),
@@ -411,7 +419,7 @@ export function getFacultyImportSampleRows(designationOptions: string[]): Record
     ratificationStatus: "Ratified",
   },
   {
-    employeeId: "FAC005", departmentCode: "CSE", legalName: "GRACE THOMAS", nameAsPerPan: "Mrs. Grace Thomas",
+    employeeId: "FAC005", honorific: honorific(4), departmentCode: "CSE", legalName: "GRACE THOMAS", nameAsPerPan: "Mrs. Grace Thomas",
     collegeEmail: "grace.thomas@college.edu", password: "ChangeMe#105", mobileNo: "9876543214",
     designation: designation(4), highestQualification: "M.Sc",
     employeeCategory: category(4),
@@ -424,8 +432,11 @@ export function getFacultyImportSampleRows(designationOptions: string[]): Record
   ];
 }
 
-export function getFacultyImportHints(designationOptions: string[]): string[] {
+export function getFacultyImportHints(designationOptions: string[], honorificOptions: string[] = []): string[] {
   return [
+  honorificOptions.length
+    ? `Honorific: optional - ${honorificOptions.join(" / ")}, added under Principal Settings > Honorifics. Leave blank for none.`
+    : "Honorific: optional - add at least one under Principal Settings > Honorifics to offer it here; leave the column blank until then.",
   "Full Name (as per SSC): enter the name exactly as it appears on the faculty member's SSC (10th class) certificate, in CAPITAL LETTERS - this is the PRIMARY identity name used as their display name everywhere across the app (lists, PDFs, notifications, teaching assignments, etc.).",
   "Name (as per PAN): optional - only needed for statutory/financial paperwork matching. When left blank, Full Name (as per SSC) is used instead everywhere this faculty member's name is shown.",
   designationOptions.length
