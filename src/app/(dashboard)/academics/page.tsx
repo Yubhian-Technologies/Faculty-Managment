@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/store/authStore";
 import { ROLE_LABELS } from "@/types";
-import { Library, BookOpen, FileText, Tags, ArrowRight } from "lucide-react";
+import { Library, BookOpen, FileText, Tags, ArrowRight, ListChecks } from "lucide-react";
 
 const QUICK_ACTIONS = [
   {
@@ -21,6 +21,12 @@ const QUICK_ACTIONS = [
     icon: Library,
     title: "Course Structure",
     description: "Import a course's subjects from a spreadsheet and assign them to a department's semesters.",
+  },
+  {
+    href: "/academics/subjects",
+    icon: ListChecks,
+    title: "Subjects",
+    description: "View, add, edit and delete the subjects for each course and regulation.",
   },
   {
     href: "/academics/categories",
