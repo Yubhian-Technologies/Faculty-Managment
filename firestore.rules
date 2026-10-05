@@ -1,5 +1,7 @@
 rules_version = '2';
 
+// Client (browser) writes are closed everywhere: the app only writes through API routes using the
+// Admin SDK, which bypasses these rules. Browser reads are kept for what pages actually read.
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -122,21 +124,21 @@ service cloud.firestore {
     // per doc (see /api/admin/settings/faculty-norms).
     match /platformConfig/{docId} {
       allow read: if isAuthenticated();
-      allow write: if isSuperAdmin();
+      allow write: if false;
     }
 
     // Leave module - leave type rules (CL/SL/SCL/EL/OD) are shared across all
     // colleges, SUPER_ADMIN-managed (see /api/leave/seed).
     match /leaveTypes/{typeId} {
       allow read: if isAuthenticated();
-      allow write: if isSuperAdmin();
+      allow write: if false;
     }
 
     // Root-level platform audit log (distinct from colleges/{id}/auditLogs below),
     // written by admin-settings routes that have no college context.
     match /auditLogs/{logId} {
       allow read: if isSuperAdmin();
-      allow create: if isSuperAdmin();
+      allow create: if false;
       allow update, delete: if false;
     }
 
@@ -144,31 +146,28 @@ service cloud.firestore {
 
     match /colleges/{collegeId} {
       allow read: if isStaff(collegeId);
-      allow create, update, delete: if isSuperAdmin();
+      allow create, update, delete: if false;
 
       // ─── [ CORE ] ───────────────────────────────────────────────────────────
 
       match /users/{uid} {
-        allow read: if isStaff(collegeId) || (isStudentSelf(collegeId) && isOwner(uid));
-        allow create: if isSuperAdmin() && hasCollegeId(collegeId);
+        // Browser reads are limited to the person's own profile (lib/firestore/users.ts getUserById).
+        // Staff directory reads go through the API, which scopes by role and department.
+        allow read: if isSuperAdmin() || isOwner(uid);
+        allow create: if false;
         // Owner self-updates are for personal-profile fields only. Every field
         // any guard (verifySession/liveRoles/scope.ts) treats as an
         // authorization signal must stay Admin-SDK-only, or a self-write here
         // is a direct privilege escalation - resolveHeldRoles in liveRoles.ts
         // reads role/seatRoles/isActive straight off this doc as ground truth.
-        allow update: if isSuperAdmin() ||
-          (isOwner(uid) && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
-            'role', 'realRole', 'roles', 'seatIds', 'seatRoles', 'collegeId',
-            'department', 'departments', 'locationDeptId', 'locationDeptIds',
-            'allLocationDepts', 'sectionId', 'sectionName', 'isActive'
-          ]));
-        allow delete: if isSuperAdmin();
+        allow update: if false;
+        allow delete: if false;
       }
 
       match /departments/{deptId} {
         allow read: if isStaff(collegeId);
-        allow create, update: if isPrincipal(collegeId);
-        allow delete: if isSuperAdmin();
+        allow create, update: if false;
+        allow delete: if false;
       }
 
       // Uniqueness lock docs for department name/short code - written only by the
@@ -186,8 +185,8 @@ service cloud.firestore {
       // collection-level gate, same granularity as departments/facultyMembers below.
       match /designations/{designationId} {
         allow read: if isStaff(collegeId);
-        allow create, update: if isHODorAbove(collegeId) || isPrincipalOrOffice(collegeId);
-        allow delete: if isSuperAdmin();
+        allow create, update: if false;
+        allow delete: if false;
       }
 
       // NOTE: faculty norms actually live at the root-level `platformConfig/facultyNorms`
@@ -199,7 +198,7 @@ service cloud.firestore {
       // /api/admin/settings/nav-visibility); this rule is defense-in-depth only.
       match /settings/{docId} {
         allow read: if isStaff(collegeId);
-        allow write: if isPrincipal(collegeId);
+        allow write: if false;
       }
 
       // ─── [ LEAVE MODULE ] ────────────────────────────────────────────────────
@@ -208,8 +207,8 @@ service cloud.firestore {
 
       match /employeeLeaveProfiles/{uid} {
         allow read: if isStaff(collegeId);
-        allow create, update: if isHODorAbove(collegeId);
-        allow delete: if isSuperAdmin();
+        allow create, update: if false;
+        allow delete: if false;
       }
 
       match /leaveBalances/{docId} {
@@ -218,57 +217,57 @@ service cloud.firestore {
       }
 
       match /leaveRequests/{requestId} {
-        allow read: if isStaff(collegeId);
-        allow create: if isStaff(collegeId) && hasCollegeId(collegeId);
-        allow update: if isHODorAbove(collegeId);
-        allow delete: if isSuperAdmin();
+        allow read: if isSuperAdmin(); // browser reads unused; the API enforces role/department scope
+        allow create: if false;
+        allow update: if false;
+        allow delete: if false;
       }
 
       // ─── [ ACADEMIC STRUCTURE ] ─────────────────────────────────────────────
 
       match /academicSessions/{sessionId} {
         allow read: if isStaff(collegeId);
-        allow create, update, delete: if isPrincipal(collegeId);
+        allow create, update, delete: if false;
       }
 
       match /academicYears/{yearId} {
         allow read: if isStaff(collegeId);
-        allow create, delete: if isPrincipal(collegeId);
+        allow create, delete: if false;
       }
 
       match /courseCatalog/{docId} {
         allow read: if isStaff(collegeId);
-        allow create, update, delete: if isPrincipal(collegeId);
+        allow create, update, delete: if false;
       }
 
       match /courses/{courseId} {
         allow read: if isStaff(collegeId);
-        allow create, update, delete: if isPrincipal(collegeId);
+        allow create, update, delete: if false;
       }
 
       match /courseAcademicYears/{docId} {
         allow read: if isStaff(collegeId);
-        allow create, update: if isPrincipal(collegeId);
+        allow create, update: if false;
       }
 
       match /courseYearTimings/{docId} {
         allow read: if isStaff(collegeId);
-        allow create, update, delete: if isPrincipal(collegeId);
+        allow create, update, delete: if false;
       }
 
       match /sections/{sectionId} {
         allow read: if isStaff(collegeId);
-        allow create, update, delete: if isHODorAbove(collegeId);
+        allow create, update, delete: if false;
       }
 
       match /timetableIncharges/{docId} {
         allow read: if isStaff(collegeId);
-        allow create, update, delete: if isHODorAbove(collegeId);
+        allow create, update, delete: if false;
       }
 
       match /students/{studentId} {
-        allow read: if isStaff(collegeId) || (isStudentSelf(collegeId) && resource.data.uid == request.auth.uid);
-        allow create, update: if isHODorAbove(collegeId) || isPanelMember(collegeId);
+        allow read: if isSuperAdmin() || (isStudentSelf(collegeId) && resource.data.uid == request.auth.uid);
+        allow create, update: if false;
       }
 
       // Certificates/documents Office uploads per student - v1 visibility is
@@ -279,24 +278,24 @@ service cloud.firestore {
       match /studentDocuments/{docId} {
         allow read: if isCollegeOffice(collegeId) || isPrincipal(collegeId) ||
           (isStudentSelf(collegeId) && resource.data.studentUid == request.auth.uid);
-        allow create, delete: if isCollegeOffice(collegeId) || isPrincipal(collegeId);
+        allow create, delete: if false;
       }
 
       // ─── [ FACULTY MODULE ] ─────────────────────────────────────────────────
 
       match /facultyMembers/{facultyId} {
-        allow read: if isStaff(collegeId);
-        allow create: if isHODorAbove(collegeId) && hasCollegeId(collegeId);
-        allow update: if isHODorAbove(collegeId);
-        allow delete: if isSuperAdmin();
+        allow read: if isSuperAdmin(); // browser reads unused; the API enforces role/department scope
+        allow create: if false;
+        allow update: if false;
+        allow delete: if false;
       }
 
       match /facultyDocuments/{docId} {
         allow read: if isStaff(collegeId);
         // Faculty can upload their own docs (checked in API by facultyId→userUid match)
-        allow create: if isStaff(collegeId) && hasCollegeId(collegeId);
-        allow update: if isHODorAbove(collegeId);
-        allow delete: if isHODorAbove(collegeId);
+        allow create: if false;
+        allow update: if false;
+        allow delete: if false;
       }
 
       // Non-teaching staff (Technical - HOD-owned - and Non-Technical -
@@ -306,18 +305,18 @@ service cloud.firestore {
       // HOD, PRINCIPAL, VICE_PRINCIPAL, plus SUPER_ADMIN via isHODorAbove).
       match /supportingStaff/{staffId} {
         allow read: if isStaff(collegeId);
-        allow create: if (isHODorAbove(collegeId) || isPrincipalOrOffice(collegeId)) && hasCollegeId(collegeId);
-        allow update: if isHODorAbove(collegeId) || isPrincipalOrOffice(collegeId);
-        allow delete: if isSuperAdmin();
+        allow create: if false;
+        allow update: if false;
+        allow delete: if false;
       }
 
       // ─── [ RECRUITMENT MODULE ] ─────────────────────────────────────────────
 
       match /vacancyRequests/{requestId} {
         allow read: if isStaff(collegeId);
-        allow create: if isHODorAbove(collegeId) && hasCollegeId(collegeId);
-        allow update: if isPrincipal(collegeId) || isHOD(collegeId);
-        allow delete: if isSuperAdmin();
+        allow create: if false;
+        allow update: if false;
+        allow delete: if false;
       }
 
       // ─── [ BUDGET MODULE ] ────────────────────────────────────────────────
@@ -327,17 +326,17 @@ service cloud.firestore {
 
       match /budgetRequests/{requestId} {
         allow read: if isStaff(collegeId);
-        allow create: if (isHOD(collegeId) || isPrincipal(collegeId)) && hasCollegeId(collegeId);
-        allow update: if isHOD(collegeId) || isPrincipal(collegeId) || isFinance(collegeId) || isManagement();
-        allow delete: if isSuperAdmin();
+        allow create: if false;
+        allow update: if false;
+        allow delete: if false;
       }
 
       // Budget cycles (submission windows HODs raise budgetRequests against) are
       // defined by Principal/Finance, not HOD.
       match /budgetCycles/{cycleId} {
         allow read: if isStaff(collegeId);
-        allow create, update: if isPrincipal(collegeId) || isFinance(collegeId);
-        allow delete: if isSuperAdmin();
+        allow create, update: if false;
+        allow delete: if false;
       }
 
       // ─── [ INDENT MODULE ] ────────────────────────────────────────────────
@@ -347,16 +346,16 @@ service cloud.firestore {
 
       match /indentRequests/{requestId} {
         allow read: if isStaff(collegeId);
-        allow create: if isHOD(collegeId) && hasCollegeId(collegeId);
-        allow update: if isHOD(collegeId) || isPurchaseDept(collegeId) || isFinance(collegeId);
-        allow delete: if isSuperAdmin();
+        allow create: if false;
+        allow update: if false;
+        allow delete: if false;
       }
 
       match /candidates/{candidateId} {
         allow read: if isStaff(collegeId);
-        allow create: if isHOD(collegeId) && hasCollegeId(collegeId);
-        allow update: if isHODorAbove(collegeId);
-        allow delete: if isHOD(collegeId) || isSuperAdmin();
+        allow create: if false;
+        allow update: if false;
+        allow delete: if false;
       }
 
       // Join entity: candidate <-> vacancyRequest. Carries all per-hiring-cycle
@@ -364,57 +363,57 @@ service cloud.firestore {
       // itself stays a reusable, decoupled person record.
       match /candidateApplications/{applicationId} {
         allow read: if isStaff(collegeId);
-        allow create: if isHOD(collegeId) && hasCollegeId(collegeId);
-        allow update: if isHODorAbove(collegeId) || isCollegeOffice(collegeId) || isPanelMember(collegeId);
-        allow delete: if isHOD(collegeId) || isSuperAdmin();
+        allow create: if false;
+        allow update: if false;
+        allow delete: if false;
       }
 
       match /hiringBatches/{batchId} {
         allow read: if isStaff(collegeId);
-        allow create: if isHOD(collegeId) && hasCollegeId(collegeId);
-        allow update: if isHODorAbove(collegeId) || isCollegeOffice(collegeId) || isPanelMember(collegeId);
-        allow delete: if isSuperAdmin();
+        allow create: if false;
+        allow update: if false;
+        allow delete: if false;
 
         // Feedback as subcollections under the batch
         match /panelFeedback/{feedbackId} {
           allow read: if isStaff(collegeId);
-          allow create: if isPanelMember(collegeId) && hasCollegeId(collegeId);
-          allow update: if isPanelMember(collegeId) && resource.data.panelUid == request.auth.uid;
-          allow delete: if isSuperAdmin();
+          allow create: if false;
+          allow update: if false;
+          allow delete: if false;
         }
 
         // Student feedback: public write (no auth) for QR-based submissions
         match /studentFeedback/{feedbackId} {
           allow read: if isStaff(collegeId);
-          allow create: if true;         // public QR-based submission
-          allow update, delete: if isSuperAdmin();
+          allow create: if false;         // public QR-based submission
+          allow update, delete: if false;
         }
 
       }
 
       match /hiringSalaryAgreements/{agreementId} {
         allow read: if isHODorAbove(collegeId) || isAccounts(collegeId);
-        allow create: if isHODorAbove(collegeId) && hasCollegeId(collegeId);
-        allow update: if isHODorAbove(collegeId);
-        allow delete: if isSuperAdmin();
+        allow create: if false;
+        allow update: if false;
+        allow delete: if false;
       }
 
       match /offerLetters/{letterId} {
         allow read: if isStaff(collegeId);
-        allow create, update: if isPrincipalOrOffice(collegeId);
-        allow delete: if isSuperAdmin();
+        allow create, update: if false;
+        allow delete: if false;
       }
 
       match /appointmentLetters/{letterId} {
         allow read: if isStaff(collegeId);
-        allow create, update: if isHODorAbove(collegeId);
-        allow delete: if isSuperAdmin();
+        allow create, update: if false;
+        allow delete: if false;
       }
 
       match /hiringTermsTemplates/{templateId} {
         allow read: if isStaff(collegeId);
-        allow create, update: if isPrincipal(collegeId);
-        allow delete: if isSuperAdmin();
+        allow create, update: if false;
+        allow delete: if false;
       }
 
       // Office → Webmaster faculty-account handoff. Written exclusively via
@@ -450,88 +449,84 @@ service cloud.firestore {
 
       match /permissionRequests/{reqId} {
         allow read: if isStaff(collegeId);
-        allow create: if isStaff(collegeId) && hasCollegeId(collegeId);
-        allow update: if isHOD(collegeId) ||
-          (isPanelMember(collegeId) && resource.data.facultyId == request.auth.uid
-            && resource.data.status == 'PENDING');
-        allow delete: if isSuperAdmin();
+        allow create: if false;
+        allow update: if false;
+        allow delete: if false;
       }
 
       match /onDutyRequests/{reqId} {
         allow read: if isStaff(collegeId);
-        allow create: if isStaff(collegeId) && hasCollegeId(collegeId);
-        allow update: if isHODorAbove(collegeId) ||
-          (isPanelMember(collegeId) && resource.data.facultyId == request.auth.uid
-            && resource.data.status == 'PENDING');
-        allow delete: if isSuperAdmin();
+        allow create: if false;
+        allow update: if false;
+        allow delete: if false;
       }
 
       // ─── [ ATTENDANCE MODULE ] ──────────────────────────────────────────────
 
       match /attendanceRecords/{recordId} {
         allow read: if isStaff(collegeId);
-        allow create: if isHODorAbove(collegeId) && hasCollegeId(collegeId);
-        allow update: if isHODorAbove(collegeId);
-        allow delete: if isSuperAdmin();
+        allow create: if false;
+        allow update: if false;
+        allow delete: if false;
       }
 
       match /attendanceSummaries/{summaryId} {
         allow read: if isStaff(collegeId);
-        allow write: if isHODorAbove(collegeId) || isAccounts(collegeId);
+        allow write: if false;
       }
 
       match /attendanceCheckInPermissions/{permissionId} {
         allow read: if isStaff(collegeId);
-        allow write: if isHODorAbove(collegeId);
+        allow write: if false;
       }
 
       match /holidays/{holidayId} {
         allow read: if isStaff(collegeId);
-        allow write: if isPrincipalOrOffice(collegeId);
+        allow write: if false;
       }
 
       match /summerHolidays/{summerHolidayId} {
         allow read: if isStaff(collegeId);
-        allow write: if isCollegeOffice(collegeId);
+        allow write: if false;
       }
 
       match /workingDays/{workingDayId} {
         allow read: if isStaff(collegeId);
-        allow write: if isPrincipalOrOffice(collegeId);
+        allow write: if false;
       }
 
       // ─── [ PAYROLL MODULE ] ─────────────────────────────────────────────────
 
       match /salaryStructures/{structureId} {
         allow read: if isAccounts(collegeId) || isPrincipal(collegeId);
-        allow write: if isAccounts(collegeId) || isPrincipal(collegeId);
+        allow write: if false;
       }
 
       match /salaryRecords/{recordId} {
         // Faculty can read their own payslip (API enforces facultyId match)
-        allow read: if isStaff(collegeId);
-        allow create: if isAccounts(collegeId) && hasCollegeId(collegeId);
-        allow update: if isAccounts(collegeId) || isPrincipal(collegeId);
-        allow delete: if isSuperAdmin();
+        allow read: if isSuperAdmin(); // browser reads unused; the API enforces role/department scope
+        allow create: if false;
+        allow update: if false;
+        allow delete: if false;
       }
 
       match /salaryAdvances/{advanceId} {
         allow read: if isAccounts(collegeId) || isHODorAbove(collegeId);
-        allow create: if isStaff(collegeId) && hasCollegeId(collegeId);
-        allow update: if isAccounts(collegeId) || isPrincipal(collegeId);
-        allow delete: if isSuperAdmin();
+        allow create: if false;
+        allow update: if false;
+        allow delete: if false;
       }
 
       match /payrollRuns/{runId} {
         allow read: if isAccounts(collegeId) || isPrincipal(collegeId);
-        allow write: if isAccounts(collegeId);
+        allow write: if false;
       }
 
       // ─── [ TEACHING MODULE ] ────────────────────────────────────────────────
 
       match /subjects/{subjectId} {
         allow read: if isStaff(collegeId);
-        allow write: if isHODorAbove(collegeId);
+        allow write: if false;
       }
 
       // Exam Cell's Internal/External marks configuration for a subject —
@@ -541,7 +536,7 @@ service cloud.firestore {
       // assigned subject's config; Principal/HOD get oversight visibility).
       match /examConfigurations/{configId} {
         allow read: if isStaff(collegeId) || isExamCell(collegeId);
-        allow write: if isExamCell(collegeId);
+        allow write: if false;
       }
 
       // Exam Cell's college-wide "how many mids" setting, and the published
@@ -549,17 +544,17 @@ service cloud.firestore {
       // as examConfigurations above.
       match /examSettings/{settingId} {
         allow read: if isStaff(collegeId) || isExamCell(collegeId);
-        allow write: if isExamCell(collegeId);
+        allow write: if false;
       }
 
       match /examMidSchedules/{scheduleId} {
         allow read: if isStaff(collegeId) || isExamCell(collegeId);
-        allow write: if isExamCell(collegeId);
+        allow write: if false;
       }
 
       match /teachingAssignments/{assignmentId} {
         allow read: if isStaff(collegeId);
-        allow write: if isHODorAbove(collegeId);
+        allow write: if false;
       }
 
       // Cross-department requests to lend a faculty member for a subject
@@ -567,12 +562,12 @@ service cloud.firestore {
       // create/fulfil these; every staff role may read for visibility.
       match /facultyAssignmentRequests/{requestId} {
         allow read: if isStaff(collegeId);
-        allow write: if isHODorAbove(collegeId);
+        allow write: if false;
       }
 
       match /timetableSlots/{slotId} {
         allow read: if isStaff(collegeId);
-        allow write: if isHODorAbove(collegeId);
+        allow write: if false;
       }
 
       // Faculty's own internal-exam marks batch (owner can create/edit while
@@ -584,11 +579,9 @@ service cloud.firestore {
       // PATCH /internal-exam-marks/[id]).
       match /internalExamMarks/{markId} {
         allow read: if isStaff(collegeId);
-        allow create: if isPanelMember(collegeId) && request.resource.data.facultyId == request.auth.uid;
-        allow update: if isPrincipal(collegeId) ||
-          (isPanelMember(collegeId) && resource.data.facultyId == request.auth.uid
-            && resource.data.status == 'DRAFT');
-        allow delete: if isPrincipal(collegeId);
+        allow create: if false;
+        allow update: if false;
+        allow delete: if false;
       }
 
       // Faculty's own class attendance session for a section+subject+date
@@ -596,7 +589,7 @@ service cloud.firestore {
       // internalExamMarks above).
       match /studentAttendance/{sessionId} {
         allow read: if isStaff(collegeId);
-        allow create: if isPanelMember(collegeId) && request.resource.data.facultyId == request.auth.uid;
+        allow create: if false;
         // Update/delete are server-only: every real edit (faculty save/submit,
         // and "Post on Behalf" office corrections) goes through the Admin SDK
         // API routes, which enforce department scope, the manual-edit window,
@@ -610,39 +603,37 @@ service cloud.firestore {
 
       match /workloadSummaries/{summaryId} {
         allow read: if isStaff(collegeId);
-        allow write: if isHODorAbove(collegeId);
+        allow write: if false;
       }
 
       // ─── [ APPRAISAL MODULE ] ───────────────────────────────────────────────
 
       match /appraisalCycles/{cycleId} {
         allow read: if isStaff(collegeId);
-        allow write: if isPrincipal(collegeId);
+        allow write: if false;
       }
 
       match /appraisals/{appraisalId} {
         allow read: if isHODorAbove(collegeId) ||
           (isPanelMember(collegeId) && resource.data.facultyId == request.auth.uid);
-        allow create: if isStaff(collegeId) && hasCollegeId(collegeId);
+        allow create: if false;
         // Self appraisal: faculty updates their own; HOD/Principal for their review
-        allow update: if isHODorAbove(collegeId) ||
-          (isPanelMember(collegeId) && resource.data.facultyId == request.auth.uid);
-        allow delete: if isSuperAdmin();
+        allow update: if false;
+        allow delete: if false;
       }
 
       // ─── [ TRAINING MODULE ] ────────────────────────────────────────────────
 
       match /trainingPrograms/{programId} {
         allow read: if isStaff(collegeId);
-        allow write: if isHODorAbove(collegeId) || isCollegeOffice(collegeId);
+        allow write: if false;
       }
 
       match /trainingEnrollments/{enrollmentId} {
         allow read: if isStaff(collegeId);
-        allow create: if isStaff(collegeId) && hasCollegeId(collegeId);
-        allow update: if isHODorAbove(collegeId) ||
-          (isPanelMember(collegeId) && resource.data.facultyId == request.auth.uid);
-        allow delete: if isHODorAbove(collegeId);
+        allow create: if false;
+        allow update: if false;
+        allow delete: if false;
       }
 
       // ─── [ GRIEVANCE MODULE ] ───────────────────────────────────────────────
@@ -652,9 +643,9 @@ service cloud.firestore {
         allow read: if isHODorAbove(collegeId) || isCollegeOffice(collegeId) ||
           (!resource.data.isAnonymous && isPanelMember(collegeId) &&
             resource.data.facultyId == request.auth.uid);
-        allow create: if isStaff(collegeId) && hasCollegeId(collegeId);
-        allow update: if isHODorAbove(collegeId) || isCollegeOffice(collegeId);
-        allow delete: if isSuperAdmin();
+        allow create: if false;
+        allow update: if false;
+        allow delete: if false;
       }
 
       // ─── [ FINANCE MODULE ] ─────────────────────────────────────────────────
@@ -709,15 +700,15 @@ service cloud.firestore {
         // Does NOT require custom claims (role/collegeId) so it works before
         // the first post-claim login.
         allow read: if isAuthenticated() && resource.data.toUid == request.auth.uid;
-        allow create: if isStaff(collegeId) && hasCollegeId(collegeId);
-        allow update: if isAuthenticated() && resource.data.toUid == request.auth.uid;
-        allow delete: if isSuperAdmin();
+        allow create: if false;
+        allow update: if false;
+        allow delete: if false;
       }
 
       match /auditLogs/{logId} {
         allow read: if isPrincipal(collegeId) || isSuperAdmin();
-        allow create: if isStaff(collegeId) && hasCollegeId(collegeId);
-        allow update, delete: if isSuperAdmin();
+        allow create: if false;
+        allow update, delete: if false;
       }
     }
   }

@@ -155,7 +155,7 @@ export default function LocationDepartmentsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-card/90 backdrop-blur-sm p-5 sm:p-6 rounded-3xl border border-border/60 shadow-xs">
         <div className="flex items-center gap-3.5">
           <Button asChild variant="ghost" size="icon" className="h-10 w-10 rounded-full hover:bg-muted/80 shrink-0">
-            <Link href="/location-staff-admin">
+            <Link aria-label="Back" href="/location-staff-admin">
               <ArrowLeft className="h-5 w-5 text-foreground" />
             </Link>
           </Button>

@@ -1,5 +1,7 @@
 export const dynamic = "force-dynamic";
 
+import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -28,6 +30,8 @@ export async function GET() {
 
     return NextResponse.json({ requests });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -41,7 +45,7 @@ export async function POST(request: Request) {
     const session = await requireCollegeMember(...COLLEGE_STAFF_ROLES);
     const isRnD = session.role === "R_AND_D";
 
-    const body = (await request.json()) as {
+    const body = (await readJsonBody(request)) as {
       totalCitations?: number | string;
       hIndex?: number | string;
       citationsExcludingSelf?: number | string;
@@ -97,15 +101,7 @@ export async function POST(request: Request) {
       updatedAt: now,
     });
 
-    await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-      collegeId: session.collegeId,
-      action: existing.exists ? "RD_CITATION_METRICS_UPDATED" : "RD_CITATION_METRICS_CREATED",
-      performedBy: session.uid,
-      performedByName: owner?.name ?? "Unknown",
-      targetId: session.uid,
-      details: { uid: session.uid, totalCitations: fields.totalCitations, hIndex: fields.hIndex },
-      timestamp: now,
-    });
+    await writeAuditLogSafe(db, session.collegeId, { action: existing.exists ? "RD_CITATION_METRICS_UPDATED" : "RD_CITATION_METRICS_CREATED", performedBy: session.uid, performedByName: owner?.name ?? "Unknown", targetId: session.uid, details: { uid: session.uid, totalCitations: fields.totalCitations, hIndex: fields.hIndex } });
 
     if (isRnD) {
       await applyCitationMetricsFields(db, session.collegeId, session.uid, fields);
@@ -121,6 +117,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ ok: true, status });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

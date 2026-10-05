@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { forgetHeldRoles } from "@/lib/auth/liveRoles";
@@ -14,6 +15,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     const ctx = await requireSeatManager(request);
     return NextResponse.json({ history: await listSeatHistory(getAdminDb(), ctx.collegeId, id) });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     return handle(err, "GET");
   }
 }
@@ -23,7 +26,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const { id } = await params;
     const ctx = await requireSeatManager(request);
     const db = getAdminDb();
-    const body = (await request.json()) as {
+    const body = (await readJsonBody(request)) as {
       action?: "ASSIGN" | "VACATE" | "UPDATE" | "REMOVE" | "REACTIVATE";
       uid?: string;
       outgoing?: OutgoingHolderAction;
@@ -58,6 +61,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (body.uid) forgetHeldRoles(ctx.collegeId, body.uid);
     return NextResponse.json({ ok: true });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     return handle(err, "PATCH");
   }
 }

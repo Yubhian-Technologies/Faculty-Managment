@@ -1,8 +1,12 @@
 export const dynamic = "force-dynamic";
 
+import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
+import { isEmployeeIdReserved, reserveEmployeeId } from "@/lib/firestore/employeeIdKeys";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
-import { getAdminDb } from "@/lib/firebase/admin";
+import { getAdminDb, getAdminAuth } from "@/lib/firebase/admin";
+import { employeeIdTaken, employeeIdTakenMessage } from "@/lib/firestore/employeeIds";
 import { getHodDepartmentScope, canHodManageFacultyDepartment } from "@/lib/departments/scope";
 import { syncTrainingEntryCoConductors } from "@/lib/faculty/syncTrainingEntryCoConductors";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
@@ -23,6 +27,9 @@ import { mobileNoFromBody } from "@/lib/faculty/mobileNo";
 import { normalizeHighestQualification } from "@/lib/faculty/highestQualification";
 import { FieldValue } from "firebase-admin/firestore";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
+import { actorOf } from "@/lib/audit/actorOf";
+import { isReadOnlyFacultyCollege, isReadOnlyFacultyStatus } from "@/lib/auth/readOnlyAccess";
+import { vacateSeatsOnExit, type VacateSeatsResult } from "@/lib/faculty/vacateSeatsOnExit";
 import type { Designation, EmployeeCategory, FacultyStatus, TrainingEntry } from "@/types";
 import {
   EMPLOYEE_CATEGORY_VALUES, EMPLOYEE_CATEGORY_ERROR_MESSAGE, SELECTABLE_FACULTY_STATUS_VALUES, FACULTY_STATUS_ERROR_MESSAGE,
@@ -62,6 +69,8 @@ export async function GET(
 
     return NextResponse.json({ faculty: { id: snap.id, ...migrateFacultyDoc(snap.data() ?? {}) } });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -78,7 +87,7 @@ export async function PATCH(
     const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL");
     const { id } = await params;
 
-    const body = (await request.json()) as Partial<{
+    const body = (await readJsonBody(request)) as Partial<{
       employeeId: string;
       apaarFacultyId: string;
       email: string;
@@ -182,22 +191,23 @@ export async function PATCH(
 
     const updates: Record<string, unknown> = { updatedAt: new Date() };
 
-    // Employee ID must stay unique across every college, not just this one -
-    // checked separately from the other string fields since it needs a
-    // duplicate lookup (mirrors the check on creation in POST /api/college/faculty).
-    // Cross-college because the public faculty-profile link is keyed on
-    // employeeId alone (see /api/public/faculty-public).
+    // Employee ID must stay unique by the same rule creation uses - across every
+    // college among faculty (the public faculty-profile link is keyed on
+    // employeeId alone, see /api/public/faculty-public) and not shared with a
+    // supporting-staff member of this college (lib/firestore/employeeIds.ts).
     if (body.employeeId !== undefined && body.employeeId.trim()) {
       const newEmployeeId = body.employeeId.trim();
       const currentEmployeeId = (snap.data() as { employeeId?: string }).employeeId;
       if (newEmployeeId !== currentEmployeeId) {
-        const dupSnap = await db
-          .collectionGroup("facultyMembers")
-          .where("employeeId", "==", newEmployeeId)
-          .limit(1)
-          .get();
-        if (!dupSnap.empty) {
-          return NextResponse.json({ error: "Employee ID already exists" }, { status: 409 });
+        const idCheck = await employeeIdTaken(db, session.collegeId, newEmployeeId, { collection: "facultyMembers", id });
+        if (idCheck.taken) {
+          return NextResponse.json({ error: employeeIdTakenMessage(idCheck) }, { status: 409 });
+        }
+        try {
+          await reserveEmployeeId(db, session.collegeId, newEmployeeId, { collection: "facultyMembers", id });
+        } catch (e) {
+          if (isEmployeeIdReserved(e)) return NextResponse.json({ error: employeeIdTakenMessage({ taken: true, heldBy: e.heldBy }) }, { status: 409 });
+          throw e;
         }
       }
       updates.employeeId = newEmployeeId;
@@ -413,24 +423,61 @@ export async function PATCH(
       }
     }
 
+    // RESIGNED/RETIRED = a read-only login (lib/auth/readOnlyAccess.ts - derived
+    // from this very status, nothing else is stored). Being read-only also means
+    // holding no seat, so every seat they hold is vacated through the normal seat
+    // flow (lib/faculty/vacateSeatsOnExit.ts). Only when the college has the switch
+    // on, and on ANY save of a person whose status IS RESIGNED/RETIRED - not only
+    // the save that changes it - so a vacate that failed, or was skipped for an admin
+    // to resolve, is retried by simply saving the record again (it is idempotent: a
+    // person holding no seat costs one read and changes nothing). The reverse (back
+    // to ACTIVE) restores access by itself but deliberately restores NO seat - an
+    // admin assigns it again - and does not run this at all. The status save above is
+    // already final: access is derived from it, so even if a seat can't be vacated
+    // here no authority lingers; the outcome is recorded on this record
+    // (seatVacateStatus) and returned so it is visible.
+    let seatVacate: VacateSeatsResult | undefined;
+    const previousFacultyData = snap.data() as { status?: string; seatVacateStatus?: string };
+    const resultingStatus = body.status ?? previousFacultyData.status;
+    const enteredExit = body.status !== undefined && body.status !== previousFacultyData.status && isReadOnlyFacultyStatus(body.status);
+    if (isReadOnlyFacultyStatus(resultingStatus) && isReadOnlyFacultyCollege(session.collegeId) && before.userUid) {
+      try {
+        const seatActor = await actorOf(db, session.collegeId, session.uid, session.email);
+        const outcome = await vacateSeatsOnExit(
+          db, session.collegeId, before.userUid, { name: newDisplayName || oldDisplayName || "This person", status: String(resultingStatus) }, seatActor
+        );
+        const detail = [
+          ...outcome.failed.map((f) => `${f.seat}: ${f.error}`),
+          ...outcome.skipped.map((x) => `${x.seat}: ${x.reason}`),
+        ];
+        // Only report (and write) when there is something to say: the save that moved them into
+        // an exited status always reports; a later re-save only when it vacated/flagged something
+        // or cleared an earlier flag.
+        const hadFlag = !!previousFacultyData.seatVacateStatus;
+        if (enteredExit || outcome.vacated.length > 0 || detail.length > 0 || hadFlag) seatVacate = outcome;
+        if (detail.length > 0) {
+          await ref.update({ seatVacateStatus: outcome.failed.length > 0 ? "FAILED" : "NEEDS_ATTENTION", seatVacateDetail: detail, updatedAt: new Date() });
+        } else if (hadFlag) {
+          await ref.update({ seatVacateStatus: FieldValue.delete(), seatVacateDetail: FieldValue.delete() });
+        }
+      } catch (seatErr) {
+        console.error("[college/faculty/[id] PATCH] seat vacate failed:", seatErr);
+        await ref.update({ seatVacateStatus: "FAILED", seatVacateDetail: [String(seatErr instanceof Error ? seatErr.message : seatErr)], updatedAt: new Date() }).catch(() => {});
+      }
+    }
+
     let actorName = "Unknown";
     try {
       const actorSnap = await db.collection("colleges").doc(session.collegeId).collection("users").doc(session.uid).get();
       actorName = (actorSnap.data() as { name?: string } | undefined)?.name ?? "Unknown";
     } catch { /* best-effort */ }
 
-    await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-      collegeId: session.collegeId,
-      action: "FACULTY_UPDATED",
-      performedBy: session.uid,
-      performedByName: actorName,
-      targetId: id,
-      details: { name: newDisplayName || oldDisplayName, fields: Object.keys(updates).filter((k) => k !== "updatedAt") },
-      timestamp: new Date(),
-    });
+    await writeAuditLogSafe(db, session.collegeId, { action: "FACULTY_UPDATED", performedBy: session.uid, performedByName: actorName, targetId: id, details: { name: newDisplayName || oldDisplayName, fields: Object.keys(updates).filter((k) => k !== "updatedAt") } });
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, ...(seatVacate ? { seatVacate } : {}) });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -500,7 +547,6 @@ export async function DELETE(
       // Best-effort: remove the Firebase Auth account too. If it fails, the
       // Firestore records are still gone, which is what the UI reads from.
       try {
-        const { getAdminAuth } = await import("@/lib/firebase/admin");
         const auth = await getAdminAuth();
         await auth.deleteUser(linkedUid);
       } catch (authErr) {
@@ -526,6 +572,8 @@ export async function DELETE(
 
     return NextResponse.json({ success: true });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

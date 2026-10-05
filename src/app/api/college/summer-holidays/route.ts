@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -34,6 +35,8 @@ export async function GET() {
     const summerHolidays = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as SummerHoliday);
     return NextResponse.json({ summerHolidays });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -47,7 +50,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("COLLEGE_OFFICE");
-    const body = (await request.json()) as { academicYear?: string; fromDate?: string; toDate?: string };
+    const body = (await readJsonBody(request)) as { academicYear?: string; fromDate?: string; toDate?: string };
 
     const academicYear = body.academicYear?.trim();
     const fromDateStr = body.fromDate?.trim();
@@ -84,6 +87,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ id: academicYear });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

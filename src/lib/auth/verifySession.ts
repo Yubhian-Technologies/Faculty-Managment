@@ -54,7 +54,8 @@ export async function verifySession(): Promise<SessionPayload | null> {
 
   const payload = await readSession<SessionPayload>(sessionCookie);
   if (!payload) return null;
-  if (payload.exp && Date.now() / 1000 > payload.exp) return null;
+  // A cookie with no expiry would be valid forever once copied - the session route always stamps one.
+  if (!payload.exp || Date.now() / 1000 > payload.exp) return null;
   return payload;
 }
 

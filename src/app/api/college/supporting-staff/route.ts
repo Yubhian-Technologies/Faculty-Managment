@@ -1,9 +1,13 @@
 export const dynamic = "force-dynamic";
 
+import { firebaseAuthErrorResponse } from "@/lib/http/firebaseErrors";
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
+import { isEmployeeIdReserved, releaseEmployeeId, reserveEmployeeId } from "@/lib/firestore/employeeIdKeys";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import { createFirebaseUser } from "@/lib/firebase/authRest";
+import { withAuthUser } from "@/lib/firebase/withAuthUser";
+import { employeeIdTaken, employeeIdTakenMessage } from "@/lib/firestore/employeeIds";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
 import { getHodDepartmentScope, canHodManageFacultyDepartment } from "@/lib/departments/scope";
 import { SUPPORTING_STAFF_ROLE_CATEGORY, canRoleCreateSupportingStaff, supportingStaffCategoryLabel } from "@/lib/supportingStaff/roleCategory";
@@ -86,9 +90,16 @@ export async function GET(request: Request) {
 
     return NextResponse.json({ staff });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
+    if (isEmployeeIdReserved(err)) {
+      return NextResponse.json({ error: employeeIdTakenMessage({ taken: true, heldBy: err.heldBy }) }, { status: 409 });
+    }
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const authErr = firebaseAuthErrorResponse(err);
+    if (authErr) return authErr;
     console.error("[college/supporting-staff GET]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
@@ -98,7 +109,7 @@ export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("COLLEGE_OFFICE", "HOD", "PRINCIPAL", "VICE_PRINCIPAL", "LIBRARY");
 
-    const body = (await request.json()) as {
+    const body = (await readJsonBody(request)) as {
       employeeId: string;
       apaarFacultyId?: string;
       email?: string;
@@ -204,26 +215,21 @@ export async function POST(request: Request) {
       department = unitLabelForHeadRole("LIBRARY") ?? "Library";
     }
 
-    const existing = await db
-      .collection("colleges")
-      .doc(collegeId)
-      .collection("supportingStaff")
-      .where("employeeId", "==", employeeId)
-      .limit(1)
-      .get();
-    if (!existing.empty) {
-      return NextResponse.json({ error: "Employee ID already exists" }, { status: 409 });
+    // One employee-ID rule for faculty and staff (lib/firestore/employeeIds.ts):
+    // not held by another staff member of this college, nor by any faculty member.
+    const idCheck = await employeeIdTaken(db, collegeId, employeeId);
+    if (idCheck.taken) {
+      return NextResponse.json({ error: employeeIdTakenMessage(idCheck) }, { status: 409 });
     }
 
-    const uid = await createFirebaseUser(collegeEmail, password, finalName);
+    // The login and every document that goes with it are one unit (withAuthUser):
+    // the three writes below are a single batch, and a failure after the Auth user
+    // exists removes it again instead of leaving an orphan login.
+    const created = await withAuthUser({ email: collegeEmail, password, displayName: finalName, db }, async (uid) => {
     const now = new Date();
+    const batch = db.batch();
 
-    await db
-      .collection("colleges")
-      .doc(collegeId)
-      .collection("users")
-      .doc(uid)
-      .set({
+    batch.set(db.collection("colleges").doc(collegeId).collection("users").doc(uid), {
         uid,
         collegeId,
         name: finalName,
@@ -239,7 +245,7 @@ export async function POST(request: Request) {
 
     const docRef = db.collection("colleges").doc(collegeId).collection("supportingStaff").doc();
 
-    await docRef.set({
+    batch.set(docRef, {
       collegeId,
       ...(department ? { department } : {}),
       employeeId,
@@ -280,19 +286,36 @@ export async function POST(request: Request) {
       updatedAt: now,
     });
 
-    await db.collection("systemUsers").doc(uid).set({
+    batch.set(db.collection("systemUsers").doc(uid), {
       uid, role: "COLLEGE_STAFF", collegeId, email: collegeEmail, name: finalName,
       ...(profilePhotoUrl ? { profilePhotoUrl } : {}),
     });
 
-    return NextResponse.json({ id: docRef.id, uid }, { status: 201 });
+    // Race-proof the employee-ID rule: the pre-check above can pass for two
+    // concurrent requests, the lock doc cannot (lib/firestore/employeeIdKeys.ts).
+    // A failure here unwinds the Auth user via withAuthUser.
+    await reserveEmployeeId(db, collegeId, employeeId, { collection: "supportingStaff", id: docRef.id });
+    try {
+      await batch.commit();
+    } catch (commitErr) {
+      await releaseEmployeeId(db, collegeId, employeeId, { collection: "supportingStaff", id: docRef.id });
+      throw commitErr;
+    }
+    return { id: docRef.id, uid };
+    });
+
+    return NextResponse.json(created, { status: 201 });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     if (err && typeof err === "object" && "code" in err && err.code === "auth/email-already-exists") {
       return NextResponse.json({ error: "An account with this email already exists" }, { status: 409 });
     }
+    const authErr = firebaseAuthErrorResponse(err);
+    if (authErr) return authErr;
     console.error("[college/supporting-staff POST]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }

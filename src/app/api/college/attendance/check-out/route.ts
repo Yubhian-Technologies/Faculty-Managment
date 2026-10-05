@@ -1,11 +1,13 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { checkCampusGeofence } from "@/lib/attendance/geofence";
 import { COLLEGE_STAFF_UNIT_HEAD_ROLES } from "@/lib/attendance/collegeStaffUnits";
 import { istDateKey, istTimeHHMM } from "@/lib/attendance/istTime";
+import { verifyAttendanceProof, type AttendanceProofBody } from "@/lib/attendance/attendanceProof";
 import type { College } from "@/types";
 
 function todayDocSuffix(): string {
@@ -19,22 +21,24 @@ function currentTimeHHMM(): string {
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_STAFF", ...COLLEGE_STAFF_UNIT_HEAD_ROLES);
-    const body = (await request.json()) as {
+    const body = (await readJsonBody(request)) as AttendanceProofBody & {
       latitude?: number;
       longitude?: number;
-      faceMatchDistance?: number;
-      faceVerified?: boolean;
     };
 
-    const { latitude, longitude, faceMatchDistance, faceVerified } = body;
+    const { latitude, longitude } = body;
     if (typeof latitude !== "number" || typeof longitude !== "number") {
       return NextResponse.json({ error: "Location is required" }, { status: 400 });
     }
-    if (!faceVerified) {
-      return NextResponse.json({ error: "Face not verified — please try again" }, { status: 400 });
-    }
 
     const db = getAdminDb();
+    // The server compares the posted face descriptor with the registered one
+    // itself (see lib/attendance/attendanceProof.ts); the client's own
+    // "faceVerified" flag and distance are ignored.
+    const proof = await verifyAttendanceProof(db, session.collegeId, session.uid, body);
+    if (!proof.ok) {
+      return NextResponse.json({ error: proof.error }, { status: proof.status });
+    }
     const collegeRef = db.collection("colleges").doc(session.collegeId);
 
     const collegeSnap = await collegeRef.get();
@@ -61,13 +65,16 @@ export async function POST(request: Request) {
     await recordRef.set({
       checkOut: currentTimeHHMM(),
       checkOutLocation: { latitude, longitude },
-      checkOutFaceMatchDistance: faceMatchDistance ?? null,
+      checkOutFaceMatchDistance: proof.distance,
       checkOutVerified: true,
+      checkOutProof: proof.evidence,
       updatedAt: new Date(),
     }, { merge: true });
 
     return NextResponse.json({ ok: true, checkOut: currentTimeHHMM() });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

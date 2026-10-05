@@ -166,11 +166,15 @@ export function OfficeCorrectionDialog({
                       <td className="px-4 py-2">{e.rollNumber}</td>
                       <td className="px-4 py-2 font-medium">{e.name}</td>
                       <td className="px-4 py-2 text-center">
-                        <Switch
-                          checked={draft[e.studentId] === "PRESENT"}
-                          onCheckedChange={(c) => toggleStudent(e.studentId, c)}
-                          aria-label={`Mark ${e.name} present`}
-                        />
+                        {e.status === "ON_DUTY" ? (
+                          <span title="Approved permission - locked" className="inline-flex rounded-full border border-blue-300 bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-800">On Duty</span>
+                        ) : (
+                          <Switch
+                            checked={draft[e.studentId] === "PRESENT"}
+                            onCheckedChange={(c) => toggleStudent(e.studentId, c)}
+                            aria-label={`Mark ${e.name} present`}
+                          />
+                        )}
                       </td>
                     </tr>
                   ))}

@@ -1,5 +1,7 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
+import { clientIp, rateLimit } from "@/lib/security/rateLimit";
 import { NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebase/admin";
 
@@ -21,8 +23,13 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+
+  const limited = rateLimit(`student-feedback:${clientIp(request)}`, 60, 3600000);
+  if (!limited.ok) {
+    return NextResponse.json({ error: "Too many requests - please try again later" }, { status: 429, headers: { "Retry-After": String(limited.retryAfterSeconds) } });
+  }
   try {
-    const body = (await request.json()) as {
+    const body = (await readJsonBody(request)) as {
       batchId: string;
       candidateId: string;
       collegeId: string;
@@ -86,6 +93,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ ok: true }, { status: 201 });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     console.error("[public/student-feedback POST]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }

@@ -5,6 +5,7 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { STUDENT_FACULTY_RATIO, CADRE_PARTS as DEFAULT_CADRE_PARTS, CADRE_TOTAL_PARTS as DEFAULT_CADRE_TOTAL, requiredFacultyCount } from "@/lib/college/facultyRatio";
 import { loadCollegeSettings } from "@/lib/firestore/collegeSettings";
+import { countStudentsOfDepartment } from "@/lib/students/countStudents";
 import { AVAILABLE_FACULTY_STATUSES } from "@/types";
 
 export type CadreEntry = {
@@ -62,15 +63,13 @@ export async function GET(request: Request) {
     // department instead, when it's their real destination branch - counted
     // too, same union sections/route.ts's own studentCount aggregation uses,
     // or a branch's year-1 intake would be missing from its own hiring plan.
-    const [studentsSnap, studentsSecondarySnap] = await Promise.all([
-      db.collection("colleges").doc(session.collegeId).collection("students").where("department", "==", dept).get(),
-      db.collection("colleges").doc(session.collegeId).collection("students").where("secondaryDepartment", "==", dept).get(),
-    ]);
-
-    const countedIds = new Set<string>();
-    for (const d of studentsSnap.docs) countedIds.add(d.id);
-    for (const d of studentsSecondarySnap.docs) countedIds.add(d.id);
-    const totalStudents = countedIds.size;
+    // Only the number is needed, so this is a count() aggregation over the same
+    // union (department OR secondaryDepartment, a student matching both counted
+    // once) rather than a read of every matching student document.
+    const totalStudents = await countStudentsOfDepartment(
+      db.collection("colleges").doc(session.collegeId).collection("students"),
+      dept
+    );
 
     // ── College settings (faculty norms) — single source for ratio + cadre split
     // Falls back to DEFAULT_COLLEGE_SETTINGS if college has no custom doc, keeping

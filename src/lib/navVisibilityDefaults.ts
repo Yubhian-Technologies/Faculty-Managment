@@ -1,4 +1,5 @@
 import type { NavVisibilitySettings, UserRole } from "@/types";
+import { migrateHiddenModules } from "@/components/layout/navConfig";
 
 // These pages are still placeholder ("coming soon") screens across every role
 // that has one - hidden by default until each is actually built out, per college.
@@ -36,8 +37,15 @@ function mergePerRole(defaults: PerRole, stored: PerRole | undefined): PerRole {
 export function resolveNavVisibility(
   stored: Partial<NavVisibilitySettings> | undefined
 ): Pick<NavVisibilitySettings, "hiddenModules" | "hiddenItems"> {
+  // Saved module names from before a section was renamed/split still hide what they
+  // used to: see migrateHiddenModules. Applied here so the Super Admin screen and
+  // the runtime sidebar read the same migrated list.
+  const hiddenModules = mergePerRole(DEFAULT_NAV_VISIBILITY.hiddenModules, stored?.hiddenModules);
+  for (const role of Object.keys(hiddenModules) as UserRole[]) {
+    hiddenModules[role] = migrateHiddenModules(role, hiddenModules[role] ?? []);
+  }
   return {
-    hiddenModules: mergePerRole(DEFAULT_NAV_VISIBILITY.hiddenModules, stored?.hiddenModules),
+    hiddenModules,
     hiddenItems: mergePerRole(DEFAULT_NAV_VISIBILITY.hiddenItems, stored?.hiddenItems),
   };
 }

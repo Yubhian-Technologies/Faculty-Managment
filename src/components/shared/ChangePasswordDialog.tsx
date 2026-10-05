@@ -32,11 +32,24 @@ const FIREBASE_ERROR_MESSAGES: Record<string, string> = {
 // Uncontrolled by default (renders its own "Change Password" button). Pass
 // open/onOpenChange to drive it from elsewhere, e.g. the top-bar settings menu,
 // in which case no trigger button is rendered.
-export function ChangePasswordDialog({ open: controlledOpen, onOpenChange }: { open?: boolean; onOpenChange?: (open: boolean) => void } = {}) {
+//
+// `forced` is for a login that MUST set a new password before using anything
+// (a student's one-time password): it can't be closed or cancelled, and says why.
+// `onChanged` runs once Firebase has accepted the new password.
+export function ChangePasswordDialog({
+  open: controlledOpen,
+  onOpenChange,
+  forced = false,
+  onChanged,
+}: { open?: boolean; onOpenChange?: (open: boolean) => void; forced?: boolean; onChanged?: () => void } = {}) {
   const [internalOpen, setInternalOpen] = useState(false);
   const controlled = controlledOpen !== undefined;
   const open = controlled ? controlledOpen : internalOpen;
-  const setOpen = (v: boolean) => { if (!controlled) setInternalOpen(v); onOpenChange?.(v); };
+  const setOpen = (v: boolean) => {
+    if (forced && !v) return; // a required change can't be dismissed
+    if (!controlled) setInternalOpen(v);
+    onOpenChange?.(v);
+  };
 
   const {
     register,
@@ -60,6 +73,7 @@ export function ChangePasswordDialog({ open: controlledOpen, onOpenChange }: { o
 
       toast({ variant: "success", title: "Password changed" });
       reset();
+      onChanged?.();
       setOpen(false);
     } catch (err: unknown) {
       const code = (err as { code?: string }).code ?? "";
@@ -72,7 +86,7 @@ export function ChangePasswordDialog({ open: controlledOpen, onOpenChange }: { o
   };
 
   return (
-    <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) reset(); }}>
+    <Dialog open={open} onOpenChange={(v) => { if (forced && !v) return; setOpen(v); if (!v) reset(); }}>
       {!controlled && <DialogTrigger asChild>
         {/* Default size, matching the other actions it sits beside in every
             profile header (Download Resume, Copy Public Profile Link) - it
@@ -83,7 +97,13 @@ export function ChangePasswordDialog({ open: controlledOpen, onOpenChange }: { o
       </DialogTrigger>}
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Change Password</DialogTitle>
+          <DialogTitle>{forced ? "Set a new password" : "Change Password"}</DialogTitle>
+          {forced && (
+            <p className="text-sm text-muted-foreground">
+              You signed in with a one-time password from your college. Choose a password of your own to continue - enter the
+              one-time password below as your current password.
+            </p>
+          )}
         </DialogHeader>
         <form
           // DialogContent renders through a Portal,
@@ -112,7 +132,7 @@ export function ChangePasswordDialog({ open: controlledOpen, onOpenChange }: { o
             {errors.confirmPassword && <p className="text-sm text-destructive">{errors.confirmPassword.message}</p>}
           </div>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+            {!forced && <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>}
             <Button type="submit" loading={isSubmitting}>Change Password</Button>
           </DialogFooter>
         </form>

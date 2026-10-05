@@ -20,27 +20,31 @@ export const attendanceNotPostedSweep = onSchedule(
     schedule: "every 15 minutes",
     timeZone: "Asia/Kolkata",
     secrets: [cronSecret],
+    // The sweep reports each missed period exactly once however many times it
+    // runs (see src/lib/attendance/notPostedSweep.ts), so a failed run is safe
+    // to retry - and a run that ends in an error is a FAILED run on the
+    // platform (visible in its metrics, alertable), not a quiet success.
+    retryCount: 2,
   },
   async () => {
     const url = appUrl.value();
     if (!url) {
       logger.error("APP_URL is not configured - skipping sweep. See functions/README.md.");
-      return;
+      // Misconfiguration: retrying cannot help, but it must not look like success.
+      throw new Error("APP_URL is not configured");
     }
-    try {
-      const res = await fetch(`${url}/api/cron/attendance-not-posted`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${cronSecret.value()}` },
-      });
-      const body = await res.text();
-      if (!res.ok) {
-        logger.error(`attendance-not-posted sweep failed: ${res.status} ${body}`);
-        return;
-      }
-      logger.info("attendance-not-posted sweep ok", { body });
-    } catch (err) {
-      logger.error("attendance-not-posted sweep threw", err);
+    const res = await fetch(`${url}/api/cron/attendance-not-posted`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${cronSecret.value()}` },
+    });
+    const body = await res.text();
+    if (!res.ok) {
+      // A 500 here names the colleges that failed (the other colleges were still
+      // swept). Throwing marks this execution failed so it is retried and alerted on.
+      logger.error(`attendance-not-posted sweep failed: ${res.status} ${body}`);
+      throw new Error(`attendance-not-posted sweep failed: ${res.status}`);
     }
+    logger.info("attendance-not-posted sweep ok", { body });
   }
 );
 

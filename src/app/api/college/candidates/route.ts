@@ -1,5 +1,7 @@
 export const dynamic = "force-dynamic";
 
+import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -58,6 +60,8 @@ export async function GET(_request: Request) {
 
     return NextResponse.json({ candidates });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -69,7 +73,7 @@ export async function GET(_request: Request) {
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");
-    const body = (await request.json()) as {
+    const body = (await readJsonBody(request)) as {
       name: string;
       email: string;
       phone: string;
@@ -134,18 +138,12 @@ export async function POST(request: Request) {
         updatedAt: now,
       });
 
-    await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-      collegeId: session.collegeId,
-      action: "CANDIDATE_ADDED",
-      performedBy: session.uid,
-      performedByName: addedByName,
-      targetId: ref.id,
-      details: { name, email },
-      timestamp: now,
-    });
+    await writeAuditLogSafe(db, session.collegeId, { action: "CANDIDATE_ADDED", performedBy: session.uid, performedByName: addedByName, targetId: ref.id, details: { name, email } });
 
     return NextResponse.json({ id: ref.id }, { status: 201 });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

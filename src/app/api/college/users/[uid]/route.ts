@@ -1,5 +1,8 @@
 export const dynamic = "force-dynamic";
 
+import { firebaseAuthErrorResponse } from "@/lib/http/firebaseErrors";
+import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { requireCollegeMember, isDepartmentOffice } from "@/lib/auth/verifySession";
@@ -12,6 +15,8 @@ import { degreeTypeError } from "@/lib/faculty/degreeType";
 import { migrateUserDoc, migrateFacultyDoc, migrateSupportingStaffDoc } from "@/lib/faculty/fieldRenames";
 import { withLegacyPersonalKeysDeleted } from "@/lib/faculty/legacyKeyDeletes";
 import { assignSeat } from "@/lib/roles/seats";
+import { setLinkedFacultyPhoto } from "@/lib/faculty/syncFacultyPhoto";
+import { hasLinkedFacultyRecord, isSingleSourceCollege, mergeFacultyWithLogin, singleSourceBlockFor } from "@/lib/faculty/singleSource";
 import type { UserRole } from "@/types";
 
 async function loadTargetInScope(
@@ -120,16 +125,27 @@ export async function GET(
         .where("userUid", "==", uid).limit(1).get();
       if (!linkedSnap.empty) {
         const linkedData = linkedSnap.docs[0].data();
-        const linkedLifted = linkedCollection === "facultyMembers" ? migrateFacultyDoc(linkedData) : migrateSupportingStaffDoc(linkedData);
-        return NextResponse.json({ user: { ...linkedLifted, ...user, recordId: linkedSnap.docs[0].id } });
+        if (linkedCollection === "facultyMembers") {
+          const singleSource = isSingleSourceCollege(session.collegeId);
+          // Additive: tells the staff edit pages (switched-on colleges only) that this person's profile
+          // content lives on the Faculty record, so they save there. Absent everywhere else.
+          return NextResponse.json({
+            user: { ...mergeFacultyWithLogin(migrateFacultyDoc(linkedData), user, singleSource), recordId: linkedSnap.docs[0].id, ...(singleSource ? { facultyRecordSource: true } : {}) },
+          });
+        }
+        return NextResponse.json({ user: { ...migrateSupportingStaffDoc(linkedData), ...user, recordId: linkedSnap.docs[0].id } });
       }
     }
 
     return NextResponse.json({ user });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const authErr = firebaseAuthErrorResponse(err);
+    if (authErr) return authErr;
     console.error("[college/users/[uid] GET]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
@@ -142,7 +158,7 @@ export async function PATCH(
   try {
     const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "HOD", "COLLEGE_OFFICE");
     const { uid } = await params;
-    const body = (await request.json()) as Partial<{
+    const body = (await readJsonBody(request)) as Partial<{
       isActive: boolean;
       name: string;
       email: string;
@@ -169,6 +185,16 @@ export async function PATCH(
     const { targetSnap, error, status } = await loadTargetInScope(db, session, uid);
     if (!targetSnap) return NextResponse.json({ error }, { status });
     const target = targetSnap.data() as { role: string; sectionId?: string; name?: string; department?: string; departments?: string[]; email?: string; collegeEmail?: string };
+
+    // Single source of truth (switch-gated, no-op elsewhere): a faculty-linked person's profile content and
+    // mirrored identity fields are edited on the Faculty record, never copied onto the login. Refused BEFORE
+    // any write (password / Auth email / Firestore) so a refusal changes nothing.
+    if (isSingleSourceCollege(session.collegeId) && (target.role === "HOD" || target.role === "PANEL_MEMBER" || target.role === "DEPARTMENT_OFFICE")) {
+      const block = singleSourceBlockFor(body, targetSnap.data() ?? {});
+      if (block && (await hasLinkedFacultyRecord(db, session.collegeId, uid))) {
+        return NextResponse.json({ error: block.message, code: "FACULTY_RECORD_IS_SOURCE", fields: block.fields }, { status: block.status });
+      }
+    }
 
     const roleChanged = body.role !== undefined && body.role !== target.role;
     if (roleChanged) {
@@ -265,6 +291,9 @@ export async function PATCH(
     if (body.academicProfile !== undefined) updates.academicProfile = normalizeAcademicProfile(body.academicProfile);
     if (body.profilePhotoUrl !== undefined) updates.profilePhotoUrl = body.profilePhotoUrl;
 
+    // The photo belongs to the person's faculty record (source of truth) - written first, then the mirror below.
+    if (body.profilePhotoUrl !== undefined) await setLinkedFacultyPhoto(db, session.collegeId, uid, body.profilePhotoUrl);
+
     await db
       .collection("colleges")
       .doc(session.collegeId)
@@ -356,21 +385,17 @@ export async function PATCH(
       actorName = (actorSnap.data() as { name?: string } | undefined)?.name ?? "Unknown";
     } catch { /* best-effort */ }
 
-    await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-      collegeId: session.collegeId,
-      action,
-      performedBy: session.uid,
-      performedByName: actorName,
-      targetId: uid,
-      details: roleChanged ? { fromRole: target.role, toRole: body.role } : { role: target.role },
-      timestamp: now,
-    });
+    await writeAuditLogSafe(db, session.collegeId, { action: action, performedBy: session.uid, performedByName: actorName, targetId: uid, details: roleChanged ? { fromRole: target.role, toRole: body.role } : { role: target.role } });
 
     return NextResponse.json({ ok: true });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const authErr = firebaseAuthErrorResponse(err);
+    if (authErr) return authErr;
     console.error("[college/users/[uid] PATCH]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
@@ -472,9 +497,13 @@ export async function DELETE(
 
     return NextResponse.json({ ok: true });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const authErr = firebaseAuthErrorResponse(err);
+    if (authErr) return authErr;
     console.error("[college/users/[uid] DELETE]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }

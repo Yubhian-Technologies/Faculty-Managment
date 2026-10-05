@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -34,6 +35,8 @@ export async function GET() {
       .sort((a, b) => b.at - a.at);
     return NextResponse.json({ plans });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (isAuthError(err)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     console.error("[exam-seating GET]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
@@ -47,7 +50,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("EXAM_CELL");
-    const body = (await request.json()) as {
+    const body = (await readJsonBody(request)) as {
       name?: string;
       sectionIds?: string[];
       roomIds?: string[];
@@ -123,6 +126,8 @@ export async function POST(request: Request) {
     const ref = await college.collection("examSeatingPlans").add(plan);
     return NextResponse.json({ id: ref.id, unplaced: allocation.unplaced.length }, { status: 201 });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (isAuthError(err)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     console.error("[exam-seating POST]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });

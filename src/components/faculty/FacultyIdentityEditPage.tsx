@@ -330,7 +330,20 @@ export function FacultyIdentityEditPage({
         const data = (await res.json()) as { error?: string };
         throw new Error(data.error ?? "Failed to save changes");
       }
+      // Only present when this save made them RESIGNED/RETIRED in a college with
+      // read-only faculty access on: what happened to the seats they held.
+      const saved = (await res.json().catch(() => ({}))) as {
+        seatVacate?: { vacated?: string[]; skipped?: { seat: string; reason: string }[]; failed?: { seat: string; error: string }[] };
+      };
       toast({ variant: "success", title: "Faculty details updated" });
+      const sv = saved.seatVacate;
+      if (sv?.vacated?.length) {
+        toast({ variant: "success", title: "Seats vacated", description: `${sv.vacated.join(", ")} - assign a new holder in Role Assignments. They now have read-only access.` });
+      }
+      const unresolved = [...(sv?.skipped ?? []).map((s) => `${s.seat}: ${s.reason}`), ...(sv?.failed ?? []).map((f) => `${f.seat}: ${f.error}`)];
+      if (unresolved.length > 0) {
+        toast({ variant: "destructive", title: "Some seats still need attention", description: unresolved.join(" · ") });
+      }
       router.push(detailHref);
     } catch (err) {
       toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to save changes" });

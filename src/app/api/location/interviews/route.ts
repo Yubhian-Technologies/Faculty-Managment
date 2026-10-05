@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { verifySession } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -50,6 +51,8 @@ export async function GET(request: Request) {
     // HR Admin and Super Admin see all
     return NextResponse.json({ interviews });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     console.error("[location/interviews GET]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
@@ -63,7 +66,7 @@ export async function POST(request: Request) {
     }
     if (!session.locationId) return NextResponse.json({ error: "No location context" }, { status: 400 });
 
-    const body = (await request.json()) as {
+    const body = (await readJsonBody(request)) as {
       vacancyId: string;
       title: string;
       interviewDate: string;
@@ -167,6 +170,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ id: ref.id }, { status: 201 });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     console.error("[location/interviews POST]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }

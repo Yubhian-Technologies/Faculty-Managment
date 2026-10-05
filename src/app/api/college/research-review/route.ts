@@ -1,5 +1,7 @@
 export const dynamic = "force-dynamic";
 
+import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
@@ -69,6 +71,8 @@ export async function GET() {
     const items = results.flat().sort((a, b) => ms(b.record.createdAt) - ms(a.record.createdAt));
     return NextResponse.json({ departments, items });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     const res = unauthorized(err);
     if (res) return res;
     console.error("[college/research-review GET]", err);
@@ -88,7 +92,7 @@ interface ReviewBody {
 export async function PATCH(request: Request) {
   try {
     const session = await requireCollegeMember("RND_COORDINATOR");
-    const body = (await request.json()) as ReviewBody;
+    const body = (await readJsonBody(request)) as ReviewBody;
     const cfg = body.module ? REVIEWABLE_MODULES[body.module] : undefined;
     if (!cfg || !body.id || !body.action) {
       return NextResponse.json({ error: "module, id and action are required" }, { status: 400 });
@@ -161,15 +165,7 @@ export async function PATCH(request: Request) {
 
     await ref.update(updates);
 
-    await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-      collegeId: session.collegeId,
-      action: "RD_COORDINATOR_REVIEWED",
-      performedBy: session.uid,
-      performedByName: coordinatorName,
-      targetId: body.id,
-      details: { module: body.module, title, action: body.action, ...(editedFields.length ? { edited: editedFields } : {}) },
-      timestamp: now,
-    });
+    await writeAuditLogSafe(db, session.collegeId, { action: "RD_COORDINATOR_REVIEWED", performedBy: session.uid, performedByName: coordinatorName, targetId: body.id, details: { module: body.module, title, action: body.action, ...(editedFields.length ? { edited: editedFields } : {}) } });
 
     if (body.action === "FORWARD") {
       await notifyRole(
@@ -193,6 +189,8 @@ export async function PATCH(request: Request) {
 
     return NextResponse.json({ ok: true, edited: editedFields });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     const res = unauthorized(err);
     if (res) return res;
     console.error("[college/research-review PATCH]", err);

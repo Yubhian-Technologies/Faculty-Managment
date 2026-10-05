@@ -1,9 +1,12 @@
 export const dynamic = "force-dynamic";
 
+import { firebaseAuthErrorResponse } from "@/lib/http/firebaseErrors";
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { createFirebaseUser } from "@/lib/firebase/authRest";
+import { loadTakenEmployeeIds } from "@/lib/firestore/employeeIds";
 import { ChunkedBatch } from "@/lib/firestore/chunkedBatch";
 import { splitDegreeAndBranch } from "@/lib/faculty/legacyProfileFallbacks";
 import { experienceBreakdown } from "@/lib/faculty/experienceCalc";
@@ -230,7 +233,7 @@ function buildSupportingStaffProfile(
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("COLLEGE_OFFICE", "HOD");
-    const body = (await request.json()) as { records: ImportRow[] };
+    const body = (await readJsonBody(request)) as { records: ImportRow[] };
 
     if (!body.records || !Array.isArray(body.records) || body.records.length === 0) {
       return NextResponse.json({ error: "No records provided" }, { status: 400 });
@@ -272,9 +275,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Your account has no department assigned - contact Administration" }, { status: 400 });
     }
 
-    const existingSnap = await db.collection("colleges").doc(collegeId).collection("supportingStaff")
-      .select("employeeId").get();
-    const existingIds = new Set(existingSnap.docs.map((d) => (d.data() as { employeeId: string }).employeeId));
+    // Same employee-ID rule as everywhere else (lib/firestore/employeeIds.ts): not
+    // held by another staff member of this college, nor by any faculty member;
+    // compared case-insensitively. Only the IDs in this file are looked up.
+    const existingIds = await loadTakenEmployeeIds(db, collegeId, (body.records ?? []).map((r) => r.employeeId ?? ""));
 
     // No Department column in the import template - HOD's rows default to
     // their own department (same as the single "Add Staff" form); College
@@ -348,7 +352,7 @@ export async function POST(request: Request) {
       if (!row.panNo?.trim() || !PAN_REGEX.test(row.panNo.trim().toUpperCase())) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "PAN No must be 5 letters, 4 digits, then 1 letter (e.g. ABCDE1234F)" }); continue; }
 
       const empId = row.employeeId.trim();
-      if (existingIds.has(empId)) {
+      if (existingIds.has(empId.toLowerCase())) {
         failed.push({ row: rowNum, employeeId: empId, error: "Employee ID already exists" });
         continue;
       }
@@ -407,6 +411,8 @@ export async function POST(request: Request) {
         userUid = await createFirebaseUser(loginEmail, passwordRaw, finalName);
         createdAuthUids.push(userUid);
       } catch (err) {
+        const badBody = badBodyResponse(err);
+        if (badBody) return badBody;
         const message = err && typeof err === "object" && "code" in err && err.code === "auth/email-already-exists"
           ? "an account with this email already exists"
           : err instanceof Error ? err.message : "unknown error";
@@ -474,7 +480,7 @@ export async function POST(request: Request) {
         });
       }
 
-      existingIds.add(empId);
+      existingIds.add(empId.toLowerCase());
       created.push(empId);
     }
 
@@ -495,9 +501,13 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ created: created.length, failed, warnings }, { status: 201 });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const authErr = firebaseAuthErrorResponse(err);
+    if (authErr) return authErr;
     console.error("[supporting-staff/import POST]", err);
     const detail = process.env.NODE_ENV !== "production" ? `: ${err instanceof Error ? err.message : String(err)}` : "";
     return NextResponse.json({ error: `Internal error${detail}` }, { status: 500 });

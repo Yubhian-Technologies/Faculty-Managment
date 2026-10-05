@@ -1,6 +1,10 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
+import { claimSectionKey, isSectionKeyTaken } from "@/lib/sections/sectionKeys";
+import { getSectionStudentCounts } from "@/lib/students/sectionCounts";
 import { NextResponse } from "next/server";
+import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodEditDepartmentId } from "@/lib/departments/scope";
@@ -320,50 +324,7 @@ export async function GET(request: Request) {
     // field.
     const deptNames = Array.from(new Set(sections.map((s) => s.department as string).filter(Boolean)));
     if (deptNames.length > 0) {
-      const chunks: string[][] = [];
-      for (let i = 0; i < deptNames.length; i += 30) chunks.push(deptNames.slice(i, i + 30));
-
-      const [primaryStudentSnaps, secondaryStudentSnaps] = await Promise.all([
-        Promise.all(
-          chunks.map((chunk) =>
-            db.collection("colleges").doc(session.collegeId).collection("students")
-              .where("department", "in", chunk)
-              .get()
-          )
-        ),
-        Promise.all(
-          chunks.map((chunk) =>
-            db.collection("colleges").doc(session.collegeId).collection("students")
-              .where("secondaryDepartment", "in", chunk)
-              .get()
-          )
-        ),
-      ]);
-
-      const countMap = new Map<string, number>();
-      const countedIds = new Set<string>();
-      for (const snap of primaryStudentSnaps) {
-        for (const d of snap.docs) {
-          if (countedIds.has(d.id)) continue;
-          countedIds.add(d.id);
-          const s = d.data() as { department?: string; section?: string; year?: number; secondaryDepartment?: string; courseId?: string };
-          const key = `${s.department ?? ""}|${s.section ?? ""}|${s.year ?? 0}|${(s.secondaryDepartment ?? "").toLowerCase()}|${s.courseId ?? ""}`;
-          countMap.set(key, (countMap.get(key) ?? 0) + 1);
-        }
-      }
-      for (const snap of secondaryStudentSnaps) {
-        for (const d of snap.docs) {
-          if (countedIds.has(d.id)) continue;
-          countedIds.add(d.id);
-          const s = d.data() as { secondaryDepartment?: string; section?: string; year?: number; courseId?: string };
-          // The section a shared-first-year student actually sits in is their
-          // real branch's own - never itself cross-listed (see hod/sections/
-          // new's managed-branch mode) - so the disambiguator stays "", same
-          // as such a section's own (always-empty) secondaryDepartments.
-          const key = `${s.secondaryDepartment ?? ""}|${s.section ?? ""}|${s.year ?? 0}|${""}|${s.courseId ?? ""}`;
-          countMap.set(key, (countMap.get(key) ?? 0) + 1);
-        }
-      }
+      const countMap = await getSectionStudentCounts(db, session.collegeId, deptNames);
 
       for (const sec of sections) {
         const secondaryDepts = sec.secondaryDepartments as string[] | undefined;
@@ -375,6 +336,8 @@ export async function GET(request: Request) {
 
     return NextResponse.json({ sections });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -389,7 +352,7 @@ export async function POST(request: Request) {
     // any managed branch) creates them; Super Admin retains an override. Reads
     // (GET above) stay open to Principal/VP/Office/Panel.
     const session = await requireCollegeMember("HOD", "SUPER_ADMIN");
-    const body = (await request.json()) as {
+    const body = (await readJsonBody(request)) as {
       courseId: string;
       name: string;
       year: number;
@@ -720,7 +683,7 @@ export async function POST(request: Request) {
     const ref = db.collection("colleges").doc(session.collegeId).collection("sections").doc();
 
     const deptIndex = await loadDepartmentIndex(db, session.collegeId);
-    await ref.set(stampDepartmentIds({
+    const sectionDoc = stampDepartmentIds({
       collegeId: session.collegeId,
       department: dept,
       ...(secondaryDepartments.length > 0 ? { secondaryDepartments } : {}),
@@ -735,10 +698,38 @@ export async function POST(request: Request) {
       studentCount: body.studentCount != null ? Math.max(0, Number(body.studentCount)) : 0,
       createdAt: now,
       updatedAt: now,
-    }, deptIndex));
+    }, deptIndex);
+    // The sibling query above is the fast, friendly check; this lock doc closes
+    // the race where two requests both pass it (see lib/sections/sectionKeys.ts).
+    try {
+      await db.runTransaction(async (tx) => {
+        await claimSectionKey(tx, db, session.collegeId, {
+          department: dept, courseId: body.courseId, year: Number(body.year), name: sectionName, secondaryDepartment: secondaryDepartments[0] ?? "",
+        }, ref);
+        tx.set(ref, sectionDoc);
+      });
+    } catch (e) {
+      if (isSectionKeyTaken(e)) {
+        return NextResponse.json(
+          { error: `Section ${sectionName} already exists for ${dept} Year ${body.year}${secondaryDepartments[0] ? ` (feeding ${secondaryDepartments[0]})` : ""}.` },
+          { status: 409 },
+        );
+      }
+      throw e;
+    }
+
+    await writeAuditLogSafe(db, session.collegeId, {
+      action: "SECTION_CREATED",
+      performedBy: session.uid,
+      performedByName: session.email || session.role,
+      targetId: ref.id,
+      details: { name: sectionName, department: dept, year: Number(body.year), courseId: body.courseId, batch },
+    });
 
     return NextResponse.json({ id: ref.id }, { status: 201 });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

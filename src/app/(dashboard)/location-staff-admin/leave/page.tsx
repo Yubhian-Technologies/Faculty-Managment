@@ -2,11 +2,13 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import { ArrowLeft, CalendarClock, CheckCircle2, XCircle, RefreshCw } from "lucide-react";
+import { ArrowLeft, CalendarClock, CheckCircle2, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/shared/DataTable";
 import { toast } from "@/hooks/useToast";
+import { useAppliedFilters } from "@/hooks/useAppliedFilters";
+import { LoadButton } from "@/components/shared/LoadButton";
 import type { LeaveRequest as LocationLeaveRequest } from "@/types/locationStaff";
 
 const LEAVE_TYPE_LABELS: Record<string, string> = { CL: "Casual", EL: "Earned", SL: "Sick", PL: "Privileged", OTHER: "Other" };
@@ -16,11 +18,13 @@ export default function LeavePage() {
   const [leaveRequests, setLeaveRequests] = useState<LocationLeaveRequest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState("ALL");
+  // Status chips edit a draft; the list is fetched when Load is clicked.
+  const { applied, dirty, load } = useAppliedFilters({ filterStatus });
 
   const loadLeave = useCallback(async () => {
     setIsLoading(true);
     try {
-      const params = new URLSearchParams({ status: filterStatus });
+      const params = new URLSearchParams({ status: applied.filterStatus });
       const res = await fetch(`/api/location/leave?${params.toString()}`);
       if (res.ok) {
         const d = await res.json() as { leaveRequests: LocationLeaveRequest[] };
@@ -31,7 +35,7 @@ export default function LeavePage() {
     } finally {
       setIsLoading(false);
     }
-  }, [filterStatus]);
+  }, [applied]);
 
   useEffect(() => { loadLeave(); }, [loadLeave]);
 
@@ -63,7 +67,7 @@ export default function LeavePage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-card/90 backdrop-blur-sm p-5 sm:p-6 rounded-3xl border border-border/60 shadow-xs">
         <div className="flex items-center gap-3.5">
           <Button asChild variant="ghost" size="icon" className="h-10 w-10 rounded-full hover:bg-muted/80 shrink-0">
-            <Link href="/location-staff-admin"><ArrowLeft className="h-5 w-5 text-foreground" /></Link>
+            <Link aria-label="Back" href="/location-staff-admin"><ArrowLeft className="h-5 w-5 text-foreground" /></Link>
           </Button>
           <div>
             <div className="flex items-center gap-2 mb-1">
@@ -102,7 +106,7 @@ export default function LeavePage() {
             {s === "ALL" ? "All" : s}
           </Button>
         ))}
-        <Button variant="outline" size="sm" className="h-8 text-xs rounded-full px-3" onClick={loadLeave}><RefreshCw className="h-3 w-3 mr-1" /> Refresh</Button>
+        <LoadButton dirty={dirty} onClick={load} loading={isLoading} className="h-8 text-xs rounded-full px-3" />
       </div>
 
       {isLoading ? (

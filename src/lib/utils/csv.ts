@@ -38,9 +38,18 @@ export function readFileAsText(file: File): Promise<string> {
   });
 }
 
+// A cell that starts like a formula is run as one when the file is opened in Excel or Sheets, so a
+// student or candidate name typed as `=HYPERLINK(...)` would execute on an administrator's machine.
+// Such cells get a leading apostrophe, which spreadsheets treat as "this is text". Ordinary values
+// are untouched: plain text, numbers, negative numbers, "+91 98765..." phone numbers and dates.
+const FORMULA_START = /^(?:[=@]|[+-][^\d\s.(])/;
+export function neutraliseFormula(cell: string): string {
+  return FORMULA_START.test(cell) ? `'${cell}` : cell;
+}
+
 export function toCSV(rows: string[][]): string {
   return rows
-    .map((row) => row.map((cell) => (
+    .map((row) => row.map((raw) => neutraliseFormula(raw)).map((cell) => (
       // Combined multi-entry export cells (see exportFacultyCsv.ts's
       // combineGroup) embed real newlines between entries - those need
       // quoting exactly like a comma/quote does, or the cell splits into a

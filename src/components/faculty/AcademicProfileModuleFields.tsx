@@ -52,7 +52,7 @@ export interface ModuleFieldsProps {
 }
 
 const EMPTY_LAB: LabEstablished = { facilityDetails: "", outcomes: "" };
-const EMPTY_PREVIOUS_INSTITUTION: PreviousInstitution = { institutionName: "", designation: "" };
+const EMPTY_PREVIOUS_INSTITUTION: PreviousInstitution = { institutionName: "", place: "", designation: "" };
 const EMPTY_PROMOTION: PromotionRecord = { designation: "" };
 const EMPTY_TRAINING: TrainingEntry = { type: "FDP", titleOfTheProgram: "", nameOfTheFacultyCoordinator: "" };
 const EMPTY_MEMBERSHIP: ProfessionalMembership = { body: "IEEE" };
@@ -216,6 +216,7 @@ export function ExperienceFields({ value: rawValue, onChange, includeTeachingAss
           return (
             <>
               <TextInput label="Institution Name" value={item.institutionName} onChange={(v) => update({ institutionName: v })} />
+              <TextInput label="Place of the University/College" value={item.place} onChange={(v) => update({ place: v })} placeholder="e.g. Bhimavaram" />
               <TextInput label="Designation" value={item.designation} onChange={(v) => update({ designation: v })} />
               <DateInput
                 label="From Date"

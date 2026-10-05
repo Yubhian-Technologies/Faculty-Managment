@@ -1,5 +1,7 @@
 export const dynamic = "force-dynamic";
 
+import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -14,7 +16,7 @@ export async function PATCH(
     // Dean Academics (ACADEMICS), who can change every field of a course.
     const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "ACADEMICS");
     const { id } = await params;
-    const body = (await request.json()) as {
+    const body = (await readJsonBody(request)) as {
       name?: string;
       code?: string;
       durationYears?: number;
@@ -100,21 +102,15 @@ export async function PATCH(
     await ref.update(updates);
 
     const actorSnap = await db.collection("colleges").doc(session.collegeId).collection("users").doc(session.uid).get();
-    await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-      collegeId: session.collegeId,
-      action: "COURSE_CATALOG_UPDATED" as string,
-      performedBy: session.uid,
-      performedByName: (actorSnap.data() as { name?: string } | undefined)?.name ?? session.email ?? "Unknown",
-      targetId: id,
-      details: {
+    await writeAuditLogSafe(db, session.collegeId, { action: "COURSE_CATALOG_UPDATED" as string, performedBy: session.uid, performedByName: (actorSnap.data() as { name?: string } | undefined)?.name ?? session.email ?? "Unknown", targetId: id, details: {
         name: (snap.data() as { name?: string }).name ?? "",
         changed: Object.keys(updates).filter((k) => k !== "updatedAt"),
-      },
-      timestamp: new Date(),
-    });
+      } });
 
     return NextResponse.json({ success: true });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -155,18 +151,12 @@ export async function DELETE(
     await ref.delete();
 
     const actorSnap = await db.collection("colleges").doc(session.collegeId).collection("users").doc(session.uid).get();
-    await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-      collegeId: session.collegeId,
-      action: "COURSE_CATALOG_DELETED" as string,
-      performedBy: session.uid,
-      performedByName: (actorSnap.data() as { name?: string } | undefined)?.name ?? session.email ?? "Unknown",
-      targetId: id,
-      details: { name: (snap.data() as { name?: string }).name ?? "" },
-      timestamp: new Date(),
-    });
+    await writeAuditLogSafe(db, session.collegeId, { action: "COURSE_CATALOG_DELETED" as string, performedBy: session.uid, performedByName: (actorSnap.data() as { name?: string } | undefined)?.name ?? session.email ?? "Unknown", targetId: id, details: { name: (snap.data() as { name?: string }).name ?? "" } });
 
     return NextResponse.json({ success: true });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

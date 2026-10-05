@@ -290,6 +290,9 @@ export function StudentDetailsPage({ studentId, backHref, editable = false }: St
           open={editOpen}
           onOpenChange={setEditOpen}
           student={student}
+          // `editable` is only ever passed by the College Office route, whose Edit
+          // form may also change the Roll No (the server enforces it by role).
+          rollEditable
           onSaved={() => { setEditOpen(false); void loadStudent(); }}
         />
       )}

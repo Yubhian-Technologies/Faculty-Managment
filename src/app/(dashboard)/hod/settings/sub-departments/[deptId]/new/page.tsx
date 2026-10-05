@@ -56,7 +56,8 @@ export default function NewSubDepartmentPage() {
         fetch("/api/college/users?role=PANEL_MEMBER").then((r) => r.json() as Promise<{ users: FMSUser[] }>),
       ]);
       setAllDepartments(deptsRes.departments ?? []);
-      setHods(hodsRes.users ?? []);
+      // A RESIGNED/RETIRED person (flagged by the API in read-only-access colleges) can no longer be a Sub-HOD.
+      setHods((hodsRes.users ?? []).filter((u) => !u.facultyExited));
     } catch {
       toast({ variant: "destructive", title: "Failed to load sub-departments" });
     } finally {

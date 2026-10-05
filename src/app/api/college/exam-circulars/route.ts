@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
@@ -36,6 +37,8 @@ export async function GET() {
     const circulars = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     return NextResponse.json({ circulars });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -58,7 +61,7 @@ export async function POST(request: Request) {
 async function postNotice(request: Request) {
   try {
     const session = await requireCollegeMember("EXAM_CELL", "SUPER_ADMIN");
-    const body = (await request.json()) as {
+    const body = (await readJsonBody(request)) as {
       courseId?: string; courseName?: string; semester?: number; totalSemesters?: number;
       noticeDate?: string; subject?: string; body?: string;
     };
@@ -96,6 +99,8 @@ async function postNotice(request: Request) {
     const ref = await db.collection("colleges").doc(session.collegeId).collection("examCirculars").add(data);
     return NextResponse.json({ circular: { id: ref.id, ...data } }, { status: 201 });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -160,6 +165,8 @@ async function postFile(request: Request) {
 
     return NextResponse.json({ circular: { id: ref.id, ...data } }, { status: 201 });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

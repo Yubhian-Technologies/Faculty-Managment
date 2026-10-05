@@ -7,6 +7,8 @@ import { BottomNav, hasBottomNav } from "@/components/layout/BottomNav";
 import { MobileDrawer } from "@/components/layout/MobileDrawer";
 import { TopBar } from "@/components/layout/TopBar";
 import { SummerHolidayBanner } from "@/components/layout/SummerHolidayBanner";
+import { ReadOnlyAccessGate } from "@/components/layout/ReadOnlyAccessGate";
+import { readOnlyHiddenHrefs } from "@/components/layout/readOnlyNav";
 import { isPathHidden } from "@/components/layout/navConfig";
 import { useAuthStore } from "@/store/authStore";
 import { useNavVisibility } from "@/hooks/useNavVisibility";
@@ -40,22 +42,27 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     notFound();
   }
 
+  // A read-only person (RESIGNED/RETIRED faculty) only sees the menu entries they can open. Applied to the
+  // menus only - NOT to the notFound() check above - so visiting a blocked page directly shows the read-only
+  // notice (ReadOnlyAccessGate) instead of a 404.
+  const navHiddenItems = user.readOnlyAccess ? [...hiddenItems, ...readOnlyHiddenHrefs()] : hiddenItems;
+
   return (
     <div className="min-h-screen bg-muted/30">
-      <Sidebar hiddenModules={hiddenModules} hiddenItems={hiddenItems} />
-      <MobileDrawer hiddenModules={hiddenModules} hiddenItems={hiddenItems} />
+      <Sidebar hiddenModules={hiddenModules} hiddenItems={navHiddenItems} />
+      <MobileDrawer hiddenModules={hiddenModules} hiddenItems={navHiddenItems} />
       <div className="md:ml-64 flex flex-col min-h-screen">
-        <TopBar hiddenItems={hiddenItems} />
+        <TopBar hiddenItems={navHiddenItems} />
         <SummerHolidayBanner />
         <main className={`flex-1 p-4 md:p-6 md:pb-6 max-w-7xl mx-auto w-full ${hasBottomNav(user.role, pathname) ? "pb-24" : "pb-6"}`}>
-          {children}
+          <ReadOnlyAccessGate>{children}</ReadOnlyAccessGate>
         </main>
         <footer className="hidden md:flex items-center justify-between px-6 py-3 border-t bg-background text-xs text-muted-foreground">
           <span>© 2026 Sri Vishnu Educational Society. All rights reserved.</span>
           <span>Developed by Yubhian Technologies LLP</span>
         </footer>
       </div>
-      <BottomNav hiddenModules={hiddenModules} hiddenItems={hiddenItems} />
+      <BottomNav hiddenModules={hiddenModules} hiddenItems={navHiddenItems} />
     </div>
   );
 }

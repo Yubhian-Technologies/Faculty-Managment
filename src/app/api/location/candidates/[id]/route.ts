@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { verifySession } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -27,6 +28,8 @@ export async function GET(_req: Request, { params }: Params) {
     if (!doc.exists) return NextResponse.json({ error: "Not found" }, { status: 404 });
     return NextResponse.json({ candidate: { id: doc.id, ...doc.data() } });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     console.error("[location/candidates/[id] GET]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
@@ -39,7 +42,7 @@ export async function PATCH(request: Request, { params }: Params) {
     if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     if (!session.locationId) return NextResponse.json({ error: "No location context" }, { status: 400 });
 
-    const body = (await request.json()) as {
+    const body = (await readJsonBody(request)) as {
       action?: "SHORTLIST" | "REJECT_CANDIDATE";
       bioData?: Record<string, unknown>;
       status?: string;
@@ -83,6 +86,8 @@ export async function PATCH(request: Request, { params }: Params) {
 
     return NextResponse.json({ error: "No valid action provided" }, { status: 400 });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     console.error("[location/candidates/[id] PATCH]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }

@@ -106,7 +106,7 @@ function BeneficiaryDepartmentCard({
     <div className="rounded-md border bg-background p-2 space-y-2">
       <div className="flex items-center justify-between">
         <p className="text-xs font-medium">{entry.courseName} · {entry.department} · Year {entry.year}</p>
-        <Button type="button" variant="ghost" size="sm" onClick={onRemove}>
+        <Button type="button" variant="ghost" size="sm" aria-label="Remove entry" onClick={onRemove}>
           <Trash2 className="h-3.5 w-3.5 text-destructive" />
         </Button>
       </div>

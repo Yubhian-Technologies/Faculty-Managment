@@ -11,7 +11,9 @@ import { FacultyProfileModuleEditor, type FacultyEditRecord } from "@/components
 import { PROFILE_MODULES, SELF_EDIT_DISABLED_MODULES, type ProfileModuleKey } from "@/lib/faculty/profileModules";
 import { useCollegeType } from "@/hooks/useCollegeType";
 import { toast } from "@/hooks/useToast";
-import { migrateUserDoc } from "@/lib/faculty/fieldRenames";
+import { migrateUserDoc, migrateFacultyDoc } from "@/lib/faculty/fieldRenames";
+import { personalRecordFromDoc, personalPatchBody } from "@/lib/faculty/personalRecord";
+import { diffAcademicProfile, isEmptyChanges } from "@/lib/faculty/academicProfileChanges";
 
 // research/financial are excluded from the hub entirely for this flow (see
 // principal/staff/[uid]/page.tsx) - this guard is defense-in-depth against
@@ -28,6 +30,9 @@ export default function PrincipalStaffModuleEditPage() {
   const [saving, setSaving] = useState(false);
   const [name, setName] = useState("");
   const [record, setRecord] = useState<FacultyEditRecord>({});
+  // Set (switched-on colleges only) when this person's profile lives on their Faculty record: the form is
+  // then filled from, and saved to, that record (section-scoped) instead of the login doc.
+  const [facultySource, setFacultySource] = useState<{ recordId: string; academicProfile: FacultyEditRecord["academicProfile"] } | null>(null);
 
   useEffect(() => {
     fetch(`/api/college/users/${uid}`)
@@ -40,6 +45,13 @@ export default function PrincipalStaffModuleEditPage() {
         }
         const m = migrateUserDoc(data.user);
         setName((m.name as string) ?? "");
+        if (data.user.facultyRecordSource === true && typeof data.user.recordId === "string") {
+          const f = migrateFacultyDoc(data.user);
+          const academicProfile = (f.academicProfile as FacultyEditRecord["academicProfile"]) ?? {};
+          setFacultySource({ recordId: data.user.recordId, academicProfile });
+          setRecord({ ...personalRecordFromDoc(f, { ratificationHistory: true }), academicProfile });
+          return;
+        }
         setRecord({
           gender: (m.gender as string) ?? "",
           dateOfBirth: (m.dateOfBirth as string) ?? undefined,
@@ -84,7 +96,7 @@ export default function PrincipalStaffModuleEditPage() {
   async function handleSave() {
     setSaving(true);
     try {
-      const body: Record<string, unknown> =
+      let body: Record<string, unknown> =
         moduleKey === "personal"
           ? {
               gender: record.gender, dateOfBirth: record.dateOfBirth, legalName: record.legalName,
@@ -103,7 +115,21 @@ export default function PrincipalStaffModuleEditPage() {
             }
           : { academicProfile: record.academicProfile };
 
-      const res = await fetch(`/api/college/users/${uid}`, {
+      if (facultySource) {
+        if (moduleKey === "personal") {
+          body = personalPatchBody(record, { ratificationHistory: true });
+        } else {
+          const academicProfileChanges = diffAcademicProfile(facultySource.academicProfile, record.academicProfile);
+          if (isEmptyChanges(academicProfileChanges)) {
+            toast({ variant: "success", title: "No changes to save" });
+            router.push(`/principal/staff/${uid}/${moduleKey}`);
+            return;
+          }
+          body = { academicProfileChanges };
+        }
+      }
+
+      const res = await fetch(facultySource ? `/api/college/faculty/${facultySource.recordId}` : `/api/college/users/${uid}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -159,9 +185,10 @@ export default function PrincipalStaffModuleEditPage() {
               moduleKey={moduleKey}
               record={record}
               onChange={patch}
-              facultyId={uid}
+              facultyId={facultySource?.recordId ?? uid}
               includeTeachingAssignment={false}
               collegeType={collegeType}
+              ratificationHistory={!!facultySource}
             />
             <div className="flex justify-end gap-3 pt-4 border-t">
               <Button variant="outline" onClick={() => router.push(`/principal/staff/${uid}/${moduleKey}`)}>Cancel</Button>

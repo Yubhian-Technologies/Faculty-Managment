@@ -24,6 +24,8 @@ const DEMO_PROFILE: FacultyPublicProfile = {
       branch: "Computer Science",
       specialization: "Distributed Machine Learning",
       institutionName: "IIT Madras",
+      departmentName: "Department of Computer Science and Engineering",
+      thesisTitle: "Scalable Distributed Learning for Large-Scale Image Recognition",
       yearOfAward: 2012,
     },
     additionalPhdDetails: [],
@@ -55,8 +57,8 @@ const DEMO_PROFILE: FacultyPublicProfile = {
   // One row per date shape: real fromDate/toDate (what the current forms write)
   // and the legacy year-only fallback older records still carry.
   academicExperience: [
-    { institutionName: "National University of Singapore", designation: "Post-Doctoral Fellow", fromDate: "2012-08-01", toDate: "2014-07-31" },
-    { institutionName: "BITS Pilani, Hyderabad Campus", designation: "Assistant Professor", fromYear: 2014, toYear: 2018 },
+    { institutionName: "National University of Singapore", place: "Singapore", designation: "Post-Doctoral Fellow", fromDate: "2012-08-01", toDate: "2014-07-31" },
+    { institutionName: "BITS Pilani, Hyderabad Campus", place: "Hyderabad", designation: "Assistant Professor", fromYear: 2014, toYear: 2018 },
   ],
   research: {
     publications: [

@@ -1,5 +1,7 @@
 export const dynamic = "force-dynamic";
 
+import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -25,6 +27,8 @@ export async function GET(
     }
     return NextResponse.json({ request: { id: snap.id, ...snap.data() } });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -40,7 +44,7 @@ export async function PATCH(
   try {
     const session = await requireCollegeMember(...ALL_ROLES);
     const { id } = await params;
-    const body = (await request.json()) as {
+    const body = (await readJsonBody(request)) as {
       action?: "FULFILL" | "CANCEL";
       assignedEmail?: string;
       webmasterNotes?: string;
@@ -103,15 +107,7 @@ export async function PATCH(
           .update({ officialEmail: assignedEmail, updatedAt: now });
       }
 
-      await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-        collegeId: session.collegeId,
-        action: "EMAIL_REQUEST_FULFILLED",
-        performedBy: session.uid,
-        performedByName: webmasterName,
-        targetId: id,
-        details: { facultyId: reqData.facultyId, assignedEmail },
-        timestamp: now,
-      });
+      await writeAuditLogSafe(db, session.collegeId, { action: "EMAIL_REQUEST_FULFILLED", performedBy: session.uid, performedByName: webmasterName, targetId: id, details: { facultyId: reqData.facultyId, assignedEmail } });
 
       if (reqData.requestedByUid) {
         await notify(
@@ -143,21 +139,15 @@ export async function PATCH(
         updatedAt: now,
       });
 
-      await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-        collegeId: session.collegeId,
-        action: "EMAIL_REQUEST_CANCELLED",
-        performedBy: session.uid,
-        performedByName: session.email ?? "Unknown",
-        targetId: id,
-        details: { facultyId: reqData.facultyId },
-        timestamp: now,
-      });
+      await writeAuditLogSafe(db, session.collegeId, { action: "EMAIL_REQUEST_CANCELLED", performedBy: session.uid, performedByName: session.email ?? "Unknown", targetId: id, details: { facultyId: reqData.facultyId } });
 
       return NextResponse.json({ ok: true });
     }
 
     return NextResponse.json({ error: "Unknown action" }, { status: 400 });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

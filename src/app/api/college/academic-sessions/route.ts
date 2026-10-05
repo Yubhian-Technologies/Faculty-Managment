@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeContext } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -51,6 +52,8 @@ export async function GET(request: Request) {
     const academicSessions = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     return NextResponse.json({ academicSessions });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -62,7 +65,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeContext(request, "SUPER_ADMIN", "PRINCIPAL", "VICE_PRINCIPAL");
-    const body = (await request.json()) as { label?: string; isCurrent?: boolean; startDate?: string; endDate?: string };
+    const body = (await readJsonBody(request)) as { label?: string; isCurrent?: boolean; startDate?: string; endDate?: string };
     const label = body.label?.trim();
 
     if (!label) {
@@ -113,6 +116,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ id: newId }, { status: 201 });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -127,7 +132,7 @@ export async function POST(request: Request) {
 export async function PATCH(request: Request) {
   try {
     const session = await requireCollegeContext(request, "SUPER_ADMIN", "PRINCIPAL", "VICE_PRINCIPAL");
-    const body = (await request.json()) as { id?: string; isCurrent?: boolean; startDate?: string; endDate?: string };
+    const body = (await readJsonBody(request)) as { id?: string; isCurrent?: boolean; startDate?: string; endDate?: string };
 
     if (!body.id) {
       return NextResponse.json({ error: "id is required" }, { status: 400 });
@@ -167,6 +172,8 @@ export async function PATCH(request: Request) {
 
     return NextResponse.json({ ok: true });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -192,6 +199,8 @@ export async function DELETE(request: Request) {
     await db.collection("colleges").doc(session.collegeId).collection("academicSessions").doc(id).delete();
     return NextResponse.json({ ok: true });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

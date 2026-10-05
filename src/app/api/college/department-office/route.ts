@@ -1,11 +1,14 @@
 export const dynamic = "force-dynamic";
 
+import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { requireCollegeMember, isDepartmentOffice } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
 import { forgetHeldRoles } from "@/lib/auth/liveRoles";
+import { seatBlockReason } from "@/lib/roles/seatEligibility";
 
 /**
  * Appointing one of the department's OWN faculty as its office head, and
@@ -94,15 +97,7 @@ async function writeAudit(
     let actorName = "Unknown";
     const actorSnap = await db.collection("colleges").doc(collegeId).collection("users").doc(actorUid).get();
     actorName = (actorSnap.data() as { name?: string } | undefined)?.name ?? "Unknown";
-    await db.collection("colleges").doc(collegeId).collection("auditLogs").add({
-      collegeId,
-      action,
-      performedBy: actorUid,
-      performedByName: actorName,
-      targetId,
-      details,
-      timestamp: new Date(),
-    });
+    await writeAuditLogSafe(db, collegeId, { action: action, performedBy: actorUid, performedByName: actorName, targetId: targetId, details: details });
   } catch (auditErr) {
     console.error("[college/department-office] audit log write failed", auditErr);
   }
@@ -114,7 +109,7 @@ export async function POST(request: Request) {
     if ("error" in ctx) return NextResponse.json({ error: ctx.error }, { status: ctx.status });
     const { session, db, scope, department } = ctx;
 
-    const { uid } = (await request.json()) as { uid?: string };
+    const { uid } = (await readJsonBody(request)) as { uid?: string };
     if (!uid) return NextResponse.json({ error: "Pick a faculty member" }, { status: 400 });
 
     const users = db.collection("colleges").doc(session.collegeId).collection("users");
@@ -143,6 +138,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: `${target.name ?? "They"} already holds this post` }, { status: 409 });
     }
 
+    // A RESIGNED/RETIRED faculty member is read-only and can't be appointed (switch-gated; this route grants
+    // the seat directly rather than through assignSeat, so it needs its own check).
+    const block = await seatBlockReason(db, session.collegeId, uid, target.name);
+    if (block) return NextResponse.json({ error: block.message }, { status: block.status });
+
     const holder = await currentHolder(db, session.collegeId, department);
     if (holder) {
       return NextResponse.json(
@@ -161,6 +161,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ ok: true });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -175,7 +177,7 @@ export async function DELETE(request: Request) {
     if ("error" in ctx) return NextResponse.json({ error: ctx.error }, { status: ctx.status });
     const { session, db, department } = ctx;
 
-    const { uid } = (await request.json()) as { uid?: string };
+    const { uid } = (await readJsonBody(request)) as { uid?: string };
     if (!uid) return NextResponse.json({ error: "Nobody to remove" }, { status: 400 });
 
     const users = db.collection("colleges").doc(session.collegeId).collection("users");
@@ -209,6 +211,8 @@ export async function DELETE(request: Request) {
 
     return NextResponse.json({ ok: true });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

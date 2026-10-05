@@ -1,5 +1,7 @@
 export const dynamic = "force-dynamic";
 
+import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { FieldValue } from "firebase-admin/firestore";
 import { findUsersSnapshot } from "@/lib/roles/findUsersByRoles";
 import { NextResponse } from "next/server";
@@ -8,7 +10,8 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { canAccessLeaveProfile } from "@/lib/leave/access";
 import { resolveHodDepartments } from "@/lib/budget/departmentScope";
 import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
-import { REQUESTS_COL, commitApproval, releasePending, releaseApproval, splitLeaveDays } from "@/lib/leave/balanceEngine";
+import { REQUESTS_COL, splitLeaveDays } from "@/lib/leave/balanceEngine";
+import { LeaveStateConflictError, transitionLeaveRequest, type BalanceEffect } from "@/lib/leave/decisionTx";
 import { decideFinalStageLeave } from "@/lib/leave/decideFinalStage";
 import { getHolidayDateKeys } from "@/lib/leave/holidaysCount";
 import { resolveStaffGender, resolveEmployeeIdentity } from "@/lib/leave/identity";
@@ -59,6 +62,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
     return NextResponse.json({ request: req });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -112,7 +117,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       "ACADEMICS", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D",
       "LIBRARY", "EXAM_CELL", "WEBMASTER", "PLACEMENT_DEPT", "PURCHASE_DEPT"
     );
-    const body = (await request.json()) as {
+    const body = (await readJsonBody(request)) as {
       action?: "APPROVE" | "REJECT" | "CANCEL" | "EDIT" | "PROPOSE_COVERAGE" | "REVISE_ADJUSTMENT"
         | "SUBMIT_OD_PROOF" | "VERIFY_OD_PROOF" | "REJECT_OD_PROOF" | "REQUEST_OD_PROOF"
         | "SUBMIT_CERTIFICATE" | "VERIFY_CERTIFICATE" | "REJECT_CERTIFICATE" | "REQUEST_CERTIFICATE";
@@ -187,31 +192,36 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
           return NextResponse.json({ error: "This leave has already been completed and can no longer be cancelled" }, { status: 400 });
         }
       }
-      if (req.leaveTypeCode) {
-        const lt = LEAVE_TYPE_SEED.find((t) => t.code === req.leaveTypeCode);
-        if (lt && !lt.rules.unlimited) {
-          if (wasApproved) {
-            // Restore whatever days approval had committed to `used` -
-            // the extra beyond balance (lopDays) was never committed in the
-            // first place, so only the within-balance portion is reversed.
-            const committedDays = req.totalDays - (req.lopDays ?? 0);
-            if (committedDays > 0) {
-              await releaseApproval(db, session.collegeId, req.uid, req.leaveTypeCode, year, committedDays);
-            }
-          } else {
-            await releasePending(db, session.collegeId, req.uid, req.leaveTypeCode, year, req.totalDays);
+      const cancelReason = body.reason!.trim();
+      // Balance release + status flip are one transaction against the request as
+      // it was read here (decisionTx.ts) - a double-click or an approver acting
+      // at the same moment can no longer release days twice or release them for
+      // a request that was just decided the other way.
+      const cancelledType = req.leaveTypeCode ? LEAVE_TYPE_SEED.find((t) => t.code === req.leaveTypeCode) : undefined;
+      let cancelBalance: BalanceEffect | undefined;
+      if (req.leaveTypeCode && cancelledType && !cancelledType.rules.unlimited) {
+        if (wasApproved) {
+          // Restore whatever days approval had committed to `used` -
+          // the extra beyond balance (lopDays) was never committed in the
+          // first place, so only the within-balance portion is reversed.
+          const committedDays = req.totalDays - (req.lopDays ?? 0);
+          if (committedDays > 0) {
+            cancelBalance = { kind: "RELEASE_APPROVAL", uid: req.uid, code: req.leaveTypeCode, year, days: committedDays };
           }
+        } else {
+          cancelBalance = { kind: "RELEASE_PENDING", uid: req.uid, code: req.leaveTypeCode, year, days: req.totalDays };
         }
       }
-      const cancelReason = body.reason!.trim();
-      await ref.update({ status: "CANCELLED", cancelReason, updatedAt: now });
+      await transitionLeaveRequest({
+        db, collegeId: session.collegeId, id,
+        expected: { status: req.status, updatedAt: req.updatedAt },
+        balance: cancelBalance,
+        buildUpdate: () => ({ status: "CANCELLED", cancelReason, updatedAt: now }),
+      });
       if (wasApproved) {
         await revokeFutureLeaveFromAttendance(db, session.collegeId, req, id);
       }
-      await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-        collegeId: session.collegeId, action: "LEAVE_CANCELLED", performedBy: session.uid,
-        performedByName: req.employeeName, targetId: id, details: { wasApproved, cancelReason }, timestamp: now,
-      });
+      await writeAuditLogSafe(db, session.collegeId, { action: "LEAVE_CANCELLED", performedBy: session.uid, performedByName: req.employeeName, targetId: id, details: { wasApproved, cancelReason } });
 
       // Tell whoever sits above this requester in the approval chain - the same
       // college-configured routing applications/route.ts POST uses to decide
@@ -562,10 +572,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       // omitted field untouched, it doesn't reset it to the HOD default.
       const clearProofRouting = proofRoutedTo !== "EXAM_CELL" && !!req.proofRoutedTo;
       await ref.update(clearProofRouting ? { ...updated, proofRoutedTo: FieldValue.delete() } : updated);
-      await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-        collegeId: session.collegeId, action: "LEAVE_EDITED", performedBy: session.uid,
-        performedByName: identity.name, targetId: id, details: { totalDays }, timestamp: now,
-      });
+      await writeAuditLogSafe(db, session.collegeId, { action: "LEAVE_EDITED", performedBy: session.uid, performedByName: identity.name, targetId: id, details: { totalDays } });
       if (adjustmentRequests.length > 0) {
         await notifyAdjustmentAssignees(db, session.collegeId, { ...req, ...updated, adjustmentRequests });
       } else {
@@ -681,10 +688,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         ...(typeof body.isPaidLeave === "boolean" ? { isPaidLeave: body.isPaidLeave } : {}),
         updatedAt: now,
       });
-      await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-        collegeId: session.collegeId, action: "LEAVE_COVERAGE_PROPOSED", performedBy: session.uid,
-        performedByName: session.email || session.role, targetId: id, details: { changedCount: changed.length }, timestamp: now,
-      });
+      await writeAuditLogSafe(db, session.collegeId, { action: "LEAVE_COVERAGE_PROPOSED", performedBy: session.uid, performedByName: session.email || session.role, targetId: id, details: { changedCount: changed.length } });
       await notifyAdjustmentAssignees(db, session.collegeId, { ...req, adjustmentRequests });
       return NextResponse.json({ ok: true, changed: true });
     }
@@ -733,10 +737,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         odProofReviewedByName: "",
         updatedAt: now,
       });
-      await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-        collegeId: session.collegeId, action: "LEAVE_OD_PROOF_SUBMITTED", performedBy: session.uid,
-        performedByName: session.email || session.role, targetId: id, details: { submissionCount }, timestamp: now,
-      });
+      await writeAuditLogSafe(db, session.collegeId, { action: "LEAVE_OD_PROOF_SUBMITTED", performedBy: session.uid, performedByName: session.email || session.role, targetId: id, details: { submissionCount } });
       await notifyODProofSubmitted(db, session.collegeId, { ...req, id }, submissionCount);
       return NextResponse.json({ ok: true });
     }
@@ -783,12 +784,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         odProofRejectionReason: verified ? "" : (body.reason ?? "").trim(),
         updatedAt: now,
       });
-      await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-        collegeId: session.collegeId,
-        action: verified ? "LEAVE_OD_PROOF_VERIFIED" : "LEAVE_OD_PROOF_REJECTED",
-        performedBy: session.uid, performedByName: session.email || session.role, targetId: id,
-        details: { reason: body.reason ?? null }, timestamp: now,
-      });
+      await writeAuditLogSafe(db, session.collegeId, { action: verified ? "LEAVE_OD_PROOF_VERIFIED" : "LEAVE_OD_PROOF_REJECTED", performedBy: session.uid, performedByName: session.email || session.role, targetId: id, details: { reason: body.reason ?? null } });
       await notifyODProofDecision(db, session.collegeId, { ...req, id }, verified, body.reason);
       return NextResponse.json({ ok: true });
     }
@@ -830,10 +826,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         `${requestedByLabel} has requested you to upload your On Duty proof of duty document.`,
         `/leave/od-proof/${id}`
       );
-      await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-        collegeId: session.collegeId, action: "LEAVE_OD_PROOF_REQUESTED", performedBy: session.uid,
-        performedByName: session.email || session.role, targetId: id, details: {}, timestamp: now,
-      });
+      await writeAuditLogSafe(db, session.collegeId, { action: "LEAVE_OD_PROOF_REQUESTED", performedBy: session.uid, performedByName: session.email || session.role, targetId: id, details: {} });
       return NextResponse.json({ ok: true });
     }
 
@@ -874,10 +867,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         certificateReviewedByName: "",
         updatedAt: now,
       });
-      await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-        collegeId: session.collegeId, action: "LEAVE_CERTIFICATE_SUBMITTED", performedBy: session.uid,
-        performedByName: session.email || session.role, targetId: id, details: { submissionCount }, timestamp: now,
-      });
+      await writeAuditLogSafe(db, session.collegeId, { action: "LEAVE_CERTIFICATE_SUBMITTED", performedBy: session.uid, performedByName: session.email || session.role, targetId: id, details: { submissionCount } });
       await notifyCertificateSubmitted(db, session.collegeId, { ...req, id }, submissionCount);
       return NextResponse.json({ ok: true });
     }
@@ -898,12 +888,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         certificateRejectionReason: verified ? "" : (body.reason ?? "").trim(),
         updatedAt: now,
       });
-      await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-        collegeId: session.collegeId,
-        action: verified ? "LEAVE_CERTIFICATE_VERIFIED" : "LEAVE_CERTIFICATE_REJECTED",
-        performedBy: session.uid, performedByName: session.email || session.role, targetId: id,
-        details: { reason: body.reason ?? null }, timestamp: now,
-      });
+      await writeAuditLogSafe(db, session.collegeId, { action: verified ? "LEAVE_CERTIFICATE_VERIFIED" : "LEAVE_CERTIFICATE_REJECTED", performedBy: session.uid, performedByName: session.email || session.role, targetId: id, details: { reason: body.reason ?? null } });
       await notifyCertificateDecision(db, session.collegeId, { ...req, id }, verified, body.reason);
       return NextResponse.json({ ok: true });
     }
@@ -921,10 +906,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
       const requestedByLabel = session.role === "HOD" ? "Your HOD" : (session.email || session.role);
       await notifyCertificateRequested(db, session.collegeId, { ...req, id }, requestedByLabel);
-      await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-        collegeId: session.collegeId, action: "LEAVE_CERTIFICATE_REQUESTED", performedBy: session.uid,
-        performedByName: session.email || session.role, targetId: id, details: {}, timestamp: now,
-      });
+      await writeAuditLogSafe(db, session.collegeId, { action: "LEAVE_CERTIFICATE_REQUESTED", performedBy: session.uid, performedByName: session.email || session.role, targetId: id, details: {} });
       return NextResponse.json({ ok: true });
     }
 
@@ -958,17 +940,16 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       };
 
       if (body.action === "REJECT") {
-        if (req.leaveTypeCode) {
-          const lt = LEAVE_TYPE_SEED.find((t) => t.code === req.leaveTypeCode);
-          if (lt && !lt.rules.unlimited) {
-            await releasePending(db, session.collegeId, req.uid, req.leaveTypeCode, year, req.totalDays);
-          }
-        }
-        await ref.update({ status: "REJECTED", hodAction: actionRecord, updatedAt: now });
-        await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-          collegeId: session.collegeId, action: "LEAVE_REJECTED", performedBy: session.uid,
-          performedByName: session.email || decidedByLabel, targetId: id, details: {}, timestamp: now,
+        const rejectedType = req.leaveTypeCode ? LEAVE_TYPE_SEED.find((t) => t.code === req.leaveTypeCode) : undefined;
+        await transitionLeaveRequest({
+          db, collegeId: session.collegeId, id,
+          expected: { status: req.status, updatedAt: req.updatedAt },
+          balance: req.leaveTypeCode && rejectedType && !rejectedType.rules.unlimited
+            ? { kind: "RELEASE_PENDING", uid: req.uid, code: req.leaveTypeCode, year, days: req.totalDays }
+            : undefined,
+          buildUpdate: () => ({ status: "REJECTED", hodAction: actionRecord, updatedAt: now }),
         });
+        await writeAuditLogSafe(db, session.collegeId, { action: "LEAVE_REJECTED", performedBy: session.uid, performedByName: session.email || decidedByLabel, targetId: id, details: {} });
         await notify(db, session.collegeId, req.uid, "LEAVE_REJECTED", "Leave Request Rejected",
           `Your leave request for ${req.totalDays} day(s) was rejected by ${decidedByLabel === "HOD" ? "your HOD" : decidedByLabel}.`, "/panel/leave");
         return NextResponse.json({ ok: true });
@@ -998,13 +979,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         // (see the notify loop below, unchanged). PENDING_VICE_PRINCIPAL is
         // the status that keeps both of them eligible; PENDING_PRINCIPAL is
         // now Principal-only (see its comment in types/leave.ts).
-        await ref.update({
-          status: "PENDING_VICE_PRINCIPAL", isPaidLeave: body.isPaidLeave, hodAction: actionRecord, updatedAt: now,
+        await transitionLeaveRequest({
+          db, collegeId: session.collegeId, id,
+          expected: { status: req.status, updatedAt: req.updatedAt },
+          buildUpdate: () => ({
+            status: "PENDING_VICE_PRINCIPAL", isPaidLeave: body.isPaidLeave, hodAction: actionRecord, updatedAt: now,
+          }),
         });
-        await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-          collegeId: session.collegeId, action: "LEAVE_HOD_FORWARDED", performedBy: session.uid,
-          performedByName: session.email || decidedByLabel, targetId: id, details: { isPaidLeave: body.isPaidLeave }, timestamp: now,
-        });
+        await writeAuditLogSafe(db, session.collegeId, { action: "LEAVE_HOD_FORWARDED", performedBy: session.uid, performedByName: session.email || decidedByLabel, targetId: id, details: { isPaidLeave: body.isPaidLeave } });
 
         const principalsSnap = await findUsersSnapshot(db, session.collegeId, ["PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_ADMIN"]);
         for (const p of principalsSnap.docs) {
@@ -1028,31 +1010,28 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       // PROPOSE_COVERAGE's acceptance gate above.
       const periodSubstitutions = req.periodSubstitutions;
 
-      let lopDays = 0;
-      if (req.leaveTypeCode) {
-        const lt = LEAVE_TYPE_SEED.find((t) => t.code === req.leaveTypeCode);
-        if (lt && !lt.rules.unlimited) {
-          const split = await splitLeaveDays(db, session.collegeId, req.uid, lt, year, req.totalDays);
-          lopDays = split.lopDays;
-          if (split.withinBalance > 0) {
-            await commitApproval(db, session.collegeId, req.uid, req.leaveTypeCode, year, split.withinBalance);
-          }
-        }
-      }
-      await ref.update({
-        status: "APPROVED", hodAction: actionRecord, lopDays, updatedAt: now,
-        ...(periodSubstitutions ? { periodSubstitutions } : {}),
-        // An approved OD only stays PAID once the duty is evidenced: the
-        // requester uploads proof after the period ends and an approver
-        // verifies it (see lib/leave/odProof.ts). Stamping the obligation
-        // here, rather than testing leaveTypeCode at read time, is what
-        // keeps every OD approved before this shipped permanently exempt.
-        ...(req.leaveTypeCode === "OD" ? { odProofRequired: true } : {}),
+      // Status precondition + balance commit + APPROVED all land in one
+      // transaction (decisionTx.ts): two approvers, or a double-click, can no
+      // longer deduct twice, and a failed update can't strand a deduction.
+      const approvedType = req.leaveTypeCode ? LEAVE_TYPE_SEED.find((t) => t.code === req.leaveTypeCode) : undefined;
+      const { lopDays } = await transitionLeaveRequest({
+        db, collegeId: session.collegeId, id,
+        expected: { status: req.status, updatedAt: req.updatedAt },
+        balance: req.leaveTypeCode && approvedType && !approvedType.rules.unlimited
+          ? { kind: "COMMIT_SPLIT", uid: req.uid, code: req.leaveTypeCode, year, days: req.totalDays, leaveType: approvedType }
+          : undefined,
+        buildUpdate: (r) => ({
+          status: "APPROVED", hodAction: actionRecord, lopDays: r.lopDays, updatedAt: now,
+          ...(periodSubstitutions ? { periodSubstitutions } : {}),
+          // An approved OD only stays PAID once the duty is evidenced: the
+          // requester uploads proof after the period ends and an approver
+          // verifies it (see lib/leave/odProof.ts). Stamping the obligation
+          // here, rather than testing leaveTypeCode at read time, is what
+          // keeps every OD approved before this shipped permanently exempt.
+          ...(req.leaveTypeCode === "OD" ? { odProofRequired: true } : {}),
+        }),
       });
-      await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-        collegeId: session.collegeId, action: "LEAVE_HOD_APPROVED", performedBy: session.uid,
-        performedByName: session.email || decidedByLabel, targetId: id, details: { lopDays }, timestamp: now,
-      });
+      await writeAuditLogSafe(db, session.collegeId, { action: "LEAVE_HOD_APPROVED", performedBy: session.uid, performedByName: session.email || decidedByLabel, targetId: id, details: { lopDays } });
       await notify(db, session.collegeId, req.uid, "LEAVE_APPROVED", "Leave Request Approved",
         `Your leave request for ${req.totalDays} day(s) was approved by ${decidedByLabel === "HOD" ? "your HOD" : decidedByLabel}` +
           (lopDays > 0 ? ` — ${lopDays} day(s) exceed your balance and will be treated as Loss of Pay.` : "."),
@@ -1184,8 +1163,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
     return NextResponse.json({ error: "This request is no longer pending" }, { status: 400 });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    if (err instanceof LeaveStateConflictError) {
+      return NextResponse.json({ error: err.message }, { status: 409 });
     }
     console.error("[leave/applications/[id] PATCH]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });

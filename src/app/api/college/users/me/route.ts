@@ -1,5 +1,7 @@
 export const dynamic = "force-dynamic";
 
+import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -8,6 +10,8 @@ import { normalizeAcademicProfile } from "@/lib/faculty/academicProfileCompat";
 import { degreeTypeError } from "@/lib/faculty/degreeType";
 import { withLegacyPersonalKeysDeleted } from "@/lib/faculty/legacyKeyDeletes";
 import { FieldValue } from "firebase-admin/firestore";
+import { setLinkedFacultyPhoto } from "@/lib/faculty/syncFacultyPhoto";
+import { hasLinkedFacultyRecord, isSingleSourceCollege, singleSourceBlockFor } from "@/lib/faculty/singleSource";
 
 // Fields a Principal/VP must never set about themselves via self-service edit -
 // salary/CTC belongs to the Accounts/Finance payroll domain, not a self-editable profile.
@@ -26,7 +30,7 @@ export async function PATCH(request: Request) {
       "T_AND_P", "R_AND_D", "PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL", "WEBMASTER", "COLLEGE_ACCOUNTS"
     );
 
-    const body = (await request.json()) as Partial<{
+    const body = (await readJsonBody(request)) as Partial<{
       name: string;
       email: string;
       collegeEmail: string;
@@ -53,6 +57,19 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
+    // Single source of truth (switch-gated, no-op elsewhere): a person who has a Faculty record keeps their
+    // profile there. Principal/VP are excluded - their own profile pages read and write this login doc, so
+    // there is no second copy to disagree with.
+    if (
+      isSingleSourceCollege(session.collegeId) && session.role !== "PRINCIPAL" && session.role !== "VICE_PRINCIPAL" &&
+      session.roles?.includes("PANEL_MEMBER")
+    ) {
+      const block = singleSourceBlockFor(body, userSnap.data() ?? {});
+      if (block && (await hasLinkedFacultyRecord(db, session.collegeId, session.uid))) {
+        return NextResponse.json({ error: block.message, code: "FACULTY_RECORD_IS_SOURCE", fields: block.fields }, { status: block.status });
+      }
+    }
+
     const now = new Date();
     const updates: Record<string, unknown> = { updatedAt: now, ...buildPersonalDetailsUpdate(body) };
 
@@ -74,6 +91,9 @@ export async function PATCH(request: Request) {
     }
     if (body.profilePhotoUrl !== undefined) updates.profilePhotoUrl = body.profilePhotoUrl;
 
+    // The photo belongs to the faculty record (source of truth) - written first, then the mirror below.
+    if (body.profilePhotoUrl !== undefined) await setLinkedFacultyPhoto(db, session.collegeId, session.uid, body.profilePhotoUrl);
+
     // Drop the old-named twin of any personal key written above on a not-yet-migrated doc.
     await userRef.update(withLegacyPersonalKeysDeleted(updates, FieldValue.delete()));
 
@@ -88,18 +108,12 @@ export async function PATCH(request: Request) {
     }
 
     const actorName = (userSnap.data() as { name?: string } | undefined)?.name ?? "Unknown";
-    await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-      collegeId: session.collegeId,
-      action: "USER_UPDATED",
-      performedBy: session.uid,
-      performedByName: actorName,
-      targetId: session.uid,
-      details: { role: session.role, self: true },
-      timestamp: now,
-    });
+    await writeAuditLogSafe(db, session.collegeId, { action: "USER_UPDATED", performedBy: session.uid, performedByName: actorName, targetId: session.uid, details: { role: session.role, self: true } });
 
     return NextResponse.json({ ok: true });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

@@ -5,9 +5,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { GraduationCap, Briefcase, MapPin, Send, Loader2 } from "lucide-react";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { storage, db } from "@/lib/firebase/client";
-import { getDoc, doc, getDocs, collection, query, where } from "firebase/firestore";
-import { createCandidate, createCandidateApplication } from "@/lib/firestore/hiring";
+import { storage } from "@/lib/firebase/client";
 import { publicApplicationSchema, type PublicApplicationFormData } from "@/lib/validations";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,7 +16,6 @@ import { FileUpload } from "@/components/shared/FileUpload";
 import { toast } from "@/hooks/useToast";
 import { Toaster } from "@/components/ui/toaster";
 import type { College, VacancyRequest } from "@/types";
-import { Timestamp } from "firebase/firestore";
 
 interface Props {
   collegeId: string;
@@ -36,16 +33,12 @@ export function CareersPageClient({ collegeId }: Props) {
   useEffect(() => {
     async function load() {
       try {
-        const collegeSnap = await getDoc(doc(db, "colleges", collegeId));
-        if (!collegeSnap.exists()) { setNotFound(true); return; }
-        setCollege({ id: collegeSnap.id, ...collegeSnap.data() } as College);
-
-        const q = query(
-          collection(db, "colleges", collegeId, "vacancyRequests"),
-          where("status", "==", "APPROVED")
-        );
-        const snap = await getDocs(q);
-        setOpenings(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as VacancyRequest));
+        const res = await fetch(`/api/public/careers/${encodeURIComponent(collegeId)}`);
+        if (res.status === 404) { setNotFound(true); return; }
+        if (!res.ok) throw new Error("load failed");
+        const json = (await res.json()) as { college: { id: string; name: string }; openings: Pick<VacancyRequest, "id" | "position" | "department" | "requiredCount">[] };
+        setCollege(json.college as College);
+        setOpenings(json.openings as VacancyRequest[]);
       } catch {
         setNotFound(true);
       } finally {
@@ -75,35 +68,17 @@ export function CareersPageClient({ collegeId }: Props) {
     }
 
     try {
+      // eslint-disable-next-line react-hooks/purity -- runs in the submit handler, never during render
       const resumeRef = ref(storage, `colleges/${collegeId}/resumes/${Date.now()}_${resume.name}`);
       await uploadBytes(resumeRef, resume);
       const resumeUrl = await getDownloadURL(resumeRef);
 
-      const candidateId = await createCandidate(collegeId, {
-        name: data.name,
-        email: data.email,
-        phone: data.phone,
-        resumeUrl,
-        source: "CAREERS_PAGE",
-        addedByUid: "",
-        addedByName: "Careers Page (self-applied)",
-        collegeId,
+      const res = await fetch(`/api/public/careers/${encodeURIComponent(collegeId)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...data, vacancyRequestId: selectedVacancy.id, resumeUrl }),
       });
-
-      await createCandidateApplication(collegeId, {
-        candidateId,
-        vacancyRequestId: selectedVacancy.id,
-        batchId: "",
-        department: selectedVacancy.department,
-        position: selectedVacancy.position,
-        currentStage: "DEMO",
-        status: "PENDING",
-        isShortlisted: false,
-        hasArrived: false,
-        addedByUid: "",
-        addedByName: "Careers Page (self-applied)",
-        collegeId,
-      });
+      if (!res.ok) throw new Error("Submission failed");
 
       setSubmitted(true);
       reset();

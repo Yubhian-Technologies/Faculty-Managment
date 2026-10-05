@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
+import { passwordChangeRequired, passwordChangeRequiredResponse } from "@/lib/students/passwordGate";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { calcFine, daysOverdue, isOverdue } from "@/lib/library/fine";
@@ -29,6 +30,7 @@ export async function GET() {
     }
     const studentId = studentSnap.docs[0].id;
     const student = studentSnap.docs[0].data() as StudentRecord;
+    if (passwordChangeRequired(student)) return passwordChangeRequiredResponse();
 
     const [loansSnap, reservationsSnap, settings] = await Promise.all([
       collegeRef.collection("bookLoans").where("studentId", "==", studentId).where("status", "in", ["ACTIVE", "OVERDUE"]).get(),

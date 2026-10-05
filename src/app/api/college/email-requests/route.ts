@@ -1,5 +1,7 @@
 export const dynamic = "force-dynamic";
 
+import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -26,6 +28,8 @@ export async function GET(request: Request) {
     const requests = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     return NextResponse.json({ requests });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -37,7 +41,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember(...REQUESTER_ROLES);
-    const body = (await request.json()) as {
+    const body = (await readJsonBody(request)) as {
       facultyId?: string;
       preferredEmail1?: string;
       preferredEmail2?: string;
@@ -107,15 +111,7 @@ export async function POST(request: Request) {
       updatedAt: now,
     });
 
-    await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-      collegeId: session.collegeId,
-      action: "EMAIL_REQUEST_CREATED",
-      performedBy: session.uid,
-      performedByName: requesterName,
-      targetId: ref.id,
-      details: { facultyId: body.facultyId, candidateName },
-      timestamp: now,
-    });
+    await writeAuditLogSafe(db, session.collegeId, { action: "EMAIL_REQUEST_CREATED", performedBy: session.uid, performedByName: requesterName, targetId: ref.id, details: { facultyId: body.facultyId, candidateName } });
 
     await notifyRole(
       db,
@@ -129,6 +125,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ ok: true, id: ref.id });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

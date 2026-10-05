@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -18,7 +19,7 @@ export async function PATCH(
     const session = await requireCollegeMember("R_AND_D");
     const { uid } = await params;
 
-    const body = (await request.json()) as { decision?: "APPROVED" | "REJECTED"; rejectionReason?: string };
+    const body = (await readJsonBody(request)) as { decision?: "APPROVED" | "REJECTED"; rejectionReason?: string };
     if (body.decision !== "APPROVED" && body.decision !== "REJECTED") {
       return NextResponse.json({ error: "decision must be APPROVED or REJECTED" }, { status: 400 });
     }
@@ -73,6 +74,8 @@ export async function PATCH(
 
     return NextResponse.json({ ok: true });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

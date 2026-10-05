@@ -50,7 +50,10 @@ export function MarkAttendanceDialog({ mode, open, onOpenChange, onSuccess }: Ma
   const [stage, setStage] = useState<Stage>("init");
   const [errorMsg, setErrorMsg] = useState("");
   const [resultTime, setResultTime] = useState("");
-  const coordsRef = useRef<{ latitude: number; longitude: number } | null>(null);
+  const coordsRef = useRef<{ latitude: number; longitude: number; accuracy: number } | null>(null);
+  // The face descriptor captured for this attempt and when - sent to the server,
+  // which does the real comparison against the registered one (attendanceProof.ts).
+  const capturedProofRef = useRef<{ descriptor: number[]; capturedAt: number } | null>(null);
   const cancelledRef = useRef(false);
   const [campusLocation, setCampusLocation] = useState<CampusLocation | null>(null);
   const [userCoords, setUserCoords] = useState<{ latitude: number; longitude: number } | null>(null);
@@ -67,7 +70,6 @@ export function MarkAttendanceDialog({ mode, open, onOpenChange, onSuccess }: Ma
   const [lateReason, setLateReason] = useState("");
   // Held between face verification and the submit that follows the late-reason
   // step, so the reason screen does not have to re-run the match.
-  const verifiedDistanceRef = useRef<number | null>(null);
 
   const isRegister = mode === "register";
   const label = mode === "check-in" ? "Check In" : mode === "check-out" ? "Check Out" : "Register Face";
@@ -100,7 +102,7 @@ export function MarkAttendanceDialog({ mode, open, onOpenChange, onSuccess }: Ma
     setStage("init");
     setErrorMsg("");
     setUserCoords(null);
-    verifiedDistanceRef.current = null;
+    capturedProofRef.current = null;
 
     if (mode === "check-in") {
       setIsLate(isLateCheckIn(nowInIndia().timeHHMM));
@@ -118,9 +120,9 @@ export function MarkAttendanceDialog({ mode, open, onOpenChange, onSuccess }: Ma
 
       navigator.geolocation.getCurrentPosition(
         (pos) => {
-          const coords = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
+          const coords = { latitude: pos.coords.latitude, longitude: pos.coords.longitude, accuracy: pos.coords.accuracy };
           coordsRef.current = coords;
-          setUserCoords(coords);
+          setUserCoords({ latitude: coords.latitude, longitude: coords.longitude });
         },
         () => { fail("Failed to get your location. Check location permissions and try again."); },
         { enableHighAccuracy: true, timeout: 15000 }
@@ -291,6 +293,7 @@ export function MarkAttendanceDialog({ mode, open, onOpenChange, onSuccess }: Ma
         return;
       }
 
+      capturedProofRef.current = { descriptor: Array.from(capturedDescriptor), capturedAt: Date.now() };
       setStage("verifying");
       const regRes = await fetch("/api/college/attendance/face-registration");
       const regJson = await regRes.json() as { registered?: boolean; embedding?: number[] | null };
@@ -324,12 +327,11 @@ export function MarkAttendanceDialog({ mode, open, onOpenChange, onSuccess }: Ma
       // location, and it sat in front of the camera for everyone whose clock
       // read late here but not on the server.
       if (mode === "check-in" && isLate) {
-        verifiedDistanceRef.current = distance;
         setStage("late-reason");
         return;
       }
 
-      await submitAttendance(distance);
+      await submitAttendance();
     } catch (err) {
       console.error("[MarkAttendanceDialog] capture failed", err);
       fail("Something went wrong verifying your face. Please try again.");
@@ -338,9 +340,14 @@ export function MarkAttendanceDialog({ mode, open, onOpenChange, onSuccess }: Ma
 
   // The write itself - reached straight from handleCapture when nothing is
   // owed, or from the late-reason screen once the reason is filled in.
-  async function submitAttendance(distance: number) {
+  async function submitAttendance() {
     if (!coordsRef.current) {
       fail("Still waiting on your location — check location permissions and try again.");
+      return;
+    }
+    const proof = capturedProofRef.current;
+    if (!proof) {
+      fail("Something went wrong - please try again.");
       return;
     }
     setStage("submitting");
@@ -351,8 +358,12 @@ export function MarkAttendanceDialog({ mode, open, onOpenChange, onSuccess }: Ma
         body: JSON.stringify({
           latitude: coordsRef.current.latitude,
           longitude: coordsRef.current.longitude,
-          faceMatchDistance: distance,
-          faceVerified: true,
+          // The server compares this descriptor with the registered one itself and
+          // judges freshness/precision; the match above is only this screen's early
+          // feedback. (`distance` is no longer sent - the server's own figure is stored.)
+          faceDescriptor: proof.descriptor,
+          capturedAt: proof.capturedAt,
+          accuracy: coordsRef.current.accuracy,
           ...(mode === "check-in" && isLate ? { lateReason: lateReason.trim() } : {}),
         }),
       });
@@ -480,15 +491,9 @@ export function MarkAttendanceDialog({ mode, open, onOpenChange, onSuccess }: Ma
           {stage === "late-reason" && (
             <Button
               onClick={() => {
-                const distance = verifiedDistanceRef.current;
-                // Only reachable if the stage was set without a match behind
-                // it; submitting a made-up distance would record a check-in
-                // that never passed verification.
-                if (distance === null) {
-                  fail("Something went wrong — please try again.");
-                  return;
-                }
-                void submitAttendance(distance);
+                // Only reachable after a capture; submitAttendance refuses to go on
+                // without one, so nothing unverified can be recorded.
+                void submitAttendance();
               }}
               disabled={!lateReason.trim()}
             >

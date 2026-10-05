@@ -1,8 +1,12 @@
 export const dynamic = "force-dynamic";
 
+import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
+import { isEmployeeIdReserved, reserveEmployeeId } from "@/lib/firestore/employeeIdKeys";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { employeeIdTaken, employeeIdTakenMessage } from "@/lib/firestore/employeeIds";
 import { getHodDepartmentScope, canHodManageFacultyDepartment } from "@/lib/departments/scope";
 import { SUPPORTING_STAFF_ROLE_CATEGORY, canRolePostCategory } from "@/lib/supportingStaff/roleCategory";
 import { unitLabelForHeadRole } from "@/lib/attendance/collegeStaffUnits";
@@ -65,6 +69,8 @@ export async function GET(
 
     return NextResponse.json({ staff: { id: snap.id, ...migrateSupportingStaffDoc(snap.data() ?? {}) } });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -81,7 +87,7 @@ export async function PATCH(
     const session = await requireCollegeMember("COLLEGE_OFFICE", "HOD", "PRINCIPAL", "VICE_PRINCIPAL", "LIBRARY");
     const { id } = await params;
 
-    const body = (await request.json()) as Partial<{
+    const body = (await readJsonBody(request)) as Partial<{
       nameAsPerPan: string;
       employeeId: string;
       apaarFacultyId: string;
@@ -185,15 +191,17 @@ export async function PATCH(
       const newEmployeeId = body.employeeId.trim();
       const currentEmployeeId = (snap.data() as { employeeId?: string }).employeeId;
       if (newEmployeeId !== currentEmployeeId) {
-        const dupSnap = await db
-          .collection("colleges")
-          .doc(session.collegeId)
-          .collection("supportingStaff")
-          .where("employeeId", "==", newEmployeeId)
-          .limit(1)
-          .get();
-        if (!dupSnap.empty) {
-          return NextResponse.json({ error: "Employee ID already exists" }, { status: 409 });
+        // Same rule as creation (lib/firestore/employeeIds.ts): not held by another
+        // staff member of this college AND not by any faculty member.
+        const idCheck = await employeeIdTaken(db, session.collegeId, newEmployeeId, { collection: "supportingStaff", id });
+        if (idCheck.taken) {
+          return NextResponse.json({ error: employeeIdTakenMessage(idCheck) }, { status: 409 });
+        }
+        try {
+          await reserveEmployeeId(db, session.collegeId, newEmployeeId, { collection: "supportingStaff", id });
+        } catch (e) {
+          if (isEmployeeIdReserved(e)) return NextResponse.json({ error: employeeIdTakenMessage({ taken: true, heldBy: e.heldBy }) }, { status: 409 });
+          throw e;
         }
       }
       updates.employeeId = newEmployeeId;
@@ -330,6 +338,8 @@ export async function PATCH(
 
     return NextResponse.json({ success: true });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -386,18 +396,12 @@ export async function DELETE(
       actorName = (actorSnap.data() as { name?: string } | undefined)?.name ?? "Unknown";
     } catch { /* best-effort */ }
 
-    await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-      collegeId: session.collegeId,
-      action: "SUPPORTING_STAFF_DELETED",
-      performedBy: session.uid,
-      performedByName: actorName,
-      targetId: id,
-      details: { name: supportingStaffDisplayName(staffData) },
-      timestamp: new Date(),
-    });
+    await writeAuditLogSafe(db, session.collegeId, { action: "SUPPORTING_STAFF_DELETED", performedBy: session.uid, performedByName: actorName, targetId: id, details: { name: supportingStaffDisplayName(staffData) } });
 
     return NextResponse.json({ success: true });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

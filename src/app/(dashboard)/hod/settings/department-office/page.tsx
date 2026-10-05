@@ -13,6 +13,7 @@ import { Avatar } from "@/components/shared/Avatar";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
+import { DepartmentOfficeAccessCard } from "@/components/departments/DepartmentOfficeAccessCard";
 import { useAuthStore } from "@/store/authStore";
 import type { FMSUser } from "@/types";
 
@@ -59,7 +60,8 @@ export default function DepartmentOfficePage() {
       const res = await fetch("/api/college/users?role=PANEL_MEMBER");
       const data = await res.json() as { users?: FMSUser[]; error?: string };
       if (!res.ok) throw new Error(data.error ?? "Failed to load");
-      return (data.users ?? []).filter((u) => u.isActive !== false);
+      // A RESIGNED/RETIRED person (flagged by the API in read-only-access colleges) can no longer be given the post.
+      return (data.users ?? []).filter((u) => u.isActive !== false && !u.facultyExited);
     },
     enabled: showCreate,
   });
@@ -279,6 +281,8 @@ export default function DepartmentOfficePage() {
         onConfirm={() => void handleRemove()}
         loading={isRemoving}
       />
+
+      {holder && <DepartmentOfficeAccessCard />}
     </div>
   );
 }

@@ -400,6 +400,14 @@ export interface FMSUser {
   // each seat they hold (see types/roleSeats.ts). Set by /api/auth/session; the
   // sidebar and page access are the union of all of them.
   roles?: UserRole[];
+  // Set by /api/auth/session ONLY for a RESIGNED/RETIRED faculty member in a college
+  // that has read-only faculty access switched on (lib/auth/readOnlyAccess.ts):
+  // they sign in normally but may only view their own profile and history. Derived
+  // from facultyMembers.status on every session call - never stored on the user doc.
+  readOnlyAccess?: boolean;
+  // Added by GET /api/college/users ONLY in a college with read-only faculty access switched on, for a person
+  // whose faculty record is RESIGNED/RETIRED - the Department Office / Sub-HOD pickers leave them out.
+  facultyExited?: boolean;
   // Denormalized from the seats this person holds (maintained by
   // lib/roles/seats.ts) - `seatRoles` is what guards and role lookups read.
   seatIds?: string[];
@@ -1266,6 +1274,14 @@ export interface DegreeDetail {
   institutionType?: "UNIVERSITY" | "INSTITUTE";
   affiliatedUniversity?: string; // UG/PG only, when institutionType === "INSTITUTE"
   institutionName: string;
+  // Doctoral (Ph.D.) only - UI label "Name of the Department": the department
+  // of the university/institute the doctorate was pursued in. Optional, so
+  // every record saved before this existed stays valid (it simply shows nothing).
+  departmentName?: string;
+  // Doctoral (Ph.D.) only - UI label "Title of the Ph.D Thesis", shown between
+  // the department and Place. Optional for the same reason as departmentName:
+  // every record saved before this existed stays valid (it simply shows nothing).
+  thesisTitle?: string;
   place?: string; // city/town where the institute is located
   percentageCgpa: string;
   // "Year of Passing" everywhere except Doctoral/Post-Doctoral, which use
@@ -1334,6 +1350,11 @@ export interface TeachingAssignmentSummary {
 
 export interface PreviousInstitution {
   institutionName: string;
+  // UI label "Place of the University/College" - where this institution is
+  // located. Shared by all three experience lists (Academic / Industry /
+  // Research), which use this one shape. Optional, so every record saved before
+  // this existed stays valid (it simply shows nothing).
+  place?: string;
   designation?: string;
   // "YYYY-MM-DD" - the actual dates worked. fromYear/toYear below are the
   // legacy, year-only shape this replaced (same read-time-fallback pattern as
@@ -2923,6 +2944,11 @@ export interface StudentRecord {
   // pipeline) - used solely by /api/auth/resolve-student-login and
   // provisionLogin's own duplicate-Roll-Number check.
   rollNumberUpper?: string;
+  // True while the password is still the one-time one the office issued; the
+  // student portal holds them at a "set a new password" screen until they change
+  // it (see lib/students/passwordGate.ts). Absent on logins created before this existed.
+  mustChangePassword?: boolean;
+  passwordChangedAt?: Timestamp;
   loginCreatedAt?: Timestamp;
   loginCreatedBy?: string; // uid of the Office user who issued it
   createdAt: Timestamp;
@@ -3132,6 +3158,14 @@ export type AuditAction =
   | "FACULTY_UPDATED"
   | "FACULTY_STATUS_CHANGED"
   | "FACULTY_DELETED"
+  // Academic structure (sections, teaching assignments, published timetables)
+  | "SECTION_CREATED"
+  | "SECTION_UPDATED"
+  | "SECTION_DELETED"
+  | "TEACHING_ASSIGNMENT_CREATED"
+  | "TEACHING_ASSIGNMENT_UPDATED"
+  | "TEACHING_ASSIGNMENT_DELETED"
+  | "TIMETABLE_PUBLISHED"
   // Supporting Staff module
   | "SUPPORTING_STAFF_CREATED"
   | "SUPPORTING_STAFF_UPDATED"

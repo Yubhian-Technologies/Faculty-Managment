@@ -1,6 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useAppliedFilters } from "@/hooks/useAppliedFilters";
+import { LoadButton } from "@/components/shared/LoadButton";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { GraduationCap, Search, Users } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -11,12 +13,22 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { EmptyState } from "@/components/shared/EmptyState";
+import { Pagination } from "@/components/shared/Pagination";
 import { toast } from "@/hooks/useToast";
 import { formatDate } from "@/lib/utils";
+import { graduateBatchLabel, graduateCourseLabel } from "@/lib/students/graduates";
 import type { StudentListItem } from "@/types";
 
-const UNSPECIFIED_COURSE = "Unspecified programme";
-const UNSPECIFIED_BATCH = "Unspecified batch";
+const DEFAULT_PAGE_SIZE = 20;
+
+interface GraduatesResponse {
+  students?: StudentListItem[];
+  total?: number;
+  overallTotal?: number;
+  orderedIds?: string[];
+  facets?: { courses: string[]; batches: string[] };
+  error?: string;
+}
 
 // Every graduated student, grouped Course → Batch (e.g. "B.Tech" → "2021-2025")
 // exactly as they were snapshotted at the moment they were graduated (see
@@ -31,64 +43,106 @@ const UNSPECIFIED_BATCH = "Unspecified batch";
 // component guessing a role from the current path.
 export function GraduatedStudentsView({ showHeader = true, studentDetailHref }: { showHeader?: boolean; studentDetailHref: (studentId: string) => string }) {
   const router = useRouter();
+  // Only graduates are ever read (status == GRADUATED, server-side), and only
+  // one page of them is held here - see students/route.ts `graduates=1`.
   const [students, setStudents] = useState<StudentListItem[]>([]);
+  const [total, setTotal] = useState(0);
+  const [overallTotal, setOverallTotal] = useState(0);
+  const [facets, setFacets] = useState<{ courses: string[]; batches: string[] }>({ courses: [], batches: [] });
   const [isLoading, setIsLoading] = useState(true);
+  const [isFetching, setIsFetching] = useState(false);
   const [search, setSearch] = useState("");
   const [courseFilter, setCourseFilter] = useState("all");
   const [batchFilter, setBatchFilter] = useState("all");
+  // Search and filters edit a draft; the list is fetched when Load is clicked (or Enter in search).
+  const { applied, dirty, load } = useAppliedFilters({ search, courseFilter, batchFilter });
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
 
-  const load = useCallback(async () => {
-    setIsLoading(true);
+  // The list request returns every matching id (in display order) plus the first
+  // page; later pages are fetched by id, so paging reads only that page's
+  // documents. Rows already fetched are kept, so revisiting a page is free.
+  const orderedIds = useRef<string[]>([]);
+  const rowCache = useRef(new Map<string, StudentListItem>());
+  const pageSizeRef = useRef(DEFAULT_PAGE_SIZE);
+  const requestSeq = useRef(0);
+
+  const loadList = useCallback(async () => {
+    const seq = ++requestSeq.current;
+    setIsFetching(true);
     try {
-      const res = await fetch("/api/college/students");
-      const data = await res.json() as { students: StudentListItem[] };
-      setStudents((data.students ?? []).filter((s) => s.status === "GRADUATED"));
+      const params = new URLSearchParams({ graduates: "1", page: "1", pageSize: String(pageSizeRef.current) });
+      const appliedSearch = applied.search.trim().toLowerCase();
+      if (appliedSearch) params.set("search", appliedSearch);
+      if (applied.courseFilter !== "all") params.set("course", applied.courseFilter);
+      if (applied.batchFilter !== "all") params.set("batch", applied.batchFilter);
+      const res = await fetch(`/api/college/students?${params.toString()}`);
+      const json = await res.json() as GraduatesResponse;
+      if (seq !== requestSeq.current) return; // a newer search/filter superseded this one
+      if (!res.ok) {
+        toast({ variant: "destructive", title: json.error ?? "Failed to load graduated students" });
+        return;
+      }
+      const rows = json.students ?? [];
+      orderedIds.current = json.orderedIds ?? [];
+      rowCache.current = new Map(rows.map((r) => [r.id, r]));
+      setStudents(rows);
+      setTotal(json.total ?? 0);
+      setOverallTotal(json.overallTotal ?? 0);
+      setFacets(json.facets ?? { courses: [], batches: [] });
+      setPage(1);
     } catch {
-      toast({ variant: "destructive", title: "Failed to load graduated students" });
+      if (seq === requestSeq.current) toast({ variant: "destructive", title: "Failed to load graduated students" });
     } finally {
-      setIsLoading(false);
+      if (seq === requestSeq.current) {
+        setIsFetching(false);
+        setIsLoading(false);
+      }
     }
-  }, []);
+  }, [applied]);
 
   // Wrapped so the loader's setState calls aren't reachable synchronously from
   // the effect body (react-hooks/set-state-in-effect).
   useEffect(() => {
-    void (async () => { await load(); })();
-  }, [load]);
+    void (async () => { await loadList(); })();
+  }, [loadList]);
 
-  const courseNames = useMemo(
-    () => Array.from(new Set(students.map((s) => s.graduationCourseName?.trim() || UNSPECIFIED_COURSE))).sort((a, b) => a.localeCompare(b)),
-    [students]
-  );
-  const batches = useMemo(
-    () => Array.from(new Set(students.map((s) => s.graduationBatch?.trim() || UNSPECIFIED_BATCH))).sort((a, b) => b.localeCompare(a)),
-    [students]
-  );
-
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return students.filter((s) => {
-      const course = s.graduationCourseName?.trim() || UNSPECIFIED_COURSE;
-      const batch = s.graduationBatch?.trim() || UNSPECIFIED_BATCH;
-      if (courseFilter !== "all" && course !== courseFilter) return false;
-      if (batchFilter !== "all" && batch !== batchFilter) return false;
-      if (q && !(
-        s.name.toLowerCase().includes(q)
-        || (s.rollNumber ?? "").toLowerCase().includes(q)
-        || (s.department ?? "").toLowerCase().includes(q)
-      )) return false;
-      return true;
-    });
-  }, [students, search, courseFilter, batchFilter]);
+  async function showPage(nextPage: number, nextSize: number) {
+    const ids = orderedIds.current.slice((nextPage - 1) * nextSize, nextPage * nextSize);
+    const missing = ids.filter((id) => !rowCache.current.has(id));
+    if (missing.length > 0) {
+      const seq = ++requestSeq.current;
+      setIsFetching(true);
+      try {
+        const res = await fetch(`/api/college/students?graduates=1&ids=${missing.join(",")}`);
+        const json = await res.json() as GraduatesResponse;
+        if (seq !== requestSeq.current) return;
+        if (!res.ok) {
+          toast({ variant: "destructive", title: json.error ?? "Failed to load graduated students" });
+          return;
+        }
+        for (const r of json.students ?? []) rowCache.current.set(r.id, r);
+      } catch {
+        if (seq === requestSeq.current) toast({ variant: "destructive", title: "Failed to load graduated students" });
+        return;
+      } finally {
+        if (seq === requestSeq.current) setIsFetching(false);
+      }
+    }
+    pageSizeRef.current = nextSize;
+    setStudents(ids.map((id) => rowCache.current.get(id)).filter((r): r is StudentListItem => !!r));
+    setPage(nextPage);
+    setPageSize(nextSize);
+  }
 
   // Course → Batch → students, both levels sorted for a stable, scannable
   // hierarchy - newest batch first within a course, since that's the group
   // someone's most likely looking for right after a promotion run.
   const grouped = useMemo(() => {
     const byCourse = new Map<string, Map<string, StudentListItem[]>>();
-    for (const s of filtered) {
-      const course = s.graduationCourseName?.trim() || UNSPECIFIED_COURSE;
-      const batch = s.graduationBatch?.trim() || UNSPECIFIED_BATCH;
+    for (const s of students) {
+      const course = graduateCourseLabel(s);
+      const batch = graduateBatchLabel(s);
       if (!byCourse.has(course)) byCourse.set(course, new Map());
       const byBatch = byCourse.get(course)!;
       if (!byBatch.has(batch)) byBatch.set(batch, []);
@@ -105,7 +159,7 @@ export function GraduatedStudentsView({ showHeader = true, studentDetailHref }: 
             students: list.sort((a, b) => (a.rollNumber ?? "").localeCompare(b.rollNumber ?? "")),
           })),
       }));
-  }, [filtered]);
+  }, [students]);
 
   return (
     <div className="space-y-6">
@@ -118,7 +172,7 @@ export function GraduatedStudentsView({ showHeader = true, studentDetailHref }: 
 
       <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
         <GraduationCap className="h-4 w-4" />
-        <span><strong className="text-foreground">{students.length}</strong> graduated total</span>
+        <span><strong className="text-foreground">{overallTotal}</strong> graduated total</span>
       </div>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -127,6 +181,7 @@ export function GraduatedStudentsView({ showHeader = true, studentDetailHref }: 
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") load(); }}
             placeholder="Search by name, roll number or department"
             className="pl-9"
           />
@@ -135,16 +190,17 @@ export function GraduatedStudentsView({ showHeader = true, studentDetailHref }: 
           <SelectTrigger className="sm:w-56"><SelectValue placeholder="All courses" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All courses</SelectItem>
-            {courseNames.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+            {facets.courses.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
           </SelectContent>
         </Select>
         <Select value={batchFilter} onValueChange={setBatchFilter}>
           <SelectTrigger className="sm:w-44"><SelectValue placeholder="All batches" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All batches</SelectItem>
-            {batches.map((b) => <SelectItem key={b} value={b}>{b}</SelectItem>)}
+            {facets.batches.map((b) => <SelectItem key={b} value={b}>{b}</SelectItem>)}
           </SelectContent>
         </Select>
+        <LoadButton dirty={dirty} onClick={load} loading={isFetching} />
       </div>
 
       {isLoading ? (
@@ -153,8 +209,8 @@ export function GraduatedStudentsView({ showHeader = true, studentDetailHref }: 
         </div>
       ) : grouped.length === 0 ? (
         <EmptyState
-          title={students.length === 0 ? "No graduated students yet" : "No graduates match your filters"}
-          description={students.length === 0 ? "Students appear here once they're graduated from Student Promotion." : "Try clearing the search or filters."}
+          title={overallTotal === 0 ? "No graduated students yet" : "No graduates match your filters"}
+          description={overallTotal === 0 ? "Students appear here once they're graduated from Student Promotion." : "Try clearing the search or filters."}
           icon={<GraduationCap className="h-8 w-8" />}
         />
       ) : (
@@ -206,6 +262,17 @@ export function GraduatedStudentsView({ showHeader = true, studentDetailHref }: 
             </Card>
           ))}
         </div>
+      )}
+
+      {!isLoading && total > 0 && (
+        <Pagination
+          page={page}
+          pageSize={pageSize}
+          total={total}
+          onPageChange={(p) => void showPage(p, pageSize)}
+          onPageSizeChange={(size) => void showPage(1, size)}
+          disabled={isFetching}
+        />
       )}
     </div>
   );

@@ -140,6 +140,8 @@ export function buildStudentDoc(
     ...(batch ? { batch } : {}),
     ...(section.courseId ? { courseId: section.courseId } : {}),
     rollNumber: row.rollNumber.trim(),
+    // Case-insensitive roll key for the uniqueness check and the login lookup.
+    ...(row.rollNumber.trim() ? { rollNumberUpper: row.rollNumber.trim().toUpperCase() } : {}),
     name: row.name.trim(),
     ...(row.studentType?.trim() ? { studentType: row.studentType.trim() } : {}),
     status: parseStudentStatus(row.status),

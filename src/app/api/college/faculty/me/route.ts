@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -19,6 +20,7 @@ import { mobileNoFromBody } from "@/lib/faculty/mobileNo";
 import { FieldValue } from "firebase-admin/firestore";
 import { normalizeHighestQualification } from "@/lib/faculty/highestQualification";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
+import { isSingleSourceCollege } from "@/lib/faculty/singleSource";
 import type { TrainingEntry } from "@/types";
 
 const PROMOTION_KEYS = [PROMOTION_HISTORY_KEY]; // College Office-owned - see PATCH .../promotion-salary
@@ -68,9 +70,14 @@ export async function GET() {
         .where("facultyId", "==", facultyDoc.id)
         .get();
 
+      // Additive, switched-on colleges only: `editViaFacultyRecord` tells the shared My Profile edit page it may
+      // save through PATCH /api/college/faculty/me (needs the Faculty role this caller already holds) instead of
+      // the login-side users/me, so the edit lands on the record being shown. Absent everywhere else.
+      const editViaFacultyRecord = isSingleSourceCollege(session.collegeId) && (session.roles ?? []).includes("PANEL_MEMBER");
       return NextResponse.json({
         faculty: { id: facultyDoc.id, ...migrateFacultyDoc(facultyDoc.data()) },
         teachingAssignments: assignmentsSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
+        ...(editViaFacultyRecord ? { editViaFacultyRecord: true } : {}),
       });
     }
 
@@ -90,6 +97,8 @@ export async function GET() {
       teachingAssignments: [],
     });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -106,7 +115,7 @@ export async function PATCH(request: Request) {
   try {
     const session = await requireCollegeMember("PANEL_MEMBER");
 
-    const body = (await request.json()) as Partial<{
+    const body = (await readJsonBody(request)) as Partial<{
       email: string;
       mobileNo: string;
       phone: string; // legacy alias of mobileNo, accepted for one release (see mobileNoFromBody)
@@ -307,6 +316,8 @@ export async function PATCH(request: Request) {
 
     return NextResponse.json({ ok: true });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

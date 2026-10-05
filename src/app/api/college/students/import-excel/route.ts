@@ -1,27 +1,52 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
+import { invalidateSectionCountCache } from "@/lib/students/sectionCounts";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
-import { getAdminDb } from "@/lib/firebase/admin";
+import { getAdminDb, getAdminAuth } from "@/lib/firebase/admin";
 import { buildStudentDoc, type StudentImportRow } from "@/lib/students/importRow";
+import { claimStudentRoll, releaseStudentRoll, rollTakenMessage } from "@/lib/students/rollIdentity";
+import { studentPasswordError } from "@/lib/students/passwordPolicy";
+import { StudentLoginError, provisionStudentLogin } from "@/lib/students/provisionLogin";
 import { departmentHistoryEntry } from "@/lib/students/departmentHistory";
-import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
 import { resolveDepartmentByNameOrCode, resolveCourseByNameOrCode, isConfiguredSecondaryDepartmentOrChild } from "@/lib/departments/codeOrNameResolver";
 import { resolveBranchYearOwner, resolveFreshmanLandingDepartment, type DepartmentYearRow } from "@/lib/departments/managedBranches";
 import { freshmanLandingDepartmentNames, type DepartmentWithId } from "@/lib/college/academicStructure";
-import { isLikelySameUnassignedStudent, STRONG_IDENTITY_FIELDS } from "@/lib/students/duplicateDetection";
+import { isLikelySameUnassignedStudent } from "@/lib/students/duplicateDetection";
+import { loadExistingStudentsForImport } from "@/lib/students/importExisting";
+import { actorOf } from "@/lib/audit/actorOf";
+import { writeAuditLog } from "@/lib/audit/writeAuditLog";
 import { validateYearForCourseDuration } from "@/lib/students/rosterValidation";
-import { ChunkedBatch } from "@/lib/firestore/chunkedBatch";
+import { ChunkedBatch, ChunkedBatchError } from "@/lib/firestore/chunkedBatch";
 import { createRollRegistry, rollNumberTakenMessage } from "@/lib/students/rollNumberUniqueness";
-import type { Section } from "@/types";
+import type { Section, StudentRecord } from "@/types";
 
-// Bulk, multi-section roster upload (HOD's Excel/CSV template, also used by
-// College Office) - unlike college/students/import (single sectionId for the
+// Bulk, multi-section roster upload (College Office only - the route guard below) - unlike college/students/import (single sectionId for the
 // whole batch), each row here names its own Section + Academic Year so one
 // file can cover an entire department's (or the whole college's) intake in
 // one go. Office also uses this to set `secondaryDepartment` for 1st-year
 // rows registered to a core branch while sitting under Basic Science.
-type BulkImportRow = StudentImportRow & { section: string; year: number; department?: string };
+// `loginPassword` (optional) is the password for the row's student login, chosen
+// by the office in the file's Password column. It is handed to Firebase Auth only:
+// buildStudentDoc picks named fields, so it can never reach a Firestore document,
+// and it is never logged or echoed back.
+type BulkImportRow = StudentImportRow & { section: string; year: number; department?: string; loginPassword?: string };
+
+// One row that passed every check and is waiting for its global roll claim, then
+// its write (and, when a password was given, its login).
+interface AcceptedRow {
+  rowNum: number;
+  roll: string;
+  name: string;
+  password: string | null;
+  docRef: FirebaseFirestore.DocumentReference;
+  doc: Record<string, unknown>;
+  historyRef: FirebaseFirestore.DocumentReference;
+  historyData: Record<string, unknown>;
+  claimCreated: boolean;
+  chunkIndex: number;
+}
 
 // Roll numbers are only unique within one (department, course, section,
 // year) - a bare section name alone is NOT unique college-wide (two
@@ -88,7 +113,8 @@ export async function POST(request: Request) {
     // Principal, Vice Principal or Panel role may bulk-import. (Super Admin keeps
     // access as the platform-wide override, consistent with every other route.)
     const session = await requireCollegeMember("COLLEGE_OFFICE", "SUPER_ADMIN");
-    const body = (await request.json()) as { records: BulkImportRow[] };
+    invalidateSectionCountCache(session.collegeId); // student counts on the Sections list change with this write
+    const body = (await readJsonBody(request)) as { records: BulkImportRow[] };
 
     if (!body.records || !Array.isArray(body.records) || body.records.length === 0) {
       return NextResponse.json({ error: "No records provided" }, { status: 400 });
@@ -99,16 +125,6 @@ export async function POST(request: Request) {
 
     const db = getAdminDb();
     const collegeId = session.collegeId;
-
-    // Full scope (not just the department name) so an HOD whose department
-    // has sub-departments - like a Sub-HOD or the parent HOD themself - can
-    // still be matched against a section that actually lives one level down
-    // the tree, consistent with how sections/[id]/route.ts already treats a
-    // parent HOD as having full access to their own sub-departments' sections.
-    let hodScope: Awaited<ReturnType<typeof getHodDepartmentScope>> | null = null;
-    if (session.role === "HOD") {
-      hodScope = await getHodDepartmentScope(db, collegeId, session.uid);
-    }
 
     const [sectionsSnap, departmentsSnap, coursesSnap] = await Promise.all([
       db.collection("colleges").doc(collegeId).collection("sections").get(),
@@ -259,8 +275,9 @@ export async function POST(request: Request) {
       childManagedDeptsByParentId.set(data.parentDepartmentId, arr);
     }
 
-    const existingSnap = await db.collection("colleges").doc(collegeId).collection("students")
-      .select("rollNumber", "section", "year", "name", "department", "secondaryDepartment", "courseId", ...STRONG_IDENTITY_FIELDS).get();
+    // Only the students these rows can actually collide with - never the whole
+    // roster (see lib/students/importExisting.ts for what is fetched and why).
+    const existingDocs = await loadExistingStudentsForImport(db, collegeId, body.records, resolveDepartment);
     // Placed-section roll dedupe: a section name is only unique within one
     // department's one course (see StudentRecord.courseId's doc-comment - two
     // different departments, or two different courses in the SAME
@@ -298,7 +315,7 @@ export async function POST(request: Request) {
       const arr = existingUnassignedByKey.get(key);
       if (arr) arr.push(s); else existingUnassignedByKey.set(key, [s]);
     };
-    for (const d of existingSnap.docs) {
+    for (const d of existingDocs) {
       const s = d.data() as Record<string, unknown> & { rollNumber?: string; section?: string; year?: number; name?: string; department?: string; secondaryDepartment?: string; courseId?: string };
       if (!s.section) {
         if (s.rollNumber) {
@@ -315,7 +332,7 @@ export async function POST(request: Request) {
     }
     // College-wide roll registry - every saved student, placed or not.
     const rollRegistry = createRollRegistry(
-      existingSnap.docs.map((d) => ({ id: d.id, rollNumber: d.get("rollNumber"), name: d.get("name") }))
+      existingDocs.map((d) => ({ id: d.id, rollNumber: d.get("rollNumber"), name: d.get("name") }))
     );
 
     // Lightweight direct-duplicate check on real-world unique identifiers -
@@ -326,7 +343,7 @@ export async function POST(request: Request) {
     // issues the same admission number/hall ticket/email to two different
     // students. Only checked when the field is actually populated - never
     // makes any of them required. Built once from the already-fetched
-    // existingSnap (no extra read); grown only once a row is actually
+    // existingDocs (no extra read); grown only once a row is actually
     // written (not merely passes this check - see the two `registerIdentity`
     // call sites below), so a later row can still reuse a value a REJECTED
     // earlier row never actually claimed, and a duplicate two rows apart in
@@ -334,7 +351,7 @@ export async function POST(request: Request) {
     const existingAdmissionNos = new Set<string>();
     const existingHallTicketNos = new Set<string>();
     const existingEmails = new Set<string>();
-    for (const d of existingSnap.docs) {
+    for (const d of existingDocs) {
       const s = d.data() as Record<string, unknown>;
       const admissionNo = typeof s.admissionNo === "string" ? s.admissionNo.trim().toLowerCase() : "";
       if (admissionNo) existingAdmissionNos.add(admissionNo);
@@ -362,14 +379,26 @@ export async function POST(request: Request) {
     }
 
     const now = new Date();
-    const created: string[] = [];
     const failed: { row: number; rollNumber: string; error: string }[] = [];
     const studentsColl = db.collection("colleges").doc(collegeId).collection("students");
     const batch = new ChunkedBatch(db);
+    const accepted: AcceptedRow[] = [];
 
     for (let i = 0; i < body.records.length; i++) {
       const row = body.records[i];
       const rowNum = i + 2;
+
+      // The login password, when the row has one, is checked before anything about
+      // the row is accepted - a bad one rejects the row, so nothing is half-imported.
+      const loginPassword = typeof row.loginPassword === "string" && row.loginPassword !== "" ? row.loginPassword : null;
+      if (row.loginPassword !== undefined && row.loginPassword !== null && row.loginPassword !== "" && typeof row.loginPassword !== "string") {
+        failed.push({ row: rowNum, rollNumber: row.rollNumber ?? "-", error: "Password must be text" });
+        continue;
+      }
+      if (loginPassword !== null) {
+        const passwordProblem = studentPasswordError(loginPassword);
+        if (passwordProblem) { failed.push({ row: rowNum, rollNumber: row.rollNumber ?? "-", error: passwordProblem }); continue; }
+      }
 
       // Roll Number is required only for section-based (placed) rows - the
       // Office's unassigned import doesn't collect it (checked in that path).
@@ -421,10 +450,6 @@ export async function POST(request: Request) {
 
         // departmentName is guaranteed here (the earlier guard rejects rows
         // with neither section nor department).
-        if (hodScope && !canHodEditDepartment(hodScope, departmentName!)) {
-          failed.push({ row: rowNum, rollNumber: row.rollNumber ?? "-", error: `${departmentName} is not yours or one you manage` });
-          continue;
-        }
 
         // 1st-year rows at a college that runs a shared/common first year
         // must land under one of that structure's Basic Science (Freshman)
@@ -579,13 +604,16 @@ export async function POST(request: Request) {
           }
         }
         const docRef = studentsColl.doc();
-        batch.set(docRef, buildStudentDoc(
-          { collegeId, department: departmentName!, name: "", year: Number(row.year), courseId: resolvedCourseId },
-          { ...row, rollNumber: roll, secondaryDepartment: unassignedSecondary, course: resolvedCourse },
-          now
-        ));
         const history = departmentHistoryEntry(db, collegeId, docRef.id, departmentName!, "", Number(row.year), now);
-        batch.set(history.ref, history.data);
+        accepted.push({
+          rowNum, roll, name: row.name.trim(), password: loginPassword, docRef,
+          doc: buildStudentDoc(
+            { collegeId, department: departmentName!, name: "", year: Number(row.year), courseId: resolvedCourseId },
+            { ...row, rollNumber: roll, secondaryDepartment: unassignedSecondary, course: resolvedCourse },
+            now
+          ),
+          historyRef: history.ref, historyData: history.data as Record<string, unknown>, claimCreated: false, chunkIndex: 0,
+        });
         if (roll) {
           existingUnassignedRolls.add(rollKey);
           rollRegistry.claim(roll, row.name.trim());
@@ -598,7 +626,6 @@ export async function POST(request: Request) {
           if (nameKeyViaSecondary) addUnassignedCandidate(nameKeyViaSecondary, newCandidate);
         }
         registerIdentityValues(row);
-        created.push(roll || row.name.trim());
         continue;
       }
 
@@ -667,20 +694,10 @@ export async function POST(request: Request) {
         } else if (candidates.length === 1) {
           section = candidates[0];
         } else {
-          // Ambiguous across departments - an HOD's own template has no
-          // Department column, so narrow to their own department tree (own
-          // department or one of its sub-departments) if that resolves it
-          // uniquely, then to the row's Secondary Department if that does;
-          // otherwise this needs a human to say which.
-          // canHodEditDepartment (own department(s) - an HOD can head more
-          // than one at once - plus sub-departments/managed branches), same
-          // check line 431 above already uses for the explicit-Department
-          // path; this implicit (no Department column) path had drifted to a
-          // narrower, ownDepartmentNames[0]-only check that dropped a
-          // multi-department HOD's other department(s).
-          let narrowed = hodScope
-            ? candidates.filter((c) => canHodEditDepartment(hodScope, c.department))
-            : candidates;
+          // Ambiguous across departments: narrow to the row's Secondary
+          // Department if that resolves it uniquely; otherwise this needs a
+          // human to say which.
+          let narrowed = candidates;
           if (narrowed.length > 1 && requestedSecondaryDept) {
             const bySecondary = narrowed.filter(isSecondaryMatch);
             if (bySecondary.length === 1) narrowed = bySecondary;
@@ -692,10 +709,6 @@ export async function POST(request: Request) {
             continue;
           }
         }
-      }
-      if (hodScope && !canHodEditDepartment(hodScope, section.department)) {
-        failed.push({ row: rowNum, rollNumber: row.rollNumber, error: `Section ${row.section} is not in your department` });
-        continue;
       }
 
       // Defaults from the section's own secondaryDepartments (inherited from
@@ -773,19 +786,112 @@ export async function POST(request: Request) {
       // REAL section - so there's nothing left to check there.
 
       const docRef = studentsColl.doc();
-      batch.set(docRef, buildStudentDoc(section, { ...row, secondaryDepartment: secondaryDept || undefined, course: placedCourse }, now));
       const history = departmentHistoryEntry(db, collegeId, docRef.id, section.department, section.name, section.year, now);
-      batch.set(history.ref, history.data);
+      accepted.push({
+        rowNum, roll, name: row.name.trim(), password: loginPassword, docRef,
+        doc: buildStudentDoc(section, { ...row, secondaryDepartment: secondaryDept || undefined, course: placedCourse }, now),
+        historyRef: history.ref, historyData: history.data as Record<string, unknown>, claimCreated: false, chunkIndex: 0,
+      });
       existingRolls.add(dedupeKey);
       rollRegistry.claim(roll, row.name.trim());
       registerIdentityValues(row);
-      created.push(roll);
     }
 
-    if (created.length > 0) await batch.commit();
+    // Roll numbers are unique across ALL colleges. Each accepted row claims its roll
+    // in the global registry (atomically, a few at a time); a row whose roll is held
+    // by a student of ANOTHER college is rejected here, and nothing of it is written.
+    const claimed: AcceptedRow[] = [];
+    for (let i = 0; i < accepted.length; i += 10) {
+      const group = accepted.slice(i, i + 10);
+      await Promise.all(
+        group.map(async (a) => {
+          const claim = await claimStudentRoll(db, { roll: a.roll, collegeId, studentDocId: a.docRef.id, name: a.name }, now);
+          if (!claim.ok) {
+            failed.push({
+              row: a.rowNum,
+              rollNumber: a.roll,
+              error: claim.code === "TAKEN" ? rollTakenMessage(a.roll, claim.holder) : "Roll Number must contain letters or digits",
+            });
+            return;
+          }
+          a.claimCreated = claim.created;
+          claimed.push(a);
+        })
+      );
+    }
+    claimed.sort((x, y) => x.rowNum - y.rowNum);
 
-    return NextResponse.json({ created: created.length, failed }, { status: 201 });
+    for (const a of claimed) {
+      batch.set(a.docRef, a.doc);
+      batch.set(a.historyRef, a.historyData);
+      a.chunkIndex = batch.getCurrentChunkIndex();
+    }
+
+    // Commit. If a chunk fails, only ITS rows are given back (their claims released)
+    // and reported; the rows of chunks that did commit stay imported.
+    let saved = claimed;
+    if (claimed.length > 0) {
+      try {
+        await batch.commit();
+      } catch (commitErr) {
+        const failedChunks = commitErr instanceof ChunkedBatchError ? new Set(commitErr.failedChunkIndexes) : null;
+        const lost = failedChunks ? claimed.filter((a) => failedChunks.has(a.chunkIndex)) : claimed;
+        await Promise.all(
+          lost.filter((a) => a.claimCreated).map((a) =>
+            releaseStudentRoll(db, a.roll, collegeId, a.docRef.id).catch((e) => console.error("[students/import-excel] could not release roll claim", a.roll, e))
+          )
+        );
+        if (!failedChunks) throw commitErr;
+        for (const a of lost) failed.push({ row: a.rowNum, rollNumber: a.roll, error: "Could not be saved - please import this row again" });
+        saved = claimed.filter((a) => !failedChunks.has(a.chunkIndex));
+      }
+    }
+    const created = saved.map((a) => a.roll || a.name);
+
+    // Logins for the rows that came with a password. The students are already saved,
+    // so a login problem never undoes one: it is reported per row and "Create login"
+    // on the roster can retry.
+    const loginFailed: { row: number; rollNumber: string; error: string }[] = [];
+    let loginsCreated = 0;
+    const withPasswords = saved.filter((a) => a.password !== null);
+    if (withPasswords.length > 0) {
+      const adminAuth = await getAdminAuth();
+      for (let i = 0; i < withPasswords.length; i += 5) {
+        await Promise.all(
+          withPasswords.slice(i, i + 5).map(async (a) => {
+            try {
+              await provisionStudentLogin(
+                db, adminAuth, collegeId, a.docRef.id,
+                { ...(a.doc as unknown as StudentRecord), id: a.docRef.id } as StudentRecord, session.uid, a.password as string
+              );
+              loginsCreated++;
+            } catch (loginErr) {
+              if (!(loginErr instanceof StudentLoginError)) console.error("[students/import-excel] login creation failed", a.roll, loginErr);
+              loginFailed.push({
+                row: a.rowNum,
+                rollNumber: a.roll,
+                error: loginErr instanceof StudentLoginError ? loginErr.message : "Imported, but the login could not be created - use Create login to retry",
+              });
+            }
+          })
+        );
+      }
+      loginFailed.sort((x, y) => x.row - y.row);
+    }
+    failed.sort((x, y) => x.row - y.row);
+
+    const actor = await actorOf(db, collegeId, session.uid, session.email);
+    await writeAuditLog(db, collegeId, {
+      action: "STUDENTS_IMPORTED",
+      performedBy: session.uid,
+      performedByName: actor.name,
+      details: { rows: body.records.length, created: created.length, failed: failed.length, loginsCreated, loginFailed: loginFailed.length },
+    });
+
+    return NextResponse.json({ created: created.length, failed, loginsCreated, loginFailed }, { status: 201 });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

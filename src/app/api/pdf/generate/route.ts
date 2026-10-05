@@ -1,7 +1,10 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { verifyFirebaseToken } from "@/lib/auth/verifyFirebaseToken";
+import { assertTokenActive } from "@/lib/auth/assertTokenActive";
+import { rateLimit } from "@/lib/security/rateLimit";
 import { getOfferLetterHTML, getAppointmentLetterHTML } from "@/lib/pdf/offerLetterTemplate";
 import { getFinanceReportHTML, getFinanceReceiptHTML } from "@/lib/pdf/financeReportTemplate";
 import { getResumeHTML } from "@/lib/pdf/resumeTemplate";
@@ -13,6 +16,7 @@ async function verifyToken(request: Request): Promise<string | null> {
   if (!auth?.startsWith("Bearer ")) return null;
   try {
     const decoded = await verifyFirebaseToken(auth.slice(7));
+    if (!(await assertTokenActive(decoded.uid, decoded.iat))) return null;
     return decoded.uid;
   } catch {
     return null;
@@ -31,9 +35,13 @@ async function verifyToken(request: Request): Promise<string | null> {
 export async function POST(request: Request) {
   const uid = await verifyToken(request);
   if (!uid) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const limited = rateLimit(`pdf-generate:${uid}`, 60, 60 * 1000);
+  if (!limited.ok) {
+    return NextResponse.json({ error: "Too many requests - try again shortly" }, { status: 429, headers: { "Retry-After": String(limited.retryAfterSeconds) } });
+  }
 
   try {
-    const body = (await request.json()) as {
+    const body = (await readJsonBody(request)) as {
       type: "OFFER_LETTER" | "APPOINTMENT_LETTER" | "FINANCE_REPORT" | "FINANCE_RECEIPT" | "RESUME" | "DOCUMENT_ACKNOWLEDGEMENT" | "CANDIDATE_PROFILE";
       data: Record<string, unknown>;
     };
@@ -76,6 +84,8 @@ export async function POST(request: Request) {
       },
     });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     console.error("[pdf/generate]", err);
     return NextResponse.json({ error: "Document generation failed" }, { status: 500 });
   }

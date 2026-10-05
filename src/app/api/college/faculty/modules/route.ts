@@ -1,3 +1,4 @@
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { Timestamp } from "firebase-admin/firestore";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
@@ -20,6 +21,8 @@ export async function GET() {
     const data = snap.exists ? (snap.data() as FacultyAssignedModulesDoc) : null;
     return NextResponse.json({ modules: data?.modules ?? [] });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -31,7 +34,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");
-    const body = (await request.json()) as { modules?: FacultyAssignedModule[]; academicYear?: string; semester?: number; department?: string };
+    const body = (await readJsonBody(request)) as { modules?: FacultyAssignedModule[]; academicYear?: string; semester?: number; department?: string };
     const db = getAdminDb();
     const now = Timestamp.now();
     const docRef = modulesRef(db, session.collegeId, session.uid);
@@ -51,6 +54,8 @@ export async function POST(request: Request) {
     } as unknown as FacultyAssignedModulesDoc, { merge: true });
     return NextResponse.json({ modules: body.modules ?? [] });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

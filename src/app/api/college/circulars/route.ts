@@ -1,4 +1,5 @@
 export const dynamic = "force-dynamic";
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -18,6 +19,8 @@ export async function GET(request: Request) {
     const filtered = docs.filter((d) => d.status !== "DRAFT" || isPrincipal || d.createdBy === session.uid);
     return NextResponse.json({ circulars: filtered });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     console.error("[circulars GET]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
@@ -30,7 +33,7 @@ export async function POST(request: Request) {
     const db = getAdminDb();
     const ok = await canSendCircular(db, session.collegeId, session.uid, session.role as never, (session as unknown as { realRole?: string }).realRole as never);
     if (!ok) return NextResponse.json({ error: "Not allowed to send circulars. Contact Principal." }, { status: 403 });
-    const body = (await request.json()) as {
+    const body = (await readJsonBody(request)) as {
       subject?: string; body?: string; date?: string; employeeType?: string; departmentIds?: string[]; departmentNames?: string[]; messageFrom?: string; attachments?: { fileName: string; fileUrl: string; fileType?: string; fileSize?: number }[];
       recipientKind?: string; targetYears?: number[];
     };
@@ -55,6 +58,8 @@ export async function POST(request: Request) {
     });
     return NextResponse.json({ circular }, { status: 201 });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     if (err instanceof Error && err.message.includes("required")) return NextResponse.json({ error: err.message }, { status: 400 });
     console.error("[circulars POST]", err);

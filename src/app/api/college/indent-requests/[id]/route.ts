@@ -1,5 +1,7 @@
 export const dynamic = "force-dynamic";
 
+import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeContext } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -38,6 +40,8 @@ export async function GET(
 
     return NextResponse.json({ request: req });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -53,7 +57,7 @@ export async function PATCH(
   try {
     const session = await requireCollegeContext(request, "HOD", "PURCHASE_DEPT", "FINANCE", "SUPER_ADMIN");
     const { id } = await params;
-    const body = (await request.json()) as {
+    const body = (await readJsonBody(request)) as {
       action?: "REJECT" | "RETURN" | "SEND_TO_FINANCE" | "APPROVE" | "UPLOAD_RECEIPT" | "UPLOAD_GRN";
       remarks?: string;
       items?: IndentItem[];
@@ -119,15 +123,7 @@ export async function PATCH(
           updatedAt: now,
         });
 
-        await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-          collegeId: session.collegeId,
-          action: "INDENT_GRN_UPLOADED",
-          performedBy: session.uid,
-          performedByName: hodName,
-          targetId: id,
-          details: { title: req.title, department: req.department, grnNumber: body.grnNumber },
-          timestamp: now,
-        });
+        await writeAuditLogSafe(db, session.collegeId, { action: "INDENT_GRN_UPLOADED", performedBy: session.uid, performedByName: hodName, targetId: id, details: { title: req.title, department: req.department, grnNumber: body.grnNumber } });
 
         const notifMessage = `${hodName} confirmed goods received for "${req.title}" (${req.department}). GRN #${body.grnNumber}.`;
         await notifyRole(db, session.collegeId, "PURCHASE_DEPT", "INDENT_GRN_UPLOADED", "GRN Uploaded", notifMessage, "/purchase/indents");
@@ -202,15 +198,7 @@ export async function PATCH(
           updatedAt: now,
         });
 
-        await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-          collegeId: session.collegeId,
-          action: nextStatus === "REJECTED_BY_PURCHASE" ? "INDENT_REJECTED_BY_PURCHASE" : "INDENT_RETURNED_TO_HOD",
-          performedBy: session.uid,
-          performedByName: purchaseName,
-          targetId: id,
-          details: { title: req.title, department: req.department },
-          timestamp: now,
-        });
+        await writeAuditLogSafe(db, session.collegeId, { action: nextStatus === "REJECTED_BY_PURCHASE" ? "INDENT_REJECTED_BY_PURCHASE" : "INDENT_RETURNED_TO_HOD", performedBy: session.uid, performedByName: purchaseName, targetId: id, details: { title: req.title, department: req.department } });
 
         await notify(
           db, session.collegeId, req.hodUid,
@@ -257,15 +245,7 @@ export async function PATCH(
           updatedAt: now,
         });
 
-        await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-          collegeId: session.collegeId,
-          action: "INDENT_SENT_TO_FINANCE",
-          performedBy: session.uid,
-          performedByName: purchaseName,
-          targetId: id,
-          details: { title: req.title, department: req.department },
-          timestamp: now,
-        });
+        await writeAuditLogSafe(db, session.collegeId, { action: "INDENT_SENT_TO_FINANCE", performedBy: session.uid, performedByName: purchaseName, targetId: id, details: { title: req.title, department: req.department } });
 
         await notifyRole(
           db, session.collegeId, "FINANCE",
@@ -332,15 +312,7 @@ export async function PATCH(
           timestamp: now,
         });
 
-        await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-          collegeId: session.collegeId,
-          action: "INDENT_RECEIPT_UPLOADED",
-          performedBy: session.uid,
-          performedByName: purchaseName,
-          targetId: id,
-          details: { title: req.title, department: req.department, amount },
-          timestamp: now,
-        });
+        await writeAuditLogSafe(db, session.collegeId, { action: "INDENT_RECEIPT_UPLOADED", performedBy: session.uid, performedByName: purchaseName, targetId: id, details: { title: req.title, department: req.department, amount } });
 
         const notifMessage = `${purchaseName} uploaded the purchase receipt for "${req.title}" (${req.department}).`;
         await notify(db, session.collegeId, req.hodUid, "INDENT_RECEIPT_UPLOADED", "Indent Completed", notifMessage, "/hod/indents");
@@ -499,6 +471,8 @@ export async function PATCH(
 
     return NextResponse.json({ error: "Action not permitted in current state." }, { status: 409 });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

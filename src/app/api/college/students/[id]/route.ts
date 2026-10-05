@@ -1,8 +1,10 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
+import { invalidateSectionCountCache } from "@/lib/students/sectionCounts";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
-import { getAdminDb } from "@/lib/firebase/admin";
+import { getAdminDb, getAdminAuth } from "@/lib/firebase/admin";
 import { departmentHistoryEntry } from "@/lib/students/departmentHistory";
 import { normalizeRosterDetails } from "@/lib/students/rosterFields";
 import { getHodDepartmentScope } from "@/lib/departments/scope";
@@ -12,6 +14,12 @@ import { getFacultyIdCandidates } from "@/lib/faculty/resolveFacultyMemberId";
 import { getAcademicStructure, type DepartmentWithId } from "@/lib/college/academicStructure";
 import { findCurrentSectionDoc } from "@/lib/students/findCurrentSectionDoc";
 import { findRollNumberConflict, rollNumberTakenMessage } from "@/lib/students/rollNumberUniqueness";
+import { rollNumberUpperOf } from "@/lib/students/loginDefaults";
+import { deleteStudentsCompletely } from "@/lib/students/deleteStudent";
+import { StudentLoginError, setStudentLoginActive, syncStudentRollChange } from "@/lib/students/provisionLogin";
+import { FieldValue } from "firebase-admin/firestore";
+import { actorOf } from "@/lib/audit/actorOf";
+import { writeAuditLog } from "@/lib/audit/writeAuditLog";
 import type { Section, StudentRecord, StudentStatus } from "@/types";
 
 // Move a single student to a different section (roster-management fix-up -
@@ -75,6 +83,25 @@ async function catalogIdForStudent(
   return catalogIdForCourseId(db, collegeId, courseId);
 }
 
+// One audit entry per roster change. Never fails the request (see writeAuditLog).
+async function auditStudentChange(
+  db: FirebaseFirestore.Firestore,
+  session: { collegeId: string; uid: string; email?: string },
+  action: string,
+  student: Pick<StudentRecord, "name" | "rollNumber">,
+  targetId: string,
+  details: Record<string, unknown> = {}
+) {
+  const actor = await actorOf(db, session.collegeId, session.uid, session.email);
+  await writeAuditLog(db, session.collegeId, {
+    action,
+    performedBy: session.uid,
+    performedByName: actor.name,
+    targetId,
+    details: { name: student.name, rollNumber: student.rollNumber, ...details },
+  });
+}
+
 // A single student's full roster record, for the Student Details page
 // (src/components/students/StudentDetailsPage.tsx) - that page loads fresh
 // on every visit (bookmark/refresh), so it needs its own by-id fetch rather
@@ -102,6 +129,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
     return NextResponse.json({ student: { ...student, id: studentSnap.id } });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -115,8 +144,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const session = await requireCollegeMember(
       "PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "COLLEGE_OFFICE"
     );
+    invalidateSectionCountCache(session.collegeId); // student counts on the Sections list change with this write
     const { id } = await params;
-    const body = (await request.json()) as {
+    const body = (await readJsonBody(request)) as {
       targetSectionId?: string;
       unassign?: boolean;
       secondaryDepartment?: string | null;
@@ -171,10 +201,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
       const now = new Date();
       const batch = db.batch();
-      batch.update(studentRef, { section: "", updatedAt: now });
+      // labBatch is a sub-group OF the section being left - carrying it into
+      // "unassigned" (and on to whatever section comes next) would put the
+      // student in the wrong lab roster.
+      batch.update(studentRef, { section: "", labBatch: "", updatedAt: now });
       const history = departmentHistoryEntry(db, session.collegeId, id, student.department, "", student.year, now);
       batch.set(history.ref, history.data);
       await batch.commit();
+      await auditStudentChange(db, session, "STUDENT_UNASSIGNED", student, id, { fromSection: student.section, year: student.year });
 
       return NextResponse.json({ ok: true });
     }
@@ -207,6 +241,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       }
 
       await studentRef.update({ profilePhotoUrl: body.profilePhotoUrl.trim() || null, updatedAt: new Date() });
+      await auditStudentChange(db, session, "STUDENT_PHOTO_UPDATED", student, id);
       return NextResponse.json({ ok: true });
     }
 
@@ -216,15 +251,18 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     // the same information the Office already enters when it imports or adds
     // the student in the first place.
     //
-    // rollNumber is deliberately NOT reachable here even though it's a
-    // template column: it stays on the path below, which is the department's
-    // alone and is the only one that checks uniqueness. The Office can set a
-    // provisional one at intake (import/add); correcting it afterwards is the
-    // HOD's call.
+    // rollNumber: for every role EXCEPT the College Office it is deliberately NOT
+    // reachable here even though it's a template column - it stays on the path
+    // below, which is the department's and is the only one that checks
+    // uniqueness. The College Office may also change it from this edit form: a
+    // changed roll goes through the very same rules and write as the path below
+    // (can't be blanked, unique - also across colleges, the login and its roll
+    // registry entry follow it), see officeRollChange.
     if (!body.targetSectionId && body.details) {
       const updates = normalizeRosterDetails(body.details);
       delete updates.rollNumber;
-      if (Object.keys(updates).length === 0) {
+      const officeSentRoll = session.role === "COLLEGE_OFFICE" && body.details.rollNumber !== undefined;
+      if (Object.keys(updates).length === 0 && !officeSentRoll) {
         return NextResponse.json({ error: "No editable fields provided" }, { status: 400 });
       }
       // Course is required (ROSTER_FIELDS) the same as Name/Department/Year -
@@ -250,6 +288,30 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         }
       } else if (!["PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "COLLEGE_OFFICE"].includes(session.role)) {
         return NextResponse.json({ error: "Not allowed to edit student details" }, { status: 403 });
+      }
+
+      // College Office only: a changed Roll No. The same checks as the roll-number
+      // path below - never removable, and refused when another student holds it -
+      // made before anything is written. The unchanged roll the form re-sends with
+      // every save is a no-op (so a legacy student sharing a roll stays editable).
+      let officeRollChange: { from: string; to: string } | null = null;
+      if (officeSentRoll) {
+        const sent = body.details.rollNumber;
+        const roll = typeof sent === "string" ? sent.trim() : "";
+        const currentRoll = (student.rollNumber ?? "").trim();
+        if (!roll && currentRoll) {
+          return NextResponse.json({ error: "A student's roll number can't be removed - change it to the correct number instead" }, { status: 400 });
+        }
+        if (roll && roll !== currentRoll) {
+          const clash = await findRollNumberConflict(collegeRef.collection("students"), roll, id);
+          if (clash) {
+            return NextResponse.json({ error: rollNumberTakenMessage(roll, clash.name) }, { status: 400 });
+          }
+          officeRollChange = { from: currentRoll, to: roll };
+        }
+      }
+      if (Object.keys(updates).length === 0 && !officeRollChange) {
+        return NextResponse.json({ error: "No editable fields provided" }, { status: 400 });
       }
 
       // Secondary Department, when being set to a real value (not cleared -
@@ -311,15 +373,43 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
           updates.department = remappedDepartment;
           const now = new Date();
           const history = departmentHistoryEntry(db, session.collegeId, id, remappedDepartment, student.section ?? "", student.year, now);
-          const batch = db.batch();
-          batch.update(studentRef, { ...updates, updatedAt: now });
-          batch.set(history.ref, history.data);
-          await batch.commit();
+          if (officeRollChange) {
+            // The roll change and the detail updates are ONE write (syncStudentRollChange);
+            // the history entry follows it.
+            try {
+              await syncStudentRollChange(db, await getAdminAuth(), session.collegeId, id, student, officeRollChange.to, { ...updates, updatedAt: now });
+            } catch (err) {
+              if (err instanceof StudentLoginError) return NextResponse.json({ error: err.message }, { status: err.status });
+              throw err;
+            }
+            await history.ref.set(history.data);
+            await auditStudentChange(db, session, "STUDENT_ROLL_CHANGED", student, id, { from: officeRollChange.from, to: officeRollChange.to });
+          } else {
+            const batch = db.batch();
+            batch.update(studentRef, { ...updates, updatedAt: now });
+            batch.set(history.ref, history.data);
+            await batch.commit();
+          }
+          await auditStudentChange(db, session, "STUDENT_DETAILS_UPDATED", student, id, { fields: Object.keys(updates), remappedDepartment });
           return NextResponse.json({ ok: true });
         }
       }
 
-      await studentRef.update({ ...updates, updatedAt: new Date() });
+      if (officeRollChange) {
+        // The roll is the student's login name and is unique across ALL colleges:
+        // claimed globally, the login's email and lookup follow it, the old roll is
+        // retired - together with this edit's other fields, in one write.
+        try {
+          await syncStudentRollChange(db, await getAdminAuth(), session.collegeId, id, student, officeRollChange.to, { ...updates, updatedAt: new Date() });
+        } catch (err) {
+          if (err instanceof StudentLoginError) return NextResponse.json({ error: err.message }, { status: err.status });
+          throw err;
+        }
+        await auditStudentChange(db, session, "STUDENT_ROLL_CHANGED", student, id, { from: officeRollChange.from, to: officeRollChange.to });
+      } else {
+        await studentRef.update({ ...updates, updatedAt: new Date() });
+      }
+      await auditStudentChange(db, session, "STUDENT_DETAILS_UPDATED", student, id, { fields: Object.keys(updates) });
       return NextResponse.json({ ok: true });
     }
 
@@ -372,14 +462,38 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       }
 
       const updates: Record<string, unknown> = { updatedAt: new Date() };
+      let revertedGraduation = false;
 
       if (body.status !== undefined) {
         if (!["REGULAR", "DETAINED", "GRADUATED"].includes(body.status)) {
           return NextResponse.json({ error: "Invalid status" }, { status: 400 });
         }
+        // Graduating records WHEN, from WHICH batch and course - only Promotion's
+        // Graduate action captures those (students/promote). A bare status flip
+        // here would create a graduate with none of it.
+        if (body.status === "GRADUATED") {
+          if (student.status !== "GRADUATED") {
+            return NextResponse.json(
+              { error: "Use Promotion > Graduate to graduate students - it records their batch and course" },
+              { status: 400 }
+            );
+          }
+        } else if (student.status === "GRADUATED") {
+          // Undoing a graduation: office-level, and it must also drop the graduation
+          // snapshot (it would otherwise haunt the record) and give the login back.
+          if (!["PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN"].includes(session.role)) {
+            return NextResponse.json({ error: "Only the Principal can undo a graduation" }, { status: 403 });
+          }
+          revertedGraduation = true;
+          updates.graduatedAt = FieldValue.delete();
+          updates.graduationBatch = FieldValue.delete();
+          updates.graduationCourseId = FieldValue.delete();
+          updates.graduationCourseName = FieldValue.delete();
+        }
         updates.status = body.status;
       }
 
+      let rollChange: { from: string; to: string } | null = null;
       if (body.rollNumber !== undefined) {
         const roll = body.rollNumber.trim();
         const currentRoll = (student.rollNumber ?? "").trim();
@@ -392,25 +506,55 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
           return NextResponse.json({ error: "A student's roll number can't be removed - change it to the correct number instead" }, { status: 400 });
         }
         // Roll numbers are unique across the whole college (like a faculty
-        // member's employee id). Only checked when the roll is actually
-        // CHANGING: the edit dialog re-sends the current roll along with a
-        // status / lab-batch change, and a student who already shares a roll
-        // with someone (data saved before this rule) must still be editable
-        // without first having to change it.
+        // member's employee id), compared case-insensitively. Only checked when
+        // the roll is actually CHANGING: the edit dialog re-sends the current
+        // roll along with a status / lab-batch change, and a student who
+        // already shares a roll with someone (data saved before this rule) must
+        // still be editable without first having to change it.
         if (roll && roll !== currentRoll) {
           const clash = await findRollNumberConflict(collegeRef.collection("students"), roll, id);
           if (clash) {
             return NextResponse.json({ error: rollNumberTakenMessage(roll, clash.name) }, { status: 400 });
           }
+          rollChange = { from: currentRoll, to: roll };
+        } else {
+          updates.rollNumber = roll;
+          // Opportunistically stamp the case-insensitive key on a document that predates it.
+          if (roll) updates.rollNumberUpper = rollNumberUpperOf(roll);
         }
-        updates.rollNumber = roll;
       }
 
       if (body.labBatch !== undefined) {
         updates.labBatch = body.labBatch.trim();
       }
 
-      await studentRef.update(updates);
+      try {
+        if (rollChange) {
+          // The roll is the student's login name and is unique across ALL colleges:
+          // the new roll is claimed globally, the login's email and lookup follow it,
+          // and the old roll is retired - see syncStudentRollChange.
+          await syncStudentRollChange(db, await getAdminAuth(), session.collegeId, id, student, rollChange.to, updates);
+        } else {
+          await studentRef.update(updates);
+        }
+      } catch (err) {
+        const badBody = badBodyResponse(err);
+        if (badBody) return badBody;
+        if (err instanceof StudentLoginError) return NextResponse.json({ error: err.message }, { status: err.status });
+        throw err;
+      }
+
+      if (revertedGraduation && student.uid) {
+        await setStudentLoginActive(db, await getAdminAuth(), session.collegeId, student.uid, true);
+      }
+
+      if (rollChange) await auditStudentChange(db, session, "STUDENT_ROLL_CHANGED", student, id, { from: rollChange.from, to: rollChange.to });
+      if (body.status !== undefined && body.status !== student.status) {
+        await auditStudentChange(db, session, revertedGraduation ? "STUDENT_GRADUATION_UNDONE" : "STUDENT_STATUS_CHANGED", student, id, { from: student.status, to: body.status });
+      }
+      if (body.labBatch !== undefined && body.labBatch.trim() !== (student.labBatch ?? "")) {
+        await auditStudentChange(db, session, "STUDENT_LAB_BATCH_UPDATED", student, id, { from: student.labBatch ?? "", to: body.labBatch.trim() });
+      }
       return NextResponse.json({ ok: true });
     }
 
@@ -519,6 +663,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         year: targetSection.year,
         courseId: targetSection.courseId,
         course: targetSection.courseName ?? null,
+        // A lab batch belongs to the section it was set in - never carried into another.
+        labBatch: "",
         updatedAt: now,
       });
     } else {
@@ -529,6 +675,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         secondaryDepartment: secondaryDept || null,
         courseId: targetSection.courseId,
         course: targetSection.courseName ?? null,
+        labBatch: "",
         updatedAt: now,
       });
     }
@@ -539,9 +686,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     );
     batch.set(history.ref, history.data);
     await batch.commit();
+    await auditStudentChange(db, session, "STUDENT_SECTION_CHANGED", student, id, {
+      fromSection: student.section || "", toSection: targetSection.name, toDepartment: targetSection.department, year: targetSection.year,
+    });
 
     return NextResponse.json({ ok: true });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -550,11 +702,17 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
 }
 
+// Deleting a student is permanent and complete (see lib/students/deleteStudent.ts):
+// the record, its department history, their login and their roll number's registry
+// entry are all removed - nothing is archived. Whoever could delete before still can:
+// the HOD of the student's department, the Principal/Vice Principal/Office, and the
+// faculty member in charge of the student's section.
 export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await requireCollegeMember(
       "PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "COLLEGE_OFFICE"
     );
+    invalidateSectionCountCache(session.collegeId); // student counts on the Sections list change with this write
     const { id } = await params;
 
     const db = getAdminDb();
@@ -579,14 +737,15 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
       }
     }
 
-    const historySnap = await studentRef.collection("departmentHistory").get();
-    const batch = db.batch();
-    for (const h of historySnap.docs) batch.delete(h.ref);
-    batch.delete(studentRef);
-    await batch.commit();
+    const { failedIds } = await deleteStudentsCompletely(db, getAdminAuth, session.collegeId, [studentSnap]);
+    if (failedIds.length > 0) {
+      return NextResponse.json({ error: "Could not delete the student's login - nothing was deleted, please try again" }, { status: 500 });
+    }
 
     return NextResponse.json({ ok: true });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

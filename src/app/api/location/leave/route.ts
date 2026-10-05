@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -45,18 +46,19 @@ export async function GET(request: Request) {
     if (deptId) {
       query = query.where("departmentId", "==", deptId);
     }
-    if (dateFrom) {
-      query = query.where("startDate", ">=", dateFrom);
-    }
-    if (dateTo) {
-      query = query.where("startDate", "<=", dateTo);
-    }
-
+    // The date range is applied after the read: Firestore refuses a range filter on startDate
+    // combined with the createdAt ordering below (the first sort must be the range field), so
+    // asking for a date range used to fail outright.
     const snap = await query
       .orderBy("createdAt", "desc")
       .limit(200)
       .get();
-    const leaveRequests = snap.docs.map((d) => ({ id: d.id, ...d.data() })) as LeaveRequest[];
+    const leaveRequests = (snap.docs.map((d) => ({ id: d.id, ...d.data() })) as LeaveRequest[]).filter((lr) => {
+      const start = (lr as { startDate?: string }).startDate ?? "";
+      if (dateFrom && start < dateFrom) return false;
+      if (dateTo && start > dateTo) return false;
+      return true;
+    });
 
     // Resolve staff names for dept head view
     if (session.role === "LOCATION_DEPT_HEAD" && !staffId) {
@@ -77,6 +79,8 @@ export async function GET(request: Request) {
 
     return NextResponse.json({ leaveRequests });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && err.message === "UNAUTHORIZED") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -94,7 +98,7 @@ export async function POST(request: Request) {
       "SUPER_ADMIN"
     );
 
-    const body = (await request.json()) as {
+    const body = (await readJsonBody(request)) as {
       staffId: string;
       departmentId: string;
       staffName: string;
@@ -142,6 +146,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ id: leaveRef.id, status: "PENDING" }, { status: 201 });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && err.message === "UNAUTHORIZED") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

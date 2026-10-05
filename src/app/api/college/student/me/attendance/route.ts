@@ -1,12 +1,13 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
+import { passwordChangeRequired, passwordChangeRequiredResponse } from "@/lib/students/passwordGate";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { loadEffectiveTiming } from "@/lib/college/semester";
 import { formatShortCourseName } from "@/lib/academic/format";
 import { istDateKey } from "@/lib/attendance/istTime";
-import { computeStudentAttendanceHistory, studentDepartmentsForHistory } from "@/lib/studentAttendance/history";
+import { computeStudentAttendanceHistory, studentDepartmentsForHistory, STUDENT_SELF_VIEW_CACHE_MS } from "@/lib/studentAttendance/history";
 import { calcPercent } from "@/lib/studentAttendance/percentage";
 import {
   batchStartYear,
@@ -48,6 +49,7 @@ export async function GET(request: Request) {
     }
     const studentDoc = studentSnap.docs[0];
     const student = { ...(studentDoc.data() as StudentRecord), id: studentDoc.id };
+    if (passwordChangeRequired(student)) return passwordChangeRequiredResponse();
 
     // Semesters this student has actually reached: every configured semester of
     // years 1..current whose start date has passed (see semesterOptionsForStudent).
@@ -99,10 +101,12 @@ export async function GET(request: Request) {
     }
 
     const departments = await studentDepartmentsForHistory(db, session.collegeId, student);
+    // Cached for a few minutes and shared by the department's other students (see
+    // computeStudentAttendanceHistory): a student's own view need not be to-the-second live.
     const { subjects } = await computeStudentAttendanceHistory(db, session.collegeId, student.id, departments, {
       from: range.from,
       to: range.to,
-    });
+    }, { cacheMs: STUDENT_SELF_VIEW_CACHE_MS });
 
     // Short codes only on the report: the subject's short code, the course's
     // short name ("B.Tech"), the branch's department code ("CSE"). A shared-

@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -128,6 +129,8 @@ export async function GET(request: Request) {
 
     return NextResponse.json({ staff: staffList });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && err.message === "UNAUTHORIZED") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -145,7 +148,7 @@ export async function POST(request: Request) {
       "SUPER_ADMIN"
     );
 
-    const body = (await request.json()) as Partial<LocationStaffMember> & { locationId?: string };
+    const body = (await readJsonBody(request)) as Partial<LocationStaffMember> & { locationId?: string };
     const locationId = body.locationId || session.locationId;
     if (!locationId) {
       return NextResponse.json({ error: "locationId required" }, { status: 400 });
@@ -318,6 +321,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ id: ref.id, ...staffPayload }, { status: 201 });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && err.message === "UNAUTHORIZED") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

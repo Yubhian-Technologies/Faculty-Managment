@@ -1,20 +1,32 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb, getAdminAuth } from "@/lib/firebase/admin";
-import { resetStudentLoginPassword } from "@/lib/students/provisionLogin";
-import { DEFAULT_STUDENT_PASSWORD } from "@/lib/students/loginDefaults";
+import { StudentLoginError, resetStudentLoginPassword } from "@/lib/students/provisionLogin";
+import { studentPasswordError } from "@/lib/students/passwordPolicy";
 import type { StudentRecord } from "@/types";
 
-// Resets a student's login back to the shared default password - the only
-// password-recovery path for students (their login email is synthetic, so
-// Firebase's own "forgot password" email can't reach them). College Office
-// only, same as create-login.
+// Sets a student's login to a NEW password the College Office types in the
+// request - the only password-recovery path for students (their login email is
+// synthetic, so Firebase's own "forgot password" email can't reach them). The
+// password goes to Firebase Auth only; it is not stored, logged, audited or
+// returned. College Office only, same as create-login. Students can also change
+// their own password at any time.
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await requireCollegeMember("COLLEGE_OFFICE");
     const { id } = await params;
+
+    let body: { password?: unknown };
+    try {
+      body = (await readJsonBody(request)) as { password?: unknown };
+    } catch {
+      return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+    }
+    const passwordProblem = studentPasswordError(body?.password);
+    if (passwordProblem) return NextResponse.json({ error: passwordProblem }, { status: 400 });
 
     const db = getAdminDb();
     const collegeRef = db.collection("colleges").doc(session.collegeId);
@@ -28,7 +40,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     }
 
     const adminAuth = await getAdminAuth();
-    await resetStudentLoginPassword(adminAuth, student.uid);
+    await resetStudentLoginPassword(adminAuth, student.uid, body.password as string);
 
     await collegeRef.collection("auditLogs").add({
       collegeId: session.collegeId,
@@ -38,8 +50,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       timestamp: new Date(),
     });
 
-    return NextResponse.json({ ok: true, password: DEFAULT_STUDENT_PASSWORD });
+    return NextResponse.json({ ok: true });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
+    if (err instanceof StudentLoginError) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

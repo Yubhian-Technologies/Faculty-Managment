@@ -1,29 +1,12 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { COLLEGE_STAFF_UNIT_HEAD_ROLES } from "@/lib/attendance/collegeStaffUnits";
-
-// face-api.js's faceRecognitionNet always produces a 128-dimensional
-// descriptor — used to sanity-check what a client posts before it's trusted.
-const EMBEDDING_LENGTH = 128;
-
-// Same "faculty member doc, else own user doc" resolution as
-// /api/college/attendance/reference-photo and /api/college/faculty/me - HODs,
-// Principal, and Vice Principal have no separate FacultyMember record, so
-// their registration lives on users/{uid} instead - naturally a separate
-// document from any Faculty member's, never shared.
-async function resolveOwnDocRef(
-  db: FirebaseFirestore.Firestore,
-  collegeId: string,
-  uid: string
-): Promise<FirebaseFirestore.DocumentReference> {
-  const collegeRef = db.collection("colleges").doc(collegeId);
-  const facultySnap = await collegeRef.collection("facultyMembers").where("userUid", "==", uid).limit(1).get();
-  if (!facultySnap.empty) return facultySnap.docs[0].ref;
-  return collegeRef.collection("users").doc(uid);
-}
+import { EMBEDDING_LENGTH } from "@/lib/attendance/faceThreshold";
+import { resolveOwnDocRef } from "@/lib/attendance/faceRegistry";
 
 // Whether the caller has registered their face yet - the gate the Faculty/HOD
 // attendance pages use to decide whether to offer "Register" or "Check In" -
@@ -40,6 +23,8 @@ export async function GET() {
     const registered = Array.isArray(data?.faceEmbedding) && data.faceEmbedding.length === EMBEDDING_LENGTH;
     return NextResponse.json({ registered, embedding: registered ? data!.faceEmbedding : null });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -56,7 +41,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_STAFF", ...COLLEGE_STAFF_UNIT_HEAD_ROLES);
-    const body = (await request.json()) as { embedding?: number[] };
+    const body = (await readJsonBody(request)) as { embedding?: number[] };
     const embedding = body.embedding;
 
     if (
@@ -81,6 +66,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ ok: true });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

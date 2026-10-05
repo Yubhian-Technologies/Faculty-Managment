@@ -1,5 +1,7 @@
 export const dynamic = "force-dynamic";
 
+import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { findUsersSnapshot } from "@/lib/roles/findUsersByRoles";
 import { NextResponse } from "next/server";
 import { requireCollegeContext } from "@/lib/auth/verifySession";
@@ -42,6 +44,8 @@ export async function GET(request: Request) {
 
     return NextResponse.json({ requests });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -53,7 +57,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeContext(request, "HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");
-    const body = (await request.json()) as {
+    const body = (await readJsonBody(request)) as {
       academicYear: string;
       title: string;
       requestDate?: string;
@@ -148,15 +152,7 @@ export async function POST(request: Request) {
           updatedAt: now,
         });
 
-      await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-        collegeId: session.collegeId,
-        action: "BUDGET_REQUEST_SUBMITTED",
-        performedBy: session.uid,
-        performedByName: requesterName,
-        targetId: ref.id,
-        details: { title, department, isEmergency: true, emergencyType },
-        timestamp: now,
-      });
+      await writeAuditLogSafe(db, session.collegeId, { action: "BUDGET_REQUEST_SUBMITTED", performedBy: session.uid, performedByName: requesterName, targetId: ref.id, details: { title, department, isEmergency: true, emergencyType } });
 
       // Nothing to notify - Management works pull-style (visits the page to see
       // what's pending), since notifications are gated on collegeId and MANAGEMENT
@@ -197,15 +193,7 @@ export async function POST(request: Request) {
         updatedAt: now,
       });
 
-    await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-      collegeId: session.collegeId,
-      action: "BUDGET_REQUEST_SUBMITTED",
-      performedBy: session.uid,
-      performedByName: hodName,
-      targetId: ref.id,
-      details: { title, department },
-      timestamp: now,
-    });
+    await writeAuditLogSafe(db, session.collegeId, { action: "BUDGET_REQUEST_SUBMITTED", performedBy: session.uid, performedByName: hodName, targetId: ref.id, details: { title, department } });
 
     const principalsSnap = await findUsersSnapshot(db, session.collegeId, ["PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_ADMIN"]);
 
@@ -230,6 +218,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ id: ref.id }, { status: 201 });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

@@ -1,5 +1,6 @@
 import type { StudentListItem, StudentRecord } from "@/types";
 import { compareStudentsForList } from "@/lib/students/listOrder";
+import { compareGraduates, graduateBatchLabel, graduateCourseLabel, graduateFacets } from "@/lib/students/graduates";
 
 // Server-side pagination for the College Office / Principal-tier Students
 // list (the roles that see the whole college unscoped - no HOD/PANEL_MEMBER
@@ -50,17 +51,48 @@ export interface StudentListQuery {
   year: number | null;
   /** Exact studentType ("Regular"/"Lateral"). "" means no filter. */
   studentType: string;
+  /**
+   * Inclusive roll-number range, compared upper-cased as strings (the same rule
+   * as the HOD page's range - hodPagedList.fetchHodStudentsMatching). Either end
+   * may be left blank for an open-ended range; both given in the wrong order are
+   * swapped. A student with no roll number never matches an active range.
+   * Applied in memory over the candidate set like the other non-structural
+   * filters: roll numbers are stored in mixed case ("24pa1a1222" next to
+   * "24PA1A1241"), so a Firestore range query on `rollNumber` would miss rows.
+   */
+  rollFrom?: string;
+  rollTo?: string;
 }
 
 type Doc = FirebaseFirestore.QueryDocumentSnapshot;
 
+type RollRange = Pick<StudentListQuery, "rollFrom" | "rollTo">;
+
+function hasRollRange(range: RollRange): boolean {
+  return !!(range.rollFrom?.trim() || range.rollTo?.trim());
+}
+
+/** Whether `roll` lies inside the (possibly open-ended) inclusive range. */
+export function rollInRange(roll: unknown, range: RollRange): boolean {
+  let lo = (range.rollFrom ?? "").trim().toUpperCase();
+  let hi = (range.rollTo ?? "").trim().toUpperCase();
+  if (!lo && !hi) return true;
+  const value = typeof roll === "string" ? roll.trim().toUpperCase() : "";
+  if (!value) return false;
+  if (lo && hi && lo > hi) [lo, hi] = [hi, lo];
+  if (lo && value < lo) return false;
+  if (hi && value > hi) return false;
+  return true;
+}
+
 function matchesRemaining(
   data: FirebaseFirestore.DocumentData,
-  opts: Pick<StudentListQuery, "search" | "course" | "year" | "studentType">
+  opts: Pick<StudentListQuery, "search" | "course" | "year" | "studentType" | "rollFrom" | "rollTo">
 ): boolean {
   if (opts.year !== null && Number(data.year) !== opts.year) return false;
   if (opts.course && data.course !== opts.course) return false;
   if (opts.studentType && data.studentType !== opts.studentType) return false;
+  if (!rollInRange(data.rollNumber, opts)) return false;
   if (opts.search) {
     const name = String(data.name ?? "").toLowerCase();
     const roll = String(data.rollNumber ?? "").toLowerCase();
@@ -127,7 +159,7 @@ export async function fetchStudentsPage(
   studentsColl: FirebaseFirestore.CollectionReference,
   params: StudentListQuery
 ): Promise<{ students: StudentListItem[]; total: number }> {
-  const hasFilter = params.departments.length > 0 || params.year !== null || !!params.course || !!params.search || !!params.studentType;
+  const hasFilter = params.departments.length > 0 || params.year !== null || !!params.course || !!params.search || !!params.studentType || hasRollRange(params);
 
   if (!hasFilter) {
     const [countSnap, pageSnap] = await Promise.all([
@@ -152,10 +184,109 @@ export async function fetchStudentsPage(
  */
 export async function fetchMatchingStudentIds(
   studentsColl: FirebaseFirestore.CollectionReference,
-  params: Pick<StudentListQuery, "departments" | "year" | "course" | "search" | "studentType">
+  params: Pick<StudentListQuery, "departments" | "year" | "course" | "search" | "studentType" | "rollFrom" | "rollTo">
 ): Promise<string[]> {
   const candidates = await resolveCandidates(studentsColl, params);
   return candidates.filter((d) => matchesRemaining(d.data(), params)).map((d) => d.id);
+}
+
+// ── Graduated students ───────────────────────────────────────────────────
+// The Graduated view used to download EVERY student in the college and keep
+// only status === "GRADUATED" in the browser. `status` is now the one
+// structural filter pushed down to Firestore (a bare equality, so the automatic
+// single-field index serves it - same reasoning as the top-of-file comment), so
+// only graduates are read, and the browser gets exactly one page.
+//
+// Course/batch/search are applied in memory over that candidate set: a
+// graduate's course and batch are labelled with an "Unspecified" bucket when
+// blank (lib/students/graduates.ts), which an equality filter can't express.
+//
+// The list request also returns `orderedIds` - every matching id, in display
+// order, and nothing else about them. Paging then needs no further candidate
+// read: the client asks for just the ids of the page it wants
+// (fetchGraduatesByIds) and Firestore reads exactly that many documents.
+
+export interface GraduatesQuery {
+  page: number;
+  pageSize: number;
+  /** Trimmed, lower-cased. "" means no search. Matches name, roll number or department. */
+  search: string;
+  /** A course label as in graduateFacets(). "" means every course. */
+  course: string;
+  /** A batch label as in graduateFacets(). "" means every batch. */
+  batch: string;
+}
+
+export interface GraduatesPage {
+  students: StudentListItem[];
+  /** Graduates matching the filters. */
+  total: number;
+  /** Every graduate, ignoring the filters - the "N graduated total" figure. */
+  overallTotal: number;
+  /** Every matching id in display order, so later pages can be fetched by id. */
+  orderedIds: string[];
+  /** Drop-down options over every graduate, so they don't shrink as filters narrow. */
+  facets: { courses: string[]; batches: string[] };
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
+export async function fetchGraduatesPage(
+  studentsColl: FirebaseFirestore.CollectionReference,
+  params: GraduatesQuery
+): Promise<GraduatesPage> {
+  const snap = await studentsColl.where("status", "==", "GRADUATED").get();
+  const all = snap.docs
+    .map((d) => ({ id: d.id, ...(d.data() as Omit<StudentRecord, "id">), accessLevel: "primary" as const }))
+    .sort(compareGraduates) as StudentListItem[];
+
+  const filtered = all.filter((s) => {
+    if (params.course && graduateCourseLabel(s) !== params.course) return false;
+    if (params.batch && graduateBatchLabel(s) !== params.batch) return false;
+    if (params.search) {
+      const name = String(s.name ?? "").toLowerCase();
+      const roll = String(s.rollNumber ?? "").toLowerCase();
+      const dept = String(s.department ?? "").toLowerCase();
+      if (!name.includes(params.search) && !roll.includes(params.search) && !dept.includes(params.search)) return false;
+    }
+    return true;
+  });
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / params.pageSize));
+  const page = Math.min(Math.max(1, params.page), totalPages);
+  const start = (page - 1) * params.pageSize;
+  return {
+    students: filtered.slice(start, start + params.pageSize),
+    total: filtered.length,
+    overallTotal: all.length,
+    orderedIds: filtered.map((s) => s.id),
+    facets: graduateFacets(all),
+    page,
+    pageSize: params.pageSize,
+    totalPages,
+  };
+}
+
+/**
+ * The graduates among `ids`, in the order asked - one document read per id.
+ * An id that no longer exists, or whose student isn't (any longer) graduated,
+ * is simply left out.
+ */
+export async function fetchGraduatesByIds(
+  studentsColl: FirebaseFirestore.CollectionReference,
+  ids: string[]
+): Promise<StudentListItem[]> {
+  if (ids.length === 0) return [];
+  const snaps = await studentsColl.firestore.getAll(...ids.map((id) => studentsColl.doc(id)));
+  const out: StudentListItem[] = [];
+  for (const d of snaps) {
+    if (!d.exists) continue;
+    const data = d.data() as Omit<StudentRecord, "id">;
+    if (data.status !== "GRADUATED") continue;
+    out.push({ id: d.id, ...data, accessLevel: "primary" });
+  }
+  return out;
 }
 
 // ── CSV export ───────────────────────────────────────────────────────────

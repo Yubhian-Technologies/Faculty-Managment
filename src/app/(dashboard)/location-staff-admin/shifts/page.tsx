@@ -1,5 +1,6 @@
 "use client";
 
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { useEffect, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
 import {
@@ -69,9 +70,9 @@ export default function LocationStaffAdminShiftsPage() {
   }, [refreshKey]);
 
   // Delete shift
-  const handleDeleteShift = async (shiftId: string, shiftName: string) => {
-    if (!confirm(`Are you sure you want to delete shift "${shiftName}"?`)) return;
-
+  const [shiftToDelete, setShiftToDelete] = useState<{ id: string; name: string } | null>(null);
+  const handleDeleteShift = (shiftId: string, shiftName: string) => setShiftToDelete({ id: shiftId, name: shiftName });
+  const deleteShift = async (shiftId: string, shiftName: string) => {
     try {
       const res = await fetch(`/api/location/shifts/${shiftId}`, {
         method: "DELETE",
@@ -104,7 +105,7 @@ export default function LocationStaffAdminShiftsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-card/90 backdrop-blur-sm p-5 sm:p-6 rounded-3xl border border-border/60 shadow-xs">
         <div className="flex items-center gap-3.5">
           <Button asChild variant="ghost" size="icon" className="h-10 w-10 rounded-full hover:bg-muted/80 shrink-0">
-            <Link href="/location-staff-admin">
+            <Link aria-label="Back" href="/location-staff-admin">
               <ArrowLeft className="h-5 w-5 text-foreground" />
             </Link>
           </Button>
@@ -280,6 +281,19 @@ export default function LocationStaffAdminShiftsPage() {
           })}
         </div>
       )}
+      <ConfirmDialog
+        open={!!shiftToDelete}
+        onOpenChange={(o) => { if (!o) setShiftToDelete(null); }}
+        title={`Delete shift "${shiftToDelete?.name ?? ""}"?`}
+        description="This cannot be undone."
+        confirmLabel="Delete"
+        variant="destructive"
+        onConfirm={async () => {
+          const target = shiftToDelete;
+          setShiftToDelete(null);
+          if (target) await deleteShift(target.id, target.name);
+        }}
+      />
     </div>
   );
 }

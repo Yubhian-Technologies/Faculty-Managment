@@ -1,9 +1,13 @@
 export const dynamic = "force-dynamic";
 
+import { firebaseAuthErrorResponse } from "@/lib/http/firebaseErrors";
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
+import { isEmployeeIdReserved, releaseEmployeeId, reserveEmployeeId } from "@/lib/firestore/employeeIdKeys";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import { createFirebaseUser } from "@/lib/firebase/authRest";
+import { withAuthUser } from "@/lib/firebase/withAuthUser";
+import { employeeIdTaken, employeeIdTakenMessage } from "@/lib/firestore/employeeIds";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
 import { getHodDepartmentScope, getDepartmentTreeNames, canHodManageFacultyDepartment, facultyManageableDepartmentNames } from "@/lib/departments/scope";
 import { LEGACY_TECHNICAL_DESIGNATIONS } from "@/lib/designations/config";
@@ -21,6 +25,7 @@ import {
   isFacultyAvailable, FACULTY_STATUS_DATE_FIELD, FACULTY_STATUS_DATE_LABELS,
 } from "@/types";
 import { loadDepartmentIndex, stampDepartmentIds } from "@/lib/departments/stampIds";
+import { whereIn, type QueryLike } from "@/lib/firestore/inQuery";
 
 export async function GET(request: Request) {
   try {
@@ -57,7 +62,7 @@ export async function GET(request: Request) {
 
     const db = getAdminDb();
     const facultyColl = db.collection("colleges").doc(session.collegeId).collection("facultyMembers");
-    const withStatus = (q: FirebaseFirestore.Query): FirebaseFirestore.Query =>
+    const withStatus = (q: QueryLike): QueryLike =>
       statusFilter ? q.where("status", "==", statusFilter) : q;
 
     // The immediate parent department name(s) of `names` (deduplicated,
@@ -79,14 +84,14 @@ export async function GET(request: Request) {
         .filter((n): n is string => !!n && !names.includes(n));
     }
 
-    let primaryQuery: FirebaseFirestore.Query = facultyColl;
+    let primaryQuery: QueryLike = facultyColl;
     // A parent department's HOD manages its sub-departments' faculty too, so
     // they are listed alongside their own - needed both to pick a sub-department
     // specialist when assigning a shared/parent-owned subject, and to administer
     // those faculty directly (see canHodEditDepartment in lib/departments/scope).
-    let childDeptQuery: FirebaseFirestore.Query | null = null;
+    let childDeptQuery: QueryLike | null = null;
     // See includeParent above - populated only for that opt-in case.
-    let parentDeptQuery: FirebaseFirestore.Query | null = null;
+    let parentDeptQuery: QueryLike | null = null;
 
     // Deliberately does NOT cross into a feeder/fed department's own faculty
     // (e.g. Basic Science's faculty showing up under CSE, or vice versa) -
@@ -123,10 +128,10 @@ export async function GET(request: Request) {
           ? (await getDepartmentTreeNames(db, session.collegeId, deptFilter)).filter((n) => canHodManageFacultyDepartment(scope, n))
           : [];
         primaryQuery = treeNames.length > 0
-          ? primaryQuery.where("department", "in", treeNames.slice(0, 30))
+          ? whereIn(primaryQuery, "department", treeNames)
           : primaryQuery.where("department", "==", "__none__");
       } else if (scope.ownDepartmentNames.length > 0) {
-        primaryQuery = primaryQuery.where("department", "in", scope.ownDepartmentNames.slice(0, 30));
+        primaryQuery = whereIn(primaryQuery, "department", scope.ownDepartmentNames);
 
         // Sub-departments only (facultyManageableDepartmentNames) - a managed/
         // "core" branch's own faculty roster is never this HOD's, sub-HOD or
@@ -140,14 +145,14 @@ export async function GET(request: Request) {
           ? []
           : facultyManageableDepartmentNames(scope).filter((n) => !scope.ownDepartmentNames.includes(n));
         if (ownedNames.length > 0) {
-          childDeptQuery = withStatus(facultyColl.where("department", "in", ownedNames.slice(0, 30)));
+          childDeptQuery = withStatus(whereIn(facultyColl, "department", ownedNames));
         }
 
         if (includeParent) {
           const parentNames = (await parentDepartmentNames(scope.ownDepartmentNames))
             .filter((n) => !ownedNames.includes(n));
           if (parentNames.length > 0) {
-            parentDeptQuery = withStatus(facultyColl.where("department", "in", parentNames.slice(0, 30)));
+            parentDeptQuery = withStatus(whereIn(facultyColl, "department", parentNames));
           }
         }
       } else {
@@ -173,7 +178,7 @@ export async function GET(request: Request) {
       if (includeParent) {
         const parentNames = await parentDepartmentNames([callerDepartment]);
         primaryQuery = parentNames.length > 0
-          ? primaryQuery.where("department", "in", [callerDepartment, ...parentNames].slice(0, 30))
+          ? whereIn(primaryQuery, "department", [callerDepartment, ...parentNames])
           : primaryQuery.where("department", "==", callerDepartment);
       } else {
         primaryQuery = primaryQuery.where("department", "==", callerDepartment);
@@ -250,9 +255,16 @@ export async function GET(request: Request) {
     );
     return NextResponse.json({ faculty: teachingOnly });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
+    if (isEmployeeIdReserved(err)) {
+      return NextResponse.json({ error: employeeIdTakenMessage({ taken: true, heldBy: err.heldBy }) }, { status: 409 });
+    }
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const authErr = firebaseAuthErrorResponse(err);
+    if (authErr) return authErr;
     console.error("[college/faculty GET]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
@@ -262,7 +274,7 @@ export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL");
 
-    const body = (await request.json()) as {
+    const body = (await readJsonBody(request)) as {
       employeeId: string;
       apaarFacultyId?: string;
       email?: string;
@@ -399,36 +411,32 @@ export async function POST(request: Request) {
       );
     }
 
-    // Check employee ID uniqueness across every college, not just this one -
-    // the public faculty-profile link is keyed on employeeId alone (see
-    // /api/public/faculty-public), so a collision between colleges would let
-    // one person's link resolve to a different person's profile.
-    const existing = await db
-      .collectionGroup("facultyMembers")
-      .where("employeeId", "==", employeeId)
-      .limit(1)
-      .get();
-
-    if (!existing.empty) {
-      return NextResponse.json({ error: "Employee ID already exists" }, { status: 409 });
+    // One employee-ID rule for faculty and staff (lib/firestore/employeeIds.ts):
+    // unique across every college among faculty - the public faculty-profile link
+    // is keyed on employeeId alone (see /api/public/faculty-public), so a
+    // collision between colleges would let one person's link resolve to a
+    // different person's profile - and not shared with any supporting-staff
+    // member of this college either.
+    const idCheck = await employeeIdTaken(db, collegeId, employeeId);
+    if (idCheck.taken) {
+      return NextResponse.json({ error: employeeIdTakenMessage(idCheck) }, { status: 409 });
     }
 
     // College email is the login username - create the Firebase Auth user with it,
     // not the personal email (which is optional, contact-only). Uses
     // finalName (legalName), so the Auth account's display name is never blank.
-    const uid = await createFirebaseUser(collegeEmail, password, finalName);
-
+    // The login and every document that goes with it are ONE unit (withAuthUser):
+    // the three Firestore writes below are a single batch, and a failure anywhere
+    // after the Auth user exists removes it again instead of leaving an orphan
+    // login that would block this email on the retry.
+    const created = await withAuthUser({ email: collegeEmail, password, displayName: finalName, db }, async (uid) => {
     const now = new Date();
+    const batch = db.batch();
 
     // Write to users collection (login account) - name here is finalName too
     // (legalName), since this is what nav/notifications/pickers
     // read as "the" display name for this login.
-    await db
-      .collection("colleges")
-      .doc(collegeId)
-      .collection("users")
-      .doc(uid)
-      .set({
+    batch.set(db.collection("colleges").doc(collegeId).collection("users").doc(uid), {
         uid,
         collegeId,
         name: finalName,
@@ -449,7 +457,7 @@ export async function POST(request: Request) {
       .doc();
 
     const deptIndex = await loadDepartmentIndex(db, collegeId);
-    await docRef.set(stampDepartmentIds({
+    batch.set(docRef, stampDepartmentIds({
       collegeId,
       department,
       employeeId,
@@ -498,13 +506,28 @@ export async function POST(request: Request) {
     }, deptIndex));
 
     // Role mapping for Firestore-based session resolution
-    await db.collection("systemUsers").doc(uid).set({
+    batch.set(db.collection("systemUsers").doc(uid), {
       uid, role: "PANEL_MEMBER", collegeId, email: collegeEmail, name: finalName,
       ...(profilePhotoUrl ? { profilePhotoUrl } : {}),
     });
 
-    return NextResponse.json({ id: docRef.id, uid }, { status: 201 });
+    // Race-proof the employee-ID rule: the pre-check above can pass for two
+    // concurrent requests, the lock doc cannot (lib/firestore/employeeIdKeys.ts).
+    // A failure here unwinds the Auth user via withAuthUser.
+    await reserveEmployeeId(db, collegeId, employeeId, { collection: "facultyMembers", id: docRef.id });
+    try {
+      await batch.commit();
+    } catch (commitErr) {
+      await releaseEmployeeId(db, collegeId, employeeId, { collection: "facultyMembers", id: docRef.id });
+      throw commitErr;
+    }
+    return { id: docRef.id, uid };
+    });
+
+    return NextResponse.json(created, { status: 201 });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -516,6 +539,8 @@ export async function POST(request: Request) {
     ) {
       return NextResponse.json({ error: "An account with this email already exists" }, { status: 409 });
     }
+    const authErr = firebaseAuthErrorResponse(err);
+    if (authErr) return authErr;
     console.error("[college/faculty POST]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }

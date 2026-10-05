@@ -1,9 +1,11 @@
 export const dynamic = "force-dynamic";
 
+import { firebaseAuthErrorResponse } from "@/lib/http/firebaseErrors";
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import { createFirebaseUser } from "@/lib/firebase/authRest";
+import { withAuthUser } from "@/lib/firebase/withAuthUser";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { getHodDepartmentScope, canHodManageFacultyDepartment } from "@/lib/departments/scope";
 
@@ -15,7 +17,7 @@ export async function POST(
     const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL");
     const { id } = await params;
 
-    const body = (await request.json()) as { email?: string; password?: string };
+    const body = (await readJsonBody(request)) as { email?: string; password?: string };
     const { email, password } = body;
 
     if (!email || !password || password.length < 8) {
@@ -61,19 +63,15 @@ export async function POST(
     const department = data.department ?? "";
     const profilePhotoUrl = data.profilePhotoUrl;
 
-    // Create Firebase Auth user
-    const uid = await createFirebaseUser(email, password, name);
-
+    // Create the Firebase Auth user and every document that goes with it as one
+    // unit (withAuthUser): one batch for the writes, and the Auth user is removed
+    // again if anything fails, so a failed attempt never leaves an orphan login.
     const now = new Date();
-
-    // Write login account to users collection
-    await db
-      .collection("colleges")
-      .doc(session.collegeId)
-      .collection("users")
-      .doc(uid)
-      .set({
-        uid,
+    const uid = await withAuthUser({ email, password, displayName: name, db }, async (newUid) => {
+      const batch = db.batch();
+      // Login account
+      batch.set(db.collection("colleges").doc(session.collegeId).collection("users").doc(newUid), {
+        uid: newUid,
         collegeId: session.collegeId,
         name,
         email,
@@ -84,28 +82,33 @@ export async function POST(
         createdAt: now,
         updatedAt: now,
       });
-
-    // Role mapping for session resolution
-    await db.collection("systemUsers").doc(uid).set({
-      uid,
-      role: "PANEL_MEMBER",
-      collegeId: session.collegeId,
-      email,
-      name,
-      ...(profilePhotoUrl ? { profilePhotoUrl } : {}),
+      // Role mapping for session resolution
+      batch.set(db.collection("systemUsers").doc(newUid), {
+        uid: newUid,
+        role: "PANEL_MEMBER",
+        collegeId: session.collegeId,
+        email,
+        name,
+        ...(profilePhotoUrl ? { profilePhotoUrl } : {}),
+      });
+      // Link the login account back to the faculty record
+      batch.update(ref, { userUid: newUid, updatedAt: now });
+      await batch.commit();
+      return newUid;
     });
-
-    // Link the login account back to the faculty record
-    await ref.update({ userUid: uid, updatedAt: now });
 
     return NextResponse.json({ uid }, { status: 201 });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     if (err && typeof err === "object" && "code" in err && err.code === "auth/email-already-exists") {
       return NextResponse.json({ error: "An account with this email already exists" }, { status: 409 });
     }
+    const authErr = firebaseAuthErrorResponse(err);
+    if (authErr) return authErr;
     console.error("[faculty/[id]/login POST]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }

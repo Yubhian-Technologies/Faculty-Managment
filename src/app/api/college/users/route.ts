@@ -1,10 +1,13 @@
 export const dynamic = "force-dynamic";
 
+import { firebaseAuthErrorResponse } from "@/lib/http/firebaseErrors";
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { convertLegacyAccounts } from "@/lib/roles/seats";
 import { NextResponse } from "next/server";
 import { requireCollegeMember, isDepartmentOffice } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import { createFirebaseUser } from "@/lib/firebase/authRest";
+import { exitedFacultyUidsOrNone } from "@/lib/auth/readOnlyFacultyLookup";
+import { withAuthUser } from "@/lib/firebase/withAuthUser";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
 import { syncDepartmentHod, getHodDepartmentScope, canHodEditDepartment, facultyManageableDepartmentNames } from "@/lib/departments/scope";
 import { isSeatRole } from "@/lib/roles/seatRoles";
@@ -114,11 +117,20 @@ export async function GET(request: Request) {
       }
     }
 
+    // Additive, read-only-access colleges only (zero reads elsewhere): flags people whose faculty record is
+    // RESIGNED/RETIRED so the Department Office and Sub-HOD pickers can leave them out. Nothing is removed here.
+    const exited = await exitedFacultyUidsOrNone(db, session.collegeId);
+    if (exited.size > 0) users = users.map((u) => (exited.has(u.uid) ? { ...u, facultyExited: true } : u));
+
     return NextResponse.json({ users });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const authErr = firebaseAuthErrorResponse(err);
+    if (authErr) return authErr;
     console.error("[college/users GET]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
@@ -128,7 +140,7 @@ export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "HOD", "COLLEGE_OFFICE");
 
-    const body = (await request.json()) as {
+    const body = (await readJsonBody(request)) as {
       name?: string; // not required for CLASS_LEADER - auto-generated below (role rotates by college rules)
       email?: string; // required for CLASS_LEADER; optional personal contact for everyone else
       collegeEmail?: string;
@@ -323,17 +335,18 @@ export async function POST(request: Request) {
     // has no college email concept, so it keeps using its own `email` as before.
     const loginEmail = role === "CLASS_LEADER" ? email! : collegeEmail!;
 
-    // Create Firebase Auth user via REST API (no firebase-admin/auth required)
-    const uid = await createFirebaseUser(loginEmail, password, resolvedName);
-
+    // The login and its profile documents are one unit (withAuthUser): both
+    // documents are a single batch, and if they - or the department-HOD / class-
+    // leader links that follow - fail, the Auth user is removed again (and the
+    // profile documents with it) so a failed attempt can't leave an orphan login
+    // blocking this email on the retry.
     const now = new Date();
-    await db
-      .collection("colleges")
-      .doc(collegeId)
-      .collection("users")
-      .doc(uid)
-      .set({
-        uid,
+    const uid = await withAuthUser({ email: loginEmail, password, displayName: resolvedName, db }, async (newUid) => {
+      const userRef = db.collection("colleges").doc(collegeId).collection("users").doc(newUid);
+      const systemRef = db.collection("systemUsers").doc(newUid);
+      const batch = db.batch();
+      batch.set(userRef, {
+        uid: newUid,
         collegeId,
         name: resolvedName,
         email: loginEmail,
@@ -354,20 +367,26 @@ export async function POST(request: Request) {
         createdAt: now,
         updatedAt: now,
       });
+      // Role mapping for Firestore-based session resolution
+      batch.set(systemRef, {
+        uid: newUid, role, collegeId, email: loginEmail, name: resolvedName,
+        ...(profilePhotoUrl ? { profilePhotoUrl } : {}),
+      });
+      await batch.commit();
 
-    // Role mapping for Firestore-based session resolution
-    await db.collection("systemUsers").doc(uid).set({
-      uid, role, collegeId, email: loginEmail, name: resolvedName,
-      ...(profilePhotoUrl ? { profilePhotoUrl } : {}),
+      try {
+        await syncDepartmentHod(db, collegeId, { uid: newUid, role, name: resolvedName, department: resolvedDepartment });
+        // Link the login back onto its Section so office/HOD timetable-adjacent
+        // views can show who the class leader is without a reverse lookup.
+        if (role === "CLASS_LEADER" && sectionRef) {
+          await sectionRef.update({ classLeaderUid: newUid, classLeaderName: resolvedName, updatedAt: now });
+        }
+      } catch (linkErr) {
+        await Promise.allSettled([userRef.delete(), systemRef.delete()]);
+        throw linkErr;
+      }
+      return newUid;
     });
-
-    await syncDepartmentHod(db, collegeId, { uid, role, name: resolvedName, department: resolvedDepartment });
-
-    // Link the login back onto its Section so office/HOD timetable-adjacent
-    // views can show who the class leader is without a reverse lookup.
-    if (role === "CLASS_LEADER" && sectionRef) {
-      await sectionRef.update({ classLeaderUid: uid, classLeaderName: resolvedName, updatedAt: now });
-    }
 
     // Audit log
     let creatorName = "Unknown";
@@ -407,6 +426,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ uid }, { status: 201 });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -421,6 +442,8 @@ export async function POST(request: Request) {
         { status: 409 }
       );
     }
+    const authErr = firebaseAuthErrorResponse(err);
+    if (authErr) return authErr;
     console.error("[college/users POST]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }

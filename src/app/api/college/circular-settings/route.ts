@@ -1,4 +1,5 @@
 export const dynamic = "force-dynamic";
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -11,6 +12,8 @@ export async function GET() {
     const settings = await getCircularSettings(db, session.collegeId);
     return NextResponse.json({ settings });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
@@ -19,11 +22,13 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL");
-    const body = (await request.json()) as { messageFromOptions?: string[] };
+    const body = (await readJsonBody(request)) as { messageFromOptions?: string[] };
     const db = getAdminDb();
     const settings = await saveCircularSettings(db, session.collegeId, body.messageFromOptions ?? [], { uid: session.uid, name: (session as unknown as { name?: string }).name ?? "" });
     return NextResponse.json({ settings });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     if (err instanceof Error && err.message.includes("At least one")) return NextResponse.json({ error: err.message }, { status: 400 });
     return NextResponse.json({ error: "Internal error" }, { status: 500 });

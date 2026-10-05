@@ -8,6 +8,7 @@ import { closeMissedCheckouts, toAttendanceDate } from "@/lib/attendance/closeMi
 import { isSunday } from "@/lib/attendance/attendanceWindow";
 import { unitLabelForHeadRole, isCollegeStaffUnitHead, COLLEGE_STAFF_UNIT_HEAD_ROLES } from "@/lib/attendance/collegeStaffUnits";
 import { istMidnightUTC, parseISTDateParam } from "@/lib/attendance/istTime";
+import { attendanceDateKeysReady } from "@/lib/attendance/dateKeys";
 import type { AttendanceRecord } from "@/types";
 
 interface RosterEntry {
@@ -248,9 +249,20 @@ export async function GET(request: Request) {
     }
 
     const rosterByUid = new Map(roster.map((r) => [r.uid, r]));
-    let recordsQuery: FirebaseFirestore.Query = collegeRef.collection("attendanceRecords");
-    if (scopeDepartments) recordsQuery = recordsQuery.where("department", "in", scopeDepartments);
-    const recordsSnap = await recordsQuery.get();
+    // Fast path: read only this date's records via the `dateKey` field. Used only
+    // once scripts/backfill-attendance-date-keys.mjs has stamped the older records
+    // and left its marker doc; until then (or if the marker read fails) the
+    // original whole-collection read below runs unchanged. Department scoping is
+    // implicit - the roster is already scoped, and records of other people skip.
+    let recordsSnap: FirebaseFirestore.QuerySnapshot;
+    const dateKeysReady = await attendanceDateKeysReady(collegeRef);
+    if (dateKeysReady) {
+      recordsSnap = await collegeRef.collection("attendanceRecords").where("dateKey", "==", docSuffix).get();
+    } else {
+      let recordsQuery: FirebaseFirestore.Query = collegeRef.collection("attendanceRecords");
+      if (scopeDepartments) recordsQuery = recordsQuery.where("department", "in", scopeDepartments);
+      recordsSnap = await recordsQuery.get();
+    }
 
     // Two passes: first collect this date's matching records (with a ref, so
     // closeMissedCheckouts can persist any correction), then apply the

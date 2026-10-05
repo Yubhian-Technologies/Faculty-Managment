@@ -1,5 +1,7 @@
 export const dynamic = "force-dynamic";
 
+import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -34,7 +36,7 @@ export async function PATCH(
     const session = await requireCollegeMember("COLLEGE_OFFICE");
     const { id } = await params;
 
-    const body = (await request.json()) as Partial<{
+    const body = (await readJsonBody(request)) as Partial<{
       promotionHistory: PromotionRecord[];
       monthlySalary: number;
       grossAnnualCTC: number;
@@ -111,21 +113,15 @@ export async function PATCH(
       actorName = (actorSnap.data() as { name?: string } | undefined)?.name ?? "College Office";
     } catch { /* best-effort */ }
 
-    await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-      collegeId: session.collegeId,
-      action: "FACULTY_UPDATED",
-      performedBy: session.uid,
-      performedByName: actorName,
-      targetId: id,
-      details: {
+    await writeAuditLogSafe(db, session.collegeId, { action: "FACULTY_UPDATED", performedBy: session.uid, performedByName: actorName, targetId: id, details: {
         fields: Object.keys(body),
         ...(syncedDesignation !== undefined ? { designation: { from: facultyData.designation ?? null, to: syncedDesignation } } : {}),
-      },
-      timestamp: new Date(),
-    });
+      } });
 
     return NextResponse.json({ success: true });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

@@ -1,8 +1,13 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
+import { invalidateSectionCountCache } from "@/lib/students/sectionCounts";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
-import { getAdminDb } from "@/lib/firebase/admin";
+import { getAdminDb, getAdminAuth } from "@/lib/firebase/admin";
+import { claimStudentRoll, releaseStudentRoll, rollTakenMessage } from "@/lib/students/rollIdentity";
+import { studentPasswordError } from "@/lib/students/passwordPolicy";
+import { StudentLoginError, provisionStudentLogin } from "@/lib/students/provisionLogin";
 import { departmentHistoryEntry } from "@/lib/students/departmentHistory";
 import { normalizeRosterDetails } from "@/lib/students/rosterFields";
 import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
@@ -10,14 +15,18 @@ import { resolveBranchYearOwner, resolveFreshmanLandingDepartment, type Departme
 import { isConfiguredSecondaryDepartmentOrChild, resolveDepartmentByNameOrCode } from "@/lib/departments/codeOrNameResolver";
 import { getFacultyIdCandidates } from "@/lib/faculty/resolveFacultyMemberId";
 import { resolveDepartmentCourseScope, resolveCatalogId, freshmanLandingDepartmentNames, expandDepartmentNameForRollup, type DepartmentWithId } from "@/lib/college/academicStructure";
-import { fetchStudentsPage, fetchMatchingStudentIds, fetchStudentsForExport } from "@/lib/students/paginatedList";
+import { fetchStudentsPage, fetchMatchingStudentIds, fetchStudentsForExport, fetchGraduatesPage, fetchGraduatesByIds } from "@/lib/students/paginatedList";
 import { fetchPanelStudentsPage } from "@/lib/students/panelPagedList";
+import { handleHodStudentsRequest, isHodOnDemandRequest } from "@/lib/students/hodPagedList";
 import { isLikelySameUnassignedStudent } from "@/lib/students/duplicateDetection";
 import { sortStudentsForList } from "@/lib/students/listOrder";
 import { findRollNumberConflict, rollNumberTakenMessage } from "@/lib/students/rollNumberUniqueness";
+import { rollNumberUpperOf } from "@/lib/students/loginDefaults";
+import { projectStudentsForRole } from "@/lib/students/listProjection";
 import { validateYearForCourseDuration } from "@/lib/students/rosterValidation";
 import type { Course, Section, StudentRecord, StudentStatus, DepartmentCourseScope } from "@/types";
 import { loadDepartmentIndex, stampDepartmentIds } from "@/lib/departments/stampIds";
+import { whereIn, type QueryLike } from "@/lib/firestore/inQuery";
 
 const PAGE_SIZES = [10, 20, 30, 50];
 
@@ -25,6 +34,14 @@ const PAGE_SIZES = [10, 20, 30, 50];
 // fan-out - see the role branching below) - the only ones server-side
 // pagination is offered to.
 const UNSCOPED_ROLES = ["PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "COLLEGE_OFFICE", "LIBRARY"];
+
+// Student ids a client may ask for in one by-id page fetch (a page is at most
+// PAGE_SIZES' largest, 50) - and the shape a Firestore auto-id takes, so a
+// crafted value can't turn into a different document path.
+const MAX_IDS_PER_REQUEST = 50;
+function parseIdList(raw: string): string[] {
+  return Array.from(new Set(raw.split(",").map((v) => v.trim()).filter((v) => /^[A-Za-z0-9_-]{1,128}$/.test(v)))).slice(0, MAX_IDS_PER_REQUEST);
+}
 
 // Sections a PANEL_MEMBER (faculty) is in charge of - students are only visible/
 // editable within these. Returns [] if the faculty isn't assigned to any section.
@@ -53,6 +70,37 @@ export async function GET(request: Request) {
     const db = getAdminDb();
     const collegeRef = db.collection("colleges").doc(session.collegeId);
     const studentsColl = collegeRef.collection("students");
+
+    // ── Graduated students (the Graduated view, College Office / Principal) ──
+    // Only `status == "GRADUATED"` documents are read - never the whole roster -
+    // and the browser receives one page. `graduates=1&ids=a,b,c` fetches just
+    // those graduates (later pages, whose ids the list request already returned);
+    // without `ids` it's the list request (page/pageSize/search/course/batch).
+    // Opt-in via `graduates=1`, so every other caller is untouched.
+    if (searchParams.get("graduates") === "1" && UNSCOPED_ROLES.includes(session.role)) {
+      const idsParam = searchParams.get("ids");
+      if (idsParam !== null) {
+        return NextResponse.json({ students: await fetchGraduatesByIds(studentsColl, parseIdList(idsParam)) });
+      }
+      const pageSizeRaw = Number(searchParams.get("pageSize"));
+      const result = await fetchGraduatesPage(studentsColl, {
+        page: Math.max(1, Number(searchParams.get("page")) || 1),
+        pageSize: PAGE_SIZES.includes(pageSizeRaw) ? pageSizeRaw : 20,
+        search: (searchParams.get("search") ?? "").trim().toLowerCase(),
+        course: (searchParams.get("course") ?? "").trim(),
+        batch: (searchParams.get("batch") ?? "").trim(),
+      });
+      return NextResponse.json(result);
+    }
+
+    // ── HOD Students page (paged list, by-id pages, bulk selection, filter meta) ──
+    // Opt-in via `page`, `ids`, `selectAll` or `hodMeta` (lib/students/
+    // hodPagedList.ts) - every other HOD caller of this endpoint sends none of
+    // them and keeps getting the whole scoped `{ students }` list below, unchanged.
+    if (session.role === "HOD" && isHodOnDemandRequest(searchParams)) {
+      const result = await handleHodStudentsRequest(db, session, searchParams);
+      return NextResponse.json(result.body, { status: result.status });
+    }
 
     // ── Server-side paginated listing (College Office / Principal-tier
     // Students page) ────────────────────────────────────────────────────────
@@ -86,7 +134,7 @@ export async function GET(request: Request) {
           departments = Array.from(new Set(pickedDepartments.flatMap((d) => expandDepartmentNameForRollup(allDepts, d))));
         }
         const { students, total, truncated } = await fetchStudentsForExport(studentsColl, { search, departments, courses, years });
-        return NextResponse.json({ students, total, truncated });
+        return NextResponse.json({ students: projectStudentsForRole(session.role, students), total, truncated });
       }
 
       const pickedDepartment = (searchParams.get("department") ?? "").trim();
@@ -94,6 +142,8 @@ export async function GET(request: Request) {
       const yearParam = searchParams.get("year");
       const year = yearParam ? Number(yearParam) : null;
       const studentType = (searchParams.get("studentType") ?? "").trim();
+      const rollFrom = (searchParams.get("rollFrom") ?? "").trim();
+      const rollTo = (searchParams.get("rollTo") ?? "").trim();
 
       let departments: string[] = [];
       if (pickedDepartment) {
@@ -103,33 +153,33 @@ export async function GET(request: Request) {
       }
 
       if (searchParams.get("idsOnly") === "1") {
-        const ids = await fetchMatchingStudentIds(studentsColl, { departments, course, year, search, studentType });
+        const ids = await fetchMatchingStudentIds(studentsColl, { departments, course, year, search, studentType, rollFrom, rollTo });
         return NextResponse.json({ ids, total: ids.length });
       }
 
       const page = Math.max(1, Number(searchParams.get("page")) || 1);
       const pageSizeRaw = Number(searchParams.get("pageSize"));
       const pageSize = PAGE_SIZES.includes(pageSizeRaw) ? pageSizeRaw : 20;
-      const { students, total } = await fetchStudentsPage(studentsColl, { page, pageSize, search, departments, course, year, studentType });
-      return NextResponse.json({ students, total, page, pageSize, totalPages: Math.max(1, Math.ceil(total / pageSize)) });
+      const { students, total } = await fetchStudentsPage(studentsColl, { page, pageSize, search, departments, course, year, studentType, rollFrom, rollTo });
+      return NextResponse.json({ students: projectStudentsForRole(session.role, students), total, page, pageSize, totalPages: Math.max(1, Math.ceil(total / pageSize)) });
     }
 
-    const withCommonFilters = (q: FirebaseFirestore.Query): FirebaseFirestore.Query => {
+    const withCommonFilters = (q: QueryLike): QueryLike => {
       let out = q;
       if (sectionFilter) out = out.where("section", "==", sectionFilter);
       if (yearFilter) out = out.where("year", "==", Number(yearFilter));
       return out;
     };
 
-    let primaryQuery: FirebaseFirestore.Query = studentsColl;
+    let primaryQuery: QueryLike = studentsColl;
     // Only HOD has a narrower-than-college scope with a meaningful "secondary"
     // (view-only) counterpart - either a student pre-registered to this HOD's
     // department while primarily owned by another (e.g. Basic Science), or a
     // student who belongs to one of this HOD's own sub-departments (parent
     // HOD gets automatic view-only access). Every other role here already
     // sees the whole college unscoped, so nothing they see is ever "secondary".
-    let secondaryQuery: FirebaseFirestore.Query | null = null;
-    let childDeptQuery: FirebaseFirestore.Query | null = null;
+    let secondaryQuery: QueryLike | null = null;
+    let childDeptQuery: QueryLike | null = null;
     // A branch can be BOTH a standalone department with its own dedicated HOD
     // (its own assignedYears, e.g. CIVIL's [2,3,4]) AND grouped under a
     // sub-department for the shared first year (e.g. BS-English managing
@@ -156,7 +206,7 @@ export async function GET(request: Request) {
           cursor: searchParams.get("cursor") ?? "",
           page: Math.max(1, Number(searchParams.get("pageNo")) || 1),
         });
-        return NextResponse.json(page);
+        return NextResponse.json({ ...page, students: projectStudentsForRole(session.role, page.students) });
       }
       // Section *names* aren't unique across years or departments (e.g. "A" exists
       // in both Year 1 and Year 2, and independently in both CSE and AIDS) - a
@@ -171,7 +221,7 @@ export async function GET(request: Request) {
       // charge of one would see the other course's students mixed into their
       // roster.
       const sectionSnaps = await Promise.all(
-        sections.slice(0, 30).flatMap((s) => {
+        sections.flatMap((s) => {
           const withCourseId = (q: FirebaseFirestore.Query) => (s.courseId ? q.where("courseId", "==", s.courseId) : q);
           return [
             withCommonFilters(
@@ -199,12 +249,12 @@ export async function GET(request: Request) {
         }
       }
       sortStudentsForList(students);
-      return NextResponse.json({ students });
+      return NextResponse.json({ students: projectStudentsForRole(session.role, students) });
     } else if (session.role === "HOD") {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
       hodScope = scope;
       if (scope.ownDepartmentNames.length > 0) {
-        primaryQuery = primaryQuery.where("department", "in", scope.ownDepartmentNames.slice(0, 30));
+        primaryQuery = whereIn(primaryQuery, "department", scope.ownDepartmentNames);
         // A shared-first-year student can be pre-registered straight toward a
         // specialization sub-department (e.g. "Cyber Security" under CSE,
         // college/departments secondaryDepartments can now name one directly -
@@ -214,8 +264,8 @@ export async function GET(request: Request) {
         // the parent HOD who actually governs that sub-department. Still
         // "secondary"/view-only below, same as any other cross-listed match -
         // this only widens WHICH names can match, not the access level.
-        const secondaryTargets = Array.from(new Set([...scope.ownDepartmentNames, ...scope.childDepartmentNames])).slice(0, 30);
-        secondaryQuery = withCommonFilters(studentsColl.where("secondaryDepartment", "in", secondaryTargets));
+        const secondaryTargets = Array.from(new Set([...scope.ownDepartmentNames, ...scope.childDepartmentNames]));
+        secondaryQuery = withCommonFilters(whereIn(studentsColl, "secondaryDepartment", secondaryTargets));
         const deptsSnap = await db.collection("colleges").doc(session.collegeId).collection("departments").get();
         hodDepartments = deptsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as DepartmentYearRow[];
       } else {
@@ -230,7 +280,7 @@ export async function GET(request: Request) {
       // below, once we have each student's year.
       const ownedDeptNames = [...scope.childDepartmentNames, ...scope.managedDepartmentNames];
       if (ownedDeptNames.length > 0) {
-        childDeptQuery = withCommonFilters(studentsColl.where("department", "in", ownedDeptNames.slice(0, 30)));
+        childDeptQuery = withCommonFilters(whereIn(studentsColl, "department", ownedDeptNames));
       }
     }
 
@@ -304,8 +354,11 @@ export async function GET(request: Request) {
     }
     sortStudentsForList(students);
 
-    return NextResponse.json({ students });
+    // Lists carry only what the caller's role needs (see lib/students/listProjection.ts).
+    return NextResponse.json({ students: projectStudentsForRole(session.role, students) });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -327,7 +380,8 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "COLLEGE_OFFICE");
-    const body = (await request.json()) as {
+    invalidateSectionCountCache(session.collegeId); // student counts on the Sections list change with this write
+    const body = (await readJsonBody(request)) as {
       name: string;
       section?: string;
       year: number;
@@ -350,6 +404,18 @@ export async function POST(request: Request) {
     const providedRoll = typeof body.rollNumber === "string" ? body.rollNumber.trim() : "";
     if (!providedRoll) {
       return NextResponse.json({ error: "Roll number is required" }, { status: 400 });
+    }
+    // Optional: the password for the student's login, chosen by the office. When
+    // given, the login is created right after the student. It is validated up
+    // front (nothing is written for a bad one), handed to Firebase Auth only and
+    // never stored: normalizeRosterDetails below keeps only roster fields.
+    const loginPassword = typeof body.loginPassword === "string" && body.loginPassword !== "" ? body.loginPassword : null;
+    if (body.loginPassword !== undefined && body.loginPassword !== null && body.loginPassword !== "" && typeof body.loginPassword !== "string") {
+      return NextResponse.json({ error: "Invalid password" }, { status: 400 });
+    }
+    if (loginPassword !== null) {
+      const passwordProblem = studentPasswordError(loginPassword);
+      if (passwordProblem) return NextResponse.json({ error: passwordProblem }, { status: 400 });
     }
 
     const db = getAdminDb();
@@ -586,6 +652,7 @@ export async function POST(request: Request) {
 
     // A roll number is unique across the whole college, wherever the student
     // is (or isn't) placed - checked first, for placed and unassigned adds alike.
+    // (Uniqueness across ALL colleges is claimed atomically just before the write below.)
     {
       const clash = await findRollNumberConflict(collegeRef.collection("students"), providedRoll);
       if (clash) {
@@ -656,7 +723,7 @@ export async function POST(request: Request) {
 
     const batch = db.batch();
     const deptIndex = await loadDepartmentIndex(db, session.collegeId);
-    batch.set(studentRef, stampDepartmentIds({
+    const newStudent = stampDepartmentIds({
       collegeId: session.collegeId,
       department: dept,
       section: sectionName,
@@ -672,12 +739,56 @@ export async function POST(request: Request) {
       ...normalizeRosterDetails(body),
       createdAt: now,
       updatedAt: now,
-    }, deptIndex));
+    }, deptIndex) as Record<string, unknown>;
+    // Case-insensitive roll key - what the uniqueness check and the login
+    // lookup read (see rollNumberUniqueness.ts). Only stamped when there IS a
+    // roll: students are often created before the department assigns numbers.
+    const newRollUpper = rollNumberUpperOf(newStudent.rollNumber);
+    if (newRollUpper) newStudent.rollNumberUpper = newRollUpper;
+    batch.set(studentRef, newStudent);
     batch.set(history.ref, history.data);
-    await batch.commit();
+
+    // Roll numbers are unique across ALL colleges: claim this one in the global
+    // registry (atomically - two colleges adding the same roll at once cannot both
+    // win) just before the student is written, and give it back if that write fails.
+    const claim = await claimStudentRoll(db, { roll: providedRoll, collegeId: session.collegeId, studentDocId: studentRef.id, name: body.name.trim() });
+    if (!claim.ok) {
+      return NextResponse.json(
+        { error: claim.code === "TAKEN" ? rollTakenMessage(providedRoll, claim.holder) : "Roll number must contain letters or digits" },
+        { status: claim.code === "TAKEN" ? 409 : 400 }
+      );
+    }
+    try {
+      await batch.commit();
+    } catch (commitErr) {
+      if (claim.created) {
+        await releaseStudentRoll(db, providedRoll, session.collegeId, studentRef.id).catch((e) => console.error("[college/students POST] could not release roll claim", e));
+      }
+      throw commitErr;
+    }
+
+    // The login, when the office supplied a password. The student is already saved,
+    // so a login problem is reported without undoing them - "create login" can retry.
+    if (loginPassword !== null) {
+      try {
+        await provisionStudentLogin(
+          db, await getAdminAuth(), session.collegeId, studentRef.id,
+          { ...(newStudent as unknown as StudentRecord), id: studentRef.id } as StudentRecord, session.uid, loginPassword
+        );
+        return NextResponse.json({ id: studentRef.id, loginCreated: true }, { status: 201 });
+      } catch (loginErr) {
+        if (!(loginErr instanceof StudentLoginError)) console.error("[college/students POST] login creation failed", loginErr);
+        return NextResponse.json(
+          { id: studentRef.id, loginCreated: false, loginError: loginErr instanceof StudentLoginError ? loginErr.message : "The student was added but the login could not be created - use Create login to retry" },
+          { status: 201 }
+        );
+      }
+    }
 
     return NextResponse.json({ id: studentRef.id }, { status: 201 });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

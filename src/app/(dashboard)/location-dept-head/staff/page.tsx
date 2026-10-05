@@ -93,7 +93,7 @@ export default function LocationStaffRosterPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-card p-3 sm:p-4 rounded-xl border">
         <div className="flex items-center gap-3">
           <Button asChild variant="ghost" size="icon" className="h-9 w-9 shrink-0">
-            <Link href="/location-dept-head">
+            <Link aria-label="Back" href="/location-dept-head">
               <ArrowLeft className="h-5 w-5" />
             </Link>
           </Button>
@@ -220,7 +220,7 @@ export default function LocationStaffRosterPage() {
                       </div>
                     </div>
 
-                    <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground shrink-0" tabIndex={-1}>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground shrink-0" tabIndex={-1} aria-label="View staff member">
                       <Eye className="h-4 w-4" />
                     </Button>
                   </div>

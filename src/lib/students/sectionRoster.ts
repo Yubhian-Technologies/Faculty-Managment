@@ -1,4 +1,5 @@
 import type { StudentRecord } from "@/types";
+import { countStudentsInSection } from "@/lib/students/countStudents";
 
 export interface SectionIdentity {
   department: string;
@@ -77,15 +78,15 @@ export async function fetchSectionStudents(
   return students;
 }
 
-// Not a cheaper .count() aggregate anymore - the primary/secondary merge
-// needs the actual doc ids to dedupe, so this just reuses fetchSectionStudents.
-// Section rosters are small (tens of students), so the extra doc reads are
-// not a meaningful cost, and it guarantees the count can never disagree with
-// what actually loads.
+// A headcount, via count() aggregations rather than reading the roster. The
+// primary/secondary merge in fetchSectionStudents de-dupes by document id, which
+// a count has no ids for - but the union is |primary| + |secondary| - |both|
+// (see countStudentsInSection), so the number is exactly what that roster
+// query's length would be (same department/section/year/courseId filters), at
+// one read per 1,000 index entries instead of one read per student document.
 export async function countSectionStudents(
   collegeRef: FirebaseFirestore.DocumentReference,
   identity: SectionIdentity,
 ): Promise<number> {
-  const students = await fetchSectionStudents(collegeRef, identity);
-  return students.length;
+  return countStudentsInSection(collegeRef.collection("students"), identity);
 }

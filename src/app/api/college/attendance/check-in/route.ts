@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -13,12 +14,14 @@ import { isLateCheckIn } from "@/lib/attendance/lateStatus";
 import { recordLateCheckIn } from "@/lib/leave/lateAttendancePenalty";
 import { resolveCheckInPermission } from "@/lib/attendance/checkInPermission";
 import { nowInIndia } from "@/lib/leave/dayCounter";
+import { verifyAttendanceProof, type AttendanceProofBody } from "@/lib/attendance/attendanceProof";
 import type { College, UserRole } from "@/types";
 
-// Self-attendance check-in — geolocation and face-match verification both
-// happen client-side (see src/lib/attendance/faceMatch.ts); this route only
-// re-validates the geofence server-side (never trust client-reported
-// distance) and records the client's reported face-match result.
+// Self-attendance check-in. The browser captures a face descriptor and a GPS
+// fix; the SERVER does the face comparison against the registered descriptor and
+// judges how fresh and precise the capture is (lib/attendance/attendanceProof.ts -
+// which also says plainly what a server cannot prove), then re-validates the
+// geofence. The client's own "faceVerified" flag and match distance are ignored.
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_STAFF", ...COLLEGE_STAFF_UNIT_HEAD_ROLES);
@@ -45,20 +48,19 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "You're on approved leave today — attendance cannot be marked." }, { status: 403 });
     }
 
-    const body = (await request.json()) as {
+    const body = (await readJsonBody(request)) as AttendanceProofBody & {
       latitude?: number;
       longitude?: number;
-      faceMatchDistance?: number;
-      faceVerified?: boolean;
       lateReason?: string;
     };
 
-    const { latitude, longitude, faceMatchDistance, faceVerified } = body;
+    const { latitude, longitude } = body;
     if (typeof latitude !== "number" || typeof longitude !== "number") {
       return NextResponse.json({ error: "Location is required" }, { status: 400 });
     }
-    if (!faceVerified) {
-      return NextResponse.json({ error: "Face not verified — please try again" }, { status: 400 });
+    const proof = await verifyAttendanceProof(db, session.collegeId, session.uid, body);
+    if (!proof.ok) {
+      return NextResponse.json({ error: proof.error }, { status: proof.status });
     }
 
     const collegeRef = db.collection("colleges").doc(session.collegeId);
@@ -101,12 +103,15 @@ export async function POST(request: Request) {
           facultyName: user?.name ?? "",
           department: user?.department ?? "",
           date,
+          dateKey: docSuffix,
           status: "PRESENT",
           checkIn,
           source: "BIOMETRIC",
           checkInLocation: { latitude, longitude },
-          checkInFaceMatchDistance: faceMatchDistance ?? null,
+          // Computed here from the posted descriptor - never the client's own figure.
+          checkInFaceMatchDistance: proof.distance,
           checkInVerified: true,
+          checkInProof: proof.evidence,
           ...(permittedCheckInTime ? { permittedCheckInTime } : {}),
           ...(late && lateReason ? { lateReason } : {}),
           updatedAt: now,
@@ -127,6 +132,8 @@ export async function POST(request: Request) {
       try {
         await recordLateCheckIn(db, session.collegeId, session.uid, user?.name ?? "", user?.department ?? "", date);
       } catch (err) {
+        const badBody = badBodyResponse(err);
+        if (badBody) return badBody;
         // Never fails the check-in itself over a penalty-bookkeeping error -
         // the person is still correctly marked PRESENT either way.
         console.error("[college/attendance/check-in] late-penalty recording failed", err);
@@ -135,6 +142,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ ok: true, checkIn });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

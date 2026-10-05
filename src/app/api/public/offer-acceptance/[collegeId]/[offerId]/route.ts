@@ -1,5 +1,7 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
+import { clientIp, rateLimit } from "@/lib/security/rateLimit";
 import { findUsersSnapshot } from "@/lib/roles/findUsersByRoles";
 import { NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -40,6 +42,8 @@ export async function GET(
       },
     });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     console.error("[public/offer-acceptance GET]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
@@ -49,9 +53,14 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ collegeId: string; offerId: string }> }
 ) {
+
+  const limited = rateLimit(`offer-accept:${clientIp(request)}`, 30, 3600000);
+  if (!limited.ok) {
+    return NextResponse.json({ error: "Too many requests - please try again later" }, { status: 429, headers: { "Retry-After": String(limited.retryAfterSeconds) } });
+  }
   try {
     const { collegeId, offerId } = await params;
-    const body = (await request.json()) as {
+    const body = (await readJsonBody(request)) as {
       termsAccepted?: boolean;
       decision?: "ACCEPTED" | "REJECTED";
       confirmedDateOfJoining?: string;
@@ -115,6 +124,8 @@ export async function POST(
 
     return NextResponse.json({ ok: true });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     console.error("[public/offer-acceptance POST]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }

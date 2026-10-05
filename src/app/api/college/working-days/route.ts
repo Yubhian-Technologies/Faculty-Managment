@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -36,6 +37,8 @@ export async function GET() {
     const workingDays = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as WorkingDayOverride);
     return NextResponse.json({ workingDays });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -47,7 +50,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_OFFICE");
-    const body = (await request.json()) as {
+    const body = (await readJsonBody(request)) as {
       date?: string; reason?: string; roles?: UserRole[];
       isHalfDay?: boolean; halfDaySession?: "FN" | "AN";
     };
@@ -82,6 +85,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ id: docRef.id }, { status: 201 });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

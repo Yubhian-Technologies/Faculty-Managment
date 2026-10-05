@@ -1,11 +1,15 @@
 export const dynamic = "force-dynamic";
 
+import { firebaseAuthErrorResponse } from "@/lib/http/firebaseErrors";
+import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireSuperAdmin } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
 import { normalizeAcademicProfile } from "@/lib/faculty/academicProfileCompat";
 import { migrateUserDoc, migrateFacultyDoc, migrateSupportingStaffDoc } from "@/lib/faculty/fieldRenames";
+import { isSingleSourceCollege, mergeFacultyWithLogin } from "@/lib/faculty/singleSource";
 import { withLegacyPersonalKeysDeleted } from "@/lib/faculty/legacyKeyDeletes";
 import { FieldValue } from "firebase-admin/firestore";
 import type { UserRole } from "@/types";
@@ -55,16 +59,22 @@ export async function GET(
         .where("userUid", "==", uid).limit(1).get();
       if (!linkedSnap.empty) {
         const linkedData = linkedSnap.docs[0].data();
-        const linkedLifted = linkedCollection === "facultyMembers" ? migrateFacultyDoc(linkedData) : migrateSupportingStaffDoc(linkedData);
-        return NextResponse.json({ user: { ...linkedLifted, ...user, recordId: linkedSnap.docs[0].id } });
+        if (linkedCollection === "facultyMembers") {
+          return NextResponse.json({ user: { ...mergeFacultyWithLogin(migrateFacultyDoc(linkedData), user, isSingleSourceCollege(collegeId)), recordId: linkedSnap.docs[0].id } });
+        }
+        return NextResponse.json({ user: { ...migrateSupportingStaffDoc(linkedData), ...user, recordId: linkedSnap.docs[0].id } });
       }
     }
 
     return NextResponse.json({ user });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && err.message === "UNAUTHORIZED") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const authErr = firebaseAuthErrorResponse(err);
+    if (authErr) return authErr;
     console.error("[admin/users/[uid] GET]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
@@ -78,7 +88,7 @@ export async function PATCH(
     await requireSuperAdmin();
 
     const { uid } = await params;
-    const body = (await request.json()) as {
+    const body = (await readJsonBody(request)) as {
       collegeId?: string;
       role?: UserRole;
       isActive?: boolean;
@@ -121,15 +131,7 @@ export async function PATCH(
       const auth = await getAdminAuth();
       await auth.updateUser(uid, { password: newPassword });
 
-      await db.collection("colleges").doc(collegeId).collection("auditLogs").add({
-        collegeId,
-        action: "USER_PASSWORD_RESET",
-        performedBy: "SUPER_ADMIN",
-        performedByName: "Super Admin",
-        targetId: uid,
-        details: {},
-        timestamp: new Date(),
-      });
+      await writeAuditLogSafe(db, collegeId, { action: "USER_PASSWORD_RESET", performedBy: "SUPER_ADMIN", performedByName: "Super Admin", targetId: uid, details: {} });
     }
     const updates: Record<string, unknown> = { updatedAt: new Date(), ...buildPersonalDetailsUpdate(body) };
 
@@ -179,26 +181,22 @@ export async function PATCH(
     const action =
       isActive === false ? "USER_DEACTIVATED" : isActive === true ? "USER_REACTIVATED" : "USER_UPDATED";
 
-    await db.collection("colleges").doc(collegeId).collection("auditLogs").add({
-      collegeId,
-      action,
-      performedBy: "SUPER_ADMIN",
-      performedByName: "Super Admin",
-      targetId: uid,
-      details: {
+    await writeAuditLogSafe(db, collegeId, { action: action, performedBy: "SUPER_ADMIN", performedByName: "Super Admin", targetId: uid, details: {
         ...(role !== undefined && { role }),
         ...(isActive !== undefined && { isActive }),
         ...(department !== undefined && { department }),
         ...(name !== undefined && { name }),
-      },
-      timestamp: new Date(),
-    });
+      } });
 
     return NextResponse.json({ ok: true });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && err.message === "UNAUTHORIZED") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const authErr = firebaseAuthErrorResponse(err);
+    if (authErr) return authErr;
     console.error("[admin/users/[uid] PATCH]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
@@ -254,22 +252,18 @@ export async function DELETE(
     }
 
     if (collegeId) {
-      await db.collection("colleges").doc(collegeId).collection("auditLogs").add({
-        collegeId,
-        action: "USER_DELETED",
-        performedBy: "SUPER_ADMIN",
-        performedByName: "Super Admin",
-        targetId: uid,
-        details: { email: userEmail },
-        timestamp: new Date(),
-      });
+      await writeAuditLogSafe(db, collegeId, { action: "USER_DELETED", performedBy: "SUPER_ADMIN", performedByName: "Super Admin", targetId: uid, details: { email: userEmail } });
     }
 
     return NextResponse.json({ ok: true });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && err.message === "UNAUTHORIZED") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const authErr = firebaseAuthErrorResponse(err);
+    if (authErr) return authErr;
     console.error("[admin/users/[uid] DELETE]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }

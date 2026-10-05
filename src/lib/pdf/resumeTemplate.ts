@@ -18,6 +18,8 @@ interface DegreeDetail {
   specialization?: string; // Doctoral only - shown instead of Branch
   degreeAndBranch?: string; // legacy - pre-split records that haven't been re-saved yet
   institutionName?: string;
+  departmentName?: string; // Doctoral (Ph.D.) only - "Name of the Department"
+  thesisTitle?: string; // Doctoral (Ph.D.) only - "Title of the Ph.D Thesis"
   percentageCgpa?: string;
   yearOfPassing?: number; // every level except Doctoral/Post-Doctoral
   yearOfAward?: number; // Doctoral/Post-Doctoral only
@@ -49,6 +51,7 @@ interface TeachingAssignmentSummary {
 
 interface PreviousInstitution {
   institutionName?: string;
+  place?: string; // "Place of the University/College"
   designation?: string;
   fromDate?: string;
   toDate?: string;
@@ -305,7 +308,10 @@ function degreeEntry(label: string, d?: DegreeDetail, useSpecialization = false)
       d.institutionName || label,
       // useSpecialization is true exactly for the Doctoral entries -> Year of Award.
       year ? String(year) : "",
-      `${label}${secondary ? ` - ${secondary}` : ""}`,
+      // The department the doctorate was pursued in and the thesis title
+      // (Ph.D. entries only - the same useSpecialization flag), kept beside the
+      // course/specialization.
+      `${label}${secondary ? ` - ${secondary}` : ""}${useSpecialization && d.departmentName ? ` · ${d.departmentName}` : ""}${useSpecialization && d.thesisTitle ? ` · Thesis: ${d.thesisTitle}` : ""}`,
       d.percentageCgpa || ""
     ) + certLink
   );
@@ -405,7 +411,8 @@ export function getResumeHTML(rawData: ResumeData): string {
           const from = pi.fromDate ?? (pi.fromYear ? String(pi.fromYear) : "");
           const to = pi.toDate ?? (pi.toYear ? String(pi.toYear) : "");
           const range = from || to ? `${from} - ${to}` : "";
-          return entry(pi.institutionName || "Previous Institution", range, pi.designation || "");
+          const institution = pi.institutionName || "Previous Institution";
+          return entry(pi.place ? `${institution}, ${pi.place}` : institution, range, pi.designation || "");
         })
         .join("")
     : "";

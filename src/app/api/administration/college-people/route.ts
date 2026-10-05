@@ -1,5 +1,8 @@
 export const dynamic = "force-dynamic";
 
+import { firebaseAuthErrorResponse } from "@/lib/http/firebaseErrors";
+import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireLocationMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -25,7 +28,7 @@ import { assignSeat, createSeat, listSeats, SeatError } from "@/lib/roles/seats"
 export async function POST(request: Request) {
   try {
     const session = await requireLocationMember("ADMINISTRATION");
-    const body = (await request.json()) as {
+    const body = (await readJsonBody(request)) as {
       collegeId?: string;
       name?: string;
       collegeEmail?: string;
@@ -88,11 +91,7 @@ export async function POST(request: Request) {
     });
     await db.collection("systemUsers").doc(uid).set({ uid, role: primaryRole, collegeId, email, name });
 
-    await db.collection("colleges").doc(collegeId).collection("auditLogs").add({
-      collegeId, action: "USER_CREATED",
-      performedBy: session.uid, performedByName: "Administration",
-      targetId: uid, details: { email, role: primaryRole, name }, timestamp: now,
-    });
+    await writeAuditLogSafe(db, collegeId, { action: "USER_CREATED", performedBy: session.uid, performedByName: "Administration", targetId: uid, details: { email, role: primaryRole, name } });
 
     // Appoint them: reuse the college's open seat of that kind if there is one
     // (the Principal seat, or a College Admin seat nobody holds), else make it.
@@ -112,6 +111,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ uid, ...(seatError ? { seatError } : {}) }, { status: 201 });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_LOCATION_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -119,6 +120,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "An account with this email already exists" }, { status: 409 });
     }
     const msg = err instanceof Error ? err.message : String(err);
+    const authErr = firebaseAuthErrorResponse(err);
+    if (authErr) return authErr;
     console.error("[administration/college-people POST]", msg);
     return NextResponse.json({ error: msg || "Internal error" }, { status: 500 });
   }

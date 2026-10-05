@@ -1,5 +1,7 @@
 export const dynamic = "force-dynamic";
 
+import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
@@ -26,6 +28,8 @@ export async function GET(
 
     return NextResponse.json({ publication: { id: snap.id, ...snap.data() } });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -42,7 +46,7 @@ export async function PATCH(
     const session = await requireCollegeMember(...PUBLICATION_ELIGIBLE_ROLES);
     const { id } = await params;
 
-    const body = (await request.json()) as Partial<{
+    const body = (await readJsonBody(request)) as Partial<{
       title: string;
       coAuthors: string;
       citation: string;
@@ -103,15 +107,7 @@ export async function PATCH(
         ...(body.decision === "REJECTED" ? { rejectionReason: body.rejectionReason ?? "" } : { rejectionReason: FieldValue.delete() }),
       });
 
-      await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-        collegeId: session.collegeId,
-        action: "RD_PUBLICATION_UPDATED",
-        performedBy: session.uid,
-        performedByName: reviewedByName,
-        targetId: id,
-        details: { title: pub.title, decision: body.decision },
-        timestamp: now,
-      });
+      await writeAuditLogSafe(db, session.collegeId, { action: "RD_PUBLICATION_UPDATED", performedBy: session.uid, performedByName: reviewedByName, targetId: id, details: { title: pub.title, decision: body.decision } });
 
       await notify(
         db, session.collegeId, pub.uid,
@@ -173,15 +169,7 @@ export async function PATCH(
       }
 
       await ref.update(updates);
-      await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-        collegeId: session.collegeId,
-        action: "RD_PUBLICATION_UPDATED",
-        performedBy: session.uid,
-        performedByName: editorName,
-        targetId: id,
-        details: { title: body.title ?? pub.title },
-        timestamp: now,
-      });
+      await writeAuditLogSafe(db, session.collegeId, { action: "RD_PUBLICATION_UPDATED", performedBy: session.uid, performedByName: editorName, targetId: id, details: { title: body.title ?? pub.title } });
       await notifyReviewer(db, session.collegeId, route, {
         type: "PUBLICATION_PENDING_VERIFICATION",
         title: wasApproved ? "Approved publication edited - re-verification needed" : "Publication resubmitted for verification",
@@ -221,17 +209,11 @@ export async function PATCH(
       const actorSnap = await db.collection("colleges").doc(session.collegeId).collection("users").doc(session.uid).get();
       actorName = (actorSnap.data() as { name?: string } | undefined)?.name ?? "Unknown";
     } catch { /* best-effort */ }
-    await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-      collegeId: session.collegeId,
-      action: "RD_PUBLICATION_UPDATED",
-      performedBy: session.uid,
-      performedByName: actorName,
-      targetId: id,
-      details: { title: body.title ?? pub.title },
-      timestamp: new Date(),
-    });
+    await writeAuditLogSafe(db, session.collegeId, { action: "RD_PUBLICATION_UPDATED", performedBy: session.uid, performedByName: actorName, targetId: id, details: { title: body.title ?? pub.title } });
     return NextResponse.json({ ok: true });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -262,17 +244,11 @@ export async function DELETE(
       const actorSnap = await db.collection("colleges").doc(session.collegeId).collection("users").doc(session.uid).get();
       actorName = (actorSnap.data() as { name?: string } | undefined)?.name ?? "Unknown";
     } catch { /* best-effort */ }
-    await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-      collegeId: session.collegeId,
-      action: "RD_PUBLICATION_DELETED",
-      performedBy: session.uid,
-      performedByName: actorName,
-      targetId: id,
-      details: { title: pub.title, uid: pub.uid },
-      timestamp: new Date(),
-    });
+    await writeAuditLogSafe(db, session.collegeId, { action: "RD_PUBLICATION_DELETED", performedBy: session.uid, performedByName: actorName, targetId: id, details: { title: pub.title, uid: pub.uid } });
     return NextResponse.json({ ok: true });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

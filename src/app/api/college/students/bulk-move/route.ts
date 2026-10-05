@@ -1,6 +1,10 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
+import { invalidateSectionCountCache } from "@/lib/students/sectionCounts";
 import { NextResponse } from "next/server";
+import { actorOf } from "@/lib/audit/actorOf";
+import { writeAuditLog } from "@/lib/audit/writeAuditLog";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope } from "@/lib/departments/scope";
@@ -40,7 +44,8 @@ interface SkipRow { id: string; name: string; reason: string }
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");
-    const body = (await request.json()) as {
+    invalidateSectionCountCache(session.collegeId); // student counts on the Sections list change with this write
+    const body = (await readJsonBody(request)) as {
       studentIds?: unknown;
       targetSectionId?: unknown;
       unassign?: unknown;
@@ -134,7 +139,7 @@ export async function POST(request: Request) {
       if (unassign) {
         if (!from) { skipped.push({ ...label, reason: "Already unassigned" }); continue; }
         moves.push({ id, name: student.name, rollNumber: student.rollNumber ?? "", from, to: "" });
-        writes.push({ ref: snap.ref, update: { section: "" }, historyDepartment: student.department, year: student.year, section: "", previous: from });
+        writes.push({ ref: snap.ref, update: { section: "", labBatch: "" }, historyDepartment: student.department, year: student.year, section: "", previous: from });
         continue;
       }
 
@@ -143,7 +148,8 @@ export async function POST(request: Request) {
       const roll = (student.rollNumber ?? "").trim().toLowerCase();
       if (roll) targetRolls.add(roll);
       moves.push({ id, name: student.name, rollNumber: student.rollNumber ?? "", from, to: target!.name });
-      writes.push({ ref: snap.ref, update: plan.update, historyDepartment: plan.historyDepartment, year: target!.year, section: target!.name, previous: from });
+      // A lab batch belongs to the section it was set in - never carried into another.
+      writes.push({ ref: snap.ref, update: { ...plan.update, labBatch: "" }, historyDepartment: plan.historyDepartment, year: target!.year, section: target!.name, previous: from });
     }
 
     if (!dryRun && writes.length > 0) {
@@ -155,6 +161,17 @@ export async function POST(request: Request) {
         batch.set(history.ref, history.data);
       }
       await batch.commit();
+      const actor = await actorOf(db, session.collegeId, session.uid, session.email);
+      await writeAuditLog(db, session.collegeId, {
+        action: unassign ? "STUDENTS_BULK_UNASSIGNED" : "STUDENTS_BULK_MOVED",
+        performedBy: session.uid,
+        performedByName: actor.name,
+        details: {
+          count: moves.length,
+          skipped: skipped.length,
+          ...(target ? { toSectionId: target.id, toSection: target.name, toDepartment: target.department, toYear: target.year } : {}),
+        },
+      });
     }
 
     return NextResponse.json({
@@ -165,6 +182,8 @@ export async function POST(request: Request) {
       moved: dryRun ? 0 : moves.length,
     });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

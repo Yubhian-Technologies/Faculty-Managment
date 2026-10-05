@@ -1,18 +1,23 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAuthStore } from "@/store/authStore";
+import { useMyAssignments } from "@/hooks/useMyAssignments";
+import { useOfficeAllowedHrefs } from "@/hooks/useOfficeAllowedHrefs";
+import { officeHiddenHrefs } from "@/lib/departments/officeAccess";
 import { getNavItemsForRole, groupNavItemsByModule } from "@/components/layout/navConfig";
 import type { UserRole } from "@/types";
 
 type PerRole = Partial<Record<UserRole, string[]>>;
 
-// Only meaningful once a login has been made Timetable Incharge for a
-// course-year (see TimetableIncharge in types/core.ts) - hidden for everyone
-// else, regardless of the Super Admin's own settings.
+// Tabs that only make sense for someone holding the matching duty - hidden for
+// everyone else, regardless of the Super Admin's own settings. Which duties a
+// login holds comes from useMyAssignments (one request, cached).
 const TIMETABLE_INCHARGE_HREFS = [
   "/panel/timetable-incharge", "/panel/assignment-requests",
   "/college-staff/timetable-incharge", "/college-staff/assignment-requests",
 ];
-const INCHARGE_ELIGIBLE_ROLES: UserRole[] = ["PANEL_MEMBER", "COLLEGE_STAFF"];
+const SECTION_INCHARGE_HREFS = ["/panel/students", "/panel/students/batches"];
+const MID_PAPER_HREFS = ["/panel/mid-bank"];
+const DUTY_ROLES: UserRole[] = ["PANEL_MEMBER", "COLLEGE_STAFF"];
 
 export function useNavVisibility() {
   const user = useAuthStore((s) => s.user);
@@ -22,20 +27,11 @@ export function useNavVisibility() {
   const primary = user?.role;
   const seatRoles = user?.roles ?? user?.seatRoles;
   const canBeIncharge = !!primary && !!user?.collegeId &&
-    [primary, ...(seatRoles ?? [])].some((r) => INCHARGE_ELIGIBLE_ROLES.includes(r));
+    [primary, ...(seatRoles ?? [])].some((r) => DUTY_ROLES.includes(r));
   // null = not yet known; the nav stays in its loading state until it is.
-  const [isIncharge, setIsIncharge] = useState<boolean | null>(canBeIncharge ? null : false);
-
-  useEffect(() => {
-    if (!canBeIncharge) return;
-    let cancelled = false;
-    fetch("/api/college/timetable-incharges?mine=true", { cache: "no-store" })
-      .then((r) => r.json() as Promise<{ incharges?: unknown[] }>)
-      .then((d) => { if (!cancelled) setIsIncharge((d.incharges?.length ?? 0) > 0); })
-      // Can't tell -> keep the entry visible rather than lock a real Incharge out.
-      .catch(() => { if (!cancelled) setIsIncharge(true); });
-    return () => { cancelled = true; };
-  }, [canBeIncharge, user?.uid]);
+  const assignments = useMyAssignments(canBeIncharge);
+  // A Department Office head's sidebar is narrowed to what their HOD allowed.
+  const officeAllowed = useOfficeAllowedHrefs(user?.realRole === "DEPARTMENT_OFFICE");
 
   useEffect(() => {
     if (!user?.collegeId) return;
@@ -67,9 +63,14 @@ export function useNavVisibility() {
         }
       }
     }
-    if (isIncharge === false) TIMETABLE_INCHARGE_HREFS.forEach((h) => hrefs.add(h));
+    if (officeAllowed.hrefs) officeHiddenHrefs(officeAllowed.hrefs).forEach((h) => hrefs.add(h));
+    if (assignments) {
+      if (!assignments.timetableIncharge) TIMETABLE_INCHARGE_HREFS.forEach((h) => hrefs.add(h));
+      if (!assignments.sectionIncharge) SECTION_INCHARGE_HREFS.forEach((h) => hrefs.add(h));
+      if (!assignments.midPaperSetter) MID_PAPER_HREFS.forEach((h) => hrefs.add(h));
+    }
     return Array.from(hrefs);
-  }, [raw, primary, seatRoles, isIncharge]);
+  }, [raw, primary, seatRoles, assignments, officeAllowed.hrefs]);
 
   const hiddenModules = useMemo(() => {
     if (!primary) return [];
@@ -81,5 +82,5 @@ export function useNavVisibility() {
     return Array.from(mods);
   }, [raw, primary, seatRoles]);
 
-  return { hiddenModules, hiddenItems, loading: loading || isIncharge === null };
+  return { hiddenModules, hiddenItems, loading: loading || (canBeIncharge && assignments === null) || officeAllowed.loading };
 }

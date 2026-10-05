@@ -1,9 +1,12 @@
 export const dynamic = "force-dynamic";
 
+import { firebaseAuthErrorResponse } from "@/lib/http/firebaseErrors";
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { createFirebaseUser } from "@/lib/firebase/authRest";
+import { loadTakenEmployeeIds } from "@/lib/firestore/employeeIds";
 import { ChunkedBatch, ChunkedBatchError } from "@/lib/firestore/chunkedBatch";
 import {
   matchOption, normalizeDigits, isScientificNotation,
@@ -75,7 +78,7 @@ function parseDate(v: string | undefined): Date | undefined {
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");
-    const body = (await request.json()) as { records: ImportRow[] };
+    const body = (await readJsonBody(request)) as { records: ImportRow[] };
 
     if (!body.records || !Array.isArray(body.records) || body.records.length === 0) {
       return NextResponse.json({ error: "No records provided" }, { status: 400 });
@@ -171,25 +174,20 @@ export async function POST(request: Request) {
       return { name: matched.name };
     }
 
-    // Load existing employeeIds/collegeEmails to detect duplicates - lowercased,
-    // since "VIT001"/"vit001" or two different casings of the same email are
-    // the same real-world identifier and Firestore would otherwise let both
-    // through as separate documents. employeeId is checked across every
-    // college, not just this one - the public faculty-profile link is keyed
-    // on employeeId alone (see /api/public/faculty-public), so a collision
-    // between colleges would let one person's link resolve to a different
-    // person's profile.
-    // ponytail: full collectionGroup scan on every import, not an indexed
-    // per-ID lookup - fine at hundreds of faculty across all colleges,
-    // revisit (e.g. a global employeeId registry doc) if that grows to
-    // thousands and imports start feeling slow.
-    const [facultyEmailSnap, employeeIdSnap] = await Promise.all([
+    // Existing employeeIds/collegeEmails to detect duplicates - lowercased, since
+    // "VIT001"/"vit001" or two different casings of the same email are the same
+    // real-world identifier and Firestore would otherwise let both through as
+    // separate documents. employeeId follows the one rule faculty and staff share
+    // (lib/firestore/employeeIds.ts): unique across every college among faculty -
+    // the public faculty-profile link is keyed on employeeId alone (see
+    // /api/public/faculty-public) - and not shared with this college's supporting
+    // staff. Only the IDs in this file are looked up; the importer used to scan
+    // every faculty member of every college on every call.
+    const [facultyEmailSnap, takenIds] = await Promise.all([
       db.collection("colleges").doc(collegeId).collection("facultyMembers").select("collegeEmail").get(),
-      db.collectionGroup("facultyMembers").select("employeeId").get(),
+      loadTakenEmployeeIds(db, collegeId, (body.records ?? []).map((r) => r.employeeId ?? "")),
     ]);
-    const existingIds = new Set(
-      employeeIdSnap.docs.map((d) => (d.data() as { employeeId?: string }).employeeId?.toLowerCase()).filter((v): v is string => !!v)
-    );
+    const existingIds = takenIds;
     const existingEmails = new Set(
       facultyEmailSnap.docs.map((d) => (d.data() as { collegeEmail?: string }).collegeEmail?.toLowerCase()).filter((v): v is string => !!v)
     );
@@ -374,6 +372,8 @@ export async function POST(request: Request) {
       try {
         userUid = await createFirebaseUser(loginEmail, passwordRaw, finalName);
       } catch (err) {
+        const badBody = badBodyResponse(err);
+        if (badBody) return badBody;
         const message = err && typeof err === "object" && "code" in err && err.code === "auth/email-already-exists"
           ? "an account with this email already exists"
           : err instanceof Error ? err.message : "unknown error";
@@ -497,9 +497,13 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ created: created.length, failed, warnings }, { status: 201 });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const authErr = firebaseAuthErrorResponse(err);
+    if (authErr) return authErr;
     console.error("[faculty/import POST]", err);
     const detail = process.env.NODE_ENV !== "production" ? `: ${err instanceof Error ? err.message : String(err)}` : "";
     return NextResponse.json({ error: `Internal error${detail}` }, { status: 500 });

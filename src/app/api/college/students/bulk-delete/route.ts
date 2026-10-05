@@ -1,9 +1,11 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
+import { invalidateSectionCountCache } from "@/lib/students/sectionCounts";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
-import { getAdminDb } from "@/lib/firebase/admin";
-import { ChunkedBatch } from "@/lib/firestore/chunkedBatch";
+import { getAdminAuth, getAdminDb } from "@/lib/firebase/admin";
+import { deleteStudentsCompletely } from "@/lib/students/deleteStudent";
 import type { Firestore } from "firebase-admin/firestore";
 
 const MAX_STUDENTS_PER_CALL = 400;
@@ -22,14 +24,16 @@ async function getUserName(db: Firestore, collegeId: string, uid: string): Promi
 // page already lets Office filter the visible roster (search/department/year)
 // and select-all within that view, so "delete everyone in a department" and
 // "delete all students" both resolve to the same call as "delete selected",
-// just with a bigger id list. Same cleanup as the single-student DELETE
-// (students/[id]/route.ts): each student's departmentHistory subcollection
-// goes with it. Capped and chunked like students/promote; callers with more
-// than the cap split into multiple sequential calls.
+// just with a bigger id list. Same permanent, complete deletion as the
+// single-student DELETE (students/[id]/route.ts, see lib/students/deleteStudent.ts):
+// each student's record, department history, login and roll registry entry go
+// with them and nothing is archived. Capped; callers with more than the cap
+// split into multiple sequential calls.
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("COLLEGE_OFFICE", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");
-    const body = (await request.json()) as { studentIds: string[] };
+    invalidateSectionCountCache(session.collegeId); // student counts on the Sections list change with this write
+    const body = (await readJsonBody(request)) as { studentIds: string[] };
 
     const studentIds = Array.isArray(body.studentIds) ? Array.from(new Set(body.studentIds)) : [];
     if (studentIds.length === 0) {
@@ -49,44 +53,31 @@ export async function POST(request: Request) {
       studentIds.map((id) => collegeRef.collection("students").doc(id).get())
     );
     const existing = studentSnaps.filter((s) => s.exists);
-    const historySnaps = await Promise.all(
-      existing.map((s) => s.ref.collection("departmentHistory").get())
-    );
+    const skipped = studentSnaps.filter((s) => !s.exists).map((s) => s.id);
 
-    const batch = new ChunkedBatch(db);
-    const skipped: string[] = [];
-    let deletedCount = 0;
-    let historyIdx = 0;
-
-    for (const snap of studentSnaps) {
-      if (!snap.exists) {
-        skipped.push(snap.id);
-        continue;
-      }
-      for (const h of historySnaps[historyIdx].docs) batch.delete(h.ref);
-      historyIdx++;
-      batch.delete(snap.ref);
-      deletedCount++;
-    }
-
-    if (deletedCount === 0) {
+    if (existing.length === 0) {
       return NextResponse.json({ error: "No matching students to remove" }, { status: 400 });
     }
 
-    await batch.commit();
+    const { deletedIds, failedIds } = await deleteStudentsCompletely(db, getAdminAuth, session.collegeId, existing);
+    const deletedCount = deletedIds.length;
 
-    const performedByName = await getUserName(db, session.collegeId, session.uid);
-    await collegeRef.collection("auditLogs").add({
-      collegeId: session.collegeId,
-      action: "STUDENTS_BULK_DELETED",
-      performedBy: session.uid,
-      performedByName,
-      details: { count: deletedCount, skipped: skipped.length },
-      timestamp: new Date(),
-    });
+    if (deletedCount > 0) {
+      const performedByName = await getUserName(db, session.collegeId, session.uid);
+      await collegeRef.collection("auditLogs").add({
+        collegeId: session.collegeId,
+        action: "STUDENTS_BULK_DELETED",
+        performedBy: session.uid,
+        performedByName,
+        details: { count: deletedCount, skipped: skipped.length, ...(failedIds.length > 0 ? { failed: failedIds.length } : {}) },
+        timestamp: new Date(),
+      });
+    }
 
-    return NextResponse.json({ ok: true, deletedCount, skipped });
+    return NextResponse.json({ ok: true, deletedCount, skipped, failed: failedIds });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

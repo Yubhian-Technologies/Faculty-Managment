@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -63,7 +64,7 @@ interface ValidRow {
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", ...COLLEGE_STAFF_UNIT_HEAD_ROLES);
-    const body = (await request.json()) as { records: ImportRow[] };
+    const body = (await readJsonBody(request)) as { records: ImportRow[] };
 
     if (!body.records || !Array.isArray(body.records) || body.records.length === 0) {
       return NextResponse.json({ error: "No records provided" }, { status: 400 });
@@ -210,7 +211,7 @@ export async function POST(request: Request) {
       }
       batch.set(collegeRef.collection("attendanceRecords").doc(`${vr.uid}_${vr.docSuffix}`), {
         collegeId, facultyId: vr.uid, facultyName: vr.name, department: vr.department,
-        date: vr.date, status: vr.status,
+        date: vr.date, dateKey: vr.docSuffix, status: vr.status,
         ...(vr.checkIn ? { checkIn: vr.checkIn } : {}),
         ...(vr.checkOut ? { checkOut: vr.checkOut } : {}),
         source: "IMPORTED", markedBy: session.uid,
@@ -248,6 +249,8 @@ export async function POST(request: Request) {
       try {
         await recordLateCheckIn(db, collegeId, vr.uid, vr.name, vr.department, vr.date);
       } catch (err) {
+        const badBody = badBodyResponse(err);
+        if (badBody) return badBody;
         // Never fails the import over a penalty-bookkeeping error - the
         // attendance records themselves are already committed either way.
         console.error("[college/attendance/import] late-penalty recording failed", err);
@@ -256,6 +259,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ created, skipped, failed }, { status: 201 });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

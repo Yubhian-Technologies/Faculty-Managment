@@ -48,7 +48,7 @@ export default function CollegeDepartmentsBrowsePage() {
     <div className="space-y-6">
       <div className="flex items-center gap-2">
         <Button variant="ghost" size="icon" asChild>
-          <Link href="/administration/colleges"><ArrowLeft className="h-4 w-4" /></Link>
+          <Link aria-label="Back" href="/administration/colleges"><ArrowLeft className="h-4 w-4" /></Link>
         </Button>
         <PageHeader title={collegeName || "Departments"} description="Pick a department to search its faculty or students" />
       </div>

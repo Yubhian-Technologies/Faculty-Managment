@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -156,6 +157,8 @@ export async function GET(request: Request) {
 
     return NextResponse.json({ timings });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -171,7 +174,7 @@ export async function POST(request: Request) {
     // timings/page.tsx) - the finer-grained HOD period-by-period breakdown
     // below (PATCH) stays HOD/Principal-only, a separate privilege.
     const session = await requireCollegeMember("PRINCIPAL", "SUPER_ADMIN", "COLLEGE_OFFICE");
-    const body = (await request.json()) as {
+    const body = (await readJsonBody(request)) as {
       departmentId: string;
       courseId: string;
       year: number;
@@ -229,6 +232,8 @@ export async function POST(request: Request) {
         return { semester: s.semester, startDate: start, endDate: end };
       });
     } catch (err) {
+      const badBody = badBodyResponse(err);
+      if (badBody) return badBody;
       return NextResponse.json({ error: err instanceof Error ? err.message : "Invalid semester dates" }, { status: 400 });
     }
     semesters.sort((a, b) => a.semester - b.semester);
@@ -347,6 +352,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ id: docId }, { status: 201 });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -366,7 +373,7 @@ export async function POST(request: Request) {
 export async function PATCH(request: Request) {
   try {
     const session = await requireCollegeMember("HOD", "PRINCIPAL", "SUPER_ADMIN", "PANEL_MEMBER", "COLLEGE_STAFF");
-    const body = (await request.json()) as {
+    const body = (await readJsonBody(request)) as {
       courseId?: string;
       year?: number;
       periods?: PeriodTiming[];
@@ -455,6 +462,8 @@ export async function PATCH(request: Request) {
 
     return NextResponse.json({ id: docId });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

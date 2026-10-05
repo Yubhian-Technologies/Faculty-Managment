@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { verifyFirebaseToken } from "@/lib/auth/verifyFirebaseToken";
 import { getAdminDb, getAdminAuth } from "@/lib/firebase/admin";
@@ -8,10 +9,12 @@ import { signSession } from "@/lib/auth/sessionToken";
 import { orderHeldRoles } from "@/lib/roles/seatRoles";
 import { activeDelegatedRoles } from "@/lib/leave/roleDelegation";
 import { migrateUserDoc } from "@/lib/faculty/fieldRenames";
+import { isFacultyCapableRole, isReadOnlyFacultyCollege } from "@/lib/auth/readOnlyAccess";
+import { isFacultyExited } from "@/lib/auth/readOnlyFacultyLookup";
 
 export async function POST(request: Request) {
   try {
-    const body = (await request.json()) as { token?: string };
+    const body = (await readJsonBody(request)) as { token?: string };
     const { token } = body;
 
     if (!token) {
@@ -144,6 +147,12 @@ export async function POST(request: Request) {
     // seat it holds (see types/roleSeats.ts). The sidebar and page access are
     // built from this list; API guards re-check it live, so a seat handed to
     // someone else takes effect immediately, not when this cookie expires.
+    // A deactivated account is also disabled in Firebase Auth; this stops a session being issued
+    // from an ID token that was minted just before that happened.
+    if (profile && profile.isActive === false) {
+      return NextResponse.json({ error: "This account has been deactivated" }, { status: 403 });
+    }
+
     const seatRoles = Array.isArray(profile?.seatRoles) ? (profile.seatRoles as string[]) : [];
     // Holding the College Admin seat makes someone a College Admin for the few
     // things that tell it apart from a Principal (see SessionPayload.realRole),
@@ -160,7 +169,22 @@ export async function POST(request: Request) {
     if (collegeId && profile) {
       try { delegatedRoles = (await activeDelegatedRoles(getAdminDb(), collegeId, decoded.uid)).roles; } catch { /* non-fatal */ }
     }
-    const roles = role === "UNKNOWN" ? [role] : orderHeldRoles(role, [...seatRoles, ...delegatedRoles]);
+    let roles = role === "UNKNOWN" ? [role] : orderHeldRoles(role, [...seatRoles, ...delegatedRoles]);
+
+    // A RESIGNED/RETIRED faculty member signs in normally but is READ-ONLY (see
+    // lib/auth/readOnlyAccess.ts): derived from facultyMembers.status, only for a
+    // college that has the switch on (zero extra reads otherwise). They hold no
+    // seat, so the roles carried in the cookie and sent to the client are just
+    // their own role - the seat menus/pages disappear. The API guards re-check the
+    // status live on every request regardless, so this only keeps the UI honest.
+    let readOnlyAccess = false;
+    if (collegeId && profile && role !== "UNKNOWN" && isReadOnlyFacultyCollege(collegeId) && isFacultyCapableRole(profile.role as string)) {
+      try { readOnlyAccess = await isFacultyExited(db, collegeId, decoded.uid); } catch { /* non-fatal - the guards enforce it anyway */ }
+    }
+    if (readOnlyAccess) {
+      roles = [role];
+      realRole = role;
+    }
 
     const sessionData = {
       uid: decoded.uid,
@@ -175,7 +199,7 @@ export async function POST(request: Request) {
 
     const sessionCookie = await signSession(sessionData);
 
-    const response = NextResponse.json({ ok: true, role, realRole, roles, collegeId, locationId, name, email, profile, refreshToken: !claimsWereSet });
+    const response = NextResponse.json({ ok: true, role, realRole, roles, collegeId, locationId, name, email, profile, refreshToken: !claimsWereSet, ...(readOnlyAccess ? { readOnlyAccess: true } : {}) });
     response.cookies.set("fms-session", sessionCookie, {
       httpOnly: true,
       // Not just a NODE_ENV check: a staging/preview deploy reachable over the
@@ -190,6 +214,8 @@ export async function POST(request: Request) {
 
     return response;
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     const message = err instanceof Error ? err.message : String(err);
     console.error("[auth/session] token verification failed:", message);
     // Never echo verifier internals (e.g. which key ids are known, why a

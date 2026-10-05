@@ -1,5 +1,7 @@
 "use client";
 
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
+import { neutraliseFormula } from "@/lib/utils/csv";
 import { useEffect, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
@@ -236,10 +238,9 @@ export default function DepartmentDetailPage() {
     }
   };
 
-  const handleUnlinkShift = async (shiftToUnlink: LocationShift) => {
-    if (!confirm(`Unlink "${shiftToUnlink.name}" from this department? Staff assigned in other departments will not be affected.`)) {
-      return;
-    }
+  const [shiftPendingUnlink, setShiftPendingUnlink] = useState<LocationShift | null>(null);
+  const handleUnlinkShift = (shiftToUnlink: LocationShift) => setShiftPendingUnlink(shiftToUnlink);
+  const performUnlinkShift = async (shiftToUnlink: LocationShift) => {
     try {
       const res = await fetch(`/api/location/shifts/${shiftToUnlink.id}`, {
         method: "PATCH",
@@ -390,7 +391,7 @@ export default function DepartmentDetailPage() {
     ];
 
     const rows = reportRows.map((r) => [
-      `"${r.staffName.replace(/"/g, '""')}"`,
+      `"${neutraliseFormula(r.staffName).replace(/"/g, '""')}"`,
       `"${r.role.replace(/"/g, '""')}"`,
       `"${(r.departmentName || deptName).replace(/"/g, '""')}"`,
       `"${(r.shiftName || "Unassigned").replace(/"/g, '""')}"`,
@@ -439,7 +440,7 @@ export default function DepartmentDetailPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-card/90 backdrop-blur-sm p-5 sm:p-6 rounded-3xl border border-border/60 shadow-xs">
         <div className="flex items-center gap-3.5">
           <Button asChild variant="ghost" size="icon" className="h-10 w-10 rounded-full hover:bg-muted/80 shrink-0">
-            <Link href="/location-staff-admin/departments">
+            <Link aria-label="Back" href="/location-staff-admin/departments">
               <ArrowLeft className="h-5 w-5 text-foreground" />
             </Link>
           </Button>
@@ -1718,6 +1719,18 @@ export default function DepartmentDetailPage() {
           </Card>
         </div>
       )}
+      <ConfirmDialog
+        open={!!shiftPendingUnlink}
+        onOpenChange={(o) => { if (!o) setShiftPendingUnlink(null); }}
+        title={`Unlink "${shiftPendingUnlink?.name ?? ""}" from this department?`}
+        description="Staff assigned in other departments will not be affected."
+        confirmLabel="Unlink"
+        onConfirm={async () => {
+          const target = shiftPendingUnlink;
+          setShiftPendingUnlink(null);
+          if (target) await performUnlinkShift(target);
+        }}
+      />
     </div>
   );
 }

@@ -106,7 +106,7 @@ export function CollegeBrowserList({ basePath, description = "Select a college t
     <div className="space-y-6">
       <div className="flex items-center gap-2">
         <Button variant="ghost" size="icon" asChild>
-          <Link href={basePath}><ArrowLeft className="h-4 w-4" /></Link>
+          <Link aria-label="Back" href={basePath}><ArrowLeft className="h-4 w-4" /></Link>
         </Button>
         <PageHeader title={location?.name ?? "Colleges"} description={description} />
       </div>

@@ -1,5 +1,7 @@
 export const dynamic = "force-dynamic";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
+import { scopedLocationId } from "@/lib/location/scope";
 import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -14,14 +16,14 @@ export async function POST(request: Request) {
       "SUPER_ADMIN"
     );
 
-    const body = (await request.json()) as {
+    const body = (await readJsonBody(request)) as {
       locationId?: string;
       staffId?: string;
       staffIds?: string[];
       targetShiftId: string; // shift ID, or "" / "__unassigned__" to remove from shift
     };
 
-    const locationId = body.locationId || session.locationId;
+    const locationId = scopedLocationId(session, body.locationId);
     if (!locationId) {
       return NextResponse.json({ error: "locationId required" }, { status: 400 });
     }
@@ -104,6 +106,8 @@ export async function POST(request: Request) {
       targetShiftName: isUnassigning ? "Unassigned" : targetShiftName,
     });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && err.message === "UNAUTHORIZED") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

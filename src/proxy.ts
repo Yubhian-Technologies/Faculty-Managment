@@ -3,6 +3,7 @@ import { readSession } from "@/lib/auth/sessionToken";
 import type { NextRequest } from "next/server";
 import { ROLE_DASHBOARD_PATHS, rolesInheritedBy } from "@/types/core";
 import type { UserRole } from "@/types/core";
+import { METHOD_HEADER, PATH_HEADER } from "@/lib/auth/readOnlyAccess";
 
 // "/" is public so signed-out visitors land on the marketing page (src/app/page.tsx)
 // instead of being force-redirected to /login before it can render; that page
@@ -111,7 +112,19 @@ function allowedPathsForRole(role: string): string[] {
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  if (isPublicPath(pathname) || pathname.startsWith("/_next") || pathname.startsWith("/api/")) {
+  // API requests are not gated here (every route guards itself), but the guard
+  // behind them (lib/auth/liveRoles.ts) needs the HTTP method and path to give
+  // a RESIGNED/RETIRED faculty member read-only access, and route guards never
+  // receive either. Stamp them on EVERY /api request, always overwriting
+  // whatever the client sent under the same names, so they can't be spoofed.
+  if (pathname.startsWith("/api/")) {
+    const headers = new Headers(request.headers);
+    headers.set(METHOD_HEADER, request.method);
+    headers.set(PATH_HEADER, pathname);
+    return NextResponse.next({ request: { headers } });
+  }
+
+  if (isPublicPath(pathname) || pathname.startsWith("/_next")) {
     return NextResponse.next();
   }
 

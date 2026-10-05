@@ -1,5 +1,7 @@
 export const dynamic = "force-dynamic";
 
+import { hidePanelPrompts } from "@/lib/notifications/visibility";
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeContext } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -32,19 +34,12 @@ export async function GET(request: Request) {
       .limit(30)
       .get();
 
-    // Hides panel-stage prompts already stored for leadership roles before the
-    // write-side fix (see excludeLeadershipUids in src/lib/notify.ts).
-    const hidePanelPrompts = ["PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_ADMIN"].includes(session.role);
-    const PANEL_PROMPT_TITLES = ["Panel Interview Scoring Open", "Panel Feedback Unlocked"];
-    const notifications = snap.docs
-      .map((d) => ({ id: d.id, ...d.data() }))
-      .filter((n) => {
-        if (!hidePanelPrompts) return true;
-        const { type, title } = n as { type?: string; title?: string };
-        return type !== "CANDIDATE_ARRIVED" && !PANEL_PROMPT_TITLES.includes(title ?? "");
-      });
+    // Hides panel-stage prompts already stored for leadership roles (see lib/notifications/visibility.ts).
+    const notifications = hidePanelPrompts(session.role, snap.docs.map((d) => ({ id: d.id, ...d.data() }) as { id: string; type?: string; title?: string }));
     return NextResponse.json({ notifications });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ notifications: [] });
     }
@@ -56,7 +51,7 @@ export async function GET(request: Request) {
 export async function PATCH(request: Request) {
   try {
     const session = await requireCollegeContext(request, ...NOTIFICATION_ROLES);
-    const body = (await request.json()) as { id?: string; markAll?: boolean };
+    const body = (await readJsonBody(request)) as { id?: string; markAll?: boolean };
 
     const db = getAdminDb();
     const col = db
@@ -83,6 +78,8 @@ export async function PATCH(request: Request) {
 
     return NextResponse.json({ ok: true });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

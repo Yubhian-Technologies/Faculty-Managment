@@ -1,5 +1,7 @@
 export const dynamic = "force-dynamic";
 
+import { firebaseAuthErrorResponse } from "@/lib/http/firebaseErrors";
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { convertLegacyAccounts } from "@/lib/roles/seats";
 import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth/verifySession";
@@ -9,6 +11,7 @@ import { type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
 import { provisionCollegeUser, provisionLocationUser } from "@/lib/firestore/userProvisioning";
 import { normalizeAcademicProfile } from "@/lib/faculty/academicProfileCompat";
 import { migrateUserDoc, migrateFacultyDoc, migrateSupportingStaffDoc } from "@/lib/faculty/fieldRenames";
+import { isSingleSourceCollege, mergeFacultyWithLogin } from "@/lib/faculty/singleSource";
 import { PHONE_REGEX, EMAIL_REGEX } from "@/lib/validations";
 import type { UserRole } from "@/types";
 import { ROLE_SCOPE } from "@/types";
@@ -68,6 +71,7 @@ export async function GET(request: Request) {
     const staffUids = usersRaw.filter((u) => u.role === "COLLEGE_STAFF").map((u) => u.uid);
 
     let users: (Record<string, unknown> & { uid: string; role?: string })[];
+    const facultyWins = isSingleSourceCollege(collegeId);
 
     try {
       const panelMap = new Map<string, { data: Record<string, unknown>; id: string }>();
@@ -105,8 +109,8 @@ export async function GET(request: Request) {
         if (u.role === "PANEL_MEMBER") hit = panelMap.get(u.uid);
         else if (u.role === "COLLEGE_STAFF") hit = staffMap.get(u.uid);
         if (!hit) return u;
-        const lifted = u.role === "PANEL_MEMBER" ? migrateFacultyDoc(hit.data) : migrateSupportingStaffDoc(hit.data);
-        return { ...lifted, ...u, recordId: hit.id };
+        if (u.role === "PANEL_MEMBER") return { ...mergeFacultyWithLogin(migrateFacultyDoc(hit.data), u, facultyWins), recordId: hit.id };
+        return { ...migrateSupportingStaffDoc(hit.data), ...u, recordId: hit.id };
       });
     } catch (e) {
       console.warn("[admin/users GET] batched fetch failed, falling back to N+1:", e);
@@ -126,9 +130,8 @@ export async function GET(request: Request) {
             .get();
           if (linkedSnap.empty) return u;
           const linkedData = linkedSnap.docs[0].data();
-          const linkedLifted =
-            linkedCollection === "facultyMembers" ? migrateFacultyDoc(linkedData) : migrateSupportingStaffDoc(linkedData);
-          return { ...linkedLifted, ...u, recordId: linkedSnap.docs[0].id };
+          if (linkedCollection === "facultyMembers") return { ...mergeFacultyWithLogin(migrateFacultyDoc(linkedData), u, facultyWins), recordId: linkedSnap.docs[0].id };
+          return { ...migrateSupportingStaffDoc(linkedData), ...u, recordId: linkedSnap.docs[0].id };
         }),
       );
     }
@@ -143,9 +146,13 @@ export async function GET(request: Request) {
     filteredUsers.sort((a, b) => ((a as { name?: string }).name ?? "").localeCompare((b as { name?: string }).name ?? ""));
     return NextResponse.json({ users: filteredUsers });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && err.message === "UNAUTHORIZED") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const authErr = firebaseAuthErrorResponse(err);
+    if (authErr) return authErr;
     console.error("[admin/users GET]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
@@ -169,7 +176,7 @@ export async function POST(request: Request) {
     const session = await requireRole("SUPER_ADMIN", "MANAGEMENT");
     const creatableRoles = session.role === "MANAGEMENT" ? MANAGEMENT_CREATABLE : SUPER_ADMIN_CREATABLE;
 
-    const body = (await request.json()) as {
+    const body = (await readJsonBody(request)) as {
       name: string;
       email: string;
       password: string;
@@ -270,6 +277,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ uid }, { status: 201 });
   } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
     if (err instanceof Error && err.message === "UNAUTHORIZED") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -280,6 +289,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "An account with this email already exists" }, { status: 409 });
     }
     const msg = err instanceof Error ? err.message : String(err);
+    const authErr = firebaseAuthErrorResponse(err);
+    if (authErr) return authErr;
     console.error("[admin/users POST]", msg);
     return NextResponse.json({ error: msg || "Internal error" }, { status: 500 });
   }

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Send, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -409,14 +410,27 @@ export function TeachingAssignmentsEditor({ courseId, year, backHref }: Teaching
     }
   }
 
+  // Removing an assignment also deletes its timetable slots, so it is asked
+  // about first rather than happening on the click (see ConfirmDialog below).
+  const [removeTarget, setRemoveTarget] = useState<TeachingAssignment | null>(null);
+  const [removing, setRemoving] = useState(false);
+
   async function handleRemove(id: string) {
+    setRemoving(true);
     try {
       const res = await fetch(`/api/college/teaching-assignments?id=${id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({})) as { error?: string };
+        toast({ variant: "destructive", title: "Failed to remove assignment", description: json.error });
+        return;
+      }
       toast({ variant: "success", title: "Assignment removed" });
+      setRemoveTarget(null);
       load();
     } catch {
       toast({ variant: "destructive", title: "Failed to remove assignment" });
+    } finally {
+      setRemoving(false);
     }
   }
 
@@ -647,7 +661,7 @@ export function TeachingAssignmentsEditor({ courseId, year, backHref }: Teaching
                           </p>
                           <p className="text-xs text-muted-foreground">{a.facultyName} · {a.hoursPerWeek} hrs/wk</p>
                         </div>
-                        <Button size="sm" variant="ghost" onClick={() => void handleRemove(a.id)}>
+                        <Button size="sm" variant="ghost" title="Remove assignment" onClick={() => setRemoveTarget(a)}>
                           <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
                       </div>
@@ -659,6 +673,22 @@ export function TeachingAssignmentsEditor({ courseId, year, backHref }: Teaching
           )}
         </CardContent>
       </Card>
+
+      <ConfirmDialog
+        open={!!removeTarget}
+        onOpenChange={(open) => { if (!open && !removing) setRemoveTarget(null); }}
+        title="Remove this assignment?"
+        description={
+          removeTarget
+            ? `${removeTarget.facultyName} will no longer teach ${removeTarget.subjectName} for Section ${removeTarget.sectionName ?? ""}. `
+              + "Every timetable period booked for it is removed too. This cannot be undone."
+            : undefined
+        }
+        confirmLabel="Remove"
+        variant="destructive"
+        loading={removing}
+        onConfirm={() => { if (removeTarget) void handleRemove(removeTarget.id); }}
+      />
     </div>
   );
 }

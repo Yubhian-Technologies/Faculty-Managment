@@ -85,10 +85,13 @@ const SCHOOL_DEGREE_SUBFIELDS = ["Course", "Board", "Institution Name", "Percent
 // FacultyProfileFields-level scalar - see DegreeFields in
 // ProfileFieldPrimitives.tsx) and Year of Registration/Name of the
 // Guide-Supervisor (shown while Pursuing, instead of Year of Award).
-const DOCTORAL_SUBFIELDS = ["Specialization", "Institution Name", "Status", "Mode", "Year of Registration", "Name of the Guide / Supervisor", "Year of Award", "Place", "Hall Ticket Number"];
+const POSTDOCTORAL_SUBFIELDS = ["Specialization", "Institution Name", "Status", "Mode", "Year of Registration", "Name of the Guide / Supervisor", "Year of Award", "Place", "Hall Ticket Number"];
+// Ph.D. entries additionally carry the Name of the Department and the Title of
+// the Ph.D Thesis, just before Place (Postdoctoral entries have neither).
+const DOCTORAL_SUBFIELDS = [...POSTDOCTORAL_SUBFIELDS.slice(0, 7), "Name of the Department", "Title of the Ph.D Thesis", ...POSTDOCTORAL_SUBFIELDS.slice(7)];
 // Roles/Responsibilities is a per-entry field, labelled per experience type.
 const experienceSubfields = (kind: "Academic" | "Industry" | "Research") =>
-  ["Institution Name", "Designation", "From Date", "To Date", "Joining Salary", "Leaving Salary", `${kind} Roles/Responsibilities`, "Reason for Leaving", "NOC Obtained"];
+  ["Institution Name", "Place of the University/College", "Designation", "From Date", "To Date", "Joining Salary", "Leaving Salary", `${kind} Roles/Responsibilities`, "Reason for Leaving", "NOC Obtained"];
 
 // Professional Experience / Professional Development / Financial sub-field
 // wording is exactly the Faculty Details UI label (== the stored key: e.g.
@@ -183,7 +186,7 @@ export const EXPORT_FIELDS: ExportField[] = [
   group("qualification", "ugDetailsGroup", "UG Details", DEGREE_SUBFIELDS),
   group("qualification", "pgDetailsGroup", "PG Details", DEGREE_SUBFIELDS),
   group("qualification", "phdDetailsGroup", "Ph.D. Details", DOCTORAL_SUBFIELDS),
-  group("qualification", "postdoctoralFellowshipDetailsGroup", "Postdoctoral Fellowship Details", DOCTORAL_SUBFIELDS),
+  group("qualification", "postdoctoralFellowshipDetailsGroup", "Postdoctoral Fellowship Details", POSTDOCTORAL_SUBFIELDS),
   // StaffQualification (QualificationsFields) has its own shape - no
   // separate Board field like HIGH_SCHOOL/INTERMEDIATE DegreeFields; the
   // exam board (if any) is folded into Institution Name itself.
