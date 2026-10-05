@@ -47,8 +47,15 @@ export async function GET(request: Request) {
       .map((p) => ({ uid: p.uid, name: p.name, email: p.email, role: p.role, storedRole: p.storedRole, department: p.department }))
       .sort((a, b) => a.name.localeCompare(b.name));
 
+    // parentDepartmentId travels with the name so the assign dialog can offer a
+    // department's sub-departments alongside it - a seat scoped to a parent
+    // (e.g. R&D Coordinator - Artificial Intelligence) may be filled from the
+    // parent or from any of its children.
     const departments = deptsSnap.docs
-      .map((d) => ({ id: d.id, name: (d.data() as { name?: string }).name ?? "" }))
+      .map((d) => {
+        const data = d.data() as { name?: string; parentDepartmentId?: string };
+        return { id: d.id, name: data.name ?? "", parentDepartmentId: data.parentDepartmentId };
+      })
       .sort((a, b) => a.name.localeCompare(b.name));
 
     // Additive, read-only-access colleges only: lets the Assign picker leave out RESIGNED/RETIRED people
