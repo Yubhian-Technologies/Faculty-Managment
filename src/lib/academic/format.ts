@@ -106,3 +106,30 @@ export function yearSemesterLabel(semester: number, semestersPerYear = 2): strin
   const withinYear = semester - (year - 1) * perYear;
   return `${year}-${withinYear}`;
 }
+
+/**
+ * A semester's label from the YEAR it belongs to and its position within that
+ * year: "2-1" for the first semester of second year.
+ *
+ * Prefer this over yearSemesterLabel wherever the course-year's own semester
+ * list is to hand, because the stored NUMBER cannot be trusted to mean the
+ * same thing twice. Across the live colleges both conventions are in use:
+ *
+ *   year 2 -> semesters [1,2]   (numbered within the year)   - 12 course-years
+ *   year 3 -> semesters [5,6]   (numbered across the course) -  2 course-years
+ *
+ * Dividing the number by a semesters-per-year figure is right for the second
+ * and wrong for the first - it labelled second year's semesters "1-1" and
+ * "1-2". Position is correct for both: [1,2] in year 2 and [3,4] in year 2
+ * both read 2-1 and 2-2.
+ *
+ * Falls back to yearSemesterLabel when `semester` is not in the list at all,
+ * so a stale pick still renders something rather than an empty label.
+ */
+export function yearSemesterLabelIn(year: number, semestersInYear: number[], semester: number): string {
+  if (!Number.isFinite(year) || year < 1) return yearSemesterLabel(semester);
+  const sorted = [...new Set(semestersInYear.filter((n) => Number.isFinite(n)))].sort((a, b) => a - b);
+  const index = sorted.indexOf(semester);
+  if (index < 0) return yearSemesterLabel(semester);
+  return `${year}-${index + 1}`;
+}

@@ -23,7 +23,7 @@ import { LEVEL_LABELS, ROLE_LABELS, ROLE_LEVEL, type UserRole } from "@/types/co
 import type { OutgoingHolderAction, RoleSeat, RoleSeatHistoryEntry } from "@/types/roleSeats";
 
 interface Person { uid: string; name: string; email: string; role: string; storedRole?: string; department: string; facultyExited?: boolean }
-interface Dept { id: string; name: string }
+interface Dept { id: string; name: string; parentDepartmentId?: string }
 
 // Role Assignments: who sits in each seat (Principal, a department's HOD, Vice
 // Principal, Academics, R&D head, ...). Appointing someone adds that seat's modules
@@ -222,7 +222,7 @@ export function RoleAssignmentsPage({ collegeId }: { collegeId?: string }) {
       />
       <AssignDialog
         seat={assignSeat} onClose={() => setAssignSeat(null)} people={people}
-        patchSeat={patchSeat} onDone={load}
+        departments={departments} patchSeat={patchSeat} onDone={load}
       />
       <HistoryDialog seat={historySeat} onClose={() => setHistorySeat(null)} qs={qs} />
       <RoleEmailDialog seat={emailSeat} onClose={() => setEmailSeat(null)} patchSeat={patchSeat} onDone={load} />
@@ -282,11 +282,12 @@ function needsOutgoing(seat: RoleSeat, people: Person[]): boolean {
 }
 
 function AssignDialog({
-  seat, onClose, people, patchSeat, onDone,
+  seat, onClose, people, departments, patchSeat, onDone,
 }: {
   seat: RoleSeat | null;
   onClose: () => void;
   people: Person[];
+  departments: Dept[];
   patchSeat: (id: string, body: Record<string, unknown>) => Promise<{ ok: boolean; error?: string }>;
   onDone: () => Promise<void>;
 }) {
@@ -297,15 +298,41 @@ function AssignDialog({
   const [outgoing, setOutgoing] = useState<OutgoingHolderAction>({ action: "DEACTIVATE" });
   const [busy, setBusy] = useState(false);
 
+  // A seat scoped to a department is filled from that department - every
+  // college has one R&D Coordinator, one HOD and so on PER department, and
+  // offering the whole college's faculty made it easy to appoint the wrong
+  // person entirely. A parent department also offers its sub-departments'
+  // faculty, since a sub-department's staff teach under the parent.
+  const departmentNames = useMemo(() => {
+    if (!seat?.departmentName) return null;
+    const names = new Set([seat.departmentName]);
+    if (seat.departmentId) {
+      for (const d of departments) {
+        if (d.parentDepartmentId === seat.departmentId && d.name) names.add(d.name);
+      }
+    }
+    return names;
+  }, [seat, departments]);
+
   const list = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return people
+    const eligible = people
       .filter((p) => p.uid !== seat?.holderUid)
       .filter((p) => !p.facultyExited) // RESIGNED/RETIRED: read-only access, can't be given a role (the server refuses too)
-      .filter((p) => !seat || canHoldSeat(p.role, seat.role))
+      .filter((p) => !seat || canHoldSeat(p.role, seat.role));
+
+    // Narrow to the seat's department, but never to nothing: a department with
+    // no eligible person yet would otherwise leave the seat unfillable with no
+    // way to explain why, so it falls back to the full list.
+    const inDepartment = departmentNames
+      ? eligible.filter((p) => departmentNames.has(p.department))
+      : eligible;
+    const scoped = inDepartment.length > 0 ? inDepartment : eligible;
+
+    return scoped
       .filter((p) => !q || p.name.toLowerCase().includes(q) || p.email.toLowerCase().includes(q))
       .slice(0, 100);
-  }, [people, search, seat]);
+  }, [people, search, seat, departmentNames]);
 
   if (!seat) return null;
   const outgoingNeeded = needsOutgoing(seat, people);

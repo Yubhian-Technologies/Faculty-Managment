@@ -42,7 +42,7 @@ export async function POST(request: Request) {
     const token = randomUUID();
     const path = `student-permission-proofs/${session.collegeId}/${session.uid}/${randomUUID()}.${ext}`;
     const bucket = getAdminStorage().bucket();
-    await bucket.file(path).save(buffer, { metadata: { contentType, metadata: { firebaseStorageDownloadTokens: token } }, resumable: false });
+    await bucket.file(path).save(buffer, { metadata: { cacheControl: "public, max-age=604800", contentType, metadata: { firebaseStorageDownloadTokens: token } }, resumable: false });
 
     const url = `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(path)}?alt=media&token=${token}`;
     return NextResponse.json({ url, name: (file as File).name || `proof.${ext}`, size: buffer.byteLength });

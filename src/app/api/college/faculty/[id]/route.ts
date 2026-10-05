@@ -141,12 +141,33 @@ export async function PATCH(
       }
     }
 
-    // Empty string clears the photo - everything else must be a real upload of ours.
+    // Empty string clears the photo - everything else must be a real upload of
+    // ours. Two things this must NOT reject:
+    //
+    //  - The photo already on the record. The edit form loads the stored URL
+    //    into its state and sends it back on every save, so a PATCH that does
+    //    not touch the photo still carries it. Re-validating a value we
+    //    persisted ourselves is what made "Save Changes" fail with "Invalid
+    //    photo URL" for anyone who had a photo, having changed nothing.
+    //
+    //  - A photo uploaded against the person's LOGIN uid rather than this
+    //    faculty doc's id. Both are legitimate: api/upload/profile-photo keys
+    //    the path on `targetId || session.uid`, so a faculty member uploading
+    //    their own photo gets a uid-keyed path while a Principal uploading it
+    //    for them gets a doc-keyed one. 23 of the 24 faculty photos in the
+    //    live colleges are uid-keyed, so accepting only the doc id rejected
+    //    almost every real record.
+    const existingPhotoUrl = (snap.data() as { profilePhotoUrl?: string }).profilePhotoUrl ?? "";
+    const facultyUserUid = (snap.data() as { userUid?: string }).userUid ?? "";
+    const photoUrlIsOurs = (url: string) =>
+      url.startsWith("https://firebasestorage.googleapis.com/") &&
+      [id, facultyUserUid].filter(Boolean).some((owner) => url.includes(encodeURIComponent(`profile-photos/${owner}_`)));
+
     if (
       body.profilePhotoUrl !== undefined &&
       body.profilePhotoUrl !== "" &&
-      (!body.profilePhotoUrl.startsWith("https://firebasestorage.googleapis.com/") ||
-        !body.profilePhotoUrl.includes(encodeURIComponent(`profile-photos/${id}_`)))
+      body.profilePhotoUrl !== existingPhotoUrl &&
+      !photoUrlIsOurs(body.profilePhotoUrl)
     ) {
       return NextResponse.json({ error: "Invalid photo URL" }, { status: 400 });
     }

@@ -176,11 +176,20 @@ export async function PATCH(
       }
     }
 
+    // The value already on the record always passes - the edit form loads the
+    // stored URL into its state and sends it back on every save, so a PATCH
+    // that does not touch the photo still carries it. Re-validating a value we
+    // persisted ourselves is what made Save fail with "Invalid photo URL"
+    // having changed nothing (see api/college/faculty/[id]).
+    const existingPhotoUrl = (snap.data() as { profilePhotoUrl?: string }).profilePhotoUrl ?? "";
+    const staffUserUid = (snap.data() as { userUid?: string }).userUid ?? "";
     if (
       body.profilePhotoUrl !== undefined &&
       body.profilePhotoUrl !== "" &&
+      body.profilePhotoUrl !== existingPhotoUrl &&
       (!body.profilePhotoUrl.startsWith("https://firebasestorage.googleapis.com/") ||
-        !body.profilePhotoUrl.includes(encodeURIComponent(`profile-photos/${id}_`)))
+        ![id, staffUserUid].filter(Boolean).some((owner) =>
+          body.profilePhotoUrl!.includes(encodeURIComponent(`profile-photos/${owner}_`))))
     ) {
       return NextResponse.json({ error: "Invalid photo URL" }, { status: 400 });
     }

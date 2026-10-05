@@ -10,7 +10,11 @@ import { isoDateKey } from "@/lib/leave/dayCounter";
 import { sectionDisplayLabel } from "@/lib/sections/sectionLabel";
 import { ordinalYear } from "@/lib/timetable/gridModel";
 import type { Course, CourseYearTiming, DayOfWeek, Department, Section, Subject, TimetableSlot } from "@/types";
-import { yearSemesterLabel } from "@/lib/academic/format";
+import { yearSemesterLabelIn } from "@/lib/academic/format";
+import { offeredYearsAcross } from "@/lib/college/departmentYears";
+import { useAuthStore } from "@/store/authStore";
+import { useWorkContext } from "@/hooks/useWorkContext";
+import { departmentOfContext } from "@/lib/roles/activeHodDepartment";
 
 // Read-only, download-only counterpart of /hod/timetable (the editor): year ->
 // semester -> section, then Load shows the published timetable, with PDF/Excel
@@ -39,6 +43,8 @@ export default function HODTimetableViewPage() {
   const [typeFilter, setTypeFilter] = useState<"ALL" | "THEORY" | "PRACTICAL">("ALL");
   const [loadedFor, setLoadedFor] = useState("");
   const [showLeisure, setShowLeisure] = useState(false);
+  const user = useAuthStore((st) => st.user);
+  const { active } = useWorkContext();
   const [weekStart, setWeekStart] = useState<Date>(() => currentWeekDates()[0]);
 
   useEffect(() => {
@@ -63,17 +69,48 @@ export default function HODTimetableViewPage() {
     return () => { cancelled = true; };
   }, []);
 
-  const years = useMemo(
-    () => Array.from(new Set(sections.map((s) => Number(s.year)))).sort((a, b) => a - b),
-    [sections]
-  );
+  // The years this HOD's departments are ASSIGNED, not the years their
+  // sections happen to sit in. A department given years 2-4 used to still
+  // offer year 1 whenever one shared first-year section was filed under it,
+  // and one given a year it had not created sections for yet offered nothing.
+  //
+  // /api/college/sections is already role-scoped, so the department names on
+  // those sections are exactly this HOD's tree - that is what decides whose
+  // assigned years to union here. Falls back to the sections' own years for a
+  // department nobody has configured yet.
+  // This HOD's OWN department - whichever they are "working as" when they head
+  // more than one, else all of them.
+  //
+  // NOT the departments their sections belong to. A managing department runs
+  // branches whose sections are filed under the BRANCH (Basic Science teaches
+  // the shared first year of data science, ECE and the rest, and those
+  // sections say "data science"). Unioning the branches' assigned years gave
+  // the Basic Science HOD years 2-4 - the branches' own years - and dropped
+  // the one year she actually runs.
+  const ownDepartmentNames = useMemo(() => {
+    const picked = departmentOfContext(active);
+    if (picked) return [picked];
+    return user?.departments ?? (user?.department ? [user.department] : []);
+  }, [active, user]);
+
+  const years = useMemo(() => {
+    const sectionYears = sections.map((s) => Number(s.year));
+    const catalogId = courses.find((c) => sections.some((s) => s.courseId === c.id))?.catalogId;
+    return offeredYearsAcross(ownDepartmentNames, departments, catalogId, sectionYears);
+  }, [sections, departments, courses, ownDepartmentNames]);
   const yearSections = useMemo(() => sections.filter((s) => String(s.year) === year), [sections, year]);
 
   // Timings are per course-year, keyed by the SECTION's own courseId (a shared
   // first-year section is filed under its real branch's Course doc).
   useEffect(() => {
     if (!year) return;
-    const courseIds = Array.from(new Set(sections.filter((s) => String(s.year) === year).map((s) => s.courseId)));
+    // Every course this HOD teaches, not only the ones with a section in the
+    // chosen year. The Year list offers the years the department is ASSIGNED,
+    // and a department can be assigned a year it has not created sections for
+    // yet (Civil is assigned 2-4 but only has year-3 sections). Keying the
+    // lookup on that year's sections left nothing to fetch, so a year with
+    // semesters configured still reported "No semesters".
+    const courseIds = Array.from(new Set(sections.map((s) => s.courseId)));
     let cancelled = false;
     void (async () => {
       try {
@@ -90,9 +127,14 @@ export default function HODTimetableViewPage() {
     return () => { cancelled = true; };
   }, [year, sections]);
 
+  // `timings` already holds only the chosen year's entry per course, so the
+  // semesters are read straight off it rather than through that year's
+  // sections - which may legitimately be none.
   const semesterOptions = useMemo(
-    () => Array.from(new Set(yearSections.flatMap((s) => (timings[s.courseId]?.semesters ?? []).map((x) => x.semester)))).sort((a, b) => a - b),
-    [yearSections, timings]
+    () => Array.from(new Set(
+      Object.values(timings).flatMap((t) => (t?.semesters ?? []).map((x) => x.semester))
+    )).sort((a, b) => a - b),
+    [timings]
   );
   // A chosen semester narrows the sections to the course-years that run it.
   const sectionsForPick = useMemo(
@@ -181,13 +223,15 @@ export default function HODTimetableViewPage() {
             disabled={!year || semesterOptions.length === 0}
           >
             <option value="">{!year ? "Select a year" : semesterOptions.length === 0 ? "No semesters" : "Select semester"}</option>
-            {semesterOptions.map((n) => <option key={n} value={n}>{yearSemesterLabel(n)}</option>)}
+            {semesterOptions.map((n) => <option key={n} value={n}>{yearSemesterLabelIn(Number(year), semesterOptions, n)}</option>)}
           </select>
         </div>
         <div className="space-y-1.5">
           <label className="text-sm font-medium" htmlFor="ttv-section">Section</label>
           <select id="ttv-section" className={selectClass} value={sectionId} onChange={(e) => chooseSection(e.target.value)} disabled={!year}>
-            <option value="">Select a section</option>
+            <option value="">
+              {!year ? "Select a year" : sectionsForPick.length === 0 ? "No sections for this year yet" : "Select a section"}
+            </option>
             {sectionsForPick.map((s) => (
               <option key={s.id} value={s.id}>{sectionDisplayLabel(s, departments)}</option>
             ))}
@@ -238,7 +282,7 @@ export default function HODTimetableViewPage() {
           courseName={course?.name}
           departmentName={departments.find((d) => d.name === loadedSection?.department)?.name ?? loadedSection?.department}
           academicYear={slots[0]?.academicYear}
-          semesterLabel={loadedSemester != null ? `Sem ${yearSemesterLabel(loadedSemester)}` : undefined}
+          semesterLabel={loadedSemester != null ? `Sem ${yearSemesterLabelIn(Number(year), semesterOptions, loadedSemester)}` : undefined}
           workingDays={workingDays}
           weekStart={weekStart}
           onWeekChange={setWeekStart}

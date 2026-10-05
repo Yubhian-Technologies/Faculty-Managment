@@ -56,6 +56,7 @@ export async function POST(request: Request) {
     await fileRef.save(buffer, {
       metadata: {
         contentType,
+        cacheControl: "public, max-age=604800",
         metadata: { firebaseStorageDownloadTokens: downloadToken },
       },
       resumable: false,

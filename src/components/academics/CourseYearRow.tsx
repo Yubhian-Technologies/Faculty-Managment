@@ -166,6 +166,8 @@ export function CourseYearRow({
                 <SemesterColumnCard
                   key={s.semester}
                   semester={s.semester}
+                  year={year}
+                  semestersInYear={semesters.map((x) => x.semester)}
                   duration={s.duration}
                   assignments={semAssignments}
                   onClick={() => onOpenSemesterSubjects(s.semester)}
