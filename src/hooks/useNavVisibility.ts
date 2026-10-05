@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useAuthStore } from "@/store/authStore";
 import { useMyAssignments } from "@/hooks/useMyAssignments";
 import { useOfficeAllowedHrefs } from "@/hooks/useOfficeAllowedHrefs";
@@ -21,8 +22,6 @@ const DUTY_ROLES: UserRole[] = ["PANEL_MEMBER", "COLLEGE_STAFF"];
 
 export function useNavVisibility() {
   const user = useAuthStore((s) => s.user);
-  const [raw, setRaw] = useState<{ hiddenModules: PerRole; hiddenItems: PerRole }>({ hiddenModules: {}, hiddenItems: {} });
-  const [loading, setLoading] = useState(!!user?.collegeId);
 
   const primary = user?.role;
   const seatRoles = user?.roles ?? user?.seatRoles;
@@ -33,16 +32,19 @@ export function useNavVisibility() {
   // A Department Office head's sidebar is narrowed to what their HOD allowed.
   const officeAllowed = useOfficeAllowedHrefs(user?.realRole === "DEPARTMENT_OFFICE");
 
-  useEffect(() => {
-    if (!user?.collegeId) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setLoading(true);
-    fetch("/api/college/settings/nav-visibility", { cache: "no-store" })
-      .then((r) => r.json() as Promise<{ hiddenModules?: PerRole; hiddenItems?: PerRole }>)
-      .then((d) => setRaw({ hiddenModules: d.hiddenModules ?? {}, hiddenItems: d.hiddenItems ?? {} }))
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, [user?.collegeId, user?.role]);
+  // Hidden-module/item config is a Super Admin setting that's the same for
+  // every role at a college and rarely changes - cached via the shared
+  // query client (lib/queryClient.ts) instead of re-fetched on every
+  // navigation, which is what the previous `cache: "no-store"` fetch did.
+  const { data: raw = { hiddenModules: {}, hiddenItems: {} }, isLoading } = useQuery({
+    queryKey: ["nav-visibility", user?.collegeId],
+    queryFn: () =>
+      fetch("/api/college/settings/nav-visibility")
+        .then((r) => r.json() as Promise<{ hiddenModules?: PerRole; hiddenItems?: PerRole }>)
+        .then((d) => ({ hiddenModules: d.hiddenModules ?? {}, hiddenItems: d.hiddenItems ?? {} })),
+    enabled: !!user?.collegeId,
+  });
+  const loading = Boolean(user?.collegeId) && isLoading;
 
   const hiddenItems = useMemo(() => {
     if (!primary) return [];

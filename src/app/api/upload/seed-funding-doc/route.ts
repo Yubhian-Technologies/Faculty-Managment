@@ -51,7 +51,7 @@ export async function POST(request: Request) {
 
     const bucket = getAdminStorage().bucket();
     await bucket.file(path).save(buffer, {
-      metadata: { contentType, metadata: { firebaseStorageDownloadTokens: downloadToken } },
+      metadata: { cacheControl: "public, max-age=604800", contentType, metadata: { firebaseStorageDownloadTokens: downloadToken } },
       resumable: false,
     });
 

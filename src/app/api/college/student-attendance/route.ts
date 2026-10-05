@@ -9,7 +9,7 @@ import { checkFacultyPeriodWindow, periodWindowMessage } from "@/lib/timetable/c
 import { resolveSubstituteSlotsForDate } from "@/lib/leave/periodCoverage";
 import { getNoClassReason } from "@/lib/studentAttendance/classDay";
 import { applyOnDutyToEntries, loadOnDutyDay, presentCountOf } from "@/lib/studentAttendance/onDuty";
-import { fetchSectionStudents } from "@/lib/students/sectionRoster";
+import { fetchSectionStudentsCached } from "@/lib/students/sectionRosterCache";
 import { sortStudentsForList } from "@/lib/students/listOrder";
 import { resolveCollegeAcademicYear } from "@/lib/college/collegeAcademicYear";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
@@ -158,7 +158,7 @@ export async function POST(request: Request) {
     // sortStudentsForList, not rollNumber.localeCompare: a student imported
     // without a roll number sorts last by name instead of throwing here and
     // making the whole class impossible to take attendance for.
-    const students = sortStudentsForList(await fetchSectionStudents(collegeRef, {
+    const students = sortStudentsForList(await fetchSectionStudentsCached(collegeRef, {
       department,
       sectionName,
       year,
