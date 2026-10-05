@@ -178,7 +178,10 @@ export async function GET(request: Request) {
       let periods: PeriodTiming[] = [];
       for (const timing of timingByCourseYear.values()) {
         if (!timing) continue;
-        const own = timing.periods && timing.periods.length > 0 ? timing.periods : defaultPeriodTimings(timing);
+        // Some stored timings key each entry `periodNumber` instead of `period`;
+        // the grid matches slots on `period`, so normalise or every cell reads Free.
+        const own = (timing.periods && timing.periods.length > 0 ? timing.periods : defaultPeriodTimings(timing))
+          .map((p) => ({ ...p, period: p.period ?? (p as { periodNumber?: number }).periodNumber ?? 0 }));
         if (own.length > periods.length) periods = own;
       }
       // No timings at all (or no slots yet): fall back to the widest period
