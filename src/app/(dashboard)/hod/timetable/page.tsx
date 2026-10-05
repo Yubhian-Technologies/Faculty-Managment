@@ -3,12 +3,13 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { ClipboardList, GraduationCap, Search, UserCog, Users } from "lucide-react";
+import { ClipboardList, Search, Users } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { TimetableInchargePanel } from "@/components/timetable/TimetableInchargePanel";
 import { TimetableGridEditor } from "@/components/timetable/TimetableGridEditor";
 import { toast } from "@/hooks/useToast";
 import { useMyDepartments } from "@/hooks/useMyDepartments";
@@ -17,7 +18,8 @@ import {
 } from "@/lib/departments/hodScope";
 import { ordinalYear } from "@/lib/timetable/gridModel";
 import { sectionDisplayLabel } from "@/lib/sections/sectionLabel";
-import type { Course, Department, Section } from "@/types";
+import { yearSemesterLabel } from "@/lib/academic/format";
+import type { Course, CourseYearTiming, Department, Section } from "@/types";
 
 // Reaching one section's timetable used to be four clicks: a course tile, then
 // a year tile, then a section tile, then the grid - every level a page that
@@ -41,6 +43,7 @@ interface LoadedSection {
   courseId: string;
   year: string;
   sectionId: string;
+  semester: number | null;
 }
 
 function SectionTimetable() {
@@ -56,6 +59,8 @@ function SectionTimetable() {
 
   const [courseKey, setCourseKey] = useState("");
   const [year, setYear] = useState("");
+  const [semester, setSemester] = useState<number | null>(null);
+  const [timings, setTimings] = useState<Record<string, CourseYearTiming | null>>({});
   const [sectionId, setSectionId] = useState("");
   const [sections, setSections] = useState<Section[]>([]);
   const [isLoadingSections, setIsLoadingSections] = useState(false);
@@ -195,18 +200,63 @@ function SectionTimetable() {
     };
   }, [selectedGroup, selectedCourse, year]);
 
+  // Semesters are configured per course-year (CourseYearTiming), filed under
+  // each section's own courseId - same lookup hod/timetable-view uses. The list
+  // is every semester any section of the picked year runs.
+  useEffect(() => {
+    if (!year || sections.length === 0) return;
+    const courseIds = Array.from(new Set(sections.map((s) => s.courseId)));
+    let cancelled = false;
+    void (async () => {
+      try {
+        const entries = await Promise.all(courseIds.map(async (id) => {
+          const t = await fetch(`/api/college/course-year-timings?courseId=${encodeURIComponent(id)}`)
+            .then((r) => r.json() as Promise<{ timings: CourseYearTiming[] }>);
+          return [id, (t.timings ?? []).find((x) => Number(x.year) === Number(year)) ?? null] as const;
+        }));
+        if (!cancelled) setTimings(Object.fromEntries(entries));
+      } catch {
+        if (!cancelled) toast({ variant: "destructive", title: "Failed to load semesters" });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [year, sections]);
+
+  const semesterOptions = useMemo(
+    () => Array.from(new Set(sections.flatMap((s) => (timings[s.courseId]?.semesters ?? []).map((x) => x.semester)))).sort((a, b) => a - b),
+    [sections, timings]
+  );
+  // A chosen semester narrows the sections to the course-years that run it.
+  const sectionsForPick = useMemo(
+    () => sections.filter((s) => {
+      const sems = (timings[s.courseId]?.semesters ?? []).map((x) => x.semester);
+      return semester == null || sems.length === 0 || sems.includes(semester);
+    }),
+    [sections, semester, timings]
+  );
+
   // Changing a filter invalidates what's on screen: without this, switching
   // year would leave the previous year's timetable sitting below the filters
   // looking like it belonged to the new selection.
   function changeCourse(next: string) {
     setCourseKey(next);
     setYear("");
+    setSemester(null);
+    setTimings({});
     setSectionId("");
     setSections([]);
     setLoaded(null);
   }
   function changeYear(next: string) {
     setYear(next);
+    setSemester(null);
+    setTimings({});
+    setSectionId("");
+    setSections([]);
+    setLoaded(null);
+  }
+  function changeSemester(next: string) {
+    setSemester(next === "all" ? null : Number(next));
     setSectionId("");
     setLoaded(null);
   }
@@ -218,7 +268,7 @@ function SectionTimetable() {
   function handleLoad() {
     const section = sections.find((s) => s.id === sectionId);
     if (!selectedCourse || !year || !section) return;
-    setLoaded({ courseId: section.courseId, year, sectionId: section.id });
+    setLoaded({ courseId: section.courseId, year, sectionId: section.id, semester });
   }
 
   const canLoad = !!selectedCourse && !!year && !!sectionId && !isLoadingSections;
@@ -227,7 +277,7 @@ function SectionTimetable() {
     <div className="space-y-6">
       <PageHeader
         title="Timetable"
-        description="Pick a course, year and section, then load that section's timetable to build or publish it"
+        description="Pick a course, year, semester and section, then load that section's timetable to build or publish it"
       />
 
       <Card>
@@ -239,11 +289,11 @@ function SectionTimetable() {
         </CardHeader>
         <CardContent>
           {isLoading ? (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
               {[1, 2, 3, 4].map((i) => <div key={i} className="h-16 rounded-md border bg-muted/30 animate-pulse" />)}
             </div>
           ) : (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
               <div className="space-y-1.5">
                 <Label htmlFor="tt-course">Course</Label>
                 <Select value={courseKey} onValueChange={changeCourse} disabled={courseGroups.length === 0}>
@@ -285,11 +335,30 @@ function SectionTimetable() {
               </div>
 
               <div className="space-y-1.5">
+                <Label htmlFor="tt-semester">Semester</Label>
+                <Select
+                  value={semester != null ? String(semester) : "all"}
+                  onValueChange={changeSemester}
+                  disabled={!year || semesterOptions.length === 0}
+                >
+                  <SelectTrigger id="tt-semester">
+                    <SelectValue placeholder={!year ? "Select a year" : semesterOptions.length === 0 ? "No semesters" : "All semesters"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All semesters</SelectItem>
+                    {semesterOptions.map((n) => (
+                      <SelectItem key={n} value={String(n)}>{yearSemesterLabel(n)}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
                 <Label htmlFor="tt-section">Section</Label>
                 <Select
                   value={sectionId}
                   onValueChange={changeSection}
-                  disabled={!year || isLoadingSections || sections.length === 0}
+                  disabled={!year || isLoadingSections || sectionsForPick.length === 0}
                 >
                   <SelectTrigger id="tt-section">
                     <SelectValue
@@ -297,7 +366,7 @@ function SectionTimetable() {
                     />
                   </SelectTrigger>
                   <SelectContent>
-                    {sections.map((s) => (
+                    {sectionsForPick.map((s) => (
                       <SelectItem key={s.id} value={s.id}>
                         {sectionDisplayLabel(s, departments)} · {s.studentCount ?? 0} students
                       </SelectItem>
@@ -320,25 +389,15 @@ function SectionTimetable() {
             </div>
           )}
 
-          {/* Timetable Incharge and the department-wide Teaching Assignments
-              editor are per course-YEAR, not per section, so they stay on their
-              own pages - linked from here once a course and year are picked,
-              rather than folded into a per-section view. */}
+          {/* The department-wide Teaching Assignments editor is per course-YEAR,
+              not per section, so it stays on its own page - linked from here
+              once a course and year are picked. */}
           {selectedCourse && year && (
             <div className="mt-4 flex flex-wrap items-center gap-2 border-t pt-4">
-              <span className="text-xs text-muted-foreground flex items-center gap-1.5">
-                <UserCog className="h-3.5 w-3.5" />
-                {ordinalYear(Number(year))} tools:
-              </span>
+              <span className="text-xs text-muted-foreground">{ordinalYear(Number(year))} tools:</span>
               <Button variant="outline" size="sm" asChild>
                 <Link href={`/hod/timetable/${selectedCourse.id}/${year}/teaching-assignments`}>
                   <ClipboardList className="h-3.5 w-3.5 mr-1.5" />Teaching Assignments
-                </Link>
-              </Button>
-              <Button variant="outline" size="sm" asChild>
-                <Link href={`/hod/timetable/${selectedCourse.id}/${year}`}>
-                  <GraduationCap className="h-3.5 w-3.5 mr-1.5" />
-                  Timetable Incharge
                 </Link>
               </Button>
             </div>
@@ -346,18 +405,23 @@ function SectionTimetable() {
         </CardContent>
       </Card>
 
+      {selectedCourse && year && (
+        <TimetableInchargePanel courses={courses} departments={departments} sections={sections} catalogId={selectedCourse.catalogId} year={Number(year)} />
+      )}
+
       {loaded ? (
         <TimetableGridEditor
-          key={`${loaded.courseId}_${loaded.year}_${loaded.sectionId}`}
+          key={`${loaded.courseId}_${loaded.year}_${loaded.sectionId}_${loaded.semester ?? ""}`}
           courseId={loaded.courseId}
           year={loaded.year}
           sectionId={loaded.sectionId}
+          semester={loaded.semester}
         />
       ) : (
         !isLoading && (
           <div className="rounded-lg border border-dashed p-10 text-center text-sm text-muted-foreground">
             <Users className="h-5 w-5 mx-auto mb-2 opacity-50" />
-            Pick a course, year and section above, then press Load Timetable.
+            Pick a course, year, semester and section above, then press Load Timetable.
           </div>
         )
       )}

@@ -44,6 +44,9 @@ interface TimetableGridEditorProps {
   // "Back to sections" is meaningless - the filters ARE the way back. The
   // header, title and every export/edit action still render either way.
   backHref?: string;
+  // Which semester's timetable this grid shows and edits. Omitted (or null) lets
+  // the server resolve whichever semester is running today, as before.
+  semester?: number | null;
 }
 
 // Shared by both hod/timetable/[courseId]/[year]/[sectionId]/page.tsx and
@@ -54,7 +57,9 @@ interface TimetableGridEditorProps {
 // goes through the same API routes either visitor already had server-side
 // authorization checks added for (see teaching-assignments/timetable/
 // timetable-slots routes' isTimetableIncharge branches).
-export function TimetableGridEditor({ courseId, year, sectionId, backHref }: TimetableGridEditorProps) {
+export function TimetableGridEditor({ courseId, year, sectionId, backHref, semester }: TimetableGridEditorProps) {
+  const semesterQuery = semester != null ? `&semester=${semester}` : "";
+  const semesterBody = semester != null ? { semester } : {};
   const router = useRouter();
   const myDepartments = useMyDepartments();
   const searchParams = useSearchParams();
@@ -167,9 +172,9 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref }: Tim
           .then((r) => r.json() as Promise<{ sections: Section[] }>),
         fetch(`/api/college/course-year-timings?courseId=${encodeURIComponent(courseId)}`)
           .then((r) => r.json() as Promise<{ timings: CourseYearTiming[] }>),
-        fetch(`/api/college/timetable-slots?sectionId=${encodeURIComponent(sectionId)}`)
+        fetch(`/api/college/timetable-slots?sectionId=${encodeURIComponent(sectionId)}${semesterQuery}`)
           .then((r) => r.json() as Promise<{ slots: TimetableSlot[]; subjects?: Subject[]; workingDays?: DayOfWeek[] }>),
-        fetch(`/api/college/timetable/draft?sectionId=${encodeURIComponent(sectionId)}`)
+        fetch(`/api/college/timetable/draft?sectionId=${encodeURIComponent(sectionId)}${semesterQuery}`)
           .then((r) => r.json() as Promise<{ draft: TimetableDraft | null }>),
         fetch(`/api/college/teaching-assignments?sectionId=${encodeURIComponent(sectionId)}`)
           .then((r) => r.json() as Promise<{ assignments: TeachingAssignment[] }>),
@@ -199,7 +204,7 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref }: Tim
     } catch {
       toast({ variant: "destructive", title: "Failed to load timetable" });
     }
-  }, [courseId, year, sectionId]);
+  }, [courseId, year, sectionId, semesterQuery]);
 
   useEffect(() => {
     let cancelled = false;
@@ -335,7 +340,7 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref }: Tim
       const res = await fetch("/api/college/timetable/draft", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sectionId }),
+        body: JSON.stringify({ sectionId, ...semesterBody }),
       });
       const json = (await res.json()) as { error?: string };
       if (!res.ok) {
@@ -366,6 +371,7 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref }: Tim
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           sectionId,
+          ...semesterBody,
           action: "add",
           assignmentId: assignment.id,
           toDay: addingAt.day,
@@ -394,6 +400,7 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref }: Tim
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           sectionId,
+          ...semesterBody,
           action: "remove",
           assignmentId: slot.assignmentId,
           fromDay: slot.day,
@@ -451,7 +458,7 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref }: Tim
       const res = await fetch("/api/college/timetable/publish", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sectionId }),
+        body: JSON.stringify({ sectionId, ...semesterBody }),
       });
       const json = (await res.json()) as { issues?: string[]; error?: string; published?: number };
       if (!res.ok) {
@@ -472,7 +479,7 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref }: Tim
   async function handleDiscard() {
     setBusy("discard");
     try {
-      const res = await fetch(`/api/college/timetable/draft?sectionId=${encodeURIComponent(sectionId)}`, { method: "DELETE" });
+      const res = await fetch(`/api/college/timetable/draft?sectionId=${encodeURIComponent(sectionId)}${semesterQuery}`, { method: "DELETE" });
       if (!res.ok) {
         toast({ variant: "destructive", title: "Could not discard the draft" });
         return;
@@ -497,6 +504,7 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref }: Tim
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           sectionId,
+          ...semesterBody,
           assignmentId: selected.assignmentId,
           fromDay: selected.day,
           fromPeriod: selected.periodNumber,
