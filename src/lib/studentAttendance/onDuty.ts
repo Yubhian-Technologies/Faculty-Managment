@@ -1,5 +1,6 @@
 import { FieldValue } from "firebase-admin/firestore";
 import type { Firestore, Transaction } from "firebase-admin/firestore";
+import { applyTallyDeltaInTx } from "./dayTally";
 import type { StudentAttendanceEntry, StudentAttendanceSession } from "@/types";
 
 // "On duty" coverage: students who are officially away for given periods of a
@@ -145,6 +146,7 @@ export async function applyOnDutyToExistingSessions(
           const diff = entries.filter((e, i) => e !== s.entries[i]).length;
           if (diff === 0) return 0;
           tx.update(doc.ref, { entries, presentCount: presentCountOf(entries), updatedAt: new Date() });
+          applyTallyDeltaInTx(tx, db, collegeId, s, { ...s, entries });
           return diff;
         });
       }
@@ -181,6 +183,7 @@ export async function releaseOnDutyFromSessions(
           });
           if (diff === 0) return 0;
           tx.update(doc.ref, { entries, presentCount: presentCountOf(entries), updatedAt: new Date() });
+          applyTallyDeltaInTx(tx, db, collegeId, s, { ...s, entries });
           return diff;
         });
       }

@@ -7,6 +7,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 import { checkFacultyPeriodWindow, periodWindowMessage } from "@/lib/timetable/currentPeriod";
 import { mergeMarkUpdates } from "@/lib/studentAttendance/onDuty";
+import { applyTallyDeltaInTx } from "@/lib/studentAttendance/dayTally";
 import type { StudentAttendanceEntry, StudentAttendanceMark, StudentAttendanceSession } from "@/types";
 
 const VALID_MARKS: StudentAttendanceMark[] = ["PRESENT", "ABSENT"];
@@ -28,7 +29,9 @@ export async function PATCH(
     const db = getAdminDb();
     const collegeRef = db.collection("colleges").doc(session.collegeId);
     const ref = collegeRef.collection("studentAttendance").doc(id);
-    const snap = await ref.get();
+    // Independent reads - one round trip instead of two (the faculty id is only
+    // used further down, after the ownership checks).
+    const [snap, facultyMemberId] = await Promise.all([ref.get(), resolveFacultyMemberId(db, session.collegeId, session.uid)]);
     if (!snap.exists) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
@@ -72,7 +75,6 @@ export async function PATCH(
     // Period 1 session can't be saved once Period 2 (same assignment) has
     // taken over - "some period of this assignment is active right now"
     // isn't enough; it must be THIS session's own period.
-    const facultyMemberId = await resolveFacultyMemberId(db, session.collegeId, session.uid);
     const windowCheck = await checkFacultyPeriodWindow(
       db, session.collegeId, facultyMemberId, existing.assignmentId, existing.date, new Date(), existing.periodNumber
     );
@@ -126,6 +128,11 @@ export async function PATCH(
       }
 
       tx.update(ref, update);
+      // Keep the student dashboard's tally exact in the same commit: a submit is
+      // the moment this period starts to count.
+      if (body.submit) {
+        applyTallyDeltaInTx(tx, db, session.collegeId, fresh, { ...fresh, entries, status: "SUBMITTED" });
+      }
       return { merged: update, fresh };
     });
 

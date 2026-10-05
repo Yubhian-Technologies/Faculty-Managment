@@ -2,7 +2,7 @@
 
 import { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { signInWithEmailAndPassword, type UserCredential } from "firebase/auth";
+import { signInWithEmailAndPassword, signInWithCustomToken, type UserCredential } from "firebase/auth";
 import { Eye, EyeOff } from "lucide-react";
 import { auth } from "@/lib/firebase/client";
 import { getUserById } from "@/lib/firestore/users";
@@ -196,6 +196,7 @@ function LoginForm() {
         // Staff/Admin direct email sign-in
         credential = await signInWithEmailAndPassword(auth, identifier.trim(), password);
       } else {
+        try {
         // Student Roll Number sign-in:
         // 1. Try the deterministic Auth email: <rollNumber>@students.internal
         //    (no database read) - the identity for any plain roll (letters/digits).
@@ -239,6 +240,26 @@ function LoginForm() {
           if (!signedIn) throw lastErr;
           credential = signedIn;
         }
+        } catch (studentErr: unknown) {
+          // Not a student: faculty can also sign in with their Employee ID and the
+          // same password as their email login (checked server-side).
+          const code = (studentErr as { code?: string })?.code;
+          if (code !== "auth/user-not-found" && code !== "auth/invalid-credential") throw studentErr;
+          const empRes = await fetch("/api/auth/employee-login", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ employeeId: identifier.trim(), password }),
+          });
+          const empBody = (await empRes.json().catch(() => ({}))) as { customToken?: string; error?: string };
+          if (empRes.status === 429) {
+            throw Object.assign(new Error("Too many attempts. Please wait a minute and try again."), { code: "auth/too-many-requests" });
+          }
+          if (empRes.status === 403) {
+            throw Object.assign(new Error(empBody.error), { code: "auth/user-disabled" });
+          }
+          if (!empRes.ok || !empBody.customToken) throw studentErr;
+          credential = await signInWithCustomToken(auth, empBody.customToken);
+        }
       }
 
       await completeLogin(credential, redirect, router, setUser, setFirebaseToken);
@@ -265,7 +286,7 @@ function LoginForm() {
         <Card className="shadow-xl border-0">
           <CardHeader className="space-y-1 pb-4">
             <CardTitle className="text-xl">Welcome back</CardTitle>
-            <CardDescription>Enter your email or roll number to sign in</CardDescription>
+            <CardDescription>Enter your email, employee ID or roll number to sign in</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={onSubmit} className="space-y-4" noValidate>

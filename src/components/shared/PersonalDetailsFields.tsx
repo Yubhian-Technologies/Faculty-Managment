@@ -10,6 +10,7 @@ import { PHONE_REGEX, AADHAR_REGEX, PAN_REGEX, HEIGHT_REGEX } from "@/lib/valida
 import { StringListInput, RepeatingGroup } from "@/components/shared/ProfileFieldPrimitives";
 import { migratePersonalFlat } from "@/lib/faculty/fieldRenames";
 import { DesignationSelect } from "@/components/faculty/DesignationOptions";
+import { toDateInputValue } from "@/lib/utils";
 import type { Religion, Caste } from "@/types";
 import type { RatificationRecord } from "@/types";
 
@@ -193,7 +194,7 @@ export function PersonalDetailsFields({ value: rawValue, onChange, requiredField
           <Label>Date of Birth{mark("dateOfBirth")}</Label>
           <Input
             type="date"
-            value={value.dateOfBirth ?? ""}
+            value={value.dateOfBirth ? toDateInputValue(value.dateOfBirth as never) : ""}
             max={latestDobForAge18()}
             onChange={(e) => set("dateOfBirth", e.target.value)}
           />
@@ -606,7 +607,7 @@ export function PersonalDetailsFields({ value: rawValue, onChange, requiredField
                 </div>
                 <div className="space-y-2">
                   <Label>Ratification Date</Label>
-                  <Input type="date" value={value.ratificationDate ?? ""} onChange={(e) => set("ratificationDate", e.target.value)} />
+                  <Input type="date" value={value.ratificationDate ? toDateInputValue(value.ratificationDate as never) : ""} onChange={(e) => set("ratificationDate", e.target.value)} />
                 </div>
               </>
             )}
@@ -637,7 +638,7 @@ export function PersonalDetailsFields({ value: rawValue, onChange, requiredField
                   </div>
                   <div className="space-y-2">
                     <Label>Ratification Date</Label>
-                    <Input type="date" value={item.date ?? ""} onChange={(e) => update({ date: e.target.value })} />
+                    <Input type="date" value={item.date ? toDateInputValue(item.date as never) : ""} onChange={(e) => update({ date: e.target.value })} />
                   </div>
                 </>
               )}

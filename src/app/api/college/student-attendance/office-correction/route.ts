@@ -26,14 +26,14 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 // this collection - see student-attendance/[id]/route.ts). HOD acts here
 // directly; DEPARTMENT_OFFICE reaches the same authorization because it's
 // normalized to role "HOD" in the session (see UserRole's own doc-comment in
-// src/types/core.ts) - no separate role branch needed. PRINCIPAL/VICE_PRINCIPAL
-// get every department, same convention as faculty-attendance-completion.
+// src/types/core.ts) - no separate role branch needed. Principal/VP are
+// deliberately excluded: only the department's own HOD/office may post or correct.
 // Reuses this collection's existing two-step shape (POST loads/creates a
 // DRAFT + roster, PATCH at .../office-correction/[id] edits and submits) -
 // matching the faculty-facing student-attendance route this mirrors.
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL");
+    const session = await requireCollegeMember("HOD");
     const body = (await readJsonBody(request)) as {
       facultyId?: string;
       assignmentId?: string;
@@ -139,16 +139,11 @@ export async function POST(request: Request) {
     const id = `${assignmentId}_${date}_${periodNumber}`;
     const ref = collegeRef.collection("studentAttendance").doc(id);
 
-    // A submitted session is a locked historical record - safe to just read
-    // back (e.g. a prior office attempt landing after the faculty already
-    // submitted) without clobbering. If we land on an existing DRAFT, hand
-    // it back rather than overwriting the marks already entered.
+    // An existing session (DRAFT or SUBMITTED) is handed back as-is so the
+    // HOD/office can correct it via PATCH - never overwritten here.
     const existingSnap = await ref.get();
     if (existingSnap.exists) {
       const existing = existingSnap.data() as StudentAttendanceSession;
-      if (existing.status === "SUBMITTED") {
-        return NextResponse.json({ error: "Attendance for this period has already been submitted" }, { status: 409 });
-      }
       return NextResponse.json({ session: { ...existing, id } });
     }
 
@@ -220,9 +215,6 @@ export async function POST(request: Request) {
     });
 
     if (conflictSession) {
-      if (conflictSession.status === "SUBMITTED") {
-        return NextResponse.json({ error: "Attendance for this period has already been submitted" }, { status: 409 });
-      }
       return NextResponse.json({ session: { ...conflictSession, id } });
     }
 

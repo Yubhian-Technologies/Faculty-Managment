@@ -1,3 +1,4 @@
+import { readStudentTally, tallyMode, tallyReadyFrom } from "./dayTally";
 import type { Firestore } from "firebase-admin/firestore";
 import type { StudentAttendanceSession } from "@/types";
 import { indexSessions, isOnDutyMark, tallyStudentBySubject, type HeldAttend } from "./counting";
@@ -86,6 +87,41 @@ export async function computeStudentAttendanceHistory(
   departments: string | string[],
   range: AttendanceHistoryRange = {},
   opts: { cacheMs?: number } = {}
+): Promise<StudentAttendanceHistory> {
+  // The per-student daily tally (dayTally.ts) answers an explicit from/to range
+  // with a handful of document reads instead of a department-wide scan. It is
+  // trusted only from the backfilled date on; anything else, and any failure,
+  // takes the scan below. `shadow` serves the scan and logs any disagreement.
+  const mode = tallyMode();
+  if (mode !== "off" && range.from && range.to && !range.year && !range.month) {
+    try {
+      const readyFrom = await tallyReadyFrom(db, collegeId);
+      if (readyFrom && range.from >= readyFrom) {
+        const rows = await readStudentTally(db, collegeId, studentId, range.from, range.to);
+        if (mode === "on") {
+          return assemble(db, collegeId, rows.map((r) => ({ subjectId: r.subjectId, subjectName: r.subjectName, subjectCode: r.subjectCode, held: r.held, attended: r.attended })));
+        }
+        const live = await computeLiveHistory(db, collegeId, studentId, departments, range, opts);
+        const liveBySubject = new Map(live.subjects.map((s) => [s.subjectId, `${s.held}/${s.attend}`]));
+        const tallyBySubject = new Map(rows.map((r) => [r.subjectId, `${r.held}/${r.attended}`]));
+        const same = liveBySubject.size === tallyBySubject.size && [...liveBySubject].every(([k, v]) => tallyBySubject.get(k) === v);
+        if (!same) console.warn("[tally-mismatch]", { collegeId, studentId, from: range.from, to: range.to, live: [...liveBySubject], tally: [...tallyBySubject] });
+        return live;
+      }
+    } catch (err) {
+      console.error("[studentAttendance/history tally]", err);
+    }
+  }
+  return computeLiveHistory(db, collegeId, studentId, departments, range, opts);
+}
+
+async function computeLiveHistory(
+  db: Firestore,
+  collegeId: string,
+  studentId: string,
+  departments: string | string[],
+  range: AttendanceHistoryRange,
+  opts: { cacheMs?: number }
 ): Promise<StudentAttendanceHistory> {
   const depts = (Array.isArray(departments) ? departments : [departments]).filter(Boolean).slice(0, MAX_DEPARTMENTS);
   if (depts.length === 0) return { subjects: [], total: { held: 0, attend: 0, percent: 0 } };

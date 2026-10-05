@@ -8,7 +8,10 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-type FirestoreTimestampLike = { _seconds: number; _nanoseconds?: number } | { seconds: number; nanoseconds?: number };
+export type FirestoreTimestampLike =
+  | { _seconds?: number; _nanoseconds?: number; toDate?: () => Date }
+  | { seconds?: number; nanoseconds?: number; toDate?: () => Date }
+  | { toDate?: () => Date; seconds?: number; _seconds?: number };
 
 export function toDate(timestamp: Timestamp | Date | FirestoreTimestampLike | string | null | undefined): Date | null {
   if (!timestamp) return null;
@@ -23,34 +26,92 @@ export function toDate(timestamp: Timestamp | Date | FirestoreTimestampLike | st
   // Timestamp to begin with) - fall back to parsing it directly rather than
   // silently collapsing to the Unix epoch.
   if (typeof timestamp === "string") {
-    const d = new Date(timestamp);
+    const trimmed = timestamp.trim();
+    const dmy = /^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/.exec(trimmed);
+    if (dmy) {
+      const [, dd, mm, yyyy] = dmy;
+      const d = new Date(Date.UTC(Number(yyyy), Number(mm) - 1, Number(dd)));
+      if (!Number.isNaN(d.getTime())) return d;
+    }
+    const d = new Date(trimmed);
     if (!Number.isNaN(d.getTime())) return d;
   }
   return null;
 }
 
-export function formatDate(timestamp: Timestamp | Date | FirestoreTimestampLike | null | undefined): string {
+export function formatDate(timestamp: Timestamp | Date | FirestoreTimestampLike | string | null | undefined): string {
+  if (typeof timestamp === "string") {
+    const trimmed = timestamp.trim();
+    const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmed);
+    if (iso) {
+      const [, yyyy, mm, dd] = iso;
+      const d = new Date(Date.UTC(Number(yyyy), Number(mm) - 1, Number(dd)));
+      return d.toLocaleDateString("en-IN", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+        timeZone: "UTC",
+      });
+    }
+    const dmy = /^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/.exec(trimmed);
+    if (dmy) {
+      const [, dd, mm, yyyy] = dmy;
+      const d = new Date(Date.UTC(Number(yyyy), Number(mm) - 1, Number(dd)));
+      return d.toLocaleDateString("en-IN", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+        timeZone: "UTC",
+      });
+    }
+  }
   const date = toDate(timestamp);
   if (!date) return "-";
   return date.toLocaleDateString("en-IN", {
     day: "2-digit",
     month: "short",
     year: "numeric",
+    timeZone: "Asia/Kolkata",
   });
 }
 
-// "17-08-2026" (dd-mm-yyyy) - the weekly timetable grid's own date style,
-// used both for a column's header date and inline next to a cross-week
-// substitution's "Substituting for X" label (see TimetableSlot.substituteDate)
-// so the two read consistently. Accepts either a Date (header) or a plain
-// "YYYY-MM-DD" key (substituteDate is stored as one, not a Firestore
-// Timestamp).
-export function formatDMY(input: Date | string | null | undefined): string {
-  const date = input instanceof Date ? input : toDate(input);
-  if (!date) return "";
-  const dd = String(date.getDate()).padStart(2, "0");
-  const mm = String(date.getMonth() + 1).padStart(2, "0");
-  return `${dd}-${mm}-${date.getFullYear()}`;
+// "17-08-2026" (dd-mm-yyyy) - DD-MM-YYYY date style, used for timetable
+// grids, substitutions, and resume exports. Accepts Timestamp, Date,
+// Firestore Timestamp-like, or plain "YYYY-MM-DD" / "DD-MM-YYYY" strings.
+// Safely anchored to Asia/Kolkata to prevent IST midnight day shifts.
+export function formatDMY(
+  input: Timestamp | Date | FirestoreTimestampLike | string | null | undefined
+): string {
+  if (!input) return "";
+  if (typeof input === "string") {
+    const trimmed = input.trim();
+    if (!trimmed) return "";
+    const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmed);
+    if (iso) {
+      const [, yyyy, mm, dd] = iso;
+      return `${dd}-${mm}-${yyyy}`;
+    }
+    const dmy = /^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/.exec(trimmed);
+    if (dmy) {
+      const [, dd, mm, yyyy] = dmy;
+      return `${dd.padStart(2, "0")}-${mm.padStart(2, "0")}-${yyyy}`;
+    }
+    if (/^\d{4}$/.test(trimmed)) {
+      return trimmed;
+    }
+  }
+  const date = toDate(input as Parameters<typeof toDate>[0]);
+  if (!date || Number.isNaN(date.getTime())) return typeof input === "string" ? input : "";
+  const parts = new Intl.DateTimeFormat("en-IN", {
+    timeZone: "Asia/Kolkata",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).formatToParts(date);
+  const dd = parts.find((p) => p.type === "day")?.value.padStart(2, "0") ?? String(date.getDate()).padStart(2, "0");
+  const mm = parts.find((p) => p.type === "month")?.value.padStart(2, "0") ?? String(date.getMonth() + 1).padStart(2, "0");
+  const yyyy = parts.find((p) => p.type === "year")?.value ?? String(date.getFullYear());
+  return `${dd}-${mm}-${yyyy}`;
 }
 
 // "09:00" -> "9:00 AM" - display only, stored/submitted values stay 24h "HH:MM".
@@ -84,15 +145,32 @@ export function formatDateTime(timestamp: Timestamp | Date | FirestoreTimestampL
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
+    timeZone: "Asia/Kolkata",
   });
 }
 
-// Formats a Firestore Timestamp (or admin-SDK-serialized equivalent) as a yyyy-mm-dd
+// Formats a Firestore Timestamp (or admin-SDK-serialized equivalent, or Date, or YYYY-MM-DD string) as a yyyy-mm-dd
 // string suitable for <input type="date">.
-export function toDateInputValue(timestamp: Timestamp | Date | FirestoreTimestampLike | null | undefined): string {
+export function toDateInputValue(timestamp: Timestamp | Date | FirestoreTimestampLike | string | null | undefined): string {
+  if (typeof timestamp === "string") {
+    const trimmed = timestamp.trim();
+    const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmed);
+    if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+    const dmy = /^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/.exec(trimmed);
+    if (dmy) {
+      const [, dd, mm, yyyy] = dmy;
+      return `${yyyy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`;
+    }
+  }
   const date = toDate(timestamp);
   if (!date) return "";
-  return date.toISOString().split("T")[0];
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  return formatter.format(date);
 }
 
 export function formatCurrency(amount: number): string {

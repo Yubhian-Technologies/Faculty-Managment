@@ -31,6 +31,18 @@ export async function createFirebaseUser(
   return data.localId;
 }
 
+/** Checks an email/password against Firebase Auth. Returns "ok", or the REST error code (e.g. INVALID_LOGIN_CREDENTIALS, USER_DISABLED). */
+export async function verifyPassword(email: string, password: string): Promise<string> {
+  const res = await fetch(`${BASE}/accounts:signInWithPassword?key=${API_KEY}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password, returnSecureToken: false }),
+  });
+  if (res.ok) return "ok";
+  const data = (await res.json().catch(() => ({}))) as FirebaseRestError;
+  return data.error?.message ?? "UNKNOWN";
+}
+
 export async function updateFirebaseUserEmail(
   uid: string,
   newEmail: string,
