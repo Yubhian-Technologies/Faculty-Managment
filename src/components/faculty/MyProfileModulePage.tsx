@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { FacultyProfileModuleContent } from "@/components/faculty/FacultyProfileModuleContent";
 import { PROFILE_MODULES, SELF_EDIT_DISABLED_MODULES, type ProfileModuleKey } from "@/lib/faculty/profileModules";
 import { useCollegeType } from "@/hooks/useCollegeType";
+import { useReadOnlyAccess } from "@/hooks/useReadOnlyAccess";
 import type { FacultyMember, TeachingAssignment } from "@/types";
 
 type MyFaculty = Partial<FacultyMember> & { id: string; isActive?: boolean };
@@ -20,6 +21,7 @@ type MyFaculty = Partial<FacultyMember> & { id: string; isActive?: boolean };
 // principal/profile/page.tsx), so it doesn't use this.
 export function MyProfileModulePage({ basePath, hideLegalName = false, ratificationHistory = false }: { basePath: string; hideLegalName?: boolean; ratificationHistory?: boolean }) {
   const params = useParams<{ module: string }>();
+  const readOnly = useReadOnlyAccess(); // RESIGNED/RETIRED: view only, no Edit button
   const moduleKey = params.module as ProfileModuleKey;
   const moduleDef = PROFILE_MODULES[moduleKey];
   const { collegeType } = useCollegeType();
@@ -53,7 +55,7 @@ export function MyProfileModulePage({ basePath, hideLegalName = false, ratificat
             <Button variant="outline" asChild>
               <Link href={basePath}><ArrowLeft className="h-4 w-4 mr-2" />Back</Link>
             </Button>
-            {!SELF_EDIT_DISABLED_MODULES.includes(moduleKey) && (
+            {!readOnly && !SELF_EDIT_DISABLED_MODULES.includes(moduleKey) && (
               <Button asChild>
                 <Link href={`${basePath}/${moduleKey}/edit`}><Pencil className="h-4 w-4 mr-2" />Edit</Link>
               </Button>

@@ -10,10 +10,7 @@
 // This module is deliberately pure (no Firestore, no Next imports) so proxy.ts
 // can import the header names. The enforcement lives in lib/auth/liveRoles.ts.
 //
-// The feature is OFF unless a college is listed in READ_ONLY_FACULTY_COLLEGES (a
-// comma-separated list of college ids, read from the environment - so a college
-// that is not listed costs ZERO extra Firestore reads and behaves exactly as
-// before).
+// Applies to EVERY college - there is no per-college switch.
 
 /** facultyMembers.status values that make a login read-only. */
 export const READ_ONLY_FACULTY_STATUSES = ["RESIGNED", "RETIRED"] as const;
@@ -32,16 +29,6 @@ export const FACULTY_CAPABLE_ROLES = ["PANEL_MEMBER", "HOD", "DEPARTMENT_OFFICE"
 
 export function isFacultyCapableRole(role: unknown): boolean {
   return typeof role === "string" && (FACULTY_CAPABLE_ROLES as readonly string[]).includes(role);
-}
-
-/** Parses READ_ONLY_FACULTY_COLLEGES ("idA, idB") into a set of college ids. */
-export function readOnlyFacultyColleges(raw: string | undefined = process.env.READ_ONLY_FACULTY_COLLEGES): Set<string> {
-  return new Set((raw ?? "").split(",").map((s) => s.trim()).filter(Boolean));
-}
-
-export function isReadOnlyFacultyCollege(collegeId: string | undefined, raw?: string): boolean {
-  if (!collegeId) return false;
-  return (raw === undefined ? readOnlyFacultyColleges() : readOnlyFacultyColleges(raw)).has(collegeId);
 }
 
 // ─── Request shape handed from proxy.ts to the role guard ──────────────────

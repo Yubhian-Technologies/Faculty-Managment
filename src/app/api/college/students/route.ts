@@ -11,6 +11,7 @@ import { StudentLoginError, provisionStudentLogin } from "@/lib/students/provisi
 import { departmentHistoryEntry } from "@/lib/students/departmentHistory";
 import { normalizeRosterDetails } from "@/lib/students/rosterFields";
 import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
+import { notConfiguredMessage } from "@/lib/college/taughtYears";
 import { resolveBranchYearOwner, resolveFreshmanLandingDepartment, type DepartmentYearRow } from "@/lib/departments/managedBranches";
 import { isConfiguredSecondaryDepartmentOrChild, resolveDepartmentByNameOrCode } from "@/lib/departments/codeOrNameResolver";
 import { getFacultyIdCandidates } from "@/lib/faculty/resolveFacultyMemberId";
@@ -610,8 +611,16 @@ export async function POST(request: Request) {
             assignedYears = resolveDepartmentCourseScope(parentSnap.data() as typeof deptScopeDoc, catalogId).assignedYears;
           }
         }
-        if (assignedYears.length > 0 && !assignedYears.includes(Number(body.year))) {
-          return NextResponse.json({ error: `"${dept}" is not assigned to teach Year ${body.year}` }, { status: 400 });
+        // Empty = not configured, NOT unrestricted (lib/college/taughtYears.ts).
+        if (!assignedYears.includes(Number(body.year))) {
+          return NextResponse.json(
+            {
+              error: assignedYears.length === 0
+                ? notConfiguredMessage(dept, body.year, courseName)
+                : `"${dept}" is not assigned to teach Year ${body.year}`,
+            },
+            { status: 400 }
+          );
         }
 
         // Secondary Department, when given, must actually be one this

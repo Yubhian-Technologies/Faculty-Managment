@@ -1,5 +1,5 @@
 import type { Firestore } from "firebase-admin/firestore";
-import { isReadOnlyFacultyCollege, isReadOnlyFacultyStatus, READ_ONLY_FACULTY_STATUSES } from "@/lib/auth/readOnlyAccess";
+import { isReadOnlyFacultyStatus, READ_ONLY_FACULTY_STATUSES } from "@/lib/auth/readOnlyAccess";
 
 /**
  * Whether this login's linked faculty record (facultyMembers.userUid == uid) is
@@ -24,11 +24,9 @@ export async function isFacultyExited(db: Firestore, collegeId: string, uid: str
 /**
  * Logins of every RESIGNED/RETIRED faculty member in the college - for the "who can I pick?" lists only
  * (Department Office, Sub-HOD, Leave Handover, Role Assignments), which must not offer someone who can no
- * longer be given a post. Switch-gated: an empty set and ZERO reads unless this college has read-only faculty
- * access switched on. One query (status in [...]), never a per-person read. Throws if Firestore fails.
+ * longer be given a post. One query (status in [...]), never a per-person read. Throws if Firestore fails.
  */
 export async function exitedFacultyUids(db: Firestore, collegeId: string): Promise<Set<string>> {
-  if (!isReadOnlyFacultyCollege(collegeId)) return new Set();
   const snap = await db
     .collection("colleges").doc(collegeId)
     .collection("facultyMembers")

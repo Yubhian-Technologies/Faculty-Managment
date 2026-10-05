@@ -382,7 +382,8 @@ export default function HODSectionsPage() {
       const manager = subDeptFilter ? groupingChildren.find((c) => c.name === subDeptFilter) : ownDept;
       if (!manager) return [];
       const managerYears = managerEffectiveYears(manager, departments, activeCatalogId);
-      return managerYears.length > 0 ? courseYears.filter((y) => managerYears.includes(y)) : courseYears;
+      // No Years Taught for the manager = no years (never every year of the course).
+      return courseYears.filter((y) => managerYears.includes(y));
     }
 
     const relevant = resolveScopeDepartments(ownDept, departments, isGroupingContainer, useCascadeFilter, groupingChildren, plainChildren, ownHasNoSections);

@@ -3,8 +3,7 @@ import { initializeApp, getApps, getApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 
 // R7 on a real Firestore (the local emulator), through the REAL routes: the pickers for Department Office,
-// Sub-HOD, Leave Handover and Role Assignments leave out RESIGNED/RETIRED people - in a switched-on college
-// only - and nothing stored changes. Skipped unless the emulator is running:
+// Sub-HOD, Leave Handover and Role Assignments leave out RESIGNED/RETIRED people - in every college - and nothing stored changes. Skipped unless the emulator is running:
 //   firebase emulators:exec --config <cfg> --only firestore --project demo-ex "npx vitest run src/lib/auth/exitedPickers.emulator.test.ts"
 
 const EMULATOR = !!process.env.FIRESTORE_EMULATOR_HOST;
@@ -40,7 +39,6 @@ describe.skipIf(!EMULATOR)("pickers leave out RESIGNED/RETIRED people (real Fire
 
   beforeEach(async () => {
     for (const n of ["users", "facultyMembers", "roleSeats", "departments", "leaveRequests", "auditLogs"]) for (const d of (await col(n).get()).docs) await d.ref.delete();
-    delete process.env.READ_ONLY_FACULTY_COLLEGES;
     who.uid = "hod"; who.role = "HOD";
     vi.spyOn(console, "error").mockImplementation(() => {});
     await db().collection("colleges").doc(C).set({ name: "C", seatsConvertedAt: new Date() }, { merge: true });
@@ -56,23 +54,16 @@ describe.skipIf(!EMULATOR)("pickers leave out RESIGNED/RETIRED people (real Fire
     await col("departments").doc("dMech").set({ collegeId: C, name: "Mech", code: "ME", isActive: true, hodUid: "hod", hodName: "HOD", createdAt: t });
   });
 
-  const ON = () => { process.env.READ_ONLY_FACULTY_COLLEGES = C; };
   const json = async (r: Response) => (await r.json()) as Record<string, unknown>;
 
-  it("exitedFacultyUids: OFF -> empty and ZERO reads; ON -> exactly the RESIGNED/RETIRED logins", async () => {
+  it("exitedFacultyUids: exactly the RESIGNED/RETIRED logins, in any college", async () => {
     const { exitedFacultyUids } = await import("@/lib/auth/readOnlyFacultyLookup");
-    let reads = 0;
-    const counting = new Proxy(db(), { get: (t, k) => { if (k === "collection") reads++; return Reflect.get(t, k).bind(t); } });
-    expect((await exitedFacultyUids(counting, C)).size).toBe(0);
-    expect(reads).toBe(0);
-    ON();
     expect([...(await exitedFacultyUids(db(), C))].sort()).toEqual(["resigned", "retired"]);
-    process.env.READ_ONLY_FACULTY_COLLEGES = "other";
-    expect((await exitedFacultyUids(db(), C)).size).toBe(0);
+    process.env.READ_ONLY_FACULTY_COLLEGES = "other"; // the old switch is gone - ignored
+    expect([...(await exitedFacultyUids(db(), C))].sort()).toEqual(["resigned", "retired"]);
   });
 
   it("Department Office / Sub-HOD source (users?role=PANEL_MEMBER): exited people are FLAGGED, nobody is removed or changed", async () => {
-    ON();
     const { GET } = await import("@/app/api/college/users/route");
     const before = await dump();
     const { users } = (await json(await GET(new Request("http://x/api/college/users?role=PANEL_MEMBER")))) as { users: { uid: string; facultyExited?: boolean }[] };
@@ -83,43 +74,28 @@ describe.skipIf(!EMULATOR)("pickers leave out RESIGNED/RETIRED people (real Fire
     expect(await dump()).toBe(before);
   });
 
-  it("OFF: users GET is unchanged (no flag anywhere)", async () => {
-    const { GET } = await import("@/app/api/college/users/route");
-    const { users } = (await json(await GET(new Request("http://x/api/college/users?role=PANEL_MEMBER")))) as { users: Record<string, unknown>[] };
-    expect(users.some((u) => "facultyExited" in u)).toBe(false);
-  });
-
   it("Role Assignments source (role-seats GET): exited people flagged, the people list is the same length", async () => {
     const { GET } = await import("@/app/api/college/role-seats/route");
-    const off = (await json(await GET(new Request("http://x/api/college/role-seats")))) as { people: { uid: string; facultyExited?: boolean }[] };
-    ON();
     const on = (await json(await GET(new Request("http://x/api/college/role-seats")))) as { people: { uid: string; facultyExited?: boolean }[] };
-    expect(off.people.some((p) => p.facultyExited)).toBe(false);
-    expect(on.people.length).toBe(off.people.length);
+    expect(on.people.length).toBeGreaterThanOrEqual(5);              // nobody is removed from the list itself
     expect(on.people.filter((p) => p.facultyExited).map((p) => p.uid).sort()).toEqual(["resigned", "retired"]);
   });
 
-  it("Leave Handover pickers filter exited people server-side (only when ON); a saved application's pool is untouched", async () => {
+  it("Leave Handover pickers filter exited people server-side ; a saved application's pool is untouched", async () => {
     who.uid = "active"; who.role = "PANEL_MEMBER";
     const { GET: candidates } = await import("@/app/api/leave/handover-candidates/route");
     const { GET: options } = await import("@/app/api/leave/role-handover-options/route");
     const uids = async (r: Response, key: string) => ((await json(r))[key] as { uid: string }[]).map((p) => p.uid).sort();
 
-    const offC = await uids(await candidates(new Request("http://x/api/leave/handover-candidates")), "candidates");
-    const offO = await uids(await options(new Request("http://x/api/leave/role-handover-options?department=Mech")), "people");
-    expect(offC).toEqual(expect.arrayContaining(["onleave", "resigned", "retired"]));
-    expect(offO).toEqual(expect.arrayContaining(["resigned", "retired"]));
-
-    ON();
     const onC = await uids(await candidates(new Request("http://x/api/leave/handover-candidates")), "candidates");
     const onO = await uids(await options(new Request("http://x/api/leave/role-handover-options?department=Mech")), "people");
-    expect(onC).toEqual(offC.filter((u) => u !== "resigned" && u !== "retired"));
-    expect(onO).toEqual(offO.filter((u) => u !== "resigned" && u !== "retired"));
-    expect(onC).toContain("onleave");                       // only RESIGNED/RETIRED are hidden
+    expect(onC).not.toContain("resigned"); expect(onC).not.toContain("retired");
+    expect(onO).not.toContain("resigned"); expect(onO).not.toContain("retired");
+    expect(onC).toEqual(expect.arrayContaining(["onleave", "nofac"]));   // only RESIGNED/RETIRED are hidden
+    expect(onO).toEqual(expect.arrayContaining(["onleave", "nofac"]));
   });
 
   it("a lookup failure shows everyone instead of hiding people (the server still refuses the appointment)", async () => {
-    ON();
     const mod = await import("@/lib/auth/readOnlyFacultyLookup");
     const bad = { collection: () => { throw new Error("firestore down"); } } as never;
     expect((await mod.exitedFacultyUidsOrNone(bad, C)).size).toBe(0);

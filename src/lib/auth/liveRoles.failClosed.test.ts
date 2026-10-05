@@ -7,6 +7,8 @@ vi.mock("@/lib/firebase/admin", () => ({
     collection: () => ({
       doc: () => ({
         collection: () => ({
+          // the faculty-status lookup (facultyMembers.where(userUid).limit(1)): no faculty record
+          where: () => ({ limit: () => ({ get: async () => ({ empty: true, docs: [] }) }) }),
           doc: () => ({
             get: async () => {
               if (h.fail) throw new Error("firestore unavailable");

@@ -14,7 +14,7 @@ type PerRole = Partial<Record<UserRole, string[]>>;
 // login holds comes from useMyAssignments (one request, cached).
 const TIMETABLE_INCHARGE_HREFS = [
   "/panel/timetable-incharge", "/panel/assignment-requests",
-  "/college-staff/timetable-incharge", "/college-staff/assignment-requests",
+  "/college-staff/timetable-incharge", "/college-staff/assignment-requests", "/college-staff/faculty-timetable",
 ];
 const SECTION_INCHARGE_HREFS = ["/panel/students", "/panel/students/batches"];
 const MID_PAPER_HREFS = ["/panel/mid-bank"];

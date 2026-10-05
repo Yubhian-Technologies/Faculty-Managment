@@ -109,9 +109,9 @@ function ExamCellConfigureForm() {
   // The union of every department's actually-assigned years for this course
   // name, not the raw 1..max(durationYears) span - Department isn't picked
   // yet at this point (Course -> Year -> Branch), so a year only appears at
-  // all if SOME department offering this course actually teaches it. Falls
-  // back to the full span only when no department has any explicit
-  // assignment, so an unconfigured college isn't locked out.
+  // all if SOME department offering this course actually teaches it. No
+  // department with Years Taught means no years: empty is "not configured",
+  // never "every year" (lib/college/taughtYears.ts).
   const yearOptions = useMemo(() => {
     const relevant = courses.filter((c) => c.name === courseName);
     const assigned = new Set<number>();
@@ -120,9 +120,7 @@ function ExamCellConfigureForm() {
       if (!dept) continue;
       for (const y of resolveDepartmentCourseScope(dept, c.catalogId).assignedYears) assigned.add(y);
     }
-    if (assigned.size > 0) return Array.from(assigned).sort((a, b) => a - b);
-    const duration = Math.max(0, ...relevant.map((c) => c.durationYears));
-    return Array.from({ length: duration }, (_, i) => i + 1);
+    return Array.from(assigned).sort((a, b) => a - b);
   }, [courses, courseName, departmentById]);
 
   // Previously offered every department that merely owns a Course row for
@@ -133,16 +131,10 @@ function ExamCellConfigureForm() {
   // included).
   //
   // A department with NO explicit assignedYears (flat or per-course
-  // override) is unconfigured, not "assigned to nothing" - every other
-  // assignedYears check across the app (sections/students/subjects routes,
-  // this same page's own yearOptions fallback) treats an empty array as "no
-  // restriction, offers every year of the course" and only narrows once a
-  // department has actually set something. This memo used to skip that
-  // fallback and do a bare `.includes(yearNum)`, which silently excluded any
-  // never-explicitly-scoped department (e.g. COMPUTER SCIENCE) from every
-  // Branch list even though it structurally teaches all of that course's
-  // years - bounded by the course's own durationYears so an unconfigured
-  // department still can't offer a year beyond what the course even runs.
+  // override) is unconfigured: it offers no year until its Years Taught is
+  // set. Empty never means "every year of the course" - the sections/students/
+  // subjects routes and this page's yearOptions all agree
+  // (lib/college/taughtYears.ts).
   const branchOptions = useMemo(() => {
     if (!courseName || !year) return [];
     const yearNum = Number(year);
@@ -153,9 +145,7 @@ function ExamCellConfigureForm() {
         const dept = departmentById.get(c.departmentId);
         if (!dept) return;
         const assignedYears = resolveDepartmentCourseScope(dept, c.catalogId).assignedYears;
-        const offersYear = assignedYears.length > 0
-          ? assignedYears.includes(yearNum)
-          : yearNum >= 1 && yearNum <= c.durationYears;
+        const offersYear = assignedYears.includes(yearNum);
         if (!offersYear) return;
         seen.set(c.departmentId, departmentNameById.get(c.departmentId) ?? c.departmentId);
       });

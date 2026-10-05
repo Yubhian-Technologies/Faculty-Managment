@@ -243,17 +243,15 @@ export default function TeachingAssignmentsPage() {
     const assigned = new Set<number>();
     // A year some OTHER department already claims as a feeder FOR one of
     // `relevant` (e.g. Basic Science owning year 1 of a shared-first-year
-    // B.Tech) is never this HOD's own to staff, even when nothing here ends
-    // up "assigned" and the fallback below would otherwise offer every year -
-    // see fedYears.
+    // B.Tech) is never this HOD's own to staff - see fedYears. Nothing
+    // assigned means no years (never "every year": lib/college/taughtYears.ts).
     const excluded = new Set<number>();
     for (const d of relevant) {
       for (const y of managerEffectiveYears(d, departments, course.catalogId)) assigned.add(y);
       for (const y of fedYears(d, departments, course.catalogId)) excluded.add(y);
     }
     const courseYears = Array.from({ length: course.durationYears }, (_, i) => i + 1);
-    const base = assigned.size > 0 ? courseYears.filter((y) => assigned.has(y)) : courseYears;
-    return base.filter((y) => !excluded.has(y));
+    return courseYears.filter((y) => assigned.has(y) && !excluded.has(y));
   }, [course, subDepartmentOptions, scope.ownDept, departments]);
 
   // Keyed on the course ids, not just the group: if the scope-wide course fetch

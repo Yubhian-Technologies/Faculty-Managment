@@ -16,6 +16,7 @@ import { isNavItemActive, filterVisibleNavItems, isPathHidden, ROLES_WITH_EMBEDD
 import { NavIcon } from "./NavIcon";
 import { useCustomNav } from "@/hooks/useCustomNav";
 import { WorkContextSwitcher } from "./WorkContextSwitcher";
+import { readOnlyNavItems } from "./readOnlyNav";
 import { LocationDeptSwitcher } from "./LocationDeptSwitcher";
 import { useWorkContext } from "@/hooks/useWorkContext";
 import { OrgScopeTree } from "./OrgScopeTree";
@@ -96,6 +97,8 @@ export function Sidebar({ hiddenModules, hiddenItems }: SidebarProps) {
 
   // Super-Admin-built tabs and tab order for this college (no-op when none).
   navItems = applyCustomNav(navItems, hiddenItems);
+  // RESIGNED/RETIRED: a fixed, view-only menu (see readOnlyNavItems) instead of the normal one.
+  if (user.readOnlyAccess) navItems = readOnlyNavItems();
 
   return (
     <aside className="hidden md:flex md:flex-col w-64 border-r bg-background h-screen fixed top-0 left-0 z-30">

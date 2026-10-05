@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { courseYearNumbers } from "@/lib/college/courseYears";
 import { Plus, Trash2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -59,7 +60,6 @@ export function normalizeResourcePersonsDetails(value: string[] | string | undef
   return [];
 }
 
-const YEARS = [1, 2, 3, 4];
 
 interface DepartmentOption { id: string; name: string; }
 interface CourseOption { id: string; name: string; departmentId: string; department: string; durationYears: number; }
@@ -152,7 +152,8 @@ function AddBeneficiaryDepartment({
   const [loading, setLoading] = useState(false);
 
   const selectedCourse = courses.find((c) => c.id === courseId);
-  const yearOptions = selectedCourse ? YEARS.filter((y) => y <= selectedCourse.durationYears) : YEARS;
+  // The selected course's own years (the Year picker is disabled until a course is chosen).
+  const yearOptions = selectedCourse ? courseYearNumbers(selectedCourse.durationYears) : [];
   const isDuplicate = !!selectedCourse && !!year && existingCourseYears.has(`${selectedCourse.id}:${year}`);
 
   function selectCourse(v: string) {

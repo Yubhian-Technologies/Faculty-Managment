@@ -30,7 +30,6 @@ describe.skipIf(!EMULATOR)("read-only follows facultyMembers.status (real Firest
 
   beforeEach(async () => {
     process.env.SESSION_SECRET = "t";
-    process.env.READ_ONLY_FACULTY_COLLEGES = C;
     const { signSession } = await import("@/lib/auth/sessionToken");
     cookieJar.set("fms-session", await signSession({ uid: "ux", email: "e@x.y", role: "PANEL_MEMBER", roles: ["HOD", "PANEL_MEMBER"], collegeId: C, exp: Math.floor(Date.now() / 1000) + 3600 }));
     await college().collection("users").doc("ux").set({ role: "PANEL_MEMBER", seatRoles: ["HOD"], isActive: true });
@@ -38,7 +37,7 @@ describe.skipIf(!EMULATOR)("read-only follows facultyMembers.status (real Firest
     const { forgetHeldRoles } = await import("@/lib/auth/liveRoles");
     forgetHeldRoles(C, "ux");
   });
-  afterEach(() => { delete process.env.READ_ONLY_FACULTY_COLLEGES; });
+  afterEach(() => { });
 
   it("ACTIVE -> full access; RESIGNED -> own reads only; back to ACTIVE -> full access again", async () => {
     expect(await call("POST", "/api/college/students", ["HOD", "PANEL_MEMBER"])).not.toBeNull();
