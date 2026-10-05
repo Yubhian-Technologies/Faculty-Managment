@@ -1,5 +1,7 @@
 import type { Firestore } from "firebase-admin/firestore";
 import { defaultPeriodTimings } from "@/lib/timetable/buildGrid";
+import { resolveBranchYearOwner, type DepartmentYearRow } from "@/lib/departments/managedBranches";
+import { notify } from "@/lib/notify";
 import type { CourseYearTiming, FacultyAssignmentRequest, PeriodTiming } from "@/types";
 
 // A lending department's busyPeriods declaration (see
@@ -118,4 +120,51 @@ export async function loadUserRole(db: Firestore, collegeId: string, uid: string
   const snap = await db.collection("colleges").doc(collegeId).collection("users").doc(uid).get();
   const d = snap.data() as { role?: string; realRole?: string } | undefined;
   return d?.realRole ?? d?.role;
+}
+
+/**
+ * Everyone who places a lent-in subject on a section: whoever raised the
+ * request, plus the HOD of the department that actually runs the section's
+ * year - for a managed branch's shared year that is the Sub-HOD who groups it
+ * (resolveBranchYearOwner), who may never have raised the request themselves.
+ */
+export async function lendRecipientUids(
+  db: Firestore,
+  collegeId: string,
+  r: Pick<FacultyAssignmentRequest, "requestedBy" | "requestingDepartment" | "year" | "courseId">,
+): Promise<string[]> {
+  const collegeRef = db.collection("colleges").doc(collegeId);
+  const [deptsSnap, courseSnap] = await Promise.all([
+    collegeRef.collection("departments").get(),
+    collegeRef.collection("courses").doc(r.courseId).get(),
+  ]);
+  const departments = deptsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as (DepartmentYearRow & { name?: string; hodUid?: string })[];
+  const catalogId = (courseSnap.data() as { catalogId?: string } | undefined)?.catalogId;
+  const ownerName = resolveBranchYearOwner(departments, r.requestingDepartment, Number(r.year), catalogId);
+  const uids = new Set<string>([r.requestedBy]);
+  for (const d of departments) {
+    if ((d.name === ownerName || d.name === r.requestingDepartment) && d.hodUid) uids.add(d.hodUid);
+  }
+  // The Timetable Incharge delegated this exact course-year does the same
+  // placement work as the Sub-HOD, so they need the same heads-up.
+  const inchargeSnap = await collegeRef.collection("timetableIncharges").doc(`${r.courseId}_year${r.year}`).get();
+  const inchargeUid = (inchargeSnap.data() as { uid?: string } | undefined)?.uid;
+  if (inchargeUid) uids.add(inchargeUid);
+  return Array.from(uids);
+}
+
+/** Notifies every lendRecipientUids person, each linked to the timetable page for their own role. */
+export async function notifyLendRecipients(
+  db: Firestore,
+  collegeId: string,
+  r: Pick<FacultyAssignmentRequest, "requestedBy" | "requestingDepartment" | "year" | "courseId" | "sectionId">,
+  type: string,
+  title: string,
+  message: string,
+): Promise<void> {
+  const uids = await lendRecipientUids(db, collegeId, r);
+  await Promise.all(uids.map(async (uid) => {
+    const role = await loadUserRole(db, collegeId, uid);
+    await notify(db, collegeId, uid, type, title, message, requesterTimetableLink(role, r));
+  }));
 }

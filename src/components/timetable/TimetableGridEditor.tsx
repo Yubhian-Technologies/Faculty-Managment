@@ -180,7 +180,7 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
           .then((r) => r.json() as Promise<{ assignments: TeachingAssignment[] }>),
         fetch("/api/college/faculty?availableOnly=true")
           .then((r) => r.json() as Promise<{ faculty: { id: string; accessLevel?: string }[] }>),
-        fetch("/api/college/faculty-assignment-requests")
+        fetch(`/api/college/faculty-assignment-requests?sectionId=${encodeURIComponent(sectionId)}`)
           .then((r) => r.json() as Promise<{ requests: FacultyAssignmentRequest[] }>),
       ]);
 
@@ -393,6 +393,24 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
       setDraft((d) => (d ? { ...d, slots: json.slots ?? d.slots, status: "DRAFT" } : d));
       setAddingAt(null);
       if (json.adjustedNote) toast({ title: "Lab spans a break", description: json.adjustedNote });
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  /** Deletes one pinned (live, manually placed) period. A pinned lab block is one slot per period, so each is removed on its own. */
+  async function handleRemovePinned(slotId: string, subjectName: string) {
+    if (!window.confirm(`Remove the pinned period for ${subjectName}? This changes the live timetable immediately.`)) return;
+    setBusy("move");
+    try {
+      const res = await fetch(`/api/college/timetable-slots/${encodeURIComponent(slotId)}`, { method: "DELETE" });
+      if (!res.ok) {
+        const json = (await res.json().catch(() => ({}))) as { error?: string };
+        toast({ variant: "destructive", title: "Could not remove", description: json.error });
+        return;
+      }
+      setSlots((prev) => prev.filter((x) => (x as TimetableSlot & { id?: string }).id !== slotId));
+      toast({ title: "Pinned period removed" });
     } finally {
       setBusy(null);
     }
@@ -924,7 +942,13 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
                                 selected.assignmentId === dSlot.assignmentId &&
                                 selected.day === dSlot.day &&
                                 selected.periodNumber === dSlot.periodNumber;
-                              const clickable = mode === "draft" && isEditing && !isLocked;
+                              // The section's own HOD may select (and so remove) a placement locked only
+                              // because its teaching assignment no longer exists - otherwise those stale
+                              // cells could never be cleared short of discarding the whole draft - and may
+                              // remove a pinned (live, manually placed) slot. Anyone else's slot seen
+                              // cross-department stays locked.
+                              const clickable = mode === "draft" && isEditing && (!isLocked || !isCrossDepartment);
+                              const pinnedId = isPinned && !isCrossDepartment ? (slot as TimetableSlot & { id?: string }).id : undefined;
                               const substituteFacultyName = "substituteFacultyName" in slot ? slot.substituteFacultyName : undefined;
 
                               return (
@@ -974,6 +998,21 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
                                       className="mt-1.5 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium text-destructive hover:bg-destructive/10"
                                     >
                                       <Trash2 className="h-3 w-3" />Remove
+                                    </span>
+                                  )}
+                                  {pinnedId && mode === "draft" && isEditing && (
+                                    <span
+                                      role="button"
+                                      tabIndex={0}
+                                      onClick={(e) => { e.stopPropagation(); void handleRemovePinned(pinnedId, slot.subjectName); }}
+                                      onKeyDown={(e) => {
+                                        if (e.key === "Enter" || e.key === " ") {
+                                          e.preventDefault(); e.stopPropagation(); void handleRemovePinned(pinnedId, slot.subjectName);
+                                        }
+                                      }}
+                                      className="mt-1.5 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium text-destructive hover:bg-destructive/10"
+                                    >
+                                      <Trash2 className="h-3 w-3" />Remove pinned
                                     </span>
                                   )}
                                 </button>
