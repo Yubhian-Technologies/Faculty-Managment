@@ -10,6 +10,7 @@ import { isoDateKey } from "@/lib/leave/dayCounter";
 import { sectionDisplayLabel } from "@/lib/sections/sectionLabel";
 import { ordinalYear } from "@/lib/timetable/gridModel";
 import type { Course, CourseYearTiming, DayOfWeek, Department, Section, Subject, TimetableSlot } from "@/types";
+import { yearSemesterLabel } from "@/lib/academic/format";
 
 // Read-only, download-only counterpart of /hod/timetable (the editor): year ->
 // semester -> section, then Load shows the published timetable, with PDF/Excel
@@ -180,7 +181,7 @@ export default function HODTimetableViewPage() {
             disabled={!year || semesterOptions.length === 0}
           >
             <option value="">{!year ? "Select a year" : semesterOptions.length === 0 ? "No semesters" : "Select semester"}</option>
-            {semesterOptions.map((n) => <option key={n} value={n}>Semester {n}</option>)}
+            {semesterOptions.map((n) => <option key={n} value={n}>{yearSemesterLabel(n)}</option>)}
           </select>
         </div>
         <div className="space-y-1.5">
@@ -237,7 +238,7 @@ export default function HODTimetableViewPage() {
           courseName={course?.name}
           departmentName={departments.find((d) => d.name === loadedSection?.department)?.name ?? loadedSection?.department}
           academicYear={slots[0]?.academicYear}
-          semesterLabel={loadedSemester != null ? `Semester ${loadedSemester}` : undefined}
+          semesterLabel={loadedSemester != null ? `Sem ${yearSemesterLabel(loadedSemester)}` : undefined}
           workingDays={workingDays}
           weekStart={weekStart}
           onWeekChange={setWeekStart}

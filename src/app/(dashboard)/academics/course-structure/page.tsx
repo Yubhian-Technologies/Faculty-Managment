@@ -22,6 +22,7 @@ import {
 import type { CourseStructureResult, CourseStructureScopeSummary } from "@/lib/subjects/services/CourseStructureImportService";
 import { SUBJECT_CATEGORY_LABELS } from "@/types";
 import { Download, Upload, XCircle, FileSpreadsheet, ArrowLeft, AlertTriangle, Loader2 } from "lucide-react";
+import { yearSemesterLabel } from "@/lib/academic/format";
 
 // Academics > Course Structure. One file = every subject of one
 // Regulation + Course + Department, created and assigned to that
@@ -477,7 +478,7 @@ function CourseStructurePageInner() {
                         return (
                           <div key={sem} className="min-w-0 px-3 py-2 space-y-1.5">
                             <p className="text-sm font-medium">
-                              Semester {sem}
+                              Sem {yearSemesterLabel(sem)}
                               <span className="ml-2 font-normal text-muted-foreground">
                                 {subjects.length} subject{subjects.length !== 1 ? "s" : ""}
                                 {!configured.includes(sem) && ", not in Course-Year Timings"}

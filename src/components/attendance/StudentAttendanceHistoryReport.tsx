@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SegmentedTabs } from "@/components/shared/SegmentedTabs";
 import { toast } from "@/hooks/useToast";
+import { yearSemesterLabel } from "@/lib/academic/format";
 
 const MONTH_LABELS = [
   "January", "February", "March", "April", "May", "June",
@@ -154,7 +155,7 @@ export function StudentAttendanceHistoryReport({
         setShownRangeLabel(`${ddmmyyyy(from)} to ${ddmmyyyy(to)}`);
       } else if (mode === "semester") {
         params.set("semester", String(semester));
-        setShownRangeLabel(`Semester ${semester}`);
+        setShownRangeLabel(`Sem ${yearSemesterLabel(Number(semester))}`);
       } else {
         setShownRangeLabel("entire history");
       }
@@ -256,7 +257,7 @@ export function StudentAttendanceHistoryReport({
                   onChange={(e) => setSemester(e.target.value ? Number(e.target.value) : null)}
                 >
                   <option value="">Select</option>
-                  {availableSemesters.map((s) => <option key={s} value={s}>Semester {s}</option>)}
+                  {availableSemesters.map((s) => <option key={s} value={s}>{yearSemesterLabel(s)}</option>)}
                 </select>
               </div>
             )}

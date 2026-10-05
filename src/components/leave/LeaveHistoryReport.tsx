@@ -252,25 +252,39 @@ export function LeaveHistoryReport({ apiUrl, queryKey, employeeHrefBase, emptyTi
   const [category, setCategory] = useState<EffectiveLeaveCategory>("vacation");
   const [search, setSearch] = useState("");
   const [isExportingPdf, setIsExportingPdf] = useState(false);
+  // What Load last asked for. The register used to fetch the moment the page
+  // opened and again on every picker change - a whole department's year of
+  // balances pulled before anyone had said which month they wanted. Nothing
+  // is fetched until this is set.
+  const [applied, setApplied] = useState<{ mode: "month" | "year"; year: number; month: number } | null>(null);
+
+  // Everything that reads the DATA - the queries, the exports, the table's own
+  // month arithmetic - goes through these, never the live pickers above. A
+  // picker moved but not yet loaded must not relabel the rows already on
+  // screen as belonging to a month they were never fetched for.
+  const shownMode = applied?.mode ?? mode;
+  const shownYear = applied?.year ?? year;
+  const shownMonth = applied?.month ?? month;
+  const filtersMoved = !!applied && (applied.mode !== mode || applied.year !== year || (mode === "month" && applied.month !== month));
 
   const monthlyQuery = useQuery({
-    queryKey: [...queryKey, "month", year, month],
+    queryKey: [...queryKey, "month", shownYear, shownMonth],
     queryFn: () =>
-      fetch(`${apiUrl}${apiUrl.includes("?") ? "&" : "?"}year=${year}&month=${month}`)
+      fetch(`${apiUrl}${apiUrl.includes("?") ? "&" : "?"}year=${shownYear}&month=${shownMonth}`)
         .then((r) => r.json() as Promise<{ department: Department; rows: LeaveHistoryReportRow[]; location?: string; holidaysCount?: number; holidaysByMonth?: number[] }>),
-    enabled: mode === "month",
+    enabled: applied?.mode === "month",
   });
 
   const yearlyApiUrl = toYearlyApiUrl(apiUrl);
   const yearlyQuery = useQuery({
-    queryKey: [...queryKey, "year", year],
+    queryKey: [...queryKey, "year", shownYear],
     queryFn: () =>
-      fetch(`${yearlyApiUrl}${yearlyApiUrl.includes("?") ? "&" : "?"}year=${year}`)
+      fetch(`${yearlyApiUrl}${yearlyApiUrl.includes("?") ? "&" : "?"}year=${shownYear}`)
         .then((r) => r.json() as Promise<{ department: Department; rows: LeaveYearlyReportRow[]; location?: string; holidaysCount?: number; holidaysByMonth?: number[] }>),
-    enabled: mode === "year",
+    enabled: applied?.mode === "year",
   });
 
-  const { data, isLoading } = mode === "month" ? monthlyQuery : yearlyQuery;
+  const { data, isLoading } = shownMode === "month" ? monthlyQuery : yearlyQuery;
   const categoryRows = showCategoryFilter
     ? (data?.rows ?? []).filter((row) => row.category === category)
     : (data?.rows ?? []);
@@ -287,7 +301,7 @@ export function LeaveHistoryReport({ apiUrl, queryKey, employeeHrefBase, emptyTi
     const department = data?.department?.name ?? "";
     const location = data?.location ?? "";
     const holidaysByMonth = data?.holidaysByMonth ?? [];
-    return mode === "month"
+    return shownMode === "month"
       ? (rows as LeaveHistoryReportRow[]).map((row, i) =>
           exportRow({
             sno: i + 1,
@@ -295,11 +309,11 @@ export function LeaveHistoryReport({ apiUrl, queryKey, employeeHrefBase, emptyTi
             name: row.name,
             department,
             dateOfJoining: row.dateOfJoining,
-            payrollMonth: formatPayrollMonth(year, month),
+            payrollMonth: formatPayrollMonth(shownYear, shownMonth),
             period: row,
             category: row.category,
             location,
-            weeklyOffs: countSundaysInMonth(year, month),
+            weeklyOffs: countSundaysInMonth(shownYear, shownMonth),
             holidays: data?.holidaysCount ?? 0,
           })
         )
@@ -311,11 +325,11 @@ export function LeaveHistoryReport({ apiUrl, queryKey, employeeHrefBase, emptyTi
               name: row.name,
               department,
               dateOfJoining: row.dateOfJoining,
-              payrollMonth: formatPayrollMonth(year, m.month),
+              payrollMonth: formatPayrollMonth(shownYear, m.month),
               period: m,
               category: row.category,
               location,
-              weeklyOffs: countSundaysInMonth(year, m.month),
+              weeklyOffs: countSundaysInMonth(shownYear, m.month),
               holidays: holidaysByMonth[m.month - 1] ?? 0,
             })
           ),
@@ -329,13 +343,13 @@ export function LeaveHistoryReport({ apiUrl, queryKey, employeeHrefBase, emptyTi
             period: row.totals,
             category: row.category,
             location,
-            weeklyOffs: totalSundaysInYear(year),
+            weeklyOffs: totalSundaysInYear(shownYear),
             holidays: holidaysByMonth.reduce((s, n) => s + n, 0),
           }),
         ]);
   }
 
-  const exportFilenameBase = `leave-history-${mode === "month" ? `${year}-${String(month).padStart(2, "0")}` : year}`;
+  const exportFilenameBase = `leave-history-${shownMode === "month" ? `${shownYear}-${String(shownMonth).padStart(2, "0")}` : shownYear}`;
 
   function handleExportExcel() {
     downloadCSV(toCSV([EXPORT_HEADERS, ...buildExportRows()]), `${exportFilenameBase}.csv`);
@@ -348,7 +362,7 @@ export function LeaveHistoryReport({ apiUrl, queryKey, employeeHrefBase, emptyTi
     setIsExportingPdf(true);
     try {
       const exportRows = buildExportRows();
-      const title = `Leave History Register - ${data?.department?.name ?? ""} (${mode === "month" ? `${MONTH_NAMES[month - 1]} ${year}` : year})`;
+      const title = `Leave History Register - ${data?.department?.name ?? ""} (${shownMode === "month" ? `${MONTH_NAMES[shownMonth - 1]} ${shownYear}` : shownYear})`;
       const tableHead = `<tr>${EXPORT_HEADERS.map((h) => `<th style="border:1px solid #999;background:#0a0a7a;color:#fff;padding:4px 6px;font-size:9px;white-space:nowrap;">${h}</th>`).join("")}</tr>`;
       const tableBody = exportRows
         .map(
@@ -367,7 +381,7 @@ export function LeaveHistoryReport({ apiUrl, queryKey, employeeHrefBase, emptyTi
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center gap-3 justify-between">
+      <div className="flex flex-wrap items-center gap-3">
         <div className="flex flex-wrap items-center gap-3">
           {showCategoryFilter && (
             <SegmentedTabs value={category} onChange={(key) => setCategory(key as EffectiveLeaveCategory)} options={CATEGORY_TABS} />
@@ -407,6 +421,15 @@ export function LeaveHistoryReport({ apiUrl, queryKey, employeeHrefBase, emptyTi
               ))}
             </SelectContent>
           </Select>
+          {/* Last control of the filter group, as on every other converted
+              screen - everything to its left is read when it is pressed. */}
+          <Button size="sm" onClick={() => setApplied({ mode, year, month })} loading={isLoading}>
+            <Search className="h-4 w-4 mr-1" />
+            {applied ? "Reload" : "Load"}
+          </Button>
+        </div>
+        {/* Exports are not filters - kept apart from them, hard right. */}
+        <div className="flex items-center gap-3 ml-auto">
           <Button variant="outline" size="sm" onClick={handleExportExcel} disabled={rows.length === 0}>
             <FileSpreadsheet className="h-4 w-4 mr-1" />
             Excel
@@ -418,6 +441,17 @@ export function LeaveHistoryReport({ apiUrl, queryKey, employeeHrefBase, emptyTi
         </div>
       </div>
 
+      {filtersMoved && (
+        <p className="text-xs text-muted-foreground">
+          Filters have changed since this was loaded &mdash; press Reload to apply them.
+        </p>
+      )}
+
+      {!applied ? (
+        <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+          Choose a month or full year, then press Load.
+        </div>
+      ) : (
       <Card>
         <CardContent className="p-0">
           {isLoading ? (
@@ -442,9 +476,9 @@ export function LeaveHistoryReport({ apiUrl, queryKey, employeeHrefBase, emptyTi
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full border-collapse">
-                <ReportTableHead monthColumn={mode === "year"} />
+                <ReportTableHead monthColumn={shownMode === "year"} />
                 <tbody>
-                  {mode === "month"
+                  {shownMode === "month"
                     ? (rows as LeaveHistoryReportRow[]).map((row, i) => (
                         <tr key={row.uid} className="hover:bg-muted/40">
                           <td className={td}>{i + 1}</td>
@@ -456,7 +490,7 @@ export function LeaveHistoryReport({ apiUrl, queryKey, employeeHrefBase, emptyTi
                             {roleTag(row.role) && <span className="text-xs text-muted-foreground"> ({roleTag(row.role)})</span>}
                           </td>
                           <td className={td}>{row.category ? EFFECTIVE_CATEGORY_LABELS[row.category] : "-"}</td>
-                          <PeriodCells period={row} weeklyOffs={countSundaysInMonth(year, month)} holidays={data?.holidaysCount ?? 0} />
+                          <PeriodCells period={row} weeklyOffs={countSundaysInMonth(shownYear, shownMonth)} holidays={data?.holidaysCount ?? 0} />
                         </tr>
                       ))
                     : (rows as LeaveYearlyReportRow[]).map((row, i) => (
@@ -477,12 +511,12 @@ export function LeaveHistoryReport({ apiUrl, queryKey, employeeHrefBase, emptyTi
                                 </>
                               )}
                               <td className={td}>{MONTH_NAMES[m.month - 1]}</td>
-                              <PeriodCells period={m} weeklyOffs={countSundaysInMonth(year, m.month)} holidays={data?.holidaysByMonth?.[m.month - 1] ?? 0} />
+                              <PeriodCells period={m} weeklyOffs={countSundaysInMonth(shownYear, m.month)} holidays={data?.holidaysByMonth?.[m.month - 1] ?? 0} />
                             </tr>
                           ))}
                           <tr className="bg-muted/60 font-semibold">
                             <td className={td}>Total</td>
-                            <PeriodCells period={row.totals} weeklyOffs={totalSundaysInYear(year)} holidays={(data?.holidaysByMonth ?? []).reduce((s, n) => s + n, 0)} />
+                            <PeriodCells period={row.totals} weeklyOffs={totalSundaysInYear(shownYear)} holidays={(data?.holidaysByMonth ?? []).reduce((s, n) => s + n, 0)} />
                           </tr>
                         </Fragment>
                       ))}
@@ -492,6 +526,7 @@ export function LeaveHistoryReport({ apiUrl, queryKey, employeeHrefBase, emptyTi
           )}
         </CardContent>
       </Card>
+      )}
     </div>
   );
 }
