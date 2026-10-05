@@ -1,11 +1,14 @@
 "use client";
 
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Search } from "lucide-react";
 import { ActiveLeaveNowCard } from "@/components/leave/ActiveLeaveNowCard";
 import { NON_DEPARTMENTAL_STAFF_ROLES } from "@/lib/leave/nonDepartmentalStaffRoles";
 import { ROLE_LABELS } from "@/types";
@@ -13,6 +16,16 @@ import type { Department } from "@/types";
 
 export default function PrincipalLeaveHistoryDepartmentsPage() {
   const router = useRouter();
+  // Picking from either dropdown used to navigate on the spot, so a mis-click
+  // loaded a whole department's register and the only way back was the browser
+  // button. The choice is held here instead and acted on by Load.
+  //
+  // The two are alternatives, not a pair - a register belongs to a department
+  // OR to a college-wide role - so choosing one clears the other rather than
+  // leaving a stale value behind for Load to pick the wrong one from.
+  const [deptId, setDeptId] = useState("");
+  const [role, setRole] = useState("");
+  const target = deptId || role;
 
   const { data: departments = [], isLoading } = useQuery({
     queryKey: ["principal-leave-history-departments"],
@@ -48,8 +61,9 @@ export default function PrincipalLeaveHistoryDepartmentsPage() {
           <div className="space-y-2">
             <Label>Department</Label>
             <Select
+              value={deptId}
               disabled={isLoading || topLevelDepartments.length === 0}
-              onValueChange={(deptId) => router.push(`/principal/leave-history/${deptId}`)}
+              onValueChange={(v) => { setDeptId(v); setRole(""); }}
             >
               <SelectTrigger>
                 <SelectValue placeholder={isLoading ? "Loading..." : topLevelDepartments.length === 0 ? "No departments yet" : "Select a department..."} />
@@ -70,7 +84,7 @@ export default function PrincipalLeaveHistoryDepartmentsPage() {
               department - each gets its own leave register instead. */}
           <div className="space-y-2">
             <Label>Role</Label>
-            <Select onValueChange={(role) => router.push(`/principal/leave-history/${role}`)}>
+            <Select value={role} onValueChange={(v) => { setRole(v); setDeptId(""); }}>
               <SelectTrigger>
                 <SelectValue placeholder="Select a role..." />
               </SelectTrigger>
@@ -80,6 +94,13 @@ export default function PrincipalLeaveHistoryDepartmentsPage() {
                 ))}
               </SelectContent>
             </Select>
+          </div>
+
+          <div className="sm:col-span-2">
+            <Button onClick={() => target && router.push(`/principal/leave-history/${target}`)} disabled={!target}>
+              <Search className="h-4 w-4 mr-1.5" />
+              Load
+            </Button>
           </div>
         </CardContent>
       </Card>

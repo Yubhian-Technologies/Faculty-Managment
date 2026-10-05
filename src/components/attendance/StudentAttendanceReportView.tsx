@@ -11,7 +11,9 @@ import { toast } from "@/hooks/useToast";
 import { exportToCSV } from "@/lib/utils";
 import { formatPercent } from "@/lib/studentAttendance/percentage";
 import { applyStudentFilters, NO_FILTERS, type StudentReportFilters } from "@/lib/studentAttendance/reportFilters";
-import type { Course, SectionListItem } from "@/types";
+import { resolveDepartmentCourseScope } from "@/lib/college/academicStructure";
+import type { Course, Department, SectionListItem } from "@/types";
+import { yearSemesterLabel } from "@/lib/academic/format";
 
 const ALL = "__all__";
 // Below this a student is in shortage; colours the percentages in the tables.
@@ -91,6 +93,7 @@ export function StudentAttendanceReportView({ title = "Student Attendance", scop
   const [pickedSubjects, setPickedSubjects] = useState<string[]>([]);
   const [batchOn, setBatchOn] = useState(false);
   const [pickedBatches, setPickedBatches] = useState<string[]>([]);
+  const [departmentDocs, setDepartmentDocs] = useState<Department[]>([]);
   const [percentOn, setPercentOn] = useState(false);
   const [minPercent, setMinPercent] = useState("");
   const [maxPercent, setMaxPercent] = useState("");
@@ -109,8 +112,12 @@ export function StudentAttendanceReportView({ title = "Student Attendance", scop
         // Course length (years) decides how far up the semester list goes. Best
         // effort: without it the list stops at the highest year with a section.
         try {
-          const c = await fetch("/api/college/courses").then((r) => r.json() as Promise<{ courses?: Course[] }>);
+          const [c, d] = await Promise.all([
+            fetch("/api/college/courses").then((r) => r.json() as Promise<{ courses?: Course[] }>),
+            fetch("/api/college/departments").then((r) => r.json() as Promise<{ departments?: Department[] }>),
+          ]);
           setCourseDocs(c.courses ?? []);
+          setDepartmentDocs(d.departments ?? []);
         } catch { /* falls back to the sections' own years */ }
       } catch {
         toast({ variant: "destructive", title: "Failed to load sections" });
@@ -129,34 +136,108 @@ export function StudentAttendanceReportView({ title = "Student Attendance", scop
   const only = <T,>(options: T[], picked: T | ""): T | "" => (picked !== "" ? picked : scoped && options.length === 1 ? options[0] : "");
   const course = only(courses, pickedCourse);
   const inCourse = useMemo(() => sections.filter((s) => courseKey(s) === course), [sections, course]);
-  const departments = useMemo(() => Array.from(new Set(inCourse.map((s) => s.department).filter(Boolean))).sort(), [inCourse]);
+  // Derived from the SECTIONS for an HOD/faculty, because /api/college/sections
+  // is role-scoped and the departments list is not - building this from the
+  // department list for them would show one HOD the whole college.
+  //
+  // Principal/College Office/College Admin see the college's real department
+  // list instead. Deriving theirs from sections too meant a department with no
+  // sections yet simply was not offered - Basic Science and its sub-departments
+  // were missing from the picker at a college that plainly has them.
+  const departments = useMemo(() => {
+    const fromSections = Array.from(new Set(inCourse.map((s) => s.department).filter(Boolean)));
+    if (scoped) return fromSections.sort();
+    const all = departmentDocs
+      .filter((d) => d.isActive !== false)
+      .map((d) => (d.name ?? "").trim())
+      .filter(Boolean);
+    return Array.from(new Set([...all, ...fromSections])).sort();
+  }, [inCourse, departmentDocs, scoped]);
   const department = course ? only(departments, pickedDepartment) : "";
   const showCourse = !scoped || courses.length !== 1;
   const showDepartment = !scoped || departments.length !== 1;
-  const inDepartment = useMemo(() => inCourse.filter((s) => s.department === department), [inCourse, department]);
-  // A department offers every semester of the years it is responsible for, not
-  // just the years that already have a section: the freshman department (only
-  // year-1 sections) 1-2, a core department (no year-1 sections, e.g. Civil with
-  // sections only in year 3) 3 to the course's last semester, and a department
-  // that runs every year itself 1 to the last.
+  // A section's courseId can be a duplicate Course doc merged into the one the
+  // courses API returns, so match on the merged ids and the names too.
+  const courseOf = (x: SectionListItem) =>
+    courseDocs.find((c) => c.id === x.courseId || c.mergedCourseIds?.includes(x.courseId)
+      || (!!x.courseName && c.name.toLowerCase() === x.courseName.toLowerCase()));
+
+  // Years are assigned per course where a department runs more than one, so
+  // everything below resolves against the catalogue THIS course belongs to.
+  // Read off the course's own sections (not the department's - a freshman
+  // department may have none) and falling back to the picked course doc.
+  const catalogId = useMemo(
+    () => inCourse.map(courseOf).find((c) => !!c?.catalogId)?.catalogId
+      ?? courseDocs.find((c) => c.name.toLowerCase() === course.toLowerCase())?.catalogId,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [inCourse, courseDocs, course]
+  );
+
+  const deptDoc = useMemo(() => departmentDocs.find((d) => d.name === department), [departmentDocs, department]);
+
+  // The years this department actually runs, per Principal/College Admin's
+  // Departments screen. A SUB-department almost never carries years of its own
+  // - that screen will not let an HOD set them on a child - so they live on the
+  // common parent (Basic Science holds year 1; Basic Science - English,
+  // - Physics, - Chemistry all run that year under it). Falling back to the
+  // parent is the same rule managerTeachingYears already applies in
+  // lib/departments/managedBranches.ts.
+  const assignedYears = useMemo(() => {
+    const yearsOf = (d: Department | undefined) =>
+      d ? resolveDepartmentCourseScope(d, catalogId).assignedYears.filter((y) => Number.isFinite(y) && y >= 1) : [];
+    const own = yearsOf(deptDoc);
+    if (own.length > 0) return own;
+    const parentDoc = deptDoc?.parentDepartmentId
+      ? departmentDocs.find((d) => d.id === deptDoc.parentDepartmentId)
+      : undefined;
+    return yearsOf(parentDoc);
+  }, [deptDoc, departmentDocs, catalogId]);
+
+  // The sections this department's report covers. Normally just its own, but a
+  // department that MANAGES branches for a shared year owns no sections under
+  // its own name at all: Basic Science - Physics manages IT and ECE, and the
+  // year-1 sections it runs are filed as "Information Technology" (BSP-IT-A).
+  // Matching on the department name alone left every such picker empty.
+  //
+  // Borrowed sections are limited to the years the manager is assigned, so
+  // Basic Science - Physics gets IT's year 1 and never IT's years 2-4, which
+  // belong to IT's own HOD.
+  const inDepartment = useMemo(() => {
+    const own = inCourse.filter((x) => x.department === department);
+    const managed = deptDoc?.managedDepartments ?? [];
+    if (managed.length === 0 || assignedYears.length === 0) return own;
+    const managedSet = new Set(managed);
+    const yearSet = new Set(assignedYears);
+    const borrowed = inCourse.filter(
+      (x) => x.department !== department && managedSet.has(x.department) && yearSet.has(Number(x.year))
+    );
+    return [...own, ...borrowed];
+  }, [inCourse, department, deptDoc, assignedYears]);
+
+  // A department offers the semesters of the years it is assigned. One given
+  // years 2-4 offers 2-1 .. 4-2 and never 1-1; a freshman department given only
+  // year 1 offers 1-1 and 1-2.
+  //
+  // This used to span year 1 (or 2) up to the COURSE's duration and offer every
+  // semester in between, so a department running one year still listed all
+  // eight - the picker said far more than the department teaches.
+  //
+  // Falls back to the years its sections are actually in when nothing is
+  // assigned - a department configured before assignedYears existed, or one
+  // left blank, still gets a usable list instead of an empty one.
   const semesterOptions = useMemo(() => {
-    const years = inDepartment.map((x) => Number(x.year)).filter((y) => Number.isFinite(y) && y >= 1);
+    const sectionYears = Array.from(new Set(
+      inDepartment.map((x) => Number(x.year)).filter((y) => Number.isFinite(y) && y >= 1)
+    ));
+    let years = assignedYears.length > 0 ? assignedYears : sectionYears;
     if (years.length === 0) return [];
-    // A section's courseId can be a duplicate Course doc merged into the one
-    // the courses API returns, so match on the merged ids and the names too.
-    const durationOf = (x: SectionListItem) =>
-      courseDocs.find((c) => c.id === x.courseId || c.mergedCourseIds?.includes(x.courseId)
-        || (!!x.courseName && c.name.toLowerCase() === x.courseName.toLowerCase()))?.durationYears ?? 0;
-    const duration = Math.max(...inDepartment.map(durationOf), ...years);
-    const first = years.includes(1) ? 1 : 2;
-    const last = years.some((y) => y > 1) ? duration : 1;
-    const out: { key: string; label: string }[] = [];
-    for (let y = first; y <= last; y++) {
-      if (onlyOwnYears && !years.includes(y)) continue;
-      for (const sem of [y * 2 - 1, y * 2]) out.push({ key: String(sem), label: `Semester ${sem}` });
-    }
-    return out;
-  }, [inDepartment, courseDocs, onlyOwnYears]);
+    // Faculty see only the years they personally hold a section in.
+    if (onlyOwnYears) years = years.filter((y) => sectionYears.includes(y));
+
+    return Array.from(new Set(years))
+      .sort((a, b) => a - b)
+      .flatMap((y) => [y * 2 - 1, y * 2].map((sem) => ({ key: String(sem), label: yearSemesterLabel(sem) })));
+  }, [inDepartment, assignedYears, onlyOwnYears]);
   // Semester n belongs to year ceil(n / 2).
   const semesterYear = semesterKey ? Math.ceil(Number(semesterKey) / 2) : 0;
   const sectionOptions = useMemo(
@@ -307,12 +388,9 @@ export function StudentAttendanceReportView({ title = "Student Attendance", scop
   function handleExport() {
     if (!reports) return;
     const rows: Record<string, string>[] = [];
-    const subjectColumns = new Map<string, string>();
     for (const r of shownReports) {
-      for (const sub of r.columns) subjectColumns.set(sub.subjectCode, sub.subjectName);
       for (const s of groupByBatch(r.rows, applied.filters.batches).flatMap((g) => g.rows)) {
-        const row: Record<string, string> = { section: r.section.name, batch: s.labBatch || "Not assigned", rollNumber: s.rollNumber, name: s.name, absentDays: String(s.absentDays ?? 0) };
-        for (const sub of r.columns) row[sub.subjectCode] = formatPercent(s.bySubject[sub.subjectId]?.percentage ?? null);
+        const row: Record<string, string> = { section: r.section.name, batch: s.labBatch || "Not assigned", rollNumber: s.rollNumber, name: s.name };
         row.percent = formatPercent(s.shown.percentage);
         rows.push(row);
       }
@@ -323,8 +401,6 @@ export function StudentAttendanceReportView({ title = "Student Attendance", scop
       ...(applied.filters.batches ? [{ key: "batch", header: "Batch" }] : []),
       { key: "rollNumber", header: "Registration No." },
       { key: "name", header: "Name" },
-      ...Array.from(subjectColumns.entries()).map(([key, header]) => ({ key, header })),
-      { key: "absentDays", header: "Days absent" },
       { key: "percent", header: "Overall %" },
     ]);
   }
@@ -424,7 +500,6 @@ export function StudentAttendanceReportView({ title = "Student Attendance", scop
           )}
           <div className="flex flex-wrap items-center gap-3">
             <Button onClick={() => void load()} disabled={!ready || loading}>{loading && !reports ? "Loading…" : "Load Report"}</Button>
-            <Button variant="outline" onClick={handleExport} disabled={!reports}>Export CSV</Button>
             {!ready && !isLoadingSections && sections.length > 0 && (
               <p className="text-xs text-muted-foreground">Choose a course, department, semester and section to load the report.</p>
             )}
@@ -520,6 +595,12 @@ export function StudentAttendanceReportView({ title = "Student Attendance", scop
             {appliedChips.length === 0
               ? <Badge variant="secondary">Everyone · till now</Badge>
               : appliedChips.map((c) => <Badge key={c} variant="in_progress">{c}</Badge>)}
+            {/* Hard right, directly above the tables it exports - and only
+                rendered alongside a report, so it can never be the dead
+                control it was while sitting next to Load Report. */}
+            <Button className="ml-auto" onClick={handleExport}>
+              Export CSV
+            </Button>
           </div>
 
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -538,7 +619,9 @@ export function StudentAttendanceReportView({ title = "Student Attendance", scop
         </>
       )}
 
-      {shownReports.map((r) => (
+      {shownReports.map((r) => {
+        let serial = 0;
+        return (
         <Card key={r.section.id} className="overflow-hidden">
           <CardHeader className="flex-row items-center justify-between gap-2 space-y-0 border-b bg-muted/30 py-3">
             <CardTitle className="text-base">Section {r.section.name}{r.section.batch ? <span className="ml-2 font-normal text-muted-foreground">{r.section.batch}</span> : null}</CardTitle>
@@ -551,10 +634,9 @@ export function StudentAttendanceReportView({ title = "Student Attendance", scop
               <table className="w-full text-sm">
                 <thead className="sticky top-0 z-10 bg-muted text-left text-xs uppercase tracking-wide text-muted-foreground">
                   <tr>
+                    <th className="px-4 py-2.5 font-medium">S.No</th>
                     <th className="px-4 py-2.5 font-medium">Reg. No.</th>
                     <th className="px-4 py-2.5 font-medium">Name</th>
-                    {r.columns.map((s) => <th key={s.subjectId} className="whitespace-nowrap px-4 py-2.5 text-center font-medium">{s.subjectName}</th>)}
-                    <th className="whitespace-nowrap px-4 py-2.5 text-center font-medium">Days absent</th>
                     <th className="whitespace-nowrap px-4 py-2.5 text-center font-medium">Overall</th>
                   </tr>
                 </thead>
@@ -563,7 +645,7 @@ export function StudentAttendanceReportView({ title = "Student Attendance", scop
                     <Fragment key={g.batch ?? "all"}>
                       {g.batch != null && (
                         <tr className="bg-primary/5">
-                          <th colSpan={r.columns.length + 4} scope="colgroup" className="px-4 py-2 text-left text-sm font-semibold">
+                          <th colSpan={4} scope="colgroup" className="px-4 py-2 text-left text-sm font-semibold">
                             {g.batch || "Not assigned"}
                             <span className="ml-2 text-xs font-normal text-muted-foreground">{g.rows.length} student{g.rows.length === 1 ? "" : "s"}</span>
                           </th>
@@ -571,12 +653,9 @@ export function StudentAttendanceReportView({ title = "Student Attendance", scop
                       )}
                       {g.rows.map((s) => (
                         <tr key={s.studentId} className="odd:bg-background even:bg-muted/20 hover:bg-muted/40">
+                          <td className="px-4 py-2.5 tabular-nums">{++serial}</td>
                           <td className="whitespace-nowrap px-4 py-2.5 tabular-nums">{s.rollNumber}</td>
                           <td className="px-4 py-2.5 font-medium">{s.name}</td>
-                          {r.columns.map((sub) => (
-                            <td key={sub.subjectId} className="px-4 py-2.5 text-center">{pctBadge(s.bySubject[sub.subjectId]?.percentage ?? null)}</td>
-                          ))}
-                          <td className="px-4 py-2.5 text-center tabular-nums">{s.absentDays ?? 0}</td>
                           <td className="px-4 py-2.5 text-center">{pctBadge(s.shown.percentage, true)}</td>
                         </tr>
                       ))}
@@ -587,7 +666,8 @@ export function StudentAttendanceReportView({ title = "Student Attendance", scop
             )}
           </CardContent>
         </Card>
-      ))}
+        );
+      })}
     </div>
   );
 }

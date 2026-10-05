@@ -15,6 +15,13 @@ import type { StudentAttendanceMark, StudentAttendanceSession } from "@/types";
 // Polled only while the tab is visible: period open/close times are minute-granular,
 // and a hidden tab nobody is looking at was the bulk of the server load.
 const PERIOD_POLL_MS = 60_000;
+// How close to a period's start/end we need to be before polling every
+// PERIOD_POLL_MS actually matters - outside this window isOpen/phase can't
+// change, so there's nothing worth re-fetching for.
+const BOUNDARY_WINDOW_MS = 5 * 60_000;
+// How early to wake up (via setTimeout) before a boundary we're not yet
+// near, so polling starts a little ahead of the actual minute it flips.
+const WAKE_EARLY_MS = 2 * 60_000;
 
 interface TodayPeriod {
   assignmentId: string;
@@ -79,6 +86,50 @@ function phaseOf(p: TodayPeriod): "UPCOMING" | "OPEN" | "ENDED" {
   return p.phase ?? (p.isOpen ? "OPEN" : "ENDED");
 }
 
+// IST milliseconds since local midnight, used to compare "now" against period
+// startTime/endTime ("HH:MM" IST) without pulling in a date library.
+function istMsSinceMidnight(): number {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(new Date());
+  const v = (t: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === t)!.value;
+  return (Number(v("hour")) * 3600 + Number(v("minute")) * 60 + Number(v("second"))) * 1000;
+}
+
+function hhmmToMs(hhmm: string): number {
+  const [h, m] = hhmm.split(":").map(Number);
+  return (h * 3600 + m * 60) * 1000;
+}
+
+// Every period's start AND end counts as a boundary - a start flips
+// UPCOMING -> OPEN, an end flips OPEN -> ENDED, and isOpen/phase can only
+// change at one of these moments.
+function boundariesOf(todayPeriods: TodayPeriod[]): number[] {
+  return todayPeriods.flatMap((p) => [hhmmToMs(p.startTime), hhmmToMs(p.endTime)]);
+}
+
+// How long to wait before the mark-attendance page checks the server again.
+// Polling every PERIOD_POLL_MS only matters within BOUNDARY_WINDOW_MS of an
+// actual period start/end, since isOpen/phase can't change in between -
+// outside that window this schedules one wake-up WAKE_EARLY_MS before the
+// next boundary instead of polling the whole day. Returns null once every
+// boundary for today is behind us - nothing left worth scheduling.
+function nextPollDelayMs(todayPeriods: TodayPeriod[]): number | null {
+  const boundaries = boundariesOf(todayPeriods);
+  if (boundaries.length === 0) return null;
+  const nowMs = istMsSinceMidnight();
+  const nearAnyBoundary = boundaries.some((b) => Math.abs(b - nowMs) <= BOUNDARY_WINDOW_MS);
+  if (nearAnyBoundary) return PERIOD_POLL_MS;
+  const future = boundaries.filter((b) => b > nowMs);
+  if (future.length === 0) return null;
+  const nextBoundary = Math.min(...future);
+  return Math.max(PERIOD_POLL_MS, nextBoundary - nowMs - WAKE_EARLY_MS);
+}
+
 // ABSENTEES: everyone starts Present, the faculty switches ON only the absent
 // roll numbers. PRESENTEES: everyone starts Absent, the faculty switches ON
 // only the present ones. Either way a switched-ON row is the "picked" one.
@@ -113,6 +164,12 @@ function OnDutyTag() {
 
 export default function MarkAttendancePage() {
   const [periods, setPeriods] = useState<TodayPeriod[]>([]);
+  // Mirrors `periods` for the visibility-change scheduler below, which needs
+  // today's boundaries while the tab is hidden (so it can resume correctly)
+  // without depending on `periods` and re-running the whole polling effect
+  // on every fetch - same pattern as expandedIdRef just below.
+  const periodsRef = useRef<TodayPeriod[]>([]);
+  useEffect(() => { periodsRef.current = periods; }, [periods]);
   const [noClassReason, setNoClassReason] = useState<string | null>(null);
   const [dateStr, setDateStr] = useState<string>(todayStr());
   const [isLoadingPeriods, setIsLoadingPeriods] = useState(true);
@@ -203,24 +260,52 @@ export default function MarkAttendancePage() {
   }
 
   // Load the first report without touching state synchronously, then keep the
-  // view current with a 60s poll.
+  // view current - but only poll every PERIOD_POLL_MS while within
+  // BOUNDARY_WINDOW_MS of an actual period start/end (see nextPollDelayMs);
+  // otherwise this schedules a single wake-up shortly before the next one
+  // instead of hitting the server on a timer for the whole teaching day.
   useEffect(() => {
+    let cancelled = false;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+    function scheduleFrom(todayPeriods: TodayPeriod[]) {
+      if (cancelled) return;
+      if (timeoutId) clearTimeout(timeoutId);
+      const delay = nextPollDelayMs(todayPeriods);
+      if (delay === null) return; // today's periods are all over - nothing left worth polling for
+      timeoutId = setTimeout(() => { void tick(); }, delay);
+    }
+
+    async function tick() {
+      if (cancelled) return;
+      if (document.visibilityState === "visible") {
+        scheduleFrom(await fetchTodayPeriods());
+      } else {
+        // Hidden tab: don't spend a request, just re-check the schedule
+        // against today's already-known boundaries.
+        scheduleFrom(periodsRef.current);
+      }
+    }
+
     void (async () => {
-      await fetchTodayPeriods();
+      const fresh = await fetchTodayPeriods();
       // Anything queued from a previous offline session (this device, any
       // time before now) gets one sync attempt as soon as the page opens.
       await syncPendingSubmissions();
+      scheduleFrom(fresh);
     })();
-    const id = setInterval(() => {
-      if (document.visibilityState !== "visible") return;
-      void (async () => {
-        await fetchTodayPeriods();
-      })();
-    }, PERIOD_POLL_MS);
+
     // Catch up straight away when the tab comes back, rather than waiting for the next tick.
-    const onVisible = () => { if (document.visibilityState === "visible") void fetchTodayPeriods(); };
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      void (async () => { scheduleFrom(await fetchTodayPeriods()); })();
+    };
     document.addEventListener("visibilitychange", onVisible);
-    return () => { clearInterval(id); document.removeEventListener("visibilitychange", onVisible); };
+    return () => {
+      cancelled = true;
+      if (timeoutId) clearTimeout(timeoutId);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
     // syncPendingSubmissions is a stable useCallback (empty deps) - adding
     // it here doesn't cause extra re-runs, just satisfies the linter.
   }, [syncPendingSubmissions]);

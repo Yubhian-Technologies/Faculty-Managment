@@ -13,6 +13,7 @@ import {
   SubjectRangeSummaryTables, type SubjectColumn, type SubjectRangeStudentRow,
 } from "@/components/attendance/SubjectRangeSummaryTables";
 import type { StudentAttendanceMark } from "@/types";
+import { yearSemesterLabel } from "@/lib/academic/format";
 
 type View = "day" | "month" | "period" | "semester" | "tillnow";
 
@@ -133,7 +134,7 @@ export function FacultyAttendanceReportView({ sections }: { sections: FacultySec
       if (!semester) { toast({ variant: "destructive", title: "Pick a semester" }); return; }
       params.set("summary", "true");
       params.set("semester", semester);
-      label = `Semester ${semester}`;
+      label = `Sem ${yearSemesterLabel(Number(semester))}`;
     } else {
       params.set("summary", "true");
       params.set("allTime", "true");
@@ -267,7 +268,7 @@ export function FacultyAttendanceReportView({ sections }: { sections: FacultySec
                 <Select value={semester} onValueChange={(v) => { setSemester(v); reset(); }}>
                   <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
                   <SelectContent>
-                    {semesters.map((s) => <SelectItem key={s} value={String(s)}>Semester {s}</SelectItem>)}
+                    {semesters.map((s) => <SelectItem key={s} value={String(s)}>{yearSemesterLabel(s)}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
