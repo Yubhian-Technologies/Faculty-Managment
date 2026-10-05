@@ -13,15 +13,18 @@ import {
   GENDER_OPTIONS, RATIFICATION_STATUS_OPTIONS,
 } from "@/lib/import/fieldConstraints";
 import { fetchActiveDesignationNames, matchDesignation } from "@/lib/designations/validate";
+import { fetchActiveHonorificNames, matchHonorific } from "@/lib/honorifics/validate";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
 import { PHONE_REGEX, EMAIL_REGEX, PAN_REGEX, AADHAR_REGEX } from "@/lib/validations";
 import { getHodDepartmentScope, facultyManageableDepartmentNames } from "@/lib/departments/scope";
 import { normalizeHighestQualification } from "@/lib/faculty/highestQualification";
+import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import type { Designation } from "@/types";
 import { EMPLOYEE_CATEGORY_LABELS, EMPLOYEE_CATEGORY_VALUES, EMPLOYEE_CATEGORY_ERROR_MESSAGE } from "@/types";
 
 type ImportRow = {
   employeeId: string;
+  honorific?: string;
   departmentCode?: string;
   legalName: string;
   nameAsPerPan?: string;
@@ -199,6 +202,11 @@ export async function POST(request: Request) {
     // below via matchDesignation (same shared helper the manual Add/Edit
     // routes use, just without refetching the catalog on every row).
     const allowedTeachingDesignations = await fetchActiveDesignationNames(db, collegeId, "FACULTY");
+    // This college's own admin-curated Honorific Catalog (see
+    // HonorificsCatalogCard) - fetched once here, matched per row below via
+    // matchHonorific. Honorific is optional, unlike Designation: a blank cell
+    // is simply left unset, never rejected.
+    const allowedHonorifics = await fetchActiveHonorificNames(db, collegeId);
 
     const now = new Date();
     // Rows that passed validation and were queued for write, alongside which
@@ -286,6 +294,19 @@ export async function POST(request: Request) {
       }
       const designation: Designation = designationResult.name;
 
+      // Honorific - optional, only validated against the catalog when a
+      // non-blank value was actually given (unlike Designation, a blank
+      // cell is never rejected).
+      let resolvedHonorific: string | undefined;
+      if (row.honorific?.trim()) {
+        const honorificResult = matchHonorific(row.honorific, allowedHonorifics);
+        if ("error" in honorificResult) {
+          failed.push({ row: rowNum, employeeId: empId, error: honorificResult.error });
+          continue;
+        }
+        resolvedHonorific = honorificResult.name;
+      }
+
       // Employee Category - the same closed set the Add/Edit form and PATCH
       // enforce (EMPLOYEE_CATEGORY_LABELS). The cell may hold the label
       // ("Part Time") or the stored key ("PART_TIME"); matchOption's
@@ -356,8 +377,10 @@ export async function POST(request: Request) {
 
       // The name used everywhere this record is displayed/copied from (login
       // account, teaching assignments, sections, etc.) - Full Name (as per
-      // SSC) is the only identity/display name (required above).
-      const finalName = row.legalName.trim();
+      // SSC) is the only identity/display name (required above),
+      // honorific-prefixed via facultyDisplayName() same as every other
+      // display of this record.
+      const finalName = facultyDisplayName({ legalName: row.legalName, honorific: resolvedHonorific });
 
       // Login creation - mandatory now that Login Password is a required
       // column, so every imported row gets a login account (role: Panel
@@ -391,6 +414,7 @@ export async function POST(request: Request) {
         // always legalName - see finalName above and facultyDisplayName().
         collegeEmail: loginEmail,
         mobileNo: checkPhone(row.mobileNo, "Mobile No") ?? "",
+        ...(resolvedHonorific ? { honorific: resolvedHonorific } : {}),
         designation,
         employeeCategory,
         highestQualification: normalizeHighestQualification(row.highestQualification),

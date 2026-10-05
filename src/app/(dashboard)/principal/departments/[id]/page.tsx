@@ -339,20 +339,34 @@ export default function DepartmentDetailPage() {
             : "Loading…"
         }
         actions={
-          <Button
-            variant="outline"
-            onClick={() =>
-              router.push(
-                // From a sub-department, "back" means its parent, not the top list.
-                parentDepartment
-                  ? `/principal/departments/${parentDepartment.id}`
-                  : "/principal/departments"
-              )
-            }
-          >
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            {parentDepartment ? `Back to ${parentDepartment.name}` : "Back to Departments"}
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={() =>
+                router.push(
+                  // From a sub-department, "back" means its parent, not the top list.
+                  parentDepartment
+                    ? `/principal/departments/${parentDepartment.id}`
+                    : "/principal/departments"
+                )
+              }
+            >
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              {parentDepartment ? `Back to ${parentDepartment.name}` : "Back to Departments"}
+            </Button>
+            {/* Name/code (and, for a sub-department, its Sub-HOD/managed
+                branches) can only be edited here - this page's own
+                Sub-Departments card (below) and the DepartmentsPanel drill-
+                down on /principal/courses both only ever navigate INTO a
+                sub-department, never to its edit form, so without this
+                button there was no reachable path to rename one at all,
+                despite the edit form itself fully supporting it. */}
+            {department && (
+              <Button variant="outline" onClick={() => router.push(`/principal/departments/${department.id}/edit`)}>
+                <Pencil className="h-4 w-4 mr-2" />Edit Department
+              </Button>
+            )}
+          </div>
         }
       />
 

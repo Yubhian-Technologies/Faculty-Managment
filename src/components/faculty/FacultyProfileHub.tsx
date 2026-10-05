@@ -83,7 +83,7 @@ export function FacultyIdentityFacts({
     // as "the same fields, just read-only".
     <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
       <Fact label="Employee ID" value={faculty.employeeId} />
-      <Fact label="Full Name (as per SSC)" value={faculty.legalName} />
+      <Fact label="Full Name (as per SSC)" value={facultyDisplayName(faculty) || faculty.legalName} />
       <Fact label="APAAR Faculty ID" value={faculty.apaarFacultyId} />
       <Fact
         label="Department"

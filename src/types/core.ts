@@ -751,6 +751,23 @@ export interface DesignationCatalogItem {
   updatedAt?: Timestamp;
 }
 
+// ─── Honorific Catalog (admin-curated name prefixes — Mr., Mrs., Dr., Prof., ...) ─────
+// colleges/{collegeId}/honorifics - same "add it here once, pick it everywhere
+// else" model as the Designation Catalog above, deliberately flat (no
+// category/cadre split - an honorific isn't role-specific the way a
+// designation is). Configured by the Principal on the Settings page
+// (HonorificsCatalogCard) - see api/college/honorifics.
+export interface HonorificCatalogItem {
+  id: string;
+  collegeId: string;
+  name: string; // admin-entered, e.g. "Dr.", "Mr.", "Mrs.", "Prof."
+  isActive: boolean;
+  createdBy?: string;
+  createdByName?: string;
+  createdAt: Timestamp;
+  updatedAt?: Timestamp;
+}
+
 // ─── Course (a program offered by a Department — engineering, pharmacy, dental, etc.) ──
 
 export interface Course {
@@ -1171,6 +1188,11 @@ export interface FacultyMember {
   // Extended profile fields (from institution records / bulk import)
   gender?: "Male" | "Female" | "Other";
   dateOfBirth?: Timestamp;
+  // Admin-curated prefix (Dr., Mr., Mrs., Prof., ...) from this college's own
+  // Honorific Catalog (colleges/{id}/honorifics - see HonorificsCatalogCard,
+  // api/college/honorifics). Optional, set from Add/Import Faculty only for
+  // now - not yet read by facultyDisplayName() or shown anywhere else.
+  honorific?: string;
   // Full Name (as per SSC certificates, CAPITAL LETTERS) - the faculty
   // member's PRIMARY/required identity name (enforced at the Add/Import
   // layer, not the type itself, since a legacy record may predate this).

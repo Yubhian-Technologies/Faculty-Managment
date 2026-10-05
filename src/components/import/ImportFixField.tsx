@@ -24,12 +24,15 @@ const YES_NO_KEYS = new Set(["differentlyAbled", "permanentAddressSameAsTemporar
 function fixFieldOptions(
   fieldKey: string,
   designationOptions: string[] | undefined,
+  honorificOptions: string[] | undefined,
   departmentOptions: string[] | undefined,
   departmentCodeOptions: string[] | undefined,
 ): string[] | undefined {
   switch (fieldKey) {
     case "designation":
       return designationOptions ?? [];
+    case "honorific":
+      return honorificOptions ?? [];
     case "employeeCategory":
       return Object.values(EMPLOYEE_CATEGORY_LABELS);
     case "status":
@@ -66,6 +69,10 @@ interface Props {
   // once by the import page - see DesignationCatalogCard), for fieldKey
   // "designation" only.
   designationOptions?: string[];
+  // This college's own admin-curated Honorific Catalog (see
+  // HonorificsCatalogCard), for fieldKey "honorific" only. Faculty's Fix
+  // dialog is the only caller that passes this.
+  honorificOptions?: string[];
   // Only Non-Technical Staff's Fix dialog passes this (College Office's own
   // "Add Staff" form is the only one of the three with a Department picker -
   // HOD's Supporting Staff defaults it automatically with no picker either -
@@ -85,9 +92,9 @@ interface Props {
 // Falls through to a plain text Input for every other column, unchanged from
 // before.
 export function ImportFixField({
-  fieldKey, label, required, value, placeholder, onChange, designationOptions, departmentOptions, departmentCodeOptions,
+  fieldKey, label, required, value, placeholder, onChange, designationOptions, honorificOptions, departmentOptions, departmentCodeOptions,
 }: Props) {
-  const options = fixFieldOptions(fieldKey, designationOptions, departmentOptions, departmentCodeOptions);
+  const options = fixFieldOptions(fieldKey, designationOptions, honorificOptions, departmentOptions, departmentCodeOptions);
 
   if (!options) {
     return (

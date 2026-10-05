@@ -490,7 +490,7 @@ export function getResumeHTML(rawData: ResumeData): string {
     detail("Gender", data.gender) +
     detail("Blood Group", data.bloodGroup) +
     detail("Marital Status", data.maritalStatus) +
-    detail("Full Name (as per SSC)", data.legalName) +
+    detail("Full Name (as per SSC)", facultyDisplayName(data) || data.legalName) +
     detail("Father Name", data.fatherName) +
     detail("Mother Name", data.motherName) +
     detail("Spouse Name", data.spouseName) +

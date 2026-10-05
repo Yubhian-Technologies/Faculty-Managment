@@ -106,7 +106,11 @@ export async function POST(request: Request) {
     const db = getAdminDb();
     const collegeId = session.collegeId;
 
-    const usersSnap = await db.collection("colleges").doc(collegeId).collection("users").get();
+    const [usersSnap, facultySnap, supportingStaffSnap] = await Promise.all([
+      db.collection("colleges").doc(collegeId).collection("users").get(),
+      db.collection("colleges").doc(collegeId).collection("facultyMembers").get(),
+      db.collection("colleges").doc(collegeId).collection("supportingStaff").get(),
+    ]);
     const byEmployeeId = new Map<string, string>();
     const byNormalizedName = new Map<string, string>();
     const namesByUid = new Map<string, string>();
@@ -119,6 +123,24 @@ export async function POST(request: Request) {
         const key = normalizeName(data.name);
         if (!byNormalizedName.has(key)) byNormalizedName.set(key, doc.id); // first match wins on duplicate names
       }
+    }
+    // The Add/Import Faculty and Add/Import Supporting Staff flows both set
+    // employeeId on the facultyMembers/supportingStaff doc itself, never on
+    // the linked `users` doc (see faculty/import POST's own payload) - so the
+    // loop above, which only reads users.employeeId, never actually resolves
+    // an Employee Code for staff onboarded the normal way (confirmed live:
+    // a populated college can have 0 of its users docs carrying employeeId
+    // while its facultyMembers docs all do). Filled in here from both
+    // collections' own employeeId + userUid, keyed the same way so a row's
+    // Employee Code matches regardless of which flow actually created the
+    // login.
+    for (const doc of facultySnap.docs) {
+      const data = doc.data() as { employeeId?: string; userUid?: string };
+      if (data.employeeId?.trim() && data.userUid) byEmployeeId.set(data.employeeId.trim().toLowerCase(), data.userUid);
+    }
+    for (const doc of supportingStaffSnap.docs) {
+      const data = doc.data() as { employeeId?: string; userUid?: string };
+      if (data.employeeId?.trim() && data.userUid) byEmployeeId.set(data.employeeId.trim().toLowerCase(), data.userUid);
     }
 
     let addedByName = "College Office";
