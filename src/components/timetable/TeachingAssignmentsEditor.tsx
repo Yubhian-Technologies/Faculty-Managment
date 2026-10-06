@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/useToast";
 import { useAuth } from "@/hooks/useAuth";
@@ -71,7 +72,8 @@ export function TeachingAssignmentsEditor({ courseId, year, backHref }: Teaching
   // More faculty for the same subject + section, added with "+ Add another faculty" (the first is assignForm.facultyId).
   const [extraFacultyIds, setExtraFacultyIds] = useState<string[]>([]);
   const [savingAssignment, setSavingAssignment] = useState(false);
-  const [requestTargetId, setRequestTargetId] = useState("");
+  // The departments ticked in "ask other departments" - a subject can be asked of several at once.
+  const [requestTargetIds, setRequestTargetIds] = useState<string[]>([]);
   const [sendingRequest, setSendingRequest] = useState(false);
 
   function load() {
@@ -245,13 +247,6 @@ export function TeachingAssignmentsEditor({ courseId, year, backHref }: Teaching
     [assignmentRequests, courseId, year, user?.uid]
   );
 
-  // sectionId_subjectId pairs with a PENDING lend-request already out - see
-  // hod/teaching-assignments/page.tsx's own copy of this same guard.
-  const pendingRequestKeys = useMemo(
-    () => new Set(myOutgoingRequests.filter((r) => r.status === "PENDING").map((r) => `${r.sectionId}_${r.subjectId}`)),
-    [myOutgoingRequests]
-  );
-
   // Unstaffed subjects: only checks sections of the department(s) to which the subject was assigned
   const gapRows = useMemo(() => assignedSubjects.map((subject) => {
     const subjectDeptIds = new Set(
@@ -321,7 +316,6 @@ export function TeachingAssignmentsEditor({ courseId, year, backHref }: Teaching
       if (hasRegulationMatches && selectedSection.regulation && s.regulation && s.regulation !== selectedSection.regulation) {
         return false;
       }
-      if (pendingRequestKeys.has(`${assignForm.sectionId}_${s.id}`)) return false;
       const existingForSubject = assignments.filter((a) =>
         a.sectionId === assignForm.sectionId && a.subjectId === s.id &&
         matchesCurrentSemester(a.timetableSemester, effectiveSemester)
@@ -329,7 +323,7 @@ export function TeachingAssignmentsEditor({ courseId, year, backHref }: Teaching
       // A subject keeps showing until it has the most faculty allowed, so more can be added.
       return existingForSubject.length < MAX_FACULTY_PER_SUBJECT;
     });
-  }, [assignForm.sectionId, sections, departments, semesterAssignments, effectiveSemester, year, assignedSubjects, pendingRequestKeys, assignments]);
+  }, [assignForm.sectionId, sections, departments, semesterAssignments, effectiveSemester, year, assignedSubjects, assignments]);
 
   // Every department in the college is askable except this section's own -
   // see hod/teaching-assignments/page.tsx's own copy. Sub-departments are NOT
@@ -397,7 +391,7 @@ export function TeachingAssignmentsEditor({ courseId, year, backHref }: Teaching
   }
 
   async function handleSendRequest() {
-    if (!assignForm.sectionId || !assignForm.subjectId || !requestTargetId) return;
+    if (!assignForm.sectionId || !assignForm.subjectId || requestTargetIds.length === 0) return;
     setSendingRequest(true);
     try {
       const res = await fetch("/api/college/faculty-assignment-requests", {
@@ -407,20 +401,22 @@ export function TeachingAssignmentsEditor({ courseId, year, backHref }: Teaching
           courseId,
           sectionId: assignForm.sectionId,
           subjectId: assignForm.subjectId,
-          targetDepartmentId: requestTargetId,
+          targetDepartmentIds: requestTargetIds,
         }),
       });
-      const json = await res.json() as { error?: string };
+      const json = await res.json() as { error?: string; created?: { departmentName: string }[]; skipped?: { departmentName: string }[] };
       if (!res.ok) {
         toast({ variant: "destructive", title: "Failed to send request", description: json.error });
         return;
       }
-      toast({ variant: "success", title: "Request sent" });
-      setRequestTargetId("");
-      // The subject just requested drops out of availableSubjectsForAssign
-      // (see pendingRequestKeys) the moment assignmentRequests refreshes -
-      // clear it here too so the form doesn't sit on a now-invalid selection.
-      setAssignForm((f) => ({ ...f, subjectId: "" }));
+      const sent = json.created?.length ?? 0;
+      const skipped = json.skipped ?? [];
+      toast({
+        variant: "success",
+        title: `Request sent to ${sent} department${sent === 1 ? "" : "s"}`,
+        description: skipped.length > 0 ? `Already pending with ${skipped.map((x) => x.departmentName).join(", ")}.` : undefined,
+      });
+      setRequestTargetIds([]);
       load();
     } catch {
       toast({ variant: "destructive", title: "Network error" });
@@ -583,7 +579,7 @@ export function TeachingAssignmentsEditor({ courseId, year, backHref }: Teaching
                 <Label>Subject</Label>
                 <Select
                   value={assignForm.subjectId}
-                  onValueChange={(v) => { setAssignForm((f) => ({ ...f, subjectId: v, facultyId: "" })); setExtraFacultyIds([]); setRequestTargetId(""); }}
+                  onValueChange={(v) => { setAssignForm((f) => ({ ...f, subjectId: v, facultyId: "" })); setExtraFacultyIds([]); setRequestTargetIds([]); }}
                   disabled={!assignForm.sectionId}
                 >
                   <SelectTrigger><SelectValue placeholder="Select subject" /></SelectTrigger>
@@ -672,35 +668,39 @@ export function TeachingAssignmentsEditor({ courseId, year, backHref }: Teaching
 
               {assignForm.sectionId && assignForm.subjectId && (
                 <div className="pt-3 mt-3 border-t space-y-2">
-                  <Label>Or ask another department to lend a faculty member</Label>
-                  <div className="flex flex-wrap gap-2">
-                    <Select value={requestTargetId} onValueChange={setRequestTargetId}>
-                      <SelectTrigger className="flex-1 min-w-48">
-                        <SelectValue placeholder={requestableDepartments.length ? "Select department" : "No other departments"} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {requestableDepartments.map((d) => {
-                          const parentName = d.parentDepartmentId
-                            ? departments.find((p) => p.id === d.parentDepartmentId)?.name
-                            : null;
-                          return (
-                            <SelectItem key={d.id} value={d.id}>
-                              {d.name}{parentName ? ` (${parentName})` : ""}
-                            </SelectItem>
-                          );
-                        })}
-                      </SelectContent>
-                    </Select>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      loading={sendingRequest}
-                      disabled={!requestTargetId}
-                      onClick={() => void handleSendRequest()}
-                    >
-                      <Send className="h-4 w-4 mr-2" />Send Request
-                    </Button>
+                  <Label>Or ask other departments to lend a faculty member</Label>
+                  {/* Tick as many departments as you like - each gets its own request, and the subject can
+                      be asked of more departments later even if it already has faculty. */}
+                  <div className="max-h-44 space-y-1 overflow-y-auto rounded-md border p-2">
+                    {requestableDepartments.length === 0 ? (
+                      <p className="px-1 text-xs text-muted-foreground">No other departments</p>
+                    ) : requestableDepartments.map((d) => {
+                      const parentName = d.parentDepartmentId ? departments.find((p) => p.id === d.parentDepartmentId)?.name : null;
+                      const alreadyAsked = assignmentRequests.some((r) =>
+                        r.status === "PENDING" && r.sectionId === assignForm.sectionId && r.subjectId === assignForm.subjectId && r.targetDepartmentId === d.id);
+                      return (
+                        <label key={d.id} className={`flex items-center gap-2 rounded px-1 py-0.5 text-sm ${alreadyAsked ? "opacity-60" : "cursor-pointer hover:bg-muted/50"}`}>
+                          <Checkbox
+                            checked={requestTargetIds.includes(d.id)}
+                            disabled={alreadyAsked}
+                            onCheckedChange={(v) => setRequestTargetIds((ids) => (v === true ? [...ids, d.id] : ids.filter((x) => x !== d.id)))}
+                          />
+                          <span>{d.name}{parentName ? ` (${parentName})` : ""}</span>
+                          {alreadyAsked && <span className="text-[10px] text-muted-foreground">already requested</span>}
+                        </label>
+                      );
+                    })}
                   </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    loading={sendingRequest}
+                    disabled={requestTargetIds.length === 0}
+                    onClick={() => void handleSendRequest()}
+                  >
+                    <Send className="h-4 w-4 mr-2" />
+                    {requestTargetIds.length > 1 ? `Send requests to ${requestTargetIds.length} departments` : "Send Request"}
+                  </Button>
                   <p className="text-xs text-muted-foreground">
                     They&rsquo;ll pick one of their own faculty for it - track its status below.
                   </p>

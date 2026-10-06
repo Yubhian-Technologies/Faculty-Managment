@@ -12,7 +12,8 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/useToast";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
-import { ChevronsRight, ChevronsLeft, Plus, Pencil, Trash2, Check, X } from "lucide-react";
+import { ChevronsRight, ChevronsLeft, Pencil, Trash2, Check, X } from "lucide-react";
+import { SectionLabBatchModes } from "@/components/students/SectionLabBatchModes";
 import type { Section, StudentRecord } from "@/types";
 
 // A section's own lab sub-groups (e.g. "Batch 1", "Batch 2" for split
@@ -29,7 +30,6 @@ export default function LabBatchesPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [sectionId, setSectionId] = useState("");
   const [batch, setBatch] = useState("");
-  const [newBatchName, setNewBatchName] = useState("");
   // A batch is not a record anywhere - it is just the labBatch string on each
   // student (see StudentRecord.labBatch), so renaming one is a bulk rewrite of
   // that string and deleting one is a bulk clear. Both stage into `pending`
@@ -47,6 +47,14 @@ export default function LabBatchesPage() {
   // per checkbox click.
   const [pending, setPending] = useState<Map<string, string>>(new Map());
   const [isSaving, setIsSaving] = useState(false);
+  // The batch list for the picked section while it differs from what is saved on the
+  // Section doc (a rename/delete waiting for Update); null = use the saved list.
+  const [localBatches, setLocalBatches] = useState<string[] | null>(null);
+  // "Number of batches" field, and whether its save is running.
+  const [batchCount, setBatchCount] = useState("");
+  const [isSavingBatches, setIsSavingBatches] = useState(false);
+  // Bumped each time the student data is reloaded, so the lab list below re-reads the batches just saved.
+  const [savedVersion, setSavedVersion] = useState(0);
 
   function load() {
     setIsLoading(true);
@@ -62,6 +70,8 @@ export default function LabBatchesPage() {
         setRightChecked(new Set());
         setRenameTarget(null);
         setDeleteTarget(null);
+        setSavedVersion((v) => v + 1);
+        setLocalBatches(null);
         setSectionId((current) => (current && sec.some((s) => s.id === current) ? current : sec[0]?.id ?? ""));
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load students" }))
@@ -87,6 +97,8 @@ export default function LabBatchesPage() {
   );
 
   const selectedSection = sections.find((s) => s.id === sectionId) ?? null;
+  // The batches set up for this section (saved on the Section doc, even with no students in them yet).
+  const savedBatches = localBatches ?? selectedSection?.labBatches ?? [];
   const sectionStudents = useMemo(() => {
     if (!selectedSection) return [];
     return authorizedStudents
@@ -108,7 +120,7 @@ export default function LabBatchesPage() {
   // insensitive, but only once it's an exact word-for-word match otherwise -
   // see lib/students/sectionRoster.ts).
   const batchOptions = useMemo(() => {
-    const labels = new Set<string>();
+    const labels = new Set<string>(savedBatches);
     for (const s of sectionStudents) {
       const v = effectiveBatch(s);
       if (v) labels.add(v);
@@ -116,7 +128,7 @@ export default function LabBatchesPage() {
     if (batch) labels.add(batch);
     return Array.from(labels).sort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sectionStudents, pending, batch]);
+  }, [sectionStudents, pending, batch, savedBatches]);
 
   // Switching section: batches are scoped per section, so the picked batch
   // and any staged-but-unsaved moves from the previous section no longer
@@ -129,6 +141,8 @@ export default function LabBatchesPage() {
     setRightChecked(new Set());
     setRenameTarget(null);
     setDeleteTarget(null);
+    setLocalBatches(null);
+    setBatchCount("");
   }
 
   function handleBatchChange(value: string) {
@@ -137,30 +151,65 @@ export default function LabBatchesPage() {
     setRightChecked(new Set());
   }
 
-  function handleCreateBatch() {
-    const name = newBatchName.trim();
-    if (!name) return;
-    // The very first batch in a section starts as everyone's default home -
-    // before any batching, the whole class is effectively one group as far
-    // as lab attendance is concerned, so there's nothing to hand-pick yet.
-    // Every batch after that starts empty - splitting a class that's already
-    // divided is a deliberate choice, made by swapping specific students
-    // across with </>> below (staged like any other move, not saved until
-    // Update).
-    if (batchOptions.length === 0) {
-      setPending((prev) => {
-        const next = new Map(prev);
-        for (const s of sectionStudents) {
-          const current = (prev.get(s.id) ?? s.labBatch ?? "").trim();
-          if (current === "") next.set(s.id, name);
-        }
-        return next;
+  // Saves the section's batch list straight away (Section.labBatches), so a batch exists
+  // before any student is moved into it. Resolves true on success.
+  async function persistBatches(list: string[]): Promise<boolean> {
+    if (!selectedSection) return false;
+    setIsSavingBatches(true);
+    try {
+      const res = await fetch("/api/college/section-lab-batches", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sectionId: selectedSection.id, labBatches: list }),
       });
+      const json = (await res.json().catch(() => ({}))) as { error?: string; labBatches?: string[] };
+      if (!res.ok) {
+        toast({ variant: "destructive", title: "Could not save the batches", description: json.error });
+        return false;
+      }
+      const saved = json.labBatches ?? list;
+      // Keep the section list current so Cancel falls back to what is really saved.
+      setSections((prev) => prev.map((x) => (x.id === selectedSection.id ? { ...x, labBatches: saved } : x)));
+      setLocalBatches(null);
+      // The lab list below reads the saved batches, so let it pick up the new ones.
+      setSavedVersion((v) => v + 1);
+      return true;
+    } catch {
+      toast({ variant: "destructive", title: "Network error - please try again" });
+      return false;
+    } finally {
+      setIsSavingBatches(false);
     }
-    setBatch(name);
-    setNewBatchName("");
-    setLeftChecked(new Set());
-    setRightChecked(new Set());
+  }
+
+  // Step 2: "this section has N batches" - names them Batch 1..N (keeping any already
+  // there) and saves. Students are divided into them afterwards.
+  async function handleSaveBatchCount() {
+    const n = Math.floor(Number(batchCount));
+    if (!selectedSection || !Number.isFinite(n) || n < 1 || n > 20) {
+      toast({ variant: "destructive", title: "Enter a number of batches between 1 and 20" });
+      return;
+    }
+    const existing = batchOptions;
+    if (n < existing.length) {
+      toast({ variant: "destructive", title: `This section already has ${existing.length} batches`, description: "Delete a batch with the bin icon to have fewer." });
+      return;
+    }
+    const taken = new Set(existing.map((b) => b.toLowerCase()));
+    const list = [...existing];
+    for (let i = 1; list.length < n; i++) {
+      const label = `Batch ${i}`;
+      if (!taken.has(label.toLowerCase())) { list.push(label); taken.add(label.toLowerCase()); }
+    }
+    if (n === existing.length) {
+      // Same count: nothing new to name, but make sure the list is saved.
+      if (await persistBatches(list)) toast({ variant: "success", title: `${n} batch${n === 1 ? "" : "es"} saved` });
+      return;
+    }
+    if (await persistBatches(list)) {
+      toast({ variant: "success", title: `${n} batch${n === 1 ? "" : "es"} saved`, description: "Now divide the students into them below." });
+      setBatchCount("");
+    }
   }
 
   function startRename(b: string) {
@@ -188,6 +237,8 @@ export default function LabBatchesPage() {
       }
       return next;
     });
+    // The saved list follows on Update, together with the students' labels.
+    setLocalBatches(savedBatches.map((b) => (b === from ? to : b)));
     if (batch === from) setBatch(to);
     setRenameTarget(null);
   }
@@ -204,6 +255,7 @@ export default function LabBatchesPage() {
       }
       return next;
     });
+    setLocalBatches(savedBatches.filter((b) => b !== target));
     if (batch === target) setBatch("");
     setDeleteTarget(null);
     setLeftChecked(new Set());
@@ -246,13 +298,14 @@ export default function LabBatchesPage() {
   }
 
   function handleCancel() {
+    setLocalBatches(null);
     setPending(new Map());
     setLeftChecked(new Set());
     setRightChecked(new Set());
   }
 
   async function handleUpdate() {
-    if (pending.size === 0) {
+    if (pending.size === 0 && localBatches === null) {
       toast({ title: "No changes to save" });
       return;
     }
@@ -269,6 +322,9 @@ export default function LabBatchesPage() {
         )
       );
       const failed = results.filter((ok) => !ok).length;
+      // The batch list (a rename/delete) is saved after the students, so a batch is never
+      // dropped while a student is still in it.
+      if (failed === 0 && localBatches !== null) await persistBatches(localBatches);
       if (failed > 0) {
         toast({ variant: "destructive", title: `${failed} of ${entries.length} update(s) failed`, description: "Try again for the ones that didn't go through." });
       } else {
@@ -309,43 +365,24 @@ export default function LabBatchesPage() {
                   </SelectContent>
                 </Select>
               </div>
-              {/* Step 2 - the button sits beside the name it acts on, so typing
-                  a name and creating it read as the single action they are.
-                  It used to sit a row below, next to the batch PICKER, where
-                  it looked like it acted on the batch already selected. */}
-              {/* Add / rename / delete all live on this one row, acting on the
-                  batch picked below. Rename reuses this same input rather than
-                  opening a second one: the field either names a new batch or
-                  renames the chosen one, never both at once. */}
+              {/* Batches are added with "Number of batches" below. Here the batch picked
+                  below can be renamed or deleted; the name box only shows while renaming. */}
               <div className="space-y-2">
-                <Label htmlFor="new-batch-name">
-                  {renameTarget ? `2. Rename ${renameTarget}` : "2. Add a batch"}
-                </Label>
+                <Label htmlFor="rename-batch-name">{renameTarget ? `Rename ${renameTarget}` : "Rename or delete a batch"}</Label>
                 <div className="flex flex-wrap gap-2">
-                  <Input
-                    id="new-batch-name"
-                    className="flex-1 min-w-0"
-                    value={renameTarget ? renameValue : newBatchName}
-                    onChange={(e) => {
-                      if (renameTarget) setRenameValue(e.target.value);
-                      else setNewBatchName(e.target.value);
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        if (renameTarget) handleRenameBatch();
-                        else handleCreateBatch();
-                      }
-                      if (e.key === "Escape" && renameTarget) {
-                        e.preventDefault();
-                        setRenameTarget(null);
-                      }
-                    }}
-                    placeholder={renameTarget ? "New name" : "e.g. Batch 1"}
-                    disabled={!selectedSection}
-                  />
                   {renameTarget ? (
                     <>
+                      <Input
+                        id="rename-batch-name"
+                        className="flex-1 min-w-0"
+                        value={renameValue}
+                        onChange={(e) => setRenameValue(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") { e.preventDefault(); handleRenameBatch(); }
+                          if (e.key === "Escape") { e.preventDefault(); setRenameTarget(null); }
+                        }}
+                        placeholder="New name"
+                      />
                       <Button type="button" className="shrink-0" onClick={handleRenameBatch} disabled={!renameValue.trim()}>
                         <Check className="h-4 w-4 mr-1.5" />Save name
                       </Button>
@@ -355,31 +392,55 @@ export default function LabBatchesPage() {
                     </>
                   ) : (
                     <>
-                      <Button type="button" variant="outline" className="shrink-0" onClick={handleCreateBatch} disabled={!selectedSection || !newBatchName.trim()}>
-                        <Plus className="h-4 w-4 mr-1.5" />Add batch
-                      </Button>
                       <Button
-                        type="button" variant="outline" size="icon" className="shrink-0"
+                        type="button" variant="outline" className="shrink-0"
                         onClick={() => { if (batch) startRename(batch); }}
                         disabled={!batch}
                         title={batch ? `Rename ${batch}` : "Pick a batch below first"}
-                        aria-label={batch ? `Rename ${batch}` : "Rename batch"}
                       >
-                        <Pencil className="h-4 w-4" />
+                        <Pencil className="h-4 w-4 mr-1.5" />Rename
                       </Button>
                       <Button
-                        type="button" variant="outline" size="icon"
+                        type="button" variant="outline"
                         className="shrink-0 text-destructive hover:text-destructive"
                         onClick={() => { if (batch) setDeleteTarget(batch); }}
                         disabled={!batch}
                         title={batch ? `Delete ${batch}` : "Pick a batch below first"}
-                        aria-label={batch ? `Delete ${batch}` : "Delete batch"}
                       >
-                        <Trash2 className="h-4 w-4" />
+                        <Trash2 className="h-4 w-4 mr-1.5" />Delete
                       </Button>
+                      {!batch && <span className="self-center text-xs text-muted-foreground">Pick a batch below first</span>}
                     </>
                   )}
                 </div>
+              </div>
+            </div>
+
+            {/* Set up the batches FIRST: how many, then Save - only after that are students divided
+                into them (below). Saved on the section, so the batches exist even with no students in them. */}
+            <div className="space-y-2 sm:max-w-2xl">
+              <Label htmlFor="batch-count">Number of batches (set this first)</Label>
+              <div className="flex flex-wrap items-center gap-2">
+                <Input
+                  id="batch-count"
+                  type="number"
+                  min={1}
+                  max={20}
+                  className="w-28"
+                  value={batchCount}
+                  onChange={(e) => setBatchCount(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void handleSaveBatchCount(); } }}
+                  placeholder="e.g. 2"
+                  disabled={!selectedSection}
+                />
+                <Button type="button" onClick={() => void handleSaveBatchCount()} loading={isSavingBatches} disabled={!selectedSection || !batchCount.trim()}>
+                  Save batches
+                </Button>
+                <span className="text-xs text-muted-foreground">
+                  {savedBatches.length > 0
+                    ? `Saved: ${savedBatches.join(", ")}. Now divide the students into them below.`
+                    : "Enter how many batches this section has and save, then divide the students below."}
+                </span>
               </div>
             </div>
 
@@ -470,15 +531,15 @@ export default function LabBatchesPage() {
                 </div>
 
                 <div className="flex justify-end gap-2 pt-4 mt-4 border-t">
-                  {pending.size > 0 && (
+                  {(pending.size > 0 || localBatches !== null) && (
                     <p className="mr-auto self-center text-xs text-muted-foreground">
-                      {pending.size} unsaved change{pending.size !== 1 ? "s" : ""}
+                      {pending.size > 0 ? `${pending.size} unsaved student change${pending.size !== 1 ? "s" : ""}` : "Unsaved batch changes"}
                     </p>
                   )}
-                  <Button type="button" variant="outline" onClick={handleCancel} disabled={pending.size === 0 || isSaving}>
+                  <Button type="button" variant="outline" onClick={handleCancel} disabled={(pending.size === 0 && localBatches === null) || isSaving}>
                     Cancel
                   </Button>
-                  <Button type="button" onClick={handleUpdate} loading={isSaving} disabled={pending.size === 0}>
+                  <Button type="button" onClick={handleUpdate} loading={isSaving} disabled={pending.size === 0 && localBatches === null}>
                     Update
                   </Button>
                 </div>
@@ -487,6 +548,8 @@ export default function LabBatchesPage() {
           </CardContent>
         </Card>
       )}
+
+      {sectionId && sections.length > 0 && <SectionLabBatchModes key={`${sectionId}-${savedVersion}`} sectionId={sectionId} />}
 
       <ConfirmDialog
         open={deleteTarget !== null}

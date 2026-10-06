@@ -1,7 +1,7 @@
 "use client";
 
 import { FacultyTimetableLookup } from "@/components/timetable/FacultyTimetableLookup";
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowLeft, ChevronDown, ChevronRight, Clock, Coffee, Lock, PencilLine, Plus, Send,
@@ -124,6 +124,9 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
   // and `addingAt` holds the empty cell the HOD clicked.
   const [assignments, setAssignments] = useState<TeachingAssignment[]>([]);
   const [addingAt, setAddingAt] = useState<{ day: DayOfWeek; period: number } | null>(null);
+  // A subject with more than one faculty in this section was picked: ask whether they all go in
+  // this cell together, or only the picked one (the others are added separately).
+  const [sharePrompt, setSharePrompt] = useState<{ picked: TeachingAssignment; others: TeachingAssignment[] } | null>(null);
   // Faculty ids this HOD actually manages (own + managed branches + true
   // sub-departments - "primary" per /api/college/faculty, excluding a
   // feeder's view-only "secondary" pool) - used to scope "Update" to only
@@ -146,7 +149,7 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
   // Lent-in assignments the lending department hasn't yet closed with "Notify
   // & close" (request.busyClosed) - still declaring busy periods, so not ready
   // to be placed. Held back from "Add a subject" until they close it.
-  const [notReadyLentInIds, setNotReadyLentInIds] = useState<Set<string>>(new Set());
+  const [notReadyLentInIds, setNotReadyLentInIds] = useState<Map<string, string>>(new Map()); // assignment id -> lending department
   // Editing state for the "Edit Period Timings" dialog - each period's own
   // start/end, within the college day the Principal already set
   // (timing.collegeStartTime/collegeEndTime). `period` numbers are always
@@ -207,10 +210,10 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
           .filter((r) => r.sectionId === sectionId)
           .flatMap((r) => requestAssignmentIds(r))
       ));
-      setNotReadyLentInIds(new Set(
+      setNotReadyLentInIds(new Map(
         (requestsData.requests ?? [])
           .filter((r) => r.sectionId === sectionId && r.status === "ALLOCATED" && !r.busyClosed)
-          .flatMap((r) => requestAssignmentIds(r))
+          .flatMap((r) => requestAssignmentIds(r).map((id) => [id, r.targetDepartmentName] as const))
       ));
       // An unpublished draft is what the HOD most likely came here to act on.
       if (draftData.draft && draftData.draft.status === "DRAFT") setModeState("draft");
@@ -273,13 +276,56 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
   // its periods is this section's own HOD/Timetable Incharge's job like any
   // other subject now (the lending side only declares that faculty's busy
   // periods - see AssignmentRequestsPanel).
+  // Pinned periods (placed straight onto the live timetable, outside any draft) would show locked and
+  // could not be moved or removed here. Pressing Edit moves them into the draft as ordinary periods,
+  // once per edit session; the banner below does the same on demand. See api/college/timetable/unpin.
+  const pinnedCount = slots.filter((x) => x.source !== "GENERATED").length;
+  const [unlocking, setUnlocking] = useState(false);
+  const unlockPinned = useCallback(async (quiet: boolean) => {
+    setUnlocking(true);
+    try {
+      const res = await fetch("/api/college/timetable/unpin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sectionId, ...semesterBody }),
+      });
+      const json = (await res.json().catch(() => ({}))) as { unlocked?: number; error?: string };
+      if (!res.ok) {
+        toast({ variant: "destructive", title: "Could not unlock the pinned periods", description: json.error });
+        return;
+      }
+      if ((json.unlocked ?? 0) > 0) {
+        toast({ title: `${json.unlocked} pinned period${json.unlocked === 1 ? "" : "s"} unlocked`, description: "They can now be moved or removed like any other." });
+        await loadAll();
+      } else if (!quiet) {
+        toast({ title: "Nothing to unlock", description: "None of the pinned periods belong to the current semester." });
+      }
+    } catch {
+      toast({ variant: "destructive", title: "Could not unlock the pinned periods" });
+    } finally {
+      setUnlocking(false);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sectionId, semesterQuery, loadAll]);
+  const unlockTriedRef = useRef(false);
+  useEffect(() => {
+    if (!isEditing) { unlockTriedRef.current = false; return; }
+    if (mode !== "draft" || isCrossDepartment || !draft || unlockTriedRef.current || pinnedCount === 0) return;
+    unlockTriedRef.current = true;
+    void unlockPinned(true);
+  }, [isEditing, mode, isCrossDepartment, draft, pinnedCount, unlockPinned]);
+
+  // A lent-in subject is held back only while nobody has placed it: one already on the timetable
+  // (draft or published) stays editable, whatever the lender's close state.
+  const placedAssignmentIds = new Set([...(draft?.slots ?? []).map((x) => x.assignmentId), ...slots.map((x) => x.assignmentId)]);
+  const heldBack = (id: string) => notReadyLentInIds.has(id) && !placedAssignmentIds.has(id);
   const myAssignmentIds = isCrossDepartment
     ? fulfillingAssignmentId
       ? [fulfillingAssignmentId]
       : assignments
-          .filter((a) => (myFacultyIds.has(a.facultyId) || lentInAssignmentIds.has(a.id)) && !notReadyLentInIds.has(a.id))
+          .filter((a) => (myFacultyIds.has(a.facultyId) || lentInAssignmentIds.has(a.id)) && !heldBack(a.id))
           .map((a) => a.id)
-    : assignments.filter((a) => !notReadyLentInIds.has(a.id)).map((a) => a.id);
+    : assignments.filter((a) => !heldBack(a.id)).map((a) => a.id);
   // Same restriction, applied to the "Add a subject" picker - also excludes
   // whatever's already occupying the target cell (rawCellEntriesFor, not the
   // Theory/Practical-filtered cellEntriesFor - a cell hidden by the view
@@ -293,9 +339,19 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
   // lab too (validatePlacement enforces both), so the picker never offers a
   // theory subject there and the Split button never shows on a theory cell.
   const isSplitTarget = addingAt ? rawCellEntriesFor(addingAt.day, addingAt.period).length > 0 : false;
+  // Subjects already in the clicked cell: another faculty of the SAME subject may join it
+  // (co-teaching, theory or lab); any other join must be a lab alongside a lab.
+  const occupantSubjectIds = new Set(addingAt ? rawCellEntriesFor(addingAt.day, addingAt.period).map((e) => e.slot.subjectId) : []);
+  // A different lab can only join a period that holds labs alone; a theory period only takes more faculty of its own subject.
+  const occupantsAllLabs = addingAt
+    ? rawCellEntriesFor(addingAt.day, addingAt.period).every((e) => assignments.find((a) => a.id === e.slot.assignmentId)?.subjectType === "PRACTICAL")
+    : false;
   const pickableAssignments = assignments.filter(
-    (a) => myAssignmentIds.includes(a.id) && !occupyingAtTarget.has(a.id) && (!isSplitTarget || a.subjectType === "PRACTICAL")
+    (a) => myAssignmentIds.includes(a.id) && !occupyingAtTarget.has(a.id)
+      && (!isSplitTarget || occupantSubjectIds.has(a.subjectId) || (a.subjectType === "PRACTICAL" && occupantsAllLabs))
   );
+  // Lent-in subjects not offered yet (their lender has not closed the request and nothing is placed).
+  const heldBackList = assignments.filter((a) => heldBack(a.id) && !a.isPast);
   const draftHasSlots = Boolean(draft?.slots?.length);
   // Gates the Update button specifically: having *some* slots in the draft
   // isn't enough if none of them are this HOD's own faculty's yet.
@@ -347,6 +403,69 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
    *  display only. "ALL" (the default) shows every entry exactly as before.
    *  A slot with no resolved subjectType (e.g. a legacy row from before this
    *  field existed) still shows under "ALL". */
+  /**
+   * Several faculty of ONE subject in the same cell (co-teaching): the subject is shown once, with
+   * each faculty listed under it. Clicking a faculty selects just their placement, so move/remove
+   * still act on one person at a time.
+   */
+  function renderSharedCell(mates: { slot: TimetableSlot | DraftSlot; isPinned: boolean }[]) {
+    const first = mates[0].slot;
+    const code = ("subjectCode" in first && first.subjectCode) || ("shortCode" in first && (first as unknown as { shortCode?: string }).shortCode) || first.subjectName;
+    const allLocked = mates.every((m) => m.isPinned || (isCrossDepartment && mode === "draft" && !myAssignmentIds.includes((m.slot as DraftSlot).assignmentId)));
+    return (
+      <div
+        key={`shared_${first.subjectId}`}
+        className={`w-full rounded-md border p-2 ${allLocked ? "bg-muted border-border" : "bg-primary/5 border-primary/20"}`}
+      >
+        <p className="text-xs font-bold leading-tight uppercase tracking-wide">{code}</p>
+        {("subjectCode" in first && first.subjectCode && first.subjectCode !== first.subjectName) && (
+          <p className="mt-0.5 line-clamp-1 text-[10px] font-medium text-muted-foreground" title={first.subjectName}>{first.subjectName}</p>
+        )}
+        <div className="mt-1 space-y-0.5">
+          {mates.map((m, i) => {
+            const { slot, isPinned } = m;
+            const dSlot = !isPinned && mode === "draft" ? (slot as DraftSlot) : undefined;
+            // A subject that is not the viewer's own is locked only for someone from ANOTHER department;
+            // the section's own HOD / Incharge can move or remove every period of it.
+            const isForeignSlot = isCrossDepartment && Boolean(dSlot) && !myAssignmentIds.includes(dSlot!.assignmentId);
+            const isLocked = isPinned || isForeignSlot;
+            const clickable = mode === "draft" && isEditing && (!isLocked || !isCrossDepartment);
+            const isSelected = !!(selected && dSlot && selected.assignmentId === dSlot.assignmentId
+              && selected.day === dSlot.day && selected.periodNumber === dSlot.periodNumber);
+            const covering = "substituteFacultyName" in slot ? slot.substituteFacultyName : undefined;
+            return (
+              <div key={`${slot.assignmentId}_${i}`}>
+                <button
+                  type="button"
+                  disabled={!clickable || busy !== null}
+                  onClick={() => { if (clickable && dSlot) setSelected(isSelected ? null : dSlot); }}
+                  className={[
+                    "block w-full rounded px-1 py-0.5 text-left text-[11px] transition-colors",
+                    isSelected ? "bg-primary/15 font-semibold ring-1 ring-primary" : "text-muted-foreground",
+                    clickable ? "cursor-pointer hover:bg-primary/10" : "cursor-default",
+                  ].join(" ")}
+                >
+                  {covering ? <span className="font-medium text-amber-700">{covering}</span> : slot.facultyName}
+                </button>
+                {isSelected && dSlot && (
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    onClick={(e) => { e.stopPropagation(); void handleRemove(dSlot); }}
+                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); void handleRemove(dSlot); } }}
+                    className="ml-1 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium text-destructive hover:bg-destructive/10"
+                  >
+                    <Trash2 className="h-3 w-3" />Remove {slot.facultyName}
+                  </span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
   function cellEntriesFor(day: DayOfWeek, period: number): { slot: TimetableSlot | DraftSlot; isPinned: boolean }[] {
     const entries = rawCellEntriesFor(day, period);
     return typeFilter === "ALL" ? entries : entries.filter((e) => e.slot.subjectType === typeFilter);
@@ -375,39 +494,76 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
     }
   }
 
-  /** Places a teaching assignment (subject + its faculty) into the clicked cell. */
-  async function handleAdd(assignment: TeachingAssignment) {
+  /**
+   * PATCHes one teaching assignment into the clicked cell. `coTeach`: it joins the SAME subject
+   * already in the cell (another faculty of it); `allowSplit`: it joins a different lab.
+   * Returns an error message, or null once placed.
+   */
+  async function placeOne(assignment: TeachingAssignment, flags: { coTeach: boolean; allowSplit: boolean }): Promise<string | null> {
+    if (!addingAt) return "No cell selected";
+    const res = await fetch("/api/college/timetable/draft", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sectionId,
+        ...semesterBody,
+        action: "add",
+        assignmentId: assignment.id,
+        toDay: addingAt.day,
+        toPeriod: addingAt.period,
+        allowSplit: flags.allowSplit,
+        ...(flags.coTeach ? { coTeach: true } : {}),
+      }),
+    });
+    const json = (await res.json()) as { slots?: DraftSlot[]; error?: string; adjustedNote?: string | null };
+    if (!res.ok) return json.error ?? "Cannot add here";
+    setDraft((d) => (d ? { ...d, slots: json.slots ?? d.slots, status: "DRAFT" } : d));
+    if (json.adjustedNote) toast({ title: "Lab spans a break", description: json.adjustedNote });
+    return null;
+  }
+
+  /** The flags the FIRST faculty placed in the clicked cell needs, from what the cell already holds. */
+  function flagsForCell(assignment: TeachingAssignment) {
+    const sameSubjectHere = isSplitTarget && occupantSubjectIds.has(assignment.subjectId);
+    return { coTeach: sameSubjectHere, allowSplit: isSplitTarget && !sameSubjectHere };
+  }
+
+  /** Picked a subject in the "Add a subject" list. A subject with other faculty in this section asks first. */
+  function handleAdd(assignment: TeachingAssignment) {
     if (!addingAt) return;
+    const others = assignments.filter(
+      (x) => x.id !== assignment.id && x.subjectId === assignment.subjectId && !x.isPast
+        && myAssignmentIds.includes(x.id) && !occupyingAtTarget.has(x.id),
+    );
+    if (others.length > 0) {
+      setSharePrompt({ picked: assignment, others });
+      return;
+    }
+    void placeAssignments([assignment]);
+  }
+
+  /** Places the given faculty of one subject in the clicked cell, the first as the cell allows and the rest alongside it. */
+  async function placeAssignments(list: TeachingAssignment[]) {
+    if (!addingAt || list.length === 0) return;
     setBusy("move");
     try {
-      // Only a genuinely already-occupied cell opts into a split period -
-      // the empty-cell "Add" flow never sets this, so it still gets the
-      // normal double-booking rejection if something raced it. Reuses the
-      // same isSplitTarget the picker itself was already filtered by.
-      const allowSplit = isSplitTarget;
-      const res = await fetch("/api/college/timetable/draft", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sectionId,
-          ...semesterBody,
-          action: "add",
-          assignmentId: assignment.id,
-          toDay: addingAt.day,
-          toPeriod: addingAt.period,
-          allowSplit,
-        }),
-      });
-      const json = (await res.json()) as { slots?: DraftSlot[]; error?: string; adjustedNote?: string | null };
-      if (!res.ok) {
-        toast({ variant: "destructive", title: "Cannot add here", description: json.error });
-        return;
+      for (let i = 0; i < list.length; i++) {
+        const flags = i === 0 ? flagsForCell(list[i]) : { coTeach: true, allowSplit: false };
+        const problem = await placeOne(list[i], flags);
+        if (problem) {
+          toast({
+            variant: "destructive",
+            title: i === 0 ? "Cannot add here" : `Placed ${list.slice(0, i).map((a) => a.facultyName).join(", ")}, but not ${list[i].facultyName}`,
+            description: problem,
+          });
+          if (i > 0) setAddingAt(null);
+          return;
+        }
       }
-      setDraft((d) => (d ? { ...d, slots: json.slots ?? d.slots, status: "DRAFT" } : d));
       setAddingAt(null);
-      if (json.adjustedNote) toast({ title: "Lab spans a break", description: json.adjustedNote });
     } finally {
       setBusy(null);
+      setSharePrompt(null);
     }
   }
 
@@ -878,8 +1034,17 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
         <p className="text-sm text-muted-foreground">
           {selected
             ? `Moving ${selected.subjectName} - click an empty period to place it, or click it again to cancel.`
-            : "Click an empty period to add a subject, or a placed subject to move or remove it. Pinned slots and subjects lent in by another department cannot be changed here."}
+            : "Click an empty period to add a subject, or a placed subject to move or remove it. Subjects lent in by another department are changed by that department, not here."}
         </p>
+      )}
+
+      {mode === "draft" && isEditing && !isCrossDepartment && pinnedCount > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+          <span>{pinnedCount} period{pinnedCount === 1 ? " is" : "s are"} pinned on the live timetable and locked here.</span>
+          <Button size="sm" variant="outline" loading={unlocking} onClick={() => void unlockPinned(false)}>
+            Unlock {pinnedCount === 1 ? "it" : "them"}
+          </Button>
+        </div>
       )}
 
       {draft?.diagnostics?.length ? (
@@ -970,20 +1135,34 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
                     // Only a cell of lab (PRACTICAL) subjects, and not already
                     // shared by two, can be split any further.
                     const rawEntries = rawCellEntriesFor(d, row.period);
-                    const canAddAnother = mode === "draft" && isEditing && !selected
-                      && rawEntries.length < 2
+                    // ...or another faculty of the same subject that is not in the cell yet (co-teaching).
+                    // (counted by subject: a lab with two faculty is still one lab, so a second lab may join it)
+                    const labCanSplit = new Set(rawEntries.map((e) => e.slot.subjectId)).size < 2
                       && rawEntries.every((e) => assignments.find((a) => a.id === e.slot.assignmentId)?.subjectType === "PRACTICAL");
+                    const sameSubjectFacultyLeft = assignments.some((a) =>
+                      myAssignmentIds.includes(a.id) && !a.isPast
+                      && !rawEntries.some((e) => e.slot.assignmentId === a.id)
+                      && rawEntries.some((e) => e.slot.subjectId === a.subjectId));
+                    // Always offered on an occupied period while editing: the dialog lists what can join (another lab beside a
+                    // lab, or another faculty of the same subject) and says why when nothing can.
+                    const canAddAnother = mode === "draft" && isEditing;
 
                     return (
                       <td key={`period_${row.period}`} className="p-2 align-top">
                         <div className="space-y-1">
                             {entries.map((entry, entryIdx) => {
+                              // Faculty of one subject sharing this cell: one block, subject once.
+                              const sameSubject = entries.filter((e) => e.slot.subjectId === entry.slot.subjectId);
+                              if (sameSubject.length > 1) {
+                                if (entries.findIndex((e) => e.slot.subjectId === entry.slot.subjectId) !== entryIdx) return null;
+                                return renderSharedCell(sameSubject);
+                              }
                               const { slot, isPinned } = entry;
                               const dSlot = !isPinned && mode === "draft" ? (slot as DraftSlot) : undefined;
                               // A placed period this HOD doesn't own (e.g. a subject lent in
                               // through a cross-department Assignment Request) is shown same as
                               // a pinned slot - visible, but locked against move/remove here.
-                              const isForeignSlot = Boolean(dSlot) && !myAssignmentIds.includes(dSlot!.assignmentId);
+                              const isForeignSlot = isCrossDepartment && Boolean(dSlot) && !myAssignmentIds.includes(dSlot!.assignmentId);
                               const isLocked = isPinned || isForeignSlot;
                               const isSelected =
                                 selected && dSlot &&
@@ -1038,6 +1217,16 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
                                   )}
                                   {"classroom" in slot && slot.classroom && (
                                     <p className="text-[11px] text-muted-foreground">{slot.classroom}</p>
+                                  )}
+                                  {/* Why this period is locked. */}
+                                  {isLocked && (
+                                    <p className="mt-1 text-[10px] font-medium text-amber-700">
+                                      {isPinned
+                                        ? "Pinned on the live timetable"
+                                        : notReadyLentInIds.get(slot.assignmentId)
+                                          ? `Lent in - waiting for ${notReadyLentInIds.get(slot.assignmentId)}`
+                                          : "Belongs to another department"}
+                                    </p>
                                   )}
                                   {isSelected && dSlot && (
                                     <span
@@ -1096,10 +1285,10 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
                               <button
                                 type="button"
                                 disabled={busy !== null}
-                                onClick={() => setAddingAt({ day: d, period: row.period })}
+                                onClick={() => { setSelected(null); setAddingAt({ day: d, period: row.period }); }}
                                 className="w-full rounded-md border border-dashed p-1 text-center text-[10px] text-muted-foreground hover:border-primary hover:text-primary cursor-pointer"
                               >
-                                <span className="inline-flex items-center gap-1"><Plus className="h-3 w-3" />Split - add subject</span>
+                                <span className="inline-flex items-center gap-1"><Plus className="h-3 w-3" />{sameSubjectFacultyLeft && !labCanSplit ? "Add faculty" : "Split - add subject"}</span>
                               </button>
                             ) : null}
                           </div>
@@ -1124,7 +1313,7 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
             </DialogTitle>
             <DialogDescription>
               {isSplitTarget
-                ? `This period already has a subject - only a lab (Practical) subject can be added alongside it.`
+                ? `This period already has a subject - another faculty of the same subject, or a lab (Practical) subject alongside a lab, can be added to it.`
                 : `Pick a subject assigned to this section. Its faculty comes along automatically; a subject with custom continuous slots (set in Settings) takes that many periods.`}
             </DialogDescription>
           </DialogHeader>
@@ -1135,9 +1324,11 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
                 ? "None of your remaining lab (Practical) subjects can be added here - only a lab may share an already-occupied period."
                 : isCrossDepartment
                   ? "None of your faculty are assigned to this section yet. Add that under Teaching Assignments first."
-                  : assignments.length > 0
-                    ? "Every remaining subject was lent in through an Assignment Request - the lending department places its own periods from their side."
-                    : "No subjects are assigned to this section yet. Add them under Teaching Assignments first."}
+                  : heldBackList.length > 0
+                    ? "The remaining subjects are lent in by other departments, which have not finished yet - see below."
+                    : assignments.length > 0
+                      ? "Every remaining subject is already placed in this period, or none of them can go here."
+                      : "No subjects are assigned to this section yet. Add them under Teaching Assignments first."}
             </p>
           ) : (
             <div className="max-h-80 space-y-1.5 overflow-y-auto">
@@ -1146,7 +1337,7 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
                   key={a.id}
                   type="button"
                   disabled={busy !== null}
-                  onClick={() => void handleAdd(a)}
+                  onClick={() => handleAdd(a)}
                   className="flex w-full items-center justify-between gap-3 rounded-md border p-3 text-left transition-colors hover:border-primary disabled:opacity-50"
                 >
                   <span className="min-w-0">
@@ -1158,6 +1349,50 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
               ))}
             </div>
           )}
+
+          {/* Subjects lent in by another department stay out of the list above until that department
+              has shared the faculty's busy periods and pressed "Notify department & close". */}
+          {heldBackList.length > 0 && (
+            <div className="space-y-1 rounded-md border border-amber-200 bg-amber-50 p-3">
+              <p className="text-xs font-medium text-amber-900">Not available yet - waiting for the lending department</p>
+              {heldBackList.map((a) => (
+                <p key={a.id} className="text-xs text-amber-900">
+                  {a.subjectName} - {a.facultyName}
+                  <span className="text-amber-700"> · waiting for {notReadyLentInIds.get(a.id)} to notify you</span>
+                </p>
+              ))}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* A subject with more than one faculty: all of them in this cell together (co-teaching), or only the one picked. */}
+      <Dialog open={sharePrompt !== null} onOpenChange={(o) => { if (!o && busy === null) setSharePrompt(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{sharePrompt?.picked.subjectName} has more than one faculty</DialogTitle>
+            <DialogDescription>
+              {sharePrompt
+                ? `${[sharePrompt.picked, ...sharePrompt.others].map((a) => a.facultyName).join(", ")} teach this subject in this section. Place them all in this period, or add ${sharePrompt.picked.facultyName} alone here and add the others in other periods?`
+                : ""}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-2">
+            <Button
+              loading={busy !== null}
+              onClick={() => sharePrompt && void placeAssignments([sharePrompt.picked, ...sharePrompt.others])}
+            >
+              Place all {sharePrompt ? 1 + sharePrompt.others.length : ""} faculty here
+            </Button>
+            <Button
+              variant="outline"
+              disabled={busy !== null}
+              onClick={() => sharePrompt && void placeAssignments([sharePrompt.picked])}
+            >
+              Only {sharePrompt?.picked.facultyName} here - add the others separately
+            </Button>
+            <Button variant="ghost" disabled={busy !== null} onClick={() => setSharePrompt(null)}>Cancel</Button>
+          </div>
         </DialogContent>
       </Dialog>
 

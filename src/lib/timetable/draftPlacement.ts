@@ -1,3 +1,4 @@
+import { MAX_FACULTY_PER_SUBJECT } from "@/lib/teaching/facultyCap";
 import { pinnedCells, type TimetableContext } from "@/lib/timetable/loadContext";
 import { isContiguousBlockAvailable, periodsFollowedByBreak } from "@/lib/timetable/buildGrid";
 import type { DayOfWeek, DraftSlot } from "@/types";
@@ -61,6 +62,11 @@ export function validatePlacement(
     // by two DIFFERENT assignments: the same one twice in a cell would collide
     // on its attendance session (keyed by assignment, date and period).
     assignmentId?: string;
+    // Co-teaching: the SAME subject placed in a cell that already holds it, for another
+    // faculty of that subject ("place here with both faculty"). Works for any subject
+    // type, theory included, unlike allowSplit, which only ever pairs two labs. Needs
+    // `subjectId`; the cell may hold only this subject, never a different one.
+    coTeach?: boolean;
   },
 ): string | null {
   const { timing, rules } = ctx;
@@ -87,13 +93,33 @@ export function validatePlacement(
     const p = startPeriod + i;
     const key = cellKey(day, p);
     if (pinned.has(key)) return `Period ${p} on ${day} holds a pinned slot.`;
-    if (occupied.has(key) && !opts.allowSplit) return `This section already has a subject at ${day} period ${p}.`;
-    if (occupied.has(key) && opts.allowSplit) {
+    if (occupied.has(key) && !opts.allowSplit && !opts.coTeach) return `This section already has a subject at ${day} period ${p}.`;
+    if (occupied.has(key) && opts.coTeach) {
+      const existing = draft.slots.filter((s) => s.day === day && s.periodNumber === p);
+      const sameSubject = existing.filter((s) => s.subjectId === opts.subjectId);
+      // Besides this subject, the cell may only hold ONE other lab, and only when this subject is a lab too
+      // (two labs sharing a period, each with its own faculty).
+      const others = existing.filter((s) => s.subjectId !== opts.subjectId);
+      if (others.length > 0) {
+        const typeOf = (id: string) => ctx.subjectsById.get(id)?.type;
+        const labsOnly = typeOf(opts.subjectId) === "PRACTICAL" && others.every((s) => typeOf(s.subjectId) === "PRACTICAL");
+        if (!labsOnly) return `Period ${p} on ${day} holds a different subject - faculty can only share a period for the same subject.`;
+        if (new Set([...existing.map((s) => s.subjectId), opts.subjectId]).size > 2) {
+          return `Period ${p} on ${day} already has 2 labs sharing it - a period can only be split between two labs.`;
+        }
+      }
+      if (opts.assignmentId && existing.some((s) => s.assignmentId === opts.assignmentId)) {
+        return `This faculty is already placed at ${day} period ${p}.`;
+      }
+      if (sameSubject.length >= MAX_FACULTY_PER_SUBJECT) return `Period ${p} on ${day} already has ${sameSubject.length} faculty for this subject.`;
+    } else if (occupied.has(key) && opts.allowSplit) {
       // A period may only be split between labs: every subject already in it
       // must be PRACTICAL too (the incoming one is checked by the caller),
       // and at most two share it.
       const existing = draft.slots.filter((s) => s.day === day && s.periodNumber === p);
-      if (existing.length >= 2) return `Period ${p} on ${day} already has 2 subjects sharing it - a period can only be split between two labs.`;
+      // Two LABS (subjects) may share a period; each may have several faculty, so count subjects, not entries.
+      const existingLabs = new Set(existing.map((s) => s.subjectId));
+      if (existingLabs.size >= 2 && !existingLabs.has(opts.subjectId)) return `Period ${p} on ${day} already has 2 labs sharing it - a period can only be split between two labs.`;
       if (existing.some((s) => ctx.subjectsById.get(s.subjectId)?.type !== "PRACTICAL")) {
         return `Period ${p} on ${day} holds a non-lab subject - a period can only be split between lab subjects.`;
       }
