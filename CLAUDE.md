@@ -75,6 +75,13 @@ There is **no env switch** (the old `READ_ONLY_FACULTY_COLLEGES` is gone and ign
 - **Department rename never touches another department's rows** (`renameCascade.ts`): the by-id pass skips a doc whose stored name is another department's current name (teaching assignments store the SECTION's department name beside the COURSE owner's id), and an existing id is never overwritten - only a missing one is stamped.
 - **No assumed course shape.** Year lists come from `Course.durationYears` (`courseYearNumbers`, `selectableYears`); semesters from the course's own `courseYearTimings` (`semesterPlan`, `useCourseSemesterPlan`) with a single labelled fallback of 2/year only when a course has none.
 
+### Previous Teaching Assignments (free text)
+
+- **Where:** `facultyMembers.previousTeachingAssignments` - a list of `{ id, source: INTERNAL|EXTERNAL, collegeName (External only), academicYear, course, year, semester, subject, passPercentage }`, every field free text. Separate from the `teachingAssignments` collection (current/structured/legacy `isPast` rows), which the feature never touches; old `isPast` rows stay listed and editable under "Previous".
+- **Who writes it:** the faculty member themselves (`PATCH /api/college/faculty/me`, from their own Teaching Load page - the only self-editable part of that module; `isSelfEditDisabled` in `profileModules.ts`) and HOD/Principal (`PATCH /api/college/faculty/[id]`, the Add wizard via `POST /api/college/faculty` and `link-hod`).
+- **Never lose a row:** editors send `previousTeachingAssignmentsLoadedIds`; the server keeps any stored row the editor never loaded (`mergePreviousTeachingAssignments`) and drops only rows it loaded and removed, so a stale edit page cannot erase what someone else added. Rules (trim, External needs a College Name, caps) live in `src/lib/faculty/previousTeaching.ts`.
+- **Shown in:** the Teaching Load view (`TeachingLoadTable`) and the resume ("Previous Teaching Assignments" table).
+
 ## Architecture & Directory Map
 
 ```

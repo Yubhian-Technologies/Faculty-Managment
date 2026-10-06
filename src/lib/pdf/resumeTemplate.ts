@@ -7,6 +7,8 @@ import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { DESIGNATION_LABELS, FACULTY_STATUS_LABELS, ROLE_LABELS, RELIGION_LABELS, CASTE_LABELS } from "@/types";
 import type { Religion, Caste } from "@/types";
 import { buildTeachingLoadRows, formatClassColumn, type TeachingLoadRow } from "@/lib/teaching/buildTeachingLoadRows";
+import { readPreviousTeachingAssignments, formatPassPercentage, PREVIOUS_TEACHING_SOURCE_LABELS } from "@/lib/faculty/previousTeaching";
+import type { PreviousTeachingAssignment } from "@/types";
 import { allPreviousExperienceEntries, totalYearsOfExperience, experienceBreakdown, formatDuration } from "@/lib/faculty/experienceCalc";
 
 type TimestampLike = { toDate?: () => Date; seconds?: number; _seconds?: number } | string | null | undefined;
@@ -185,6 +187,8 @@ export interface ResumeData {
   /** Live current teaching-assignment rows (course/section/subject), distinct from the
    *  Module 2 3-course summary - only populated for roles whose details page shows this
    *  (e.g. HOD's Faculty edit page). */
+  /** Free-text Previous Teaching Assignments stored on the faculty record (Internal/External, Academic Year, Course, Year, Sem, Subject, Passing %). */
+  previousTeachingAssignments?: unknown;
   teachingAssignments?: {
     courseName?: string;
     year?: number;
@@ -277,12 +281,21 @@ function renderTeachingLoadTable(rows: TeachingLoadRow[], showPastColumns: boole
 /** Renders the Current / Previous Teaching Assignments tables under their own
  *  labeled subheadings, kept visually separate rather than intermixed -
  *  Student Pass % only ever applies to (and is only shown on) the Previous table. */
-function renderTeachingLoadGroups(groups: { current: TeachingLoadRow[]; past: TeachingLoadRow[] }): string {
+/** Free-text Previous Teaching Assignments table (every column as the faculty member/HOD typed it). */
+function renderPreviousTeachingTable(rows: PreviousTeachingAssignment[]): string {
+  if (!rows.length) return "";
+  const body = rows
+    .map((r) => `<tr><td>${esc(PREVIOUS_TEACHING_SOURCE_LABELS[r.source])}${r.source === "EXTERNAL" && r.collegeName ? ` - ${esc(r.collegeName)}` : ""}</td><td>${esc(r.academicYear)}</td><td>${esc(r.course)}</td><td>${esc(r.year)}</td><td>${esc(r.semester)}</td><td>${esc(r.subject)}</td><td>${esc(formatPassPercentage(r.passPercentage))}</td></tr>`)
+    .join("");
+  return `<table class="data-table"><tr><th>Internal / External</th><th>Academic Year</th><th>Course</th><th>Year</th><th>Semester</th><th>Subject</th><th>Passing %</th></tr>${body}</table>`;
+}
+
+function renderTeachingLoadGroups(groups: { current: TeachingLoadRow[]; past: TeachingLoadRow[] }, previous: PreviousTeachingAssignment[] = []): string {
   const currentBlock = groups.current.length
     ? `<div class="subheading">Current Teaching Assignments</div>${renderTeachingLoadTable(groups.current, false)}`
     : "";
-  const pastBlock = groups.past.length
-    ? `<div class="subheading">Previous Teaching Assignments</div>${renderTeachingLoadTable(groups.past, true)}`  // true = show Student Pass % + Feedback %
+  const pastBlock = groups.past.length || previous.length
+    ? `<div class="subheading">Previous Teaching Assignments</div>${renderPreviousTeachingTable(previous)}${renderTeachingLoadTable(groups.past, true)}`  // true = show Student Pass % + Feedback %
     : "";
   return currentBlock + pastBlock;
 }
@@ -454,7 +467,7 @@ export function getResumeHTML(rawData: ResumeData): string {
     staticCourses: ap?.teachingAssignment?.courses,
     department: data.department,
   });
-  const teachingLoadTables = renderTeachingLoadGroups(teachingLoadGroups);
+  const teachingLoadTables = renderTeachingLoadGroups(teachingLoadGroups, readPreviousTeachingAssignments(data));
   const teachingLoadBody = teachingLoadBullets + teachingLoadTables;
 
   // ── Research publications ───────────────────────────────────────────────

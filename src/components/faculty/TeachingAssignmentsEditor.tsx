@@ -11,6 +11,8 @@ import { DAY_LABELS } from "@/types";
 import { sectionDisplayLabel } from "@/lib/sections/sectionLabel";
 import { resolveDepartmentCourseScope } from "@/lib/college/academicStructure";
 import { buildCourseGroups } from "@/lib/departments/hodScope";
+import { PreviousTeachingRecordList, newPreviousTeachingRecord } from "@/components/faculty/PreviousTeachingAssignmentsEditor";
+import type { PreviousTeachingAssignment } from "@/types";
 
 export interface StagedSlot {
   localId: string;
@@ -86,9 +88,18 @@ interface Props {
   // departments' own faculty pools, even though they show up under one
   // merged "Bachelor of Technology" pick in the Course dropdown.
   department?: string;
+  // Free-text Previous Teaching Assignments (Internal/External, Academic Year, Course, Year, Sem, Subject, Passing %).
+  // When the host passes these, "Add Previous Teaching Assignment" adds such a record - stored on the faculty record,
+  // separate from the structured assignments above, which are left exactly as they were. Rows already saved in the
+  // earlier course/section/subject-picker format (isPast) stay listed and editable under "Previous". Without these
+  // props the editor behaves as it always did.
+  previousRecords?: PreviousTeachingAssignment[];
+  onPreviousRecordsChange?: (rows: PreviousTeachingAssignment[]) => void;
 }
 
-export function TeachingAssignmentsEditor({ value, onChange, department }: Props) {
+export function TeachingAssignmentsEditor({ value, onChange, department, previousRecords, onPreviousRecordsChange }: Props) {
+  const freeTextPrevious = !!onPreviousRecordsChange;
+  const previousList = previousRecords ?? [];
   const [courses, setCourses] = useState<Course[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const ownDepartment = useMemo(
@@ -301,13 +312,16 @@ export function TeachingAssignmentsEditor({ value, onChange, department }: Props
           <Button type="button" variant="outline" size="sm" onClick={() => addRow(false)}>
             <Plus className="h-3.5 w-3.5 mr-1" />Add Course
           </Button>
-          <Button type="button" variant="outline" size="sm" onClick={() => addRow(true)}>
+          <Button
+            type="button" variant="outline" size="sm"
+            onClick={() => (freeTextPrevious ? onPreviousRecordsChange?.([...previousList, newPreviousTeachingRecord()]) : addRow(true))}
+          >
             <History className="h-3.5 w-3.5 mr-1" />Add Previous Teaching Assignment
           </Button>
         </div>
       </div>
 
-      {value.length === 0 && <p className="text-xs text-muted-foreground">No teaching assignments added yet.</p>}
+      {value.length === 0 && previousList.length === 0 && <p className="text-xs text-muted-foreground">No teaching assignments added yet.</p>}
 
       {value.filter((r) => !r.isPast).length > 0 && (
         <div className="space-y-3">
@@ -315,9 +329,12 @@ export function TeachingAssignmentsEditor({ value, onChange, department }: Props
           {value.filter((r) => !r.isPast).map(renderRow)}
         </div>
       )}
-      {value.filter((r) => r.isPast).length > 0 && (
+      {(value.filter((r) => r.isPast).length > 0 || previousList.length > 0) && (
         <div className="space-y-3 border-t pt-3">
           <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Previous</p>
+          {previousList.length > 0 && onPreviousRecordsChange && (
+            <PreviousTeachingRecordList value={previousList} onChange={onPreviousRecordsChange} />
+          )}
           {value.filter((r) => r.isPast).map(renderRow)}
         </div>
       )}

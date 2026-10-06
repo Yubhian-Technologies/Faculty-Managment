@@ -19,6 +19,9 @@ import { personalRecordFromDoc, personalPatchBody } from "@/lib/faculty/personal
 import { diffAcademicProfile, isEmptyChanges } from "@/lib/faculty/academicProfileChanges";
 import { degreeTypeError } from "@/lib/faculty/degreeType";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
+import { readPreviousTeachingAssignments } from "@/lib/faculty/previousTeaching";
+import { savePreviousTeachingAssignments, samePreviousTeaching } from "@/lib/faculty/savePreviousTeaching";
+import type { PreviousTeachingAssignment } from "@/types";
 
 // Shared by every role that edits a faculty record (HOD, Principal/College
 // Admin). `moduleHref` is that role's own read-only view of this same module
@@ -41,6 +44,9 @@ export function FacultyModuleEditPage({
   const [originalAcademicProfile, setOriginalAcademicProfile] = useState<FacultyEditRecord["academicProfile"]>({});
   const [teachingRows, setTeachingRows] = useState<StagedTeachingRow[]>([]);
   const [originalTeachingRows, setOriginalTeachingRows] = useState<StagedTeachingRow[]>([]);
+  // Free-text Previous Teaching Assignments, as loaded and as edited (see lib/faculty/previousTeaching.ts).
+  const [previousRecords, setPreviousRecords] = useState<PreviousTeachingAssignment[]>([]);
+  const [originalPrevious, setOriginalPrevious] = useState<PreviousTeachingAssignment[]>([]);
 
   useEffect(() => {
     fetch(`/api/college/faculty/${facultyId}`)
@@ -54,6 +60,9 @@ export function FacultyModuleEditPage({
         const m = migrateFacultyDoc(data.faculty);
         setName(facultyDisplayName(m as { legalName?: string }));
         setDepartment((m.department as string) ?? "");
+        const previous = readPreviousTeachingAssignments(m as { previousTeachingAssignments?: unknown });
+        setPreviousRecords(previous);
+        setOriginalPrevious(previous);
         const academicProfile = (m.academicProfile as FacultyEditRecord["academicProfile"]) ?? {};
         setOriginalAcademicProfile(academicProfile);
         setRecord({
@@ -112,6 +121,15 @@ export function FacultyModuleEditPage({
     setSaving(true);
     try {
       if (moduleKey === "teaching-load") {
+        if (!samePreviousTeaching(previousRecords, originalPrevious)) {
+          const prevError = await savePreviousTeachingAssignments(`/api/college/faculty/${facultyId}`, previousRecords, originalPrevious.map((r) => r.id));
+          if (prevError) {
+            toast({ variant: "destructive", title: "Previous teaching assignments not saved", description: prevError });
+            setSaving(false);
+            return;
+          }
+          setOriginalPrevious(previousRecords);
+        }
         const errors = await syncTeachingAssignments(facultyId, name, originalTeachingRows, teachingRows);
         if (errors.length > 0) {
           toast({ variant: "destructive", title: "Some teaching assignments failed to save", description: errors.join("; ") });
@@ -176,6 +194,8 @@ export function FacultyModuleEditPage({
               facultyId={facultyId}
               teachingRows={teachingRows}
               onTeachingRowsChange={setTeachingRows}
+              previousTeachingRecords={previousRecords}
+              onPreviousTeachingRecordsChange={setPreviousRecords}
               department={department}
               collegeType={collegeType}
               requiredPersonalFields={FACULTY_REQUIRED_PERSONAL_FIELDS}

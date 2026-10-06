@@ -56,6 +56,8 @@ import {
 } from "@/components/faculty/AcademicProfileModuleFields";
 import { TextInput } from "@/components/shared/ProfileFieldPrimitives";
 import { syncTeachingAssignments } from "@/lib/teaching/syncTeachingAssignments";
+import type { PreviousTeachingAssignment } from "@/types";
+import { previousTeachingProblem } from "@/lib/faculty/previousTeaching";
 import {
   experienceBreakdown,
   totalYearsOfExperience,
@@ -193,6 +195,7 @@ export default function NewFacultyPage() {
   }, [isLinkMode, department, myDepartments]);
 
   const [teachingRows, setTeachingRows] = useState<StagedTeachingRow[]>([]);
+  const [previousTeaching, setPreviousTeaching] = useState<PreviousTeachingAssignment[]>([]);
   const [extraPhones, setExtraPhones] = useState<{ label?: string; number: string }[]>([]);
   const [photoUrl, setPhotoUrl] = useState<string | undefined>(undefined);
   const [tempPhotoId] = useState(() => crypto.randomUUID());
@@ -462,6 +465,14 @@ export default function NewFacultyPage() {
       return;
     }
 
+    const previousProblem = previousTeachingProblem(previousTeaching);
+    if (previousProblem) {
+      setErroredSteps(new Set<WizardStepKey>(["teaching-load"]));
+      setStepIndex(steps.findIndex((s) => s.key === "teaching-load"));
+      toast({ variant: "destructive", title: "Previous teaching assignment incomplete", description: previousProblem });
+      return;
+    }
+
     const displayName = personalDetails.legalName?.trim() || "";
     setSubmitting(true);
     try {
@@ -477,6 +488,7 @@ export default function NewFacultyPage() {
             ? { department }
             : {}),
           academicProfile,
+          ...(previousTeaching.length > 0 ? { previousTeachingAssignments: previousTeaching } : {}),
           ...(honorific ? { honorific } : {}),
           ...personalDetails,
           ...(photoUrl ? { profilePhotoUrl: photoUrl } : {}),
@@ -1094,6 +1106,8 @@ export default function NewFacultyPage() {
               <TeachingAssignmentsEditor
                 value={teachingRows}
                 onChange={setTeachingRows}
+                previousRecords={previousTeaching}
+                onPreviousRecordsChange={setPreviousTeaching}
                 department={effectiveDepartment}
               />
             )}
@@ -1181,7 +1195,7 @@ export default function NewFacultyPage() {
                       </div>
                       <div className="flex justify-between py-1">
                         <span className="text-muted-foreground">Teaching Load Staged:</span>
-                        <span className="font-semibold text-foreground">{teachingRows.length} subjects</span>
+                        <span className="font-semibold text-foreground">{teachingRows.length} subjects{previousTeaching.length > 0 ? ` + ${previousTeaching.length} previous` : ""}</span>
                       </div>
                     </div>
                   </div>
