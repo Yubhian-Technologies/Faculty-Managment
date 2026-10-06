@@ -36,6 +36,7 @@ export interface StudentImportRow {
   // collected via CSV.
   course?: string;
   dateOfAdmission?: string;
+  dateOfJoining?: string;
   admissionNo?: string;
   hallTicketNo?: string;
   admissionType?: string;
@@ -157,6 +158,7 @@ export function buildStudentDoc(
     ...(row.secondaryDepartment?.trim() ? { secondaryDepartment: row.secondaryDepartment.trim() } : {}),
     ...(row.course?.trim() ? { course: row.course.trim() } : {}),
     ...(row.dateOfAdmission?.trim() ? { dateOfAdmission: row.dateOfAdmission.trim() } : {}),
+    ...(row.dateOfJoining?.trim() ? { dateOfJoining: row.dateOfJoining.trim() } : {}),
     ...(row.admissionNo?.trim() ? { admissionNo: row.admissionNo.trim() } : {}),
     ...(row.hallTicketNo?.trim() ? { hallTicketNo: row.hallTicketNo.trim() } : {}),
     ...(row.admissionType?.trim() ? { admissionType: row.admissionType.trim() } : {}),

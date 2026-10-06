@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { effectiveJoiningDate } from "@/lib/studentAttendance/joiningDate";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -129,7 +130,8 @@ export async function GET(request: Request) {
         to: earlierDate(semesterTo, toParam),
         year: yearParam,
         month: monthParam,
-      }
+      },
+      { joinedOn: effectiveJoiningDate(student) }
     );
 
     return NextResponse.json({

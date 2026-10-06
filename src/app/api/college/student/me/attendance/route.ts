@@ -7,6 +7,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { loadEffectiveTiming } from "@/lib/college/semester";
 import { formatShortCourseName } from "@/lib/academic/format";
 import { istDateKey } from "@/lib/attendance/istTime";
+import { effectiveJoiningDate } from "@/lib/studentAttendance/joiningDate";
 import { computeStudentAttendanceHistory, studentDepartmentsForHistory, STUDENT_SELF_VIEW_CACHE_MS } from "@/lib/studentAttendance/history";
 import { loadAcademicYearConfig, windowForAcademicYear } from "@/lib/studentAttendance/academicYearWindow";
 import { calcPercent } from "@/lib/studentAttendance/percentage";
@@ -124,7 +125,7 @@ export async function GET(request: Request) {
     const { subjects } = await computeStudentAttendanceHistory(db, session.collegeId, student.id, departments, {
       from,
       to,
-    }, { cacheMs: STUDENT_SELF_VIEW_CACHE_MS });
+    }, { cacheMs: STUDENT_SELF_VIEW_CACHE_MS, joinedOn: effectiveJoiningDate(student) });
 
     // Short codes only on the report: the subject's short code, the course's
     // short name ("B.Tech"), the branch's department code ("CSE"). A shared-
