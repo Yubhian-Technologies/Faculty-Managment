@@ -209,6 +209,9 @@ export async function PATCH(request: Request) {
       // "add" only - explicit opt-in for a split period (see validatePlacement's
       // own doc-comment). Ignored for "move"/"remove".
       allowSplit?: boolean;
+      // "add" only - place this faculty in a cell that already holds the SAME subject for
+      // another of its faculty ("place here with both faculty"). Any subject type.
+      coTeach?: boolean;
     };
 
     const { sectionId, assignmentId } = body;
@@ -294,7 +297,8 @@ export async function PATCH(request: Request) {
         // department has shared their busy periods and closed the request. The
         // lender's own placing flow (callerIsLender) is not held back.
         const lendingDept = ctx.lentNotReady.get(assignmentId);
-        if (lendingDept && !callerIsLender) {
+        const alreadyInDraft = draft.slots.some((s) => s.assignmentId === assignmentId);
+        if (lendingDept && !callerIsLender && !alreadyInDraft) {
           return { ok: false, status: 409, error: `${lendingDept} hasn't finished this allocation yet - you can place ${assignment.facultyName || "this faculty"} once they notify you` };
         }
         const subject = ctx.subjectsById.get(assignment.subjectId);
@@ -307,7 +311,7 @@ export async function PATCH(request: Request) {
         // Same gate as timetable-slots/route.ts's manual pin path - a split
         // period (two+ subjects/faculty sharing one cell) only makes sense for
         // parallel lab batches, not two theory classes at once.
-        if (body.allowSplit && subjectType !== "PRACTICAL") {
+        if (body.allowSplit && !body.coTeach && subjectType !== "PRACTICAL") {
           return { ok: false, status: 400, error: "Only lab (PRACTICAL) subjects can be split into batches" };
         }
 
@@ -321,6 +325,8 @@ export async function PATCH(request: Request) {
           blockSize,
           ignore: new Set<string>(),
           allowSplit: body.allowSplit,
+          coTeach: body.coTeach,
+          assignmentId,
         };
         const problem = validatePlacement(ctx, draft, placementOpts);
         if (problem) {

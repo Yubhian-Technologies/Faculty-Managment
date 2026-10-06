@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { cn } from "@/lib/utils";
 import { isoDateKey } from "@/lib/leave/dayCounter";
-import { ALL_DAYS, buildTimetableColumns, periodTimeRange, resolveTimetableDays, slotShortCode } from "@/lib/timetable/gridModel";
+import { ALL_DAYS, buildTimetableColumns, periodTimeRange, resolveTimetableDays, slotShortCode, mergeCoTaughtSlots} from "@/lib/timetable/gridModel";
 import { DAY_LABELS } from "@/types";
 import type { CourseYearTiming, DayOfWeek, Subject, TimetableSlot } from "@/types";
 
@@ -94,7 +94,8 @@ export function StudentDayTimetable({ weekStart, timing, slots, subjects, workin
                 </li>
               );
             }
-            const periodSlots = daySlots.filter((s) => s.periodNumber === col.periodNumber);
+            // Faculty of one subject sharing the period show as one entry, subject once.
+            const periodSlots = mergeCoTaughtSlots(daySlots.filter((s) => s.periodNumber === col.periodNumber));
             const start = toMinutes(col.startTime);
             const end = toMinutes(col.endTime);
             const isNow = isToday && start !== null && end !== null && nowMinutes >= start && nowMinutes < end;

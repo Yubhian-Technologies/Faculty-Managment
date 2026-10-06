@@ -1,15 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useParams } from "next/navigation";
+import { useReturnTo } from "@/hooks/useReturnTo";
+import { RETURN_PARAM, withReturnTo } from "@/lib/faculty/returnTo";
 import { FacultyProfileHub } from "@/components/faculty/FacultyProfileHub";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { toast } from "@/hooks/useToast";
 import type { Department, FacultyMember } from "@/types";
 
-export default function PrincipalFacultyProfilePage() {
+function PrincipalFacultyProfileContent() {
+  const returnTo = useReturnTo();
   const { deptId, facultyId } = useParams<{ deptId: string; facultyId: string }>();
   const [confirmingReRegister, setConfirmingReRegister] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
@@ -70,8 +73,9 @@ export default function PrincipalFacultyProfilePage() {
       <FacultyProfileHub
         faculty={faculty}
         basePath={`/principal/faculty/${deptId}/${facultyId}`}
-        backHref={`/principal/faculty/${deptId}`}
-        editHref={`/principal/faculty/${deptId}/${facultyId}/edit`}
+        backHref={returnTo ?? `/principal/faculty/${deptId}`}
+        linkQuery={returnTo ? `?${RETURN_PARAM}=${encodeURIComponent(returnTo)}` : ""}
+        editHref={withReturnTo(`/principal/faculty/${deptId}/${facultyId}/edit`, returnTo)}
         parentDeptName={parentDeptName}
         onReRegisterFace={() => setConfirmingReRegister(true)}
       />
@@ -87,4 +91,8 @@ export default function PrincipalFacultyProfilePage() {
       />
     </>
   );
+}
+
+export default function PrincipalFacultyProfilePage() {
+  return <Suspense fallback={<p className="text-sm text-muted-foreground">Loading…</p>}><PrincipalFacultyProfileContent /></Suspense>;
 }

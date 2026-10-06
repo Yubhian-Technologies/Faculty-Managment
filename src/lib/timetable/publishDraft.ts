@@ -1,3 +1,4 @@
+import { MAX_FACULTY_PER_SUBJECT } from "@/lib/teaching/facultyCap";
 import { FieldValue, type Firestore } from "firebase-admin/firestore";
 import type { DraftSlot, TimetableDraft, TimetableSlot } from "@/types";
 import { bumpGuards, facultyGuard, lockGuards, sectionGuard } from "@/lib/timetable/guards";
@@ -120,9 +121,15 @@ export async function publishSectionDraft(input: PublishInput): Promise<PublishO
       if (pinnedCells.has(cell)) {
         issues.push(`${day} period ${period} now holds a pinned slot, so the draft's placement there can't be published. Regenerate this timetable.`);
       } else if (inCell.length > 1) {
+        // Several faculty of ONE subject may share the cell (co-teaching, any subject type); two
+        // different subjects may share it only if both are labs - each lab with any number of faculty.
+        const bySubject = new Map<string, DraftSlot[]>();
+        for (const s of inCell) bySubject.set(s.subjectId, [...(bySubject.get(s.subjectId) ?? []), s]);
+        const subjects = Array.from(bySubject.values());
         const allLabs = inCell.every((s) => s.subjectType === "PRACTICAL");
-        if (!allLabs || inCell.length > 2) {
-          issues.push(`${day} period ${period} has ${inCell.length} subjects in it - only two labs may share a period. Regenerate this timetable.`);
+        const tooManyFaculty = subjects.some((g) => g.length > MAX_FACULTY_PER_SUBJECT);
+        if (tooManyFaculty || subjects.length > 2 || (subjects.length === 2 && !allLabs)) {
+          issues.push(`${day} period ${period} has ${subjects.length} subjects in it - only two labs may share a period (each with its faculty), or several faculty of the same subject. Regenerate this timetable.`);
         }
       }
     }

@@ -160,6 +160,13 @@ export function PersonalDetailsFields({ value: rawValue, onChange, requiredField
   function set<K extends keyof PersonalDetailsValue>(key: K, v: PersonalDetailsValue[K]) {
     onChange({ ...value, [key]: v });
   }
+  // A required field can be switched to another option but not blanked; an optional one
+  // gets a clear (x) on its Select so a mistaken pick can be taken back. Clearing writes ""
+  // (the form's blank), which every save path stores as a real clear - never undefined, which
+  // the PATCH body drops and the server would then read as "keep the stored value".
+  function canClear(key: keyof PersonalDetailsValue, hasValue: unknown): boolean {
+    return !!hasValue && !requiredFields.includes(key);
+  }
   function mark(key: keyof PersonalDetailsValue): string {
     return requiredFields.includes(key) ? " *" : "";
   }
@@ -205,7 +212,7 @@ export function PersonalDetailsFields({ value: rawValue, onChange, requiredField
             value={value.gender && !GENDER_OPTIONS.includes(value.gender) ? "Other" : (value.gender ?? "")}
             onValueChange={(v) => set("gender", v === "Other" ? "Other" : v)}
           >
-            <SelectTrigger><SelectValue placeholder="Select gender" /></SelectTrigger>
+            <SelectTrigger onClear={canClear("gender", value.gender) ? () => set("gender", "") : undefined}><SelectValue placeholder="Select gender" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="Male">Male</SelectItem>
               <SelectItem value="Female">Female</SelectItem>
@@ -249,7 +256,7 @@ export function PersonalDetailsFields({ value: rawValue, onChange, requiredField
             value={value.religion && !(value.religion in RELIGION_LABELS) ? "OTHER" : (value.religion ?? "")}
             onValueChange={(v) => set("religion", v)}
           >
-            <SelectTrigger><SelectValue placeholder="Select religion" /></SelectTrigger>
+            <SelectTrigger onClear={canClear("religion", value.religion) ? () => set("religion", "") : undefined}><SelectValue placeholder="Select religion" /></SelectTrigger>
             <SelectContent>
               {Object.entries(RELIGION_LABELS).map(([v, label]) => <SelectItem key={v} value={v}>{label}</SelectItem>)}
             </SelectContent>
@@ -271,9 +278,9 @@ export function PersonalDetailsFields({ value: rawValue, onChange, requiredField
             // resurface as if it were a real caste name; picking any option
             // below overwrites it.
             value={value.caste === "BC" ? "" : value.caste && !(value.caste in CASTE_LABELS) ? "OTHER" : (value.caste ?? "")}
-            onValueChange={(v) => onChange({ ...value, caste: v, subCaste: undefined })}
+            onValueChange={(v) => onChange({ ...value, caste: v, subCaste: "" })}
           >
-            <SelectTrigger><SelectValue placeholder="Select caste" /></SelectTrigger>
+            <SelectTrigger onClear={canClear("caste", value.caste && value.caste !== "BC" ? value.caste : "") ? () => onChange({ ...value, caste: "", subCaste: "" }) : undefined}><SelectValue placeholder="Select caste" /></SelectTrigger>
             <SelectContent>
               {Object.entries(CASTE_LABELS).map(([v, label]) => <SelectItem key={v} value={v}>{label}</SelectItem>)}
             </SelectContent>
@@ -294,7 +301,7 @@ export function PersonalDetailsFields({ value: rawValue, onChange, requiredField
                 value={value.subCaste && !subCasteOptions.includes(value.subCaste) ? "OTHER" : (value.subCaste ?? "")}
                 onValueChange={(v) => set("subCaste", v)}
               >
-                <SelectTrigger><SelectValue placeholder="Select sub caste" /></SelectTrigger>
+                <SelectTrigger onClear={canClear("subCaste", value.subCaste) ? () => set("subCaste", "") : undefined}><SelectValue placeholder="Select sub caste" /></SelectTrigger>
                 <SelectContent>
                   {subCasteOptions.map((sc) => <SelectItem key={sc} value={sc}>{sc}</SelectItem>)}
                   <SelectItem value="OTHER">Other</SelectItem>
@@ -353,9 +360,9 @@ export function PersonalDetailsFields({ value: rawValue, onChange, requiredField
         <Label>Differently Abled</Label>
         <Select
           value={value.differentlyAbled === undefined ? "" : value.differentlyAbled ? "Yes" : "No"}
-          onValueChange={(v) => onChange({ ...value, differentlyAbled: v === "Yes", differentlyAbledDetails: v === "Yes" ? value.differentlyAbledDetails : undefined })}
+          onValueChange={(v) => onChange({ ...value, differentlyAbled: v === "Yes", differentlyAbledDetails: v === "Yes" ? value.differentlyAbledDetails : "" })}
         >
-          <SelectTrigger className="max-w-xs"><SelectValue placeholder="Select" /></SelectTrigger>
+          <SelectTrigger className="max-w-xs" onClear={canClear("differentlyAbled", value.differentlyAbled !== undefined) ? () => onChange({ ...value, differentlyAbled: undefined }) : undefined}><SelectValue placeholder="Select" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="Yes">Yes</SelectItem>
             <SelectItem value="No">No</SelectItem>
@@ -383,7 +390,7 @@ export function PersonalDetailsFields({ value: rawValue, onChange, requiredField
             value={value.motherTongue && !MOTHER_TONGUE_OPTIONS.includes(value.motherTongue) ? "OTHER" : (value.motherTongue ?? "")}
             onValueChange={(v) => set("motherTongue", v)}
           >
-            <SelectTrigger><SelectValue placeholder="Select mother tongue" /></SelectTrigger>
+            <SelectTrigger onClear={canClear("motherTongue", value.motherTongue) ? () => set("motherTongue", "") : undefined}><SelectValue placeholder="Select mother tongue" /></SelectTrigger>
             <SelectContent>
               {MOTHER_TONGUE_OPTIONS.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
               <SelectItem value="OTHER">Other</SelectItem>
@@ -435,7 +442,7 @@ export function PersonalDetailsFields({ value: rawValue, onChange, requiredField
         <div className="space-y-2">
           <Label>Marital Status</Label>
           <Select value={value.maritalStatus ?? ""} onValueChange={(v) => set("maritalStatus", v)}>
-            <SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger>
+            <SelectTrigger onClear={canClear("maritalStatus", value.maritalStatus) ? () => set("maritalStatus", "") : undefined}><SelectValue placeholder="Select status" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="Single">Single</SelectItem>
               <SelectItem value="Married">Married</SelectItem>
@@ -445,7 +452,7 @@ export function PersonalDetailsFields({ value: rawValue, onChange, requiredField
         <div className="space-y-2">
           <Label>Blood Group</Label>
           <Select value={value.bloodGroup ?? ""} onValueChange={(v) => set("bloodGroup", v)}>
-            <SelectTrigger><SelectValue placeholder="Select blood group" /></SelectTrigger>
+            <SelectTrigger onClear={canClear("bloodGroup", value.bloodGroup) ? () => set("bloodGroup", "") : undefined}><SelectValue placeholder="Select blood group" /></SelectTrigger>
             <SelectContent>
               {BLOOD_GROUPS.map((bg) => <SelectItem key={bg} value={bg}>{bg}</SelectItem>)}
             </SelectContent>
@@ -592,7 +599,7 @@ export function PersonalDetailsFields({ value: rawValue, onChange, requiredField
                   }
                 }}
               >
-                <SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger>
+                <SelectTrigger onClear={canClear("ratificationStatus", value.ratificationStatus) ? () => set("ratificationStatus", "") : undefined}><SelectValue placeholder="Select status" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="Ratified">Ratified</SelectItem>
                   <SelectItem value="Not Ratified">Not Ratified</SelectItem>

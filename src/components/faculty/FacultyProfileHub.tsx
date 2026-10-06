@@ -147,6 +147,9 @@ interface FacultyProfileHubProps {
   basePath: string; // e.g. "/hod/faculty/abc123" - tiles link to "{basePath}/{moduleKey}"
   hideFinancialModule?: boolean;
   excludeModules?: ProfileModuleKey[];
+  // Appended to every tile link (e.g. "?from=..."); callers that don't pass it
+  // link exactly as before.
+  linkQuery?: string;
   backHref?: string;
   editHref?: string;
   parentDeptName?: string | null; // shown as a badge next to Department when it's a sub-department
@@ -167,16 +170,17 @@ interface ProfileModuleTilesProps {
   basePath: string;
   hideFinancialModule?: boolean;
   excludeModules?: ProfileModuleKey[];
+  linkQuery?: string;
 }
 
 // Just the tile grid, no identity header - for self-profile pages (My Profile)
 // that already render their own account-details card above it.
-export function ProfileModuleTiles({ basePath, hideFinancialModule, excludeModules }: ProfileModuleTilesProps) {
+export function ProfileModuleTiles({ basePath, hideFinancialModule, excludeModules, linkQuery }: ProfileModuleTilesProps) {
   const modules = getFacultyProfileModules({ hideFinancialModule, excludeModules });
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {modules.map((m) => (
-        <Link key={m.key} href={`${basePath}/${m.key}`}>
+        <Link key={m.key} href={`${basePath}/${m.key}${linkQuery ?? ""}`}>
           <Card className="cursor-pointer hover:border-primary hover:shadow-md transition-all duration-200">
             <CardContent className="p-5 flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -198,7 +202,7 @@ export function ProfileModuleTiles({ basePath, hideFinancialModule, excludeModul
 // module (Personal, Academic Qualification, Research, ...) instead of one long
 // scrolling form - each tile routes to its own page (FacultyProfileModuleContent).
 export function FacultyProfileHub({
-  faculty, basePath, hideFinancialModule, excludeModules, backHref, editHref, parentDeptName, onReRegisterFace, viewAttendanceHref,
+  faculty, basePath, hideFinancialModule, excludeModules, linkQuery, backHref, editHref, parentDeptName, onReRegisterFace, viewAttendanceHref,
 }: FacultyProfileHubProps) {
   const designationLabel = faculty.designation ? (DESIGNATION_LABELS[faculty.designation] ?? faculty.designation) : undefined;
   const headerDescription = [designationLabel, faculty.department].filter(Boolean).join(" • ") || undefined;
@@ -286,7 +290,7 @@ export function FacultyProfileHub({
         </CardContent>
       </Card>
 
-      <ProfileModuleTiles basePath={basePath} hideFinancialModule={hideFinancialModule} excludeModules={excludeModules} />
+      <ProfileModuleTiles basePath={basePath} hideFinancialModule={hideFinancialModule} excludeModules={excludeModules} linkQuery={linkQuery} />
     </div>
   );
 }

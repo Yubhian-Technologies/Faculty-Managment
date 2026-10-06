@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { effectiveLabBatch, loadLabBatchModes } from "@/lib/students/labBatchMode";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { sortStudentsForList } from "@/lib/students/listOrder";
@@ -158,7 +159,10 @@ export async function POST(request: Request) {
     // TimetableSlot.labBatch) so an office-corrected roster is never wider
     // than the roster the faculty's own live session would have used (see
     // student-attendance/route.ts's own POST).
-    const labBatch = matchedPeriod.slot.labBatch ?? undefined;
+    const labBatch = effectiveLabBatch(
+      matchedPeriod.slot.labBatch, await loadLabBatchModes(db, session.collegeId, [{ sectionId, subjectId: assignment.subjectId }]),
+      sectionId, assignment.subjectId, assignment.facultyId,
+    );
     const students = sortStudentsForList(await fetchSectionStudents(collegeRef, { department, sectionName, year, courseId, labBatch }));
 
     const markerSnap = await collegeRef.collection("users").doc(session.uid).get();

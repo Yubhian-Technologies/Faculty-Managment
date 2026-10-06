@@ -20,8 +20,7 @@ import {
   isLabSlot,
   latestEffectiveDate,
   resolveTimetableDays,
-  slotShortCode,
-} from "./gridModel";
+  slotShortCode, mergeCoTaughtSlots,} from "./gridModel";
 
 export interface SectionTimetablePdfOptions {
   collegeName?: string;
@@ -216,7 +215,8 @@ export function buildSectionTimetablePdfHtml(opts: SectionTimetablePdfOptions): 
             const title = col.breakKind === "lunch" ? "LUNCH BREAK" : "SHORT BREAK";
             return `<td class="cell break-cell" rowspan="${gridDays.length}"><div class="vtext">${title}</div></td>`;
           }
-          const cellSlots = slots.filter((s) => s.day === day && s.periodNumber === col.periodNumber);
+          // Faculty of one subject sharing the period print the subject once.
+          const cellSlots = mergeCoTaughtSlots(slots.filter((s) => s.day === day && s.periodNumber === col.periodNumber));
           if (cellSlots.length === 0) return `<td class="cell"><div class="fx">&nbsp;</div></td>`;
           const inner = cellSlots
             .map((s) => {

@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { effectiveLabBatch, loadLabBatchModes } from "@/lib/students/labBatchMode";
 import { NextResponse } from "next/server";
 import { passwordChangeRequired, passwordChangeRequiredResponse } from "@/lib/students/passwordGate";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
@@ -55,10 +56,14 @@ export async function GET() {
       .where("sectionId", "==", section.id)
       .where("day", "==", day)
       .get();
-    const slots = slotsSnap.docs
+    const liveSlots = slotsSnap.docs
       .map((d) => ({ id: d.id, ...d.data() }) as TimetableSlot & { id: string })
-      .filter((s) => isLiveAcademicYear(s, ctx.academicYear) && matchesCurrentSemester(s.semester, ctx.currentSemester))
-      .filter((s) => slotVisibleToStudent(s, student.labBatch));
+      .filter((s) => isLiveAcademicYear(s, ctx.academicYear) && matchesCurrentSemester(s.semester, ctx.currentSemester));
+    // A lab the section's faculty incharge set to "no batch" is for the whole section, so every
+    // student sees it; otherwise a split lab period is shown only to its own batch.
+    const labModes = await loadLabBatchModes(db, session.collegeId, liveSlots.map((s) => ({ sectionId: section.id, subjectId: s.subjectId })));
+    const slots = liveSlots.filter((s) =>
+      slotVisibleToStudent({ labBatch: effectiveLabBatch(s.labBatch, labModes, section.id, s.subjectId, s.facultyId) }, student.labBatch));
 
     // A substitution belongs to one calendar date - only today's applies to today's list.
     const subs = slots.length > 0 ? await getActiveSubstitutionsForDates(db, session.collegeId, [today]) : [];
@@ -78,7 +83,7 @@ export async function GET() {
       buildTimetableColumns(timing).flatMap((c) => (c.kind === "period" ? [[c.periodNumber, c] as const] : []))
     );
 
-    const periods = slots
+    const rows = slots
       .sort((a, b) => a.periodNumber - b.periodNumber)
       .map((s) => {
         const sub = subBySlot.get(s.id);
@@ -93,9 +98,23 @@ export async function GET() {
           faculty: sub?.substituteFacultyName || s.facultyName || "",
           isSubstitute: Boolean(sub),
           room: s.classroom ?? "",
-          labBatch: s.labBatch ?? "",
+          labBatch: effectiveLabBatch(s.labBatch, labModes, section.id, s.subjectId, s.facultyId) ?? "",
+          subjectId: s.subjectId,
         };
       });
+    // Faculty of one subject in the same period show as one entry: the subject once, every faculty listed.
+    const merged = new Map<string, (typeof rows)[number]>();
+    for (const r of rows) {
+      const key = `${r.periodNumber}_${r.subjectId}`;
+      const have = merged.get(key);
+      if (!have) { merged.set(key, { ...r }); continue; }
+      const join = (a: string, b: string) => Array.from(new Set([...a.split(", "), ...b.split(", ")].filter(Boolean))).join(", ");
+      have.faculty = join(have.faculty, r.faculty);
+      have.labBatch = join(have.labBatch, r.labBatch);
+      have.room = have.room || r.room;
+      have.isSubstitute = have.isSubstitute || r.isSubstitute;
+    }
+    const periods = Array.from(merged.values()).map(({ subjectId: _subjectId, ...rest }) => { void _subjectId; return rest; });
 
     return NextResponse.json({
       ...base,

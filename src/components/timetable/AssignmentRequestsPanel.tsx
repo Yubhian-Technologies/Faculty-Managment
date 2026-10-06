@@ -386,6 +386,14 @@ export function AssignmentRequestsPanel({ timetableHrefFor }: AssignmentRequests
                       )}
                     </div>
 
+                    {/* The requesting department only gets to place these once this is closed. */}
+                    {dir === "incoming" && !r.busyClosed && (
+                      <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                        {r.requestingDepartment} cannot see {allocs.length === 1 ? "this subject" : "these faculty"} in their timetable yet. Mark any busy periods
+                        {allocs.length > 1 ? " for each faculty" : ""}, then press <strong>Notify department &amp; close</strong> - until then it stays waiting.
+                      </p>
+                    )}
+
                     {dir === "incoming" && !r.busyClosed && addingAnotherId === r.id && (
                       <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/20 p-3">
                         <Select

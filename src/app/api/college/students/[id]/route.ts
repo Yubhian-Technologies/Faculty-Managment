@@ -15,6 +15,7 @@ import { getAcademicStructure, type DepartmentWithId } from "@/lib/college/acade
 import { findCurrentSectionDoc } from "@/lib/students/findCurrentSectionDoc";
 import { findRollNumberConflict, rollNumberTakenMessage } from "@/lib/students/rollNumberUniqueness";
 import { rollNumberUpperOf } from "@/lib/students/loginDefaults";
+import { normalizeStudentMobile, studentMobileProblem, reserveStudentMobile, isStudentMobileTaken, STUDENT_MOBILE_CLEAR_MESSAGE } from "@/lib/students/studentMobile";
 import { deleteStudentsCompletely } from "@/lib/students/deleteStudent";
 import { StudentLoginError, setStudentLoginActive, syncStudentRollChange } from "@/lib/students/provisionLogin";
 import { FieldValue } from "firebase-admin/firestore";
@@ -312,6 +313,30 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       }
       if (Object.keys(updates).length === 0 && !officeRollChange) {
         return NextResponse.json({ error: "No editable fields provided" }, { status: 400 });
+      }
+
+      // Student Mobile No is required: it can be CHANGED to a real 10-digit number that no other student - in this or any
+      // other college - holds (stored in that 10-digit form, claimed atomically - lib/students/studentMobile.ts), but
+      // never CLEARED. The value the edit form re-sends unchanged is left alone, and a legacy student saved with no number
+      // yet may still be saved without one (like a legacy roll-less student) until one is entered. A claim left behind by
+      // a later failure goes stale by itself.
+      if ("mobileNo" in updates && updates.mobileNo === null && (student.mobileNo ?? "").toString().trim()) {
+        return NextResponse.json({ error: STUDENT_MOBILE_CLEAR_MESSAGE }, { status: 400 });
+      }
+      if ("mobileNo" in updates && typeof updates.mobileNo === "string") {
+        const typed = updates.mobileNo.trim();
+        if (typed !== (student.mobileNo ?? "").toString().trim()) {
+          const mobileProblem = studentMobileProblem(typed);
+          if (mobileProblem) return NextResponse.json({ error: mobileProblem }, { status: 400 });
+          const mobile10 = normalizeStudentMobile(typed);
+          try {
+            await reserveStudentMobile(db, session.collegeId, mobile10, id);
+          } catch (mobileErr) {
+            if (isStudentMobileTaken(mobileErr)) return NextResponse.json({ error: mobileErr.userMessage }, { status: 409 });
+            throw mobileErr;
+          }
+          updates.mobileNo = mobile10;
+        }
       }
 
       // Secondary Department, when being set to a real value (not cleared -

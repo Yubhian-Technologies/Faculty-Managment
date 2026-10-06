@@ -101,7 +101,7 @@ export function DesignationOptions({ kind = "both", disabledKeys, allowedNames }
 // the original text visible in the input beside it, the same pattern
 // DegreeFields uses for Course.
 export function DesignationSelect({
-  label, value, onChange, kind = "both", disabledKeys, allowOther = true, allowedNames,
+  label, value, onChange, kind = "both", disabledKeys, allowOther = true, allowedNames, clearable = true,
 }: {
   label: string;
   value: string | undefined;
@@ -115,6 +115,9 @@ export function DesignationSelect({
   // (a value already stored outside this restricted set still shows, via the
   // "Other" free-text fallback, so nothing silently disappears).
   allowedNames?: string[];
+  // Lets a picked designation be taken back (writes ""). On by default: every caller is a
+  // history entry (promotion / previous institution / ratification), none is the current post.
+  clearable?: boolean;
 }) {
   const { teaching, supporting } = useDesignationCatalog(kind);
   const allowedKeys = allowedNames?.map(designationKey);
@@ -125,7 +128,7 @@ export function DesignationSelect({
     <div className="space-y-2">
       <Label>{label}</Label>
       <Select value={isOther ? "OTHER" : (value ?? "")} onValueChange={onChange}>
-        <SelectTrigger><SelectValue placeholder="Select designation" /></SelectTrigger>
+        <SelectTrigger onClear={clearable && value ? () => onChange("") : undefined}><SelectValue placeholder="Select designation" /></SelectTrigger>
         <SelectContent>
           <DesignationOptions kind={kind} disabledKeys={disabledKeys} allowedNames={allowedNames} />
           {allowOther && (

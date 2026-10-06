@@ -86,7 +86,9 @@ export function personalPatchBody(record: FacultyEditRecord, opts: { ratificatio
     fatherName: record.fatherName, motherName: record.motherName, religion: record.religion,
     caste: record.caste, subCaste: record.subCaste, aadharNo: record.aadharNo, panNo: record.panNo,
     passportNo: record.passportNo,
-    differentlyAbled: record.differentlyAbled, differentlyAbledDetails: record.differentlyAbledDetails,
+    // null (not undefined) when blank: JSON drops undefined, and the server only writes keys it receives,
+    // so a cleared Yes/No would otherwise leave the old answer stored.
+    differentlyAbled: record.differentlyAbled ?? null, differentlyAbledDetails: record.differentlyAbledDetails,
     bankAccountNumber: record.bankAccountNumber, ifscCode: record.ifscCode,
     bankName: record.bankName, bankBranch: record.bankBranch, bankOtherDetails: record.bankOtherDetails,
     emergencyContactName: record.emergencyContactName, emergencyContactRelation: record.emergencyContactRelation,

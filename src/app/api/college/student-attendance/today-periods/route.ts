@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { effectiveLabBatch, loadLabBatchModes } from "@/lib/students/labBatchMode";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -7,6 +8,7 @@ import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 import { getNoClassReason } from "@/lib/studentAttendance/classDay";
 import { getFacultyPeriodsForDate } from "@/lib/timetable/currentPeriod";
 import { dateInRanges, getAllocatedPeriodsForDate, loadFacultyAllocations } from "@/lib/studentAttendance/labAllocation";
+import { facultyActiveOn, loadLabWindows } from "@/lib/students/labFacultyWindow";
 import type { StudentAttendanceSession, TeachingAssignment } from "@/types";
 
 // "Today" for attendance purposes is the college's calendar day (IST, Asia/Kolkata),
@@ -81,8 +83,13 @@ export async function GET(request: Request) {
     // Holiday / summer break / non-working day: nothing to mark today.
     if (closedReason) return NextResponse.json({ date, periods: [], allocations: allocationSummaries(allocations), noClassReason: closedReason });
     const allocatedKeys = new Set(allocatedSlots.map((a) => `${a.slot.assignmentId}_${a.slot.periodNumber}`));
+    // A lab's faculty teach it on their own dates (set by the section's faculty incharge): outside
+    // them the period is not theirs to take - unless an HOD/Incharge allocated it to them.
+    const labWindows = await loadLabWindows(db, session.collegeId, ownSlots.map((s) => ({ sectionId: s.slot.sectionId, subjectId: s.slot.subjectId })));
     const slots = [
-      ...ownSlots,
+      ...ownSlots.filter((o) =>
+        allocatedKeys.has(`${o.slot.assignmentId}_${o.slot.periodNumber}`)
+        || facultyActiveOn(labWindows, o.slot.sectionId, o.slot.subjectId, o.slot.facultyId, date)),
       ...allocatedSlots.filter((a) => !ownSlots.some((o) => o.slot.assignmentId === a.slot.assignmentId && o.slot.periodNumber === a.slot.periodNumber)),
     ].sort((a, b) => toMinutes(a.startTime) - toMinutes(b.startTime));
 
@@ -104,6 +111,8 @@ export async function GET(request: Request) {
       }
     }
 
+    // A lab the section's faculty incharge set to "no batch" shows (and rosters) as the whole section.
+    const labModes = await loadLabBatchModes(db, session.collegeId, slots.map((s) => ({ sectionId: s.slot.sectionId, subjectId: s.slot.subjectId })));
     const periods = await Promise.all(
       slots.map(async ({ slot, startTime, endTime, closeTime }) => {
         // An allocated lab period is open all day on its allocated dates.
@@ -133,7 +142,7 @@ export async function GET(request: Request) {
           sessionStatus: sess?.status ?? null,
           isOpen,
           phase,
-          labBatch: slot.labBatch ?? null,
+          labBatch: effectiveLabBatch(slot.labBatch, labModes, slot.sectionId, slot.subjectId, slot.facultyId) ?? null,
           allocated,
         };
       })

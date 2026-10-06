@@ -28,8 +28,7 @@ import {
   resolveTimetableDays,
   slotFacultyName,
   slotShortCode,
-  type TimetableColumn,
-} from "@/lib/timetable/gridModel";
+  type TimetableColumn, mergeCoTaughtSlots,} from "@/lib/timetable/gridModel";
 import { toRoman } from "@/lib/academic/format";
 import { getISTParts, istTimeHHMM } from "@/lib/attendance/istTime";
 import type {
@@ -369,9 +368,10 @@ export function WeeklyTimetableMatrix({
                           );
                         }
 
-                        const cellSlots = filteredSlots.filter(
+                        // Faculty of one subject sharing the period show as one entry, subject once.
+                        const cellSlots = mergeCoTaughtSlots(filteredSlots.filter(
                           (s) => s.day === d && s.periodNumber === col.periodNumber
-                        );
+                        ));
                         const isLiveCell = isToday && currentPeriodNumber === col.periodNumber;
 
                         if (cellSlots.length === 0) {

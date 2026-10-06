@@ -19,6 +19,7 @@ import {
   slotFacultyName,
   slotShortCode,
   type TimetableColumn,
+  mergeCoTaughtSlots,
   continuousSpans,
   isLabSlot,
 } from "@/lib/timetable/gridModel";
@@ -409,9 +410,10 @@ export function InstitutionalTimetableTable({
                     );
                   }
 
-                  const periodSlots = filteredSlots.filter(
+                  // Faculty of one subject sharing the period show as one entry, subject once.
+                  const periodSlots = mergeCoTaughtSlots(filteredSlots.filter(
                     (s) => s.day === d && s.periodNumber === col.periodNumber
-                  );
+                  ));
                   const range = periodTimeRange(col.startTime, col.endTime);
 
                   return (
@@ -535,9 +537,9 @@ export function InstitutionalTimetableTable({
                           );
                         }
 
-                        const periodSlots = filteredSlots.filter(
+                        const periodSlots = mergeCoTaughtSlots(filteredSlots.filter(
                           (s) => s.day === d && s.periodNumber === col.periodNumber
-                        );
+                        ));
 
                         if (periodSlots.length === 0) {
                           return (

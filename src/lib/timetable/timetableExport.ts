@@ -20,8 +20,7 @@ import {
   getHodSignatureLabel,
   latestEffectiveDate,
   resolveTimetableDays,
-  slotShortCode,
-} from "./gridModel";
+  slotShortCode, mergeCoTaughtSlots,} from "./gridModel";
 
 export interface SectionTimetableXlsxOptions {
   collegeName?: string;
@@ -263,7 +262,8 @@ export async function buildSectionTimetableXlsxBuffer(opts: SectionTimetableXlsx
     let maxLines = 1;
     columns.forEach((col, i) => {
       if (col.kind === "break") return;
-      const cellSlots = slots.filter((s) => s.day === day && s.periodNumber === col.periodNumber);
+      // Faculty of one subject sharing the period print the subject once.
+      const cellSlots = mergeCoTaughtSlots(slots.filter((s) => s.day === day && s.periodNumber === col.periodNumber));
       if (cellSlots.length === 0) return;
       const blocks = cellSlots.map((s) =>
         [
