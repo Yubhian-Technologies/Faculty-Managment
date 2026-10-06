@@ -181,6 +181,14 @@ export function TextInput({ label, value, onChange, placeholder, required, type 
 // Changing Course drops the Degree unless it is still valid for the new Course, so a
 // stale Degree never lingers on an entry whose Course no longer asks for one. The key is
 // removed rather than set to undefined - Firestore rejects undefined field values.
+// Drops one optional key (never sets it to undefined - see withCourse): the way a Select
+// that was picked, even by mistake, goes back to blank.
+function omitKey<T extends object, K extends keyof T>(o: T, key: K): Omit<T, K> {
+  const { [key]: _removed, ...rest } = o;
+  void _removed;
+  return rest;
+}
+
 function withCourse(v: DegreeDetail, course: string): DegreeDetail {
   const { degreeType, ...rest } = v;
   return { ...rest, course, ...(isValidDegreeType(course, degreeType) ? { degreeType } : {}) };
@@ -234,7 +242,7 @@ export function DegreeFields({
             <div className="space-y-2">
               <Label>Status</Label>
               <Select value={v.status ?? ""} onValueChange={(x) => onChange({ ...v, status: x as PhdStatus })}>
-                <SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger>
+                <SelectTrigger onClear={v.status ? () => onChange(omitKey(v, "status")) : undefined}><SelectValue placeholder="Select status" /></SelectTrigger>
                 <SelectContent>
                   {PHD_STATUS_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
                 </SelectContent>
@@ -243,7 +251,7 @@ export function DegreeFields({
             <div className="space-y-2">
               <Label>Mode</Label>
               <Select value={v.mode ?? ""} onValueChange={(x) => onChange({ ...v, mode: x as PhdMode })}>
-                <SelectTrigger><SelectValue placeholder="Select mode" /></SelectTrigger>
+                <SelectTrigger onClear={v.mode ? () => onChange(omitKey(v, "mode")) : undefined}><SelectValue placeholder="Select mode" /></SelectTrigger>
                 <SelectContent>
                   {PHD_MODE_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
                 </SelectContent>
@@ -258,7 +266,7 @@ export function DegreeFields({
               value={domainIsOther ? "OTHERS" : (domain ?? "")}
               onValueChange={(x) => onChange({ ...withCourse(v, ""), domain: x })}
             >
-              <SelectTrigger><SelectValue placeholder="Select domain" /></SelectTrigger>
+              <SelectTrigger onClear={domain ? () => onChange(omitKey(withCourse(v, ""), "domain")) : undefined}><SelectValue placeholder="Select domain" /></SelectTrigger>
               <SelectContent>
                 {Object.entries(EDUCATION_DOMAIN_LABELS).map(([k, lbl]) => <SelectItem key={k} value={k}>{lbl}</SelectItem>)}
               </SelectContent>
@@ -279,7 +287,7 @@ export function DegreeFields({
               value={schoolQualificationIsOther ? OTHER_QUALIFICATION : v.course}
               onValueChange={(x) => onChange({ ...v, course: x })}
             >
-              <SelectTrigger><SelectValue placeholder="Select course" /></SelectTrigger>
+              <SelectTrigger onClear={v.course ? () => onChange({ ...v, course: "" }) : undefined}><SelectValue placeholder="Select course" /></SelectTrigger>
               <SelectContent>
                 {schoolQualificationOptions.map((opt) => <SelectItem key={opt} value={opt}>{opt}</SelectItem>)}
               </SelectContent>
@@ -302,7 +310,7 @@ export function DegreeFields({
               onValueChange={(x) => onChange(withCourse(v, x))}
               disabled={hasDomain && !domain}
             >
-              <SelectTrigger><SelectValue placeholder={hasDomain && !domain ? "Select domain first" : "Select course"} /></SelectTrigger>
+              <SelectTrigger onClear={v.course ? () => onChange(withCourse(v, "")) : undefined}><SelectValue placeholder={hasDomain && !domain ? "Select domain first" : "Select course"} /></SelectTrigger>
               <SelectContent>
                 {courseOptions.map((opt) => <SelectItem key={opt} value={opt}>{opt}</SelectItem>)}
                 <SelectItem value="Other">Other</SelectItem>
@@ -344,7 +352,7 @@ export function DegreeFields({
                 value={v.institutionType ?? ""}
                 onValueChange={(x) => onChange({ ...v, institutionType: x as DegreeDetail["institutionType"] })}
               >
-                <SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger>
+                <SelectTrigger onClear={v.institutionType ? () => onChange(omitKey(v, "institutionType")) : undefined}><SelectValue placeholder="Select type" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="UNIVERSITY">University</SelectItem>
                   <SelectItem value="INSTITUTE">Institute</SelectItem>

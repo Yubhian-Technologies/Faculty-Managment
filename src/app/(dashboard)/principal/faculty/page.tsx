@@ -30,6 +30,7 @@ import { useCollegeType } from "@/hooks/useCollegeType";
 import { hasSupportingStaffSplit } from "@/lib/designations/config";
 import { toast } from "@/hooks/useToast";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
+import { withReturnTo } from "@/lib/faculty/returnTo";
 import { downloadFacultyResume } from "@/lib/faculty/downloadFacultyResume";
 import type { ResumeSectionKey } from "@/lib/pdf/resumeSections";
 import type { CollegeType, Department, FacultyMember, FacultyStatus } from "@/types";
@@ -43,7 +44,7 @@ const ALL_DEPTS = "__ALL__";
 const ALL_STATUS = "__ALL__";
 
 const STATUS_OPTIONS: { value: string; label: string }[] = [
-  { value: ALL_STATUS, label: "ALL — All Statuses" },
+  { value: ALL_STATUS, label: "ALL Status" },
   { value: "ACTIVE", label: "Active" },
   { value: "INTERVIEW_DONE", label: "Interview Done" },
   { value: "RETAINERSHIP", label: "Retainership" },
@@ -129,8 +130,32 @@ function PrincipalFacultyContent() {
     return options;
   }, [departments]);
 
+  // The filters the table was actually loaded with (not the dropdowns, which
+  // may have been changed since without pressing Load). The register's own URL
+  // is rebuilt from these so Back from a profile / edit page restores the same
+  // list, and every row link carries it in `?from=`.
+  const [loadedFilters, setLoadedFilters] = useState<{ dept: string; status: string } | null>(null);
+  const listUrl = useMemo(() => {
+    if (!loadedFilters) return "/principal/faculty";
+    const p = new URLSearchParams();
+    p.set("load", "1");
+    if (loadedFilters.dept !== ALL_DEPTS) p.set("department", loadedFilters.dept);
+    if (loadedFilters.status !== ALL_STATUS) p.set("status", loadedFilters.status);
+    const defaultTab = loadedFilters.status !== ALL_STATUS ? loadedFilters.status : "";
+    if (statusTab !== defaultTab) p.set("tab", statusTab || "all");
+    return `/principal/faculty?${p.toString()}`;
+  }, [loadedFilters, statusTab]);
+
+  // Keep the address bar in step with what is loaded (no navigation, no reload).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!loadedFilters || window.location.pathname !== "/principal/faculty") return;
+    const current = window.location.pathname + window.location.search;
+    if (current !== listUrl) window.history.replaceState(window.history.state, "", listUrl);
+  }, [listUrl, loadedFilters]);
+
   // Load faculty with current filters
-  const handleLoad = useCallback(async (dept = selectedDept, status = selectedStatus) => {
+  const handleLoad = useCallback(async (dept = selectedDept, status = selectedStatus, tab = "") => {
     abortControllerRef.current?.abort();
     const ctrl = new AbortController();
     abortControllerRef.current = ctrl;
@@ -148,7 +173,8 @@ function PrincipalFacultyContent() {
       setFaculty(data.faculty ?? []);
       setHasLoaded(true);
       setSelectedIds(new Set());
-      setStatusTab(status !== ALL_STATUS ? status : "");
+      setStatusTab(tab === "all" ? "" : tab || (status !== ALL_STATUS ? status : ""));
+      setLoadedFilters({ dept, status });
     } catch (err) {
       if ((err as Error)?.name === "AbortError") return;
       toast({
@@ -161,22 +187,27 @@ function PrincipalFacultyContent() {
     }
   }, [selectedDept, selectedStatus]);
 
-  // Auto-load if navigated here with query parameters (e.g., from deep link)
+  // Auto-load once on arrival when the URL carries filters (a deep link, or Back
+  // from a profile page). Mount-only: re-running on every filter change would
+  // snap the dropdowns back to the URL while the user is picking.
   useEffect(() => {
     const deptParam = searchParams.get("department");
     const statusParam = searchParams.get("status");
-    if (deptParam || statusParam) {
+    if (deptParam || statusParam || searchParams.get("load")) {
       const d = deptParam || ALL_DEPTS;
       const s = statusParam || ALL_STATUS;
       setSelectedDept(d);
       setSelectedStatus(s);
-      void handleLoad(d, s);
+      void handleLoad(d, s, searchParams.get("tab") ?? "");
     }
-  }, [searchParams, handleLoad]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function handleReset() {
     setSelectedDept(ALL_DEPTS);
     setSelectedStatus(ALL_STATUS);
+    setLoadedFilters(null);
+    if (window.location.pathname === "/principal/faculty") window.history.replaceState(window.history.state, "", "/principal/faculty");
     setFaculty([]);
     setHasLoaded(false);
     setSelectedIds(new Set());
@@ -352,7 +383,7 @@ function PrincipalFacultyContent() {
                 title="Create login account"
                 onClick={(e) => {
                   e.stopPropagation();
-                  router.push(`/principal/faculty/${dId}/${row.id}/credentials`);
+                  router.push(withReturnTo(`/principal/faculty/${dId}/${row.id}/credentials`, listUrl));
                 }}
               >
                 <LogIn className="h-4 w-4" />
@@ -366,7 +397,7 @@ function PrincipalFacultyContent() {
               title="View profile"
               onClick={(e) => {
                 e.stopPropagation();
-                router.push(`/principal/faculty/${dId}/${row.id}`);
+                router.push(withReturnTo(`/principal/faculty/${dId}/${row.id}`, listUrl));
               }}
             >
               <Eye className="h-4 w-4" />
@@ -393,7 +424,7 @@ function PrincipalFacultyContent() {
               title="Edit faculty details"
               onClick={(e) => {
                 e.stopPropagation();
-                router.push(`/principal/faculty/${dId}/${row.id}/edit`);
+                router.push(withReturnTo(`/principal/faculty/${dId}/${row.id}/edit`, listUrl));
               }}
             >
               <Pencil className="h-4 w-4" />
@@ -480,7 +511,7 @@ function PrincipalFacultyContent() {
                   </SelectTrigger>
                   <SelectContent className="max-h-[320px]">
                     <SelectItem value={ALL_DEPTS} className="font-semibold text-primary">
-                      ALL — All Departments
+                      ALL Departments
                     </SelectItem>
                     {departmentOptions.map((opt) => (
                       <SelectItem
@@ -605,7 +636,7 @@ function PrincipalFacultyContent() {
             defaultPageSize={20}
             searchPlaceholder="Search by name, employee ID, email, designation, or department..."
             searchKeys={["name", "legalName", "email", "collegeEmail", "employeeId", "designation", "department", "mobileNo"] as (keyof FacultyRow)[]}
-            onRowClick={(row) => router.push(`/principal/faculty/${getDeptIdForRow(row)}/${row.id}`)}
+            onRowClick={(row) => router.push(withReturnTo(`/principal/faculty/${getDeptIdForRow(row)}/${row.id}`, listUrl))}
             emptyTitle={statusTab ? `No ${statusTab.toLowerCase().replace(/_/g, " ")} faculty found` : "No faculty found"}
             emptyDescription={
               statusTab

@@ -1,7 +1,10 @@
 "use client";
 
+import { Suspense } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useParams } from "next/navigation";
+import { useReturnTo } from "@/hooks/useReturnTo";
+import { withReturnTo } from "@/lib/faculty/returnTo";
 import Link from "next/link";
 import { ArrowLeft, Pencil } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -12,7 +15,8 @@ import { PROFILE_MODULES, type ProfileModuleKey } from "@/lib/faculty/profileMod
 import { useCollegeType } from "@/hooks/useCollegeType";
 import type { FacultyMember, TeachingAssignment } from "@/types";
 
-export default function PrincipalFacultyModulePage() {
+function PrincipalFacultyModuleContent() {
+  const returnTo = useReturnTo();
   const { deptId, facultyId, module: moduleParam } = useParams<{ deptId: string; facultyId: string; module: string }>();
   const moduleKey = moduleParam as ProfileModuleKey;
   const moduleDef = PROFILE_MODULES[moduleKey];
@@ -48,13 +52,13 @@ export default function PrincipalFacultyModulePage() {
         actions={
           <div className="flex gap-2">
             <Button variant="outline" asChild>
-              <Link href={`/principal/faculty/${deptId}/${facultyId}`}><ArrowLeft className="h-4 w-4 mr-2" />Back</Link>
+              <Link href={withReturnTo(`/principal/faculty/${deptId}/${facultyId}`, returnTo)}><ArrowLeft className="h-4 w-4 mr-2" />Back</Link>
             </Button>
             {/* Same modules the HOD can edit - Research and Financial stay read-only
                 (Research is the faculty's own publications; Financial is College Office's). */}
             {moduleKey !== "research" && moduleKey !== "financial" && (
               <Button asChild>
-                <Link href={`/principal/faculty/${deptId}/${facultyId}/${moduleKey}/edit`}><Pencil className="h-4 w-4 mr-2" />Edit</Link>
+                <Link href={withReturnTo(`/principal/faculty/${deptId}/${facultyId}/${moduleKey}/edit`, returnTo)}><Pencil className="h-4 w-4 mr-2" />Edit</Link>
               </Button>
             )}
           </div>
@@ -68,4 +72,8 @@ export default function PrincipalFacultyModulePage() {
       ) : null}
     </div>
   );
+}
+
+export default function PrincipalFacultyModulePage() {
+  return <Suspense fallback={<p className="text-sm text-muted-foreground">Loading…</p>}><PrincipalFacultyModuleContent /></Suspense>;
 }
