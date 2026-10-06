@@ -561,3 +561,44 @@ export interface WorkloadSummary {
   subjectCount: number;
   updatedAt: Timestamp;
 }
+
+// Whether one LAB (PRACTICAL subject) of one section runs batch by batch. The
+// section's faculty incharge decides it per lab (Students -> Lab Batches). With no
+// setting, a lab behaves as before: a split period (TimetableSlot.labBatch) uses
+// its batch roster. `batchWise: false` = "no batch" - the whole section attends
+// that lab together, so the lab's periods ignore their batch label.
+export interface SectionLabBatchSetting {
+  id: string; // `${sectionId}_${subjectId}`
+  collegeId: string;
+  sectionId: string;
+  subjectId: string;
+  batchWise: boolean;
+  // When batch-wise: which lab batch each of the lab's faculty takes (facultyMembers
+  // doc id -> the batch label students carry in StudentRecord.labBatch), e.g.
+  // Faculty A -> "Batch 1", Faculty B -> "Batch 2" (two faculty may also share a batch).
+  // That faculty marks only that batch's students, whatever batch label the
+  // timetable period itself carries. Absent/empty for a faculty = the period's own label.
+  batchByFaculty?: Record<string, string>;
+  updatedBy: string;
+  updatedAt: unknown;
+}
+
+// The dates each faculty of a LAB teaches it in one section, set by the section's faculty
+// incharge: Faculty A from..to, Faculty B another from..to. Outside its own dates a faculty
+// does not see the lab in their Teaching Load and cannot take its attendance. A faculty with
+// no window teaches it throughout. Windows of two faculty of one lab may not overlap.
+export interface LabFacultyWindow {
+  from: string; // "YYYY-MM-DD", inclusive
+  to: string;   // "YYYY-MM-DD", inclusive
+}
+
+export interface SectionLabFacultyWindows {
+  id: string; // `${sectionId}_${subjectId}`
+  collegeId: string;
+  sectionId: string;
+  subjectId: string;
+  /** facultyMembers doc id -> that faculty's dates. */
+  windowByFaculty: Record<string, LabFacultyWindow>;
+  updatedBy: string;
+  updatedAt: unknown;
+}

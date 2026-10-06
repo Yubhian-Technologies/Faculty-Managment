@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { MAX_FACULTY_PER_SUBJECT } from "@/lib/teaching/facultyCap";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
@@ -151,30 +152,37 @@ export async function POST(request: Request) {
       sectionId?: string;
       subjectId?: string;
       targetDepartmentId?: string;
+      // The same subject may be asked of several departments at once: one request goes to each.
+      targetDepartmentIds?: string[];
     };
-    const { courseId, sectionId, subjectId, targetDepartmentId } = body;
-    if (!courseId || !sectionId || !subjectId || !targetDepartmentId) {
-      return NextResponse.json({ error: "courseId, sectionId, subjectId and targetDepartmentId are required" }, { status: 400 });
+    const { courseId, sectionId, subjectId } = body;
+    const targetDepartmentIds = Array.from(new Set(
+      [...(body.targetDepartmentIds ?? []), ...(body.targetDepartmentId ? [body.targetDepartmentId] : [])].filter(Boolean),
+    ));
+    if (!courseId || !sectionId || !subjectId || targetDepartmentIds.length === 0) {
+      return NextResponse.json({ error: "courseId, sectionId, subjectId and at least one target department are required" }, { status: 400 });
+    }
+    if (targetDepartmentIds.length > 20) {
+      return NextResponse.json({ error: "At most 20 departments at a time" }, { status: 400 });
     }
 
     const db = getAdminDb();
     const collegeRef = db.collection("colleges").doc(session.collegeId);
 
-    const [courseSnap, sectionSnap, subjectSnap, targetDeptSnap] = await Promise.all([
+    const [courseSnap, sectionSnap, subjectSnap, targetDeptSnaps] = await Promise.all([
       collegeRef.collection("courses").doc(courseId).get(),
       collegeRef.collection("sections").doc(sectionId).get(),
       collegeRef.collection("subjects").doc(subjectId).get(),
-      collegeRef.collection("departments").doc(targetDepartmentId).get(),
+      db.getAll(...targetDepartmentIds.map((id) => collegeRef.collection("departments").doc(id))),
     ]);
     if (!courseSnap.exists) return NextResponse.json({ error: "Course not found" }, { status: 404 });
     if (!sectionSnap.exists) return NextResponse.json({ error: "Section not found" }, { status: 404 });
     if (!subjectSnap.exists) return NextResponse.json({ error: "Subject not found" }, { status: 404 });
-    if (!targetDeptSnap.exists) return NextResponse.json({ error: "Target department not found" }, { status: 404 });
+    if (targetDeptSnaps.some((d) => !d.exists)) return NextResponse.json({ error: "Target department not found" }, { status: 404 });
 
     const course = courseSnap.data() as { name: string };
     const section = sectionSnap.data() as { name: string; year: number; department: string };
     const subject = subjectSnap.data() as { name: string; code: string; hoursPerWeek: number };
-    const targetDept = targetDeptSnap.data() as { name: string; hodUid?: string };
 
     if (session.role === "HOD") {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
@@ -187,71 +195,87 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "You are not the Timetable Incharge for this course & year" }, { status: 403 });
       }
     }
+    // A subject that already has faculty can still be asked of other departments (to add more),
+    // up to the most faculty one subject can have in a section.
     const existingSnap = await collegeRef.collection("teachingAssignments")
       .where("sectionId", "==", sectionId).where("subjectId", "==", subjectId).get();
-    if (existingSnap.docs.some((d) => !(d.data() as { isPast?: boolean }).isPast)) {
-      return NextResponse.json({ error: "This subject already has a faculty member assigned for this section" }, { status: 409 });
+    const assignedCount = existingSnap.docs.filter((d) => !(d.data() as { isPast?: boolean }).isPast).length;
+    if (assignedCount >= MAX_FACULTY_PER_SUBJECT) {
+      return NextResponse.json({ error: `This subject already has ${MAX_FACULTY_PER_SUBJECT} faculty for this section - the most allowed` }, { status: 409 });
     }
 
-    const dupeSnap = await collegeRef.collection("facultyAssignmentRequests")
+    // One request per department; a department that already has an open request for this subject
+    // and section is skipped (no duplicates to the same department), the rest still go.
+    const openSnap = await collegeRef.collection("facultyAssignmentRequests")
       .where("sectionId", "==", sectionId)
       .where("subjectId", "==", subjectId)
       .where("status", "==", "PENDING")
-      .limit(1)
       .get();
-    if (!dupeSnap.empty) {
-      return NextResponse.json({ error: "A request for this subject and section is already pending" }, { status: 409 });
-    }
+    const alreadyAsked = new Set(openSnap.docs.map((d) => (d.data() as { targetDepartmentId?: string }).targetDepartmentId));
 
     const requesterSnap = await collegeRef.collection("users").doc(session.uid).get();
     const requesterName = (requesterSnap.data() as { name?: string } | undefined)?.name ?? "HOD";
 
     const now = new Date();
-    const ref = collegeRef.collection("facultyAssignmentRequests").doc();
-    await ref.set({
-      collegeId: session.collegeId,
-      courseId,
-      courseName: course.name,
-      year: section.year,
-      sectionId,
-      sectionName: section.name,
-      requestingDepartment: section.department,
-      subjectId,
-      subjectName: subject.name,
-      subjectCode: subject.code,
-      hoursPerWeek: subject.hoursPerWeek,
-      targetDepartmentId,
-      targetDepartmentName: targetDept.name,
-      requestedBy: session.uid,
-      requestedByName: requesterName,
-      status: "PENDING",
-      createdAt: now,
-      updatedAt: now,
-    });
+    const created: { id: string; departmentName: string }[] = [];
+    const skipped: { departmentName: string; reason: string }[] = [];
+    for (const targetDeptSnap of targetDeptSnaps) {
+      const targetDepartmentId = targetDeptSnap.id;
+      const targetDept = targetDeptSnap.data() as { name: string; hodUid?: string };
+      if (alreadyAsked.has(targetDepartmentId)) {
+        skipped.push({ departmentName: targetDept.name, reason: "A request for this subject and section is already pending with them" });
+        continue;
+      }
+      const ref = collegeRef.collection("facultyAssignmentRequests").doc();
+      await ref.set({
+        collegeId: session.collegeId,
+        courseId,
+        courseName: course.name,
+        year: section.year,
+        sectionId,
+        sectionName: section.name,
+        requestingDepartment: section.department,
+        subjectId,
+        subjectName: subject.name,
+        subjectCode: subject.code,
+        hoursPerWeek: subject.hoursPerWeek,
+        targetDepartmentId,
+        targetDepartmentName: targetDept.name,
+        requestedBy: session.uid,
+        requestedByName: requesterName,
+        status: "PENDING",
+        createdAt: now,
+        updatedAt: now,
+      });
 
-    await collegeRef.collection("auditLogs").add({
-      collegeId: session.collegeId,
-      action: "FACULTY_ASSIGNMENT_REQUESTED",
-      performedBy: session.uid,
-      performedByName: requesterName,
-      targetId: ref.id,
-      details: { subjectName: subject.name, sectionName: section.name, targetDepartment: targetDept.name },
-      timestamp: now,
-    });
+      await collegeRef.collection("auditLogs").add({
+        collegeId: session.collegeId,
+        action: "FACULTY_ASSIGNMENT_REQUESTED",
+        performedBy: session.uid,
+        performedByName: requesterName,
+        targetId: ref.id,
+        details: { subjectName: subject.name, sectionName: section.name, targetDepartment: targetDept.name },
+        timestamp: now,
+      });
 
-    if (targetDept.hodUid) {
-      await notify(
-        db,
-        session.collegeId,
-        targetDept.hodUid,
-        "FACULTY_ASSIGNMENT_REQUESTED",
-        "Faculty assignment requested",
-        `${requesterName} asked ${targetDept.name} to lend a faculty member for ${subject.name} (${course.name}, Section ${section.name})`,
-        "/hod/assignment-requests"
-      );
+      if (targetDept.hodUid) {
+        await notify(
+          db,
+          session.collegeId,
+          targetDept.hodUid,
+          "FACULTY_ASSIGNMENT_REQUESTED",
+          "Faculty assignment requested",
+          `${requesterName} asked ${targetDept.name} to lend a faculty member for ${subject.name} (${course.name}, Section ${section.name})`,
+          "/hod/assignment-requests"
+        );
+      }
+      created.push({ id: ref.id, departmentName: targetDept.name });
     }
 
-    return NextResponse.json({ id: ref.id }, { status: 201 });
+    if (created.length === 0) {
+      return NextResponse.json({ error: skipped[0]?.reason ?? "Nothing to send", skipped }, { status: 409 });
+    }
+    return NextResponse.json({ id: created[0].id, created, skipped }, { status: 201 });
   } catch (err) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
