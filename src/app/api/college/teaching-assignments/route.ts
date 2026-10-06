@@ -13,6 +13,7 @@ import { requiredFacultyCount } from "@/lib/college/facultyRatio";
 import { getHodDepartmentScope, canHodEditDepartment, canHodManageAssignment, facultyManageableDepartmentNames } from "@/lib/departments/scope";
 import { canHodEditDepartmentYear, type DepartmentYearRow } from "@/lib/departments/managedBranches";
 import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
+import { facultyActiveOn, facultyActiveOnAny, loadLabWindows } from "@/lib/students/labFacultyWindow";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { getActiveSubstitutionsForDates, currentWeekDateKeys } from "@/lib/leave/periodCoverage";
 import { resolveSectionCurrentSemester, resolveRequestedSemester, matchesCurrentSemester } from "@/lib/college/semester";
@@ -77,6 +78,9 @@ export async function GET(request: Request) {
     // this file for department-name lists).
     const rosterAssignmentQueries: FirebaseFirestore.Query[] = [];
     let timetableSlots: (TimetableSlot & { id: string })[] = [];
+    // True for the "my own teaching load" view (a faculty looking at themselves, or an HOD/Principal
+    // looking up one faculty) - the only view a lab's per-faculty teaching dates apply to.
+    let isFacultyView = false;
     // Populated only for the deptView HOD branch below - needed to year-gate
     // childAssignmentQuery's results (a managed branch's own non-shared years
     // must never surface to its manager - see canHodEditDepartmentYear).
@@ -152,6 +156,7 @@ export async function GET(request: Request) {
     } else {
       // Viewing a specific faculty member's assignments - HOD/Principal/SuperAdmin may look up anyone;
       // everyone else (including a faculty viewing their own "Teaching Load") is restricted to themselves.
+      isFacultyView = true;
       const canViewOthers = ["HOD", "PRINCIPAL", "SUPER_ADMIN"].includes(session.role);
       // teachingAssignments/timetableSlots key off the FacultyMember doc id, not
       // the login uid — resolve "myself" through the userUid back-link (see
@@ -291,6 +296,23 @@ export async function GET(request: Request) {
           : new Date(b.createdAt as unknown as string).getTime();
       return tb - ta; // descending
     });
+
+    // A lab's faculty teach it on their own dates (set by the section's faculty incharge). In a
+    // faculty's Teaching Load, a lab does not show on days outside their dates, and not at all in a
+    // week that has none of them.
+    if (isFacultyView) {
+      const weekDates = currentWeekDateKeys(weekParam ?? undefined);
+      const dayIndex: Record<string, number> = { MON: 0, TUE: 1, WED: 2, THU: 3, FRI: 4, SAT: 5 };
+      const labWindows = await loadLabWindows(
+        db, session.collegeId,
+        [...assignments, ...timetableSlots].map((x) => ({ sectionId: x.sectionId, subjectId: x.subjectId })),
+      );
+      timetableSlots = timetableSlots.filter((sl) => {
+        const date = weekDates[dayIndex[sl.day] ?? -1];
+        return !date || facultyActiveOn(labWindows, sl.sectionId, sl.subjectId, sl.facultyId, date);
+      });
+      assignments = assignments.filter((a) => facultyActiveOnAny(labWindows, a.sectionId, a.subjectId, a.facultyId, weekDates));
+    }
 
     // Joined onto each assignment/slot at read time only (never stored on
     // either doc - see TeachingAssignment.subjectType/TimetableSlot.
@@ -589,6 +611,9 @@ export async function POST(request: Request) {
         subjectName: subject.name,
         subjectCode: subject.code,
         ...(subject.shortCode ? { shortCode: subject.shortCode } : {}),
+        // A hand-typed subject (subjects/custom) is real teaching load for the
+        // timetable but never belongs on the faculty resume.
+        ...((subject as { isCustom?: boolean }).isCustom ? { excludeFromResume: true } : {}),
         hoursPerWeek: body.hoursPerWeek != null ? Number(body.hoursPerWeek) : subject.hoursPerWeek,
         assignedBy: session.uid,
         assignedByName: session.role,

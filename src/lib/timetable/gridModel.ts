@@ -152,16 +152,24 @@ export function periodTimeRange(startTime?: string, endTime?: string): string | 
  * configured shortCode, then its code, then the read-time joined values, and
  * only falls back to deriving one from the name as a last resort.
  */
+// A hand-typed (custom) subject is filed under a generated code ("CUS-AB12C")
+// that means nothing to anyone - show its typed name wherever a code would go.
+// Older custom subjects/assignments still carry that generated code.
+const GENERATED_CODE = /^CUS-[A-Z0-9]{5}$/;
+export function readableCode(code: string | undefined, name: string | undefined): string | undefined {
+  return code && GENERATED_CODE.test(code) ? (name || code) : code;
+}
+
 export function slotShortCode(
   slot: TimetableSlot,
   subjects?: Map<string, Subject> | Subject[],
 ): string {
   const subject = subjects instanceof Map ? subjects.get(slot.subjectId) : subjects?.find((s) => s.id === slot.subjectId);
-  if (subject?.shortCode) return subject.shortCode;
-  if (subject?.code) return subject.code;
+  if (subject?.shortCode && !GENERATED_CODE.test(subject.shortCode)) return subject.shortCode;
+  if (subject?.code) return readableCode(subject.code, subject.name) as string;
   const joined = slot as TimetableSlot & { shortCode?: string; subjectCode?: string };
-  if (joined.shortCode) return joined.shortCode;
-  if (joined.subjectCode) return joined.subjectCode;
+  if (joined.shortCode && !GENERATED_CODE.test(joined.shortCode)) return joined.shortCode;
+  if (joined.subjectCode) return readableCode(joined.subjectCode, slot.subjectName) as string;
   const name = (slot.subjectName ?? "").trim();
   if (!name) return "—";
   if (name.length <= 10) return name.toUpperCase();
@@ -176,7 +184,7 @@ export function slotShortCode(
 export function slotSubjectCode(slot: TimetableSlot, subjects?: Map<string, Subject> | Subject[]): string {
   const subject = subjects instanceof Map ? subjects.get(slot.subjectId) : subjects?.find((s) => s.id === slot.subjectId);
   const joined = slot as TimetableSlot & { subjectCode?: string };
-  return subject?.code || joined.subjectCode || slotShortCode(slot, subjects);
+  return readableCode(subject?.code, subject?.name) || readableCode(joined.subjectCode, slot.subjectName) || slotShortCode(slot, subjects);
 }
 
 /** Who is actually teaching this slot right now - the substitute wins. */
@@ -333,4 +341,46 @@ export function ordinalYear(year: number): string {
  */
 export function allocationNeedsOfficialCode(allocation: AllocationEntry[]): boolean {
   return allocation.some((a) => a.code && a.code !== a.shortCode);
+}
+
+/** The slot fields cell-merging reads and rewrites. */
+interface MergeableSlot {
+  subjectId?: string;
+  subjectName?: string;
+  facultyName?: string;
+  substituteFacultyName?: string;
+  substituteForName?: string;
+  substituteDate?: string;
+  labBatch?: string;
+}
+
+/**
+ * Several faculty of ONE subject in the same cell (co-teaching, or a lab split into batches
+ * with a faculty each) become ONE entry: the subject appears once, with every faculty listed
+ * ("A, B") and every batch ("Batch 1, Batch 2"). Entries of different subjects stay separate,
+ * in their original order. A cover for one of the faculty shows under their name as
+ * "Sub: <name>". Used by every on-screen timetable and both downloads, so a cell reads the
+ * same wherever it is shown.
+ */
+export function mergeCoTaughtSlots<T extends MergeableSlot>(cellSlots: T[]): T[] {
+  const groups = new Map<string, T[]>();
+  for (const s of cellSlots) {
+    const key = s.subjectId || s.subjectName || `__${groups.size}`;
+    groups.set(key, [...(groups.get(key) ?? []), s]);
+  }
+  return Array.from(groups.values()).map((group) => {
+    if (group.length === 1) return group[0];
+    const unique = (values: (string | undefined)[]) => Array.from(new Set(values.filter((v): v is string => !!v)));
+    const faculty = unique(group.map((g) => (g.substituteFacultyName ? `Sub: ${g.substituteFacultyName}` : g.facultyName)));
+    const batches = unique(group.map((g) => g.labBatch));
+    return {
+      ...group[0],
+      facultyName: faculty.join(", "),
+      labBatch: batches.length > 0 ? batches.join(", ") : undefined,
+      // The names above already carry any cover; a merged entry is not itself "a substitution".
+      substituteFacultyName: undefined,
+      substituteForName: undefined,
+      substituteDate: undefined,
+    };
+  });
 }
