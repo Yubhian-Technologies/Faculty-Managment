@@ -24,6 +24,9 @@ import { FacultyProfileModuleEditor, type FacultyEditRecord } from "@/components
 import { getMissingRequiredPersonalFields, FACULTY_REQUIRED_PERSONAL_FIELDS } from "@/components/shared/PersonalDetailsFields";
 import { getFacultyProfileModules, type ProfileModuleKey } from "@/lib/faculty/profileModules";
 import { syncTeachingAssignments } from "@/lib/teaching/syncTeachingAssignments";
+import { readPreviousTeachingAssignments } from "@/lib/faculty/previousTeaching";
+import { savePreviousTeachingAssignments, samePreviousTeaching } from "@/lib/faculty/savePreviousTeaching";
+import type { PreviousTeachingAssignment } from "@/types";
 import type { StagedTeachingRow } from "@/components/faculty/TeachingAssignmentsEditor";
 import { useCollegeType } from "@/hooks/useCollegeType";
 import { personalRecordFromDoc, personalPatchBody } from "@/lib/faculty/personalRecord";
@@ -118,6 +121,9 @@ export function FacultyIdentityEditPage({
   const [originalAcademicProfile, setOriginalAcademicProfile] = useState<FacultyEditRecord["academicProfile"]>({});
   const [teachingRows, setTeachingRows] = useState<StagedTeachingRow[]>([]);
   const [originalTeachingRows, setOriginalTeachingRows] = useState<StagedTeachingRow[]>([]);
+  // Free-text Previous Teaching Assignments, as loaded and as edited (see lib/faculty/previousTeaching.ts).
+  const [previousRecords, setPreviousRecords] = useState<PreviousTeachingAssignment[]>([]);
+  const [originalPrevious, setOriginalPrevious] = useState<PreviousTeachingAssignment[]>([]);
   const [savingModule, setSavingModule] = useState<ProfileModuleKey | null>(null);
 
   useEffect(() => {
@@ -133,6 +139,9 @@ export function FacultyIdentityEditPage({
         setEmployeeId((m.employeeId as string) ?? "");
         setCollegeEmail((m.collegeEmail as string) ?? "");
         setDepartment((m.department as string) ?? "");
+        const previous = readPreviousTeachingAssignments(m as { previousTeachingAssignments?: unknown });
+        setPreviousRecords(previous);
+        setOriginalPrevious(previous);
         const academicProfile = (m.academicProfile as FacultyEditRecord["academicProfile"]) ?? {};
         setOriginalAcademicProfile(academicProfile);
         setRecord({
@@ -218,6 +227,14 @@ export function FacultyIdentityEditPage({
     setSavingModule(moduleKey);
     try {
       if (moduleKey === "teaching-load") {
+        if (!samePreviousTeaching(previousRecords, originalPrevious)) {
+          const prevError = await savePreviousTeachingAssignments(`/api/college/faculty/${facultyId}`, previousRecords, originalPrevious.map((r) => r.id));
+          if (prevError) {
+            toast({ variant: "destructive", title: "Previous teaching assignments not saved", description: prevError });
+            return;
+          }
+          setOriginalPrevious(previousRecords);
+        }
         const errors = await syncTeachingAssignments(facultyId, form.legalName, originalTeachingRows, teachingRows);
         if (errors.length > 0) {
           toast({ variant: "destructive", title: "Some teaching assignments failed to save", description: errors.join("; ") });
@@ -657,6 +674,8 @@ export function FacultyIdentityEditPage({
               facultyId={facultyId}
               teachingRows={teachingRows}
               onTeachingRowsChange={setTeachingRows}
+              previousTeachingRecords={previousRecords}
+              onPreviousTeachingRecordsChange={setPreviousRecords}
               department={department}
               collegeType={collegeType}
               requiredPersonalFields={FACULTY_REQUIRED_PERSONAL_FIELDS}

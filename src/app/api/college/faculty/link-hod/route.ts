@@ -10,6 +10,7 @@ import { forgetHeldRoles } from "@/lib/auth/liveRoles";
 import { experienceBreakdown, allPreviousExperienceEntries } from "@/lib/faculty/experienceCalc";
 import { mobileNoFromBody } from "@/lib/faculty/mobileNo";
 import { normalizeAcademicProfile } from "@/lib/faculty/academicProfileCompat";
+import { normalizePreviousTeachingAssignments } from "@/lib/faculty/previousTeaching";
 import { normalizeHighestQualification } from "@/lib/faculty/highestQualification";
 import type { Designation, FacultyStatus } from "@/types";
 import { SELECTABLE_FACULTY_STATUS_VALUES, FACULTY_STATUS_ERROR_MESSAGE, FACULTY_STATUS_DATE_FIELD, FACULTY_STATUS_DATE_LABELS } from "@/types";
@@ -49,6 +50,7 @@ export async function POST(request: Request) {
       retainershipDate?: string;
       academicProfile?: Record<string, unknown>;
       technicalProfile?: Record<string, unknown>;
+      previousTeachingAssignments?: unknown;
       profilePhotoUrl?: string;
     } & PersonalDetailsInput;
 
@@ -67,6 +69,12 @@ export async function POST(request: Request) {
     if (!(SELECTABLE_FACULTY_STATUS_VALUES as string[]).includes(status)) {
       return NextResponse.json({ error: FACULTY_STATUS_ERROR_MESSAGE }, { status: 400 });
     }
+    // Previous Teaching Assignments (free text) - see POST /api/college/faculty.
+    const previousTeachingResult = body.previousTeachingAssignments === undefined
+      ? { ok: true as const, value: [] }
+      : normalizePreviousTeachingAssignments(body.previousTeachingAssignments, () => crypto.randomUUID());
+    if (!previousTeachingResult.ok) return NextResponse.json({ error: previousTeachingResult.error }, { status: 400 });
+    const previousTeaching = previousTeachingResult.value;
     const statusDateField = FACULTY_STATUS_DATE_FIELD[status];
     if (statusDateField && !body[statusDateField]?.trim()) {
       return NextResponse.json({ error: `${FACULTY_STATUS_DATE_LABELS[statusDateField]} is required` }, { status: 400 });
@@ -169,6 +177,7 @@ export async function POST(request: Request) {
       userUid: linkUid,
       ...(body.academicProfile ? { academicProfile: normalizeAcademicProfile(body.academicProfile) } : {}),
       ...(body.technicalProfile ? { technicalProfile: body.technicalProfile } : {}),
+      ...(previousTeaching.length > 0 ? { previousTeachingAssignments: previousTeaching } : {}),
       ...(profilePhotoUrl ? { profilePhotoUrl } : {}),
       ...buildPersonalDetailsUpdate(body),
       createdAt: now,

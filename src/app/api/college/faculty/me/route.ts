@@ -21,6 +21,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { normalizeHighestQualification } from "@/lib/faculty/highestQualification";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { isSingleSourceCollege } from "@/lib/faculty/singleSource";
+import { resolvePreviousTeachingUpdate } from "@/lib/faculty/previousTeaching";
 import type { TrainingEntry } from "@/types";
 
 const PROMOTION_KEYS = [PROMOTION_HISTORY_KEY]; // College Office-owned - see PATCH .../promotion-salary
@@ -76,6 +77,9 @@ export async function GET() {
       const editViaFacultyRecord = isSingleSourceCollege(session.collegeId) && (session.roles ?? []).includes("PANEL_MEMBER");
       return NextResponse.json({
         faculty: { id: facultyDoc.id, ...migrateFacultyDoc(facultyDoc.data()) },
+        // Additive: this person's details come from a real facultyMembers record (the shared My Profile pages use it to
+        // enable the self-editable Previous Teaching Assignments).
+        facultyRecord: true,
         teachingAssignments: assignmentsSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
         ...(editViaFacultyRecord ? { editViaFacultyRecord: true } : {}),
       });
@@ -133,6 +137,10 @@ export async function PATCH(request: Request) {
       academicProfile: Record<string, unknown>;
       // Section-scoped alternative to academicProfile ({ set, remove }); never combined with it.
       academicProfileChanges: unknown;
+      // Previous Teaching Assignments - the one part of Teaching Load a faculty member enters themselves (the
+      // current assignments stay HOD/Principal-assigned). See lib/faculty/previousTeaching.ts.
+      previousTeachingAssignments: unknown;
+      previousTeachingAssignmentsLoadedIds: unknown;
       profilePhotoUrl: string;
     }> & PersonalDetailsInput;
 
@@ -174,6 +182,9 @@ export async function PATCH(request: Request) {
       facultyUpdates.additionalPhoneNumbers = body.additionalPhoneNumbers.filter((p) => p.number?.trim());
     }
     if (body.profilePhotoUrl !== undefined) facultyUpdates.profilePhotoUrl = body.profilePhotoUrl;
+    const previousTeaching = resolvePreviousTeachingUpdate(body, facultyDoc.data() as { previousTeachingAssignments?: unknown }, () => crypto.randomUUID());
+    if (previousTeaching.kind === "error") return NextResponse.json({ error: previousTeaching.error }, { status: 400 });
+    if (previousTeaching.kind === "set") facultyUpdates.previousTeachingAssignments = previousTeaching.value;
     // Same two write modes as PATCH /api/college/faculty/[id]: section-scoped
     // `academicProfileChanges` (dot-paths, every other stored key untouched) or the
     // whole `academicProfile`. The College-Office/R&D-owned keys are never accepted here.
