@@ -205,19 +205,19 @@ function SectionTimetable() {
   // each section's own courseId - same lookup hod/timetable-view uses. The list
   // is every semester any section of the picked year runs.
   useEffect(() => {
-    if (!year || !selectedGroup) return;
-    // The group's course ids, not the loaded sections' - so this runs in
-    // parallel with the sections fetch instead of waiting behind it.
+    if (!year || !selectedGroup || selectedGroup.courseIds.length === 0) return;
     const courseIds = selectedGroup.courseIds;
     let cancelled = false;
     void (async () => {
       setIsLoadingTimings(true);
       try {
-        const entries = await Promise.all(courseIds.map(async (id) => {
-          const t = await fetch(`/api/college/course-year-timings?courseId=${encodeURIComponent(id)}`)
-            .then((r) => r.json() as Promise<{ timings: CourseYearTiming[] }>);
-          return [id, (t.timings ?? []).find((x) => Number(x.year) === Number(year)) ?? null] as const;
-        }));
+        const res = await fetch(`/api/college/course-year-timings?courseId=${encodeURIComponent(courseIds.join(","))}`);
+        const data = (await res.json()) as { timings: CourseYearTiming[] };
+        const allTimings = data.timings ?? [];
+        const entries = courseIds.map((id) => [
+          id,
+          allTimings.find((x) => x.courseId === id && Number(x.year) === Number(year)) ?? null,
+        ] as const);
         if (!cancelled) setTimings(Object.fromEntries(entries));
       } catch {
         if (!cancelled) toast({ variant: "destructive", title: "Failed to load semesters" });

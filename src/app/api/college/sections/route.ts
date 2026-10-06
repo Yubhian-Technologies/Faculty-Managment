@@ -43,7 +43,9 @@ export async function GET(request: Request) {
     const withCommonFilters = (q: FirebaseFirestore.Query): FirebaseFirestore.Query => {
       let out = q;
       if (courseFilterIds.length === 1) out = out.where("courseId", "==", courseFilterIds[0]);
-      else if (courseFilterIds.length > 1) out = out.where("courseId", "in", courseFilterIds.slice(0, 30));
+      // Multi-course filtering is applied in memory below: `courseId in [...]`
+      // multiplies with the department `in` / array-contains-any clauses and
+      // exceeds Firestore's 30-term disjunction limit (500 error).
       if (yearFilter) out = out.where("year", "==", Number(yearFilter));
       return out;
     };
@@ -182,9 +184,12 @@ export async function GET(request: Request) {
       secondaryQuery ? secondaryQuery.get() : Promise.resolve(null),
     ]);
 
+    const courseIdSet = courseFilterIds.length > 1 ? new Set(courseFilterIds) : null;
+    const inCourses = (d: FirebaseFirestore.QueryDocumentSnapshot) => !courseIdSet || courseIdSet.has(d.data().courseId as string);
+
     const seenIds = new Set<string>();
     const sections: { id: string; accessLevel: "primary" | "secondary"; [key: string]: unknown }[] = [];
-    for (const d of primarySnap.docs) {
+    for (const d of primarySnap.docs.filter(inCourses)) {
       const data = d.data();
       // Own-department match. When this year is claimed by whoever manages the
       // branch elsewhere (a shared first year routed through a common
@@ -209,7 +214,7 @@ export async function GET(request: Request) {
       sections.push({ id: d.id, ...data, accessLevel });
     }
     if (childDeptSnap) {
-      for (const d of childDeptSnap.docs) {
+      for (const d of childDeptSnap.docs.filter(inCourses)) {
         if (seenIds.has(d.id)) continue;
         const data = d.data();
         const deptName = data.department as string;
@@ -248,7 +253,7 @@ export async function GET(request: Request) {
       // is non-empty, which secondaryQuery itself requires).
       const deptByName = new Map(hodDepartments.map((d) => [d.name ?? "", d]));
       const receivingCandidates = [...hodScope.ownDepartmentNames, ...hodScope.childDepartmentNames];
-      for (const d of secondarySnap.docs) {
+      for (const d of secondarySnap.docs.filter(inCourses)) {
         if (seenIds.has(d.id)) continue;
         const data = d.data();
         const feederDept = deptByName.get(data.department as string);
