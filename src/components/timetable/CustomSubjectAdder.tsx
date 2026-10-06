@@ -34,12 +34,16 @@ export function CustomSubjectAdder({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ courseId, sectionId, semester, name: name.trim() }),
       });
-      const json = (await res.json()) as { error?: string; subject?: Subject; assignment?: SubjectSemesterAssignment };
+      const json = (await res.json()) as { error?: string; existing?: boolean; subject?: Subject; assignment?: SubjectSemesterAssignment };
       if (!res.ok || !json.subject || !json.assignment) {
         toast({ variant: "destructive", title: "Failed to add subject", description: json.error });
         return;
       }
-      toast({ variant: "success", title: "Subject added", description: "Now pick it above and assign a faculty." });
+      toast({
+        variant: "success",
+        title: json.existing ? "Subject already exists for this department" : "Subject added for the whole department",
+        description: "It's selected above - every section of the department can pick it. Now assign a faculty.",
+      });
       setName("");
       onAdded({ subject: json.subject, assignment: json.assignment });
     } catch {

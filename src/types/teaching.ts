@@ -330,6 +330,9 @@ export interface TimetableSlot {
   // MANUAL slots carry through untouched. Never set by the generator/publish
   // flow, which has no concept of batches.
   labBatch?: string;
+  // The "w.e.f" date entered when this slot was published (YYYY-MM-DD); printed
+  // on the timetable's title line. Absent on slots published before it was asked.
+  effectiveDate?: string;
   source?: TimetableSlotSource; // absent on rows written before this field existed - treat as MANUAL
   isPinned?: boolean;
   // Which of the course-year's configured semesters (CourseYearTiming.

@@ -19,6 +19,8 @@ import {
   slotFacultyName,
   slotShortCode,
   type TimetableColumn,
+  continuousSpans,
+  isLabSlot,
 } from "@/lib/timetable/gridModel";
 import type {
   CourseYearTiming,
@@ -93,6 +95,9 @@ export function InstitutionalTimetableTable({
   const activeAddress = address ?? (collegeInfo?.address || "");
   const activePhone = phone ?? (collegeInfo?.phone || "");
 
+  // Off by default: when on, back-to-back periods holding the same subject
+  // (e.g. a 3-period lab) are drawn as ONE wide cell instead of repeating it.
+  const [mergeContinuous, setMergeContinuous] = useState(false);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [isExportingXlsx, setIsExportingXlsx] = useState(false);
 
@@ -183,11 +188,12 @@ export function InstitutionalTimetableTable({
       shortBreaks: timing.shortBreaks,
       subjects,
       assignments,
+      mergeContinuous,
     }),
     [
       activeCollegeName, activeCollegeCode, activeAffiliation, activeAddress, activePhone,
       collegeInfo?.logoUrl, logoUrl, departmentName, courseName, academicYear, semesterLabel,
-      section, classroom, classInchargeName, visibleDays, timing, filteredSlots, subjects, assignments,
+      section, classroom, classInchargeName, visibleDays, timing, filteredSlots, subjects, assignments, mergeContinuous,
     ]
   );
 
@@ -280,6 +286,16 @@ export function InstitutionalTimetableTable({
               ))}
             </div>
           )}
+
+          <label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground cursor-pointer select-none">
+            <input
+              type="checkbox"
+              className="h-3.5 w-3.5"
+              checked={mergeContinuous}
+              onChange={(e) => setMergeContinuous(e.target.checked)}
+            />
+            Merge continuous periods
+          </label>
 
           <div className="flex items-center gap-1.5">
             <Button
@@ -491,13 +507,18 @@ export function InstitutionalTimetableTable({
               </thead>
               <tbody>
                 {days.map((d, dayIndex) => {
+                  const { spans, skipped } = mergeContinuous
+                    ? continuousSpans(columns, (p) => filteredSlots.filter((s) => s.day === d && s.periodNumber === p))
+                    : { spans: new Map<number, number>(), skipped: new Set<number>() };
                   return (
                     <tr key={d} className="border-b last:border-b-0 hover:bg-muted/10">
                       <td className="border-r p-2.5 text-center font-bold text-foreground sticky left-0 z-[5] backdrop-blur bg-muted/90">
                         {DAY_LABELS[d]?.slice(0, 3) ?? d}
                       </td>
 
-                      {columns.map((col) => {
+                      {columns.map((col, colIdx) => {
+                        // Swallowed by the wider cell to its left (see continuousSpans).
+                        if (skipped.has(colIdx)) return null;
                         if (col.kind === "break") {
                           // One tall cell across every day row, titled vertically.
                           if (dayIndex > 0) return null;
@@ -527,7 +548,7 @@ export function InstitutionalTimetableTable({
                         }
 
                         return (
-                          <td key={col.id} className="border-r p-2 text-center align-middle">
+                          <td key={col.id} colSpan={spans.get(colIdx) ?? 1} className="border-r p-2 text-center align-middle">
                             <div className="flex flex-col items-center justify-center gap-1">
                               {periodSlots.map((s, idx) => {
                                 const shortCode = slotShortCode(s, subjectMap);
@@ -540,7 +561,10 @@ export function InstitutionalTimetableTable({
                                     className={`w-full rounded px-1.5 py-1 text-center transition-all ${
                                       isSub
                                         ? "bg-amber-100 text-amber-900 border border-amber-300"
-                                        : "bg-primary/5 hover:bg-primary/10 border border-primary/20 text-foreground"
+                                        : isLabSlot(s, subjectMap)
+                                          // Lab / practical periods stand out from theory.
+                                          ? "bg-violet-100 hover:bg-violet-200 border border-violet-300 text-violet-950 dark:bg-violet-950/40 dark:border-violet-700 dark:text-violet-100"
+                                          : "bg-primary/5 hover:bg-primary/10 border border-primary/20 text-foreground"
                                     }`}
                                     title={`${s.subjectName}${faculty ? ` · ${faculty}` : ""}${s.classroom ? ` · Room ${s.classroom}` : ""}`}
                                   >

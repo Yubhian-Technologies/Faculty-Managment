@@ -12,6 +12,7 @@ import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
@@ -118,6 +119,8 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
   const [selected, setSelected] = useState<DraftSlot | null>(null);
   const [busy, setBusy] = useState<null | "publish" | "discard" | "move" | "blank" | "reset">(null);
   const [confirmPublish, setConfirmPublish] = useState(false);
+  // "w.e.f" date printed on the timetable, asked for in the publish dialog.
+  const [effectiveDate, setEffectiveDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
   // Manual timetabling: the section's assignments feed the add-subject picker,
@@ -1238,8 +1241,17 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
         }
         confirmLabel={isCrossDepartment ? "Notify" : "Publish"}
         loading={busy === "publish"}
+        confirmDisabled={!isCrossDepartment && !effectiveDate}
         onConfirm={handlePublish}
-      />
+      >
+        {!isCrossDepartment && (
+          <div className="space-y-1.5">
+            <Label htmlFor="publish-wef">Effective from (w.e.f)</Label>
+            <Input id="publish-wef" type="date" value={effectiveDate} onChange={(e) => setEffectiveDate(e.target.value)} />
+            <p className="text-xs text-muted-foreground">Printed on the timetable&apos;s title line.</p>
+          </div>
+        )}
+      </ConfirmDialog>
       <ConfirmDialog
         open={confirmDiscard}
         onOpenChange={setConfirmDiscard}

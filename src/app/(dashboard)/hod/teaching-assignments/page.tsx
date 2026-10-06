@@ -1174,8 +1174,8 @@ const effectiveSemester = semesterOptions.length === 0
                     sectionId={assignForm.sectionId}
                     semester={effectiveSemester}
                     onAdded={({ subject, assignment }) => {
-                      setSubjectsCache((c) => ({ ...c, [key]: [...(c[key] ?? []), subject] }));
-                      setSemesterAssignmentsCache((c) => ({ ...c, [key]: [...(c[key] ?? []), assignment] }));
+                      setSubjectsCache((c) => ({ ...c, [key]: [...(c[key] ?? []).filter((x) => x.id !== subject.id), subject] }));
+                      setSemesterAssignmentsCache((c) => ({ ...c, [key]: [...(c[key] ?? []).filter((x) => x.id !== assignment.id), assignment] }));
                       setAssignForm((f) => ({ ...f, subjectId: subject.id }));
                     }}
                   />

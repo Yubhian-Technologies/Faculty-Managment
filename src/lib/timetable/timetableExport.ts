@@ -18,6 +18,7 @@ import {
   timetableClassLine,
   buildClassTimetableSubtitle,
   getHodSignatureLabel,
+  latestEffectiveDate,
   resolveTimetableDays,
   slotShortCode,
 } from "./gridModel";
@@ -221,7 +222,7 @@ export async function buildSectionTimetableXlsxBuffer(opts: SectionTimetableXlsx
   const subtitleText = buildClassTimetableSubtitle({
     academicYear: opts.academicYear,
     semesterLabel,
-    effectiveDate: opts.effectiveDate,
+    effectiveDate: opts.effectiveDate ?? latestEffectiveDate(slots),
   });
   putAcross(subtitleText, { bold: true, size: 10 });
 

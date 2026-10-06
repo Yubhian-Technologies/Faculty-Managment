@@ -605,8 +605,8 @@ export function TeachingAssignmentsEditor({ courseId, year, backHref }: Teaching
                   sectionId={assignForm.sectionId}
                   semester={effectiveSemester}
                   onAdded={({ subject, assignment }) => {
-                    setMasterSubjects((p) => [...p, subject]);
-                    setSemesterAssignments((p) => [...p, assignment]);
+                    setMasterSubjects((p) => [...p.filter((x) => x.id !== subject.id), subject]);
+                    setSemesterAssignments((p) => [...p.filter((x) => x.id !== assignment.id), assignment]);
                     setAssignForm((f) => ({ ...f, subjectId: subject.id }));
                   }}
                 />

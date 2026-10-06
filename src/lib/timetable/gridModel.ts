@@ -348,15 +348,83 @@ export function buildClassTimetableSubtitle(opts: {
     ? opts.semester
     : Number(opts.semesterLabel?.match(/\d+/g)?.pop()) || 1;
   const semType = semNum > 0 ? (semNum % 2 === 1 ? "Odd Semester" : "Even Semester") : "Semester";
-  const wefDate = opts.effectiveDate?.trim() ? `w.e.f ${opts.effectiveDate.trim()}` : "w.e.f ____________";
-  return `Class Time Table for the Academic Year ${acadYear}, ${semType}, ${wefDate}`;
+  // The date is asked for when the timetable is published; until then the line
+  // simply has no w.e.f part - no blank to fill in by hand.
+  const eff = opts.effectiveDate?.trim();
+  const iso = eff?.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const shown = iso ? `${iso[3]}-${iso[2]}-${iso[1]}` : eff;
+  return `Class Time Table for the Academic Year ${acadYear}, ${semType}${shown ? `, w.e.f ${shown}` : ""}`;
+}
+
+/**
+ * Which period columns to draw as one wide cell: back-to-back PERIOD columns
+ * (no break between them) whose slots are the same subject / faculty / batch /
+ * room. Returns the colSpan keyed by the first column's index, and the indexes
+ * of the columns it swallows. Break columns never merge and never get merged over.
+ */
+export function continuousSpans(
+  columns: { kind: string; periodNumber?: number }[],
+  slotsAt: (periodNumber: number) => TimetableSlot[],
+): { spans: Map<number, number>; skipped: Set<number> } {
+  const sig = (i: number): string | null => {
+    const col = columns[i];
+    if (!col || col.kind === "break" || col.periodNumber == null) return null;
+    const here = slotsAt(col.periodNumber);
+    if (here.length === 0) return null;
+    return here
+      .map((s) => [s.subjectId, s.assignmentId, s.labBatch ?? "", s.classroom ?? "", s.substituteFacultyName ?? ""].join("|"))
+      .sort()
+      .join("||");
+  };
+  const spans = new Map<number, number>();
+  const skipped = new Set<number>();
+  for (let i = 0; i < columns.length; i++) {
+    if (skipped.has(i)) continue;
+    const s = sig(i);
+    if (s == null) continue;
+    let j = i + 1;
+    while (sig(j) === s) j++;
+    if (j - i > 1) {
+      spans.set(i, j - i);
+      for (let k = i + 1; k < j; k++) skipped.add(k);
+    }
+  }
+  return { spans, skipped };
+}
+
+/**
+ * Whether a slot is a lab / practical period (coloured differently on every
+ * timetable view). The subject's type decides when it's known; a lab batch
+ * label always means lab; with no type at all, a "lab"/"practical" name does.
+ */
+export function isLabSlot(slot: TimetableSlot, subjects?: Map<string, Subject> | Subject[]): boolean {
+  if (slot.labBatch) return true;
+  const subject = subjects instanceof Map ? subjects.get(slot.subjectId) : subjects?.find((s) => s.id === slot.subjectId);
+  const type = subject?.type ?? (slot as TimetableSlot & { subjectType?: string }).subjectType;
+  if (type) return type === "PRACTICAL";
+  return /\b(lab|laboratory|practical)\b/i.test(slot.subjectName ?? "");
+}
+
+/** The effective date entered at publish time, carried on the published slots (latest wins). */
+export function latestEffectiveDate(slots: { effectiveDate?: string }[]): string | undefined {
+  let best: string | undefined;
+  for (const s of slots) if (s.effectiveDate && (!best || s.effectiveDate > best)) best = s.effectiveDate;
+  return best;
 }
 
 export function getHodSignatureLabel(deptNameOrCode?: string): string {
   if (!deptNameOrCode?.trim()) return "HOD";
   const str = deptNameOrCode.trim();
   if (/^[A-Z]{2,6}$/.test(str)) return `HOD-${str}`;
+  // Most specific names first - "computer science and business system" must not
+  // fall into the plain "computer science" (CSE) entry, nor "electronics and
+  // electrical" into "electronics" (ECE).
   const codeMap: Record<string, string> = {
+    "computer science and business": "CSBS",
+    "electronics and electrical": "EEE",
+    "electronics and communication": "ECE",
+    "artificial intelligence and machine": "AIML",
+    "artificial intelligence and data": "AIDS",
     "computer science": "CSE",
     "electronics": "ECE",
     "mechanical": "ME",

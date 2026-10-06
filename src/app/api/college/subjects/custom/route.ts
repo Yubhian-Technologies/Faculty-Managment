@@ -54,8 +54,30 @@ export async function POST(request: Request) {
     const dept = allDepartments.find((d) => d.name === section.department);
     if (!dept) return NextResponse.json({ error: "Section's department not found" }, { status: 404 });
 
+    // One subject per department + year + semester + name, shared by every
+    // section of that department (they all pick it from the normal subject
+    // list) - typing "NSS" from a second section reuses the first, it never
+    // makes a duplicate. Legacy ones (random ids) are found by name; new ones
+    // get a deterministic id so two simultaneous adds land on the same doc.
+    const norm = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]/g, "");
+    const nameKey = norm(name);
+    if (!nameKey) return NextResponse.json({ error: "Enter a subject name" }, { status: 400 });
+    const existingRows = await collegeRef.collection("subjectSemesterAssignments").where("departmentId", "==", dept.id).get();
+    const found = existingRows.docs.find((d) => {
+      const x = d.data() as { isCustom?: boolean; semester?: number; year?: number; subjectName?: string };
+      return x.isCustom && x.semester === semester && x.year === section.year && norm(x.subjectName ?? "") === nameKey;
+    });
+    if (found) {
+      const subjSnap = await collegeRef.collection("subjects").doc((found.data() as { subjectId: string }).subjectId).get();
+      return NextResponse.json({
+        id: subjSnap.id, existing: true,
+        subject: { id: subjSnap.id, ...subjSnap.data() },
+        assignment: { id: found.id, ...found.data() },
+      });
+    }
+
     const now = new Date();
-    const subjectRef = collegeRef.collection("subjects").doc();
+    const subjectRef = collegeRef.collection("subjects").doc(`cus_${dept.id}_${section.year}_${semester}_${nameKey}`.slice(0, 200));
     // The typed name doubles as the code, so every place that shows a code
     // (grid, PDFs, allocation list) reads naturally. Uniqueness is by doc id.
     const code = name;
@@ -78,10 +100,17 @@ export async function POST(request: Request) {
       updatedAt: now,
     };
     const assignmentId = `${subjectRef.id}_${dept.id}_${semester}`;
-    const batch = db.batch();
-    batch.set(subjectRef, subjectDoc);
-    batch.set(collegeRef.collection("subjectSemesterAssignments").doc(assignmentId), assignmentDoc);
-    await batch.commit();
+    const assignmentRef = collegeRef.collection("subjectSemesterAssignments").doc(assignmentId);
+    const raced = await db.runTransaction(async (tx) => {
+      if ((await tx.get(assignmentRef)).exists) return true; // another add got here first
+      tx.set(subjectRef, subjectDoc);
+      tx.set(assignmentRef, assignmentDoc);
+      return false;
+    });
+    if (raced) {
+      const [s, a] = await Promise.all([subjectRef.get(), assignmentRef.get()]);
+      return NextResponse.json({ id: s.id, existing: true, subject: { id: s.id, ...s.data() }, assignment: { id: a.id, ...a.data() } });
+    }
 
     // The docs come back so the caller can show the subject without a refetch.
     return NextResponse.json(
