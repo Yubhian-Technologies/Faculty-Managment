@@ -104,21 +104,18 @@ export default function HODTimetableViewPage() {
   // first-year section is filed under its real branch's Course doc).
   useEffect(() => {
     if (!year) return;
-    // Every course this HOD teaches, not only the ones with a section in the
-    // chosen year. The Year list offers the years the department is ASSIGNED,
-    // and a department can be assigned a year it has not created sections for
-    // yet (Civil is assigned 2-4 but only has year-3 sections). Keying the
-    // lookup on that year's sections left nothing to fetch, so a year with
-    // semesters configured still reported "No semesters".
-    const courseIds = Array.from(new Set(sections.map((s) => s.courseId)));
+    const courseIds = Array.from(new Set(sections.map((s) => s.courseId))).filter(Boolean);
+    if (courseIds.length === 0) return;
     let cancelled = false;
     void (async () => {
       try {
-        const entries = await Promise.all(courseIds.map(async (id) => {
-          const t = await fetch(`/api/college/course-year-timings?courseId=${encodeURIComponent(id)}`)
-            .then((r) => r.json() as Promise<{ timings: CourseYearTiming[] }>);
-          return [id, (t.timings ?? []).find((x) => Number(x.year) === Number(year)) ?? null] as const;
-        }));
+        const res = await fetch(`/api/college/course-year-timings?courseId=${encodeURIComponent(courseIds.join(","))}`);
+        const data = (await res.json()) as { timings: CourseYearTiming[] };
+        const allTimings = data.timings ?? [];
+        const entries = courseIds.map((id) => [
+          id,
+          allTimings.find((x) => x.courseId === id && Number(x.year) === Number(year)) ?? null,
+        ] as const);
         if (!cancelled) setTimings(Object.fromEntries(entries));
       } catch {
         if (!cancelled) toast({ variant: "destructive", title: "Failed to load period timings" });

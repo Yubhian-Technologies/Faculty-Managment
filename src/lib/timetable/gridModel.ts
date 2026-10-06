@@ -300,9 +300,14 @@ export function timetableClassLine(parts: {
   sectionName?: string;
   departmentName?: string;
 }): string {
-  const semNumber = parts.semesterLabel?.match(/\d+/)?.[0];
+  // The LAST number: pickers label a semester "2-1" (year-semester), and the
+  // class line already shows the year, so it is the semester within the year.
+  const semNumber = parts.semesterLabel?.match(/\d+/g)?.pop();
   const semester = semNumber ? `${roman(Number(semNumber))} Sem` : parts.semesterLabel;
-  let section = (parts.sectionName ?? "").trim().replace(/[-_]+/g, " ");
+  // A branch-picker name carries the owning department's code first
+  // ("BSC-CSE-C" = Basic Science, CSE, C); the class line wants "CSE C".
+  const nameParts = (parts.sectionName ?? "").trim().split(/[-_\s]+/).filter(Boolean);
+  let section = (nameParts.length >= 3 ? nameParts.slice(1) : nameParts).join(" ");
   if (section && !/[A-Za-z]{2,}/.test(section) && parts.departmentName) {
     const initials = parts.departmentName.split(/[\s&]+/).filter((w) => /^[A-Za-z]/.test(w) && !/^(and|of)$/i.test(w)).map((w) => w[0].toUpperCase()).join("");
     section = `${initials} ${section}`;

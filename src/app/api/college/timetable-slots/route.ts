@@ -13,6 +13,8 @@ import { getActiveSubstitutionsForDates, currentWeekDateKeys } from "@/lib/leave
 import { resolveSectionCurrentSemester, resolveRequestedSemester, matchesCurrentSemester } from "@/lib/college/semester";
 import { matchesCurrentAcademicYear } from "@/lib/college/academicSession";
 import { isTimetableIncharge } from "@/lib/departments/timetableIncharge";
+import { chunkValues } from "@/lib/firestore/inQuery";
+import { FieldPath } from "firebase-admin/firestore";
 import type { DayOfWeek, SubjectType, TimetableRules, TimetableSlot } from "@/types";
 import { DEFAULT_TIMETABLE_RULES } from "@/types";
 import { loadDepartmentIndex, stampDepartmentIds } from "@/lib/departments/stampIds";
@@ -80,19 +82,43 @@ export async function GET(request: Request) {
     const rules: TimetableRules = rulesSnap.exists
       ? { ...DEFAULT_TIMETABLE_RULES, ...(rulesSnap.data() as Partial<TimetableRules>) }
       : DEFAULT_TIMETABLE_RULES;
-    const subjectDocs = subjectsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) }));
-    const subjectTypeById = new Map(subjectsSnap.docs.map((d) => [d.id, (d.data() as { type?: SubjectType }).type]));
+
+    const subjectsById = new Map(subjectsSnap.docs.map((d) => [d.id, { id: d.id, ...(d.data() as object) }]));
+
     // A prior semester's or prior session's published slots stay in
     // Firestore as history (see publish/route.ts) but drop out of this
     // "current timetable" read once the next one starts - unless `semester`/
     // `academicYear` above explicitly asked for that prior one.
-    const rawSlots = snap.docs
+    const filteredSlots = snap.docs
       .map((d) => ({ id: d.id, ...d.data() }) as TimetableSlot & { id: string })
       .filter((s) =>
         matchesCurrentSemester(s.semester, currentSemester) &&
         (isBrowsingPastYear ? s.academicYear === requestedAcademicYear : matchesCurrentAcademicYear(s.academicYear, requestedAcademicYear))
-      )
-      .map((s) => ({ ...s, subjectType: s.subjectId ? subjectTypeById.get(s.subjectId) : undefined }));
+      );
+
+    // Cross-department feeder subjects (e.g. Basic Science subjects for 1st Year engineering branches)
+    // belong to a feeder Course doc, not section.courseId. Backfill any missing subject IDs so
+    // slotShortCode and subjectType can be resolved accurately on the client.
+    const missingSubjectIds = Array.from(
+      new Set(filteredSlots.map((s) => s.subjectId).filter((id): id is string => Boolean(id) && !subjectsById.has(id)))
+    );
+    if (missingSubjectIds.length > 0) {
+      const extraSnaps = await Promise.all(
+        chunkValues(missingSubjectIds).map((ids) => collegeRef.collection("subjects").where(FieldPath.documentId(), "in", ids).get())
+      );
+      for (const extraSnap of extraSnaps) {
+        for (const d of extraSnap.docs) {
+          subjectsById.set(d.id, { id: d.id, ...(d.data() as object) });
+        }
+      }
+    }
+
+    const rawSlots = filteredSlots.map((s) => ({
+      ...s,
+      subjectType: s.subjectId ? (subjectsById.get(s.subjectId) as { type?: SubjectType } | undefined)?.type : undefined
+    }));
+
+    const subjectDocs = Array.from(subjectsById.values());
 
     // Overlay the displayed week's approved-leave substitutions, if any -
     // who's actually taking a period on a given day instead of the regular

@@ -1,9 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Clock, Layers, FileDown } from "lucide-react";
+import { FileDown } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/useToast";
 import { useAuth } from "@/hooks/useAuth";
@@ -100,8 +99,6 @@ export default function HODTeachingPage() {
     })();
   }, [weekStart, effectiveSemester]);
 
-  const totalHoursPerWeek = assignments.reduce((sum, a) => sum + (a.hoursPerWeek ?? 0), 0);
-  const subjectCount = assignments.length;
   const assignmentById = new Map(assignments.map((a) => [a.id, a]));
   const maxPeriod = timetableSlots.reduce((max, s) => Math.max(max, s.periodNumber), 0);
   const periods = Array.from({ length: maxPeriod }, (_, i) => i + 1);
@@ -158,11 +155,6 @@ export default function HODTeachingPage() {
           title="Teaching Load"
           description="Your subject allocations and weekly timetable, period by period"
         />
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-2">
-          {[1, 2].map((i) => (
-            <div key={i} className="h-24 rounded-lg border bg-muted/30 animate-pulse" />
-          ))}
-        </div>
         <div className="h-96 rounded-lg border bg-muted/30 animate-pulse" />
       </div>
     );
@@ -174,30 +166,6 @@ export default function HODTeachingPage() {
         title="Teaching Load"
         description="Your subject allocations and weekly timetable, period by period"
       />
-
-      {/* Summary cards */}
-      {assignments.length > 0 && (
-        <div className="grid grid-cols-2 gap-3">
-          <Card>
-            <CardContent className="p-4 flex items-center gap-3">
-              <Clock className="h-8 w-8 text-blue-500 shrink-0" />
-              <div>
-                <p className="text-xs text-muted-foreground">Total Weekly Hours</p>
-                <p className="text-3xl font-bold text-blue-600">{totalHoursPerWeek}</p>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4 flex items-center gap-3">
-              <Layers className="h-8 w-8 text-indigo-500 shrink-0" />
-              <div>
-                <p className="text-xs text-muted-foreground">Subjects Assigned</p>
-                <p className="text-3xl font-bold text-indigo-600">{subjectCount}</p>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
 
       {periods.length === 0 ? (
         <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">

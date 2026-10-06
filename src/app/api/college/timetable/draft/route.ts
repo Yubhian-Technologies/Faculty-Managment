@@ -298,7 +298,11 @@ export async function PATCH(request: Request) {
         }
         const subject = ctx.subjectsById.get(assignment.subjectId);
         const subjectType = subject?.type ?? "THEORY";
-        const blockSize = subjectType === "PRACTICAL" ? Math.max(1, ctx.rules.labBlockSize) : 1;
+        const blockSize = subjectType === "PRACTICAL"
+          ? Math.max(1, ctx.rules.labBlockSize ?? 3)
+          : subjectType === "THEORY"
+            ? Math.max(1, ctx.rules.theoryBlockSize ?? 1)
+            : 1;
 
         // Same gate as timetable-slots/route.ts's manual pin path - a split
         // period (two+ subjects/faculty sharing one cell) only makes sense for

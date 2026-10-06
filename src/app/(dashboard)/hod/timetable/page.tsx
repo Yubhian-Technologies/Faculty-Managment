@@ -214,19 +214,19 @@ function SectionTimetable() {
   // each section's own courseId - same lookup hod/timetable-view uses. The list
   // is every semester any section of the picked year runs.
   useEffect(() => {
-    if (!year || !selectedGroup) return;
-    // The group's course ids, not the loaded sections' - so this runs in
-    // parallel with the sections fetch instead of waiting behind it.
+    if (!year || !selectedGroup || selectedGroup.courseIds.length === 0) return;
     const courseIds = selectedGroup.courseIds;
     let cancelled = false;
     void (async () => {
       setIsLoadingTimings(true);
       try {
-        const entries = await Promise.all(courseIds.map(async (id) => {
-          const t = await fetch(`/api/college/course-year-timings?courseId=${encodeURIComponent(id)}`)
-            .then((r) => r.json() as Promise<{ timings: CourseYearTiming[] }>);
-          return [id, (t.timings ?? []).find((x) => Number(x.year) === Number(year)) ?? null] as const;
-        }));
+        const res = await fetch(`/api/college/course-year-timings?courseId=${encodeURIComponent(courseIds.join(","))}`);
+        const data = (await res.json()) as { timings: CourseYearTiming[] };
+        const allTimings = data.timings ?? [];
+        const entries = courseIds.map((id) => [
+          id,
+          allTimings.find((x) => x.courseId === id && Number(x.year) === Number(year)) ?? null,
+        ] as const);
         if (!cancelled) setTimings(Object.fromEntries(entries));
       } catch {
         if (!cancelled) toast({ variant: "destructive", title: "Failed to load semesters" });
@@ -271,7 +271,7 @@ function SectionTimetable() {
     setLoaded(null);
   }
   function changeSemester(next: string) {
-    setSemester(next === "all" ? null : Number(next));
+    setSemester(Number(next));
     setSectionId("");
     setLoaded(null);
   }
@@ -286,7 +286,11 @@ function SectionTimetable() {
     setLoaded({ courseId: section.courseId, year, sectionId: section.id, semester });
   }
 
-  const canLoad = !!selectedCourse && !!year && !!sectionId && !isLoadingSections;
+  // Same rule as hod/timetable-view: with semesters configured, one must be
+  // picked. "All" would silently resolve to whichever semester today falls in
+  // and show/seed a blank timetable if the slots were published under another.
+  const canLoad = !!selectedCourse && !!year && !!sectionId && !isLoadingSections
+    && (semesterOptions.length === 0 || semester != null);
 
   return (
     <div className="space-y-6">
@@ -359,15 +363,14 @@ function SectionTimetable() {
               <div className="space-y-1.5">
                 <Label htmlFor="tt-semester">Semester</Label>
                 <Select
-                  value={semester != null ? String(semester) : "all"}
+                  value={semester != null ? String(semester) : ""}
                   onValueChange={changeSemester}
                   disabled={!year || isLoadingTimings || semesterOptions.length === 0}
                 >
                   <SelectTrigger id="tt-semester">
-                    <SelectValue placeholder={!year ? "Select a year" : isLoadingTimings ? "Loading semesters…" : semesterOptions.length === 0 ? "No semesters" : "All semesters"} />
+                    <SelectValue placeholder={!year ? "Select a year" : isLoadingTimings ? "Loading semesters…" : semesterOptions.length === 0 ? "No semesters" : "Select semester"} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All semesters</SelectItem>
                     {semesterOptions.map((n) => (
                       <SelectItem key={n} value={String(n)}>{yearSemesterLabel(n)}</SelectItem>
                     ))}

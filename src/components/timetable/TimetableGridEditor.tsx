@@ -977,7 +977,7 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
                     return (
                       <td key={`period_${row.period}`} className="p-2 align-top">
                         <div className="space-y-1">
-                            {entries.map((entry) => {
+                            {entries.map((entry, entryIdx) => {
                               const { slot, isPinned } = entry;
                               const dSlot = !isPinned && mode === "draft" ? (slot as DraftSlot) : undefined;
                               // A placed period this HOD doesn't own (e.g. a subject lent in
@@ -1001,7 +1001,8 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
 
                               return (
                                 <button
-                                  key={slot.assignmentId}
+                                  // A split lab period holds several entries of ONE assignment in a cell.
+                                  key={`${slot.assignmentId}_${entryIdx}`}
                                   type="button"
                                   disabled={!clickable || busy !== null}
                                   onClick={() => {
@@ -1015,10 +1016,15 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
                                     clickable ? "hover:border-primary cursor-pointer" : "cursor-default",
                                   ].join(" ")}
                                 >
-                                  <p className="text-xs font-semibold leading-tight flex items-center gap-1">
+                                  <p className="text-xs font-bold leading-tight flex items-center gap-1 uppercase tracking-wide">
                                     {isLocked && <Lock className="h-3 w-3 shrink-0 text-muted-foreground" />}
-                                    {slot.subjectName}
+                                    {("subjectCode" in slot && slot.subjectCode) || ("shortCode" in slot && (slot as unknown as { shortCode?: string }).shortCode) || slot.subjectName}
                                   </p>
+                                  {("subjectCode" in slot && slot.subjectCode && slot.subjectCode !== slot.subjectName) && (
+                                    <p className="text-[10px] font-medium text-muted-foreground line-clamp-1 mt-0.5" title={slot.subjectName}>
+                                      {slot.subjectName}
+                                    </p>
+                                  )}
                                   {substituteFacultyName ? (
                                     <>
                                       <p className="text-[11px] font-medium text-amber-700 mt-0.5">{substituteFacultyName}</p>

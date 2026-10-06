@@ -72,13 +72,20 @@ export function InchargeTimetableWorkspace({ basePath }: { basePath: string }) {
         .sort((a, b) => a.name.localeCompare(b.name));
       setSections(list);
       setSectionId(list.length === 1 ? list[0].id : "");
-      const entries = await Promise.all(Array.from(new Set(list.map((s) => s.courseId))).map(async (id) => {
-        const t = await fetch(`/api/college/course-year-timings?courseId=${encodeURIComponent(id)}`)
+      const targetCourseIds = Array.from(new Set(list.map((s) => s.courseId))).filter(Boolean);
+      if (targetCourseIds.length > 0) {
+        const res = await fetch(`/api/college/course-year-timings?courseId=${encodeURIComponent(targetCourseIds.join(","))}`)
           .then((r) => r.json() as Promise<{ timings?: CourseYearTiming[] }>)
           .catch(() => ({ timings: [] as CourseYearTiming[] }));
-        return [id, (t.timings ?? []).find((x) => Number(x.year) === Number(year)) ?? null] as const;
-      }));
-      setTimings(Object.fromEntries(entries));
+        const fetchedTimings = res.timings ?? [];
+        const entries = targetCourseIds.map((id) => [
+          id,
+          fetchedTimings.find((x) => x.courseId === id && Number(x.year) === Number(year)) ?? null,
+        ] as const);
+        setTimings(Object.fromEntries(entries));
+      } else {
+        setTimings({});
+      }
     } catch {
       setSections([]);
       toast({ variant: "destructive", title: "Failed to load sections" });

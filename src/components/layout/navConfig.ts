@@ -370,6 +370,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", href: "/academics", iconName: "LayoutDashboard", roles: ["ACADEMICS"] },
   { label: "Regulation", href: "/academics/regulation", iconName: "FileText", roles: ["ACADEMICS"], section: "Academics" },
   { label: "Course Structure", href: "/academics/course-structure", iconName: "Library", roles: ["ACADEMICS"], section: "Academics" },
+  { label: "Subjects", href: "/academics/subjects", iconName: "ListChecks", roles: ["ACADEMICS"], section: "Academics" },
   { label: "Syllabus", href: "/academics/syllabus", iconName: "BookOpen", roles: ["ACADEMICS"], section: "Academics" },
   { label: "Timetable View", href: "/academics/timetable-view", iconName: "CalendarDays", roles: ["ACADEMICS"], section: "Academics" },
   { label: "My Profile", href: "/academics/profile", iconName: "UserCircle", roles: ["ACADEMICS"], section: "Personal" },
@@ -997,6 +998,7 @@ export const BOTTOM_NAV_ITEMS: Record<UserRole, NavItem[]> = {
   ACADEMICS: [
     { label: "Home", href: "/academics", iconName: "LayoutDashboard", roles: ["ACADEMICS"] },
     { label: "Course Structure", href: "/academics/course-structure", iconName: "Library", roles: ["ACADEMICS"] },
+    { label: "Subjects", href: "/academics/subjects", iconName: "ListChecks", roles: ["ACADEMICS"] },
     { label: "Profile", href: "/academics/profile", iconName: "UserCircle", roles: ["ACADEMICS"] },
   ],
   IQAC_COORDINATOR: [

@@ -9,6 +9,7 @@ import { buildSectionTimetablePdfHtml } from "@/lib/timetable/sectionTimetablePd
 import { downloadSectionTimetableXlsx } from "@/lib/timetable/timetableExport";
 import { resolveLogoUrl } from "@/lib/timetable/logoAsset";
 import { renderHtmlToPdf } from "@/lib/pdf/htmlToPdf";
+import { yearSemesterLabelIn } from "@/lib/academic/format";
 import {
   buildAllocationList,
   buildTimetableColumns,
@@ -72,7 +73,7 @@ export function InstitutionalTimetableTable({
   phone,
   logoUrl,
   academicYear = slots[0]?.academicYear ?? "",
-  semesterLabel,
+  semesterLabel: semesterLabelProp,
   classroom,
   classInchargeName,
   subjects = [],
@@ -96,6 +97,16 @@ export function InstitutionalTimetableTable({
   const [isExportingXlsx, setIsExportingXlsx] = useState(false);
 
   const subjectMap = useMemo(() => new Map(subjects.map((s) => [s.id, s])), [subjects]);
+
+  // A caller's own label wins; otherwise the semester these slots were placed
+  // under, when they all share one (so a download says which semester it is for).
+  const semesterLabel = useMemo(() => {
+    if (semesterLabelProp) return semesterLabelProp;
+    const sems = Array.from(new Set(slots.map((s) => s.semester).filter((n): n is number => typeof n === "number")));
+    if (sems.length !== 1) return undefined;
+    const inYear = (timing.semesters ?? []).map((x) => x.semester);
+    return `Sem ${yearSemesterLabelIn(Number(timing.year), inYear, sems[0])}`;
+  }, [semesterLabelProp, slots, timing]);
 
   // ── Days: the college's own working days, unioned with any day a slot
   // actually occupies so a slot published on a since-removed working day is

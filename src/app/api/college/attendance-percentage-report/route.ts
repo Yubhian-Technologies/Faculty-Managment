@@ -12,6 +12,7 @@ import { compareStudentsForList } from "@/lib/students/listOrder";
 import { loadAcademicYearConfig, resolveAcademicYearRequest, sessionInAcademicYear, windowForAcademicYear } from "@/lib/studentAttendance/academicYearWindow";
 import { loadNotPostedIndex, resolveDenominatorMode, withNotPosted, type DenominatorResult } from "@/lib/studentAttendance/heldDenominator";
 import { istDateKey } from "@/lib/attendance/istTime";
+import { mapLimit } from "@/lib/firestore/sharedReads";
 import type { Section, StudentAttendanceSession, TeachingAssignment } from "@/types";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -44,20 +45,25 @@ const READ_ROLES = ["EXAM_CELL", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN"];
 // subject never tagged with a semester (course-year has none configured)
 // still counts regardless of which semester was requested, rather than
 // silently disappearing.
-async function sectionSubjectIds(
+async function subjectIdsBySection(
   collegeRef: FirebaseFirestore.DocumentReference,
-  sectionId: string,
+  sectionIds: string[],
   requestedSemester: number | null
-): Promise<string[]> {
-  const snap = await collegeRef.collection("teachingAssignments").where("sectionId", "==", sectionId).get();
-  const ids = new Set<string>();
-  for (const doc of snap.docs) {
+): Promise<Map<string, string[]>> {
+  const bySection = new Map<string, Set<string>>();
+  // One query per 30 sections (Firestore's `in` cap) instead of one per section.
+  const chunks: string[][] = [];
+  for (let i = 0; i < sectionIds.length; i += 30) chunks.push(sectionIds.slice(i, i + 30));
+  const snaps = await Promise.all(chunks.map((c) => collegeRef.collection("teachingAssignments").where("sectionId", "in", c).get()));
+  for (const doc of snaps.flatMap((s) => s.docs)) {
     const a = doc.data() as TeachingAssignment;
-    if (a.isPast) continue;
+    if (a.isPast || !a.sectionId) continue;
     if (requestedSemester != null && !matchesCurrentSemester(a.timetableSemester, requestedSemester)) continue;
-    ids.add(a.subjectId);
+    const set = bySection.get(a.sectionId) ?? new Set<string>();
+    set.add(a.subjectId);
+    bySection.set(a.sectionId, set);
   }
-  return Array.from(ids);
+  return new Map(Array.from(bySection, ([id, set]) => [id, Array.from(set)]));
 }
 
 export async function GET(request: Request) {
@@ -113,6 +119,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "From date must be before the To date" }, { status: 400 });
     }
 
+    const startedAt = Date.now();
     const db = getAdminDb();
     const collegeRef = db.collection("colleges").doc(session.collegeId);
 
@@ -165,14 +172,20 @@ export async function GET(request: Request) {
     }[] = [];
     let denominatorUnavailable: DenominatorResult["unavailable"];
 
-    for (const section of sections) {
+    const subjectIdsOf = await subjectIdsBySection(collegeRef, sections.map((s) => s.id), requestedSemester);
+
+    // Sections are independent, so a few run at once; per-section results are
+    // merged below in section order, and the final sort makes the order moot anyway.
+    const perSection = await mapLimit(sections, 4, async (section) => {
+      const rows: typeof results = [];
+      let unavailable: DenominatorResult["unavailable"];
+      const subjectIds = subjectIdsOf.get(section.id) ?? [];
       let sessionsQuery: FirebaseFirestore.Query = collegeRef.collection("studentAttendance")
         .where("sectionId", "==", section.id)
         .where("status", "==", "SUBMITTED");
       if (rangeFrom) sessionsQuery = sessionsQuery.where("date", ">=", rangeFrom);
       if (rangeTo) sessionsQuery = sessionsQuery.where("date", "<=", rangeTo);
-      const [subjectIds, sessionsSnap, roster] = await Promise.all([
-        sectionSubjectIds(collegeRef, section.id, requestedSemester),
+      const [sessionsSnap, roster] = await Promise.all([
         sessionsQuery.get(),
         fetchSectionStudents(collegeRef, {
           department: section.department, sectionName: section.name,
@@ -206,7 +219,7 @@ export async function GET(request: Request) {
           window: window && !window.isCurrent ? window : currentWindow, requestedSemester,
           submittedSessions: sessions.map((r) => ({ assignmentId: r.assignmentId, date: r.date, periodNumber: r.periodNumber })),
         });
-        if (notPosted.unavailable) denominatorUnavailable = notPosted.unavailable;
+        if (notPosted.unavailable) unavailable = notPosted.unavailable;
       }
 
       for (const stu of roster) {
@@ -234,14 +247,26 @@ export async function GET(request: Request) {
         const timetableNumbers = { held: heldTimetable, attended, percentage: calcPercent(attended, heldTimetable) };
         const main = denominator === "TIMETABLE" ? timetableNumbers : submittedNumbers;
         const other = denominator === "TIMETABLE" ? submittedNumbers : timetableNumbers;
-        results.push({
+        rows.push({
           studentId: stu.id, name: stu.name, rollNumber: stu.rollNumber,
           sectionName: section.name, ...main,
           ...(notPosted ? { notPostedPeriods: notPostedCount } : {}),
           ...(compare ? { alt: { mode: denominator === "TIMETABLE" ? "SUBMITTED" as const : "TIMETABLE" as const, ...other } } : {}),
         });
       }
+      return { rows, unavailable, sessionDocs: sessionsSnap.size };
+    });
+    for (const r of perSection) {
+      results.push(...r.rows);
+      if (r.unavailable) denominatorUnavailable = r.unavailable;
     }
+    // Baseline for judging the attendance-aggregation work: one line per request.
+    console.info("[perf] attendance-percentage-report", {
+      sections: sections.length,
+      sessionDocsRead: perSection.reduce((n, r) => n + r.sessionDocs, 0),
+      students: results.length,
+      ms: Date.now() - startedAt,
+    });
 
     // A percentage-range filter can't meaningfully match a no-data (null)
     // student - exclude them whenever either bound is actually set, rather
