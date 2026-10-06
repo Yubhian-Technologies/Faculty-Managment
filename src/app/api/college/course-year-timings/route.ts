@@ -22,7 +22,8 @@ export async function GET(request: Request) {
   try {
     const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "HOD", "COLLEGE_OFFICE", "ACCOUNTS", "PANEL_MEMBER", "COLLEGE_STAFF", "ACADEMICS", "EXAM_CELL");
     const { searchParams } = new URL(request.url);
-    const courseId = searchParams.get("courseId");
+    const courseIdRaw = searchParams.get("courseId");
+    const courseIds = courseIdRaw ? courseIdRaw.split(",").map((s) => s.trim()).filter(Boolean) : [];
 
     const db = getAdminDb();
     let query = db
@@ -30,7 +31,11 @@ export async function GET(request: Request) {
       .doc(session.collegeId)
       .collection("courseYearTimings") as FirebaseFirestore.Query;
 
-    if (courseId) query = query.where("courseId", "==", courseId);
+    if (courseIds.length === 1) {
+      query = query.where("courseId", "==", courseIds[0]);
+    } else if (courseIds.length > 1) {
+      query = query.where("courseId", "in", courseIds.slice(0, 30));
+    }
 
     const snap = await query.get();
     let timings = snap.docs.map((d) => ({ id: d.id, ...d.data() })) as (CourseYearTiming & { id: string })[];
@@ -53,7 +58,7 @@ export async function GET(request: Request) {
       // where this HOD's OWN faculty roster already holds a real
       // TeachingAssignment unlocks that row - department membership itself
       // grants nothing here.
-      if (deniedTimings.length > 0 && courseId) {
+      if (deniedTimings.length > 0 && courseIds.length > 0) {
         const rosterDeptNames = facultyManageableDepartmentNames(scope);
         const rosterFacultySnap = rosterDeptNames.length > 0
           ? await db.collection("colleges").doc(session.collegeId).collection("facultyMembers")
@@ -61,8 +66,10 @@ export async function GET(request: Request) {
           : null;
         const rosterIds = new Set((rosterFacultySnap?.docs ?? []).map((d) => d.id));
         if (rosterIds.size > 0) {
-          const taSnap = await db.collection("colleges").doc(session.collegeId)
-            .collection("teachingAssignments").where("courseId", "==", courseId).get();
+          const taQuery = courseIds.length === 1
+            ? db.collection("colleges").doc(session.collegeId).collection("teachingAssignments").where("courseId", "==", courseIds[0])
+            : db.collection("colleges").doc(session.collegeId).collection("teachingAssignments").where("courseId", "in", courseIds.slice(0, 30));
+          const taSnap = await taQuery.get();
           const accessibleYears = new Set(
             taSnap.docs
               .filter((d) => rosterIds.has((d.data() as { facultyId?: string }).facultyId ?? ""))
@@ -73,19 +80,17 @@ export async function GET(request: Request) {
           }
         }
 
-        // A lending department marking busy periods (AssignmentRequestsPanel)
-        // picks ANY year of the requesting course - the faculty's own commitment
-        // can be in a different year than the request - so the per-year
-        // assignment rule above left every other year unconfigured. Having an
-        // ALLOCATED request for this course targeted at the HOD's own
-        // department unlocks the course's remaining rows (read-only; PATCH
-        // still enforces edit scope). Filtered in memory to avoid a composite index.
+        // Filtered in memory to avoid a composite index on (courseId IN, status == ALLOCATED).
         const alreadyOwned = new Set(ownedTimings.map((t) => t.id));
         const lendNames = new Set(rosterDeptNames);
+        const courseIdSet = new Set(courseIds);
         const lentSnap = await db.collection("colleges").doc(session.collegeId)
           .collection("facultyAssignmentRequests")
-          .where("courseId", "==", courseId).where("status", "==", "ALLOCATED").get();
-        const isLender = lentSnap.docs.some((d) => lendNames.has((d.data() as { targetDepartmentName?: string }).targetDepartmentName ?? ""));
+          .where("status", "==", "ALLOCATED").get();
+        const isLender = lentSnap.docs.some((d) => {
+          const data = d.data() as { courseId?: string; targetDepartmentName?: string };
+          return data.courseId && courseIdSet.has(data.courseId) && lendNames.has(data.targetDepartmentName ?? "");
+        });
         if (isLender) {
           for (const t of deniedTimings) if (!alreadyOwned.has(t.id)) ownedTimings.push(t);
         }
@@ -101,7 +106,7 @@ export async function GET(request: Request) {
     // editor sees the timings that actually govern it. Only years a manager
     // genuinely owns are filled in (see inheritedTimingCourseId), so a
     // department merely missing its own year stays unconfigured, as before.
-    if (courseId) {
+    if (courseIds.length > 0) {
       const collegeRef = db.collection("colleges").doc(session.collegeId);
       const [coursesSnap, deptsSnap, allTimingsSnap] = await Promise.all([
         collegeRef.collection("courses").get(),
@@ -110,37 +115,31 @@ export async function GET(request: Request) {
       ]);
       const courses = coursesSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as Course[];
       const departments = deptsSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as (Department & { id: string })[];
-      const ownCourse = courses.find((c) => c.id === courseId);
-      if (ownCourse) {
-        const allTimings = allTimingsSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as (CourseYearTiming & { id: string })[];
-        const haveYears = new Set(timings.map((t) => Number(t.year)));
+      const allTimings = allTimingsSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as (CourseYearTiming & { id: string })[];
+      const structure = structureFromDepartments(departments);
+      const commonIds = getFreshmanDepartmentIds(departments);
+      const sharedDeptIds = new Set(
+        departments.filter((d) => commonIds.has(d.id) || (d.parentDepartmentId && commonIds.has(d.parentDepartmentId))).map((d) => d.id)
+      );
+      const courseById = new Map(courses.map((c) => [c.id, c]));
+
+      for (const targetCourseId of courseIds) {
+        const ownCourse = courses.find((c) => c.id === targetCourseId);
+        if (!ownCourse) continue;
+        const haveYears = new Set(timings.filter((t) => t.courseId === targetCourseId).map((t) => Number(t.year)));
         const span = Number(ownCourse.durationYears) || 0;
         for (let year = 1; year <= span; year++) {
           if (haveYears.has(year)) continue;
           const inheritedId = inheritedTimingCourseId(ownCourse, year, departments, courses);
           if (!inheritedId) continue;
           const inherited = allTimings.find((t) => t.courseId === inheritedId && Number(t.year) === year);
-          // Reported under the course that was asked for, with its own id kept
-          // so a later edit still writes to the row it came from rather than
-          // silently forking a copy.
-          if (inherited) timings.push({ ...inherited, inheritedFromCourseId: inheritedId } as typeof inherited);
-          haveYears.add(year);
+          if (inherited) {
+            timings.push({ ...inherited, courseId: targetCourseId, inheritedFromCourseId: inheritedId } as typeof inherited);
+            haveYears.add(year);
+          }
         }
 
-        // Common first year: the Principal configures it ONCE on the shared
-        // (freshman) department and it governs every course's year 1 - a branch
-        // that isn't a managed branch of any sub-department (so
-        // inheritedTimingCourseId above finds nothing) has no row of its own
-        // for it. Fall back to the shared department's row for any year it
-        // claims, preferring the same catalog programme. Read-only view of the
-        // shared row; edits still write to the row it came from.
-        const structure = structureFromDepartments(departments);
         if (structure.isCommonFirstYear) {
-          const commonIds = getFreshmanDepartmentIds(departments);
-          const sharedDeptIds = new Set(
-            departments.filter((d) => commonIds.has(d.id) || (d.parentDepartmentId && commonIds.has(d.parentDepartmentId))).map((d) => d.id)
-          );
-          const courseById = new Map(courses.map((c) => [c.id, c]));
           for (const year of structure.commonYears) {
             if (year < 1 || year > span || haveYears.has(year)) continue;
             const candidates = allTimings.filter((t) => Number(t.year) === year && sharedDeptIds.has(t.departmentId));
@@ -148,7 +147,7 @@ export async function GET(request: Request) {
             const shared =
               candidates.find((t) => ownCourse.catalogId && courseById.get(t.courseId)?.catalogId === ownCourse.catalogId) ??
               candidates[0];
-            timings.push({ ...shared, inheritedFromCourseId: shared.courseId } as typeof shared);
+            timings.push({ ...shared, courseId: targetCourseId, inheritedFromCourseId: shared.courseId } as typeof shared);
             haveYears.add(year);
           }
         }

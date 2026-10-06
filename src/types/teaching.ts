@@ -424,6 +424,7 @@ export interface DraftSlot {
   facultyName: string;
   subjectId: string;
   subjectName: string;
+  subjectCode?: string;
   subjectType: SubjectType;
   day: DayOfWeek;
   periodNumber: number;
