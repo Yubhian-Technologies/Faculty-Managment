@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
@@ -16,8 +16,8 @@ import type { Subject } from "@/types";
 // Academics > Subjects. View and manage subjects assigned to departments
 // by year and semester. Filter all at once, CRUD on cards.
 
-type CourseOption = { id: string; name: string; isActive?: boolean };
-type DepartmentOption = { id: string; name: string };
+type CourseOption = { id: string; name: string; catalogId?: string; isActive?: boolean };
+type DepartmentOption = { id: string; name: string; parentDepartmentId?: string };
 type AssignmentWithMaster = { assignment: any; master: Subject };
 type EditForm = {
   assignmentId?: string;
@@ -32,8 +32,9 @@ const SELECT_CLASS = "h-9 w-full rounded-md border bg-background px-2 text-sm";
 export default function SubjectsPage() {
   const [courses, setCourses] = useState<CourseOption[]>([]);
   const [departments, setDepartments] = useState<DepartmentOption[]>([]);
-  const [courseId, setCourseId] = useState("");
+  const [courseKey, setCourseKey] = useState("");
   const [deptId, setDeptId] = useState("");
+  const [subDeptId, setSubDeptId] = useState("");
   const [year, setYear] = useState("1");
   const [semester, setSemester] = useState("1");
   const [assignments, setAssignments] = useState<AssignmentWithMaster[]>([]);
@@ -54,41 +55,55 @@ export default function SubjectsPage() {
           fetch("/api/college/departments").then((r) => r.json() as Promise<{ departments?: DepartmentOption[] }>),
         ]);
         const courses = (c.courses ?? []).filter((x) => x.isActive !== false);
-        const depts = (d.departments ?? []).filter((x: any) => !x.parentDepartmentId);
+        const all = d.departments ?? [];
         setCourses(courses);
-        setDepartments(depts);
-        if (courses[0]) setCourseId(courses[0].id);
-        if (depts[0]) setDeptId(depts[0].id);
+        setDepartments(all);
+        if (courses[0]) setCourseKey(courses[0].catalogId ?? `name:${courses[0].name}`);
+        const first = all.find((x) => !x.parentDepartmentId);
+        if (first) setDeptId(first.id);
       } catch {
         setLoadError("Couldn't load courses or departments.");
       }
     })();
   }, []);
 
+  // One entry per programme: each department keeps its own Course doc for the same catalog programme.
+  const courseGroups = useMemo(() => {
+    const groups = new Map<string, { key: string; name: string; ids: string[] }>();
+    for (const c of courses) {
+      const key = c.catalogId ?? `name:${c.name}`;
+      const g = groups.get(key) ?? { key, name: c.name, ids: [] };
+      g.ids.push(c.id);
+      groups.set(key, g);
+    }
+    return Array.from(groups.values());
+  }, [courses]);
+  const topDepartments = useMemo(() => departments.filter((d) => !d.parentDepartmentId), [departments]);
+  const subDepartments = useMemo(() => departments.filter((d) => d.parentDepartmentId === deptId), [departments, deptId]);
+  const activeDeptId = subDeptId || deptId;
+
   async function handleLoad() {
-    if (!courseId || !deptId) { setLoadError("Please select course and department."); return; }
+    const group = courseGroups.find((g) => g.key === courseKey);
+    if (!group || !activeDeptId) { setLoadError("Please select course and department."); return; }
     setIsLoading(true);
     setLoadError("");
     try {
-      const res = await fetch(
-        `/api/college/subject-semester-assignments?courseId=${encodeURIComponent(courseId)}&departmentId=${encodeURIComponent(deptId)}&year=${year}&semester=${semester}`
-      );
-      const json = await res.json() as { assignments?: any[]; error?: string };
-      if (!res.ok) throw new Error(json.error ?? "Failed to load");
-
-      const subjectIds = new Set((json.assignments ?? []).map((a) => a.subjectId));
-      const masters = new Map<string, Subject>();
-
-      if (subjectIds.size > 0) {
-        const masterRes = await fetch(`/api/college/subjects?${Array.from(subjectIds).map(id => `subjectIds=${id}`).join("&")}`);
-        const masterJson = await masterRes.json() as { subjects?: Subject[] };
-        (masterJson.subjects ?? []).forEach(s => masters.set(s.id, s));
+      const responses = await Promise.all(group.ids.map((id) => fetch(
+        `/api/college/subject-semester-assignments?courseId=${encodeURIComponent(id)}&departmentId=${encodeURIComponent(activeDeptId)}&year=${year}&semester=${semester}`
+      )));
+      const merged = new Map<string, any>();
+      for (const res of responses) {
+        const body = await res.json() as { assignments?: any[]; error?: string };
+        if (!res.ok) throw new Error(body.error ?? "Failed to load");
+        for (const a of body.assignments ?? []) merged.set(a.id, a);
       }
-
-      setAssignments((json.assignments ?? []).map((a) => ({
-        assignment: a,
-        master: masters.get(a.subjectId) || { id: a.subjectId, code: a.subjectCode, name: a.subjectName } as Subject,
-      })));
+      // An instance already carries its own name/code/category/hours/credits.
+      setAssignments(Array.from(merged.values())
+        .sort((a, b) => String(a.subjectCode).localeCompare(String(b.subjectCode)))
+        .map((a) => ({
+          assignment: a,
+          master: { id: a.subjectId, code: a.subjectCode, name: a.subjectName, shortCode: a.shortCode, category: a.category } as Subject,
+        })));
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : "Failed to load subjects.");
     } finally {
@@ -139,7 +154,7 @@ export default function SubjectsPage() {
     setIsDeleting(true);
     try {
       const res = await fetch(
-        `/api/college/subject-semester-assignments?subjectId=${encodeURIComponent(deleting.subjectId)}&departmentId=${encodeURIComponent(deptId)}&semester=${deleting.semester}`,
+        `/api/college/subject-semester-assignments?subjectId=${encodeURIComponent(deleting.subjectId)}&departmentId=${encodeURIComponent(deleting.departmentId)}&semester=${deleting.semester}`,
         { method: "DELETE" }
       );
       if (!res.ok) { const json = await res.json() as { error?: string }; toast({ variant: "destructive", title: json.error ?? "Couldn't delete" }); return; }
@@ -167,21 +182,30 @@ export default function SubjectsPage() {
 
       {/* Filters */}
       <Card>
-        <CardContent className="grid gap-3 pt-6 sm:grid-cols-5">
+        <CardContent className={`grid gap-3 pt-6 ${subDepartments.length > 0 ? "sm:grid-cols-6" : "sm:grid-cols-5"}`}>
           <div className="space-y-1.5">
             <Label htmlFor="course">Course</Label>
-            <select id="course" className={SELECT_CLASS} value={courseId} onChange={(e) => setCourseId(e.target.value)}>
+            <select id="course" className={SELECT_CLASS} value={courseKey} onChange={(e) => setCourseKey(e.target.value)}>
               <option value="">Select…</option>
-              {courses.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              {courseGroups.map((g) => <option key={g.key} value={g.key}>{g.name}</option>)}
             </select>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="dept">Department</Label>
-            <select id="dept" className={SELECT_CLASS} value={deptId} onChange={(e) => setDeptId(e.target.value)}>
+            <select id="dept" className={SELECT_CLASS} value={deptId} onChange={(e) => { setDeptId(e.target.value); setSubDeptId(""); }}>
               <option value="">Select…</option>
-              {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+              {topDepartments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
             </select>
           </div>
+          {subDepartments.length > 0 && (
+            <div className="space-y-1.5">
+              <Label htmlFor="subdept">Sub-department</Label>
+              <select id="subdept" className={SELECT_CLASS} value={subDeptId} onChange={(e) => setSubDeptId(e.target.value)}>
+                <option value="">Department itself</option>
+                {subDepartments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+              </select>
+            </div>
+          )}
           <div className="space-y-1.5">
             <Label htmlFor="yr">Year</Label>
             <select id="yr" className={SELECT_CLASS} value={year} onChange={(e) => setYear(e.target.value)}>
@@ -195,7 +219,7 @@ export default function SubjectsPage() {
             </select>
           </div>
           <div className="flex items-end">
-            <Button onClick={() => void handleLoad()} className="w-full" disabled={!courseId || !deptId}>
+            <Button onClick={() => void handleLoad()} className="w-full" disabled={!courseKey || !deptId}>
               Load
             </Button>
           </div>

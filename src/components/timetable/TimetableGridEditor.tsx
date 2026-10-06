@@ -181,7 +181,7 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
           .then((r) => r.json() as Promise<{ assignments: TeachingAssignment[] }>),
         fetch("/api/college/faculty?availableOnly=true")
           .then((r) => r.json() as Promise<{ faculty: { id: string; accessLevel?: string }[] }>),
-        fetch("/api/college/faculty-assignment-requests")
+        fetch(`/api/college/faculty-assignment-requests?sectionId=${encodeURIComponent(sectionId)}`)
           .then((r) => r.json() as Promise<{ requests: FacultyAssignmentRequest[] }>),
       ]);
 
@@ -394,6 +394,24 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
       setDraft((d) => (d ? { ...d, slots: json.slots ?? d.slots, status: "DRAFT" } : d));
       setAddingAt(null);
       if (json.adjustedNote) toast({ title: "Lab spans a break", description: json.adjustedNote });
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  /** Deletes one pinned (live, manually placed) period. A pinned lab block is one slot per period, so each is removed on its own. */
+  async function handleRemovePinned(slotId: string, subjectName: string) {
+    if (!window.confirm(`Remove the pinned period for ${subjectName}? This changes the live timetable immediately.`)) return;
+    setBusy("move");
+    try {
+      const res = await fetch(`/api/college/timetable-slots/${encodeURIComponent(slotId)}`, { method: "DELETE" });
+      if (!res.ok) {
+        const json = (await res.json().catch(() => ({}))) as { error?: string };
+        toast({ variant: "destructive", title: "Could not remove", description: json.error });
+        return;
+      }
+      setSlots((prev) => prev.filter((x) => (x as TimetableSlot & { id?: string }).id !== slotId));
+      toast({ title: "Pinned period removed" });
     } finally {
       setBusy(null);
     }
@@ -912,7 +930,7 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
                     return (
                       <td key={`period_${row.period}`} className="p-2 align-top">
                         <div className="space-y-1">
-                            {entries.map((entry) => {
+                            {entries.map((entry, entryIdx) => {
                               const { slot, isPinned } = entry;
                               const dSlot = !isPinned && mode === "draft" ? (slot as DraftSlot) : undefined;
                               // A placed period this HOD doesn't own (e.g. a subject lent in
@@ -925,12 +943,19 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
                                 selected.assignmentId === dSlot.assignmentId &&
                                 selected.day === dSlot.day &&
                                 selected.periodNumber === dSlot.periodNumber;
-                              const clickable = mode === "draft" && isEditing && !isLocked;
+                              // The section's own HOD may select (and so remove) a placement locked only
+                              // because its teaching assignment no longer exists - otherwise those stale
+                              // cells could never be cleared short of discarding the whole draft - and may
+                              // remove a pinned (live, manually placed) slot. Anyone else's slot seen
+                              // cross-department stays locked.
+                              const clickable = mode === "draft" && isEditing && (!isLocked || !isCrossDepartment);
+                              const pinnedId = isPinned && !isCrossDepartment ? (slot as TimetableSlot & { id?: string }).id : undefined;
                               const substituteFacultyName = "substituteFacultyName" in slot ? slot.substituteFacultyName : undefined;
 
                               return (
                                 <button
-                                  key={slot.assignmentId}
+                                  // A split lab period holds several entries of ONE assignment in a cell.
+                                  key={`${slot.assignmentId}_${entryIdx}`}
                                   type="button"
                                   disabled={!clickable || busy !== null}
                                   onClick={() => {
@@ -944,10 +969,15 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
                                     clickable ? "hover:border-primary cursor-pointer" : "cursor-default",
                                   ].join(" ")}
                                 >
-                                  <p className="text-xs font-semibold leading-tight flex items-center gap-1">
+                                  <p className="text-xs font-bold leading-tight flex items-center gap-1 uppercase tracking-wide">
                                     {isLocked && <Lock className="h-3 w-3 shrink-0 text-muted-foreground" />}
-                                    {slot.subjectName}
+                                    {("subjectCode" in slot && slot.subjectCode) || ("shortCode" in slot && (slot as unknown as { shortCode?: string }).shortCode) || slot.subjectName}
                                   </p>
+                                  {("subjectCode" in slot && slot.subjectCode && slot.subjectCode !== slot.subjectName) && (
+                                    <p className="text-[10px] font-medium text-muted-foreground line-clamp-1 mt-0.5" title={slot.subjectName}>
+                                      {slot.subjectName}
+                                    </p>
+                                  )}
                                   {substituteFacultyName ? (
                                     <>
                                       <p className="text-[11px] font-medium text-amber-700 mt-0.5">{substituteFacultyName}</p>
@@ -975,6 +1005,21 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
                                       className="mt-1.5 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium text-destructive hover:bg-destructive/10"
                                     >
                                       <Trash2 className="h-3 w-3" />Remove
+                                    </span>
+                                  )}
+                                  {pinnedId && mode === "draft" && isEditing && (
+                                    <span
+                                      role="button"
+                                      tabIndex={0}
+                                      onClick={(e) => { e.stopPropagation(); void handleRemovePinned(pinnedId, slot.subjectName); }}
+                                      onKeyDown={(e) => {
+                                        if (e.key === "Enter" || e.key === " ") {
+                                          e.preventDefault(); e.stopPropagation(); void handleRemovePinned(pinnedId, slot.subjectName);
+                                        }
+                                      }}
+                                      className="mt-1.5 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium text-destructive hover:bg-destructive/10"
+                                    >
+                                      <Trash2 className="h-3 w-3" />Remove pinned
                                     </span>
                                   )}
                                 </button>

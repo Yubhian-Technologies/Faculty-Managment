@@ -64,6 +64,7 @@ function SectionTimetable() {
   const [sectionId, setSectionId] = useState("");
   const [sections, setSections] = useState<Section[]>([]);
   const [isLoadingSections, setIsLoadingSections] = useState(false);
+  const [isLoadingTimings, setIsLoadingTimings] = useState(false);
   const [loaded, setLoaded] = useState<LoadedSection | null>(null);
 
   useEffect(() => {
@@ -204,27 +205,32 @@ function SectionTimetable() {
   // each section's own courseId - same lookup hod/timetable-view uses. The list
   // is every semester any section of the picked year runs.
   useEffect(() => {
-    if (!year || sections.length === 0) return;
-    const courseIds = Array.from(new Set(sections.map((s) => s.courseId)));
+    if (!year || !selectedGroup || selectedGroup.courseIds.length === 0) return;
+    const courseIds = selectedGroup.courseIds;
     let cancelled = false;
     void (async () => {
+      setIsLoadingTimings(true);
       try {
-        const entries = await Promise.all(courseIds.map(async (id) => {
-          const t = await fetch(`/api/college/course-year-timings?courseId=${encodeURIComponent(id)}`)
-            .then((r) => r.json() as Promise<{ timings: CourseYearTiming[] }>);
-          return [id, (t.timings ?? []).find((x) => Number(x.year) === Number(year)) ?? null] as const;
-        }));
+        const res = await fetch(`/api/college/course-year-timings?courseId=${encodeURIComponent(courseIds.join(","))}`);
+        const data = (await res.json()) as { timings: CourseYearTiming[] };
+        const allTimings = data.timings ?? [];
+        const entries = courseIds.map((id) => [
+          id,
+          allTimings.find((x) => x.courseId === id && Number(x.year) === Number(year)) ?? null,
+        ] as const);
         if (!cancelled) setTimings(Object.fromEntries(entries));
       } catch {
         if (!cancelled) toast({ variant: "destructive", title: "Failed to load semesters" });
+      } finally {
+        if (!cancelled) setIsLoadingTimings(false);
       }
     })();
     return () => { cancelled = true; };
-  }, [year, sections]);
+  }, [year, selectedGroup]);
 
   const semesterOptions = useMemo(
-    () => Array.from(new Set(sections.flatMap((s) => (timings[s.courseId]?.semesters ?? []).map((x) => x.semester)))).sort((a, b) => a - b),
-    [sections, timings]
+    () => Array.from(new Set(Object.values(timings).flatMap((t) => (t?.semesters ?? []).map((x) => x.semester)))).sort((a, b) => a - b),
+    [timings]
   );
   // A chosen semester narrows the sections to the course-years that run it.
   const sectionsForPick = useMemo(
@@ -339,10 +345,10 @@ function SectionTimetable() {
                 <Select
                   value={semester != null ? String(semester) : "all"}
                   onValueChange={changeSemester}
-                  disabled={!year || semesterOptions.length === 0}
+                  disabled={!year || isLoadingTimings || semesterOptions.length === 0}
                 >
                   <SelectTrigger id="tt-semester">
-                    <SelectValue placeholder={!year ? "Select a year" : semesterOptions.length === 0 ? "No semesters" : "All semesters"} />
+                    <SelectValue placeholder={!year ? "Select a year" : isLoadingTimings ? "Loading semesters…" : semesterOptions.length === 0 ? "No semesters" : "All semesters"} />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All semesters</SelectItem>

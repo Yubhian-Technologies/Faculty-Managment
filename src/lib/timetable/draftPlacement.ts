@@ -57,6 +57,10 @@ export function validatePlacement(
     // occupied cell, never by the auto-generator. Skips ONLY the
     // already-occupied check; pinned/faculty-busy/daily-cap still apply.
     allowSplit?: boolean;
+    // The assignment being placed, when known. A split period must be shared
+    // by two DIFFERENT assignments: the same one twice in a cell would collide
+    // on its attendance session (keyed by assignment, date and period).
+    assignmentId?: string;
   },
 ): string | null {
   const { timing, rules } = ctx;
