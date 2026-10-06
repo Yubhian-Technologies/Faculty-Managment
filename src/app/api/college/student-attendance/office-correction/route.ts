@@ -9,7 +9,9 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodManageFacultyDepartment } from "@/lib/departments/scope";
 import { isManualEditWindowOpen, MANUAL_EDIT_WINDOW_CLOSED_MESSAGE } from "@/lib/attendance/attendanceWindow";
 import { getFacultyPeriodsForDate } from "@/lib/timetable/currentPeriod";
-import { resolvePeriodCompletionStatus } from "@/lib/attendance/periodAttendanceStatus";
+import {
+  departmentOfficeBlocked, facultyWindowClosed, FACULTY_WINDOW_OPEN_MESSAGE, OFFICE_ATTENDANCE_DENIED_MESSAGE,
+} from "@/lib/attendance/officeCorrectionAccess";
 import { istDateFromParts, istMidnightUTC } from "@/lib/attendance/istTime";
 import { applyOnDutyToEntries, loadOnDutyDay, presentCountOf } from "@/lib/studentAttendance/onDuty";
 import { fetchSectionStudents } from "@/lib/students/sectionRoster";
@@ -71,6 +73,10 @@ export async function POST(request: Request) {
       if (!canHodManageFacultyDepartment(scope, faculty.department)) {
         return NextResponse.json({ error: "That faculty is not in your department" }, { status: 403 });
       }
+      // A Department Office head holds the HOD's authority except here: the HOD must have switched this on.
+      if (await departmentOfficeBlocked(db, session.collegeId, session, scope.ownDepartmentNames)) {
+        return NextResponse.json({ error: OFFICE_ATTENDANCE_DENIED_MESSAGE }, { status: 403 });
+      }
     }
 
     const [y, m, d] = date.split("-").map(Number);
@@ -107,12 +113,9 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
-    const completionStatus = resolvePeriodCompletionStatus({ dateISO: date, endTime: matchedPeriod.endTime, session: null });
-    if (completionStatus === "PENDING") {
-      return NextResponse.json(
-        { error: "This period hasn't ended yet - the faculty member should mark it themselves." },
-        { status: 403 }
-      );
+    // Only once the faculty's own window is over: a past day, or today after the college day ended.
+    if (!facultyWindowClosed(date, matchedPeriod.closeTime)) {
+      return NextResponse.json({ error: FACULTY_WINDOW_OPEN_MESSAGE }, { status: 403 });
     }
 
     let sectionId: string | undefined;
@@ -138,6 +141,7 @@ export async function POST(request: Request) {
 
     const id = `${assignmentId}_${date}_${periodNumber}`;
     const ref = collegeRef.collection("studentAttendance").doc(id);
+    const semester = assignment.sectionId ? assignment.timetableSemester : assignment.semester;
 
     // An existing session (DRAFT or SUBMITTED) is handed back as-is so the
     // HOD/office can correct it via PATCH - never overwritten here.
@@ -176,6 +180,8 @@ export async function POST(request: Request) {
       ...(sectionId ? { sectionId } : {}),
       sectionName,
       ...(year != null ? { year } : {}),
+      // Same stamp the faculty's own session gets, so semester-filtered reports place this one correctly.
+      ...(semester != null ? { semester } : {}),
       academicYear,
       subjectId: assignment.subjectId,
       subjectName: assignment.subjectName,

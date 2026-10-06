@@ -7,7 +7,9 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodManageFacultyDepartment } from "@/lib/departments/scope";
 import { isManualEditWindowOpen, MANUAL_EDIT_WINDOW_CLOSED_MESSAGE } from "@/lib/attendance/attendanceWindow";
 import { getFacultyPeriodsForDate } from "@/lib/timetable/currentPeriod";
-import { resolvePeriodCompletionStatus } from "@/lib/attendance/periodAttendanceStatus";
+import {
+  departmentOfficeBlocked, facultyWindowClosed, FACULTY_WINDOW_OPEN_MESSAGE, OFFICE_ATTENDANCE_DENIED_MESSAGE,
+} from "@/lib/attendance/officeCorrectionAccess";
 import { istDateFromParts } from "@/lib/attendance/istTime";
 import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 import { mergeMarkUpdates } from "@/lib/studentAttendance/onDuty";
@@ -61,6 +63,10 @@ export async function PATCH(
       if (!canHodManageFacultyDepartment(scope, existing.department)) {
         return NextResponse.json({ error: "That faculty is not in your department" }, { status: 403 });
       }
+      // A Department Office head holds the HOD's authority except here: the HOD must have switched this on.
+      if (await departmentOfficeBlocked(db, session.collegeId, session, scope.ownDepartmentNames)) {
+        return NextResponse.json({ error: OFFICE_ATTENDANCE_DENIED_MESSAGE }, { status: 403 });
+      }
     }
 
     const [y, m, d] = existing.date.split("-").map(Number);
@@ -68,6 +74,10 @@ export async function PATCH(
     if (!isManualEditWindowOpen(docDate)) {
       return NextResponse.json({ error: MANUAL_EDIT_WINDOW_CLOSED_MESSAGE }, { status: 403 });
     }
+    // Only once the faculty's own window is over: a past day, or today after the college day
+    // ended. A session whose period is no longer on the timetable has no close time, so for
+    // such a session only a past day qualifies.
+    let closeTime: string | undefined;
     if (existing.periodNumber != null) {
       // existing.facultyId is the login uid (see office-correction/route.ts's
       // own comment), but getFacultyPeriodsForDate keys off the FacultyMember
@@ -79,15 +89,10 @@ export async function PATCH(
       const matchedPeriod = periodsForDate.find(
         (p) => p.slot.assignmentId === existing.assignmentId && p.slot.periodNumber === existing.periodNumber
       );
-      if (matchedPeriod) {
-        const completionStatus = resolvePeriodCompletionStatus({ dateISO: existing.date, endTime: matchedPeriod.endTime, session: null });
-        if (completionStatus === "PENDING") {
-          return NextResponse.json(
-            { error: "This period hasn't ended yet - the faculty member should mark it themselves." },
-            { status: 403 }
-          );
-        }
-      }
+      closeTime = matchedPeriod?.closeTime;
+    }
+    if (!facultyWindowClosed(existing.date, closeTime)) {
+      return NextResponse.json({ error: FACULTY_WINDOW_OPEN_MESSAGE }, { status: 403 });
     }
 
     let entries: StudentAttendanceEntry[] = existing.entries;
