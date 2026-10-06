@@ -262,8 +262,39 @@ export default function TeachingAssignmentsPage() {
   // lands after a year was already picked, the id set grows and this key changes
   // rather than leaving the earlier, incomplete result cached forever.
   const key = `${activeCourseIds.join("|")}_${year}`;
-  const subjects = useMemo(() => subjectsCache[key] ?? [], [subjectsCache, key]);
   const semesterAssignments = useMemo(() => semesterAssignmentsCache[key] ?? [], [semesterAssignmentsCache, key]);
+  // The fetched subject list, plus any subject that is assigned for this semester
+  // but missing from it (no courseId, so the course/catalog fetch never returns
+  // it - e.g. CSBS's own subjects), rebuilt from the assignment's own snapshot.
+  // Derived here rather than written into the cache because two loaders write
+  // that cache and whichever lands last used to win, dropping these.
+  const subjects = useMemo(() => {
+    const base = subjectsCache[key] ?? [];
+    const have = new Set(base.map((s) => s.id));
+    const extra: Subject[] = [];
+    for (const a of semesterAssignments) {
+      if (have.has(a.subjectId)) continue;
+      have.add(a.subjectId);
+      extra.push({
+        id: a.subjectId,
+        collegeId: a.collegeId ?? "",
+        courseId: a.courseId,
+        name: a.subjectName,
+        code: a.subjectCode,
+        ...(a.shortCode ? { shortCode: a.shortCode } : {}),
+        ...(a.regulation ? { regulation: a.regulation } : {}),
+        hoursPerWeek: a.hoursPerWeek ?? 0,
+        credits: a.credits ?? 0,
+        type: a.type ?? "THEORY",
+        isActive: true,
+        createdAt: a.createdAt,
+        updatedAt: a.updatedAt,
+      } as Subject);
+    }
+    // Sorted by name so a rebuilt subject sits beside its same-named siblings
+    // instead of landing at the very bottom of every list built from this.
+    return extra.length > 0 ? [...base, ...extra].sort((x, y) => x.name.localeCompare(y.name)) : base;
+  }, [subjectsCache, semesterAssignments, key]);
   const timings = useMemo(() => timingsCache[key] ?? [], [timingsCache, key]);
   // Union across every course-doc id in the group, sorted - a shared
   // programme's docs are all expected to agree on this, but union rather
@@ -371,9 +402,32 @@ const effectiveSemester = semesterOptions.length === 0
       // silently dropped by the join below if its own courseId falls outside
       // activeCourseIds. Falls back to the courseId union only when this
       // course has no catalogId (a legacy, pre-catalog-migration course).
+      // A branch fed by a shared first year (e.g. CSBS under BS-Chemistry) files
+      // its semester subjects under ITS OWN Course doc, which can sit outside
+      // activeCourseIds; and some were imported with the catalog id itself as
+      // the courseId. Query every same-catalog course doc plus the catalog id,
+      // or that branch's subjects never load.
+      // The sections API also returns a managed branch's own sections whatever
+      // course was asked for (CSBS-A comes back with its own courseId), so their
+      // course ids are the surest way to reach that branch's subjects.
+      const sectionCourseIds = (await Promise.all(
+        activeCourseIds.map((cId) =>
+          fetch(`/api/college/sections?courseId=${encodeURIComponent(cId)}&year=${encodeURIComponent(year)}&semester=${effectiveSemester}`)
+            .then((r) => r.json() as Promise<{ sections?: { courseId?: string }[] }>)
+            .then((d) => (d.sections ?? []).map((s) => s.courseId).filter((x): x is string => !!x))
+            .catch(() => [] as string[])
+        )
+      )).flat();
+      const assignmentCourseIds = Array.from(new Set([
+        ...activeCourseIds,
+        ...sectionCourseIds,
+        ...(course?.catalogId
+          ? [course.catalogId, ...courses.filter((c) => c.catalogId === course.catalogId).map((c) => c.id)]
+          : []),
+      ]));
       const [assignLists, subjectsLists] = await Promise.all([
         Promise.all(
-          activeCourseIds.map((courseId) =>
+          assignmentCourseIds.map((courseId) =>
             fetch(`/api/college/subject-semester-assignments?courseId=${encodeURIComponent(courseId)}&year=${encodeURIComponent(year)}&semester=${effectiveSemester}`)
               .then((r) => r.json() as Promise<{ assignments?: SubjectSemesterAssignment[] }>)
               .then((d) => d.assignments ?? [])
@@ -396,6 +450,29 @@ const effectiveSemester = semesterOptions.length === 0
       const allSubjects = subjectsLists.flat();
       const byId = new Map(allSubjects.map((s) => [s.id, s]));
       const filtered = Array.from(byId.values()).filter((s) => assignedIds.has(s.id));
+      // A subject with no courseId (e.g. the shared "SUB_GEN_*" ones filed per
+      // section) is never returned by the course/catalog fetch above, yet is
+      // genuinely assigned to this semester - rebuild it from the assignment's
+      // own snapshot, same fallback TeachingAssignmentsEditor uses, or its
+      // department would show no subjects at all.
+      for (const a of flatAssignments) {
+        if (byId.has(a.subjectId) || filtered.some((s) => s.id === a.subjectId)) continue;
+        filtered.push({
+          id: a.subjectId,
+          collegeId: a.collegeId ?? "",
+          courseId: a.courseId,
+          name: a.subjectName,
+          code: a.subjectCode,
+          ...(a.shortCode ? { shortCode: a.shortCode } : {}),
+          ...(a.regulation ? { regulation: a.regulation } : {}),
+          hoursPerWeek: a.hoursPerWeek ?? 0,
+          credits: a.credits ?? 0,
+          type: a.type ?? "THEORY",
+          isActive: true,
+          createdAt: a.createdAt,
+          updatedAt: a.updatedAt,
+        } as Subject);
+      }
       setSubjectsCache((c) => ({ ...c, [key]: filtered }));
       setSemesterAssignmentsCache((c) => ({ ...c, [key]: flatAssignments }));
       setSemesterFilterReadyKeys((prev) => {
@@ -674,6 +751,14 @@ const effectiveSemester = semesterOptions.length === 0
         });
       })()
     : subjects;
+
+  // Why the Subject list is empty for the picked section - an empty list is almost
+  // never "already staffed" (staffed subjects stay pickable): it is the section's
+  // department having no subject assigned to this semester.
+  const pickedSection = sections.find((s) => s.id === assignForm.sectionId);
+  const emptySubjectsReason = !pickedSection || subjects.length === 0
+    ? "No subjects offered for this semester"
+    : `No subjects are assigned to ${pickedSection.department} for this semester yet - ask Academics to assign them (Assign to Semester)`;
 
   // Faculty offered here span this HOD's own department and true
   // sub-departments only - never a grouped/managed "core" branch, for a
@@ -1076,9 +1161,7 @@ const effectiveSemester = semesterOptions.length === 0
                     <SelectContent>
                       {availableSubjectsForAssign.length === 0 && (
                         <div className="px-2 py-1.5 text-xs text-muted-foreground">
-                          {subjects.length === 0
-                            ? "No subjects offered for this semester"
-                            : "All subjects already staffed for this section"}
+                          {emptySubjectsReason}
                         </div>
                       )}
                       {availableSubjectsForAssign.map((s) => (

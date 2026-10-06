@@ -592,7 +592,7 @@ export function TeachingAssignmentsEditor({ courseId, year, backHref }: Teaching
                       <div className="px-2 py-1.5 text-xs text-muted-foreground">
                         {assignedSubjects.length === 0
                           ? "No subjects assigned to this department for this semester"
-                          : "All subjects already staffed for this section"}
+                          : `No subjects are assigned to ${sections.find((s) => s.id === assignForm.sectionId)?.department ?? "this section's department"} for this semester yet, or all are already staffed - check Assign to Semester`}
                       </div>
                     )}
                     {availableSubjectsForAssign.map((s) => (
