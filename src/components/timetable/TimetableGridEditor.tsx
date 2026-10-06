@@ -119,9 +119,11 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
   const [selected, setSelected] = useState<DraftSlot | null>(null);
   const [busy, setBusy] = useState<null | "publish" | "discard" | "move" | "blank" | "reset">(null);
   const [confirmPublish, setConfirmPublish] = useState(false);
-  // Off by default: when on, back-to-back periods holding the same subject (a
-  // multi-period lab) are drawn as ONE wide cell instead of repeating it.
-  const [mergeContinuous, setMergeContinuous] = useState(false);
+  // "Merge cells": the user picks back-to-back periods of one subject on a day and
+  // they are saved as a single cell (the slots carry mergeWithNext; every view and
+  // download draws them merged). `mergePick` is the current selection.
+  const [mergeMode, setMergeMode] = useState(false);
+  const [mergePick, setMergePick] = useState<{ day: DayOfWeek; periods: number[] }>({ day: "MON", periods: [] });
   // "w.e.f" date printed on the timetable, asked for in the publish dialog.
   const [effectiveDate, setEffectiveDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [confirmDiscard, setConfirmDiscard] = useState(false);
@@ -238,14 +240,80 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
   }, [loadAll]);
 
   const rows = timing ? buildRows(timing) : [];
-  // Which period cells of a day to draw as one wide cell (see mergeContinuous).
+  // Which period cells of a day are drawn as one wide cell (the ones merged via "Merge cells").
   const spansFor = (d: DayOfWeek) =>
-    mergeContinuous
-      ? continuousSpans(
-          rows.map((r) => (r.kind === "period" ? { kind: "period", periodNumber: r.period } : { kind: "break" })),
-          (p) => cellEntriesFor(d, p).map((e) => e.slot) as TimetableSlot[],
-        )
-      : { spans: new Map<number, number>(), skipped: new Set<number>() };
+    continuousSpans(
+      rows.map((r) => (r.kind === "period" ? { kind: "period", periodNumber: r.period } : { kind: "break" })),
+      (p) => cellEntriesFor(d, p).map((e) => e.slot) as TimetableSlot[],
+    );
+
+  function toggleMergePick(d: DayOfWeek, firstPeriod: number, span: number) {
+    const covered = Array.from({ length: span }, (_, i) => firstPeriod + i);
+    setMergePick((p) => {
+      if (p.day !== d) return { day: d, periods: covered };
+      const has = covered.every((x) => p.periods.includes(x));
+      return {
+        day: d,
+        periods: has
+          ? p.periods.filter((x) => !covered.includes(x))
+          : Array.from(new Set([...p.periods, ...covered])).sort((a, b) => a - b),
+      };
+    });
+  }
+
+  async function patchMerge(action: "merge" | "unmerge", day: DayOfWeek, assignmentId: string, from: number, to: number): Promise<boolean> {
+    const res = await fetch("/api/college/timetable/draft", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sectionId, ...semesterBody, action, assignmentId, fromDay: day, fromPeriod: from, toPeriod: to }),
+    });
+    const json = (await res.json()) as { slots?: DraftSlot[]; error?: string };
+    if (!res.ok) {
+      toast({ variant: "destructive", title: action === "merge" ? "Could not merge" : "Could not unmerge", description: json.error });
+      return false;
+    }
+    setDraft((dr) => (dr ? { ...dr, slots: json.slots ?? dr.slots, status: "DRAFT" } : dr));
+    return true;
+  }
+
+  async function handleMergeAction(action: "merge" | "unmerge") {
+    const { day, periods } = mergePick;
+    const sorted = [...periods].sort((a, b) => a - b);
+    const idxOf = (p: number) => rows.findIndex((r) => r.kind === "period" && r.period === p);
+    // A draft (not pinned) entry of the cell - the API anchors on a draft slot.
+    const draftAssignmentAt = (p: number) => cellEntriesFor(day, p).find((e) => !e.isPinned)?.slot.assignmentId;
+    setBusy("move");
+    try {
+      if (action === "merge") {
+        // Back-to-back period columns only: a break column in between ends a run.
+        if (sorted.length < 2 || sorted.some((p, i) => i > 0 && idxOf(p) !== idxOf(sorted[i - 1]) + 1)) {
+          toast({ variant: "destructive", title: "Pick back-to-back periods", description: "Select two or more adjacent periods on the same day (not across a break)." });
+          return;
+        }
+        const aid = draftAssignmentAt(sorted[0]);
+        if (!aid) { toast({ variant: "destructive", title: "Pinned periods can't be merged" }); return; }
+        if (!(await patchMerge("merge", day, aid, sorted[0], sorted[sorted.length - 1]))) return;
+        toast({ variant: "success", title: "Cells merged", description: "Shown as one cell once published." });
+      } else {
+        // Undo every merged cell among the selection (each starts at its first period).
+        const { spans } = spansFor(day);
+        let any = false;
+        for (const p of sorted) {
+          const span = spans.get(idxOf(p)) ?? 1;
+          if (span < 2) continue;
+          const aid = draftAssignmentAt(p);
+          if (!aid) continue;
+          any = true;
+          if (!(await patchMerge("unmerge", day, aid, p, p + span - 1))) return;
+        }
+        if (!any) { toast({ title: "Nothing to unmerge", description: "Select a merged cell." }); return; }
+        toast({ variant: "success", title: "Cells unmerged" });
+      }
+      setMergePick({ day, periods: [] });
+    } finally {
+      setBusy(null);
+    }
+  }
   // A manually-started draft legitimately has zero slots, so toolbar visibility
   // keys off the draft existing - not off it having content.
   const hasDraft = Boolean(draft);
@@ -1012,15 +1080,26 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
           )}
           {mode === "draft" && (
             <div className="ml-auto flex flex-wrap items-center gap-2">
-              <label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  className="h-3.5 w-3.5"
-                  checked={mergeContinuous}
-                  onChange={(e) => setMergeContinuous(e.target.checked)}
-                />
-                Merge continuous periods
-              </label>
+              {isEditing && (!mergeMode ? (
+                <Button size="sm" variant="outline" onClick={() => { setMergeMode(true); setSelected(null); setMergePick({ day: "MON", periods: [] }); }}>
+                  Merge cells
+                </Button>
+              ) : (
+                <>
+                  <span className="text-xs text-muted-foreground">
+                    Click the cells to merge{mergePick.periods.length > 0 ? ` (${mergePick.periods.length} selected)` : ""}
+                  </span>
+                  <Button size="sm" onClick={() => void handleMergeAction("merge")} disabled={busy !== null || mergePick.periods.length < 2}>
+                    Merge selected
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => void handleMergeAction("unmerge")} disabled={busy !== null || mergePick.periods.length < 1}>
+                    Unmerge selected
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => { setMergeMode(false); setMergePick({ day: "MON", periods: [] }); }}>
+                    Done
+                  </Button>
+                </>
+              ))}
               <Button size="sm" variant={isEditing ? "default" : "outline"} onClick={() => { setIsEditing((v) => !v); setSelected(null); }}>
                 {isEditing ? <><X className="h-4 w-4 mr-1.5" />Done editing</> : "Edit"}
               </Button>
@@ -1181,8 +1260,19 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
                     const canAddAnother = mode === "draft" && isEditing;
 
                     return (
-                      <td key={`period_${row.period}`} colSpan={spans.get(idx) ?? 1} className="p-2 align-top">
-                        <div className="space-y-1">
+                      <td
+                        key={`period_${row.period}`}
+                        colSpan={spans.get(idx) ?? 1}
+                        // In "Merge cells" mode a click on an occupied cell picks it for merging.
+                        onClick={mergeMode && isEditing && entries.length > 0 ? () => toggleMergePick(d, row.period, spans.get(idx) ?? 1) : undefined}
+                        className={[
+                          "p-2 align-top",
+                          mergeMode && entries.length > 0 ? "cursor-pointer" : "",
+                          mergeMode && mergePick.day === d && Array.from({ length: spans.get(idx) ?? 1 }, (_, i) => row.period + i).every((x) => mergePick.periods.includes(x))
+                            ? "bg-primary/15 ring-2 ring-inset ring-primary" : "",
+                        ].join(" ")}
+                      >
+                        <div className={mergeMode ? "space-y-1 pointer-events-none" : "space-y-1"}>
                             {entries.map((entry, entryIdx) => {
                               // Faculty of one subject sharing this cell: one block, subject once.
                               const sameSubject = entries.filter((e) => e.slot.subjectId === entry.slot.subjectId);
