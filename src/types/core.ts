@@ -927,6 +927,12 @@ export interface FacultyNorms {
   studentFacultyRatio: number;
   teachingHoursPerWeek: number;
   defaultMinFacultyPerDept: number;
+  maxTheoryPeriodsPerWeek?: number;
+  maxPracticalPeriodsPerWeek?: number;
+  theoryBlockSize?: number;
+  labBlockSize?: number;
+  /** Per-subject continuous-slot overrides, keyed by subjectBlockKey(); beats theory/lab block size. */
+  subjectBlockSizes?: Record<string, number>;
   positionNorms: PositionNorm[];
   // Years of service a "new joining" employee (leave profile: CL + OD only)
   // must complete before converting into their vacation/non-vacation leave
@@ -2759,6 +2765,12 @@ export interface Section {
   batch: string; // admission batch e.g. "2023-2027"
   facultyInchargeUid?: string;
   facultyInchargeName?: string;
+  // The lab batches the faculty incharge has set up for this section ("Batch 1",
+  // "Batch 2", ...), saved BEFORE any student is moved into them - a batch with no
+  // students would otherwise not exist anywhere (StudentRecord.labBatch only
+  // records which batch a student is in). The roster itself is still the
+  // students' own labBatch; this list just keeps empty batches alive.
+  labBatches?: string[];
   classLeaderUid?: string;
   classLeaderName?: string;
   studentCount: number;
@@ -2785,6 +2797,8 @@ export interface Section {
   // is later edited to for a different batch passing through the same slot.
   // Optional/lenient like Subject.regulation - absent means unrestricted.
   regulation?: string;
+  // The room this section's class sits in (e.g. "B-204"). Free text, optional.
+  classroomNumber?: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
@@ -3205,6 +3219,10 @@ export type AuditAction =
   | "TEACHING_ASSIGNMENT_UPDATED"
   | "TEACHING_ASSIGNMENT_DELETED"
   | "TIMETABLE_PUBLISHED"
+  | "TIMETABLE_RESET"
+  | "LAB_ATTENDANCE_ALLOCATED"
+  | "LAB_BATCH_MODE_SET"
+  | "SECTION_LAB_BATCHES_SET"
   // Supporting Staff module
   | "SUPPORTING_STAFF_CREATED"
   | "SUPPORTING_STAFF_UPDATED"

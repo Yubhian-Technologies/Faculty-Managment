@@ -67,8 +67,12 @@ describe("pinSlotWithChecks", () => {
       .toMatchObject({ ok: false, error: expect.stringMatching(/already has a subject scheduled on MON period 1/) });
     const split = await pinSlotWithChecks(base(fake, { assignmentId: "a3", subjectId: "lab2", facultyId: "f3", allowSplit: true }));
     expect(split.ok).toBe(true);
-    expect(await pinSlotWithChecks(base(fake, { assignmentId: "a4", subjectId: "lab2", facultyId: "f4", allowSplit: true })))
-      .toMatchObject({ ok: false, error: expect.stringMatching(/already has 2 subjects sharing it/) });
+    // A THIRD lab is refused...
+    fake.seed(`${C}/subjects/lab3`, { type: "PRACTICAL" });
+    expect(await pinSlotWithChecks(base(fake, { assignmentId: "a4", subjectId: "lab3", facultyId: "f4", allowSplit: true })))
+      .toMatchObject({ ok: false, error: expect.stringMatching(/already has 2 labs sharing it/) });
+    // ...but another faculty of a lab already in the cell may join it (a lab can have several faculty).
+    expect((await pinSlotWithChecks(base(fake, { assignmentId: "a5", subjectId: "lab2", facultyId: "f5", allowSplit: true }))).ok).toBe(true);
 
     const mixed = new FakeFirestore();
     mixed.seed(`${C}/subjects/th1`, { type: "THEORY" });

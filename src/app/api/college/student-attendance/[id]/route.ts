@@ -7,6 +7,8 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 import { checkFacultyPeriodWindow, periodWindowMessage } from "@/lib/timetable/currentPeriod";
 import { mergeMarkUpdates } from "@/lib/studentAttendance/onDuty";
+import { checkAllocatedAccess } from "@/lib/studentAttendance/labAllocation";
+import { facultyActiveOn, loadLabWindows } from "@/lib/students/labFacultyWindow";
 import { applyTallyDeltaInTx } from "@/lib/studentAttendance/dayTally";
 import type { StudentAttendanceEntry, StudentAttendanceMark, StudentAttendanceSession } from "@/types";
 
@@ -78,8 +80,22 @@ export async function PATCH(
     const windowCheck = await checkFacultyPeriodWindow(
       db, session.collegeId, facultyMemberId, existing.assignmentId, existing.date, new Date(), existing.periodNumber
     );
+    // An allocated lab session (an HOD/Incharge opened it for these dates, see
+    // lib/studentAttendance/labAllocation.ts) is not bound to the period clock.
+    let viaAllocation = false;
     if (!windowCheck.ok) {
-      return NextResponse.json({ error: periodWindowMessage(windowCheck) }, { status: 403 });
+      const allocated = await checkAllocatedAccess(db, session.collegeId, facultyMemberId, existing.assignmentId, existing.date, existing.periodNumber);
+      if (!allocated.ok) {
+        return NextResponse.json({ error: periodWindowMessage(windowCheck) }, { status: 403 });
+      }
+      viaAllocation = true;
+    }
+    // A lab's faculty take it on their own dates (set by the section's faculty incharge).
+    if (!viaAllocation && !existing.substituteForFacultyId && existing.sectionId) {
+      const windows = await loadLabWindows(db, session.collegeId, [{ sectionId: existing.sectionId, subjectId: existing.subjectId }]);
+      if (!facultyActiveOn(windows, existing.sectionId, existing.subjectId, facultyMemberId, existing.date)) {
+        return NextResponse.json({ error: "This lab is not yours on this date - the section's faculty incharge set your teaching dates for it." }, { status: 403 });
+      }
     }
 
     if (body.entries) {

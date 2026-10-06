@@ -1,14 +1,17 @@
 "use client";
 
+import { MAX_FACULTY_PER_SUBJECT } from "@/lib/teaching/facultyCap";
 import { useEffect, useMemo, useState } from "react";
+import { CustomSubjectAdder } from "@/components/timetable/CustomSubjectAdder";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Send, Trash2 } from "lucide-react";
+import { ArrowLeft, Plus, Send, Trash2, X } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/useToast";
 import { useAuth } from "@/hooks/useAuth";
@@ -66,8 +69,11 @@ export function TeachingAssignmentsEditor({ courseId, year, backHref }: Teaching
 
   const [selectedSemester, setSelectedSemester] = useState<number | null>(null);
   const [assignForm, setAssignForm] = useState({ sectionId: "", subjectId: "", facultyId: "" });
+  // More faculty for the same subject + section, added with "+ Add another faculty" (the first is assignForm.facultyId).
+  const [extraFacultyIds, setExtraFacultyIds] = useState<string[]>([]);
   const [savingAssignment, setSavingAssignment] = useState(false);
-  const [requestTargetId, setRequestTargetId] = useState("");
+  // The departments ticked in "ask other departments" - a subject can be asked of several at once.
+  const [requestTargetIds, setRequestTargetIds] = useState<string[]>([]);
   const [sendingRequest, setSendingRequest] = useState(false);
 
   function load() {
@@ -241,13 +247,6 @@ export function TeachingAssignmentsEditor({ courseId, year, backHref }: Teaching
     [assignmentRequests, courseId, year, user?.uid]
   );
 
-  // sectionId_subjectId pairs with a PENDING lend-request already out - see
-  // hod/teaching-assignments/page.tsx's own copy of this same guard.
-  const pendingRequestKeys = useMemo(
-    () => new Set(myOutgoingRequests.filter((r) => r.status === "PENDING").map((r) => `${r.sectionId}_${r.subjectId}`)),
-    [myOutgoingRequests]
-  );
-
   // Unstaffed subjects: only checks sections of the department(s) to which the subject was assigned
   const gapRows = useMemo(() => assignedSubjects.map((subject) => {
     const subjectDeptIds = new Set(
@@ -317,17 +316,14 @@ export function TeachingAssignmentsEditor({ courseId, year, backHref }: Teaching
       if (hasRegulationMatches && selectedSection.regulation && s.regulation && s.regulation !== selectedSection.regulation) {
         return false;
       }
-      if (pendingRequestKeys.has(`${assignForm.sectionId}_${s.id}`)) return false;
       const existingForSubject = assignments.filter((a) =>
         a.sectionId === assignForm.sectionId && a.subjectId === s.id &&
         matchesCurrentSemester(a.timetableSemester, effectiveSemester)
       );
-      // Only PRACTICAL (lab) subjects may be staffed twice for Batch 1 / Batch 2 half-half split.
-      // THEORY/TUTORIAL/PROJECT stay single-faculty per section.
-      if (s.type === "PRACTICAL") return existingForSubject.length < 2;
-      return existingForSubject.length === 0;
+      // A subject keeps showing until it has the most faculty allowed, so more can be added.
+      return existingForSubject.length < MAX_FACULTY_PER_SUBJECT;
     });
-  }, [assignForm.sectionId, sections, departments, semesterAssignments, effectiveSemester, year, assignedSubjects, pendingRequestKeys, assignments]);
+  }, [assignForm.sectionId, sections, departments, semesterAssignments, effectiveSemester, year, assignedSubjects, assignments]);
 
   // Every department in the college is askable except this section's own -
   // see hod/teaching-assignments/page.tsx's own copy. Sub-departments are NOT
@@ -342,34 +338,51 @@ export function TeachingAssignmentsEditor({ courseId, year, backHref }: Teaching
     [departments, requestSection]
   );
 
+  // Faculty already assigned to the picked subject in this section (and semester) are not offered again.
+  const alreadyOnSubject = new Set(
+    assignments
+      .filter((a) => a.sectionId === assignForm.sectionId && a.subjectId === assignForm.subjectId && matchesCurrentSemester(a.timetableSemester, effectiveSemester))
+      .map((a) => a.facultyId),
+  );
+  const availableFacultyForAssign = faculty.filter((f) => !alreadyOnSubject.has(f.id));
+
   async function handleAssign(e: React.FormEvent) {
     e.preventDefault();
     if (!assignForm.sectionId || !assignForm.subjectId || !assignForm.facultyId) return;
     setSavingAssignment(true);
     try {
-      const fac = faculty.find((f) => f.id === assignForm.facultyId);
       const subj = assignedSubjects.find((s) => s.id === assignForm.subjectId) ?? masterSubjects.find((s) => s.id === assignForm.subjectId);
-      const res = await fetch("/api/college/teaching-assignments", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          facultyId: assignForm.facultyId,
-          facultyName: fac?.name ?? "",
-          courseId,
-          sectionId: assignForm.sectionId,
-          subjectId: assignForm.subjectId,
-          hoursPerWeek: subj?.hoursPerWeek,
-          ...(effectiveSemester != null ? { timetableSemester: effectiveSemester } : {}),
-        }),
-      });
-      const json = await res.json() as { error?: string };
-      if (!res.ok) {
-        toast({ variant: "destructive", title: "Failed to assign", description: json.error });
-        return;
+      // One assignment per chosen faculty, in the order picked; a failure stops the rest and says which one.
+      const ids = Array.from(new Set([assignForm.facultyId, ...extraFacultyIds].filter(Boolean)));
+      let done = 0;
+      for (const facultyId of ids) {
+        const fac = faculty.find((f) => f.id === facultyId);
+        const res = await fetch("/api/college/teaching-assignments", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            facultyId,
+            facultyName: fac?.name ?? "",
+            courseId,
+            sectionId: assignForm.sectionId,
+            subjectId: assignForm.subjectId,
+            hoursPerWeek: subj?.hoursPerWeek,
+            ...(effectiveSemester != null ? { timetableSemester: effectiveSemester } : {}),
+          }),
+        });
+        const json = await res.json() as { error?: string };
+        if (!res.ok) {
+          toast({ variant: "destructive", title: `Failed to assign ${fac?.name ?? "faculty"}`, description: json.error });
+          break;
+        }
+        done++;
       }
-      toast({ variant: "success", title: "Faculty assigned" });
-      setAssignForm({ sectionId: assignForm.sectionId, subjectId: "", facultyId: "" });
-      load();
+      if (done > 0) {
+        toast({ variant: "success", title: done === 1 ? "Faculty assigned" : `${done} faculty assigned` });
+        setAssignForm({ sectionId: assignForm.sectionId, subjectId: "", facultyId: "" });
+        setExtraFacultyIds([]);
+        load();
+      }
     } catch {
       toast({ variant: "destructive", title: "Network error" });
     } finally {
@@ -378,7 +391,7 @@ export function TeachingAssignmentsEditor({ courseId, year, backHref }: Teaching
   }
 
   async function handleSendRequest() {
-    if (!assignForm.sectionId || !assignForm.subjectId || !requestTargetId) return;
+    if (!assignForm.sectionId || !assignForm.subjectId || requestTargetIds.length === 0) return;
     setSendingRequest(true);
     try {
       const res = await fetch("/api/college/faculty-assignment-requests", {
@@ -388,20 +401,22 @@ export function TeachingAssignmentsEditor({ courseId, year, backHref }: Teaching
           courseId,
           sectionId: assignForm.sectionId,
           subjectId: assignForm.subjectId,
-          targetDepartmentId: requestTargetId,
+          targetDepartmentIds: requestTargetIds,
         }),
       });
-      const json = await res.json() as { error?: string };
+      const json = await res.json() as { error?: string; created?: { departmentName: string }[]; skipped?: { departmentName: string }[] };
       if (!res.ok) {
         toast({ variant: "destructive", title: "Failed to send request", description: json.error });
         return;
       }
-      toast({ variant: "success", title: "Request sent" });
-      setRequestTargetId("");
-      // The subject just requested drops out of availableSubjectsForAssign
-      // (see pendingRequestKeys) the moment assignmentRequests refreshes -
-      // clear it here too so the form doesn't sit on a now-invalid selection.
-      setAssignForm((f) => ({ ...f, subjectId: "" }));
+      const sent = json.created?.length ?? 0;
+      const skipped = json.skipped ?? [];
+      toast({
+        variant: "success",
+        title: `Request sent to ${sent} department${sent === 1 ? "" : "s"}`,
+        description: skipped.length > 0 ? `Already pending with ${skipped.map((x) => x.departmentName).join(", ")}.` : undefined,
+      });
+      setRequestTargetIds([]);
       load();
     } catch {
       toast({ variant: "destructive", title: "Network error" });
@@ -414,6 +429,31 @@ export function TeachingAssignmentsEditor({ courseId, year, backHref }: Teaching
   // about first rather than happening on the click (see ConfirmDialog below).
   const [removeTarget, setRemoveTarget] = useState<TeachingAssignment | null>(null);
   const [removing, setRemoving] = useState(false);
+
+  // Clears a whole section at once - its assignments AND the timetable booked
+  // for them (same endpoint as "Delete entire timetable" in the Timetable tab).
+  const [resetTarget, setResetTarget] = useState<{ sectionId: string; sectionName: string } | null>(null);
+  const [resetting, setResetting] = useState(false);
+
+  async function handleResetSection(sectionId: string) {
+    setResetting(true);
+    try {
+      const semesterQuery = effectiveSemester != null ? `&semester=${effectiveSemester}` : "";
+      const res = await fetch(`/api/college/timetable/reset?sectionId=${encodeURIComponent(sectionId)}${semesterQuery}`, { method: "DELETE" });
+      const json = await res.json().catch(() => ({})) as { error?: string; removedAssignments?: number };
+      if (!res.ok) {
+        toast({ variant: "destructive", title: "Failed to delete assignments", description: json.error });
+        return;
+      }
+      toast({ variant: "success", title: "Section cleared", description: `${json.removedAssignments ?? 0} assignment(s) and their timetable removed.` });
+      setResetTarget(null);
+      load();
+    } catch {
+      toast({ variant: "destructive", title: "Failed to delete assignments" });
+    } finally {
+      setResetting(false);
+    }
+  }
 
   async function handleRemove(id: string) {
     setRemoving(true);
@@ -512,19 +552,34 @@ export function TeachingAssignmentsEditor({ courseId, year, backHref }: Teaching
                 <Label>Section</Label>
                 <Select
                   value={assignForm.sectionId}
-                  onValueChange={(v) => setAssignForm({ sectionId: v, subjectId: "", facultyId: "" })}
+                  onValueChange={(v) => { setAssignForm({ sectionId: v, subjectId: "", facultyId: "" }); setExtraFacultyIds([]); }}
                 >
                   <SelectTrigger><SelectValue placeholder={sections.length ? "Select section" : "No sections for this year"} /></SelectTrigger>
                   <SelectContent>
                     {sections.map((s) => <SelectItem key={s.id} value={s.id}>{sectionDisplayLabel(s, departments)}</SelectItem>)}
                   </SelectContent>
                 </Select>
+                {/* Works on an empty section too, so its old requests can be cleared. */}
+                {assignForm.sectionId && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 px-2 text-xs text-destructive hover:text-destructive"
+                    onClick={() => {
+                      const sec = sections.find((x) => x.id === assignForm.sectionId);
+                      setResetTarget({ sectionId: assignForm.sectionId, sectionName: sec?.name ?? "" });
+                    }}
+                  >
+                    <Trash2 className="h-3.5 w-3.5 mr-1" />Clear assignments &amp; requests for this section
+                  </Button>
+                )}
               </div>
               <div className="space-y-2">
                 <Label>Subject</Label>
                 <Select
                   value={assignForm.subjectId}
-                  onValueChange={(v) => { setAssignForm((f) => ({ ...f, subjectId: v })); setRequestTargetId(""); }}
+                  onValueChange={(v) => { setAssignForm((f) => ({ ...f, subjectId: v, facultyId: "" })); setExtraFacultyIds([]); setRequestTargetIds([]); }}
                   disabled={!assignForm.sectionId}
                 >
                   <SelectTrigger><SelectValue placeholder="Select subject" /></SelectTrigger>
@@ -541,26 +596,71 @@ export function TeachingAssignmentsEditor({ courseId, year, backHref }: Teaching
                     ))}
                   </SelectContent>
                 </Select>
+                <CustomSubjectAdder
+                  courseId={courseId}
+                  sectionId={assignForm.sectionId}
+                  semester={effectiveSemester}
+                  onAdded={({ subject, assignment }) => {
+                    setMasterSubjects((p) => [...p, subject]);
+                    setSemesterAssignments((p) => [...p, assignment]);
+                    setAssignForm((f) => ({ ...f, subjectId: subject.id }));
+                  }}
+                />
               </div>
               <div className="space-y-2">
                 <Label>Faculty</Label>
                 <Select
                   value={assignForm.facultyId}
-                  onValueChange={(v) => setAssignForm((f) => ({ ...f, facultyId: v }))}
+                  onValueChange={(v) => { setAssignForm((f) => ({ ...f, facultyId: v })); setExtraFacultyIds((ids) => ids.filter((id) => id !== v)); }}
                   disabled={!assignForm.subjectId}
                 >
-                  <SelectTrigger><SelectValue placeholder={faculty.length ? "Select faculty" : "No faculty in your department"} /></SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder={availableFacultyForAssign.length ? "Select faculty" : "No faculty in your department"} /></SelectTrigger>
                   <SelectContent>
-                    {faculty.map((f) => <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>)}
+                    {availableFacultyForAssign.map((f) => <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
+
+                {/* More faculty for the same subject in this section - each picks from
+                    whoever is not already chosen here or assigned to it. */}
+                {extraFacultyIds.map((id, i) => {
+                  const chosenElsewhere = new Set([assignForm.facultyId, ...extraFacultyIds.filter((_, j) => j !== i)]);
+                  return (
+                    <div key={i} className="flex items-center gap-2">
+                      <Select value={id} onValueChange={(v) => setExtraFacultyIds((ids) => ids.map((x, j) => (j === i ? v : x)))}>
+                        <SelectTrigger><SelectValue placeholder="Select faculty" /></SelectTrigger>
+                        <SelectContent>
+                          {availableFacultyForAssign.filter((f) => !chosenElsewhere.has(f.id)).map((f) => (
+                            <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Button type="button" size="icon" variant="ghost" title="Remove this faculty" onClick={() => setExtraFacultyIds((ids) => ids.filter((_, j) => j !== i))}>
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  );
+                })}
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={
+                    !assignForm.facultyId ||
+                    extraFacultyIds.some((id) => !id) ||
+                    availableFacultyForAssign.length <= 1 + extraFacultyIds.length ||
+                    1 + extraFacultyIds.length + alreadyOnSubject.size >= MAX_FACULTY_PER_SUBJECT
+                  }
+                  onClick={() => setExtraFacultyIds((ids) => [...ids, ""])}
+                >
+                  <Plus className="mr-1.5 h-4 w-4" />Add another faculty
+                </Button>
               </div>
               <Button
                 type="submit"
                 loading={savingAssignment}
-                disabled={!assignForm.sectionId || !assignForm.subjectId || !assignForm.facultyId}
+                disabled={!assignForm.sectionId || !assignForm.subjectId || !assignForm.facultyId || extraFacultyIds.some((id) => !id)}
               >
-                Assign
+                {extraFacultyIds.length > 0 ? `Assign ${1 + extraFacultyIds.length} faculty` : "Assign"}
               </Button>
               <p className="text-xs text-muted-foreground">
                 Periods for this subject are picked afterwards from the Timetable tab.
@@ -568,35 +668,39 @@ export function TeachingAssignmentsEditor({ courseId, year, backHref }: Teaching
 
               {assignForm.sectionId && assignForm.subjectId && (
                 <div className="pt-3 mt-3 border-t space-y-2">
-                  <Label>Or ask another department to lend a faculty member</Label>
-                  <div className="flex flex-wrap gap-2">
-                    <Select value={requestTargetId} onValueChange={setRequestTargetId}>
-                      <SelectTrigger className="flex-1 min-w-48">
-                        <SelectValue placeholder={requestableDepartments.length ? "Select department" : "No other departments"} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {requestableDepartments.map((d) => {
-                          const parentName = d.parentDepartmentId
-                            ? departments.find((p) => p.id === d.parentDepartmentId)?.name
-                            : null;
-                          return (
-                            <SelectItem key={d.id} value={d.id}>
-                              {d.name}{parentName ? ` (${parentName})` : ""}
-                            </SelectItem>
-                          );
-                        })}
-                      </SelectContent>
-                    </Select>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      loading={sendingRequest}
-                      disabled={!requestTargetId}
-                      onClick={() => void handleSendRequest()}
-                    >
-                      <Send className="h-4 w-4 mr-2" />Send Request
-                    </Button>
+                  <Label>Or ask other departments to lend a faculty member</Label>
+                  {/* Tick as many departments as you like - each gets its own request, and the subject can
+                      be asked of more departments later even if it already has faculty. */}
+                  <div className="max-h-44 space-y-1 overflow-y-auto rounded-md border p-2">
+                    {requestableDepartments.length === 0 ? (
+                      <p className="px-1 text-xs text-muted-foreground">No other departments</p>
+                    ) : requestableDepartments.map((d) => {
+                      const parentName = d.parentDepartmentId ? departments.find((p) => p.id === d.parentDepartmentId)?.name : null;
+                      const alreadyAsked = assignmentRequests.some((r) =>
+                        r.status === "PENDING" && r.sectionId === assignForm.sectionId && r.subjectId === assignForm.subjectId && r.targetDepartmentId === d.id);
+                      return (
+                        <label key={d.id} className={`flex items-center gap-2 rounded px-1 py-0.5 text-sm ${alreadyAsked ? "opacity-60" : "cursor-pointer hover:bg-muted/50"}`}>
+                          <Checkbox
+                            checked={requestTargetIds.includes(d.id)}
+                            disabled={alreadyAsked}
+                            onCheckedChange={(v) => setRequestTargetIds((ids) => (v === true ? [...ids, d.id] : ids.filter((x) => x !== d.id)))}
+                          />
+                          <span>{d.name}{parentName ? ` (${parentName})` : ""}</span>
+                          {alreadyAsked && <span className="text-[10px] text-muted-foreground">already requested</span>}
+                        </label>
+                      );
+                    })}
                   </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    loading={sendingRequest}
+                    disabled={requestTargetIds.length === 0}
+                    onClick={() => void handleSendRequest()}
+                  >
+                    <Send className="h-4 w-4 mr-2" />
+                    {requestTargetIds.length > 1 ? `Send requests to ${requestTargetIds.length} departments` : "Send Request"}
+                  </Button>
                   <p className="text-xs text-muted-foreground">
                     They&rsquo;ll pick one of their own faculty for it - track its status below.
                   </p>
@@ -650,7 +754,12 @@ export function TeachingAssignmentsEditor({ courseId, year, backHref }: Teaching
             <div className="space-y-5">
               {groups.map((g) => (
                 <div key={g.sectionId}>
-                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Section {g.sectionName}</p>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Section {g.sectionName}</p>
+                    <Button size="sm" variant="ghost" className="h-7 text-xs text-destructive hover:text-destructive" onClick={() => setResetTarget({ sectionId: g.sectionId, sectionName: g.sectionName })}>
+                      <Trash2 className="h-3.5 w-3.5 mr-1" />Delete all
+                    </Button>
+                  </div>
                   <div className="divide-y rounded-md border">
                     {g.items.map((a) => (
                       <div key={a.id} className="flex items-center justify-between py-2.5 px-3">
@@ -674,6 +783,20 @@ export function TeachingAssignmentsEditor({ courseId, year, backHref }: Teaching
         </CardContent>
       </Card>
 
+      <ConfirmDialog
+        open={!!resetTarget}
+        onOpenChange={(open) => { if (!open && !resetting) setResetTarget(null); }}
+        title="Delete every assignment for this section?"
+        description={
+          resetTarget
+            ? `All current teaching assignments for Section ${resetTarget.sectionName} the whole timetable booked for them (published and draft) and any open assignment requests are removed, so every subject shows fresh and unstaffed. This cannot be undone.`
+            : undefined
+        }
+        confirmLabel="Delete all"
+        variant="destructive"
+        loading={resetting}
+        onConfirm={() => { if (resetTarget) void handleResetSection(resetTarget.sectionId); }}
+      />
       <ConfirmDialog
         open={!!removeTarget}
         onOpenChange={(open) => { if (!open && !removing) setRemoveTarget(null); }}

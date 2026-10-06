@@ -84,8 +84,10 @@ export async function pinSlotWithChecks(input: PinSlotInput): Promise<PinSlotOut
       // subjects - never a third occupant, and never mixed with a theory/
       // tutorial/project class (the caller already confirmed the INCOMING
       // subject is PRACTICAL - this checks the EXISTING one(s)).
-      if (cellSlotsNow.length >= 2) {
-        return { ok: false, error: `Period ${periodNumber} on ${day} already has 2 subjects sharing it - a period can only be split between two labs.` };
+      // Two labs (subjects) may share a period, each with any number of faculty - count subjects, not slots.
+      const existingLabs = new Set(cellSlotsNow.map((s) => s.subjectId));
+      if (existingLabs.size >= 2 && !existingLabs.has(input.subjectId)) {
+        return { ok: false, error: `Period ${periodNumber} on ${day} already has 2 labs sharing it - a period can only be split between two labs.` };
       }
       const existingSubjectIds = Array.from(new Set(cellSlotsNow.map((s) => s.subjectId)));
       const subjectDocs = await tx.getAll(...existingSubjectIds.map((id) => collegeRef.collection("subjects").doc(id)));

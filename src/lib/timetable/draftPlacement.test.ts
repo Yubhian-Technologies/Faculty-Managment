@@ -40,6 +40,7 @@ function makeContext(overrides: Partial<TimetableContext> = {}): TimetableContex
     pinnedSlots: [],
     busyFaculty: new Map(),
     declaredBusyFaculty: new Map(),
+    lentNotReady: new Map(),
     currentSemester: null,
     ...overrides,
   };
@@ -70,5 +71,28 @@ describe("validatePlacement - busy-period source wording", () => {
   it("allows the placement when the faculty isn't busy at all", () => {
     const ctx = makeContext();
     expect(validatePlacement(ctx, { slots: [] }, placementOpts)).toBeNull();
+  });
+});
+
+describe("validatePlacement - labs sharing a period", () => {
+  const lab = (id: string) => ({ id, type: "PRACTICAL" }) as unknown as import("@/types").Subject;
+  const slot = (subjectId: string, facultyId: string, assignmentId: string) =>
+    ({ assignmentId, facultyId, facultyName: facultyId, subjectId, subjectName: subjectId, subjectType: "PRACTICAL", day: "MON", periodNumber: 1 }) as unknown as import("@/types").DraftSlot;
+  const ctx = makeContext({ subjectsById: new Map([["labA", lab("labA")], ["labB", lab("labB")], ["labC", lab("labC")]]) });
+  // Lab A already has two faculty in the period.
+  const draft = { slots: [slot("labA", "f1", "a1"), slot("labA", "f2", "a2")] };
+
+  it("lets a second LAB join a lab that already has two faculty (two labs may share, however many faculty each has)", () => {
+    expect(validatePlacement(ctx, draft, { ...placementOpts, subjectId: "labB", facultyId: "f3", assignmentId: "a3", allowSplit: true })).toBeNull();
+  });
+
+  it("still refuses a THIRD lab", () => {
+    const two = { slots: [...draft.slots, slot("labB", "f3", "a3")] };
+    expect(validatePlacement(ctx, two, { ...placementOpts, subjectId: "labC", facultyId: "f4", assignmentId: "a4", allowSplit: true })).toMatch(/already has 2 labs/);
+  });
+
+  it("lets another faculty join a lab already in a two-lab period (co-teaching)", () => {
+    const two = { slots: [...draft.slots, slot("labB", "f3", "a3")] };
+    expect(validatePlacement(ctx, two, { ...placementOpts, subjectId: "labB", facultyId: "f5", assignmentId: "a5", coTeach: true })).toBeNull();
   });
 });

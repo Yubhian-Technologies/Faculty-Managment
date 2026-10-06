@@ -18,8 +18,7 @@ import {
   resolveTimetableDays,
   slotFacultyName,
   slotShortCode,
-  type TimetableColumn,
-} from "@/lib/timetable/gridModel";
+  type TimetableColumn, mergeCoTaughtSlots,} from "@/lib/timetable/gridModel";
 import type {
   CourseYearTiming,
   DayOfWeek,
@@ -393,9 +392,10 @@ export function InstitutionalTimetableTable({
                     );
                   }
 
-                  const periodSlots = filteredSlots.filter(
+                  // Faculty of one subject sharing the period show as one entry, subject once.
+                  const periodSlots = mergeCoTaughtSlots(filteredSlots.filter(
                     (s) => s.day === d && s.periodNumber === col.periodNumber
-                  );
+                  ));
                   const range = periodTimeRange(col.startTime, col.endTime);
 
                   return (
@@ -442,7 +442,15 @@ export function InstitutionalTimetableTable({
         {/* ── Timetable Grid (wide screens) ──────────────────────────────────── */}
         <div className="hidden lg:block">
           <div className="overflow-x-auto">
-            <table className="w-full text-xs border-collapse">
+            {/* Fixed layout: every period column is the same width whatever its
+                content; breaks share one narrow width. */}
+            <table className="w-full table-fixed text-xs border-collapse">
+              <colgroup>
+                <col style={{ width: 80 }} />
+                {columns.map((col) => (
+                  <col key={col.id} style={col.kind === "break" ? { width: 64 } : { width: 130 }} />
+                ))}
+              </colgroup>
               <thead>
                 <tr className="bg-muted/40 border-b">
                   <th className="border-r p-2.5 text-center font-bold text-foreground w-20 min-w-[70px] sticky left-0 z-[5] bg-muted/95 backdrop-blur">
@@ -456,7 +464,7 @@ export function InstitutionalTimetableTable({
                           className="border-r p-2 text-center font-semibold text-muted-foreground bg-muted/30 w-12"
                         >
                           {periodTimeRange(col.startTime, col.endTime) && (
-                            <div className="text-[9.5px] font-normal text-muted-foreground whitespace-nowrap mt-0.5">
+                            <div className="text-[9.5px] font-normal text-muted-foreground mt-0.5">
                               {periodTimeRange(col.startTime, col.endTime)}
                             </div>
                           )}
@@ -506,9 +514,9 @@ export function InstitutionalTimetableTable({
                           );
                         }
 
-                        const periodSlots = filteredSlots.filter(
+                        const periodSlots = mergeCoTaughtSlots(filteredSlots.filter(
                           (s) => s.day === d && s.periodNumber === col.periodNumber
-                        );
+                        ));
 
                         if (periodSlots.length === 0) {
                           return (

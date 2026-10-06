@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { effectiveLabBatch, loadLabBatchModes } from "@/lib/students/labBatchMode";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
@@ -7,6 +8,8 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 import { checkFacultyPeriodWindow, periodWindowMessage } from "@/lib/timetable/currentPeriod";
 import { resolveSubstituteSlotsForDate } from "@/lib/leave/periodCoverage";
+import { checkAllocatedAccess } from "@/lib/studentAttendance/labAllocation";
+import { facultyActiveOn, loadLabWindows } from "@/lib/students/labFacultyWindow";
 import { getNoClassReason } from "@/lib/studentAttendance/classDay";
 import { applyOnDutyToEntries, loadOnDutyDay, presentCountOf } from "@/lib/studentAttendance/onDuty";
 import { fetchSectionStudentsCached } from "@/lib/students/sectionRosterCache";
@@ -129,9 +132,25 @@ export async function POST(request: Request) {
     // check the PATCH route re-runs before actually saving marks, so a
     // request can't be replayed/crafted for a period that hasn't started yet
     // or has already ended.
-    const windowCheck = await checkFacultyPeriodWindow(db, session.collegeId, facultyMemberId, assignmentId, date, now, Number.isInteger(body.periodNumber) ? body.periodNumber : undefined);
+    const requestedPeriod = Number.isInteger(body.periodNumber) ? body.periodNumber : undefined;
+    let windowCheck = await checkFacultyPeriodWindow(db, session.collegeId, facultyMemberId, assignmentId, date, now, requestedPeriod);
+    // Not inside its own period window: an HOD/Incharge may have opened this lab
+    // assignment for the faculty on this date (see lib/studentAttendance/labAllocation.ts).
+    let viaAllocation = false;
+    if (!windowCheck.ok) {
+      const allocated = await checkAllocatedAccess(db, session.collegeId, facultyMemberId, assignmentId, date, requestedPeriod);
+      if (allocated.ok) { windowCheck = allocated; viaAllocation = true; }
+    }
     if (!windowCheck.ok) {
       return NextResponse.json({ error: periodWindowMessage(windowCheck) }, { status: 403 });
+    }
+    // A lab's faculty take it on their own dates (set by the section's faculty incharge); a
+    // covering substitute or an HOD allocation is not bound by them.
+    if (!viaAllocation && !substituteFor) {
+      const windows = await loadLabWindows(db, session.collegeId, [{ sectionId, subjectId: assignment.subjectId }]);
+      if (!facultyActiveOn(windows, sectionId, assignment.subjectId, assignment.facultyId, date)) {
+        return NextResponse.json({ error: "This lab is not yours on this date - the section's faculty incharge set your teaching dates for it." }, { status: 403 });
+      }
     }
     const periodNumber = windowCheck.slot.periodNumber;
 
@@ -153,7 +172,11 @@ export async function POST(request: Request) {
     // own faculty marks only their own half of the section (see
     // sectionRoster.ts). An ordinary period has no labBatch, so this is a
     // no-op and the roster is the whole section.
-    const labBatch = windowCheck.slot.labBatch ?? undefined;
+    // ...unless the section's faculty incharge set this lab to "no batch" - then the whole section attends together.
+    const labBatch = effectiveLabBatch(
+      windowCheck.slot.labBatch, await loadLabBatchModes(db, session.collegeId, [{ sectionId, subjectId: assignment.subjectId }]),
+      sectionId, assignment.subjectId, assignment.facultyId,
+    );
 
     // Resolve the roster BEFORE starting the transaction: the DRAFT-reconcile
     // branch (existing status === DRAFT) merges the incoming student list into

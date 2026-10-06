@@ -9,6 +9,10 @@ export const DEFAULT_COLLEGE_SETTINGS: Omit<FacultyNorms, "updatedAt" | "updated
   studentFacultyRatio: 15,
   teachingHoursPerWeek: 16,
   defaultMinFacultyPerDept: 3,
+  maxTheoryPeriodsPerWeek: 4,
+  maxPracticalPeriodsPerWeek: 6,
+  theoryBlockSize: 1,
+  labBlockSize: 3,
   positionNorms: [
     { designation: "Professor", requiredPerDept: 1 },
     { designation: "Associate Professor", requiredPerDept: 2 },

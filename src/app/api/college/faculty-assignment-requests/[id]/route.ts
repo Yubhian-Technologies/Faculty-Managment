@@ -9,6 +9,7 @@ import { getHodDepartmentScope, canHodEditDepartment, ownDepartmentNames } from 
 import { isTimetableInchargeForDepartment } from "@/lib/departments/timetableIncharge";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { isFacultyAvailable } from "@/types";
+import { allocationFields, facultyNamesText, requestAllocations } from "@/lib/teaching/requestAllocations";
 import { matchesCurrentSemester, resolveCurrentSemester } from "@/lib/college/semester";
 import {
   expandDeclaredBusy, loadUserRole, notifyLendRecipients, requesterRequestsLink, requesterTimetableLink,
@@ -84,6 +85,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       if (reqData.status !== "ALLOCATED") {
         return NextResponse.json({ error: "This request hasn't been allocated yet" }, { status: 409 });
       }
+      // Busy periods belong to ONE allocated faculty (a request can have several);
+      // without a facultyId it is the first, as it was when only one was possible.
+      const allAllocations = requestAllocations(reqData);
+      const targetIndex = body.facultyId ? allAllocations.findIndex((a) => a.facultyId === body.facultyId) : 0;
+      if (targetIndex < 0) {
+        return NextResponse.json({ error: "That faculty is not allocated to this request" }, { status: 404 });
+      }
+      const target = allAllocations[targetIndex];
       // Closed = view-only until the lending side clicks Edit (reopen below).
       if (reqData.busyClosed) {
         return NextResponse.json({ error: "Busy periods are closed - click Edit to change them" }, { status: 409 });
@@ -111,16 +120,17 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       // the same period number in two different years is two different hours.
       const busyKey = (bp: { day: string; period: number; year?: number }) => `${bp.day}:${bp.period}:${bp.year ?? ""}`;
       const deduped = Array.from(new Map(busyPeriods.map((bp) => [busyKey(bp), bp])).values());
-      const previousKeys = new Set((reqData.busyPeriods ?? []).map(busyKey));
+      const previousKeys = new Set((target.busyPeriods ?? []).map(busyKey));
       const added = deduped.filter((bp) => !previousKeys.has(busyKey(bp)));
-      await reqRef.update({ busyPeriods: deduped, updatedAt: now });
+      const nextAllocations = allAllocations.map((a, i) => (i === targetIndex ? { ...a, busyPeriods: deduped } : a));
+      await reqRef.update({ ...allocationFields(nextAllocations), updatedAt: now });
 
       // Newly busy cells never re-validate what the requester already placed -
       // surface any that now clash with their draft or live timetable, so they
       // aren't left with a placement that silently breaks the lender's
       // declaration (publish would reject it much later).
       const conflicts: string[] = [];
-      if (added.length > 0 && reqData.allocatedFacultyId) {
+      if (added.length > 0 && target.facultyId) {
         const timingSnaps = await Promise.all(
           Array.from(new Set([Number(reqData.year), ...added.map((bp) => bp.year).filter((y): y is number => y != null)])).map(async (y) => {
             const snap = await collegeRef.collection("courseYearTimings").doc(`${reqData.courseId}_year${y}`).get();
@@ -139,14 +149,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         ]);
         for (const d of slotsSnap.docs) {
           const sl = d.data() as TimetableSlot;
-          if (sl.facultyId !== reqData.allocatedFacultyId || !matchesCurrentSemester(sl.semester, currentSemester)) continue;
+          if (sl.facultyId !== target.facultyId || !matchesCurrentSemester(sl.semester, currentSemester)) continue;
           if (newCells.has(`${sl.day}:${sl.periodNumber}`)) hit.add(`${sl.day}:${sl.periodNumber}`);
         }
         for (const d of draftsSnap.docs) {
           const draft = d.data() as TimetableDraft;
           if (!matchesCurrentSemester(draft.semester ?? null, currentSemester)) continue;
           for (const sl of draft.slots ?? []) {
-            if (sl.facultyId !== reqData.allocatedFacultyId) continue;
+            if (sl.facultyId !== target.facultyId) continue;
             if (newCells.has(`${sl.day}:${sl.periodNumber}`)) hit.add(`${sl.day}:${sl.periodNumber}`);
           }
         }
@@ -159,7 +169,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
           await notify(
             db, session.collegeId, reqData.requestedBy, "FACULTY_ASSIGNMENT_ALLOCATED",
             "Busy period clashes with your timetable",
-            `${reqData.targetDepartmentName} marked ${reqData.allocatedFacultyName ?? "the allocated faculty"} busy at ${conflicts.join(", ")}, where ${reqData.subjectName} (Section ${reqData.sectionName}) is already placed - move it before publishing`,
+            `${reqData.targetDepartmentName} marked ${target.facultyName || "the allocated faculty"} busy at ${conflicts.join(", ")}, where ${reqData.subjectName} (Section ${reqData.sectionName}) is already placed - move it before publishing`,
             requesterTimetableLink(role, reqData),
           );
         }
@@ -186,19 +196,29 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         return NextResponse.json({ error: "This request hasn't been allocated yet" }, { status: 409 });
       }
       // A second close (after an Edit) tells the requester the periods changed.
+      // ONE close covers every faculty allocated to this request, and is the
+      // moment the requester is allowed to place any of them.
       const isUpdate = reqData.busyClosedAt != null;
+      const names = facultyNamesText(requestAllocations(reqData));
       await reqRef.update({ busyClosed: true, busyClosedAt: now, updatedAt: now });
       await notifyLendRecipients(
         db, session.collegeId, reqData, "FACULTY_ASSIGNMENT_ALLOCATED",
         isUpdate ? "Busy periods updated" : "Ready to schedule",
         isUpdate
-          ? `${reqData.targetDepartmentName} updated ${reqData.allocatedFacultyName ?? "the allocated faculty"}'s busy periods for ${reqData.subjectName} (Section ${reqData.sectionName}) - check your Timetable page`
-          : `${reqData.targetDepartmentName} shared ${reqData.allocatedFacultyName ?? "the allocated faculty"}'s busy periods for ${reqData.subjectName} (Section ${reqData.sectionName}) - you can now place it on your Timetable page`,
+          ? `${reqData.targetDepartmentName} updated the busy periods of ${names} for ${reqData.subjectName} (Section ${reqData.sectionName}) - check your Timetable page`
+          : `${reqData.targetDepartmentName} shared the busy periods of ${names} for ${reqData.subjectName} (Section ${reqData.sectionName}) - you can now place it on your Timetable page`,
       );
       return NextResponse.json({ ok: true });
     }
 
-    if (reqData.status !== "PENDING") {
+    // A request takes its FIRST faculty while PENDING; further faculty can be added
+    // while it is ALLOCATED and the lender hasn't closed it (Notify & close, or Edit
+    // to reopen). "decline" is only for a request nobody has been allocated to yet.
+    const addingAnother = body.action === "allocate" && reqData.status === "ALLOCATED";
+    if (addingAnother && reqData.busyClosed) {
+      return NextResponse.json({ error: "This request is closed - click Edit to add another faculty" }, { status: 409 });
+    }
+    if (reqData.status !== "PENDING" && !addingAnother) {
       return NextResponse.json({ error: "This request has already been handled" }, { status: 409 });
     }
 
@@ -252,6 +272,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const courseSnap = await collegeRef.collection("courses").doc(reqData.courseId).get();
     const course = courseSnap.data() as { departmentId?: string } | undefined;
 
+    if (requestAllocations(reqData).some((a) => a.facultyId === body.facultyId)) {
+      return NextResponse.json({ error: "This faculty is already allocated to this request" }, { status: 409 });
+    }
+
     const existing = await collegeRef.collection("teachingAssignments")
       .where("facultyId", "==", body.facultyId)
       .where("sectionId", "==", reqData.sectionId)
@@ -285,12 +309,15 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       assignmentSemester: "",
     });
 
+    const allocatedAs = allocatedName || body.facultyName || "";
+    const nextAllocations = [
+      ...requestAllocations(reqData),
+      { facultyId: body.facultyId, facultyName: allocatedAs, teachingAssignmentId: taRef.id, busyPeriods: [], allocatedBy: session.uid },
+    ];
     await reqRef.update({
       status: "ALLOCATED",
-      allocatedFacultyId: body.facultyId,
-      allocatedFacultyName: allocatedName || body.facultyName || "",
-      allocatedBy: session.uid,
-      teachingAssignmentId: taRef.id,
+      allocatedBy: reqData.allocatedBy ?? session.uid,
+      ...allocationFields(nextAllocations),
       updatedAt: now,
     });
 
@@ -306,12 +333,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
     await notify(
       db, session.collegeId, reqData.requestedBy, "FACULTY_ASSIGNMENT_ALLOCATED",
-      "Faculty assignment fulfilled",
-      `${reqData.targetDepartmentName} assigned ${allocatedName || "a faculty member"} to ${reqData.subjectName} (Section ${reqData.sectionName}) - pick its weekly periods on the Timetable page`,
+      "Faculty allocated - waiting for the department to close",
+      `${reqData.targetDepartmentName} allocated ${allocatedName || "a faculty member"} to ${reqData.subjectName} (Section ${reqData.sectionName}). You can place it on your Timetable page once they share the busy periods and notify you`,
       requesterRequestsLink(requesterRole)
     );
 
-    return NextResponse.json({ ok: true, teachingAssignmentId: taRef.id });
+    return NextResponse.json({ ok: true, teachingAssignmentId: taRef.id, allocatedCount: nextAllocations.length });
   } catch (err) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;

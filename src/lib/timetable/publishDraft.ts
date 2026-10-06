@@ -1,7 +1,7 @@
+import { MAX_FACULTY_PER_SUBJECT } from "@/lib/teaching/facultyCap";
 import { FieldValue, type Firestore } from "firebase-admin/firestore";
 import type { DraftSlot, TimetableDraft, TimetableSlot } from "@/types";
 import { bumpGuards, facultyGuard, lockGuards, sectionGuard } from "@/lib/timetable/guards";
-import { chunkValues } from "@/lib/firestore/inQuery";
 import { draftFacultyIds } from "@/lib/timetable/draftAccess";
 import type { SlotIdentity } from "@/lib/timetable/liveSlots";
 
@@ -97,7 +97,6 @@ export async function publishSectionDraft(input: PublishInput): Promise<PublishO
         error: "Every placement in this draft belongs to a teaching assignment that's since been removed. Discard the draft and rebuild it.",
       };
     }
-    const involved = draftFacultyIds(publishable);
 
     // This section's own slots in the live timetable.
     const own = ownSlotsSnap.docs
@@ -120,33 +119,23 @@ export async function publishSectionDraft(input: PublishInput): Promise<PublishO
       if (pinnedCells.has(cell)) {
         issues.push(`${day} period ${period} now holds a pinned slot, so the draft's placement there can't be published. Regenerate this timetable.`);
       } else if (inCell.length > 1) {
+        // Several faculty of ONE subject may share the cell (co-teaching, any subject type); two
+        // different subjects may share it only if both are labs - each lab with any number of faculty.
+        const bySubject = new Map<string, DraftSlot[]>();
+        for (const s of inCell) bySubject.set(s.subjectId, [...(bySubject.get(s.subjectId) ?? []), s]);
+        const subjects = Array.from(bySubject.values());
         const allLabs = inCell.every((s) => s.subjectType === "PRACTICAL");
-        if (!allLabs || inCell.length > 2) {
-          issues.push(`${day} period ${period} has ${inCell.length} subjects in it - only two labs may share a period. Regenerate this timetable.`);
+        const tooManyFaculty = subjects.some((g) => g.length > MAX_FACULTY_PER_SUBJECT);
+        if (tooManyFaculty || subjects.length > 2 || (subjects.length === 2 && !allLabs)) {
+          issues.push(`${day} period ${period} has ${subjects.length} subjects in it - only two labs may share a period (each with its faculty), or several faculty of the same subject. Regenerate this timetable.`);
         }
       }
     }
 
-    // ── Faculty double-booking: same faculty, same day, same period NUMBER in another section (publish's existing rule) ──
-    const facultySlots: (TimetableSlot & { id: string })[] = [];
-    const seen = new Set<string>();
-    for (const chunk of chunkValues(involved)) {
-      const snap = await tx.get(slotsCol.where("facultyId", "in", chunk));
-      for (const d of snap.docs) {
-        if (seen.has(d.id)) continue;
-        seen.add(d.id);
-        const slot = { id: d.id, ...(d.data() as object) } as TimetableSlot & { id: string };
-        if (slot.sectionId !== section.id && input.isLiveSlot(slot)) facultySlots.push(slot);
-      }
-    }
-    for (const s of publishable) {
-      const clash = facultySlots.find(
-        (o) => o.facultyId === s.facultyId && o.day === s.day && o.periodNumber === s.periodNumber,
-      );
-      if (clash) {
-        issues.push(`${s.facultyName} is now booked for another section at ${s.day} period ${s.periodNumber}. Regenerate this timetable.`);
-      }
-    }
+    // No faculty double-booking check: years run their own period timings, so
+    // the same faculty member may hold the same period in two sections (same
+    // rule as draftPlacement.ts and pinSlot.ts, which never reject it either).
+
     if (issues.length > 0) {
       return { ok: false, status: 409, error: "Conflicts appeared since this draft was generated", issues: [...new Set(issues)] };
     }

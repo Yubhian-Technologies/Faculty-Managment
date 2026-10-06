@@ -2,10 +2,13 @@ import type { Firestore } from "firebase-admin/firestore";
 import { matchesCurrentSemester } from "@/lib/college/semester";
 import { matchesCurrentAcademicYear } from "@/lib/college/academicSession";
 import { bumpGuards, facultyGuard, lockGuards, sectionGuard } from "@/lib/timetable/guards";
+import { MAX_FACULTY_PER_SUBJECT } from "@/lib/teaching/facultyCap";
+
+export { MAX_FACULTY_PER_SUBJECT };
 
 // Creating a teaching assignment (and the timetable slots staged with it).
 //
-// The duplicate / "only a lab may have two faculty" / cell-already-taken checks
+// The duplicate / faculty-cap / cell-already-taken checks
 // used to be queries followed, later, by separate writes - two requests landing
 // together both passed and both wrote (two faculty on a theory subject, two
 // subjects in one cell). Here the checks and ALL the writes are one
@@ -42,7 +45,7 @@ export interface CreateAssignmentInput {
   timetableSemester: number | null;
   /** Historical record: no conflict checks, no slots. */
   isPast: boolean;
-  /** PRACTICAL subjects may have two faculty (Batch 1 / Batch 2); everything else exactly one. */
+  /** A PRACTICAL subject (still informational here: the faculty cap is the same for every subject). */
   isLab: boolean;
   slots: AssignmentSlotRequest[];
   currentAcademicYear: string;
@@ -86,12 +89,13 @@ export async function createAssignmentWithSlots(input: CreateAssignmentInput): P
       if (sameFaculty.docs.some(inSemester)) {
         return { ok: false, error: "This faculty is already assigned to this subject for this section" };
       }
+      // A subject can have several faculty in one section (a "+ add faculty" row in
+      // the Teaching Assignments form), up to MAX_FACULTY_PER_SUBJECT. Still counted
+      // inside the section's guard transaction, so a burst of requests can't
+      // overshoot it. The same faculty twice is refused above.
       const countInSemester = sameSubject.docs.filter(inSemester).length;
-      if (!input.isLab && countInSemester >= 1) {
-        return { ok: false, error: "This subject is already assigned for this section — only lab (PRACTICAL) subjects can have 2 faculties (Batch 1/Batch 2)" };
-      }
-      if (input.isLab && countInSemester >= 2) {
-        return { ok: false, error: "Lab subject already has 2 faculties assigned for this section (Batch 1 & Batch 2)" };
+      if (countInSemester >= MAX_FACULTY_PER_SUBJECT) {
+        return { ok: false, error: `This subject already has ${MAX_FACULTY_PER_SUBJECT} faculty assigned for this section - the most allowed` };
       }
     }
 

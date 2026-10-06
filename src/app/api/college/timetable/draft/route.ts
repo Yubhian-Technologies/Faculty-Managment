@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
+import { subjectBlockKey } from "@/lib/timetable/subjectBlockSize";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { loadTimetableContext } from "@/lib/timetable/loadContext";
@@ -208,6 +209,9 @@ export async function PATCH(request: Request) {
       // "add" only - explicit opt-in for a split period (see validatePlacement's
       // own doc-comment). Ignored for "move"/"remove".
       allowSplit?: boolean;
+      // "add" only - place this faculty in a cell that already holds the SAME subject for
+      // another of its faculty ("place here with both faculty"). Any subject type.
+      coTeach?: boolean;
     };
 
     const { sectionId, assignmentId } = body;
@@ -234,20 +238,23 @@ export async function PATCH(request: Request) {
     if (!ctx || !ctx.timing) return NextResponse.json({ error: "Section not found" }, { status: 404 });
     if (!(await loadDraft(db, session.collegeId, sectionId, ctx.currentSemester))) return NextResponse.json({ error: "No draft to edit" }, { status: 404 });
 
+    // True when the caller is here as the department that LENT this faculty (not as
+    // the section's own department) - see lentNotReady below.
+    let callerIsLender = false;
     if (session.role === "HOD") {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
-      if (
-        !canHodEditDepartment(scope, ctx.section.department) &&
-        !(await isCrossDepartmentLender(db, session.collegeId, ownDepartmentNames(scope), sectionId, assignmentId))
-      ) {
-        return NextResponse.json({ error: "This section isn't in your department" }, { status: 403 });
+      if (!canHodEditDepartment(scope, ctx.section.department)) {
+        callerIsLender = await isCrossDepartmentLender(db, session.collegeId, ownDepartmentNames(scope), sectionId, assignmentId);
+        if (!callerIsLender) {
+          return NextResponse.json({ error: "This section isn't in your department" }, { status: 403 });
+        }
       }
     } else if (session.role === "PANEL_MEMBER" || session.role === "COLLEGE_STAFF") {
       const ok = await isTimetableIncharge(db, session.collegeId, session.uid, ctx.section.courseId, ctx.section.year);
       if (!ok) {
         const myNames = await inchargeOwnDepartmentNames(db, session.collegeId, session.uid);
-        const lending = await isCrossDepartmentLender(db, session.collegeId, myNames, sectionId, assignmentId);
-        if (!lending) {
+        callerIsLender = await isCrossDepartmentLender(db, session.collegeId, myNames, sectionId, assignmentId);
+        if (!callerIsLender) {
           return NextResponse.json({ error: "You are not the Timetable Incharge for this course & year" }, { status: 403 });
         }
       }
@@ -286,14 +293,25 @@ export async function PATCH(request: Request) {
         if (!assignment) {
           return { ok: false, status: 404, error: "That teaching assignment is not on this section" };
         }
+        // A lent-in faculty can't be placed by the requesting side until the lending
+        // department has shared their busy periods and closed the request. The
+        // lender's own placing flow (callerIsLender) is not held back.
+        const lendingDept = ctx.lentNotReady.get(assignmentId);
+        const alreadyInDraft = draft.slots.some((s) => s.assignmentId === assignmentId);
+        if (lendingDept && !callerIsLender && !alreadyInDraft) {
+          return { ok: false, status: 409, error: `${lendingDept} hasn't finished this allocation yet - you can place ${assignment.facultyName || "this faculty"} once they notify you` };
+        }
         const subject = ctx.subjectsById.get(assignment.subjectId);
         const subjectType = subject?.type ?? "THEORY";
-        const blockSize = subjectType === "PRACTICAL" ? Math.max(1, ctx.rules.labBlockSize) : 1;
+        const override = subject ? ctx.rules.subjectBlockSizes?.[subjectBlockKey(subject)] : undefined;
+        // No theory/lab default any more: a subject takes 1 period unless the
+        // Principal set custom continuous slots for it in Settings.
+        const blockSize = Math.max(1, override ?? 1);
 
         // Same gate as timetable-slots/route.ts's manual pin path - a split
         // period (two+ subjects/faculty sharing one cell) only makes sense for
         // parallel lab batches, not two theory classes at once.
-        if (body.allowSplit && subjectType !== "PRACTICAL") {
+        if (body.allowSplit && !body.coTeach && subjectType !== "PRACTICAL") {
           return { ok: false, status: 400, error: "Only lab (PRACTICAL) subjects can be split into batches" };
         }
 
@@ -307,6 +325,8 @@ export async function PATCH(request: Request) {
           blockSize,
           ignore: new Set<string>(),
           allowSplit: body.allowSplit,
+          coTeach: body.coTeach,
+          assignmentId,
         };
         const problem = validatePlacement(ctx, draft, placementOpts);
         if (problem) {

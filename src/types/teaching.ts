@@ -221,6 +221,14 @@ export interface TeachingAssignment {
 
 export type FacultyAssignmentRequestStatus = "PENDING" | "ALLOCATED" | "DECLINED";
 
+export interface RequestAllocation {
+  facultyId: string;
+  facultyName: string;
+  teachingAssignmentId: string;
+  busyPeriods: { day: DayOfWeek; period: number; year?: number }[];
+  allocatedBy?: string;
+}
+
 export interface FacultyAssignmentRequest {
   id: string;
   collegeId: string;
@@ -256,6 +264,17 @@ export interface FacultyAssignmentRequest {
   // stored, which are read in the requesting section's own numbering. Entries
   // for another year are mapped by clock time - see lib/timetable/declaredBusy.ts.
   busyPeriods?: { day: DayOfWeek; period: number; year?: number }[];
+  // A request may be fulfilled by MORE THAN ONE faculty (the lender allocates one,
+  // marks their busy periods, adds another, ...). `allocations` holds every one;
+  // `allocatedFacultyId/Name`, `teachingAssignmentId` and `busyPeriods` above keep
+  // mirroring the FIRST, so a request allocated before this existed (single
+  // faculty, no `allocations`) reads exactly as before - see
+  // lib/teaching/requestAllocations.ts, which every reader goes through.
+  // `allocatedFacultyIds` / `teachingAssignmentIds` are query helpers
+  // (array-contains) kept in step with `allocations`.
+  allocations?: RequestAllocation[];
+  allocatedFacultyIds?: string[];
+  teachingAssignmentIds?: string[];
   // The lending side is done with the busy-periods step: set by "Notify &
   // close" (notify_timetable_updated), cleared by "Edit" (reopen_busy_periods).
   // While closed the declared periods are view-only; they keep blocking the
@@ -382,8 +401,12 @@ export interface TimetableRules {
   maxConsecutivePeriodsPerFaculty: number;
   /** No longer enforced - a subject may repeat any number of times in a day. Kept so stored rules docs still type-check. */
   maxPeriodsPerSubjectPerDay: number;
+  /** Contiguous periods a THEORY subject occupies when placed (default 1). */
+  theoryBlockSize?: number;
   /** Contiguous periods a PRACTICAL subject occupies (e.g. a 3-hour lab). */
   labBlockSize: number;
+  /** Per-subject overrides of the above, keyed by subjectBlockKey(). */
+  subjectBlockSizes?: Record<string, number>;
   /** When false, a lab block may not straddle lunch or a short break. */
   allowLabAcrossBreaks: boolean;
   // Soft preferences
@@ -398,6 +421,7 @@ export const DEFAULT_TIMETABLE_RULES: TimetableRules = {
   maxPeriodsPerFacultyPerDay: 4,
   maxConsecutivePeriodsPerFaculty: 3,
   maxPeriodsPerSubjectPerDay: 1,
+  theoryBlockSize: 1,
   labBlockSize: 3,
   allowLabAcrossBreaks: false,
   preferTheoryInMorning: true,
@@ -538,4 +562,45 @@ export interface WorkloadSummary {
   tutorialHours: number;
   subjectCount: number;
   updatedAt: Timestamp;
+}
+
+// Whether one LAB (PRACTICAL subject) of one section runs batch by batch. The
+// section's faculty incharge decides it per lab (Students -> Lab Batches). With no
+// setting, a lab behaves as before: a split period (TimetableSlot.labBatch) uses
+// its batch roster. `batchWise: false` = "no batch" - the whole section attends
+// that lab together, so the lab's periods ignore their batch label.
+export interface SectionLabBatchSetting {
+  id: string; // `${sectionId}_${subjectId}`
+  collegeId: string;
+  sectionId: string;
+  subjectId: string;
+  batchWise: boolean;
+  // When batch-wise: which lab batch each of the lab's faculty takes (facultyMembers
+  // doc id -> the batch label students carry in StudentRecord.labBatch), e.g.
+  // Faculty A -> "Batch 1", Faculty B -> "Batch 2" (two faculty may also share a batch).
+  // That faculty marks only that batch's students, whatever batch label the
+  // timetable period itself carries. Absent/empty for a faculty = the period's own label.
+  batchByFaculty?: Record<string, string>;
+  updatedBy: string;
+  updatedAt: unknown;
+}
+
+// The dates each faculty of a LAB teaches it in one section, set by the section's faculty
+// incharge: Faculty A from..to, Faculty B another from..to. Outside its own dates a faculty
+// does not see the lab in their Teaching Load and cannot take its attendance. A faculty with
+// no window teaches it throughout. Windows of two faculty of one lab may not overlap.
+export interface LabFacultyWindow {
+  from: string; // "YYYY-MM-DD", inclusive
+  to: string;   // "YYYY-MM-DD", inclusive
+}
+
+export interface SectionLabFacultyWindows {
+  id: string; // `${sectionId}_${subjectId}`
+  collegeId: string;
+  sectionId: string;
+  subjectId: string;
+  /** facultyMembers doc id -> that faculty's dates. */
+  windowByFaculty: Record<string, LabFacultyWindow>;
+  updatedBy: string;
+  updatedAt: unknown;
 }
